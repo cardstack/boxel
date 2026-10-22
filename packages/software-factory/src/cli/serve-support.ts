@@ -50,5 +50,10 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   log.error(String(error));
+  // Exit instead of only setting exitCode: child processes or sockets a failed
+  // bring-up left open would otherwise keep this process alive, and the
+  // Playwright global setup watching it only reports a failure once it exits
+  // or its own wait times out. The deferred exit lets stderr flush first.
   process.exitCode = 1;
+  setTimeout(() => process.exit(1), 100).unref();
 });

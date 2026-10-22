@@ -1,10 +1,17 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { cancel, later } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
+import { modifier } from 'ember-modifier';
 import { trackedFunction } from 'reactiveweb/function';
 
 import {
   BoxelDropdown,
+  BoxelInput,
   Button,
   Menu,
   RealmIcon,
@@ -15,6 +22,8 @@ import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 import { RealmPaths, ri } from '@cardstack/runtime-common';
 
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
+
+import RealmURLTooltip from './realm-url-tooltip';
 
 import type RealmService from '../services/realm';
 
@@ -31,15 +40,26 @@ interface Signature {
     contentClass?: string;
     selectedRealmPrefix?: string;
     displayReadOnlyTag?: boolean;
+    // Shows a text input above the realm list that filters it by name
+    searchable?: boolean;
   };
   Element: HTMLElement;
 }
+
+// BoxelDropdown's focus trap moves focus to its trigger on a zero-delay timer
+// once the content renders, so focusing the input synchronously is undone.
+// Queue the focus behind the trap's timer instead.
+const focusAfterDropdownOpens = modifier((element: HTMLElement) => {
+  let timer = later(() => element.focus(), 0);
+  return () => cancel(timer);
+});
 
 export default class RealmDropdown extends Component<Signature> {
   <template>
     <BoxelDropdown
       @contentClass={{@contentClass}}
       @matchTriggerWidth={{true}}
+      @onClose={{this.clearSearch}}
       data-test-load-realms-loaded='true'
     >
       <:trigger as |bindings|>
@@ -52,14 +72,19 @@ export default class RealmDropdown extends Component<Signature> {
           data-realm-dropdown-trigger
           data-test-realm-dropdown-trigger
           data-test-realm-name={{this.selectedRealm.name}}
-          title={{this.selectedItemText}}
           ...attributes
         >
           {{#if this.selectedRealm}}
-            <RealmIcon class='icon' @realmInfo={{this.selectedRealm}} />
-            <div class='selected-item' data-test-selected-realm>
-              {{this.selectedItemText}}
-            </div>
+            <RealmURLTooltip
+              class='selected-realm'
+              @realmURL={{this.selectedRealm.path}}
+              @label={{this.selectedRealm.name}}
+            >
+              <RealmIcon class='icon' @realmInfo={{this.selectedRealm}} />
+              <div class='selected-item' data-test-selected-realm>
+                {{this.selectedItemText}}
+              </div>
+            </RealmURLTooltip>
             {{#if (and @displayReadOnlyTag (not this.selectedRealm.canWrite))}}
               <span class='read-only-tag' data-test-realm-read-only>READ ONLY</span>
             {{/if}}
@@ -70,12 +95,37 @@ export default class RealmDropdown extends Component<Signature> {
         </Button>
       </:trigger>
       <:content as |dd|>
-        <Menu
-          class='realm-dropdown-menu'
-          @items={{this.menuItems}}
-          @closeMenu={{dd.close}}
-          data-test-realm-dropdown-menu
-        />
+        {{#if @searchable}}
+          <div class='realm-dropdown-search'>
+            <BoxelInput
+              class='realm-dropdown-search-input'
+              @type='search'
+              @value={{this.searchTerm}}
+              @onInput={{this.updateSearchTerm}}
+              @placeholder='Search workspaces'
+              @autocomplete='off'
+              aria-label='Search workspaces'
+              data-test-realm-dropdown-search
+              {{focusAfterDropdownOpens}}
+              {{on 'keydown' (fn this.selectFirstMatchOnEnter dd.close)}}
+            />
+          </div>
+        {{/if}}
+        {{#if this.hasNoSearchMatches}}
+          <p
+            class='realm-dropdown-no-results'
+            data-test-realm-dropdown-no-results
+          >
+            No workspaces match “{{this.searchTerm}}”
+          </p>
+        {{else}}
+          <Menu
+            class='realm-dropdown-menu'
+            @items={{this.menuItems}}
+            @closeMenu={{dd.close}}
+            data-test-realm-dropdown-menu
+          />
+        {{/if}}
       </:content>
     </BoxelDropdown>
     <style scoped>
@@ -84,7 +134,7 @@ export default class RealmDropdown extends Component<Signature> {
         width: 100%;
         max-width: 100%;
         display: grid;
-        grid-template-columns: auto 1fr auto auto;
+        grid-template-columns: minmax(0, 1fr) auto auto;
         justify-items: flex-start;
         gap: var(--boxel-sp-xxs);
         padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
@@ -98,6 +148,13 @@ export default class RealmDropdown extends Component<Signature> {
       }
       .realm-dropdown-trigger[aria-expanded='true'] .arrow-icon {
         transform: scaleY(-1);
+      }
+      .selected-realm {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+        min-width: 0;
+        max-width: 100%;
       }
       .selected-item {
         max-width: 100%;
@@ -119,6 +176,29 @@ export default class RealmDropdown extends Component<Signature> {
         max-height: 13rem;
         overflow-y: scroll;
       }
+      .realm-dropdown-search {
+        --boxel-input-search-background-color: transparent;
+        --boxel-input-search-color: var(--boxel-dark);
+        --boxel-input-height: 2rem;
+        padding: var(--boxel-sp-xxs);
+        border-bottom: 1px solid var(--boxel-200);
+      }
+      .realm-dropdown-search-input {
+        width: 100%;
+      }
+      /* The menu clips its items to its own rounded corners, which only
+         belong at the top of the dropdown, not under the search field */
+      .realm-dropdown-search + .realm-dropdown-menu {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+      }
+      .realm-dropdown-no-results {
+        margin: 0;
+        padding: var(--boxel-sp-xs);
+        min-width: 13rem;
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+      }
       .realm-dropdown-menu :deep(.menu-item__icon-url) {
         border-radius: var(--boxel-border-radius-xs);
       }
@@ -133,6 +213,27 @@ export default class RealmDropdown extends Component<Signature> {
 
   defaultRealmIcon = '/default-realm-icon.png';
   @service declare realm: RealmService;
+  @tracked searchTerm = '';
+
+  @action updateSearchTerm(term: string) {
+    this.searchTerm = term;
+  }
+
+  @action clearSearch() {
+    this.searchTerm = '';
+  }
+
+  @action selectFirstMatchOnEnter(close: () => void, event: KeyboardEvent) {
+    if (event.key !== 'Enter') {
+      return;
+    }
+    let [firstMatch] = this.filteredRealms;
+    if (firstMatch) {
+      event.preventDefault();
+      this.args.onSelect(firstMatch);
+      close();
+    }
+  }
 
   get selectedItemText() {
     if (!this.selectedRealm) {
@@ -173,13 +274,30 @@ export default class RealmDropdown extends Component<Signature> {
     return items;
   }
 
+  get filteredRealms(): RealmDropdownItem[] {
+    let term = this.searchTerm.trim().toLowerCase();
+    if (!this.args.searchable || !term) {
+      return this.realms;
+    }
+    return this.realms.filter((realm) =>
+      realm.name.toLowerCase().includes(term),
+    );
+  }
+
+  get hasNoSearchMatches(): boolean {
+    return (
+      Boolean(this.args.searchable && this.searchTerm.trim()) &&
+      this.filteredRealms.length === 0
+    );
+  }
+
   get menuItems(): MenuItem[] {
-    return this.realms.map(
+    return this.filteredRealms.map(
       (realm) =>
         new MenuItem({
           label: realm.name,
           action: () => this.args.onSelect(realm),
-          checked: realm.name === this.selectedRealm?.name,
+          checked: realm.path === this.selectedRealm?.path,
           iconURL: realm.iconURL ?? undefined,
           subtext: !realm.canWrite ? 'READ ONLY' : undefined,
         }),

@@ -33,15 +33,15 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import {
-  baseRealmRRI,
   baseRRI,
   chooseCard,
   Deferred,
   GetCardContextName,
   isCardInstance,
-  maybeRelativeReference,
+  portableReference,
   RealmPaths,
   ri,
+  rri,
   specRef,
   SupportedMimeType,
   type CardErrorJSONAPI,
@@ -54,6 +54,7 @@ import {
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteIdentifier } from '@cardstack/runtime-common/code-ref';
 
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import config from '@cardstack/host/config/environment';
 
 import type RealmService from '@cardstack/host/services/realm';
@@ -904,8 +905,8 @@ export default class CreateFileModal extends Component<Signature> {
 
     let spec: Spec | undefined;
     if (this.selectedSpecResource?.id) {
-      let maybeSpec = await this.store.get<Spec>(this.selectedSpecResource.id);
-      if (maybeSpec && !isCardInstance(maybeSpec)) {
+      let maybeSpec = await this.store.get(this.selectedSpecResource.id);
+      if (maybeSpec && !isCardInstance<Spec>(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }
       spec = maybeSpec;
@@ -926,26 +927,14 @@ export default class CreateFileModal extends Component<Signature> {
         this.network.virtualNetwork,
       ) as ResolvedCodeRef
     ).module;
-    // Address the base realm by its stable RRI prefix (`@cardstack/base/X`),
-    // matching the `Component` import emitted below — base modules are
-    // referenced by alias, not by a deployment-specific real URL.
     // `codeRefWithAbsoluteIdentifier` returns the resolved real URL for
-    // RRI-prefix inputs, so map it back to the prefix form for base only.
-    // Cross-realm references keep their absolute URL: a generated import
-    // pointing at another workspace resolves by real URL and is not
-    // rewritten to a realm-prefix form here.
-    const canonicalModule =
-      this.network.virtualNetwork.unresolveURL(absoluteModuleHref);
-    // A `canonicalModule` in prefix form takes the first arm, so the second
-    // one only ever parses an href.
-    const moduleForImport: RealmResourceIdentifier | URL =
-      canonicalModule.startsWith(`${baseRealmRRI}`)
-        ? (canonicalModule as RealmResourceIdentifier)
-        : new URL(absoluteModuleHref); // eslint-disable-line @cardstack/boxel/no-url-from-realm-identifier
-    let moduleURL = maybeRelativeReference(
-      moduleForImport,
+    // prefix-form input; `portableReference` writes it relative, by prefix
+    // (matching the `Component` import emitted below) or by URL.
+    let moduleURL = portableReference(
+      rri(absoluteModuleHref),
       url,
       new URL(this.selectedRealmURL),
+      this.network.virtualNetwork,
     );
     let src: string[] = [];
 
@@ -1029,8 +1018,8 @@ export class ${className} extends ${exportName} {
     }
     let spec: Spec | undefined;
     if (this.selectedSpecResource?.id) {
-      let maybeSpec = await this.store.get<Spec>(this.selectedSpecResource.id);
-      if (maybeSpec && !isCardInstance(maybeSpec)) {
+      let maybeSpec = await this.store.get(this.selectedSpecResource.id);
+      if (maybeSpec && !isCardInstance<Spec>(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }
       spec = maybeSpec;
@@ -1229,7 +1218,9 @@ export class SelectedTypePill extends Component<SelectedTypePillSignature> {
   <template>
     <Pill class='selected-type' data-test-selected-type={{@title}}>
       <:iconLeft>
-        <RealmIcon @realmInfo={{this.realm.info @id}} />
+        <RealmURLTooltip @urlInRealm={{@id}}>
+          <RealmIcon @realmInfo={{this.realm.info @id}} />
+        </RealmURLTooltip>
       </:iconLeft>
       <:default>
         <span class='boxel-contents-only' data-test-selected-type-display-name>

@@ -7,32 +7,36 @@ import {
   Deferred,
   type AffinityType,
   logger,
-  isScreenshotFormat,
-  parseScreenshotCaptureSpec,
-  SCREENSHOT_FORMATS,
-  type DeclaredScreenshotVisitArgs,
+  isOnDemandCaptureFormat,
+  parseCaptureRequestSpec,
+  ON_DEMAND_CAPTURE_FORMATS,
+  MAX_STASHED_CARD_SOURCE_LENGTH,
+  type CardSourceVisitArgs,
+  type DeclaredCaptureVisitArgs,
   type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
   type RenderVisitResponse,
   type RunCommandResponse,
-  type ScreenshotCaptureSpec,
-  type ScreenshotCaptureSpecParse,
-  type ScreenshotFormat,
-  type ScreenshotPrerenderResponse,
+  type CaptureRequestSpec,
+  type CaptureRequestSpecParse,
+  type OnDemandCaptureFormat,
+  type CapturePrerenderResponse,
 } from '@cardstack/runtime-common';
 import {
-  ecsMetadata,
+  instanceIdHeader,
   fullRequestURL,
   livenessCheck,
   fetchRequestFromContext,
 } from '../middleware/index.ts';
 import { Prerenderer } from './index.ts';
 import type { Timings } from './render-runner.ts';
-import { resolvePrerenderManagerURL } from './config.ts';
+import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
 import { heapTelemetry } from './heap-telemetry.ts';
 import { captureHeapSnapshot } from './heap-snapshot.ts';
 import {
+  parseHostShellGeneration,
+  PRERENDER_HOST_SHELL_GENERATION_HEADER,
   PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
@@ -44,6 +48,7 @@ import {
 } from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 import { isMissingExportMessage } from '@cardstack/runtime-common/package-shim-handler';
+import { withCredentialHeadersMasked } from '../lib/request-telemetry.ts';
 
 type PrerenderServer = Server & {
   __stopPrerenderer?: () => Promise<void>;
@@ -187,6 +192,44 @@ export function shouldRerenderForStaleShell({
   );
 }
 
+// The row types whose *own* failure is a missing export, rather than types
+// that merely carry one among the console errors `RenderRunner` merged onto
+// them.
+//
+// Two narrowings, and both matter because of what the answer is used for. The
+// broader `hasMissingExportError` drives the re-render, where being wrong costs
+// one render; this gates withholding a row, where being wrong hides a genuine
+// break. And it answers per row type rather than per response, because a single
+// visit produces the instance and file rows independently — a card render that
+// hit the stale bundle says nothing about a file extraction that failed beside
+// it for its own reasons.
+function unattributableRowTypes(
+  response: RenderVisitResponse,
+): ('instance' | 'file')[] {
+  let types = new Set<'instance' | 'file'>();
+  let consider = (
+    candidate: { error?: { message?: unknown } } | undefined,
+    type: 'instance' | 'file',
+  ) => {
+    let message = candidate?.error?.message;
+    if (typeof message === 'string' && isMissingExportMessage(message)) {
+      types.add(type);
+    }
+  };
+  consider(response.card?.error, 'instance');
+  consider(response.fileExtract?.error, 'file');
+  consider(response.fileRender?.error, 'file');
+  // A page that never became usable produced neither render, so the failure
+  // belongs to both rows rather than to one of them.
+  let pageUnusable = response.pageUnusableError;
+  let pageMessage = pageUnusable?.error?.message;
+  if (typeof pageMessage === 'string' && isMissingExportMessage(pageMessage)) {
+    types.add('instance');
+    types.add('file');
+  }
+  return [...types];
+}
+
 function hasMissingExportError(response: RenderVisitResponse): boolean {
   // Every sub-response that can carry a render failure, because every one of
   // them is persisted the same way: `prerender-html-visit` writes
@@ -234,13 +277,18 @@ export function stampHostShellTokens(
     // = not sampled, so nothing is stamped and a reader gets no verdict.
     warmedAtStart?: string | null | undefined;
     warmedAtCompletion?: string | null | undefined;
+    // The ordering position of `warmedAtStart`. No `null` case: a number is
+    // either known or it is not, and there is nothing for a reader to conclude
+    // from the difference.
+    warmedGenerationAtStart?: number | undefined;
   },
 ): void {
   if (
     tokens.atStart === undefined &&
     tokens.atCompletion === undefined &&
     tokens.warmedAtStart === undefined &&
-    tokens.warmedAtCompletion === undefined
+    tokens.warmedAtCompletion === undefined &&
+    tokens.warmedGenerationAtStart === undefined
   ) {
     return;
   }
@@ -272,6 +320,101 @@ export function stampHostShellTokens(
       ...(tokens.warmedAtCompletion !== undefined
         ? { warmedHostShellHashAtCompletion: tokens.warmedAtCompletion }
         : {}),
+      // The one value here the write site reads rather than an operator: it
+      // becomes the row's `host_shell_generation` column, which is what a
+      // repair pass selects on. The tokens beside it stay the record of how
+      // that number was arrived at.
+      ...(tokens.warmedGenerationAtStart !== undefined
+        ? { warmedHostShellGeneration: tokens.warmedGenerationAtStart }
+        : {}),
+    },
+  };
+}
+
+// Record that this failure is the environment's rather than the card's, so the
+// write site can decline to publish it as the card's content.
+//
+// Stated by this server because it is the only place holding both the reported
+// and warmed tokens at the moment of the render. The write site checks for the
+// field's presence and nothing else — it does not re-derive the conclusion, so
+// there is one implementation of the rule rather than two that can drift.
+export function stampStaleShellFailure(
+  response: RenderVisitResponse,
+  rowTypes: ('instance' | 'file')[],
+): void {
+  if (rowTypes.length === 0) {
+    return;
+  }
+  response.meta = {
+    ...(response.meta ?? {}),
+    diagnostics: {
+      ...(response.meta?.diagnostics ?? {}),
+      staleShellFailure: rowTypes,
+    },
+  };
+}
+
+// The row types whose *own* failure was a gateway or network failure the
+// render's fetch met — a balancer 502/503/504, the 502 the render's fetch
+// guard synthesizes for a body it could not read as a card document or a fetch
+// that never returned, or a linked-card fetch `card-service` failed with the
+// balancer's status. The render loads the card's document through the public
+// balancer, so a gateway error there is a statement about the network and not
+// the card; recording it as the card's verdict is the failure that latched a
+// card into serving 500 for days from one 502 that lasted milliseconds.
+//
+// Answered per row type rather than per response for the same reason as
+// `unattributableRowTypes`: one visit produces the instance and file rows
+// independently, and a gateway error on the card render says nothing about a
+// file extraction that failed beside it for its own reasons.
+//
+// Keyed on the `gatewayFailure` marker the fetch boundary stamps, not on the
+// error status. The status alone is ambiguous — a render timeout is a
+// card-originated 504 — so inferring the verdict from the number would withhold
+// every render timeout, exactly the failure that most needs to stay visible.
+// The marker is set only where a fetch actually met the network failure, so its
+// presence is the conclusion without any invariant to defend.
+function gatewayFailureRowTypes(
+  response: RenderVisitResponse,
+): ('instance' | 'file')[] {
+  let types = new Set<'instance' | 'file'>();
+  let consider = (
+    candidate: { error?: { gatewayFailure?: unknown } } | undefined,
+    type: 'instance' | 'file',
+  ) => {
+    if (candidate?.error?.gatewayFailure === true) {
+      types.add(type);
+    }
+  };
+  consider(response.card?.error, 'instance');
+  consider(response.fileExtract?.error, 'file');
+  consider(response.fileRender?.error, 'file');
+  // A page that never became usable produced neither render, so the failure
+  // belongs to both rows rather than to one of them.
+  if (response.pageUnusableError?.error?.gatewayFailure === true) {
+    types.add('instance');
+    types.add('file');
+  }
+  return [...types];
+}
+
+// The gateway-failure twin of `stampStaleShellFailure`: record that these
+// rows' failures were the network's and not the card's, so the write site
+// declines to publish them as the card's content. Same contract — the write
+// site checks for the field's presence and nothing else, so the rule has one
+// implementation rather than two that can drift.
+export function stampGatewayFailure(
+  response: RenderVisitResponse,
+  rowTypes: ('instance' | 'file')[],
+): void {
+  if (rowTypes.length === 0) {
+    return;
+  }
+  response.meta = {
+    ...(response.meta ?? {}),
+    diagnostics: {
+      ...(response.meta?.diagnostics ?? {}),
+      gatewayFailure: rowTypes,
     },
   };
 }
@@ -372,6 +515,9 @@ export async function raceAgainstDrain<T>(
 export function buildPrerenderApp(options: {
   serverURL: string;
   maxPages?: number;
+  // Default true. False keeps the page pool from sending the manager
+  // affinity-eviction notices for a server that never registered.
+  registerWithManager?: boolean;
   isDraining?: () => boolean;
   drainingPromise?: Promise<void>;
   // The host-shell token the manager last *reported*, read at render start and
@@ -388,6 +534,10 @@ export function buildPrerenderApp(options: {
   // recycle fails. The gap between the two is what says a page may still be
   // running the outgoing bundle.
   getWarmedHostShellHash?: () => string | undefined;
+  // The ordering position of the token above. Stamped onto the row so a repair
+  // pass can select the rows a bundle that is no longer served produced —
+  // which the token alone cannot answer, being a hash.
+  getWarmedHostShellGeneration?: () => number | undefined;
   // The recycle triggered by the last token change, if one is still running.
   // A re-render awaits it so it lands on a page warmed against the current
   // shell instead of racing the teardown. Always resolves — the caller
@@ -403,6 +553,7 @@ export function buildPrerenderApp(options: {
   let prerenderer = new Prerenderer({
     maxPages,
     serverURL: options.serverURL,
+    registerWithManager: options.registerWithManager,
   });
 
   // One reaction on the shutdown promise for the whole process. Requests take
@@ -504,16 +655,16 @@ export function buildPrerenderApp(options: {
     commandInput?: unknown;
   };
 
-  type ScreenshotRouteArgs = RouteBaseArgs & {
+  type CaptureRouteArgs = RouteBaseArgs & {
     affinityType: 'realm';
     affinityValue: string;
     realm: string;
     url: string;
-    format: ScreenshotFormat;
+    format: OnDemandCaptureFormat;
     // Pass-through of the caller's per-capture overrides. Already validated by
     // the realm-server handler; the capture path guards the one hard invariant
     // (fullPage + clip) defensively.
-    captureSpec?: ScreenshotCaptureSpec;
+    captureSpec?: CaptureRequestSpec;
   };
 
   type RouteParseResult<A extends RouteBaseArgs> = {
@@ -653,9 +804,9 @@ export function buildPrerenderApp(options: {
     };
   };
 
-  let parseScreenshotAttributes = (
+  let parseCaptureAttributes = (
     attrs: any,
-  ): RouteParseResult<ScreenshotRouteArgs> => {
+  ): RouteParseResult<CaptureRouteArgs> => {
     let rawUrl = attrs.url;
     let rawAuth = attrs.auth;
     let rawRealm = attrs.realm;
@@ -664,16 +815,16 @@ export function buildPrerenderApp(options: {
     let rawFormat = attrs.format;
     let renderOptions = parseRenderOptions(attrs);
     let priority = parsePriority(attrs);
-    let formatIsValid = isScreenshotFormat(rawFormat);
-    // Same strict parse + bounds as the realm-server's POST /_screenshot-card
+    let formatIsValid = isOnDemandCaptureFormat(rawFormat);
+    // Same strict parse + bounds as the realm-server's POST /_capture
     // body: this route is its own HTTP surface, and an unvalidated spec here
     // would reach `page.setViewport` on a pooled page with none of the cost
     // caps applied. The parse also normalizes (defaults elided, empty spec
     // -> null), so the capture path sees one canonical shape from every
     // caller. It is format-aware (fitted requires an envelope), so it
     // runs only once the format itself is valid.
-    let captureSpecParse: ScreenshotCaptureSpecParse = formatIsValid
-      ? parseScreenshotCaptureSpec(attrs.captureSpec, rawFormat)
+    let captureSpecParse: CaptureRequestSpecParse = formatIsValid
+      ? parseCaptureRequestSpec(attrs.captureSpec, rawFormat)
       : { captureSpec: null };
     let missing = missingAttrs([
       { value: rawUrl, name: 'url' },
@@ -702,7 +853,7 @@ export function buildPrerenderApp(options: {
               realm: rawRealm as string,
               url: rawUrl as string,
               auth: rawAuth as string,
-              format: rawFormat as ScreenshotFormat,
+              format: rawFormat as OnDemandCaptureFormat,
               renderOptions,
               ...(captureSpecParse.captureSpec
                 ? { captureSpec: captureSpecParse.captureSpec }
@@ -713,7 +864,7 @@ export function buildPrerenderApp(options: {
       missingMessage:
         captureSpecParse.error !== undefined
           ? captureSpecParse.error
-          : `Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (${SCREENSHOT_FORMATS.join('|')})`,
+          : `Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (${ON_DEMAND_CAPTURE_FORMATS.join('|')})`,
       logTarget: (rawUrl as string | undefined) ?? '<missing>',
       responseId: (rawUrl as string | undefined) ?? 'unknown',
       rejectionLogDetails: `affinityType=${
@@ -729,7 +880,9 @@ export function buildPrerenderApp(options: {
   };
 
   function registerPrerenderRoute<R, A extends RouteBaseArgs = PrerenderArgs>(
-    path: string,
+    // Several paths register one handler, which is how a route keeps
+    // answering a name it has been renamed away from.
+    path: string | string[],
     options: {
       requestDescription: string;
       responseType: string;
@@ -986,22 +1139,26 @@ export function buildPrerenderApp(options: {
     },
   );
 
-  registerPrerenderRoute<ScreenshotPrerenderResponse, ScreenshotRouteArgs>(
-    '/prerender-screenshot',
+  registerPrerenderRoute<CapturePrerenderResponse, CaptureRouteArgs>(
+    // The prerender server rolls out ahead of the workers and realm servers
+    // that call it, so the previous revision is still asking for
+    // `/prerender-screenshot` while this one is already serving.
+    ['/prerender-capture', '/prerender-screenshot'],
     {
-      requestDescription: 'screenshot prerender request',
-      responseType: 'screenshot-result',
-      infoLabel: 'card screenshotted',
-      warnTimeoutMessage: (url) => `screenshot of ${url} timed out`,
-      errorContext: '/prerender-screenshot',
-      parseAttributes: parseScreenshotAttributes,
+      requestDescription: 'capture prerender request',
+      responseType: 'capture-result',
+      infoLabel: 'card captured',
+      warnTimeoutMessage: (url) => `capture of ${url} timed out`,
+      errorContext: '/prerender-capture',
+      parseAttributes: parseCaptureAttributes,
       execute: (args, { signal }) =>
-        prerenderer.prerenderScreenshot({
+        prerenderer.prerenderCapture({
           realm: args.realm,
           url: args.url,
           auth: args.auth,
           format: args.format,
           ...(args.captureSpec ? { captureSpec: args.captureSpec } : {}),
+          renderOptions: args.renderOptions,
           priority: args.priority,
           signal,
         }),
@@ -1066,14 +1223,14 @@ export function buildPrerenderApp(options: {
             (t): t is string => typeof t === 'string',
           )
         : undefined;
-      // Declared-screenshot capture opt-in. Presence (even `{}`) turns the
+      // Declared-capture opt-in. Presence (even `{}`) turns the
       // capture step on for a prerender-html visit; the fields inside are
       // carry-forward inputs the capture step treats as advisory.
-      let screenshots: DeclaredScreenshotVisitArgs | undefined =
-        attrs.screenshots &&
-        typeof attrs.screenshots === 'object' &&
-        !Array.isArray(attrs.screenshots)
-          ? (attrs.screenshots as DeclaredScreenshotVisitArgs)
+      let captures: DeclaredCaptureVisitArgs | undefined =
+        attrs.captures &&
+        typeof attrs.captures === 'object' &&
+        !Array.isArray(attrs.captures)
+          ? (attrs.captures as DeclaredCaptureVisitArgs)
           : undefined;
       let isNonEmptyString = (value: unknown): value is string =>
         typeof value === 'string' && value.trim().length > 0;
@@ -1182,6 +1339,43 @@ export function buildPrerenderApp(options: {
           ? rawRenderScope
           : undefined;
 
+      // The card instance's stored bytes, sent by a caller that already read
+      // them so the render need not read them again. All three fields are
+      // required together: the card branch reads the realm URL and the modified
+      // time off the response it would otherwise fetch, so a partial payload
+      // would leave the model missing values it has no other source for. A
+      // payload that fails this check is dropped rather than rejected — the
+      // render falls back to fetching, which is the behavior this whole path
+      // optimizes away and so is always safe.
+      //
+      // The size ceiling is enforced here as well as at the producer, because
+      // this is where the bytes actually arrive and where they are handed to a
+      // CDP message. A producer that assembles visit args without
+      // `cardSourceForVisit` would otherwise carry an unbounded payload past
+      // the only check on it.
+      let rawCardSource = attrs.cardSource;
+      let cardSource: CardSourceVisitArgs | undefined =
+        rawCardSource &&
+        typeof rawCardSource === 'object' &&
+        !Array.isArray(rawCardSource) &&
+        typeof rawCardSource.source === 'string' &&
+        rawCardSource.source.length <= MAX_STASHED_CARD_SOURCE_LENGTH &&
+        typeof rawCardSource.realmURL === 'string' &&
+        rawCardSource.realmURL.length > 0 &&
+        typeof rawCardSource.lastModified === 'number' &&
+        Number.isFinite(rawCardSource.lastModified)
+          ? {
+              source: rawCardSource.source,
+              realmURL: rawCardSource.realmURL,
+              lastModified: rawCardSource.lastModified,
+            }
+          : undefined;
+      if (rawCardSource && !cardSource) {
+        log.warn(
+          `visit prerender request for ${rawUrl} carried an unusable cardSource; the render will fetch the card's source for itself`,
+        );
+      }
+
       let start = Date.now();
       // Hoisted so a re-render after a host-shell change replays the same
       // visit rather than an approximation of it.
@@ -1199,8 +1393,9 @@ export function buildPrerenderApp(options: {
         ...(batchId ? { batchId } : {}),
         ...(priority !== undefined ? { priority } : {}),
         ...(jobId ? { jobId } : {}),
-        ...(screenshots ? { screenshots } : {}),
+        ...(captures ? { captures } : {}),
         ...(renderScope ? { renderScope } : {}),
+        ...(cardSource ? { cardSource } : {}),
         signal: ac.signal,
       };
       let shellAtStart = options.getHostShellHash?.();
@@ -1210,7 +1405,19 @@ export function buildPrerenderApp(options: {
         options.getWarmedHostShellHash
           ? (options.getWarmedHostShellHash() ?? null)
           : undefined;
+      // Sampled at the same moment as the token it belongs to. `undefined`
+      // covers both "no sampler" and "the manager reported no number", because
+      // a row can do nothing with either — unlike the token, where `null` is a
+      // verdict a reader acts on.
+      let sampleWarmedGeneration = () =>
+        options.getWarmedHostShellGeneration?.();
       let warmedAtStart = sampleWarmed();
+      // The start sample rather than the completion one: it names the bundle
+      // the page was running when the render began, and a render that straddles
+      // a recycle did most of its work on that page. Stamping the later value
+      // would let such a row read as current and escape the repair it is the
+      // reason for.
+      let warmedGenerationAtStart = sampleWarmedGeneration();
       let execPromise = prerenderer
         .prerenderVisit(visitArgs)
         .then((result) => ({ result }));
@@ -1283,9 +1490,11 @@ export function buildPrerenderApp(options: {
         // forward would stamp the response as having rendered on the outgoing
         // pool even when the retry ran entirely on the current shell.
         let retryWarmedAtStart: string | null | undefined;
+        let retryWarmedGenerationAtStart: number | undefined;
         let retryPromise = (async () => {
           await options.awaitHostShellRecycle?.();
           retryWarmedAtStart = sampleWarmed();
+          retryWarmedGenerationAtStart = sampleWarmedGeneration();
           return { result: await prerenderer.prerenderVisit(visitArgs) };
         })();
         let retryResult = await raceAgainstDrain(
@@ -1313,6 +1522,7 @@ export function buildPrerenderApp(options: {
         // stamped values describe two different renders — the retry's reported
         // tokens beside the discarded attempt's pool.
         warmedAtStart = retryWarmedAtStart;
+        warmedGenerationAtStart = retryWarmedGenerationAtStart;
         warmedAtCompletion = sampleWarmed();
         log.info(
           'visit of %s re-rendered on host shell %s after discarding a %dms attempt on %s',
@@ -1321,6 +1531,38 @@ export function buildPrerenderApp(options: {
           discardedMs,
           shellAtStart,
         );
+        // The re-render failed the same way and the pool still cannot be shown
+        // to have been on the shell being served, so this failure describes the
+        // environment and not the card. Say so on the response and return it
+        // unchanged: the write site declines to publish it as the card's
+        // content, which is the only place that decision can be made — a
+        // prerender server can delay a write but never prevent one.
+        //
+        // Narrower than the re-render's own test on purpose. That one accepts a
+        // missing export anywhere in the error, including the console errors
+        // merged onto an unrelated timeout, because being wrong there costs one
+        // render. Withholding a row wants the missing export to be the failure
+        // itself.
+        let unattributable = unattributableRowTypes(response);
+        if (
+          unattributable.length > 0 &&
+          shouldRerenderForStaleShell({
+            response,
+            warmedAtStart,
+            warmedAtCompletion,
+            reportedAtCompletion: shellAtCompletion,
+          })
+        ) {
+          log.warn(
+            'visit of %s failed to resolve a module on a pool warmed against %s -> %s while the current host shell is %s, after a re-render; marking the %s row(s) unattributable to the card',
+            url,
+            warmedAtStart ?? 'none',
+            warmedAtCompletion ?? 'none',
+            shellAtCompletion,
+            unattributable.join(', '),
+          );
+          stampStaleShellFailure(response, unattributable);
+        }
       }
       let totalMs = Date.now() - start;
       let poolFlags = Object.entries({
@@ -1349,12 +1591,29 @@ export function buildPrerenderApp(options: {
         pool.affinityValue,
         poolFlagSuffix,
       );
+      // A gateway/network failure is a statement about the network, not the
+      // card, so mark the rows it hit unattributable regardless of whether the
+      // stale-shell re-render path ran — the two verdicts are independent. This
+      // one reads the `gatewayFailure` marker the fetch boundary stamped rather
+      // than inferring intent from the error status, so a card-originated
+      // gateway status (a render timeout is a 504) is not caught here. The
+      // write site withholds it exactly as it does the stale-shell verdict.
+      let gatewayFailure = gatewayFailureRowTypes(response);
+      if (gatewayFailure.length > 0) {
+        log.warn(
+          'visit of %s failed with a gateway/network error on the %s row(s); marking the failure unattributable to the card',
+          url,
+          gatewayFailure.join(', '),
+        );
+        stampGatewayFailure(response, gatewayFailure);
+      }
       decorateRenderErrorDiagnostics(response, requestId);
       stampHostShellTokens(response, {
         atStart: shellAtStart,
         atCompletion: shellAtCompletion,
         warmedAtStart,
         warmedAtCompletion,
+        warmedGenerationAtStart,
       });
       // Timings are already inside `response.meta.diagnostics`. Here
       // we just populate the JSON:API envelope `meta.timing` that
@@ -1506,11 +1765,13 @@ export function buildPrerenderApp(options: {
         log.info(
           `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}${jobTag}`,
         );
-        log.debug(JSON.stringify(ctxt.req.headers));
+        log.debug(
+          JSON.stringify(withCredentialHeadersMasked(ctxt.req.headers)),
+        );
       });
       return next();
     })
-    .use(ecsMetadata)
+    .use(instanceIdHeader)
     .use(router.routes());
 
   app.on('error', (err: any) => {
@@ -1531,7 +1792,7 @@ async function unregisterWithManager(serverURL: string) {
     const managerURL = resolvePrerenderManagerURL();
     let target = new URL(`${managerURL}/prerender-servers`);
     target.searchParams.set('url', serverURL);
-    await fetch(target.toString(), { method: 'DELETE' }).catch((e) => {
+    await fetchFromManager(target, { method: 'DELETE' }).catch((e) => {
       log.debug('Prerender manager unregister request failed:', e);
     });
   } catch (e) {
@@ -1550,6 +1811,12 @@ export function createPrerenderHttpServer(options?: {
   // pass false so the qunit runner isn't torn down before teardown hooks can
   // release hardcoded test ports (CS-10813).
   fatalExitOnUncaught?: boolean;
+  // Default true. Gates every call this server makes to the prerender
+  // manager: the registration heartbeat, the unregister on close, and the
+  // page pool's affinity-eviction notices. A server that is only
+  // reached directly by its own URL passes false, so a machine-wide manager
+  // never routes other clients' renders to it.
+  registerWithManager?: boolean;
 }): Server {
   let draining = false;
   let drainingResolved = false;
@@ -1567,19 +1834,34 @@ export function createPrerenderHttpServer(options?: {
   // retries on the next heartbeat. A visit samples this one, because it moves
   // when the change is learned rather than when the teardown finishes.
   let reportedHostShellHash: string | undefined;
+  // The ordering position of `warmedHostShellHash`, moved with it in the same
+  // assignment. A visit stamps this onto the rows it produces, which is what a
+  // repair pass selects on — so it has to name the bundle the pages were
+  // actually running, not the one the manager has since reported. Undefined
+  // whenever the manager sent no number, and never carried over from a
+  // previous token: a stale generation on a current token would attribute rows
+  // to a bundle that did not render them.
+  //
+  // There is no reported counterpart. The reported token is sampled by a visit
+  // to decide whether the pool is behind, and that comparison is between
+  // tokens; a number for a shell no page here has loaded would order nothing.
+  let warmedHostShellGeneration: number | undefined;
   // The recycle in flight for the last token change, so a visit can wait for
   // the pool to be replaced before rendering again. Never rejects.
   let hostShellRecycle: Promise<void> | undefined;
   let recyclingForHostChange = false;
   let isClosing = false;
   let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
+  let registerWithManager = options?.registerWithManager ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
   let { app, prerenderer } = buildPrerenderApp({
     getHostShellHash: () => reportedHostShellHash,
     getWarmedHostShellHash: () => warmedHostShellHash,
+    getWarmedHostShellGeneration: () => warmedHostShellGeneration,
     awaitHostShellRecycle: () => hostShellRecycle,
     maxPages: options?.maxPages,
     serverURL,
+    registerWithManager,
     isDraining: () => draining,
     drainingPromise: drainingDeferred.promise,
   });
@@ -1611,6 +1893,7 @@ export function createPrerenderHttpServer(options?: {
   );
 
   async function sendHeartbeat(status?: 'active' | 'draining') {
+    if (!registerWithManager) return;
     try {
       const managerURL = resolvePrerenderManagerURL();
       const capacity = prerenderer.currentPoolCapacity;
@@ -1632,7 +1915,7 @@ export function createPrerenderHttpServer(options?: {
       log.debug(
         `POST heartbeat to ${managerURL}/prerender-servers with body:\n${JSON.stringify(body, null, 2)}`,
       );
-      let response = await fetch(`${managerURL}/prerender-servers`, {
+      let response = await fetchFromManager(`${managerURL}/prerender-servers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/vnd.api+json',
@@ -1646,6 +1929,9 @@ export function createPrerenderHttpServer(options?: {
       if (response) {
         reconcileHostShell(
           response.headers.get(PRERENDER_HOST_SHELL_HASH_HEADER),
+          parseHostShellGeneration(
+            response.headers.get(PRERENDER_HOST_SHELL_GENERATION_HEADER),
+          ),
         );
       }
     } catch (e) {
@@ -1664,7 +1950,10 @@ export function createPrerenderHttpServer(options?: {
   // restart serializes behind the warm rather than racing it — `closeAll`
   // awaits any in-flight standby refill before closing — so pages the warm is
   // mid-way through creating can't outlive the browser the restart replaces.
-  function reconcileHostShell(hash: string | null) {
+  function reconcileHostShell(
+    hash: string | null,
+    generation: number | undefined,
+  ) {
     // Recorded before the guards below, because what the manager reported is
     // true whether or not this server is in a position to act on it.
     if (hash) {
@@ -1677,10 +1966,21 @@ export function createPrerenderHttpServer(options?: {
       hash,
       warmedHostShellHash,
     );
+    // The number that goes with `nextWarmed`, captured here rather than read
+    // when the recycle resolves: another heartbeat can report a further token
+    // while the recycle is in flight, and the pool being re-warmed is the one
+    // this reconcile decided on.
+    let nextWarmedGeneration =
+      nextWarmed === undefined
+        ? undefined
+        : nextWarmed === hash
+          ? generation
+          : warmedHostShellGeneration;
     if (!recycle) {
       // Either nothing was reported or the token matches the baseline —
       // record it and we're done.
       warmedHostShellHash = nextWarmed;
+      warmedHostShellGeneration = nextWarmedGeneration;
       return;
     }
     recyclingForHostChange = true;
@@ -1693,6 +1993,7 @@ export function createPrerenderHttpServer(options?: {
       .recycle()
       .then(() => {
         warmedHostShellHash = nextWarmed;
+        warmedHostShellGeneration = nextWarmedGeneration;
       })
       .catch((e) => {
         // Leave warmedHostShellHash unchanged so the next heartbeat retries.
@@ -1705,7 +2006,7 @@ export function createPrerenderHttpServer(options?: {
   }
 
   function startHeartbeatLoop() {
-    if (heartbeatTimer) return;
+    if (heartbeatTimer || !registerWithManager) return;
     void sendHeartbeat();
     heartbeatTimer = setInterval(() => {
       void sendHeartbeat();
@@ -1726,6 +2027,7 @@ export function createPrerenderHttpServer(options?: {
   server.on('close', async () => {
     stopHeartbeatLoop();
     await stopPrerendererOnce();
+    if (!registerWithManager) return;
     try {
       await unregisterWithManager(serverURL);
     } catch (e) {

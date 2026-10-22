@@ -6,6 +6,78 @@ Entries below are written by CI on each stable promotion — most recent first.
 
 <!-- New entries are inserted directly below this line by the stable job in .github/workflows/boxel-cli-publish.yml. -->
 
+## 2026-10-07 — npm v0.8.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.8.0
+
+## @cardstack/boxel-cli v0.8.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.8.0
+
+## Changes
+
+- feat: Let card authors name and download PDF captures by @lukemelia in https://github.com/cardstack/boxel/pull/6582
+- feat: Shim glimmer-motion and choreo into realms, with boxel parse types and host tests by @lukemelia in https://github.com/cardstack/boxel/pull/6541
+- ci: stop the boxel-cli publish workflow failing on releases that worked by @habdelra in https://github.com/cardstack/boxel/pull/6516
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.7.0...boxel-cli-v0.8.0
+
+## 2026-10-04 — npm v0.7.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.7.0
+
+## @cardstack/boxel-cli v0.7.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.7.0
+
+## Changes
+
+- chore: release boxel-cli as 0.7.0 rather than 1.0.0 by @habdelra in https://github.com/cardstack/boxel/pull/6511
+- feat: move the card-building skills to a boxel-skills plugin (Codex users: also install boxel-skills) by @habdelra in https://github.com/cardstack/boxel/pull/6506
+- feat!: rename the declared-screenshot feature to "captures" by @lukemelia in https://github.com/cardstack/boxel/pull/6307
+- feat: list every profile in `profile list`, add `--json` and a count by @lukemelia in https://github.com/cardstack/boxel/pull/6299
+- fix(skills): read block-scalar skill descriptions by @FadhlanR in https://github.com/cardstack/boxel/pull/6212
+- test: live-test harness collects import-time test registrations by @richardhjtan in https://github.com/cardstack/boxel/pull/6225
+- fix: resolve realm-prefixed imports in the parse gate by @FadhlanR in https://github.com/cardstack/boxel/pull/6211
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.6.0...boxel-cli-v0.7.0
+
+## 2026-09-23 — npm v0.6.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.6.0
+
+## @cardstack/boxel-cli v0.6.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.6.0
+
+## Changes
+
+- feat: handle login-token rate limit clearly in `boxel browse` by @FadhlanR in https://github.com/cardstack/boxel/pull/6199
+- feat(skills): add the card-operations authoring skill to the CLI plugin by @habdelra in https://github.com/cardstack/boxel/pull/6242
+- chore: resolve ember-provide-consume-context to one copy for base and host by @backspace in https://github.com/cardstack/boxel/pull/6183
+- fix: add the page.pdf capture leg, capture-only via POST /\_screenshot-card by @lukemelia in https://github.com/cardstack/boxel/pull/6120
+- docs: boxel-cli README — say what the CLI is for by @tintinthong in https://github.com/cardstack/boxel/pull/6100
+- fix(boxel-cli): resolve @cardstack/boxel-host/lib/\* in glint check; capture-readiness definitive-failure signal by @lukemelia in https://github.com/cardstack/boxel/pull/6064
+- feat: add opt-in ts_rank relevancy scoring to the full-text matches path by @FadhlanR in https://github.com/cardstack/boxel/pull/6013
+- feat: PDF fitted first-page poster (declared poster slot) by @lukemelia in https://github.com/cardstack/boxel/pull/6029
+- ci: Fix Boxel CLI tests by @backspace in https://github.com/cardstack/boxel/pull/5976
+- fix: percent-encode file names carried in HTTP headers by @habdelra in https://github.com/cardstack/boxel/pull/6008
+- fix: resolve card-facing packages in published boxel-cli parse by @habdelra in https://github.com/cardstack/boxel/pull/6006
+- fix: identify and date `boxel test`'s local module mounts by @habdelra in https://github.com/cardstack/boxel/pull/6005
+- fix: let a headless command save a card without deadlocking indexing by @habdelra in https://github.com/cardstack/boxel/pull/6001
+- feat: ScreenshotCardTool served-URL parity and download-file-to-realm by @lukemelia in https://github.com/cardstack/boxel/pull/5962
+- fix(boxel-cli): a Boxel CLI Tests flake, the checkpoint read behind it, and deadlines that hid both by @habdelra in https://github.com/cardstack/boxel/pull/5978
+- fix: assemble a card type's module info without re-asking the realm by @habdelra in https://github.com/cardstack/boxel/pull/5981
+- refactor: seed a Home README into a user's personal (first) realm by @FadhlanR in https://github.com/cardstack/boxel/pull/5953
+- feat: add `boxel screenshot` command by @lukemelia in https://github.com/cardstack/boxel/pull/5910
+- feat: boxel browse opens published realms without signing in by @FadhlanR in https://github.com/cardstack/boxel/pull/5914
+- feat: boxel browse opens the app pre-authenticated by @FadhlanR in https://github.com/cardstack/boxel/pull/5859
+- chore: Add `@typescript-eslint` v8 followups by @backspace in https://github.com/cardstack/boxel/pull/5865
+- feat: create a personal realm for accounts minted during profile add by @lukemelia in https://github.com/cardstack/boxel/pull/5831
+- feat: Bring the BXL authoring skill into the plugin and pin its claims by @habdelra in https://github.com/cardstack/boxel/pull/5819
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.5.0...boxel-cli-v0.6.0
+
 ## 2026-08-12 — npm v0.5.0
 
 Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.5.0

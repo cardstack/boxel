@@ -21,6 +21,15 @@ case "$REALM_TEST_URL" in
 esac
 BASE_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/base/${READY_PATH}"
 NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-test/${READY_PATH}"
+# The secure origin's page shell, served by the dev realm-server's own
+# listener. The host's secure-origin isolation test opens it, and a window
+# that fails to load is as unreadable as one showing the shell, so the stack
+# isn't ready until the shell answers.
+case "$SECURE_ORIGIN_URL" in
+  https://*) SECURE_READY_SCHEME="https-get" ;;
+  *)         SECURE_READY_SCHEME="http-get"  ;;
+esac
+SECURE_ORIGIN_READY="${SECURE_READY_SCHEME}://${SECURE_ORIGIN_URL#*://}"
 
 HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn}"
 SKIP_CATALOG="${SKIP_CATALOG:-}"
@@ -87,6 +96,7 @@ fi
 # here with it torn down. Keep the two values in step.
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
+  SKIP_CHOREO_GALLERY=true \
   SKIP_CATALOG="$SKIP_CATALOG" \
   SKIP_BOXEL_HOMEPAGE=true \
   SKIP_SUBMISSION=true \
@@ -96,7 +106,7 @@ WAIT_ON_TIMEOUT=900000 \
   START_SERVER_AND_TEST_INSECURE=1 \
   start-server-and-test \
     'run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
-    "${BASE_REALM_READY}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}" \
+    "${BASE_REALM_READY}|${SECURE_ORIGIN_READY}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}" \
     'run-p -ln start:worker-test start:test-realms' \
     "${NODE_TEST_REALM_READY}" \
     'wait'

@@ -37,8 +37,8 @@ import {
   type ModuleDefinitionResult,
   type ModuleRenderResponse,
   type Prerenderer,
+  type CreatePrerenderAuth,
   type Realm,
-  type RealmPermissions,
   type ResolvedCodeRef,
   type Diagnostics,
   executableExtensions,
@@ -103,6 +103,34 @@ const COALESCE_MAX_ITERATIONS = 4;
 // converges as soon as no invalidation lands mid-populate; the cap keeps an
 // invalidation storm from spinning on prerenders instead of surfacing.
 const POPULATE_RACE_MAX_ATTEMPTS = 3;
+// A module in a realm this server does not host can only be placed by asking
+// the realm that holds it, so `buildLookupContext` reaches the network — and
+// the cost of that request is set by the far end, not by anything local. An
+// origin that accepts no connections spends the platform's connect timeout
+// (10s under Node's fetch) before rejecting, and none of that is per-module:
+// a search whose filter names types from an unreachable realm pays it once
+// per type, and the next search pays the whole bill again.
+//
+// Three bounds keep it flat. Each probe carries its own deadline, so an
+// unreachable origin costs the deadline rather than the platform's timeout —
+// generous enough that a realm answering slowly under load is still seen.
+// Concurrent probes for the same module and requesting user share one
+// request. And a transport failure is remembered against the origin that
+// produced it, short-circuiting later probes there until the window lapses:
+// keyed by origin because a connection that never opens says nothing about
+// the path. An HTTP answer — 404 included — is never remembered, since a
+// server that answers at all is already fast.
+//
+// The record's window matches ERROR_CACHE_TTL_MS above, and for the same
+// reason: it is long enough that a failure is not re-paid on every request
+// that follows it, and short enough that a realm coming back is seen without
+// anything having to be restarted or cleared.
+const REALM_PROBE_TIMEOUT_MS = 5_000;
+const REALM_PROBE_UNREACHABLE_TTL_MS = ERROR_CACHE_TTL_MS;
+// How many unreachable origins are remembered at once. Sized well above the
+// number of realms any one deployment federates with, so the cap is a guard
+// against caller-supplied origins accumulating rather than a working limit.
+const REALM_PROBE_UNREACHABLE_MAX = 100;
 const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
   definitions: 'JSON',
   deps: 'JSON',
@@ -337,6 +365,15 @@ export interface DefinitionLookup {
     codeRef: ResolvedCodeRef,
     opts?: DefinitionLookupOptions,
   ): Promise<Definition>;
+  // The type's whole entry: its definition together with the adoption chain
+  // recorded beside it, the type itself and every type it descends from up to
+  // the root of its family, each keyed the way an index row's `types` records
+  // a card's. One read, so the two describe the same module. Resolved exactly
+  // as `lookupDefinition` resolves the type, and refused where it would be.
+  lookupDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<ModuleDefinitionResult>;
   // Like lookupDefinition but does not trigger a prerenderer call or
   // populate missing definitions. It may still perform lookup-context
   // resolution (including remote visibility probing) before reading from the
@@ -347,6 +384,12 @@ export interface DefinitionLookup {
   invalidate(moduleURL: string): Promise<string[]>;
   clearRealmDefinitions(resolvedRealmURL: string): Promise<void>;
   clearAllDefinitions(): Promise<void>;
+  // A counter that moves whenever any definition this lookup serves may have
+  // changed, here or in a peer process. A caller that derives an answer from
+  // definitions alone can keep it for as long as the counter holds the value
+  // it read before it started reading. A lookup without one offers no such
+  // guarantee, and its callers read afresh each time.
+  definitionGeneration?(): number;
   registerRealm(realm: LocalRealm): void;
   forRealm(realm: LocalRealm): DefinitionLookup;
   getCachedDefinitions(
@@ -377,16 +420,82 @@ interface LookupContext {
   priority?: number;
 }
 
+interface RemoteRealmProbe {
+  isPublic: boolean;
+  resolvedRealmURL?: string;
+}
+
+// The origin a probe's transport failure is recorded against. A module URL
+// that cannot be parsed has no origin to blame, so such a probe is bounded by
+// its deadline alone and nothing is remembered.
+function originOf(moduleURL: string): string | undefined {
+  try {
+    return new URL(moduleURL).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+// One timer serving both halves of a probe's bound.
+//
+// `signal` goes on the request, and the reason it aborts with is named
+// `AbortError` rather than the `TimeoutError` an `AbortSignal.timeout` would
+// raise. That name is load-bearing: the virtual network's retry wrapper
+// treats an `AbortError` as caller cancellation and rethrows it, while any
+// other rejection enters its retry loop — so a `TimeoutError` here would
+// leave attempts running in the background after the deadline had already
+// been reported, which is the opposite of a bound.
+//
+// `expired` settles the caller's own race, so the bound holds even where the
+// signal is dropped between here and the socket.
+function probeDeadline(ms: number, description: string) {
+  let controller = new AbortController();
+  let rejectExpired: (reason: unknown) => void;
+  let expired = new Promise<never>((_resolve, reject) => {
+    rejectExpired = reject;
+  });
+  // Never surfaces as an unhandled rejection: `settle` attaches a sink, and
+  // when the request wins the race the timer is cleared before it can fire.
+  expired.catch(() => {});
+  let timer = setTimeout(() => {
+    let reason = new DOMException(
+      `${description} exceeded ${ms}ms`,
+      'AbortError',
+    );
+    controller.abort(reason);
+    rejectExpired(reason);
+  }, ms);
+  return {
+    signal: controller.signal,
+    expired,
+    settle() {
+      clearTimeout(timer);
+    },
+  };
+}
+
+// Identifies the caller a probe is answered for, so probes are shared only
+// among callers whose visibility answer must agree. `forEach` rather than
+// `entries()`: `Headers` is iterable only under a `dom.iterable` lib, and
+// this module is type-checked by packages that do not enable one.
+function probeAuthKey(headers?: HeadersInit): string {
+  if (!headers) {
+    return '';
+  }
+  let parts: string[] = [];
+  new Headers(headers).forEach((value, name) => {
+    parts.push(`${name}:${value}`);
+  });
+  return parts.sort().join(',');
+}
+
 export class CachingDefinitionLookup implements DefinitionLookup {
   #dbAdapter: DBAdapter;
   #prerenderer: Prerenderer;
   #fetch: typeof fetch;
   #virtualNetwork: VirtualNetwork;
   #realms: LocalRealm[] = [];
-  #createPrerenderAuth: (
-    userId: string,
-    permissions: RealmPermissions,
-  ) => string;
+  #createPrerenderAuth: CreatePrerenderAuth;
   // Dedupes concurrent loadDefinitionCacheEntry calls that would hit the same
   // cache row so a single prerenderer round-trip is shared by all waiters
   // instead of each caller racing to the prerenderer independently.
@@ -410,6 +519,17 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   #moduleGenerations = new Map<string, number>();
   #realmGenerations = new Map<string, number>();
   #globalGeneration = 0;
+  // What `definitionGeneration` reports. It moves with every bump above, and
+  // again once an invalidation's delete has committed: between the bump and
+  // the delete a reader can still read the row being removed, and an answer
+  // derived from that row must not outlive the delete.
+  #definitionGeneration = 0;
+  // Remote-realm visibility probes. `#probeInFlight` shares one request among
+  // concurrent probes of the same module and requesting user;
+  // `#unreachableOrigins` maps an origin whose transport failed to the
+  // timestamp its record stops applying. See REALM_PROBE_TIMEOUT_MS.
+  #probeInFlight = new Map<string, Promise<RemoteRealmProbe | null>>();
+  #unreachableOrigins = new Map<string, number>();
   // CS-10953 cross-process prerender coalescer. Optional — when undefined,
   // loadDefinitionCacheEntryUncached runs the original uncoordinated path.
   // Constructed only by the realm-server main when
@@ -420,10 +540,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     dbAdapter: DBAdapter,
     prerenderer: Prerenderer,
     virtualNetwork: VirtualNetwork,
-    createPrerenderAuth: (
-      userId: string,
-      permissions: RealmPermissions,
-    ) => string,
+    createPrerenderAuth: CreatePrerenderAuth,
     populateCoordinator?: PopulateCoordinator,
   ) {
     this.#dbAdapter = dbAdapter;
@@ -438,7 +555,18 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
     opts?: DefinitionLookupOptions,
   ): Promise<Definition> {
-    return await this.lookupDefinitionWithContext(codeRef, {
+    return (
+      await this.lookupDefinitionEntryWithContext(codeRef, {
+        ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      })
+    ).definition;
+  }
+
+  async lookupDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<ModuleDefinitionResult> {
+    return await this.lookupDefinitionEntryWithContext(codeRef, {
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
     });
   }
@@ -562,13 +690,18 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     //     runs the prerender and persist directly. This is the path
     //     used by every test that doesn't construct a coordinator and
     //     by sqlite/in-memory deployments.
-    let core: Promise<DefinitionCacheEntry | undefined> = this
-      .#populateCoordinator
-      ? this.loadDefinitionCacheEntryCoordinated(
-          args,
-          this.#populateCoordinator,
-        )
-      : this.loadDefinitionCacheEntryUncached(args);
+    // Callers searching different realms share this entry — the key names a
+    // module and a cache scope, not a requester — so its database work runs as
+    // shared work (see `DBAdapter.withSharedWork`).
+    let load = () =>
+      this.#populateCoordinator
+        ? this.loadDefinitionCacheEntryCoordinated(
+            args,
+            this.#populateCoordinator,
+          )
+        : this.loadDefinitionCacheEntryUncached(args);
+    let core: Promise<DefinitionCacheEntry | undefined> =
+      this.#dbAdapter.withSharedWork?.(load) ?? load();
     pending = core.finally(() => {
       // Identity-check before deletion: an invalidation path may have
       // dropped our entry mid-flight, after which a newer caller can
@@ -837,6 +970,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // For a `fileSerialization` that is a failed card write for a module sitting
   // readable on disk.
   bumpModuleGeneration(resolvedRealmURL: string, moduleURL: string): void {
+    this.#definitionGeneration++;
     let key = moduleGenerationKey(resolvedRealmURL, moduleURL);
     this.#moduleGenerations.set(
       key,
@@ -846,6 +980,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   bumpRealmGeneration(resolvedRealmURL: string): void {
+    this.#definitionGeneration++;
     this.#realmGenerations.set(
       resolvedRealmURL,
       (this.#realmGenerations.get(resolvedRealmURL) ?? 0) + 1,
@@ -854,6 +989,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   bumpGlobalGeneration(): void {
+    this.#definitionGeneration++;
     this.#globalGeneration += 1;
     this.#inFlight.clear();
   }
@@ -948,10 +1084,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return entry;
   }
 
-  private async lookupDefinitionWithContext(
+  private async lookupDefinitionEntryWithContext(
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
-  ): Promise<Definition> {
+  ): Promise<ModuleDefinitionResult> {
     let canonicalModuleURL = canonicalURL(
       codeRef.module,
       undefined,
@@ -1043,7 +1179,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
 
     if (defOrError.type === 'definition') {
-      return defOrError.definition;
+      return defOrError;
     }
 
     throw new FilterRefersToNonexistentTypeError(codeRef, {
@@ -1087,6 +1223,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       this.bumpModuleGeneration(resolvedRealmURL, invalidatedURL);
     }
     await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
+    this.#definitionGeneration++;
     await this.notifyDefinitionCacheInvalidations(
       resolvedRealmURL,
       uniqueInvalidations,
@@ -1106,12 +1243,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         ['resolved_realm_url =', param(resolvedRealmURL)],
       ]) as Expression),
     ]);
+    this.#definitionGeneration++;
     await this.notifyRealmDefinitionCacheInvalidation(resolvedRealmURL);
   }
 
   async clearAllDefinitions(): Promise<void> {
     this.bumpGlobalGeneration();
     await this.query(['DELETE FROM', MODULES_TABLE]);
+    this.#definitionGeneration++;
     await this.notifyGlobalDefinitionCacheInvalidation();
   }
 
@@ -1245,6 +1384,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
   }
 
+  definitionGeneration(): number {
+    return this.#definitionGeneration;
+  }
+
   registerRealm(realm: LocalRealm): void {
     this.#realms.push(realm);
   }
@@ -1259,7 +1402,20 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     realm: LocalRealm,
     opts?: DefinitionLookupOptions,
   ): Promise<Definition> {
-    return await this.lookupDefinitionWithContext(codeRef, {
+    return (
+      await this.lookupDefinitionEntryWithContext(codeRef, {
+        requestingRealm: realm,
+        ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      })
+    ).definition;
+  }
+
+  async lookupDefinitionEntryForRealm(
+    codeRef: ResolvedCodeRef,
+    realm: LocalRealm,
+    opts?: DefinitionLookupOptions,
+  ): Promise<ModuleDefinitionResult> {
+    return await this.lookupDefinitionEntryWithContext(codeRef, {
       requestingRealm: realm,
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
     });
@@ -1340,16 +1496,80 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   private async probeRemoteRealm(
     moduleURL: string,
     headers?: HeadersInit,
-  ): Promise<{
-    isPublic: boolean;
-    resolvedRealmURL?: string;
-  } | null> {
+  ): Promise<RemoteRealmProbe | null> {
+    let origin = originOf(moduleURL);
+    if (origin) {
+      let unreachableUntil = this.#unreachableOrigins.get(origin);
+      if (unreachableUntil !== undefined) {
+        if (unreachableUntil > Date.now()) {
+          log.debug(
+            `Skipping remote realm visibility probe for ${moduleURL}: ${origin} is recorded unreachable for another ${unreachableUntil - Date.now()}ms`,
+          );
+          return null;
+        }
+        this.#unreachableOrigins.delete(origin);
+      }
+    }
+
+    // The requesting user is part of the key: visibility is answered per
+    // caller, so two users probing one module must not share a result.
+    let key = `${moduleURL}|${probeAuthKey(headers)}`;
+    let inFlight = this.#probeInFlight.get(key);
+    if (inFlight) {
+      return await inFlight;
+    }
+    let probe = this.probeRemoteRealmUncoalesced(moduleURL, origin, headers);
+    this.#probeInFlight.set(key, probe);
     try {
-      let response = await this.#fetch(moduleURL, {
-        method: 'HEAD',
-        headers,
-      });
+      return await probe;
+    } finally {
+      if (this.#probeInFlight.get(key) === probe) {
+        this.#probeInFlight.delete(key);
+      }
+    }
+  }
+
+  private async probeRemoteRealmUncoalesced(
+    moduleURL: string,
+    origin: string | undefined,
+    headers?: HeadersInit,
+  ): Promise<RemoteRealmProbe | null> {
+    let startedAt = Date.now();
+    // The deadline is enforced on the caller, not only on the request. The
+    // signal is passed as well so the socket is torn down wherever the fetch
+    // stack honors it, but a probe must be bounded even where it does not:
+    // the request travels through the virtual network's remapping, retry and
+    // dispatcher layers, each of which rebuilds it, and a platform connect
+    // timeout an order of magnitude longer than this deadline sits underneath
+    // them all. Racing here makes the bound hold regardless of which layer
+    // the signal survives.
+    let deadline = probeDeadline(
+      REALM_PROBE_TIMEOUT_MS,
+      `remote realm visibility probe for ${moduleURL}`,
+    );
+    let request = this.#fetch(moduleURL, {
+      method: 'HEAD',
+      headers,
+      signal: deadline.signal,
+    });
+    // The abandoned request settles after the race is already lost, so its
+    // rejection needs a sink of its own.
+    request.catch(() => {});
+    try {
+      let response = await Promise.race([request, deadline.expired]);
+      // Any HTTP answer proves the origin is reachable, whatever its status.
+      // Clearing here matters when probes for the same origin overlap: one
+      // may fail at the transport and record the origin while another is
+      // being answered, and leaving that record standing would hide a
+      // demonstrably reachable realm — reporting its types as nonexistent —
+      // until the window lapsed.
+      if (origin) {
+        this.#unreachableOrigins.delete(origin);
+      }
       if (!response.ok) {
+        log.debug(
+          `Remote realm visibility probe for ${moduleURL} answered ${response.status} in ${Date.now() - startedAt}ms`,
+        );
         return null;
       }
       let publicReadable = response.headers.get(
@@ -1365,8 +1585,48 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       };
     } catch (err) {
-      log.warn(`Failed to probe remote realm visibility for ${moduleURL}`, err);
+      if (origin) {
+        this.recordUnreachableOrigin(origin);
+      }
+      log.warn(
+        `Failed to probe remote realm visibility for ${moduleURL} after ${Date.now() - startedAt}ms${
+          origin
+            ? `; treating ${origin} as unreachable for the next ${REALM_PROBE_UNREACHABLE_TTL_MS}ms`
+            : ''
+        }`,
+        err,
+      );
       return null;
+    } finally {
+      deadline.settle();
+    }
+  }
+
+  // A filter carries arbitrary module URLs, so the origins reaching this are
+  // caller-supplied and unbounded in variety. Expiry alone would not contain
+  // the map — a record is only read, and so only retired, when that same
+  // origin is probed again, which for a one-off origin never happens — so
+  // sweep what has lapsed on the way in and cap what remains. Evicting the
+  // oldest insertion is the right sacrifice: it costs one probe the next time
+  // that origin is named, and the origins worth remembering are the ones
+  // being named repeatedly.
+  private recordUnreachableOrigin(origin: string): void {
+    let now = Date.now();
+    for (let [recorded, expiresAt] of this.#unreachableOrigins) {
+      if (expiresAt <= now) {
+        this.#unreachableOrigins.delete(recorded);
+      }
+    }
+    // Re-inserting moves the origin to the end of the Map's insertion order,
+    // which is what makes the eviction below oldest-first.
+    this.#unreachableOrigins.delete(origin);
+    this.#unreachableOrigins.set(origin, now + REALM_PROBE_UNREACHABLE_TTL_MS);
+    while (this.#unreachableOrigins.size > REALM_PROBE_UNREACHABLE_MAX) {
+      let oldest = this.#unreachableOrigins.keys().next();
+      if (oldest.done) {
+        break;
+      }
+      this.#unreachableOrigins.delete(oldest.value);
     }
   }
 
@@ -1376,8 +1636,15 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     userId: string,
     priority?: number,
   ): Promise<ModuleRenderResponse> {
-    let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
-    let auth = this.#createPrerenderAuth(userId, permissions);
+    let permissions = await fetchUserPermissions(this.#dbAdapter, {
+      userId,
+      includePublicRealms: true,
+    });
+    // A definition is cached and read by every realm that uses the module, so
+    // the render that produces one runs under realm authority.
+    let auth = this.#createPrerenderAuth(userId, permissions, {
+      realmAuthority: true,
+    });
     // A populate exists because no usable row was found, which on the write
     // path is precisely because the module's bytes just changed — so the tab
     // this render lands on is the one most likely to be holding the module it
@@ -1390,6 +1657,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     //
     // A read per populate, not per lookup: cache hits never reach here.
     let loaderEpoch = await readRealmLoaderEpoch(this.#dbAdapter, realmURL);
+    // One line per candidate, not per lookup: `populationCandidates` probes
+    // each executable extension in turn, so one miss on an extensionless URL
+    // reaches here several times and names modules that need not exist. The
+    // once-per-lookup cache-effectiveness signal is the MISS line in
+    // `loadDefinitionCacheEntryUncached`, which deliberately excludes these
+    // probes; this says only which candidate was sent, on the key channel that
+    // is off unless `LOG_LEVELS` asks for it.
+    keyLog.debug(`PRERENDER candidate=${moduleUrl} realm=${realmURL}`);
     return await this.#prerenderer.prerenderModule({
       affinityType: 'realm',
       affinityValue: realmURL,
@@ -2034,6 +2309,17 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     );
   }
 
+  async lookupDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<ModuleDefinitionResult> {
+    return await this.#inner.lookupDefinitionEntryForRealm(
+      codeRef,
+      this.#realm,
+      opts,
+    );
+  }
+
   async lookupCachedDefinition(
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined> {
@@ -2052,6 +2338,10 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
 
   async clearAllDefinitions(): Promise<void> {
     await this.#inner.clearAllDefinitions();
+  }
+
+  definitionGeneration(): number {
+    return this.#inner.definitionGeneration();
   }
 
   registerRealm(realm: LocalRealm): void {

@@ -1651,7 +1651,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Proxy request volume broken out by endpoint, from `proxying ${label} prerender request` log lines (manager-app.ts:1071). Lets you see whether the manager is mostly handling `visit` (per-card prerender), `module` (compile-time module prerender), `command` (LLM tool-call execution), or `screenshot` traffic — useful when correlating CPU / latency spikes with workload mix.",
+        "description": "Proxy request volume broken out by endpoint, from `proxying ${label} prerender request` log lines (manager-app.ts:1071). Lets you see whether the manager is mostly handling `visit` (per-card prerender), `module` (compile-time module prerender), `command` (LLM tool-call execution), or `capture` traffic — useful when correlating CPU / latency spikes with workload mix.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1755,8 +1755,8 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"proxying screenshot prerender request\" [1m]))",
-            "legendFormat": "screenshot",
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"proxying capture prerender request\" [1m]))",
+            "legendFormat": "capture",
             "queryType": "range",
             "refId": "D"
           }

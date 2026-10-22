@@ -3,6 +3,7 @@ import Service from '@ember/service';
 import {
   type TestContext,
   getContext,
+  getRootElement,
   visit,
   settled,
 } from '@ember/test-helpers';
@@ -15,10 +16,15 @@ import { getService } from '@universal-ember/test-support';
 import QUnit from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
+import type {
+  AnonymousRateLimit,
+  LinkShapePolicy,
+} from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
   cardDefComputedFields,
   ensureTrailingSlash,
+  fetchEffectiveRealmPermissions,
   getCreatedTime,
   IndexWriter,
   insertPermissions,
@@ -49,6 +55,7 @@ import {
   type RealmIdentifier,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+import { awaitPublishedHtmlReady } from '@cardstack/runtime-common/jobs/prerender-html';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
@@ -95,6 +102,7 @@ export {
   setRealmArchived,
   setRealmAuthFailure,
   setupAuthEndpoints,
+  setupPublicReadableRealms,
   setCatalogRealmURL,
 } from './realm-server-mock';
 export { setupOperatorModeStateCleanup } from './operator-mode-state';
@@ -121,9 +129,7 @@ export function testModuleRRI(path: string): RealmResourceIdentifier {
 export {
   catalogRealmURL,
   skillsRealmURL,
-  skillCardURL,
   skillFileURL,
-  devSkillId,
   skillsIndexId,
 } from '@cardstack/host/lib/utils';
 
@@ -336,31 +342,147 @@ function snapshotNameForCacheKey(
   )}_${slug}`;
 }
 
+// The prefix is keyed by the top-level module. QUnit names a nested module
+// "Parent > Child", and a snapshot made inside it must still fall under the
+// prefix that the top-level module's teardown deletes; otherwise it is never
+// deleted and stays in memory for the rest of the run.
 function snapshotPrefixForModule(moduleCacheKey: string): string {
-  let trimmedModuleCacheKey = moduleCacheKey.trim();
-  if (!trimmedModuleCacheKey) {
+  let topLevelModuleName = moduleCacheKey.split(' > ')[0]!.trim();
+  if (!topLevelModuleName) {
     throw new Error('snapshotPrefixForModule() requires a non-empty cache key');
   }
-  return `snapshot_${simpleHash(trimmedModuleCacheKey)}_`;
+  return `snapshot_${simpleHash(topLevelModuleName)}_`;
 }
 
+// Delays every save the callback triggers by `delayMs` before it reaches the
+// realm, for as long as the callback runs.
+//
+// Of the three holds here, this is the one to reach for when the callback
+// awaits a DOM helper. `withHeldSave` and `withSavesHeldOpen` keep a save in flight, and a
+// save in flight holds a test waiter open, so `click`, `fillIn`, `typeIn` and
+// the rest — all of which settle — would wait on a release the callback has
+// not reached. A slow save still completes, so settling still resolves; it
+// just takes `delayMs` longer. What it buys in exchange is weaker: a window
+// wide enough that a save is unlikely to have landed, rather than one where a
+// save provably cannot have.
+//
+// The original is held in a closure rather than on the store, so nesting works
+// and a callback that throws still restores it.
 export async function withSlowSave(
   delayMs: number,
   cb: () => Promise<void>,
 ): Promise<void> {
   let store = getService('store');
-  (store as any)._originalPersist = (store as any).persistAndUpdate;
+  let originalPersist = (store as any).persistAndUpdate as (
+    instance: CardDef,
+    opts?: unknown,
+  ) => Promise<unknown>;
   (store as any).persistAndUpdate = async (
-    card: CardDef,
-    defaultRealmHref?: string,
+    instance: CardDef,
+    opts?: unknown,
   ) => {
     await delay(delayMs);
-    await (store as any)._originalPersist(card, defaultRealmHref);
+    return await originalPersist.call(store, instance, opts);
   };
   try {
-    return cb();
+    await cb();
   } finally {
-    (store as any).persistAndUpdate = (store as any)._originalPersist;
+    (store as any).persistAndUpdate = originalPersist;
+  }
+}
+
+// Holds every save the callback triggers until the callback returns, then
+// releases them and waits for them to land. The callback therefore runs inside a
+// window where a mutation has been applied locally and no save can have reached
+// the realm, and the caller has the persisted result the moment this helper
+// resolves — neither side times a realm write against a wall clock.
+//
+// A held save holds a test waiter open, so the callback cannot await anything
+// that settles — which is every DOM helper. A callback that clicks or fills
+// belongs on `withSlowSave` instead, and trades the guarantee for a window.
+export async function withHeldSave(cb: () => Promise<void>): Promise<void> {
+  let store = getService('store');
+  let originalPersist = (store as any).persistAndUpdate as (
+    instance: CardDef,
+    opts?: unknown,
+  ) => Promise<unknown>;
+  let release: (() => void) | undefined;
+  let released = new Promise<void>((resolve) => (release = resolve));
+  let heldSaves: Promise<unknown>[] = [];
+  (store as any).persistAndUpdate = (instance: CardDef, opts?: unknown) => {
+    let heldSave = released.then(() =>
+      originalPersist.call(store, instance, opts),
+    );
+    heldSaves.push(heldSave);
+    return heldSave;
+  };
+  try {
+    await cb();
+  } finally {
+    (store as any).persistAndUpdate = originalPersist;
+    release?.();
+    await Promise.allSettled(heldSaves);
+  }
+}
+
+// Lets every save the callback triggers serialize and reach the realm at the
+// moment it is issued, then holds it open — still in flight — until the
+// callback calls `release`. The autosave queue drains one save at a time and
+// gates the next drain on the one in flight, so every mutation made while a
+// save is held coalesces into the single save that follows it.
+//
+// This is the counterpart to `withHeldSave`, which holds entry into
+// `persistAndUpdate`: holding entry changes what a save observes, because the
+// document is serialized when the save runs rather than when it was issued.
+// Holding the save open leaves that alone, which is what a caller asserting on
+// the document a leading-edge save carries needs.
+//
+// Nothing here consults a clock: the callback releases the hold once the state
+// it wants coalesced is in place, so the size of the coalescing window is the
+// caller's to state rather than the runner's to decide. What a callback may do
+// before it releases is therefore bounded: a held save keeps a test waiter
+// open, so anything that ends in `settled()` blocks until the release. Among
+// the DOM helpers that is nearly all of them — `click`, `fillIn`, `typeIn`,
+// `triggerKeyEvent` and `focus` each settle before they resolve, and `typeIn`
+// also settles inside `__focus__` ahead of its first character when the
+// browser window does not hold focus. `waitUntil` polls on a timer and settles
+// at no point, which is the way through.
+//
+// `onSaveIssued` fires as a save enters `persistAndUpdate`, ahead of the
+// document it serializes. A caller wanting to know what state a save carried
+// reads it there: the store's own `onSave` subscriber fires on the far side of
+// the realm round trip, by which point the state has moved on.
+export async function withSavesHeldOpen(
+  cb: (release: () => void) => Promise<void>,
+  opts: { onSaveIssued?: (instance: CardDef) => void } = {},
+): Promise<void> {
+  let store = getService('store');
+  let originalPersist = (store as any).persistAndUpdate as (
+    instance: CardDef,
+    opts?: unknown,
+  ) => Promise<unknown>;
+  let release: (() => void) | undefined;
+  let released = new Promise<void>((resolve) => (release = resolve));
+  let heldSaves: Promise<unknown>[] = [];
+  (store as any).persistAndUpdate = async (
+    instance: CardDef,
+    persistOpts?: unknown,
+  ) => {
+    opts.onSaveIssued?.(instance);
+    let heldSave = (async () => {
+      let result = await originalPersist.call(store, instance, persistOpts);
+      await released;
+      return result;
+    })();
+    heldSaves.push(heldSave);
+    return await heldSave;
+  };
+  try {
+    await cb(() => release?.());
+  } finally {
+    (store as any).persistAndUpdate = originalPersist;
+    release?.();
+    await Promise.allSettled(heldSaves);
   }
 }
 
@@ -465,10 +587,11 @@ export async function capturePrerenderResult(
     ''
   ).trim();
   if (errorText.length > 0) {
-    return {
-      status: 'error',
-      value: normalizeCapturedErrorText(errorText),
-    };
+    let value = normalizeCapturedErrorText(errorText);
+    if (expectedStatus === 'ready') {
+      warnUnexpectedPrerenderError(errorElement!, value);
+    }
+    return { status: 'error', value };
   }
   if (!container) {
     throw new Error(
@@ -481,14 +604,34 @@ export async function capturePrerenderResult(
     | 'unusable'
     | undefined;
   if (status === 'error' || status === 'unusable') {
-    return {
-      status: 'error',
-      value: normalizeCapturedErrorText(
-        container.innerHTML!.replace(/}[^}]*$/, '}'),
-      ),
-    };
+    let value = normalizeCapturedErrorText(
+      container.innerHTML!.replace(/}[^}]*$/, '}'),
+    );
+    if (expectedStatus === 'ready') {
+      warnUnexpectedPrerenderError(container, value);
+    }
+    return { status: 'error', value };
   }
   return { status: 'ready', value: container.children[0][capture]! };
+}
+
+// A capture that waited for `ready` and read an error says where the error
+// came from. The queries above search the whole document. Everything the app
+// renders sits inside its root element; a marker outside it was appended to
+// the page by the render route's own fallback for a failure before any render
+// template mounted — this test's, or an earlier test's that nothing removed.
+function warnUnexpectedPrerenderError(element: HTMLElement, value: string) {
+  let placement = getRootElement().contains(element)
+    ? 'inside the app root element'
+    : 'OUTSIDE the app root element (appended by the render route fallback)';
+  let marker = element.closest<HTMLElement>('[data-prerender]');
+  console.warn(
+    `capturePrerenderResult waited for 'ready' but read an error from ` +
+      `<${element.tagName.toLowerCase()}> ${placement}; ` +
+      `data-prerender-id=${marker?.dataset.prerenderId ?? 'none'} ` +
+      `data-prerender-status=${marker?.dataset.prerenderStatus ?? 'none'}: ` +
+      value,
+  );
 }
 
 export interface WaitForLoadedImageOptions {
@@ -1025,7 +1168,10 @@ export function setupLocalIndexing(hooks: NestedHooks) {
       clearFetchCache: true,
       reason: 'test teardown',
     });
-    getTestRealmRegistry().clear();
+    // The test-realm registry is cleared by setupApplicationTest /
+    // setupRenderingTest once the owner is destroyed, not here: the app is
+    // still live for the rest of teardown and its fetches must keep reaching
+    // the in-process realms.
   });
 }
 
@@ -1212,10 +1358,6 @@ export async function setupAcceptanceTestRealm({
     audioSizeLimitBytes,
     videoSizeLimitBytes,
   });
-  getTestRealmRegistry().set(result.realm.url, {
-    realm: result.realm,
-    adapter: result.adapter,
-  });
   return result;
 }
 
@@ -1225,6 +1367,9 @@ export async function setupIntegrationTestRealm({
   permissions,
   mockMatrixUtils,
   skipBootIndex,
+  linkShapePolicy,
+  anonymousRateLimit,
+  enforcePermissions,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1243,15 +1388,56 @@ export async function setupIntegrationTestRealm({
   // Not the default: a test that queries, or that reads a card by id through
   // the store, needs the index populated and fails without it.
   skipBootIndex?: true;
+  // Serve card reads the way a realm configured for links-only live reads
+  // does: relationships carry their links, but the targets behind them are
+  // not side-loaded into `included`, so the reader resolves each one itself.
+  linkShapePolicy?: LinkShapePolicy;
+  // The rate limit a policy grant counts callers who aren't signed in against
+  // where it sets none, as a realm server configures it. The realm reports it
+  // in its info. Unset, the platform's default.
+  anonymousRateLimit?: AnonymousRateLimit;
+  // Judge the host's requests by the realm's ACL, as a deployed realm does.
+  //
+  // By default the realm answers every request as its own internal dispatch,
+  // so `permissions` decide nothing about what the host is served: no ACL
+  // check runs, and so no policy gate, no refusal, and no capability check
+  // or explain that turns on who is asking. With this set, a request the host
+  // sends is judged against the session it carries, and that session is the
+  // signed-in user's, carrying what the realm computes for them from the
+  // permissions it stores. A user `permissions` gives nothing is a signed-in
+  // caller the ACL declines, which is who a realm's policy exists for.
+  //
+  // The realm's own work is still its own: the indexer's requests and the
+  // in-browser render that indexes a card are dispatched as the realm's,
+  // which is the authority they run under in a deployed realm. A request the
+  // test sends while a render is under way is taken for the realm's too; see
+  // `permissionCheckingHandler` for which renders those are and how a test
+  // keeps its assertions clear of them.
+  //
+  // A 401 or 403 the host is answered with raises its auth-error signal, which
+  // the in-browser renderer reads too, and the renderer then fails the next
+  // render it runs. The realm renders to read the definitions its policy names,
+  // so a refusal of that kind can make the realm refuse what its policy grants.
+  // Setup signs the host in with the session its permissions call for before
+  // the host sends the realm anything, the matrix boot's requests included,
+  // so none of the host's own requests is refused for want of a session. A
+  // signed-in user the realm's permissions refuse is still refused: the matrix
+  // boot reads the default system card from the realm at `testRealmURL`, so a
+  // realm there that won't let the user read it answers that read with a 403.
+  // A test that provokes a refusal on purpose, or sets up such a realm, has to
+  // allow for it.
+  enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
   videoSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
-  setupAuthEndpoints({
-    [resolvedRealmURL]: deriveTestUserPermissions(permissions),
-  });
+  if (!enforcePermissions) {
+    setupAuthEndpoints({
+      [resolvedRealmURL]: deriveTestUserPermissions(permissions),
+    });
+  }
   let result = await setupTestRealm({
     contents,
     realmURL: resolvedRealmURL,
@@ -1259,14 +1445,13 @@ export async function setupIntegrationTestRealm({
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
     skipBootIndex,
+    linkShapePolicy,
+    anonymousRateLimit,
+    enforcePermissions,
     startMatrix,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
     videoSizeLimitBytes,
-  });
-  getTestRealmRegistry().set(result.realm.url, {
-    realm: result.realm,
-    adapter: result.adapter,
   });
   return result;
 }
@@ -1342,6 +1527,9 @@ async function setupTestRealm({
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
   skipBootIndex,
+  linkShapePolicy,
+  anonymousRateLimit,
+  enforcePermissions,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1353,6 +1541,9 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
   skipBootIndex?: true;
+  linkShapePolicy?: LinkShapePolicy;
+  anonymousRateLimit?: AnonymousRateLimit;
+  enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -1407,6 +1598,36 @@ async function setupTestRealm({
   }
 
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+  // Before accepting a session the realm asks whether its user's sessions were
+  // revoked, which it reads from the realm server's `users` table. The
+  // browser's schema leaves that table out with the rest of the realm server's
+  // account tables, so only the column the check reads is made. Every realm
+  // needs it, not only one that sets `enforcePermissions`: a realm asks the
+  // question of any session it verifies, and the read probe a card+json `HEAD`
+  // makes verifies one in any realm not everyone may read.
+  await dbAdapter.execute(
+    `CREATE TABLE IF NOT EXISTS users (matrix_user_id TEXT PRIMARY KEY, sessions_revoked_at INTEGER)`,
+  );
+  let sessionFor: ((user: string) => Promise<RealmAction[]>) | undefined;
+  if (enforcePermissions) {
+    // The sessions the signed-in user is handed for this realm carry what the
+    // realm will compute for them, read back from where the realm reads it,
+    // since it refuses a session whose permissions differ from its own.
+    sessionFor = async (user: string) =>
+      await fetchEffectiveRealmPermissions(
+        dbAdapter,
+        new URL(realmURL),
+        user,
+        baseTestMatrix.url.href,
+      );
+    setupAuthEndpoints({ [realmURL]: await sessionFor(TEST_MATRIX_USER) });
+    if (mockMatrixUtils.loggedInAs) {
+      mockMatrixUtils.setRealmSessionPermissions(
+        realmURL,
+        await sessionFor(mockMatrixUtils.loggedInAs),
+      );
+    }
+  }
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
@@ -1458,7 +1679,11 @@ async function setupTestRealm({
     // one into the first argument type-checks — object spreads bypass
     // excess-property checking — and is then dropped by a destructuring that
     // never names it, so the option silently does nothing.
-    { ...(skipBootIndex ? { skipBootIndex } : {}) },
+    {
+      ...(skipBootIndex ? { skipBootIndex } : {}),
+      ...(linkShapePolicy ? { linkShapePolicy } : {}),
+      ...(anonymousRateLimit ? { anonymousRateLimit } : {}),
+    },
   );
 
   // Register the realm early so realm-server mock _info lookups can resolve
@@ -1466,6 +1691,7 @@ async function setupTestRealm({
   getTestRealmRegistry().set(realm.url, {
     realm,
     adapter,
+    ...(sessionFor ? { sessionPermissionsFor: sessionFor } : {}),
   });
 
   // we use this to run cards that were added to the test filesystem
@@ -1476,24 +1702,53 @@ async function setupTestRealm({
   );
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
+  let handler = enforcePermissions
+    ? permissionCheckingHandler(realm)
+    : realm.maybeHandle;
+
   // A realm that skipped its boot index serves its seeded instances from an
   // index that was never built, so a read for one comes back empty instead of
   // failing. That surfaces as a missing card or an empty result set far from
   // its cause, so reject it here instead, where the option is visible.
   //
-  // `maybeHandle` is the realm's request surface and the only route a test
-  // takes to it; the realm's own lookups go through its query engine directly
-  // and are unaffected. Instances written during a test are indexed
+  // The mounted handler is the realm's request surface and the only route a
+  // test takes to it; the realm's own lookups go through its query engine
+  // directly and are unaffected. Instances written during a test are indexed
   // incrementally, so only the seeded ones are refused.
   virtualNetwork.mount(
-    skipBootIndex
-      ? guardIndexReads(realm.maybeHandle, realmURL, contents)
-      : realm.maybeHandle,
+    skipBootIndex ? guardIndexReads(handler, realmURL, contents) : handler,
   );
   await adapter.ready;
   await worker.run();
   await realm.start();
+  if (enforcePermissions) {
+    await settleRealmRenders();
+  }
   if (startMatrix) {
+    if (enforcePermissions) {
+      // The host signs in to this realm now, with the session its permissions
+      // call for, rather than on its first request. A session it holds from
+      // before the realm was set up carries the default realm's permissions,
+      // and without one its first request is anonymous; the realm refuses
+      // either with a 401. The host recovers from that by signing in, but the
+      // in-browser renderer shares the host's auth-error signal and fails its
+      // next render on it, and the realm renders to read the definitions its
+      // policy names.
+      //
+      // It signs in before the matrix boot, because the boot sends requests
+      // of its own: it reads the default system card, which lives in the
+      // realm at `testRealmURL`, so a realm set up there is asked for it
+      // before anything else.
+      //
+      // A session that can't be minted is reported as an auth error rather
+      // than thrown, and that would fail the renderer's next render far from
+      // here, so setup stops on it instead.
+      if (!(await getService('realm').reauthenticate(realmURL))) {
+        throw new Error(
+          `setup could not sign the host in to ${realmURL} before the matrix boot`,
+        );
+      }
+    }
     await mockMatrixUtils.start();
   }
 
@@ -1505,10 +1760,74 @@ async function setupTestRealm({
   return { realm, adapter };
 }
 
+const TEST_MATRIX_USER = '@testuser:localhost';
+
+// The realm's request surface for a test that has it judge the host's
+// requests by its ACL (see `enforcePermissions`).
+//
+// The realm's own work carries the realm's authority in a deployed realm, so
+// it is dispatched as the realm's own here: the indexer sends every request
+// assuming the realm's owner, and the in-browser render that indexes a card
+// runs inside the render context. A render reads the source of every card it
+// indexes, the realm's policy card included, so judged as the signed-in user
+// the realm could not index what its ACL keeps from them.
+//
+// In a deployed realm the render runs in a tab of its own. Here it shares the
+// app with the test, and the render context is the only thing that marks its
+// requests, so a request the test sends while a render is under way is taken
+// for the realm's as well. `settleRealmRenders` waits out the renders the
+// realm queues after indexing. It cannot wait out one the realm runs while it
+// answers a request, to read a definition it has not cached, so a request the
+// test sends while another is still being answered can be taken for the
+// realm's too. A test sends the requests whose answers it asserts one at a
+// time, and pairs each admission it asserts with a refusal under the same
+// session, which a request taken for the realm's own would not get.
+function permissionCheckingHandler(
+  realm: Realm,
+): (request: Request) => Promise<ResponseWithNodeStream | null> {
+  return async (request: Request) => {
+    let realmsOwn =
+      request.headers.has('X-Boxel-Assume-User') ||
+      (globalThis as { __boxelRenderContext?: boolean })
+        .__boxelRenderContext === true;
+    return realmsOwn
+      ? await realm.maybeHandle(request)
+      : await realm.handle(request);
+  };
+}
+
+// Waits until no test realm owes a render: each one's indexing has finished
+// and every card it indexed has its HTML rendered. A realm renders after an
+// index pass as a job of its own, so a render can still be under way after
+// setup returns or a write has been answered.
+//
+// A suite that sets `enforcePermissions` needs that before it asks the realm
+// anything its ACL decides, since a request sent while any realm's render is
+// under way is answered as the realm's own (see `permissionCheckingHandler`):
+// the render context that marks a render's requests is the app's, not one
+// realm's. Setting up a realm that checks permissions settles every realm set
+// up before it; a test that writes, or sets up another realm afterwards,
+// calls this before it asks.
+export async function settleRealmRenders(): Promise<void> {
+  let dbAdapter = await getDbAdapter();
+  for (let { realm } of getTestRealmRegistry().values()) {
+    await realm.incrementalIndexing();
+    await realm.indexing();
+    let rendered = await awaitPublishedHtmlReady(dbAdapter, realm.url, {
+      timeoutMs: 30_000,
+      pollIntervalMs: 25,
+    });
+    if (!rendered) {
+      throw new Error(
+        `${realm.url} still owes renders of what it indexed after 30 seconds`,
+      );
+    }
+  }
+}
+
 function deriveTestUserPermissions(
   permissions?: RealmPermissions,
 ): RealmAction[] {
-  const TEST_MATRIX_USER = '@testuser:localhost';
   if (!permissions) {
     return ['read', 'write'];
   }
@@ -2339,6 +2658,11 @@ export function realmConfigCardJSON(
     iconURL?: string;
     backgroundURL?: string;
     includePrerenderedDefaultRealmIndex?: boolean;
+    // The URL of the card whose policy governs the realm.
+    policy?: string;
+    // The realm's own settings, which a card operation reads with
+    // `realmConfig("key")`.
+    config?: Record<string, unknown>;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -2354,6 +2678,12 @@ export function realmConfigCardJSON(
   if (config.includePrerenderedDefaultRealmIndex !== undefined) {
     attrs.includePrerenderedDefaultRealmIndex =
       config.includePrerenderedDefaultRealmIndex;
+  }
+  if (config.policy !== undefined) {
+    attrs.policy = config.policy;
+  }
+  if (config.config !== undefined) {
+    attrs.config = config.config;
   }
   return JSON.stringify({
     data: {

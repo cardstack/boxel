@@ -1,0 +1,62 @@
+{
+  "name": "@cardstack/secure-origin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The secure origin's pages: the secure window's shell and the credential fields the app frames, built as their own Ember app.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:build": "SECURE_ORIGIN_BUILD_RECORD=check vite build --outDir dist-lint --emptyOutDir",
+    "lint:js": "eslint . --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
+    "lint:hbs": "ember-template-lint . --no-error-on-unmatched-pattern",
+    "lint:hbs:fix": "ember-template-lint . --no-error-on-unmatched-pattern --fix",
+    "test": "node --test 'tests/**/*.test.ts'",
+    "lint:types": "ember-tsc --noEmit"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./security/*": "./src/security/*",
+    "./shell/*": "./src/shell/*",
+    "./dist/*": "./dist/*"
+  },
+  "dependencies": {
+    "@babel/runtime": "catalog:",
+    "@glimmer/component": "catalog:",
+    "decorator-transforms": "catalog:",
+    "ember-source": "catalog:"
+  },
+  "devDependencies": {
+    "@babel/core": "catalog:",
+    "@babel/plugin-transform-runtime": "^7.29.0",
+    "@babel/plugin-transform-typescript": "catalog:",
+    "@embroider/core": "^4.6.3",
+    "@embroider/macros": "^1.20.5",
+    "@embroider/vite": "^1.7.10",
+    "@glint/ember-tsc": "catalog:",
+    "@glint/template": "catalog:",
+    "@rollup/plugin-babel": "catalog:",
+    "@types/node": "catalog:",
+    "babel-plugin-ember-template-compilation": "catalog:",
+    "concurrently": "catalog:",
+    "ember-template-lint": "catalog:",
+    "eslint": "catalog:",
+    "glimmer-scoped-css": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "vite": "^8.0.10"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "ember": {
+    "edition": "octane"
+  },
+  "ember-addon": {
+    "type": "app",
+    "version": 2
+  }
+}

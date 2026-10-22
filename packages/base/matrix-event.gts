@@ -6,9 +6,6 @@ import type {
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import type {
   APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -197,6 +194,10 @@ export interface BoxelErrorForContext {
 export interface BoxelContext {
   agentId?: string;
   openCardIds?: RealmResourceIdentifier[];
+  // The registered realm prefixes (`@cardstack/base/`), each mapped to the URL
+  // its realm is served from. Identifiers elsewhere in the context are in
+  // prefix form for a file in one of these realms.
+  realmPrefixes?: Record<string, string>;
   realmUrl?: string;
   realmPermissions?: {
     canRead: boolean;
@@ -232,6 +233,10 @@ export interface BoxelContext {
     activeSpecId?: string;
   };
   debug?: boolean;
+  // Set by the chat composer on a message the user typed. Messages the app
+  // composes and posts as the user (an error report, a prompt a tool sends)
+  // never carry it, so readers can tell what the user actually wrote.
+  typedByUser?: boolean;
   requireToolCall?: boolean;
   functions?: Tool['function'][];
 }
@@ -346,17 +351,6 @@ export interface BotTriggerEvent extends BaseMatrixEvent {
   content: BotTriggerContent;
 }
 
-export interface CodePatchResultEvent extends BaseMatrixEvent {
-  type: typeof APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE;
-  content: CodePatchResultContent;
-  unsigned: {
-    age: number;
-    transaction_id: string;
-    prev_content?: any;
-    prev_sender?: string;
-  };
-}
-
 export interface ToolDefinitionSchema {
   codeRef: {
     module: string;
@@ -365,7 +359,16 @@ export interface ToolDefinitionSchema {
   tool: Tool;
 }
 
-export type ToolResultStatus = 'applied' | 'failed' | 'invalid';
+// 'approved' is not an outcome: the user approved a call ai-bot holds for
+// approval (see ToolRequest.approvalRequired), and ai-bot answers it with the
+// call's real result. 'canceled' is the outcome of a call that never ran
+// because the user stopped the assistant first.
+export type ToolResultStatus =
+  | 'applied'
+  | 'failed'
+  | 'invalid'
+  | 'approved'
+  | 'canceled';
 
 // One tool definition the bot discovered by reading a skill markdown file
 // (readRealmFile): the entry from the skill's indexed frontmatter, tagged
@@ -395,6 +398,11 @@ export interface ToolResultWithOutputContent {
   // some of its files, or a skill read whose declared tools lack usable
   // indexed definitions and so cannot be offered).
   failureReason?: string;
+  // Present on a result of a call the user asked to go ahead (Run, Retry,
+  // Accept All, Approve). It lifts a stop the user pressed, as a message from
+  // them would (see runtime-common/ai/stop.ts). A decline or a result the
+  // host sent on its own never carries it.
+  resumesAssistant?: true;
   data: {
     // we retrieve the content on the server side by downloading the file
     card?: SerializedFile & { content?: string; error?: string };
@@ -419,29 +427,12 @@ export interface ToolResultWithNoOutputContent {
   msgtype: ToolResultWithNoOutputMsgtype;
   commandRequestId: string;
   failureReason?: string; // only present if status is 'failed' or 'invalid'
+  // See ToolResultWithOutputContent.resumesAssistant.
+  resumesAssistant?: true;
   data: {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
-  };
-}
-
-export type CodePatchStatus = 'applied' | 'failed'; // possibly add 'rejected' in the future
-
-export interface CodePatchResultContent {
-  'm.relates_to': {
-    rel_type: typeof APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE;
-    key: CodePatchStatus;
-    event_id: string;
-  };
-  msgtype: typeof APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE;
-  codeBlockIndex: number;
-  failureReason?: string; // only present if status is 'failed'
-  data: {
-    context?: BoxelContext;
-    attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
-    attachedCards?: (SerializedFile & { content?: string; error?: string })[];
-    lintIssues?: string[];
   };
 }
 
@@ -468,14 +459,101 @@ export type RealmEventContent =
 export type IndexRealmEventContent =
   | IncrementalIndexEventContent
   | FullIndexEventContent
-  | CopiedIndexEventContent
   | IncrementalIndexInitiationContent;
+
+// One publish an index pass indexed alongside others. See
+// `IncrementalIndexEventContent.coalescedWrites`.
+export interface CoalescedIndexWrite {
+  clientRequestId: string | null;
+  // Which of the event's `invalidations` this publish asked the pass to index
+  // — the cards it wrote or removed, spelled as `invalidations` spells them.
+  // Null when the realm could not say, which a subscriber has to read as "may
+  // have changed any of them".
+  changed: string[] | null;
+  // The publish's own `clientAuthored`, narrowed to the event's invalidations.
+  // Absent when the publish made no such report, in which case everything in
+  // `changed` is what it wrote.
+  clientAuthored?: string[];
+}
 
 export interface IncrementalIndexEventContent {
   eventName: 'index';
   indexType: 'incremental';
   invalidations: string[];
+  // The deduped adoption chains of every row the pass touched, in the same
+  // `internalKeyFor` spelling `boxel_index.types` stores and a type filter
+  // compiles to. A live query anchored on a type that appears nowhere in here
+  // cannot have gained or lost a member, so it can sit the event out. Deduped
+  // across the pass rather than carried per URL: the question a subscriber
+  // asks is "was anything of a type I care about touched?", never "which
+  // card?", so the set is bounded by the realm's type count while
+  // `invalidations` is bounded by its row count. Absent when the pass could
+  // not report it (an older worker mid-deploy, a failed pass, a full
+  // reindex), which means nothing can be ruled out and every subscriber
+  // re-runs.
+  invalidatedTypes?: string[];
   clientRequestId?: string | null;
+  // Which of `invalidations` this request wrote from content its client
+  // supplied verbatim, rather than from state the realm computed. A client
+  // recognizing `clientRequestId` as its own already holds what these cards
+  // say — and may hold something newer still, edited while the write was in
+  // flight — so re-reading them is how an edit gets lost. Every other
+  // invalidation in the same pass reports state only the realm has.
+  //
+  // Empty and absent mean different things. Empty is a writer reporting that
+  // it authored none of what it wrote — a batch that only transformed cards,
+  // say — so every card in the pass holds state the realm computed and every
+  // one of them wants re-reading. Absent is a writer that does not report on
+  // the question at all, which leaves a client with only the request id to go
+  // on, as it had before this member existed.
+  clientAuthored?: string[];
+  // The version each card this request wrote directly now holds: URL → the
+  // content hash of the bytes the commit stored. A client holding a card can
+  // compare its own version against the one here and recognize an event it has
+  // already applied, or one that describes state older than what it holds.
+  //
+  // Keyed exactly as `invalidations` keys a card — the realm href with a
+  // trailing `.json` removed — so where a URL appears in both, the two join by
+  // construction. That is deliberately NOT how a write *response* spells the
+  // same card: response ids are canonicalized to registered-prefix form, so a
+  // client that reads an id off a write and looks it up here would miss on any
+  // realm reached through a prefix.
+  //
+  // This is not a subset of `invalidations`, and a consumer that iterates that
+  // list to read this one will miss entries. What the two lists describe comes
+  // apart in both directions: a card re-indexed as a dependency is invalidated
+  // with no version, and a file written with the bytes it already held has a
+  // version while invalidating nothing — the commit leaves such a file alone,
+  // so no pass touches it. Read this map on its own terms: it names what the
+  // request wrote, and `invalidations` names what the index moved.
+  //
+  // Only the files the request wrote. A dependent re-indexed because something
+  // it depends on changed is in `invalidations` and not here, which is the
+  // distinction the member exists to draw: the realm computed that card's new
+  // state, so nobody holds it and everybody wants it.
+  //
+  // Absent means no information, and unlike `clientAuthored` an empty map
+  // would say the same thing — so the member is present only when it has
+  // something to report, and nothing reads emptiness as a statement. It is
+  // also dropped whole rather than truncated past a size budget, for the
+  // reason `invalidatedTypes` is: a client cannot tell a partial map from a
+  // complete one, so a missing key would read as "this card is not one the
+  // request wrote" — the opposite of true.
+  versions?: Record<string, string>;
+  // Every publish the pass indexed, when it indexed more than one. The realm
+  // folds publishes that arrive while a pass is still queued into that pass,
+  // and announces the result once, from one of its callers — so
+  // `clientRequestId` and `clientAuthored` name only that caller, and a
+  // subscriber looking for its own write has to look here for it.
+  //
+  // Includes the announcing caller itself, and callers with no request id (a
+  // file-watcher echo, a removal), whose `changed` still says which cards
+  // someone other than a request-id holder moved.
+  //
+  // Absent when the pass indexed one publish, and when the list would not fit
+  // in the event — dropped whole, since a subscriber cannot tell a partial
+  // list from a complete one.
+  coalescedWrites?: CoalescedIndexWrite[];
   // The realm generation the indexing pass committed. Lets a consumer correlate
   // this search-doc update with the prerendered HTML that belongs to it.
   generation?: number;
@@ -485,14 +563,6 @@ export interface IncrementalIndexEventContent {
 interface FullIndexEventContent {
   eventName: 'index';
   indexType: 'full';
-  generation?: number;
-  realmURL: string;
-}
-
-interface CopiedIndexEventContent {
-  eventName: 'index';
-  indexType: 'copy';
-  sourceRealmURL: string;
   generation?: number;
   realmURL: string;
 }
@@ -533,16 +603,12 @@ export interface StopGeneratingEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_STOP_GENERATING_EVENT_TYPE;
 }
 
-export type MatrixEventWithBoxelContext =
-  | CardMessageEvent
-  | ToolResultEvent
-  | CodePatchResultEvent;
+export type MatrixEventWithBoxelContext = CardMessageEvent | ToolResultEvent;
 
 export type MatrixEvent =
   | ActiveLLMEvent
   | BotTriggerEvent
   | CardMessageEvent
-  | CodePatchResultEvent
   | ToolResultEvent
   | DebugMessageEvent
   | InviteEvent

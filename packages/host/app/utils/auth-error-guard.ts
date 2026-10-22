@@ -1,6 +1,7 @@
 import {
   CardError,
   isCardError,
+  isScopedCSSRequest,
   type FetcherMiddlewareHandler,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
@@ -117,6 +118,12 @@ export function createAuthErrorGuard(
   };
 }
 
+// A refused stylesheet is not an auth failure of whatever is rendering: a
+// stylesheet that won't load leaves its entry unstyled and nothing else (see
+// the search resource's `loadStylesheets`). A row carries stylesheets served
+// from the realm that answered with it, which can still refuse the request (a
+// session it has not signed in to, say), and failing the render on one would
+// drop the whole render for the sake of its styling.
 export function authErrorEventMiddleware(
   target: EventTarget | undefined = typeof window !== 'undefined'
     ? window
@@ -124,7 +131,10 @@ export function authErrorEventMiddleware(
 ): FetcherMiddlewareHandler {
   return async (req, next) => {
     let response = await next(req);
-    if (isAuthStatus(response.status)) {
+    if (
+      isAuthStatus(response.status) &&
+      !isScopedCSSRequest(new URL(req.url).pathname)
+    ) {
       dispatchAuthError(
         await CardError.fromFetchResponse(req.url, response.clone()),
         target,

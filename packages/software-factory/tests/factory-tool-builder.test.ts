@@ -756,6 +756,7 @@ module('buildFactoryTools — run_parse', function () {
       errorCount: 0,
       durationMs: 25,
       parseableFiles: ['a.gts', 'b.gts'],
+      warnings: [],
       errors: [],
     };
 
@@ -801,6 +802,7 @@ module('buildFactoryTools — run_parse', function () {
       errorCount: 1,
       durationMs: 8,
       parseableFiles: ['my-card.gts'],
+      warnings: [],
       errors: [
         {
           file: 'my-card.gts',
@@ -846,6 +848,7 @@ module('buildFactoryTools — run_parse', function () {
           errorCount: 0,
           durationMs: 0,
           parseableFiles: [],
+          warnings: [],
           errors: [],
         };
       },
@@ -871,6 +874,7 @@ module('buildFactoryTools — run_parse', function () {
       errorCount: 2,
       durationMs: 12,
       parseableFiles: ['bad.gts'],
+      warnings: [],
       errors: [
         {
           file: 'bad.gts',
@@ -1282,6 +1286,7 @@ module('buildFactoryTools — vacuous pass rejection', function () {
     errorCount: 0,
     durationMs: 0,
     parseableFiles: [],
+    warnings: [],
     errors: [],
   };
 
@@ -1386,6 +1391,7 @@ module('buildFactoryTools — vacuous pass rejection', function () {
         ...PASSED_EMPTY_PARSE,
         filesChecked: 3,
         parseableFiles: ['a.gts', 'b.gts', 'Spec/a.json'],
+        warnings: [],
       }),
     });
     let { executor } = createMockToolExecutor(new Map());
@@ -1532,6 +1538,7 @@ module('buildFactoryTools — run_parse / run_lint workspace sync', function () 
           errorCount: 0,
           durationMs: 0,
           parseableFiles: ['a.gts'],
+          warnings: [],
           errors: [],
         };
       },

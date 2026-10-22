@@ -1,0 +1,2743 @@
+import QUnit from 'qunit';
+const { module, test } = QUnit;
+import { basename } from 'path';
+
+import {
+  dischargePendingDecision,
+  erroredTargetRow,
+  isDocumentResult,
+  isHeadResult,
+  isOperationFailure,
+  isSourceResult,
+  newOperationScope,
+  pendingWriteFor,
+  policyGateStats,
+  readPlan,
+  resolveFacadeWrite,
+  resolveGatedOperation,
+  resolveOperation,
+  runOperation,
+  scopeCallerFor,
+  type OperationCore,
+  type OperationDefinition,
+  type OperationError,
+  type OperationScope,
+  type OperationTarget,
+} from '@cardstack/runtime-common/card-operations';
+import { GateTrace } from '@cardstack/runtime-common/card-operations/gate-trace';
+import { fileContentToBytes } from '@cardstack/runtime-common/stream';
+import { urlNamesFile } from '@cardstack/runtime-common/file-def-code-ref';
+import type { CodeRef } from '@cardstack/runtime-common/code-ref';
+import type { Definition } from '@cardstack/runtime-common/definitions';
+
+// ============================================================================
+// Which behavior a name resolves to, and what a refusal says.
+//
+// Dispatch reads a target's type out of the index, its operations out of the
+// definition cache, and decides from those two alone. Both are stubbed here,
+// which is the point: what is under test is the decision, not the realm's
+// ability to produce the inputs, and a stub makes the cases a real realm
+// cannot easily be put into — an errored index row, a card whose source has
+// landed but whose row has not — as cheap as the ordinary ones.
+//
+// The `read` executor rides along, since its refusals come from the same
+// taxonomy and its status mapping is the one thing a caller can observe about
+// a card that will not read cleanly. So does `readSource`, whose whole
+// contract is about what dispatch does *not* consult: the stub records every
+// collaborator call, which is what makes "definition-free" checkable rather
+// than merely asserted.
+// ============================================================================
+
+const REALM = 'http://example.com/test/';
+const PERSON: CodeRef = {
+  module: `${REALM}person`,
+  name: 'Person',
+} as CodeRef;
+
+interface StubOptions {
+  // What `cardDocument` answers. `undefined` is a missing row.
+  // An errored row may carry the card's last-known-good isolated markup.
+  document?:
+    | 'ok'
+    | 'missing'
+    | { errorStatus: number; lastKnownGoodHtml?: string };
+  // What the row peek answers. `undefined` is a missing row.
+  row?: 'ok' | 'missing';
+  // The operations the target's type declares.
+  operations?: Definition['operations'];
+  // The type entry itself. `undefined` is an unreadable one.
+  definitionType?: Definition['type'] | 'unresolvable';
+  // The source file behind the target, when there is one on disk.
+  source?: string;
+  fileMeta?: boolean;
+  // Whether the file target has an index row.
+  fileRow?: boolean;
+  // The bytes the realm holds, by local path. A path absent from this is one
+  // the realm has nothing to open at: a missing file, a directory, a path it
+  // serves no bytes from. Those refusals live on the realm's side of
+  // `openStoredFile`, so the stub expresses all of them the one way the core
+  // can observe.
+  stored?: Record<string, string | Uint8Array>;
+  // The content hash the realm recorded for a path. Absent means it recorded
+  // none, which is a case the executor has to report rather than invent a
+  // value for.
+  storedVersions?: Record<string, string>;
+  storedCreatedAt?: Record<string, number>;
+  // Paths for which the realm has no recorded hash and reads one out of the
+  // file instead. The stub reads it through the handle's bounded range and
+  // never through `content`, as the realm does, so a case can hold both modes
+  // to the same version without either spending the body the other returns.
+  storedRangeHash?: Record<string, string>;
+  // An adapter that reports no `size`, which the realm cannot validate a
+  // recorded hash against.
+  sizelessAdapter?: boolean;
+  // An adapter offering no bounded read, which leaves the realm no way to
+  // fingerprint an unrecorded file short of streaming the whole of it.
+  rangelessAdapter?: boolean;
+  // The ref the type entry names itself by, where it is not the ref it was
+  // looked up by, as for a type reached through a module that re-exports it.
+  definitionCodeRef?: CodeRef;
+  // The adoption chain recorded on the type entry. By default the type the
+  // entry names and `CardDef`.
+  definitionTypes?: string[];
+  // What the policy gate reads for a caller the realm ACL declined.
+  policy?: OperationCore['policy'];
+}
+
+interface Stub {
+  core: OperationCore;
+  calls: string[];
+  // What each `storedFileMeta` call was asked about, for the one part of the
+  // version contract that is the core's: handing the realm the size of the
+  // handle whose bytes it is returning.
+  metaCalls: {
+    localPath: string;
+    size: number | undefined;
+  }[];
+}
+
+// `getInstance` matches `i.url` / `i.file_alias`, so a row answers to the
+// card's canonical URL and to nothing else — not to a query string, a
+// fragment, a trailing slash, or the `.json` source spelling. The stub holds
+// itself to the same rule so a target that reaches the index uncanonicalized
+// misses, the way it would against Postgres.
+//
+// A path naming a file is held to the same rule for the same reason: a file's
+// bytes get a file row, never an instance row and never a card document. That
+// is what makes the index the thing that decides whether a path is a card,
+// rather than the extension on its URL.
+function isCanonicalKey(url: URL): boolean {
+  return (
+    url.search === '' &&
+    url.hash === '' &&
+    !url.pathname.endsWith('.json') &&
+    !url.pathname.endsWith('/') &&
+    !urlNamesFile(url)
+  );
+}
+
+function stub(opts: StubOptions = {}): Stub {
+  let calls: string[] = [];
+  let metaCalls: Stub['metaCalls'] = [];
+  let {
+    document = 'ok',
+    row = 'ok',
+    operations,
+    definitionType = 'card-def',
+    source,
+    fileMeta = true,
+    fileRow = false,
+    stored = {},
+    storedVersions = {},
+    storedCreatedAt = {},
+    storedRangeHash = {},
+    sizelessAdapter = false,
+    rangelessAdapter = false,
+    definitionCodeRef,
+    definitionTypes,
+    policy,
+  } = opts;
+
+  let definitionOf = (codeRef: CodeRef): Definition | undefined =>
+    definitionType === 'unresolvable'
+      ? undefined
+      : {
+          type: definitionType,
+          codeRef: definitionCodeRef ?? codeRef,
+          displayName: 'Person',
+          fields: {},
+          fieldDefs: {},
+          ...(operations ? { operations } : {}),
+        };
+
+  let core: OperationCore = {
+    realmURL: REALM,
+    definitionLookup: {
+      async lookupDefinition(codeRef) {
+        calls.push('lookupDefinition');
+        return definitionOf(codeRef);
+      },
+      async lookupDefinitionEntry(codeRef) {
+        calls.push('lookupDefinitionEntry');
+        let definition = definitionOf(codeRef);
+        return definition
+          ? {
+              definition,
+              types: definitionTypes ?? [
+                typeKey(definition.codeRef),
+                typeKey(CARD_DEF),
+              ],
+            }
+          : undefined;
+      },
+    },
+    indexQueryEngine: {
+      // A query is how an entry that describes its target finds one. Dispatch
+      // is handed a target that is already settled, so reaching this is the
+      // stub reporting that something asked the index a question it had no
+      // business asking.
+      async searchEntries() {
+        throw new Error('dispatch searched the index');
+      },
+      async cardDocument(url) {
+        calls.push('cardDocument');
+        if (document === 'missing' || !isCanonicalKey(url)) {
+          return undefined;
+        }
+        if (typeof document === 'object') {
+          return {
+            type: 'error',
+            error: {
+              errorDetail: {
+                status: document.errorStatus,
+                title: 'Boom',
+                message: 'the card could not be built',
+              },
+              scopedCssUrls: [],
+              lastKnownGoodHtml: document.lastKnownGoodHtml ?? null,
+              cardTitle: null,
+            },
+          } as any;
+        }
+        return {
+          type: 'doc',
+          doc: {
+            data: {
+              id: url.href,
+              type: 'card',
+              attributes: { title: 'Hi' },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+          generation: 7,
+          indexedAt: 1700,
+          deps: [],
+          captures: null,
+          renderError: null,
+        } as any;
+      },
+      async instance(url) {
+        calls.push('instance');
+        if (row === 'missing' || !isCanonicalKey(url)) {
+          return undefined;
+        }
+        // An errored document is read off an errored row: the index answers
+        // both from the one row, so the stub never pairs a healthy peek with
+        // an errored document. The row keeps the adoption chain its last
+        // visit recorded, and no document of its own.
+        if (typeof document === 'object') {
+          return {
+            type: 'instance-error',
+            error: { status: document.errorStatus },
+            instance: null,
+            types: [typeKey(PERSON), typeKey(CARD_DEF)],
+            generation: 7,
+            realmURL: REALM,
+            lastModified: null,
+            resourceCreatedAt: null,
+          } as any;
+        }
+        return {
+          type: 'instance',
+          instance: {
+            id: url.href,
+            type: 'card',
+            meta: { adoptsFrom: PERSON },
+          },
+          generation: 7,
+          indexedAt: 1700,
+          lastModified: 1699,
+          captures: null,
+          renderError: null,
+        } as any;
+      },
+      async file() {
+        calls.push('file');
+        return fileRow
+          ? ({
+              type: 'file',
+              lastModified: 1699,
+              generation: 4,
+              captures: null,
+              renderError: null,
+              deps: null,
+              indexedAt: 1700,
+            } as any)
+          : undefined;
+      },
+    },
+    async readFileAsText() {
+      calls.push('readFileAsText');
+      return source;
+    },
+    async openStoredFile(localPath) {
+      calls.push('openStoredFile');
+      let content = Object.prototype.hasOwnProperty.call(stored, localPath)
+        ? stored[localPath]
+        : undefined;
+      if (content === undefined) {
+        return undefined;
+      }
+      let bytes =
+        typeof content === 'string'
+          ? new TextEncoder().encode(content)
+          : content;
+      return {
+        path: localPath,
+        // A getter, as every streaming adapter's is, and it records the touch:
+        // the headers-only mode has to leave the bytes alone rather than open
+        // a stream it discards, and only reading the read tells us it did.
+        get content() {
+          calls.push('storedContent');
+          return content;
+        },
+        lastModified: 1699,
+        ...(sizelessAdapter ? {} : { size: bytes.byteLength }),
+        // A separate read of a bounded extent, which is what lets a version
+        // be read without spending `content`. Recorded on its own, so a case
+        // can tell a fingerprint read from the file apart from one recalled
+        // from a row.
+        ...(rangelessAdapter
+          ? {}
+          : {
+              createRangeStream: (start: number, end: number) => {
+                calls.push('storedRangeRead');
+                let extent = bytes.subarray(start, end + 1);
+                return new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    controller.enqueue(extent);
+                    controller.close();
+                  },
+                });
+              },
+            }),
+      };
+    },
+    async storedFileMeta(localPath, file) {
+      calls.push('storedFileMeta');
+      // What the core owes is the handle whose bytes it is returning, not just
+      // that handle's path; the policy over it is the realm's, and the
+      // realm-server suite holds the realm to it. The shape is mirrored here
+      // so the executor is exercised against each of the realm's answers.
+      metaCalls.push({ localPath, size: file.size });
+      let createdAt = storedCreatedAt[localPath];
+      let recorded = Object.prototype.hasOwnProperty.call(
+        storedVersions,
+        localPath,
+      )
+        ? storedVersions[localPath]
+        : undefined;
+      if (recorded !== undefined) {
+        return { version: recorded, createdAt };
+      }
+      let fromRanges = Object.prototype.hasOwnProperty.call(
+        storedRangeHash,
+        localPath,
+      )
+        ? storedRangeHash[localPath]
+        : undefined;
+      if (fromRanges === undefined || !file.createRangeStream || !file.size) {
+        // No record and nothing to read one out of — the absence a facade
+        // falls back from, rather than an unbounded read of the file.
+        return { createdAt };
+      }
+      // Read out of the file, as the realm does: through a bounded extent of
+      // the handle, leaving `content` for the body.
+      await fileContentToBytes({
+        content: file.createRangeStream(0, file.size - 1),
+      });
+      return { version: fromRanges, createdAt };
+    },
+    async realmConfig() {
+      calls.push('realmConfig');
+      return {};
+    },
+    async isIgnored() {
+      return false;
+    },
+    async fileMetaDocument(localPath) {
+      calls.push('fileMetaDocument');
+      return fileMeta
+        ? ({
+            data: {
+              type: 'file-meta',
+              id: `${REALM}${localPath}`,
+              attributes: { name: localPath, lastModified: 42 },
+            },
+          } as any)
+        : undefined;
+    },
+    resolveCodeRef: (codeRef) => codeRef as any,
+    // The realm derives a file's type from its extension; the stub answers the
+    // one file def the cases need.
+    fileDefCodeRef: () => MARKDOWN,
+    unresolveInstanceIds: () => {
+      calls.push('unresolveInstanceIds');
+    },
+    ...(policy ? { policy } : {}),
+  };
+  return { core, calls, metaCalls };
+}
+
+function typeKey(ref: CodeRef) {
+  return 'module' in ref ? `${ref.module}/${ref.name}` : JSON.stringify(ref);
+}
+
+// A policy of `rules`, over types keyed as `module/name`. It counts how often
+// it is loaded. `policyCard` is the card the realm's key names, and a chain
+// holding `REALM_POLICY` is a policy card's.
+function policyStub(
+  rules: { targetType: CodeRef; grants: string[] }[],
+  { policyCard }: { policyCard?: string } = {},
+) {
+  let loads = { count: 0 };
+  let access: NonNullable<OperationCore['policy']> = {
+    async compiledPolicy() {
+      loads.count++;
+      return {
+        card: `${REALM}policy`,
+        version: '1',
+        issues: [],
+        rules: rules.map(({ targetType, grants }) => ({
+          targetType,
+          grants: grants.map((operation) => ({ operation })),
+        })),
+      } as any;
+    },
+    async typeKeys(codeRef) {
+      return [typeKey(codeRef)];
+    },
+    resolvedLink: (selfLink) => selfLink,
+    async policyCard() {
+      return policyCard;
+    },
+    isPolicyCard: (types) => types.includes(typeKey(REALM_POLICY)),
+    async compileDraft() {
+      throw new Error('this stub compiles no draft');
+    },
+  };
+  return { access, loads };
+}
+
+const CARD_DEF: CodeRef = {
+  module: 'https://cardstack.com/base/card-api',
+  name: 'CardDef',
+} as CodeRef;
+
+const REALM_POLICY: CodeRef = {
+  module: '@cardstack/catalog/realm-policy/realm-policy',
+  name: 'RealmPolicy',
+} as CodeRef;
+
+const MARKDOWN: CodeRef = {
+  module: '@cardstack/base/markdown-file-def',
+  name: 'MarkdownDef',
+} as CodeRef;
+
+const CARD: OperationTarget = { kind: 'instance', url: `${REALM}person-1` };
+const FILE: OperationTarget = { kind: 'instance', url: `${REALM}sample.md` };
+
+function invoke(target: OperationTarget, name: string) {
+  return {
+    target,
+    name,
+    actor: '@test-actor:localhost',
+    clientRequestId: 'dispatch-test',
+  };
+}
+
+// The stub's bodies are a string or a byte array, never a stream, so one pass
+// is enough — but going through a helper keeps a case from reading a body
+// twice by accident, which a real single-use handle would answer with nothing.
+async function textOfBody(body: unknown): Promise<string> {
+  if (typeof body === 'string') {
+    return body;
+  }
+  if (body instanceof Uint8Array) {
+    return new TextDecoder().decode(body);
+  }
+  throw new Error(`expected a materialized body, got ${typeof body}`);
+}
+
+// Rethrows anything that is not an operation failure, so a genuine bug reports
+// itself rather than being read as the refusal under test.
+async function refusalFrom(
+  run: () => Promise<unknown>,
+): Promise<OperationError> {
+  try {
+    await run();
+  } catch (err) {
+    if (isOperationFailure(err)) {
+      return err.error;
+    }
+    throw err;
+  }
+  throw new Error('expected the operation to be refused, but it succeeded');
+}
+
+module(basename(import.meta.filename), function () {
+  module('card operations dispatch', function () {
+    test('a base operation with no declaration resolves to its built-in behavior', async function (assert) {
+      let { core } = stub();
+      let definition = await resolveOperation(core, CARD, 'read');
+      assert.strictEqual(definition.base, 'read');
+      assert.true(
+        definition.deterministic,
+        'a built-in has no program, so it is deterministic by construction',
+      );
+      assert.strictEqual(
+        definition.program,
+        undefined,
+        'and it carries no program',
+      );
+    });
+    test('a declaration wins over the built-in of the same name', async function (assert) {
+      let { core } = stub({
+        operations: {
+          // The rebinding the design exists for: asking this card to delete
+          // itself runs a transform, which is how a soft delete is spelled.
+          delete: {
+            base: 'transform',
+            deterministic: true,
+            program: { source: 'del(.x);', syntax: 'solidified' },
+          },
+        },
+      });
+      let definition = await resolveOperation(core, CARD, 'delete');
+      assert.strictEqual(
+        definition.base,
+        'transform',
+        'the name is what a caller invokes; the base is what carries it out',
+      );
+    });
+    test('a name that is neither declared nor a base operation is refused', async function (assert) {
+      let { core } = stub();
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'addComment')),
+      );
+      assert.strictEqual(error.code, 'unknown-operation');
+      assert.strictEqual(error.status, 404);
+    });
+    test('a def type that does not carry the behavior refuses it', async function (assert) {
+      let file = stub();
+      let onFile = await refusalFrom(() =>
+        runOperation(file.core, invoke(FILE, 'transform')),
+      );
+      assert.strictEqual(onFile.code, 'operation-not-allowed');
+      assert.strictEqual(onFile.status, 405);
+      assert.true(
+        onFile.detail.includes('read'),
+        `the refusal names what a file does carry: ${onFile.detail}`,
+      );
+      assert.true(
+        onFile.detail.includes('appendLine'),
+        `and the write it carries too: ${onFile.detail}`,
+      );
+
+      // A field's instances have no URL, so nothing is invocable on one — which
+      // only a type target can even express.
+      let field = stub({ definitionType: 'field-def' });
+      let onField = await refusalFrom(() =>
+        resolveOperation(
+          field.core,
+          { kind: 'type', codeRef: PERSON, realm: REALM },
+          'create',
+        ),
+      );
+      assert.strictEqual(onField.code, 'operation-not-allowed');
+    });
+    test('appending to a containsMany belongs to a card, not to a file or a field', async function (assert) {
+      // A card's fields are what a containsMany is one of, so the behavior
+      // reaches a card and nothing else: a file has no field schema, and a
+      // field's instances have no URL to invoke against.
+      let card = stub();
+      let onCard = await resolveOperation(
+        card.core,
+        CARD,
+        'appendContainsMany',
+      );
+      assert.strictEqual(
+        onCard.base,
+        'appendContainsMany',
+        'a card carries it, undeclared, as a base operation',
+      );
+
+      let file = stub();
+      let onFile = await refusalFrom(() =>
+        resolveOperation(file.core, FILE, 'appendContainsMany'),
+      );
+      assert.strictEqual(onFile.code, 'operation-not-allowed');
+      assert.strictEqual(onFile.status, 405);
+
+      let field = stub({ definitionType: 'field-def' });
+      let onField = await refusalFrom(() =>
+        resolveOperation(
+          field.core,
+          { kind: 'type', codeRef: PERSON, realm: REALM },
+          'appendContainsMany',
+        ),
+      );
+      assert.strictEqual(onField.code, 'operation-not-allowed');
+    });
+    test('a file def carries the two writes that work on its bytes', async function (assert) {
+      // A file's metadata is content-derived and read-only, so what a write on
+      // one reaches is the bytes: an `update` replaces them wholesale, and an
+      // `appendLine` adds a line to the end of a text file.
+      let file = stub();
+      for (let name of ['update', 'appendLine']) {
+        let resolved = await resolveOperation(file.core, FILE, name);
+        assert.strictEqual(
+          resolved.base,
+          name,
+          `a file carries "${name}", undeclared, as a base operation`,
+        );
+      }
+    });
+    test('appending a line is admitted for any instance, whatever its URL says', async function (assert) {
+      // A line appended to a card's stored file leaves behind something that is
+      // no longer a card, so this is the one write a card must not carry — and
+      // it is refused by `stageAppendLine`, not here. Dispatch classifies an
+      // instance target by its extension, and the registered-extension table
+      // does not name every stored file: a `.log`, a `.css`, a `.yml` holds
+      // bytes and serves them, and each classifies as a card. Refusing here
+      // would turn those away before the only code that can tell them from a
+      // card — the executor, which reads whether the path holds a card's
+      // `.json` and what content type its bytes are.
+      let card = stub();
+      let resolved = await resolveOperation(card.core, CARD, 'appendLine');
+      assert.strictEqual(
+        resolved.base,
+        'appendLine',
+        'the behavior resolves, and what it may be applied to is the ' +
+          "executor's to decide",
+      );
+    });
+    test('a write is carried out by the coordinator rather than by this dispatch', async function (assert) {
+      // Every write takes the realm's write lock once for the whole batch it
+      // belongs to, so it arrives as a batch entry. Reaching one from here is
+      // the caller having used the wrong entry point.
+      let { core } = stub();
+      for (let name of [
+        'create',
+        'update',
+        'delete',
+        'transform',
+        'appendContainsMany',
+      ]) {
+        let error = await refusalFrom(() =>
+          runOperation(core, invoke(CARD, name)),
+        );
+        assert.strictEqual(
+          error.status,
+          501,
+          `"${name}" is not carried out here`,
+        );
+      }
+    });
+    test('a callApi with a credential slot is refused to a caller who is not signed in, before anything is sent', async function (assert) {
+      let sent = 0;
+      let { core } = stub({
+        operations: {
+          withKey: {
+            base: 'callApi',
+            deterministic: true,
+            callApi: {
+              method: 'GET',
+              url: 'https://api.example.com/items',
+              destination: 'https://api.example.com/',
+              headers: { authorization: 'Bearer {{userKey}}' },
+              slots: [
+                {
+                  name: 'userKey',
+                  key: 'userKey',
+                  placement: 'header',
+                  at: 'headers.authorization',
+                },
+              ],
+            },
+          },
+        },
+      });
+      core.callApi = {
+        async send() {
+          sent++;
+          return { status: 200, headers: {}, body: null };
+        },
+      };
+      let error = await refusalFrom(() =>
+        runOperation(core, { ...invoke(CARD, 'withKey'), actor: '' }),
+      );
+      assert.strictEqual(error.code, 'actor-required');
+      assert.strictEqual(sent, 0, 'nothing was sent');
+
+      let signedIn = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'withKey')),
+      );
+      assert.strictEqual(
+        signedIn.code,
+        'binding-not-approved',
+        'a signed-in caller reaches the binding check',
+      );
+      assert.strictEqual(sent, 0, 'nothing was sent');
+    });
+    test('a keyless callApi on the type is sent through the core, filled from the payload alone', async function (assert) {
+      let sent: { url: string; credentials: number }[] = [];
+      let { core } = stub({
+        operations: {
+          lookup: {
+            base: 'callApi',
+            deterministic: true,
+            params: { name: { kind: 'field', codeRef: CARD_DEF } },
+            callApi: {
+              method: 'GET',
+              url: 'https://api.example.com/items/{name}',
+              destination: 'https://api.example.com/items/',
+              path: { name: { $ref: 'params', key: 'name' } },
+              slots: [],
+            },
+          },
+        },
+      });
+      core.callApi = {
+        async send(request, credentials) {
+          sent.push({ url: request.url, credentials: credentials.length });
+          return { status: 404, headers: {}, body: { error: 'Not found' } };
+        },
+      };
+      let result = await runOperation(core, {
+        ...invoke({ kind: 'type', codeRef: PERSON, realm: REALM }, 'lookup'),
+        params: { name: 'a b' },
+      });
+      assert.deepEqual(sent, [
+        { url: 'https://api.example.com/items/a%20b', credentials: 0 },
+      ]);
+      assert.deepEqual(result, {
+        callApi: { status: 404, headers: {}, body: { error: 'Not found' } },
+      });
+    });
+    test('a callApi whose built request leaves its declared destination is refused, and nothing is sent', async function (assert) {
+      let sent = 0;
+      let { core } = stub({
+        operations: {
+          lookup: {
+            base: 'callApi',
+            deterministic: true,
+            callApi: {
+              method: 'GET',
+              url: 'https://api.example.com/v1beta/items',
+              destination: 'https://api.example.com/v1/',
+              slots: [],
+            },
+          },
+        },
+      });
+      core.callApi = {
+        async send() {
+          sent++;
+          return { status: 200, headers: {}, body: null };
+        },
+      };
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'lookup')),
+      );
+      assert.strictEqual(error.code, 'guard-refused');
+      assert.strictEqual(error.meta?.reason, 'destination');
+      assert.strictEqual(sent, 0, 'nothing was sent');
+    });
+    test("a callApi's `output` maps the response to an object, and nothing else", async function (assert) {
+      let response = { status: 200, headers: {}, body: { id: 7 } };
+      let declare = (source: string) =>
+        stub({
+          operations: {
+            fetch: {
+              base: 'callApi',
+              deterministic: true,
+              output: { source, syntax: 'solidified' },
+              callApi: {
+                method: 'GET',
+                url: 'https://api.example.com/item',
+                destination: 'https://api.example.com/',
+                slots: [],
+              },
+            },
+          },
+        });
+      let mapped = declare('{id:.body.id}');
+      mapped.core.callApi = { send: async () => response };
+      assert.deepEqual(await runOperation(mapped.core, invoke(CARD, 'fetch')), {
+        callApi: { id: 7 },
+      });
+
+      let listed = declare('[.status]');
+      listed.core.callApi = { send: async () => response };
+      let error = await refusalFrom(() =>
+        runOperation(listed.core, invoke(CARD, 'fetch')),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+      assert.strictEqual(
+        (error.meta as { stage?: string } | undefined)?.stage,
+        'output',
+      );
+    });
+    test('a declaration lowering flagged invalid reports its findings', async function (assert) {
+      let { core } = stub({
+        operations: {
+          addComment: {
+            base: 'transform',
+            deterministic: true,
+            invalid: true,
+            issues: [
+              {
+                code: 'unknown-field',
+                operation: 'addComment',
+                path: 'append.to',
+                message: '"comments" is not a field on Person',
+              },
+            ],
+          },
+        },
+      });
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'addComment')),
+      );
+      assert.strictEqual(
+        error.code,
+        'invalid-operation',
+        'a declaration with findings is not the same as no declaration',
+      );
+      assert.true(
+        error.detail.includes('"comments" is not a field on Person'),
+        `the refusal carries the finding: ${error.detail}`,
+      );
+    });
+    test('a read serves the indexed document with its generation joined on', async function (assert) {
+      let { core } = stub();
+      let result = await runOperation(core, invoke(CARD, 'read'));
+      assert.true(isDocumentResult(result), 'a read answers with a document');
+      if (isDocumentResult(result)) {
+        assert.strictEqual(
+          result.document.data.links?.self,
+          `${REALM}person-1`,
+        );
+        assert.strictEqual(
+          (result.document.data.meta as { generation?: number }).generation,
+          7,
+          'the index-data generation is joined at serve time',
+        );
+      }
+    });
+    test('a headers-only read shares dispatch read of the index row', async function (assert) {
+      let { core, calls } = stub();
+      let result = await runOperation(core, invoke(CARD, 'read'), {
+        headersOnly: true,
+      });
+      assert.true(isHeadResult(result), 'it answers with the header values');
+      assert.strictEqual(
+        calls.filter((call) => call === 'cardDocument').length,
+        0,
+        'no document is assembled',
+      );
+      assert.strictEqual(
+        calls.filter((call) => call === 'instance').length,
+        1,
+        'dispatch and the executor read the row once between them',
+      );
+    });
+    test('an errored index row carries its own status through', async function (assert) {
+      let forbidden = await refusalFrom(() =>
+        runOperation(
+          stub({ document: { errorStatus: 403 } }).core,
+          invoke(CARD, 'read'),
+        ),
+      );
+      assert.strictEqual(
+        forbidden.status,
+        403,
+        'a real HTTP status is mirrored',
+      );
+      assert.strictEqual(forbidden.code, 'target-errored');
+
+      // 404 is the one status never mirrored: an existing-but-errored card is
+      // not "not found", and that code is reserved for a missing row so a 404
+      // from a read is an unambiguous "this card no longer exists".
+      let recorded404 = await refusalFrom(() =>
+        runOperation(
+          stub({ document: { errorStatus: 404 } }).core,
+          invoke(CARD, 'read'),
+        ),
+      );
+      assert.strictEqual(recorded404.status, 500);
+
+      let nonHttp = await refusalFrom(() =>
+        runOperation(
+          stub({ document: { errorStatus: 0 } }).core,
+          invoke(CARD, 'read'),
+        ),
+      );
+      assert.strictEqual(nonHttp.status, 500);
+    });
+    test('an errored read withholds its salvage markup when its isolated format is unshareable', async function (assert) {
+      // The salvage an errored read carries in place of the card is the card's
+      // last-known-good isolated markup, so a read declaring the isolated
+      // format unshareable carries none — while one declaring another format
+      // unshareable, or nothing, carries it.
+      let salvage = async (operations?: Definition['operations']) => {
+        try {
+          await runOperation(
+            stub({
+              document: { errorStatus: 500, lastKnownGoodHtml: '<p>Ada</p>' },
+              operations,
+            }).core,
+            invoke(CARD, 'read'),
+          );
+        } catch (err) {
+          if (isOperationFailure(err)) {
+            return erroredTargetRow(err)?.lastKnownGoodHtml;
+          }
+          throw err;
+        }
+        throw new Error('expected the read to be refused');
+      };
+      let read = (html: OperationDefinition['html']) => ({
+        read: { base: 'read' as const, deterministic: true, html },
+      });
+      assert.strictEqual(
+        await salvage(),
+        '<p>Ada</p>',
+        'a read declaring nothing carries the markup',
+      );
+      assert.strictEqual(
+        await salvage(read({ embedded: 'unshareable' })),
+        '<p>Ada</p>',
+        'so does one withholding a different format',
+      );
+      assert.strictEqual(
+        await salvage(read({ isolated: 'unshareable' })),
+        null,
+        'one withholding the isolated format carries none',
+      );
+    });
+
+    test('what a type withholds is read off an errored row too', async function (assert) {
+      // An errored row resolves to the built-in read, since its type is not
+      // on a healthy document, yet it still serves the markup an earlier
+      // render left. The type its visit recorded is what governs that markup.
+      let { core } = stub({
+        document: { errorStatus: 500, lastKnownGoodHtml: '<p>Ada</p>' },
+        operations: {
+          read: {
+            base: 'read',
+            deterministic: true,
+            html: { isolated: 'unshareable', embedded: 'unshareable' },
+          },
+        },
+      });
+      let memo = new Map();
+      let plan = await readPlan(core, new URL(CARD.url), undefined, memo);
+      assert.deepEqual(
+        plan.unshareableFormats,
+        ['embedded', 'isolated'],
+        'the declaration on the errored card’s recorded type is read',
+      );
+      assert.strictEqual(memo.size, 1, 'and it holds until the index moves');
+    });
+
+    test('a read plan the realm cannot settle withholds every format and is not remembered', async function (assert) {
+      let every = ['embedded', 'fitted', 'atom', 'head', 'isolated'];
+
+      let unreadable = new Map();
+      assert.deepEqual(
+        (
+          await readPlan(
+            stub({ definitionType: 'unresolvable' }).core,
+            new URL(CARD.url),
+            undefined,
+            unreadable,
+          )
+        ).unshareableFormats,
+        every,
+        'a card whose type entry cannot be read withholds every format',
+      );
+      assert.strictEqual(
+        unreadable.size,
+        0,
+        'and is asked afresh, since the entry may read on the next ask',
+      );
+
+      let missing = new Map();
+      assert.deepEqual(
+        (
+          await readPlan(
+            stub({ row: 'missing', document: 'missing' }).core,
+            new URL(CARD.url),
+            undefined,
+            missing,
+          )
+        ).unshareableFormats,
+        [],
+        'a path holding no card serves no markup, so withholds none',
+      );
+      assert.strictEqual(
+        missing.size,
+        0,
+        'and takes no memo entry, whatever path a caller names',
+      );
+    });
+
+    test('a type another realm declares is asked afresh rather than remembered', async function (assert) {
+      let read = {
+        read: {
+          base: 'read' as const,
+          deterministic: true,
+          html: { embedded: 'unshareable' as const },
+        },
+      };
+      let own = new Map();
+      await readPlan(
+        stub({ operations: read }).core,
+        new URL(CARD.url),
+        undefined,
+        own,
+      );
+      assert.strictEqual(own.size, 1, 'a type of this realm’s own is kept');
+
+      let foreign = new Map();
+      let plan = await readPlan(
+        stub({
+          operations: read,
+          definitionCodeRef: {
+            module: 'http://example.com/elsewhere/person',
+            name: 'Person',
+          } as CodeRef,
+        }).core,
+        new URL(CARD.url),
+        undefined,
+        foreign,
+      );
+      assert.deepEqual(
+        plan.unshareableFormats,
+        ['embedded'],
+        'another realm’s type is answered as declared',
+      );
+      assert.strictEqual(
+        foreign.size,
+        0,
+        'but not kept, since its declaration changes without this realm’s index moving',
+      );
+    });
+
+    test('a read tells a missing card from one still being indexed', async function (assert) {
+      let gone = await refusalFrom(() =>
+        runOperation(
+          stub({ document: 'missing', row: 'missing', fileMeta: false }).core,
+          invoke(CARD, 'read'),
+        ),
+      );
+      assert.strictEqual(gone.code, 'target-not-found');
+
+      let pending = await refusalFrom(() =>
+        runOperation(
+          stub({
+            document: 'missing',
+            row: 'missing',
+            fileMeta: false,
+            source: JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: { adoptsFrom: PERSON },
+              },
+            }),
+          }).core,
+          invoke(CARD, 'read'),
+        ),
+      );
+      assert.strictEqual(
+        pending.code,
+        'target-not-indexed',
+        'a `.json` on disk with no row is a write this realm has not caught up with',
+      );
+
+      // A source file that will never become an instance row is not a card in
+      // waiting, whatever else it is.
+      let notACard = await refusalFrom(() =>
+        runOperation(
+          stub({
+            document: 'missing',
+            row: 'missing',
+            fileMeta: false,
+            source: JSON.stringify({ data: [] }),
+          }).core,
+          invoke(CARD, 'read'),
+        ),
+      );
+      assert.strictEqual(notACard.code, 'target-not-found');
+    });
+    test('a type nobody can resolve is refused as a missing target', async function (assert) {
+      let { core } = stub({ definitionType: 'unresolvable' });
+      let error = await refusalFrom(() =>
+        resolveOperation(
+          core,
+          { kind: 'type', codeRef: PERSON, realm: REALM },
+          'create',
+        ),
+      );
+      assert.strictEqual(error.code, 'target-not-found');
+    });
+    test('a card whose type entry is unreadable still reads', async function (assert) {
+      // The built-in `read` consults no definition, so refusing here would make
+      // every card of a broken module unreadable.
+      let { core } = stub({ definitionType: 'unresolvable' });
+      let result = await runOperation(core, invoke(CARD, 'read'));
+      assert.true(isDocumentResult(result), 'the card still reads');
+    });
+    test('a target is canonicalized before anything is read', async function (assert) {
+      // The realm root names the realm's index card; a query string, a fragment
+      // and a trailing slash all name the card they hang off. None of them may
+      // reach the index lookup or `links.self` as written. A `.json` spelling is
+      // not in this set — it names the card's source, which is a different read.
+      for (let [spelling, expected] of [
+        [`${REALM}`, `${REALM}index`],
+        [`${REALM}person-1?vary=1`, `${REALM}person-1`],
+        [`${REALM}person-1#section`, `${REALM}person-1`],
+        [`${REALM}person-1/`, `${REALM}person-1`],
+      ] as [string, string][]) {
+        let { core } = stub();
+        let result = await runOperation(
+          core,
+          invoke({ kind: 'instance', url: spelling }, 'read'),
+        );
+        assert.true(isDocumentResult(result), `${spelling} reads`);
+        if (isDocumentResult(result)) {
+          assert.strictEqual(
+            result.document.data.links?.self,
+            expected,
+            `${spelling} resolves to ${expected}`,
+          );
+        }
+      }
+    });
+    test('a declared read the executor cannot carry out is refused', async function (assert) {
+      // Serving the plain document would be a well-formed answer to a different
+      // question than the declaration asked. The two transform stages are
+      // carried out — see `card-operations-transforms-test.ts` — so what is
+      // left is a program over the target, which a read does not run.
+      let { core } = stub({
+        operations: {
+          summary: {
+            base: 'read',
+            deterministic: true,
+            program: { source: '.title = "x";', syntax: 'solidified' },
+          },
+        },
+      });
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'summary')),
+      );
+      assert.strictEqual(error.status, 501);
+      assert.true(
+        error.detail.includes('program'),
+        `the refusal names the stage: ${error.detail}`,
+      );
+    });
+    test('a payload missing a declared param is refused before any behavior runs', async function (assert) {
+      let { core, calls } = stub({
+        operations: {
+          summary: {
+            base: 'read',
+            deterministic: true,
+            params: {
+              locale: { kind: 'field', codeRef: PERSON },
+            },
+          },
+        },
+      });
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'summary')),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+      assert.true(
+        error.detail.includes('locale'),
+        `the refusal names the param: ${error.detail}`,
+      );
+      assert.strictEqual(
+        calls.filter((call) => call === 'cardDocument').length,
+        0,
+        'nothing is read for a payload that cannot satisfy the operation',
+      );
+    });
+    test('a name every object answers to is unknown, not a dispatchable operation', async function (assert) {
+      // A lowered `operations` record has been through JSON, so it carries
+      // `Object.prototype` and answers these names with something that is not
+      // an operation. Reading one as a declaration reaches a `base` of
+      // `undefined`.
+      for (let name of [
+        'toString',
+        'constructor',
+        '__proto__',
+        'valueOf',
+        'hasOwnProperty',
+      ]) {
+        let { core } = stub();
+        let error = await refusalFrom(() =>
+          runOperation(core, invoke(CARD, name)),
+        );
+        assert.strictEqual(
+          error.code,
+          'unknown-operation',
+          `"${name}" is not an operation`,
+        );
+      }
+    });
+    test('a headers-only read of a file answers from the file row', async function (assert) {
+      let indexed = stub({ fileRow: true });
+      let fromRow = await runOperation(indexed.core, invoke(FILE, 'read'), {
+        headersOnly: true,
+      });
+      assert.deepEqual(fromRow, {
+        projected: false,
+        links: 'full',
+        type: 'file-meta',
+        indexedAt: 1700,
+        lastModified: 1699,
+        generation: 4,
+        captures: null,
+        renderError: null,
+        deps: null,
+      });
+      assert.strictEqual(
+        indexed.calls.filter((call) => call === 'fileMetaDocument').length,
+        0,
+        'an indexed file needs no document assembled',
+      );
+
+      // A file the realm serves but has not indexed still has a modification
+      // time to report.
+      let unindexed = stub({ fileRow: false });
+      let fromDisk = await runOperation(unindexed.core, invoke(FILE, 'read'), {
+        headersOnly: true,
+      });
+      assert.deepEqual(fromDisk, {
+        projected: false,
+        links: 'full',
+        type: 'file-meta',
+        indexedAt: null,
+        lastModified: 42,
+        generation: null,
+        captures: null,
+        renderError: null,
+        deps: null,
+      });
+    });
+    test('a read needs an instance to read', async function (assert) {
+      let { core } = stub();
+      let onType = await refusalFrom(() =>
+        runOperation(
+          core,
+          invoke({ kind: 'type', codeRef: PERSON, realm: REALM }, 'read'),
+        ),
+      );
+      assert.strictEqual(onType.code, 'invalid-params');
+
+      let notAURL = await refusalFrom(() =>
+        runOperation(
+          core,
+          invoke({ kind: 'instance', url: 'not a url' }, 'read'),
+        ),
+      );
+      assert.strictEqual(notAURL.code, 'invalid-params');
+    });
+    test('a declared operation resolves the same however the target is spelled', async function (assert) {
+      // Dispatch resolves the type from the target and the executor reads from
+      // it, so both have to be looking at the same card. Canonicalizing in only
+      // one of them is worse than canonicalizing in neither: the type is
+      // resolved for one card and the document assembled for another, and a
+      // declared operation silently degrades to the built-in.
+      let declared = {
+        read: {
+          base: 'read' as const,
+          deterministic: true,
+          program: { source: '.title = "x";', syntax: 'solidified' as const },
+        },
+      };
+      for (let spelling of [
+        `${REALM}person-1`,
+        `${REALM}person-1?vary=1`,
+        `${REALM}person-1#section`,
+        `${REALM}person-1/`,
+      ]) {
+        let { core, calls } = stub({ operations: declared });
+        let error = await refusalFrom(() =>
+          runOperation(
+            core,
+            invoke({ kind: 'instance', url: spelling }, 'read'),
+          ),
+        );
+        assert.strictEqual(
+          error.status,
+          501,
+          `${spelling} resolves the declared read, not the built-in`,
+        );
+        assert.strictEqual(
+          calls.filter((call) => call === 'instance').length,
+          1,
+          `${spelling} costs one row read, shared by dispatch and the executor`,
+        );
+      }
+    });
+    test('a card source spelling names the source, not the card', async function (assert) {
+      // `<card>.json` names the card's stored bytes. That is a different read
+      // from the card, so the target routes as a file rather than resolving to
+      // the instance — and what a file carries is what it is then held to, which
+      // is not what the card behind those bytes carries.
+      let { core, calls } = stub();
+      let error = await refusalFrom(() =>
+        runOperation(
+          core,
+          invoke(
+            { kind: 'instance', url: `${REALM}person-1.json` },
+            'transform',
+          ),
+        ),
+      );
+      assert.strictEqual(error.code, 'operation-not-allowed');
+      assert.strictEqual(
+        calls.filter((call) => call === 'instance').length,
+        0,
+        'a source target is never resolved through the instance index',
+      );
+    });
+    test('a file def declaration is resolved the same as a card def one', async function (assert) {
+      // A file names its type by its extension rather than in stored JSON, but
+      // the type's entry carries declarations either way, so a `read` declared
+      // on a file def subclass has to be found.
+      let { core, calls } = stub({
+        operations: {
+          readRedacted: { base: 'read' as const, deterministic: true },
+        },
+      });
+      let result = await runOperation(core, invoke(FILE, 'readRedacted'));
+      assert.true(isDocumentResult(result), 'the declared file read resolves');
+      assert.true(
+        calls.includes('lookupDefinition'),
+        'the file def type entry is consulted',
+      );
+
+      // The allowance still holds: what a file carries are reads of its bytes
+      // and writes of them, whatever it declares — there is no document to
+      // transform.
+      let mutating = stub({
+        operations: {
+          touch: { base: 'transform' as const, deterministic: true },
+        },
+      });
+      let error = await refusalFrom(() =>
+        runOperation(mutating.core, invoke(FILE, 'touch')),
+      );
+      assert.strictEqual(error.code, 'operation-not-allowed');
+    });
+    test('a foreign target is refused without reading the index', async function (assert) {
+      let { core, calls } = stub();
+      let error = await refusalFrom(() =>
+        runOperation(
+          core,
+          invoke(
+            { kind: 'instance', url: 'http://example.com/other/person-1' },
+            'read',
+          ),
+        ),
+      );
+      assert.strictEqual(error.code, 'target-not-found');
+      assert.deepEqual(
+        calls,
+        [],
+        'a URL this realm does not contain settles before any read',
+      );
+    });
+    test('both read modes answer for a file whose extension is not registered', async function (assert) {
+      // `urlNamesFile` only knows the extensions the platform maps to a file def,
+      // so a `.css`, a `.yaml` or an extensionless name reaches the card branch
+      // and misses the index. Both modes have to make the same fallback, or one
+      // path answers with a body and refuses its own headers.
+      let unregistered: OperationTarget = {
+        kind: 'instance',
+        url: `${REALM}styles.css`,
+      };
+
+      let doc = await runOperation(
+        stub({ document: 'missing', row: 'missing' }).core,
+        invoke(unregistered, 'read'),
+      );
+      assert.true(isDocumentResult(doc), 'the document mode serves the file');
+
+      let headers = await runOperation(
+        stub({ document: 'missing', row: 'missing' }).core,
+        invoke(unregistered, 'read'),
+        { headersOnly: true },
+      );
+      assert.true(isHeadResult(headers), 'and the headers mode answers too');
+      if (isHeadResult(headers)) {
+        assert.strictEqual(
+          headers.lastModified,
+          42,
+          'reporting what the file itself can say',
+        );
+        assert.strictEqual(
+          headers.indexedAt,
+          null,
+          'and nothing an index row would have carried',
+        );
+      }
+    });
+    test('a malformed type realm is a refusal, not a raw throw', async function (assert) {
+      let { core } = stub();
+      let error = await refusalFrom(() =>
+        resolveOperation(
+          core,
+          { kind: 'type', codeRef: PERSON, realm: 'not-a-url' },
+          'create',
+        ),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+      assert.strictEqual(error.status, 400);
+    });
+    test('a read refuses any clause it does not carry out', async function (assert) {
+      // Not only the program: a declaration rebound onto `read` may carry a
+      // clause belonging to the base it came from, and ignoring it is the same
+      // failure as ignoring a projection. `input` and `output` are absent
+      // because a read runs both.
+      for (let clause of ['program', 'fill', 'of', 'query']) {
+        let { core } = stub({
+          operations: {
+            look: {
+              base: 'read' as const,
+              deterministic: true,
+              [clause]: clause === 'fill' ? {} : ({ x: 1 } as any),
+            } as any,
+          },
+        });
+        let error = await refusalFrom(() =>
+          runOperation(core, invoke(CARD, 'look')),
+        );
+        assert.strictEqual(
+          error.status,
+          501,
+          `a read carrying \`${clause}\` is refused rather than flattened`,
+        );
+      }
+    });
+    test('a stored-bytes read serves the bytes and infers their content type', async function (assert) {
+      let cases = [
+        // A card's stored source. The `.json` spelling names the bytes rather
+        // than the card, which is why dispatch leaves it as written.
+        {
+          path: 'person-1.json',
+          content: '{"data":{"type":"card"}}',
+          contentType: 'application/json',
+        },
+        // A module, which has no `adoptsFrom` and no definition entry — the
+        // case the whole definition-free path exists for.
+        {
+          path: 'person.gts',
+          content: 'export class Person {}',
+          contentType: 'text/typescript+glimmer',
+        },
+        // Bytes rather than text, handed back as the adapter produced them: a
+        // read of an image must not decode them.
+        {
+          path: 'logo.png',
+          content: new Uint8Array([137, 80, 78, 71]),
+          contentType: 'image/png',
+        },
+        // An `_`-prefixed name. Only the specific registered `_` endpoints are
+        // realm endpoints; a file stored under such a name is one the byte
+        // routes serve, so a read of its bytes has to reach it rather than
+        // reporting it missing.
+        {
+          path: '_notes.md',
+          content: '# notes',
+          contentType: 'text/markdown',
+        },
+      ];
+      for (let { path, content, contentType } of cases) {
+        let { core, metaCalls } = stub({ stored: { [path]: content } });
+        let result = await runOperation(
+          core,
+          invoke({ kind: 'instance', url: `${REALM}${path}` }, 'readSource'),
+        );
+        assert.deepEqual(
+          metaCalls,
+          [
+            {
+              localPath: path,
+              size:
+                typeof content === 'string'
+                  ? content.length
+                  : content.byteLength,
+            },
+          ],
+          `${path} asks for its version against the handle being read`,
+        );
+        assert.true(isSourceResult(result), `${path} reads as stored bytes`);
+        if (isSourceResult(result)) {
+          assert.strictEqual(
+            result.contentType,
+            contentType,
+            `${path} carries the content type its extension names`,
+          );
+          assert.strictEqual(
+            result.body,
+            content,
+            `${path} hands back exactly what the adapter produced`,
+          );
+          assert.strictEqual(result.lastModified, 1699);
+          assert.strictEqual(
+            result.size,
+            typeof content === 'string' ? content.length : content.byteLength,
+            `${path} carries the size a Content-Length is set from`,
+          );
+        }
+      }
+    });
+    test('a stored-bytes read consults neither a definition nor the index', async function (assert) {
+      // The hard constraint, as the only thing that can check it: a module has
+      // no definition entry, so a read that reached the cache for one would
+      // refuse bytes that are on disk. `.gts` is a registered extension, so this
+      // is the path that would otherwise resolve a file def's type and look it
+      // up.
+      let { core, calls } = stub({
+        stored: { 'person.gts': 'export class Person {}' },
+      });
+      let result = await runOperation(
+        core,
+        invoke({ kind: 'instance', url: `${REALM}person.gts` }, 'readSource'),
+      );
+      assert.deepEqual(
+        calls,
+        ['openStoredFile', 'storedFileMeta'],
+        'one file open and one file-meta row — and no definition lookup and ' +
+          'no index read at all',
+      );
+      // Resolving the bytes is the caller's, and what it costs is the other
+      // half of the same claim: a read that is going to send the body pays for
+      // it exactly once, and one that is not — a 304, a range served from the
+      // handle — pays nothing, which is what the assertion above records.
+      assert.true(isSourceResult(result), 'the bytes mode answers with a body');
+      if (isSourceResult(result)) {
+        assert.strictEqual(
+          result.body,
+          'export class Person {}',
+          'and the body is the stored text',
+        );
+      }
+      assert.deepEqual(
+        calls,
+        ['openStoredFile', 'storedFileMeta', 'storedContent'],
+        'sending the bytes touches them exactly once',
+      );
+    });
+    test('the headers-only mode reports the metadata without touching the bytes', async function (assert) {
+      let { core, calls } = stub({
+        stored: { 'sample.md': '# hi' },
+        storedVersions: { 'sample.md': 'abc123' },
+        storedCreatedAt: { 'sample.md': 1600 },
+      });
+      let target: OperationTarget = {
+        kind: 'instance',
+        url: `${REALM}sample.md`,
+      };
+      let headers = await runOperation(core, invoke(target, 'readSource'), {
+        headersOnly: true,
+      });
+      assert.true(isSourceResult(headers), 'the metadata comes back');
+      if (isSourceResult(headers)) {
+        assert.strictEqual(headers.body, undefined, 'and no bytes with it');
+        assert.deepEqual(
+          {
+            contentType: headers.contentType,
+            lastModified: headers.lastModified,
+            created: headers.created,
+            version: headers.version,
+          },
+          {
+            contentType: 'text/markdown',
+            lastModified: 1699,
+            created: 1600,
+            version: 'abc123',
+          },
+        );
+      }
+      assert.false(
+        calls.includes('storedContent'),
+        'the adapter opens a stream on first touch, so a HEAD must not touch it',
+      );
+
+      // Identical metadata either way, which is what lets a `HEAD` and a
+      // conditional `GET` agree on a validator for the same file.
+      let bytes = await runOperation(core, invoke(target, 'readSource'));
+      assert.true(isSourceResult(bytes));
+      if (isSourceResult(bytes) && isSourceResult(headers)) {
+        let { body: _body, ...metadata } = bytes;
+        assert.deepEqual(metadata, headers);
+      }
+    });
+    test('a stored-bytes read reports a version the realm never recorded as absent', async function (assert) {
+      // The realm resolves the fingerprint — from its own row, or by reading
+      // bounded ranges of the file when the row carries none — so a null here
+      // means it could do neither. Reporting the absence is what lets the
+      // facade omit an `ETag` rather than emit one that identifies nothing.
+      let { core } = stub({ stored: { 'sample.md': '# hi' } });
+      let result = await runOperation(
+        core,
+        invoke({ kind: 'instance', url: `${REALM}sample.md` }, 'readSource'),
+      );
+      assert.true(isSourceResult(result));
+      if (isSourceResult(result)) {
+        assert.strictEqual(result.version, null);
+        assert.strictEqual(
+          result.created,
+          null,
+          'and the same for a path the realm has no record of',
+        );
+      }
+    });
+    test('a path with no stored bytes is not found, never not-indexed', async function (assert) {
+      // Every way there is nothing to read answers alike, because the realm
+      // applies its own refusals inside `openStoredFile` and the core cannot
+      // tell them apart: a missing file, a directory, a path it serves no bytes
+      // from.
+      for (let path of ['does-not-exist', 'dir']) {
+        let { core } = stub({ stored: { 'sample.md': '# hi' } });
+        let error = await refusalFrom(() =>
+          runOperation(
+            core,
+            invoke({ kind: 'instance', url: `${REALM}${path}` }, 'readSource'),
+          ),
+        );
+        assert.strictEqual(error.code, 'target-not-found', `${path} is 404`);
+        assert.strictEqual(error.status, 404);
+      }
+
+      // `target-not-indexed` says waiting will resolve the absence, and what it
+      // waits for is the index. A read of bytes has nothing to wait for, so a
+      // source file already on disk does not change the answer for a path whose
+      // own bytes are missing.
+      let { core } = stub({ source: '{"data":{"type":"card"}}' });
+      let error = await refusalFrom(() =>
+        runOperation(
+          core,
+          invoke(
+            { kind: 'instance', url: `${REALM}person-1.json` },
+            'readSource',
+          ),
+        ),
+      );
+      assert.strictEqual(error.code, 'target-not-found');
+    });
+    test('a version read from the file costs the body nothing', async function (assert) {
+      // Where the realm has no hash recorded it reads one out of the file. What
+      // it must not read it out of is the body: `content` is single-use, so a
+      // version taken from there would hand back an empty body under a hash of
+      // the real one.
+      let { core, calls } = stub({
+        stored: { 'person-1.json': '{"data":{"type":"card"}}' },
+        storedRangeHash: { 'person-1.json': 'hash-from-ranges' },
+      });
+      let result = await runOperation(
+        core,
+        invoke(
+          { kind: 'instance', url: `${REALM}person-1.json` },
+          'readSource',
+        ),
+      );
+      assert.true(isSourceResult(result));
+      if (isSourceResult(result)) {
+        assert.strictEqual(result.version, 'hash-from-ranges');
+        assert.strictEqual(
+          await textOfBody(result.body),
+          '{"data":{"type":"card"}}',
+          'the whole body is still there to serve',
+        );
+      }
+      assert.true(
+        calls.includes('storedRangeRead'),
+        'the version came out of a bounded read of the file',
+      );
+      assert.strictEqual(
+        calls.filter((call) => call === 'storedContent').length,
+        1,
+        'and `content` is touched exactly once — by the executor, for the body',
+      );
+    });
+    test('both modes report the same version, neither paying for the other', async function (assert) {
+      // A `HEAD` and a conditional `GET` decide on the same file, so a version
+      // that appeared in one and not the other would leave a facade holding two
+      // answers for one validator. Reading it out of a bounded extent rather
+      // than out of the body is what lets the headers-only mode report the same
+      // hash while still touching no stream it would have to discard.
+      let opts = {
+        stored: { 'person-1.json': '{"data":{"type":"card"}}' },
+        storedRangeHash: { 'person-1.json': 'hash-from-ranges' },
+      };
+      let target: OperationTarget = {
+        kind: 'instance',
+        url: `${REALM}person-1.json`,
+      };
+
+      let { core, calls } = stub(opts);
+      let headers = await runOperation(core, invoke(target, 'readSource'), {
+        headersOnly: true,
+      });
+      assert.true(isSourceResult(headers));
+      if (isSourceResult(headers)) {
+        assert.strictEqual(headers.version, 'hash-from-ranges');
+        assert.strictEqual(headers.body, undefined);
+      }
+      assert.false(
+        calls.includes('storedContent'),
+        'and it got there without touching the bytes it is not returning',
+      );
+
+      let bytes = await runOperation(
+        stub(opts).core,
+        invoke(target, 'readSource'),
+      );
+      assert.true(isSourceResult(bytes));
+      if (isSourceResult(bytes) && isSourceResult(headers)) {
+        let { body: _body, ...metadata } = bytes;
+        assert.deepEqual(metadata, headers, 'every value agrees, version too');
+      }
+    });
+    test('an adapter with no bounded read reports no version', async function (assert) {
+      // A version is worth a bounded read of a file and is not worth an
+      // unbounded one, so an adapter that cannot serve a range has none to give
+      // for a path the realm holds no record of. The absence is a facade's cue
+      // to fall back to the modification time, which is there either way.
+      let { core, calls } = stub({
+        stored: { 'person-1.json': '{"data":{"type":"card"}}' },
+        storedRangeHash: { 'person-1.json': 'hash-from-ranges' },
+        rangelessAdapter: true,
+      });
+      let result = await runOperation(
+        core,
+        invoke(
+          { kind: 'instance', url: `${REALM}person-1.json` },
+          'readSource',
+        ),
+      );
+      assert.true(isSourceResult(result));
+      if (isSourceResult(result)) {
+        assert.strictEqual(result.version, null);
+        assert.strictEqual(result.lastModified, 1699);
+        assert.strictEqual(
+          await textOfBody(result.body),
+          '{"data":{"type":"card"}}',
+          'and the bytes read as they always did',
+        );
+      }
+      assert.strictEqual(
+        calls.filter((call) => call === 'storedContent').length,
+        1,
+        'the body is read once, and nothing is read twice for a hash',
+      );
+    });
+    test('an adapter that reports no size still reads', async function (assert) {
+      // A recorded hash cannot be checked against a handle whose length the
+      // adapter never stated, so the realm treats it as undescribed. The result
+      // reports the size it does not have rather than omitting the member.
+      let { core } = stub({
+        stored: { 'sample.md': '# hi' },
+        storedVersions: { 'sample.md': 'recorded' },
+        sizelessAdapter: true,
+      });
+      let result = await runOperation(
+        core,
+        invoke({ kind: 'instance', url: `${REALM}sample.md` }, 'readSource'),
+      );
+      assert.true(isSourceResult(result));
+      if (isSourceResult(result)) {
+        assert.strictEqual(result.size, null);
+        assert.strictEqual(await textOfBody(result.body), '# hi');
+      }
+    });
+    test('the realm root is a directory, not a stored file', async function (assert) {
+      // A card read resolves the realm root to the realm's index card, which is
+      // what makes the root readable at all. A stored-bytes read addresses a
+      // path, and the root is the realm's own directory — so it must not resolve
+      // to `index` and serve whatever file happens to carry that bare name.
+      let { core } = stub({ stored: { index: 'not the index card' } });
+      for (let url of [REALM, REALM.replace(/\/$/, '')]) {
+        let error = await refusalFrom(() =>
+          runOperation(core, invoke({ kind: 'instance', url }, 'readSource')),
+        );
+        assert.strictEqual(
+          error.code,
+          'target-not-found',
+          `${url} names a directory: ${error.detail}`,
+        );
+      }
+
+      // The bare name still reads when it is asked for by name.
+      let byName = await runOperation(
+        core,
+        invoke({ kind: 'instance', url: `${REALM}index` }, 'readSource'),
+      );
+      assert.true(isSourceResult(byName), 'the file itself is readable');
+      if (isSourceResult(byName)) {
+        assert.strictEqual(byName.body, 'not the index card');
+      }
+
+      // And the card read still resolves the root to the index card, which is
+      // the behavior the two addressings differ on.
+      let card = await runOperation(
+        core,
+        invoke({ kind: 'instance', url: REALM }, 'read'),
+      );
+      assert.true(
+        isDocumentResult(card),
+        'a card read of the root serves the index card',
+      );
+    });
+    test('a type has no stored bytes to read', async function (assert) {
+      let { core, calls } = stub();
+      let error = await refusalFrom(() =>
+        resolveOperation(
+          core,
+          { kind: 'type', codeRef: PERSON, realm: REALM },
+          'readSource',
+        ),
+      );
+      assert.strictEqual(error.code, 'operation-not-allowed');
+      assert.strictEqual(error.status, 405);
+      assert.deepEqual(
+        calls,
+        [],
+        'and the refusal costs no definition lookup: the answer does not ' +
+          'depend on which kind of def the type turns out to be',
+      );
+
+      // A field def type refuses for the same reason rather than because a
+      // field carries nothing — the stub is set up to say `field-def`, and the
+      // refusal still arrives without the entry being read.
+      let field = stub({ definitionType: 'field-def' });
+      let onField = await refusalFrom(() =>
+        resolveOperation(
+          field.core,
+          { kind: 'type', codeRef: PERSON, realm: REALM },
+          'readSource',
+        ),
+      );
+      assert.strictEqual(onField.code, 'operation-not-allowed');
+      assert.deepEqual(field.calls, []);
+    });
+    test('a declaration may not build on a stored-bytes read', async function (assert) {
+      // A declaration wins over the built-in of the same name, which is how a
+      // `read` is specialized and how a `delete` is rebound onto `transform`.
+      // A stored-bytes read is the one behavior that cannot be won that way:
+      // there is no payload to reshape and no stage to run, so dispatching a
+      // declared name to it would answer under the author's name without doing
+      // what the author wrote. The authoring decorator refuses such a
+      // declaration; this is the realm refusing one that reached a stored
+      // definition regardless.
+      let { core } = stub({
+        operations: {
+          exportBytes: { base: 'readSource' as const, deterministic: true },
+        },
+      });
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'exportBytes')),
+      );
+      assert.strictEqual(error.code, 'operation-not-allowed');
+      assert.strictEqual(error.status, 405);
+      assert.true(
+        error.detail.includes('readSource'),
+        `the refusal names the base it was built on: ${error.detail}`,
+      );
+    });
+    test('a scope says who it resolves for, and absence is not an empty id', async function (assert) {
+      let { core } = stub();
+      let signedIn = newOperationScope(core, {
+        caller: scopeCallerFor('@someone:example.com'),
+      });
+      assert.deepEqual(signedIn.caller, {
+        kind: 'user',
+        actor: '@someone:example.com',
+      });
+      let anonymous = newOperationScope(core, { caller: scopeCallerFor('') });
+      assert.deepEqual(
+        anonymous.caller,
+        { kind: 'anonymous' },
+        'a transport’s empty actor is nobody signed in',
+      );
+      let emptyId = newOperationScope(core, {
+        caller: { kind: 'user', actor: '' },
+      });
+      assert.notDeepEqual(
+        emptyId.caller,
+        anonymous.caller,
+        'and is told apart from a caller whose id is empty',
+      );
+      assert.deepEqual(
+        newOperationScope(core).caller,
+        { kind: 'unattributed' },
+        'a scope built without naming a caller has none',
+      );
+    });
+
+    test('a scope with a caller resolves exactly as one without', async function (assert) {
+      let { core } = stub({
+        operations: { rename: { base: 'transform', deterministic: true } },
+      });
+      let withCaller = newOperationScope(core, {
+        caller: scopeCallerFor('@someone:example.com'),
+      });
+      assert.deepEqual(
+        await resolveOperation(core, CARD, 'rename', withCaller),
+        await resolveOperation(core, CARD, 'rename', newOperationScope(core)),
+      );
+    });
+
+    test('a derived scope shares the row memo and carries the caller over', async function (assert) {
+      let { core, calls } = stub();
+      let url = new URL(`${REALM}person-1`);
+      let batch = newOperationScope(core, {
+        caller: scopeCallerFor('@someone:example.com'),
+      });
+      let trace = new GateTrace();
+      let entry = batch.derive({ trace });
+      await batch.peekInstance(url);
+      await entry.peekInstance(url);
+      assert.strictEqual(
+        calls.filter((call) => call === 'instance').length,
+        1,
+        'the two invocations read the row once between them',
+      );
+      assert.deepEqual(entry.caller, batch.caller);
+      assert.strictEqual(entry.trace, trace);
+      assert.strictEqual(
+        batch.trace,
+        undefined,
+        'deriving leaves the scope it came from as it was',
+      );
+      let unattributed = entry.derive({ caller: { kind: 'unattributed' } });
+      assert.deepEqual(unattributed.caller, { kind: 'unattributed' });
+      assert.strictEqual(
+        unattributed.trace,
+        undefined,
+        'a trace is one invocation’s and does not carry over',
+      );
+    });
+
+    test('the row peek is memoized for one invocation and no longer', async function (assert) {
+      let { core, calls } = stub();
+      let url = new URL(`${REALM}person-1`);
+      let scope = newOperationScope(core);
+      await scope.peekInstance(url);
+      await scope.peekInstance(url);
+      assert.strictEqual(
+        calls.filter((call) => call === 'instance').length,
+        1,
+        'a scope reads a row once',
+      );
+      await newOperationScope(core).peekInstance(url);
+      assert.strictEqual(
+        calls.filter((call) => call === 'instance').length,
+        2,
+        'and a fresh scope reads it again, so no row outlives its request',
+      );
+    });
+  });
+
+  // A create names its type in the payload, and the realm resolves that ref
+  // to a definition-cache entry. Here the ref reaches `Person` through another
+  // module, as a re-export does, so the chain recorded on that entry is
+  // `Person`'s. A gate that matched on the ref the caller sent would answer
+  // differently from one that matches on that chain.
+  module('the policy gate on a type target', function () {
+    const CLAIMED: CodeRef = {
+      module: `${REALM}people`,
+      name: 'Claimed',
+    } as CodeRef;
+    const target: OperationTarget = {
+      kind: 'type',
+      codeRef: CLAIMED,
+      realm: REALM,
+    };
+    const reExported = { definitionCodeRef: PERSON };
+    function declined(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@teacher:localhost'),
+        coarseDeclined: 'all',
+      });
+    }
+
+    test('matches rules on the adoption chain recorded for the type the ref resolved to', async function (assert) {
+      let { access } = policyStub([{ targetType: PERSON, grants: ['create'] }]);
+      let { core } = stub({ ...reExported, policy: access });
+      let { decision } = await resolveGatedOperation(
+        core,
+        target,
+        'create',
+        declined(core),
+      );
+      assert.strictEqual(decision.kind, 'granted', 'the Person rule admits it');
+    });
+
+    test('a rule on the ref the caller named does not match a type that resolved to another', async function (assert) {
+      let { access } = policyStub([
+        { targetType: CLAIMED, grants: ['create'] },
+      ]);
+      let { core } = stub({ ...reExported, policy: access });
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(core, target, 'create', declined(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+    });
+
+    test('a rule on an ancestor in the recorded chain applies', async function (assert) {
+      let { access } = policyStub([
+        { targetType: CARD_DEF, grants: ['create'] },
+      ]);
+      let { core } = stub({ ...reExported, policy: access });
+      let { decision } = await resolveGatedOperation(
+        core,
+        target,
+        'create',
+        declined(core),
+      );
+      assert.strictEqual(decision.kind, 'granted');
+    });
+
+    test('the definition and its chain are read from one entry', async function (assert) {
+      let { access } = policyStub([{ targetType: PERSON, grants: ['create'] }]);
+      let { core, calls } = stub({ ...reExported, policy: access });
+      await resolveGatedOperation(core, target, 'create', declined(core));
+      assert.deepEqual(
+        calls.filter((call) => call.startsWith('lookupDefinition')),
+        ['lookupDefinitionEntry', 'lookupDefinition'],
+        'one read of the entry, and no separate read of its definition: the one definition read is of the ancestor the non-grantable check asks about',
+      );
+    });
+
+    test('a type is matched only for a create', async function (assert) {
+      let { access } = policyStub([
+        { targetType: PERSON, grants: ['read', 'update', 'delete'] },
+      ]);
+      let { core } = stub({ ...reExported, policy: access });
+      for (let name of ['read', 'update', 'delete']) {
+        let failure = await refusalFrom(() =>
+          resolveGatedOperation(core, target, name, declined(core)),
+        );
+        assert.strictEqual(
+          failure.code,
+          'operation-not-permitted',
+          `a ${name} granted on the type is not granted on a type target`,
+        );
+      }
+    });
+
+    test('a caller the realm ACL allowed never loads the policy', async function (assert) {
+      let { access, loads } = policyStub([]);
+      let { core } = stub({ ...reExported, policy: access });
+      let { decision } = await resolveGatedOperation(
+        core,
+        target,
+        'create',
+        newOperationScope(core, {
+          caller: scopeCallerFor('@admin:localhost'),
+          coarseDeclined: 'none',
+        }),
+      );
+      assert.strictEqual(decision.kind, 'coarse');
+      assert.strictEqual(loads.count, 0, 'the policy was not loaded');
+    });
+
+    test('a type target scoped to another realm is refused before its type is looked up', async function (assert) {
+      let { access, loads } = policyStub([
+        { targetType: PERSON, grants: ['create'] },
+      ]);
+      let { core, calls } = stub({ policy: access });
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(
+          core,
+          { kind: 'type', codeRef: PERSON, realm: 'http://example.com/other/' },
+          'create',
+          newOperationScope(core, {
+            caller: scopeCallerFor('@reader:localhost'),
+            coarseDeclined: 'writes',
+          }),
+        ),
+      );
+      assert.strictEqual(failure.code, 'invalid-params');
+      assert.true(
+        /target realm http:\/\/example\.com\/other\/ is not/.test(
+          failure.detail ?? '',
+        ),
+        failure.detail,
+      );
+      assert.deepEqual(calls, [], 'nothing was looked up');
+      assert.strictEqual(loads.count, 0, 'and the policy was not loaded');
+    });
+  });
+
+  // A reader declined only writes, with a policy that grants `update` on
+  // `CardDef` to everyone. The target's row records `Person` and `CardDef`.
+  module('the policy gate on a non-grantable operation', function () {
+    const FLAGGED: Definition['operations'] = {
+      update: { base: 'update', deterministic: true, nonGrantable: true },
+    };
+
+    // Only `Person`'s entry can carry the flag, and only `Person`'s can be
+    // unreadable, so `CardDef` always reads cleanly and flags nothing.
+    function gatedCore(person: 'flagged' | 'unflagged' | 'unreadable') {
+      let { access } = policyStub([
+        { targetType: CARD_DEF, grants: ['update'] },
+      ]);
+      let { core, calls } = stub({ policy: access });
+      let isPerson = (ref: CodeRef) => typeKey(ref) === typeKey(PERSON);
+      let definitionOf = (ref: CodeRef): Definition => {
+        if (isPerson(ref) && person === 'unreadable') {
+          throw new Error('the definition could not be built');
+        }
+        return {
+          type: 'card-def',
+          codeRef: ref,
+          displayName: isPerson(ref) ? 'Person' : 'Card',
+          fields: {},
+          fieldDefs: {},
+          ...(isPerson(ref) && person === 'flagged'
+            ? { operations: FLAGGED }
+            : {}),
+        };
+      };
+      core.definitionLookup = {
+        async lookupDefinition(ref) {
+          calls.push('lookupDefinition');
+          return definitionOf(ref);
+        },
+        async lookupDefinitionEntry(ref) {
+          calls.push('lookupDefinitionEntry');
+          return {
+            definition: definitionOf(ref),
+            types: [typeKey(ref), typeKey(CARD_DEF)],
+          };
+        },
+      };
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row
+          ? ({ ...row, types: [typeKey(PERSON), typeKey(CARD_DEF)] } as any)
+          : row;
+      };
+      return { core, calls };
+    }
+
+    function declinedWrites(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+    }
+
+    test('the flag on the target type refuses a grant that matches', async function (assert) {
+      let { core } = gatedCore('flagged');
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(core, CARD, 'update', declinedWrites(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+    });
+
+    test('a target type whose entry cannot be read refuses rather than dropping its flag', async function (assert) {
+      let { core, calls } = gatedCore('unreadable');
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(core, CARD, 'update', declinedWrites(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+      assert.true(
+        calls.includes('lookupDefinition'),
+        'the chain check asked for the target type again',
+      );
+    });
+
+    test('a target type that declares nothing is granted as before', async function (assert) {
+      let { core } = gatedCore('unflagged');
+      let { decision } = await resolveGatedOperation(
+        core,
+        CARD,
+        'update',
+        declinedWrites(core),
+      );
+      assert.strictEqual(decision.kind, 'granted');
+    });
+  });
+
+  // A card verb carries out the built-in behavior its method names, so a
+  // grant on the name reaches the verb only where the name means that
+  // behavior. A reader declined only writes, with a policy that grants
+  // `update` on `CardDef` to everyone. The target's row records `Person` and
+  // `CardDef`.
+  module('the policy gate on a card verb’s write', function () {
+    function gatedCore(
+      person:
+        | 'declares update'
+        | 'declares update on read'
+        | 'declares nothing',
+    ) {
+      let { access, loads } = policyStub([
+        { targetType: CARD_DEF, grants: ['update'] },
+      ]);
+      let { core } = stub({ policy: access });
+      let isPerson = (ref: CodeRef) => typeKey(ref) === typeKey(PERSON);
+      let definitionOf = (ref: CodeRef): Definition => ({
+        type: 'card-def',
+        codeRef: ref,
+        displayName: isPerson(ref) ? 'Person' : 'Card',
+        fields: {},
+        fieldDefs: {},
+        ...(isPerson(ref) && person === 'declares update'
+          ? {
+              operations: {
+                update: { base: 'update', deterministic: true },
+              },
+            }
+          : {}),
+        ...(isPerson(ref) && person === 'declares update on read'
+          ? {
+              operations: {
+                update: { base: 'read', deterministic: true },
+              },
+            }
+          : {}),
+      });
+      core.definitionLookup = {
+        async lookupDefinition(ref) {
+          return definitionOf(ref);
+        },
+        async lookupDefinitionEntry(ref) {
+          return {
+            definition: definitionOf(ref),
+            types: [typeKey(ref), typeKey(CARD_DEF)],
+          };
+        },
+      };
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row
+          ? ({ ...row, types: [typeKey(PERSON), typeKey(CARD_DEF)] } as any)
+          : row;
+      };
+      return { core, loads };
+    }
+
+    function scope(
+      core: OperationCore,
+      coarseDeclined: 'none' | 'writes' = 'writes',
+    ) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined,
+      });
+    }
+
+    test('a grant on the built-in behavior reaches the verb', async function (assert) {
+      let { core } = gatedCore('declares nothing');
+      let decision = await resolveFacadeWrite(
+        core,
+        CARD,
+        'update',
+        scope(core),
+      );
+      assert.strictEqual(decision.kind, 'granted');
+    });
+
+    test('a type that declares the name refuses the verb a grant the envelope would use', async function (assert) {
+      let { core } = gatedCore('declares update');
+      let { decision } = await resolveGatedOperation(
+        core,
+        CARD,
+        'update',
+        scope(core),
+      );
+      assert.strictEqual(
+        decision.kind,
+        'granted',
+        'the grant admits the declared update',
+      );
+      let failure = await refusalFrom(() =>
+        resolveFacadeWrite(core, CARD, 'update', scope(core)),
+      );
+      assert.strictEqual(
+        failure.code,
+        'operation-not-permitted',
+        'and the verb, which would not carry that update out, is refused',
+      );
+    });
+
+    test('a name declared on a base that does not write is refused before the gate judges it as a read', async function (assert) {
+      // The gate judges a declaration by its base, and a reader's reads are the
+      // ACL's to allow, so it would answer that the ACL allowed this one. The
+      // verb would then carry out its built-in write.
+      let { core, loads } = gatedCore('declares update on read');
+      let failure = await refusalFrom(() =>
+        resolveFacadeWrite(core, CARD, 'update', scope(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+      assert.strictEqual(loads.count, 0, 'and no policy was loaded');
+    });
+
+    test('a caller the ACL allowed is not judged, whatever the type declares', async function (assert) {
+      let { core, loads } = gatedCore('declares update');
+      let decision = await resolveFacadeWrite(
+        core,
+        CARD,
+        'update',
+        scope(core, 'none'),
+      );
+      assert.strictEqual(decision.kind, 'coarse');
+      assert.strictEqual(loads.count, 0, 'and no policy was loaded');
+    });
+  });
+
+  // A reader declined only writes, with a policy that grants every write the
+  // cases invoke on `CardDef`. A policy card is one whose chain holds
+  // `REALM_POLICY`, and none of the types these cases declare their writes on
+  // marks any of them non-grantable.
+  module('the policy gate on a policy card', function () {
+    const SCHOOL_POLICY: CodeRef = {
+      module: `${REALM}school-policy`,
+      name: 'SchoolPolicy',
+    } as CodeRef;
+    const MISSING: CodeRef = {
+      module: `${REALM}missing`,
+      name: 'Missing',
+    } as CodeRef;
+    const GRANTED = ['create', 'update', 'setMotto', 'draftPolicy', 'draft'];
+
+    // `rowTypes` is the chain the target's index row records. `operations` is
+    // what every type entry declares, and `MISSING` has no entry at all.
+    function gatedCore({
+      rowTypes = [PERSON, CARD_DEF],
+      policyCard,
+      operations,
+    }: {
+      rowTypes?: CodeRef[];
+      policyCard?: string;
+      operations?: Definition['operations'];
+    } = {}) {
+      let { access } = policyStub([{ targetType: CARD_DEF, grants: GRANTED }], {
+        policyCard,
+      });
+      let { core } = stub({ policy: access, operations });
+      let entry = core.definitionLookup.lookupDefinitionEntry.bind(
+        core.definitionLookup,
+      );
+      core.definitionLookup.lookupDefinitionEntry = async (ref) =>
+        typeKey(ref) === typeKey(MISSING) ? undefined : await entry(ref);
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row ? ({ ...row, types: rowTypes.map(typeKey) } as any) : row;
+      };
+      return core;
+    }
+
+    function declinedWrites(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+    }
+
+    function typeTarget(codeRef: CodeRef): OperationTarget {
+      return { kind: 'type', codeRef, realm: REALM };
+    }
+
+    async function decide(
+      core: OperationCore,
+      target: OperationTarget,
+      name: string,
+    ): Promise<string> {
+      try {
+        let { decision } = await resolveGatedOperation(
+          core,
+          target,
+          name,
+          declinedWrites(core),
+        );
+        return decision.kind;
+      } catch (err) {
+        if (isOperationFailure(err)) {
+          return err.error.code;
+        }
+        throw err;
+      }
+    }
+
+    test('the card the realm’s key names is refused by its identity, whatever its type', async function (assert) {
+      assert.strictEqual(
+        await decide(gatedCore({ policyCard: CARD.url }), CARD, 'update'),
+        'operation-not-permitted',
+        'a key naming the card by its id',
+      );
+      assert.strictEqual(
+        await decide(
+          gatedCore({ policyCard: `${CARD.url}.json` }),
+          CARD,
+          'update',
+        ),
+        'operation-not-permitted',
+        'a key naming the card by its stored source',
+      );
+      assert.strictEqual(
+        await decide(
+          gatedCore({ policyCard: `${REALM}someone-else` }),
+          CARD,
+          'update',
+        ),
+        'granted',
+        'while the same grant admits the write when the key names another card',
+      );
+    });
+
+    test('a card whose chain holds RealmPolicy is refused though no key names it, under any name', async function (assert) {
+      let core = gatedCore({
+        rowTypes: [SCHOOL_POLICY, REALM_POLICY, CARD_DEF],
+        operations: {
+          setMotto: { base: 'transform', deterministic: true },
+        },
+      });
+      assert.strictEqual(
+        await decide(core, CARD, 'update'),
+        'operation-not-permitted',
+        'a built-in write',
+      );
+      assert.strictEqual(
+        await decide(core, CARD, 'setMotto'),
+        'operation-not-permitted',
+        'a named write the type declares for itself',
+      );
+    });
+
+    test('a create is judged by the type it mints', async function (assert) {
+      let core = gatedCore({
+        operations: {
+          draftPolicy: {
+            base: 'create',
+            of: REALM_POLICY,
+            deterministic: true,
+          },
+          draft: { base: 'create', of: PERSON, deterministic: true },
+        },
+      });
+      assert.strictEqual(
+        await decide(core, typeTarget(REALM_POLICY), 'create'),
+        'operation-not-permitted',
+        'a plain create of a policy type',
+      );
+      assert.strictEqual(
+        await decide(core, typeTarget(PERSON), 'draftPolicy'),
+        'operation-not-permitted',
+        'a named create declared on an ordinary type that mints a policy card',
+      );
+      assert.strictEqual(
+        await decide(core, typeTarget(REALM_POLICY), 'draft'),
+        'granted',
+        'a named create declared on a policy type that mints an ordinary card',
+      );
+      assert.strictEqual(
+        await decide(core, typeTarget(PERSON), 'create'),
+        'granted',
+        'a plain create of an ordinary type',
+      );
+    });
+
+    test('a named create whose minted type cannot be read is refused', async function (assert) {
+      let core = gatedCore({
+        operations: {
+          draft: { base: 'create', of: MISSING, deterministic: true },
+        },
+      });
+      assert.strictEqual(
+        await decide(core, typeTarget(PERSON), 'draft'),
+        'operation-not-permitted',
+      );
+    });
+  });
+
+  // The gate matches a write's grants on the card's index row, and the write
+  // lock judges the card again from the bytes the write stages against. Here
+  // the row records `Person` and `CardDef`, and a reader declined only writes
+  // holds grants on `CardDef` for every write the cases invoke. Each case
+  // changes what the lock holds: the type the stored bytes name, and the
+  // chain the definition cache records for it.
+  module('the write lock on a card a grant admitted a write to', function () {
+    const PET: CodeRef = { module: `${REALM}pet`, name: 'Pet' } as CodeRef;
+    const TARGET = { kind: 'instance' as const, url: `${REALM}person-1` };
+    const GRANTED = ['read', 'update', 'setMotto', 'draft'];
+    const OPERATIONS: Definition['operations'] = {
+      setMotto: { base: 'transform', deterministic: true },
+      // A named create anchored on the card, which mints a `Pet` and leaves
+      // the card as it is.
+      draft: { base: 'create', of: PET, deterministic: true },
+    };
+
+    // `where` makes every grant rest on that predicate. `personChain` is the
+    // chain the definition cache records for `Person` now, which the row
+    // does not know about.
+    function lockedCore({
+      where,
+      policyCard,
+      personChain = [PERSON, CARD_DEF],
+    }: {
+      where?: string;
+      policyCard?: string;
+      personChain?: CodeRef[];
+    } = {}) {
+      let { access } = policyStub([{ targetType: CARD_DEF, grants: GRANTED }], {
+        policyCard,
+      });
+      if (where) {
+        let compiled = access.compiledPolicy.bind(access);
+        access.compiledPolicy = async () => {
+          let policy = (await compiled())!;
+          return {
+            ...policy,
+            rules: policy.rules.map((rule) => ({
+              ...rule,
+              grants: rule.grants.map((grant) => ({
+                ...grant,
+                where: { source: where, canonical: where, snapshot: false },
+              })),
+            })),
+          };
+        };
+      }
+      let { core } = stub({ policy: access, operations: OPERATIONS });
+      let entry = core.definitionLookup.lookupDefinitionEntry.bind(
+        core.definitionLookup,
+      );
+      core.definitionLookup.lookupDefinitionEntry = async (ref) => {
+        let found = await entry(ref);
+        return found && typeKey(ref) === typeKey(PERSON)
+          ? { ...found, types: personChain.map(typeKey) }
+          : found;
+      };
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row
+          ? ({ ...row, types: [typeKey(PERSON), typeKey(CARD_DEF)] } as any)
+          : row;
+      };
+      return core;
+    }
+
+    function declinedWrites(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+    }
+
+    // What the gate decides about `name` on the card, then what the lock
+    // decides with the card's stored bytes adopting from `storedAs`.
+    // `beneathAppend` hands those bytes over as the lock holds a card that an
+    // earlier entry appended to.
+    async function underLock(
+      core: OperationCore,
+      name: string,
+      storedAs: CodeRef,
+      {
+        scope = declinedWrites(core),
+        beneathAppend = false,
+      }: { scope?: OperationScope; beneathAppend?: boolean } = {},
+    ): Promise<string> {
+      let { decision } = await resolveGatedOperation(core, TARGET, name, scope);
+      let pending = pendingWriteFor(TARGET, name, decision, scope);
+      if (!pending) {
+        return `${decision.kind}, leaving nothing to the lock`;
+      }
+      let source = JSON.stringify({
+        data: {
+          type: 'card',
+          id: TARGET.url,
+          attributes: { title: 'Hi' },
+          meta: { adoptsFrom: storedAs },
+        },
+      });
+      try {
+        await dischargePendingDecision(core, pending, {
+          id: TARGET.url,
+          source,
+          ...(beneathAppend ? { beneathAppend: true as const } : {}),
+        });
+        return `${decision.kind}, then admitted`;
+      } catch (err) {
+        if (isOperationFailure(err)) {
+          return `${decision.kind}, then ${err.error.code}`;
+        }
+        throw err;
+      }
+    }
+
+    test('a write granted outright is refused when its bytes adopt from RealmPolicy', async function (assert) {
+      for (let [policyCard, whose] of [
+        [undefined, 'no key names the card'],
+        [`${REALM}policy`, 'this realm’s key names another card'],
+      ] as const) {
+        let core = lockedCore({ policyCard });
+        for (let name of ['update', 'setMotto', 'draft']) {
+          assert.strictEqual(
+            await underLock(core, name, REALM_POLICY),
+            'granted, then operation-not-permitted',
+            `${name}, where ${whose}`,
+          );
+        }
+      }
+    });
+
+    test('a write granted outright is refused when its bytes adopt from any other type', async function (assert) {
+      let core = lockedCore();
+      assert.strictEqual(
+        await underLock(core, 'update', PET),
+        'granted, then operation-not-permitted',
+        'the grant on CardDef was matched on a Person, not on a Pet',
+      );
+    });
+
+    test('a write granted outright is admitted while its bytes adopt from the type it was matched on', async function (assert) {
+      let core = lockedCore();
+      for (let name of ['update', 'setMotto', 'draft']) {
+        assert.strictEqual(
+          await underLock(core, name, PERSON),
+          'granted, then admitted',
+          name,
+        );
+      }
+    });
+
+    test('a type that now descends from RealmPolicy makes the card a policy card under the lock', async function (assert) {
+      let core = lockedCore({ personChain: [PERSON, REALM_POLICY, CARD_DEF] });
+      assert.strictEqual(
+        await underLock(core, 'update', PERSON),
+        'granted, then operation-not-permitted',
+        'a write that changes the card',
+      );
+      assert.strictEqual(
+        await underLock(core, 'setMotto', PERSON),
+        'granted, then operation-not-permitted',
+        'a named write that changes the card',
+      );
+      assert.strictEqual(
+        await underLock(core, 'draft', PERSON),
+        'granted, then admitted',
+        'a named create anchored on the card, which mints a Pet and leaves the card as it is',
+      );
+    });
+
+    test('a write resting on a predicate is judged by its bytes before the predicate runs', async function (assert) {
+      let policyNow = lockedCore({
+        where: 'true',
+        personChain: [PERSON, REALM_POLICY, CARD_DEF],
+      });
+      assert.strictEqual(
+        await underLock(policyNow, 'update', PERSON),
+        'pending, then operation-not-permitted',
+        'a card whose type now descends from RealmPolicy',
+      );
+      assert.strictEqual(
+        policyGateStats(policyNow).predicateEvaluations,
+        0,
+        'refused without evaluating the predicate',
+      );
+      let ordinary = lockedCore({ where: 'true' });
+      assert.strictEqual(
+        await underLock(ordinary, 'update', PERSON),
+        'pending, then admitted',
+        'while the same predicate admits an ordinary card',
+      );
+      assert.strictEqual(policyGateStats(ordinary).predicateEvaluations, 1);
+    });
+
+    test('bytes beneath an append judge a write granted outright by their type alone', async function (assert) {
+      let core = lockedCore();
+      assert.strictEqual(
+        await underLock(core, 'update', PERSON, { beneathAppend: true }),
+        'granted, then admitted',
+        'the type the grant was matched on',
+      );
+      assert.strictEqual(
+        await underLock(core, 'update', REALM_POLICY, { beneathAppend: true }),
+        'granted, then operation-not-permitted',
+        'a policy card',
+      );
+      assert.strictEqual(
+        await underLock(lockedCore({ where: 'true' }), 'update', PERSON, {
+          beneathAppend: true,
+        }),
+        'pending, then operation-not-permitted',
+        'while a predicate, which reads what the append changes, judges nothing from them',
+      );
+    });
+
+    test('what leaves nothing to the lock', async function (assert) {
+      let core = lockedCore();
+      assert.strictEqual(
+        await underLock(core, 'read', REALM_POLICY, {
+          scope: newOperationScope(core, {
+            caller: scopeCallerFor('@stranger:localhost'),
+            coarseDeclined: 'all',
+          }),
+        }),
+        'granted, leaving nothing to the lock',
+        'a read, which is decided at the gate',
+      );
+      assert.strictEqual(
+        await underLock(core, 'update', REALM_POLICY, {
+          scope: newOperationScope(core, {
+            caller: scopeCallerFor('@admin:localhost'),
+            coarseDeclined: 'none',
+          }),
+        }),
+        'coarse, leaving nothing to the lock',
+        'a write the realm ACL allows',
+      );
+    });
+
+    test('a caller that carries no decision to a lock is refused a write granted outright', async function (assert) {
+      let core = lockedCore();
+      let failure = await refusalFrom(() =>
+        resolveOperation(core, TARGET, 'update', declinedWrites(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+      assert.strictEqual(
+        (await resolveOperation(core, TARGET, 'read', declinedWrites(core)))
+          .base,
+        'read',
+        'while a granted read resolves as before',
+      );
+    });
+  });
+});

@@ -1,6 +1,5 @@
 import {
   click,
-  find,
   waitFor,
   fillIn,
   triggerEvent,
@@ -20,11 +19,13 @@ import stringify from 'safe-stable-stringify';
 
 import {
   baseRealmRRI,
+  baseRRI,
   type LooseSingleCardDocument,
   rri,
   fileDefFormats,
   cardDefFormats,
 } from '@cardstack/runtime-common';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -1874,6 +1875,29 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
     });
 
+    test('Clicking a search result while the workspace chooser is open closes the chooser and shows the file', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}employee.gts`,
+        workspaceChooserOpened: true,
+      });
+
+      assert.dom('[data-test-workspace-chooser]').exists();
+
+      await click('[data-test-open-search-field]');
+      await fillIn('[data-test-search-field]', 'Mango');
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`, {
+        timeout: 2000,
+      });
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+      assert.dom('[data-test-workspace-chooser]').doesNotExist();
+      await waitFor('[data-test-card-url-bar-input]');
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}Pet/mango.json`);
+    });
+
     test('Clicking a file in search panel opens the file itself (no .json appended)', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
@@ -1932,13 +1956,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/bob.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/bob.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/bob.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {
@@ -1984,13 +2006,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/bob.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/bob.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/bob.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {
@@ -2031,13 +2051,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/bob.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/bob.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/bob.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {
@@ -2089,13 +2107,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/amy"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/amy.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/amy.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/amy.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {
@@ -2537,11 +2553,34 @@ module('Acceptance | code submode tests', function (_hooks) {
         } as LooseSingleCardDocument),
       );
 
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-code-mode-card-renderer-body]')
-          ?.textContent?.includes('FadhlanXXX'),
-      );
+      // The preview updates through the realm's index event: the mock
+      // homeserver's dispatch (a test waiter), the matrix service's debounced
+      // timeline drain (a runloop timer), the store's reload of the card (a
+      // test waiter) and the re-render. Settling covers that whole chain
+      // rather than racing it against a clock.
+      await settled();
+      let previewText = () =>
+        document.querySelector('[data-test-code-mode-card-renderer-body]')
+          ?.textContent ?? '';
+      if (!previewText().includes('FadhlanXXX')) {
+        // Tells apart an event that never reached this tab, a store that never
+        // re-read the card, and a card that re-read but never re-rendered.
+        let realmEvents = mockMatrixUtils
+          .getRoomIds()
+          .flatMap((roomId) => mockMatrixUtils.getRoomEvents(roomId))
+          .filter((event) => event.type === APP_BOXEL_REALM_EVENT_TYPE)
+          .slice(-5)
+          .map((event) => event.content);
+        let instance = getService('store').peek(
+          `${testRealmURL}Person/fadhlan`,
+        );
+        console.warn(
+          '[card-preview-live-updates flake-probe] preview not updated after settled(). ' +
+            `store firstName=${JSON.stringify((instance as any)?.firstName)}; ` +
+            `preview text=${JSON.stringify(previewText())}; ` +
+            `last realm events in mock homeserver=${JSON.stringify(realmEvents)}.`,
+        );
+      }
       assert
         .dom('[data-test-code-mode-card-renderer-body]')
         .includesText('FadhlanXXX');
@@ -2658,7 +2697,9 @@ module('Acceptance | code submode tests', function (_hooks) {
         } as LooseSingleCardDocument),
       );
 
-      await waitFor('[data-test-card-error]');
+      // Each write reaches the preview through the realm's index event, which
+      // settling waits out; see 'card preview live updates when index changes'.
+      await settled();
       assert
         .dom('[data-test-card-error]')
         .exists('card error state is displayed');
@@ -2678,7 +2719,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         } as LooseSingleCardDocument),
       );
 
-      await waitFor('[data-test-card-error]', { count: 0 });
+      await settled();
       assert
         .dom('[data-test-card-error]')
         .doesNotExist('card error state is not displayed');
@@ -2913,9 +2954,8 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     test('Edit Template opens the source of a card whose type lives in a mapped realm', async function (assert) {
       // `person-entry` is a Spec, so its type resolves to the base realm — a
-      // prefix identifier rather than a URL. The button used to parse that
-      // module as a URL, which throws for any mapped realm, so the source
-      // never opened.
+      // prefix identifier rather than a URL — and the button opens that
+      // module without parsing it as a URL.
       await visitOperatorMode({
         stacks: [
           [
@@ -2933,17 +2973,12 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-edit-template-button]');
 
       await waitFor('[data-test-card-url-bar-input]');
-      let codePath = (
-        find('[data-test-card-url-bar-input]') as HTMLInputElement
-      ).value;
-      assert.true(
-        codePath.endsWith('spec.gts'),
-        `the base realm's spec source opened (got ${codePath})`,
-      );
-      assert.false(
-        codePath.startsWith('@'),
-        'the identifier was resolved to a URL rather than passed through raw',
-      );
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          baseRRI('spec.gts'),
+          "the base realm's spec source opened, shown in its prefix form",
+        );
     });
   });
 });

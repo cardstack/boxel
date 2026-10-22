@@ -1,18 +1,16 @@
+import * as cardAPI from '@cardstack/base/card-api';
+import { CardDef, FieldDef } from '@cardstack/base/card-api';
+import DateField from '@cardstack/base/date';
+import { FileDef } from '@cardstack/base/file-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+
+import { DEFINITION_FREE_BASE_OPERATIONS } from '@cardstack/runtime-common/card-operations';
 
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { setupCardLogs, setupLocalIndexing } from '../helpers';
-import {
-  setupBaseRealm,
-  cardAPI,
-  CardDef,
-  FieldDef,
-  FileDef,
-  StringField,
-  DateField,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -25,9 +23,21 @@ let getDeclaredOperations: (typeof OperationsModule)['getDeclaredOperations'];
 let params: (typeof OperationsModule)['params'];
 let actor: (typeof OperationsModule)['actor'];
 let instance: (typeof OperationsModule)['instance'];
+let realmConfig: (typeof OperationsModule)['realmConfig'];
 let card: (typeof OperationsModule)['card'];
 let bxl: (typeof OperationsModule)['bxl'];
 let linkTo: (typeof OperationsModule)['linkTo'];
+
+// The entry `getOperations` synthesizes for a base operation a def carries.
+// The cast is load-bearing rather than convenience: `OperationDeclaration`
+// deliberately cannot express `base: 'readSource'`, because nothing may
+// declare one and the authoring types are the first place that is refused —
+// while `getOperations` still reports the entry every card and file def
+// carries. That asymmetry lives here rather than being spelled out at each
+// expectation.
+function implied(base: string): OperationsModule.OperationDeclaration {
+  return { base } as OperationsModule.OperationDeclaration;
+}
 
 // Compile-time assertions. The call does nothing at run time; it fails to
 // type-check unless the two types are identical, so the call is the assertion.
@@ -44,7 +54,6 @@ function expectTypeEquals<Expected, Actual>(
 
 module('Integration | operations', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import('@cardstack/base/card-api'),
@@ -61,6 +70,7 @@ module('Integration | operations', function (hooks) {
       params,
       actor,
       instance,
+      realmConfig,
       card,
       bxl,
       linkTo,
@@ -76,7 +86,7 @@ module('Integration | operations', function (hooks) {
         params: { body: StringField },
         append: {
           to: 'comments',
-          value: { body: params('body'), author: actor() },
+          value: { body: params('body'), postedBy: actor() },
         },
       };
       // Annotated rather than inferred: a subclass's static has to stay
@@ -101,7 +111,7 @@ module('Integration | operations', function (hooks) {
         // The thunk form: this class's binding is still uninitialized while
         // its own statics are being built.
         query: {
-          filter: { on: () => ExternalReport, eq: { author: actor('id') } },
+          filter: { on: () => ExternalReport, eq: { author: actor() } },
         },
       };
     }
@@ -120,12 +130,14 @@ module('Integration | operations', function (hooks) {
       Object.keys(getOperations(ExternalReport)).sort(),
       [
         'addComment',
+        'appendContainsMany',
         'create',
         'delete',
         'escalate',
         'listMine',
         'query',
         'read',
+        'readSource',
         'transform',
         'update',
       ],
@@ -172,14 +184,16 @@ module('Integration | operations', function (hooks) {
     assert.deepEqual(
       getOperations(CardDef),
       {
-        read: { base: 'read' },
-        create: { base: 'create' },
-        update: { base: 'update' },
-        delete: { base: 'delete' },
-        query: { base: 'query' },
-        transform: { base: 'transform' },
+        read: implied('read'),
+        readSource: implied('readSource'),
+        create: implied('create'),
+        update: implied('update'),
+        delete: implied('delete'),
+        query: implied('query'),
+        transform: implied('transform'),
+        appendContainsMany: implied('appendContainsMany'),
       },
-      'a card def carries all six, implied by the def type',
+      'a card def carries every base operation, implied by the def type',
     );
     assert.deepEqual(
       Object.keys(getDeclaredOperations(CardDef)),
@@ -188,8 +202,13 @@ module('Integration | operations', function (hooks) {
     );
     assert.deepEqual(
       getOperations(FileDef),
-      { read: { base: 'read' } },
-      "a file's metadata is read-only, so a file def carries only read",
+      {
+        read: implied('read'),
+        readSource: implied('readSource'),
+        update: implied('update'),
+        appendLine: implied('appendLine'),
+      },
+      "a file's metadata is read-only, so what a file def carries beyond its two reads are the two writes that work on its bytes",
     );
     assert.deepEqual(
       getOperations(FieldDef),
@@ -211,7 +230,16 @@ module('Integration | operations', function (hooks) {
     );
     assert.deepEqual(
       Object.keys(getOperations(Report)).sort(),
-      ['create', 'delete', 'query', 'read', 'transform', 'update'],
+      [
+        'appendContainsMany',
+        'create',
+        'delete',
+        'query',
+        'read',
+        'readSource',
+        'transform',
+        'update',
+      ],
       'and adds no name, because it is that base operation',
     );
 
@@ -230,7 +258,16 @@ module('Integration | operations', function (hooks) {
     );
     assert.deepEqual(
       Object.keys(getOperations(Archivable)).sort(),
-      ['create', 'delete', 'query', 'read', 'transform', 'update'],
+      [
+        'appendContainsMany',
+        'create',
+        'delete',
+        'query',
+        'read',
+        'readSource',
+        'transform',
+        'update',
+      ],
       'which stands in for the removal rather than beside it',
     );
   });
@@ -245,8 +282,10 @@ module('Integration | operations', function (hooks) {
         fill: {
           title: params('title'),
           dueOn: params('dueOn'),
-          author: actor(),
+          postedBy: actor(),
           classroom: instance('id'),
+          room: realmConfig('defaultRoom'),
+          settings: realmConfig(),
         },
       };
       @operation static addActivity = {
@@ -258,8 +297,8 @@ module('Integration | operations', function (hooks) {
         base: 'transform',
         assert: {
           unique: 'owners',
-          by: actor('id'),
-          message: 'This person already owns the classroom',
+          by: instance('id'),
+          message: 'This classroom already owns itself',
         },
         append: { to: 'owners', value: card('https://example.test/people/1') },
       };
@@ -278,10 +317,12 @@ module('Integration | operations', function (hooks) {
       {
         title: { $ref: 'params', key: 'title' },
         dueOn: { $ref: 'params', key: 'dueOn' },
-        author: { $ref: 'actor' },
+        postedBy: { $ref: 'actor' },
         classroom: { $ref: 'instance', key: 'id' },
+        room: { $ref: 'realmConfig', key: 'defaultRoom' },
+        settings: { $ref: 'realmConfig' },
       },
-      'params, actor and instance references survive JSON round-tripping',
+      'every accessor reference survives JSON round-tripping, with and without a key',
     );
     assert.strictEqual(
       createActivity.of,
@@ -300,8 +341,8 @@ module('Integration | operations', function (hooks) {
       JSON.parse(JSON.stringify(addOwner.assert)),
       {
         unique: 'owners',
-        by: { $ref: 'actor', key: 'id' },
-        message: 'This person already owns the classroom',
+        by: { $ref: 'instance', key: 'id' },
+        message: 'This classroom already owns itself',
       },
       'an assertion keys its uniqueness check on a reference',
     );
@@ -390,14 +431,39 @@ module('Integration | operations', function (hooks) {
     );
   });
 
-  test('a file definition can only declare read operations', function (assert) {
-    class Attachment extends FileDef {
+  test('a file definition declares reads and the writes that work on its bytes', function (assert) {
+    class LogFile extends FileDef {
       @operation static readRedacted = { base: 'read', output: { name: true } };
+      // The line is the payload, so an `appendLine` says which param carries
+      // it and nothing more.
+      @operation static record = {
+        base: 'appendLine',
+        params: { line: StringField },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static replace = { base: 'update' };
     }
     assert.deepEqual(
-      Object.keys(getDeclaredOperations(Attachment)),
-      ['readRedacted'],
-      'a read operation is declarable on a file definition',
+      Object.keys(getDeclaredOperations(LogFile)).sort(),
+      ['readRedacted', 'record', 'replace'],
+      'each is declarable on a file definition',
+    );
+    assert.strictEqual(
+      getOperations(LogFile).record,
+      LogFile.record,
+      'and an author-declared one comes back from the read every consumer dispatches from, as the declaration itself',
+    );
+    assert.deepEqual(
+      Object.keys(getOperations(LogFile)).sort(),
+      [
+        'appendLine',
+        'read',
+        'readRedacted',
+        'readSource',
+        'record',
+        'replace',
+        'update',
+      ],
+      'beside every base operation the def type carries — a declaration under a name of its own adds to them rather than standing in for one',
     );
     assert.throws(
       () => {
@@ -409,9 +475,634 @@ module('Integration | operations', function (hooks) {
         }
         return Mutable;
       },
-      /carries only "read"/,
-      'file metadata is content-derived, so it has no mutation surface',
+      /carries only "read", "readSource", "update", "appendLine"/,
+      'file metadata is content-derived, so there is no JSON:API document to transform',
     );
+    assert.throws(
+      () => {
+        class Bare extends FileDef {
+          @operation static record = { base: 'appendLine' };
+        }
+        return Bare;
+      },
+      /declares a `line` param — or an `input` program that produces one/,
+      'an append with no line to append would be refused at every invocation',
+    );
+    assert.throws(
+      () => {
+        class Linked extends FileDef {
+          @operation static record = {
+            base: 'appendLine',
+            params: { line: linkTo(CardDef) },
+          };
+        }
+        return Linked;
+      },
+      /`params.line` is the text a line holds/,
+      'a link is a card identity, and what goes into a text file is text',
+    );
+  });
+
+  test('a card definition carries every behavior but the one that appends a line', function (assert) {
+    assert.throws(
+      () => {
+        class Ledger extends CardDef {
+          @operation static record = {
+            base: 'appendLine',
+            params: { line: StringField },
+          };
+        }
+        return Ledger;
+      },
+      /carries only "read", "readSource", "create", "update", "delete", "query", "transform", "appendContainsMany"/,
+      "a card's stored bytes are a JSON:API document, and a line appended to one is no longer a card",
+    );
+  });
+
+  test('an appendContainsMany names the fields it appends to and the item for each', function (assert) {
+    class EventLog extends CardDef {
+      @operation static log = {
+        base: 'appendContainsMany',
+        params: { body: StringField },
+        field: 'events',
+        item: { body: params('body'), at: actor() },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static logBoth = {
+        base: 'appendContainsMany',
+        params: { body: StringField, label: StringField },
+        fields: { events: { body: params('body') }, labels: params('label') },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.deepEqual(
+      Object.keys(getDeclaredOperations(EventLog)).sort(),
+      ['log', 'logBoth'],
+      'both spellings are declarations',
+    );
+
+    let rejected: [string, () => unknown, RegExp][] = [
+      [
+        'both spellings at once',
+        () => {
+          class Both extends CardDef {
+            @operation static log = {
+              base: 'appendContainsMany',
+              field: 'events',
+              item: { body: 'x' },
+              fields: { events: { body: 'y' } },
+            };
+          }
+          return Both;
+        },
+        /names one field with its `item`, or several under `fields` — not both/,
+      ],
+      [
+        'neither spelling',
+        () => {
+          class Neither extends CardDef {
+            @operation static log = { base: 'appendContainsMany' };
+          }
+          return Neither;
+        },
+        /needs `field` and `item`, or `fields`/,
+      ],
+      [
+        'a field with no item',
+        () => {
+          class NoItem extends CardDef {
+            @operation static log = {
+              base: 'appendContainsMany',
+              field: 'events',
+            };
+          }
+          return NoItem;
+        },
+        /needs an `item` to append to "events"/,
+      ],
+      [
+        'an empty fields map',
+        () => {
+          class Empty extends CardDef {
+            @operation static log = {
+              base: 'appendContainsMany',
+              fields: {},
+            };
+          }
+          return Empty;
+        },
+        /`fields` must be an object mapping each `containsMany` field/,
+      ],
+    ];
+    for (let [name, build, pattern] of rejected) {
+      assert.throws(build, pattern, `${name} is refused`);
+    }
+  });
+
+  test('an appendContainsMany under its own name may name nothing, and is then the built-in', function (assert) {
+    class Journal extends CardDef {
+      @operation static appendContainsMany = {
+        base: 'appendContainsMany',
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.deepEqual(
+      JSON.parse(
+        JSON.stringify(getDeclaredOperations(Journal).appendContainsMany),
+      ),
+      { base: 'appendContainsMany', nonGrantable: true },
+      'a def can mark the built-in append without changing what it appends',
+    );
+    assert.throws(
+      () => {
+        class Named extends CardDef {
+          @operation static log = {
+            base: 'appendContainsMany',
+            nonGrantable: true,
+          };
+        }
+        return Named;
+      },
+      /needs `field` and `item`, or `fields`/,
+      'under any other name an append that names nothing is refused',
+    );
+  });
+
+  test('nonGrantable is a boolean any declaration may carry', function (assert) {
+    class Ledger extends CardDef {
+      @operation static seal = {
+        base: 'transform',
+        set: { status: 'sealed' },
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static update = {
+        base: 'update',
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.deepEqual(
+      Object.keys(getDeclaredOperations(Ledger)).sort(),
+      ['seal', 'update'],
+      'a named operation and a built-in both carry it',
+    );
+    assert.throws(() => {
+      class Loose extends CardDef {
+        @operation static seal = {
+          base: 'transform',
+          set: { status: 'sealed' },
+          nonGrantable: 'yes' as unknown as boolean,
+        };
+      }
+      return Loose;
+    }, /`nonGrantable` must be a boolean/);
+  });
+
+  test('label is a short line of plain text any declaration may carry', function (assert) {
+    class Inbox extends CardDef {
+      @operation static archive = {
+        base: 'transform',
+        label: 'Archive this inbox',
+        set: { status: 'archived' },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static listOpen = {
+        base: 'query',
+        label: 'List open inboxes',
+        query: { filter: { on: () => Inbox, eq: { status: 'open' } } },
+      };
+      @operation static update = {
+        base: 'update',
+        label: 'Edit this inbox',
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    class LogFile extends FileDef {
+      @operation static record = {
+        base: 'appendLine',
+        label: 'Add a line to the log',
+        params: { line: StringField },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.entries({
+          ...getDeclaredOperations(Inbox),
+          ...getDeclaredOperations(LogFile),
+        }).map(([name, declaration]) => [name, declaration.label]),
+      ),
+      {
+        archive: 'Archive this inbox',
+        listOpen: 'List open inboxes',
+        update: 'Edit this inbox',
+        record: 'Add a line to the log',
+      },
+      'a named operation, a saved search, a built-in and a file operation all carry one',
+    );
+
+    let refused: [string, unknown, RegExp][] = [
+      ['an empty label', '', /a label must not be empty/],
+      ['a blank label', '   ', /a label must not be empty/],
+      [
+        'a label over 80 characters',
+        'x'.repeat(81),
+        /a label must be at most 80 characters, and this one is 81/,
+      ],
+      ['a label with markup', 'Archive <b>now</b>', /without markup/],
+      [
+        'a label with a line break',
+        'Archive\nthis inbox',
+        /without line breaks/,
+      ],
+      ['a label with a tab', 'Archive\tthis inbox', /without line breaks/],
+      ['a label that is not a string', 42, /a label must be a string/],
+    ];
+    for (let [what, label, pattern] of refused) {
+      assert.throws(
+        () => {
+          class Loose extends CardDef {
+            @operation static update = {
+              base: 'update',
+              label: label as string,
+            };
+          }
+          return Loose;
+        },
+        pattern,
+        `${what} is refused`,
+      );
+    }
+    class AtTheLimit extends CardDef {
+      @operation static update = {
+        base: 'update',
+        label: 'x'.repeat(80),
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.strictEqual(
+      getDeclaredOperations(AtTheLimit).update.label,
+      'x'.repeat(80),
+      'a label of exactly 80 characters is accepted',
+    );
+  });
+
+  test('an explain is carried only where a card declares one, and is never grantable', function (assert) {
+    class Plain extends CardDef {}
+    assert.false(
+      'explain' in getOperations(Plain),
+      'no card carries an explain it did not declare',
+    );
+    class Policy extends CardDef {
+      @operation static explain = {
+        base: 'explain',
+        params: {
+          actor: StringField,
+          target: StringField,
+          operation: StringField,
+        },
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.strictEqual(
+      getOperations(Policy).explain?.base,
+      'explain',
+      'a card that declares one carries it under the name it declared',
+    );
+    let rejected: [string, () => unknown, RegExp][] = [
+      [
+        'an explain that leaves the flag off',
+        () => {
+          class Open extends CardDef {
+            @operation static explain = {
+              base: 'explain',
+            } as unknown as OperationsModule.OperationDeclaration;
+          }
+          return Open;
+        },
+        /declare it with `nonGrantable: true`/,
+      ],
+      [
+        'an explain that carries a program',
+        () => {
+          class Scripted extends CardDef {
+            @operation static explain = {
+              base: 'explain',
+              nonGrantable: true,
+              transformations: bxl`.status = "x";`,
+            };
+          }
+          return Scripted;
+        },
+        /so it carries no `transformations`/,
+      ],
+      [
+        'an explain that reshapes its answer',
+        () => {
+          class Projected extends CardDef {
+            @operation static explain = {
+              base: 'explain',
+              nonGrantable: true,
+              output: { decision: bxl`.decision` },
+            };
+          }
+          return Projected;
+        },
+        /carries no `output` to reshape it/,
+      ],
+      [
+        'an explain that rewrites its question',
+        () => {
+          class Rewritten extends CardDef {
+            @operation static explain = {
+              base: 'explain',
+              nonGrantable: true,
+              input: bxl`.`,
+            };
+          }
+          return Rewritten;
+        },
+        /carries no `input` to rewrite it/,
+      ],
+      [
+        'an explain on a file def',
+        () => {
+          class LogFile extends FileDef {
+            @operation static explain = {
+              base: 'explain',
+              nonGrantable: true,
+            };
+          }
+          return LogFile;
+        },
+        /cannot declare a "explain" operation/,
+      ],
+    ];
+    for (let [name, build, pattern] of rejected) {
+      assert.throws(build, pattern, `${name} is refused`);
+    }
+  });
+
+  test('a validate is carried only where a card declares one, and is never grantable', function (assert) {
+    class Plain extends CardDef {}
+    assert.false(
+      'validate' in getOperations(Plain),
+      'no card carries a validate it did not declare',
+    );
+    class Policy extends CardDef {
+      @operation static validate = {
+        base: 'validate',
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.strictEqual(
+      getOperations(Policy).validate?.base,
+      'validate',
+      'a card that declares one carries it under the name it declared',
+    );
+    let rejected: [string, () => unknown, RegExp][] = [
+      [
+        'a validate that leaves the flag off',
+        () => {
+          class Open extends CardDef {
+            @operation static validate = {
+              base: 'validate',
+            } as unknown as OperationsModule.OperationDeclaration;
+          }
+          return Open;
+        },
+        /declare it with `nonGrantable: true`/,
+      ],
+      [
+        'a validate that carries a program',
+        () => {
+          class Scripted extends CardDef {
+            @operation static validate = {
+              base: 'validate',
+              nonGrantable: true,
+              transformations: bxl`.status = "x";`,
+            };
+          }
+          return Scripted;
+        },
+        /so it carries no `transformations`/,
+      ],
+      [
+        'a validate that reshapes its answer',
+        () => {
+          class Projected extends CardDef {
+            @operation static validate = {
+              base: 'validate',
+              nonGrantable: true,
+              output: { issues: bxl`.issues` },
+            };
+          }
+          return Projected;
+        },
+        /carries no `output` to reshape it/,
+      ],
+      [
+        'a validate that takes params',
+        () => {
+          class WithParams extends CardDef {
+            @operation static validate = {
+              base: 'validate',
+              nonGrantable: true,
+              params: { realm: StringField },
+            } as unknown as OperationsModule.OperationDeclaration;
+          }
+          return WithParams;
+        },
+        /takes no payload.*so it carries no `params`/,
+      ],
+      [
+        'a validate that takes an input',
+        () => {
+          class WithInput extends CardDef {
+            @operation static validate = {
+              base: 'validate',
+              nonGrantable: true,
+              input: bxl`{ strict: true }`,
+            } as unknown as OperationsModule.OperationDeclaration;
+          }
+          return WithInput;
+        },
+        /takes no payload.*so it carries no `input`/,
+      ],
+      [
+        'a validate on a file def',
+        () => {
+          class LogFile extends FileDef {
+            @operation static validate = {
+              base: 'validate',
+              nonGrantable: true,
+            };
+          }
+          return LogFile;
+        },
+        /cannot declare a "validate" operation/,
+      ],
+    ];
+    for (let [name, build, pattern] of rejected) {
+      assert.throws(build, pattern, `${name} is refused`);
+    }
+  });
+
+  test('a declaration that runs no program carries no raw one', function (assert) {
+    // A program stored where nothing runs it is worse than a refusal: it reads
+    // as work the operation does.
+    let rejected: [string, () => unknown][] = [
+      [
+        'appendContainsMany',
+        () => {
+          class Ledger extends CardDef {
+            @operation static log = {
+              base: 'appendContainsMany',
+              transformations: bxl`.status = "logged";`,
+            };
+          }
+          return Ledger;
+        },
+      ],
+      [
+        'appendLine',
+        () => {
+          class LogFile extends FileDef {
+            @operation static record = {
+              base: 'appendLine',
+              params: { line: StringField },
+              transformations: bxl`.name = "x";`,
+            };
+          }
+          return LogFile;
+        },
+      ],
+      [
+        'update on a file def',
+        () => {
+          class Replaceable extends FileDef {
+            @operation static replace = {
+              base: 'update',
+              transformations: bxl`.name = "x";`,
+            };
+          }
+          return Replaceable;
+        },
+      ],
+    ];
+    for (let [name, build] of rejected) {
+      assert.throws(
+        build,
+        /so it carries no `transformations`/,
+        `${name} runs no program over a document`,
+      );
+    }
+  });
+
+  test('a stored-bytes read takes no declaration at all', function (assert) {
+    // The other half of the realm's definition-free dispatch: it answers a
+    // `readSource` without consulting a definition, which is only safe while
+    // no declaration can take that name. Refusing here is what makes it so.
+    for (let Def of [CardDef, FileDef]) {
+      assert.throws(
+        () => {
+          class Exported extends (Def as typeof CardDef) {
+            @operation static exportBytes = { base: 'readSource' };
+          }
+          return Exported;
+        },
+        /serves the bytes stored at the def's URL/,
+        `a ${Def.name} cannot build an operation on a stored-bytes read`,
+      );
+    }
+    assert.throws(
+      () => {
+        class Redacted extends CardDef {
+          // Not even under its own name: specializing it is the same ask as
+          // rebinding a verb onto it, since there is no stage to specialize.
+          @operation static readSource = {
+            base: 'readSource',
+            output: { redacted: true },
+          };
+        }
+        return Redacted;
+      },
+      /reserved operation name/,
+      'and it cannot be specialized under its own name either',
+    );
+
+    // The name is reserved independently of the base, because the two are
+    // independent everywhere else: a declaration is invoked under its name and
+    // carried out by its base. The realm answers this name without reading a
+    // definition, so a declaration under it — whatever base it builds on —
+    // would be dispatched straight past, and the built-in would run in place
+    // of what the author wrote.
+    assert.throws(
+      () => {
+        class Sneaky extends CardDef {
+          @operation static readSource = {
+            base: 'read',
+            output: { redacted: true },
+          };
+        }
+        return Sneaky;
+      },
+      /reserved operation name/,
+      'a declaration cannot take the name by building on another base',
+    );
+  });
+
+  test('a saved search may not be named `query`', function (assert) {
+    // A search the caller writes by hand is invoked, and granted by a realm's
+    // policy, under the name `query`. A saved search declared under it would
+    // share that grant with every filter a caller writes over the type, so the
+    // name is refused and the base, which every saved search builds on, is not.
+    assert.throws(() => {
+      class Listing extends CardDef {
+        @operation static query = {
+          base: 'query',
+          query: { filter: { type: () => Listing } },
+        };
+      }
+      return Listing;
+    }, /"query" is a reserved operation name/);
+  });
+
+  test('the decorator refuses every name the realm answers definition-free', function (assert) {
+    // The two lists are one decision with two homes: dispatch skips the
+    // definition lookup for `DEFINITION_FREE_BASE_OPERATIONS`, and that is
+    // sound only while the decorator refuses the same names — otherwise a
+    // declaration takes one, the built-in answers, and nothing reports the
+    // declaration that never ran. `base/operations.ts` cannot import the
+    // constant (the `runtime-common` barrel carries only the types from
+    // `card-operations/types.ts`, and reaching the value pulls in the entry
+    // that type-checks bxl), so this case is what holds them equal: adding a
+    // definition-free operation to the runtime list alone fails here.
+    //
+    // The decorator is a plain function, so a name from the list drives it
+    // directly — decorator syntax cannot spell a computed one. `base: 'read'`
+    // is deliberate: it is the hole that matters, a reserved name declared on
+    // a base that is otherwise allowed.
+    assert.ok(
+      DEFINITION_FREE_BASE_OPERATIONS.length > 0,
+      'the list is non-empty, so the loop below asserts something',
+    );
+    // `operation` is exported as `PropertyDecorator` — TypeScript's two-arg
+    // shape — while the Babel legacy decorator it actually is takes a third
+    // descriptor argument, which is where the declaration object arrives. The
+    // cast asks for the real runtime signature, the same mismatch the export's
+    // own `as unknown as PropertyDecorator` exists for.
+    let applyOperation = operation as unknown as (
+      target: unknown,
+      key: string,
+      descriptor: { initializer: () => unknown },
+    ) => void;
+    for (let name of DEFINITION_FREE_BASE_OPERATIONS) {
+      assert.throws(
+        () => {
+          class Shadow extends CardDef {}
+          applyOperation(Shadow, name, {
+            initializer: () => ({ base: 'read' }),
+          });
+          return Shadow;
+        },
+        /reserved operation name/,
+        `${name} is refused as a declaration name`,
+      );
+    }
   });
 
   test('the decorator rejects an operation name that is already a static', function (assert) {
@@ -544,6 +1235,153 @@ module('Integration | operations', function (hooks) {
       },
       /a "create" operation needs/,
       'a create names the type it creates',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static createComment = {
+            base: 'create',
+            of: () => Report,
+            links: 'none',
+          };
+        }
+        return Report;
+      },
+      /"links" is not a valid key for a "create" operation/,
+      'only a read or a query carries a link graph to narrow',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static summary = { base: 'read', links: 'some' };
+        }
+        return Report;
+      },
+      /`links` must name how much of the card's link graph this read carries/,
+      'and it names one of the strategies a read applies',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static read = { base: 'read', links: 'none' };
+        }
+        return Report;
+      },
+      /this read carries — one of "full", "ids"\. .*"ids" narrows a read/,
+      'a read may not withhold its links from the host that edits the card',
+    );
+    class Gradebook extends CardDef {
+      @operation static listAll = {
+        base: 'query',
+        query: { filter: { type: () => Gradebook } },
+        links: 'none',
+      };
+    }
+    assert.strictEqual(
+      (getDeclaredOperations(Gradebook).listAll as { links?: unknown }).links,
+      'none',
+      'while a query may',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static listAll = {
+            base: 'query',
+            query: { filter: { type: () => Report } },
+            links: 'some',
+          };
+        }
+        return Report;
+      },
+      /`links` must name how much of the card's link graph each of this query's results carries/,
+      'a query names one of the same three',
+    );
+    class Roster extends CardDef {
+      @operation static listAll = {
+        base: 'query',
+        query: { filter: { type: () => Roster } },
+        links: 'ids',
+      };
+    }
+    assert.strictEqual(
+      (getDeclaredOperations(Roster).listAll as { links?: unknown }).links,
+      'ids',
+      'and a query that names one is declared with it',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static rename = {
+            base: 'transform',
+            set: { title: 'Renamed' },
+            html: { embedded: 'unshareable' },
+          };
+        }
+        return Report;
+      },
+      /"html" is not a valid key for a "transform" operation/,
+      'only a read or a query serves prerendered HTML to withhold',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static summary = {
+            base: 'read',
+            html: { edit: 'unshareable' },
+          };
+        }
+        return Report;
+      },
+      /`html` names "edit", which is not a prerendered format/,
+      'it names prerendered formats',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static summary = {
+            base: 'read',
+            html: { embedded: 'hidden' },
+          };
+        }
+        return Report;
+      },
+      /`html.embedded` must say whether the format's prerendered HTML is served/,
+      'each shareable or unshareable',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static listAll = {
+            base: 'query',
+            query: { filter: { type: () => Report } },
+            html: ['embedded'],
+          };
+        }
+        return Report;
+      },
+      /`html` must be an object naming which prerendered formats this query's results are served data-only for/,
+      'by format',
+    );
+    class Classroom extends CardDef {
+      @operation static read = {
+        base: 'read',
+        html: { embedded: 'unshareable' },
+      };
+      @operation static listAll = {
+        base: 'query',
+        query: { filter: { type: () => Classroom } },
+        html: { fitted: 'unshareable', isolated: 'shareable' },
+      };
+    }
+    assert.deepEqual(
+      (getDeclaredOperations(Classroom).read as { html?: unknown }).html,
+      { embedded: 'unshareable' },
+      'a read that names formats is declared with them',
+    );
+    assert.deepEqual(
+      (getDeclaredOperations(Classroom).listAll as { html?: unknown }).html,
+      { fitted: 'unshareable', isolated: 'shareable' },
+      'and so is a query',
     );
     assert.throws(
       () => {
@@ -1311,9 +2149,22 @@ module('Integration | operations', function (hooks) {
         /must name a param/,
       ],
       [
-        'an actor reference with an empty key',
-        { base: 'transform', set: { x: { $ref: 'actor', key: '' } } },
+        'an actor reference carrying a key',
+        { base: 'transform', set: { x: { $ref: 'actor', key: 'id' } } },
+        /carries a key; actor\(\) is the caller's user id and has no members to read/,
+      ],
+      [
+        'an instance reference with an empty key',
+        { base: 'transform', set: { x: { $ref: 'instance', key: '' } } },
         /must name a member, or none at all/,
+      ],
+      [
+        'a card reference wrapping the caller',
+        {
+          base: 'transform',
+          set: { x: { $ref: 'card', value: { $ref: 'actor' } } },
+        },
+        /`actor\(\)` is the caller's user id rather than a card/,
       ],
       [
         'a card reference with a non-reference value',
@@ -1333,6 +2184,25 @@ module('Integration | operations', function (hooks) {
         `a declaration is refused for ${name}`,
       );
     }
+  });
+
+  test('the caller is typed as a user id, not as a card', function (assert) {
+    // Compile-time assertions: each `@ts-expect-error` fails the type check if
+    // the line it precedes starts compiling. They are what keeps the two
+    // refusals below from being run-time-only — an author sees them in the
+    // editor, before a declaration is ever stored.
+    //
+    // @ts-expect-error actor() takes no argument
+    let keyed = () => actor('id');
+    // @ts-expect-error the caller is not a card identity
+    let wrapped = () => card(actor());
+    assert.throws(keyed, /takes no argument/);
+    assert.throws(wrapped, /rather than a card/);
+    assert.deepEqual(
+      actor(),
+      { $ref: 'actor' },
+      'the one form it does have carries nothing but its kind',
+    );
   });
 
   test('every reference constructor reports what it wanted', function (assert) {
@@ -1363,13 +2233,23 @@ module('Integration | operations', function (hooks) {
         /takes a card class/,
       ],
       [
-        'actor with an empty key',
-        () => actor(''),
-        /takes the name of a member to read, or no argument at all/,
+        'actor with an argument',
+        () => actor('id' as never),
+        /actor\(\) takes no argument; it is the caller's user id/,
+      ],
+      [
+        'card wrapping the caller',
+        () => card(actor() as never),
+        /`actor\(\)` is the caller's user id rather than a card/,
       ],
       [
         'instance with a non-string key',
         () => instance(1 as never),
+        /takes the name of a member to read, or no argument at all/,
+      ],
+      [
+        'realmConfig with an empty key',
+        () => realmConfig(''),
         /takes the name of a member to read, or no argument at all/,
       ],
     ];
@@ -1378,12 +2258,12 @@ module('Integration | operations', function (hooks) {
     }
   });
 
-  test('a def with no mutation surface carries only read', function (assert) {
+  test('a def with no mutation surface carries only its reads', function (assert) {
     class Bare extends cardAPI.BaseDef {}
     assert.deepEqual(
       getOperations(Bare),
-      { read: { base: 'read' } },
-      'read is the one operation every addressable def shares',
+      { read: implied('read'), readSource: implied('readSource') },
+      'the two reads are what every addressable def shares',
     );
     assert.throws(
       () => {
@@ -1395,7 +2275,7 @@ module('Integration | operations', function (hooks) {
         }
         return Mutable;
       },
-      /carries only "read"/,
+      /carries only "read", "readSource"/,
       'and a def that carries no mutation base cannot declare one',
     );
   });

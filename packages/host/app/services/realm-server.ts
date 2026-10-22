@@ -1,4 +1,5 @@
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
@@ -18,16 +19,21 @@ import {
   publishRealm as publishRealmOperation,
   SupportedMimeType,
   Deferred,
+  fetcher,
+  realmServerAuthorizationMiddleware,
   ri,
-  testRealmURL,
+  testRealmOrigin,
   unpublishRealm as unpublishRealmOperation,
   waitForReady as waitForReadyOperation,
+  type FetcherMiddlewareHandler,
   type PublishProgress,
   type RealmClient,
   type RealmIdentifier,
   type RealmIndexCounts,
   type RealmInfo,
   type JWTPayload,
+  type PublicRealmSummary,
+  type RealmServerTokenSource,
 } from '@cardstack/runtime-common';
 import {
   joinDMRoom,
@@ -40,6 +46,8 @@ import {
   RealmServerSessionLocalStorageKey,
   SessionLocalStorageKey,
 } from '@cardstack/host/utils/local-storage-keys';
+
+import { createServerRequestTimingMiddleware } from './client-telemetry';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
@@ -87,8 +95,13 @@ type AuthStatus =
 
 interface AvailableRealm {
   url: string;
-  type: 'base' | 'catalog' | 'user';
+  // `catalog` realms are the ones the realm server lists for every user;
+  // `user-catalog` realms are public realms this user added to their own
+  // Catalogs section.
+  type: 'base' | 'catalog' | 'user' | 'user-catalog';
 }
+
+export type { PublicRealmSummary };
 
 // Display metadata for an archived realm, as returned by the owner-only
 // `GET /_archived-realms` endpoint. Archived realms are sealed (their `_info`
@@ -104,7 +117,10 @@ export interface ArchivedRealmInfo {
 
 type RealmServerEventSubscriber = (data: any) => Promise<void>;
 
-export default class RealmServerService extends Service {
+export default class RealmServerService
+  extends Service
+  implements RealmServerTokenSource
+{
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
   @service declare private realm: RealmService;
@@ -114,6 +130,11 @@ export default class RealmServerService extends Service {
   private availableRealms = new TrackedArray<AvailableRealm>([
     { type: 'base', url: baseRealm.url },
   ]);
+  // The public realms this user added to their Catalogs section, as stored.
+  // `availableRealms` lists each as a `user-catalog` entry unless another list
+  // already shows it, and the entries are rebuilt from here whenever those
+  // lists change, so a pick hidden by an overlap comes back when it ends.
+  private userCatalogPickList = new TrackedArray<string>([]);
   private archivedRealmsList = new TrackedArray<ArchivedRealmInfo>([]);
   private archivedRealmsFetched = false;
   // Trusted servers whose `_realm-auth` call failed at boot assembly (network
@@ -346,17 +367,50 @@ export default class RealmServerService extends Service {
     ]);
   }
 
+  // Signs the user's secure windows out, as part of signing out of the app.
+  // The app page can neither read the window's storage nor reach the window,
+  // so the realm server ends its session. Best effort, under the session held
+  // when it's called: it is never awaited, so a failing or slow server can't
+  // hold sign-out up, and a failure is only logged.
+  endSecureWindowSessions(): void {
+    let token = this.token;
+    if (!token) {
+      return;
+    }
+    this.network
+      .fetch(`${this.url.href}_secure-sessions?client=window`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+        keepalive: true,
+        signal: AbortSignal.timeout(secureWindowSignOutTimeoutMs),
+      })
+      .then((response) => {
+        if (!response.ok) {
+          console.warn(
+            `Could not sign the secure window out: ${response.status}`,
+          );
+        }
+      })
+      .catch((e) => {
+        console.warn(`Could not sign the secure window out: ${e}`);
+      });
+  }
+
   logout(): void {
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
     this.token = undefined;
     this.client = undefined;
     this.loggingIn = undefined;
+    // An in-flight mint outlives the logout otherwise, and would hand the next
+    // account's session to a request the previous one issued.
+    this.reauthenticating = undefined;
     this.auth = { type: 'anonymous' };
     this.availableRealms.splice(0, this.availableRealms.length, {
       type: 'base',
       url: baseRealm.url,
     });
+    this.userCatalogPickList.splice(0, this.userCatalogPickList.length);
     this.unreachableRealmServersList.splice(
       0,
       this.unreachableRealmServersList.length,
@@ -366,14 +420,17 @@ export default class RealmServerService extends Service {
 
   async fetchTokensForAccessibleRealms() {
     await this.login();
-    let response = await this.network.fetch(`${this.url.href}_realm-auth`, {
-      method: 'POST',
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
+    let response = await this.network.fetch(
+      `${this.url.href}_realm-auth?include-public=true`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
       },
-    });
+    );
 
     if (!response.ok) {
       let responseText = await response.text();
@@ -441,8 +498,10 @@ export default class RealmServerService extends Service {
     serverURL: string,
   ): Promise<string[]> {
     let normalizedServerURL = ensureTrailingSlash(serverURL);
+    // Only the realms the user has a permission row of their own for: public
+    // realms reach the dashboard through the Catalogs section instead.
     let response = await this.network.fetch(
-      `${normalizedServerURL}_realm-auth`,
+      `${normalizedServerURL}_realm-auth?include-public=false`,
       {
         method: 'POST',
         headers: {
@@ -508,41 +567,29 @@ export default class RealmServerService extends Service {
   }
 
   getRealmServersForRealms(realms: string[]) {
-    // `testRealmURL` is a URL-form literal, so it has an origin to read.
-    let testRealmOrigin = isTesting()
-      ? new URL(testRealmURL).origin // eslint-disable-line @cardstack/boxel/no-url-from-realm-identifier
-      : undefined;
     let sessionTokens = this.readSessionTokens();
 
     let realmServerURLs = new Set<string>();
 
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
-      // A realm identifier may be a registered prefix, which neither carries an
-      // origin to compare nor matches the URL a session token is filed under.
-      // Resolve once and let both questions below ask in URL form, so the
-      // function is form-agnostic end to end rather than only at the skip.
+      // A realm identifier may be a registered prefix, which carries no origin
+      // to compare, so the skip below asks in resolved URL form.
       let resolvedRealmURL = resolvedRealmURLHref(
         this.network.virtualNetwork,
         normalizedRealmURL,
       );
       // Anything resolving to the test realm's origin is served by the test
       // realm server and skipped.
-      if (
-        testRealmOrigin &&
-        new URL(resolvedRealmURL).origin === testRealmOrigin
-      ) {
+      if (isTesting() && new URL(resolvedRealmURL).origin === testRealmOrigin) {
         continue;
       }
-      // A token is filed under the realm resource's own url, which is whatever
-      // spelling created the resource — so try the identifier as given and its
-      // resolved form. Missing the token does not fail loudly: the loop would
-      // `continue`, and a realm that is the only entry would leave the set
-      // empty and answer with this realm server instead of the realm's.
-      let token =
-        sessionTokens[normalizedRealmURL] ??
-        sessionTokens[realmURL] ??
-        sessionTokens[resolvedRealmURL];
+      // Missing the token does not fail loudly: the loop would `continue`,
+      // and a realm that is the only entry would leave the set empty and
+      // answer with this realm server instead of the realm's.
+      // An expired token still names the realm server that issued it, which
+      // is all this reads, so the first one found will do.
+      let [token] = this.sessionTokensFor(sessionTokens, realmURL);
       if (!token) {
         continue;
       }
@@ -575,9 +622,6 @@ export default class RealmServerService extends Service {
   private normalizeRealmServerURL(url: string): string {
     let normalizedURL = ensureTrailingSlash(url);
     if (isTesting()) {
-      // `testRealmURL` is a URL-form literal, so it has an origin to read.
-      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-      let testRealmOrigin = new URL(testRealmURL).origin;
       // In tests, realm URLs are often rooted at the test realm origin but
       // are served by the base realm server; remap to the base origin so
       // federated requests hit the active test server.
@@ -602,9 +646,27 @@ export default class RealmServerService extends Service {
       .map((r) => ri(r.url));
   }
 
+  // Every public realm the user added to their Catalogs section, including
+  // any that another list shows instead.
+  get userCatalogPicks(): string[] {
+    return [...this.userCatalogPickList];
+  }
+
+  @cached
+  get userCatalogRealmIdentifiers(): RealmIdentifier[] {
+    return this.availableRealms
+      .filter((r) => r.type === 'user-catalog')
+      .map((r) => ri(r.url));
+  }
+
+  // The realms the dashboard's Catalogs section shows: the server's catalogs,
+  // then the ones this user added.
   @cached
   get displayedCatalogRealmIdentifiers(): RealmIdentifier[] {
-    return this.catalogRealmIdentifiers;
+    return [
+      ...this.catalogRealmIdentifiers,
+      ...this.userCatalogRealmIdentifiers,
+    ];
   }
 
   @cached
@@ -660,11 +722,9 @@ export default class RealmServerService extends Service {
     // newest-created-first. Non-user entries (base, catalog) keep their
     // positions; a url already present as a non-user entry is not added
     // again as a user entry.
-    for (let i = this.availableRealms.length - 1; i >= 0; i--) {
-      if (this.availableRealms[i].type === 'user') {
-        this.availableRealms.splice(i, 1);
-      }
-    }
+    // A realm the user added as a catalog that is also one of their own
+    // realms is listed with their own realms.
+    this.removeEntries('user', 'user-catalog');
     userRealmIdentifiers.forEach((userRealmIdentifier) => {
       if (!this.availableRealms.find((r) => r.url === userRealmIdentifier)) {
         this.availableRealms.push({
@@ -673,6 +733,60 @@ export default class RealmServerService extends Service {
         });
       }
     });
+    this.addUserCatalogEntries();
+  }
+
+  // Replaces the public realms this user added to their Catalogs section. A
+  // realm already listed some other way (a server catalog, one of the user's
+  // own realms) isn't added a second time.
+  setUserCatalogRealmIdentifiers(userCatalogRealmIdentifiers: string[]) {
+    this.userCatalogPickList.splice(
+      0,
+      this.userCatalogPickList.length,
+      ...userCatalogRealmIdentifiers,
+    );
+    this.removeEntries('user-catalog');
+    this.addUserCatalogEntries();
+  }
+
+  private removeEntries(...types: AvailableRealm['type'][]) {
+    for (let i = this.availableRealms.length - 1; i >= 0; i--) {
+      if (types.includes(this.availableRealms[i].type)) {
+        this.availableRealms.splice(i, 1);
+      }
+    }
+  }
+
+  private addUserCatalogEntries() {
+    for (let url of this.userCatalogPickList) {
+      if (!this.availableRealms.find((r) => r.url === url)) {
+        this.availableRealms.push({ type: 'user-catalog', url });
+      }
+    }
+  }
+
+  // The public realms on this realm server that the user can add to their
+  // Catalogs section.
+  async fetchPublicRealms(): Promise<PublicRealmSummary[]> {
+    await this.login();
+    let response = await this.network.fetch(`${this.url.href}_public-realms`, {
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch public realms for realm server ${this.url.origin}: ${response.status}`,
+      );
+    }
+    let { data } = (await response.json()) as {
+      data: {
+        id: string;
+        attributes: Omit<PublicRealmSummary, 'url'>;
+      }[];
+    };
+    return data.map(({ id, attributes }) => ({ url: id, ...attributes }));
   }
 
   async fetchCatalogRealms() {
@@ -690,6 +804,8 @@ export default class RealmServerService extends Service {
 
     let { data } = await response.json();
 
+    // A server catalog that the user also added is listed as the server's.
+    this.removeEntries('user-catalog');
     data.forEach((publicRealm: { id: string }) => {
       if (!this.availableRealms.find((r) => r.url === publicRealm.id)) {
         this.availableRealms.push({
@@ -698,6 +814,7 @@ export default class RealmServerService extends Service {
         });
       }
     });
+    this.addUserCatalogEntries();
 
     this._ready.fulfill();
   }
@@ -1126,59 +1243,202 @@ export default class RealmServerService extends Service {
     });
   }
 
+  // A realm-server request that names a set of realms — the federated
+  // endpoints, of which `_federated-search` is the high-volume one. It is
+  // issued through a middleware stack rather than bare, so a 401 is
+  // reauthenticated and replayed once, and the request carries a correlation id
+  // joining the client's `server-request` telemetry to the server's
+  // `realm:search-timing` and `realm:requests` lines for the same request.
   maybeAuthedFetchForRealms(
     url: string,
     realms: string[],
     options: RequestInit = {},
   ) {
-    const headers = new Headers(options.headers);
-    if (!headers.has('Authorization')) {
-      if (this.token) {
-        headers.set('Authorization', `Bearer ${this.token}`);
-      } else {
-        let realmToken = this.getRealmTokenForRealms(realms);
-        if (realmToken) {
-          headers.set('Authorization', `Bearer ${realmToken}`);
-        }
-      }
-    }
-    return this.network.fetch(url, {
-      ...options,
-      headers,
-    });
+    return this.fetcherForRealms(realms)(url, options);
   }
 
-  // args is of type `RequestForwardBody` in realm-server/handlers/handle-request-forward
+  // Only the authorization middleware varies per call — it needs this
+  // request's realm list to choose its fallback token — so the timing
+  // middleware, which is realm-independent, is built once per service rather
+  // than once per search.
+  //
+  // `authErrorEventMiddleware` — which the per-realm `authedFetch` stack
+  // carries — is deliberately absent. Its `boxel-auth-error` event is listened
+  // for only by the prerender render routes, which race it against the render
+  // to fail fast; a federated search answers 401 for the whole request when any
+  // one of its realms is unreadable, so routing that through the event would
+  // abort a whole render over a single query field the card can render without.
+  private fetcherForRealms(realms: string[]): typeof globalThis.fetch {
+    let timingMiddleware = (this.serverRequestTimingMiddleware ??=
+      createServerRequestTimingMiddleware(getOwner(this)!));
+    return fetcher(
+      this.network.fetch,
+      [
+        realmServerAuthorizationMiddleware(this, realms),
+        // Innermost, so it wraps each real network attempt: an auth-retry is
+        // recorded as its own retried-flagged attempt rather than folded into
+        // the first attempt's duration.
+        timingMiddleware,
+      ],
+      this.network.virtualNetwork,
+    );
+  }
+
+  private serverRequestTimingMiddleware: FetcherMiddlewareHandler | undefined;
+
+  // `RealmServerTokenSource`. The realm-server session token is what the
+  // federated endpoints validate. The per-realm token is the fallback for a
+  // caller holding realm sessions but no realm-server session yet — at app
+  // boot, before the matrix client lands — and authenticates because the
+  // endpoint reads only the `user` claim, which both token families carry.
+  //
+  // Both families are checked for expiry, for the reason given on
+  // `getRealmTokenForRealms`: an expired token can only be rejected, so
+  // sending one spends a round trip to learn what its own `exp` claim already
+  // says. The session token can outlive its expiry when `tokenRefresher`'s
+  // timer fires late — a slept laptop, a throttled background tab.
+  tokenForRealms(realms: string[]): string | undefined {
+    let sessionToken = this.token;
+    if (sessionToken && !isTokenExpired(sessionToken)) {
+      return sessionToken;
+    }
+    return this.getRealmTokenForRealms(realms);
+  }
+
+  // `RealmServerTokenSource`. A burst of searches failing against the same
+  // rejected session shares one mint rather than each driving its own login.
+  //
+  // `rejectedToken` is the token the refused request actually carried. It is
+  // what separates "this session is stale" from "this request was in flight
+  // while someone else replaced the session" — the service's *current* token
+  // cannot tell those apart, since a 401 for a token sent seconds ago can
+  // arrive after a concurrent mint or the token refresher has already moved on.
+  async reauthenticateRealmServer(
+    rejectedToken?: string,
+  ): Promise<string | undefined> {
+    if (this.reauthenticating) {
+      return this.reauthenticating;
+    }
+    // The session has already moved past the one that was refused, so that
+    // newer session is what the replay should carry. Minting again would
+    // discard a session nothing has rejected.
+    if (rejectedToken && this.token && this.token !== rejectedToken) {
+      return this.token;
+    }
+    // No matrix client means no session can be minted, and `login()` throws
+    // that precondition rather than returning — so the 401 stands.
+    if (!this.hasClient) {
+      return undefined;
+    }
+    this.reauthenticating = (async () => {
+      try {
+        // Minted through the login task rather than `login()`, which
+        // short-circuits on the logged-in state. Clearing the token to defeat
+        // that short-circuit is what the obvious version does, and it would
+        // publish an anonymous auth state — and an empty persisted session —
+        // to every other consumer of this service for the length of the round
+        // trip. An in-flight login is joined rather than duplicated.
+        if (!this.loggingIn) {
+          this.loggingIn = this.loginTask.perform();
+        }
+        await this.loggingIn;
+        return this.token;
+      } catch (e: any) {
+        console.error(
+          `RealmServerService - failed to reauthenticate to realm server: ${e.message}`,
+          e,
+        );
+        return undefined;
+      } finally {
+        this.reauthenticating = undefined;
+      }
+    })();
+    return this.reauthenticating;
+  }
+
+  private reauthenticating: Promise<string | undefined> | undefined;
+
+  // The forwarded fields are `RequestForwardBody` in
+  // realm-server/handlers/handle-request-forward. `timeoutMs` is not one of
+  // them — it is the caller's budget for the call, spent here rather than
+  // sent.
+  //
+  // Abandoning the wait is not enough to honour a budget: the realm server
+  // holds a per-user lock across replicas for the whole life of the upstream
+  // call, so a model call nobody is reading any more still delays that user's
+  // next one. Aborting the request is what releases it, hence a real signal on
+  // the fetch rather than a race against a timer. Omitting `timeoutMs` sends
+  // no deadline and waits indefinitely. A caller's `signal` aborts the request
+  // too, including the read of the response body.
   async requestForward(args: {
     url: string;
     method: string;
     requestBody: string;
     headers?: Record<string, string>;
     multipart?: boolean;
+    timeoutMs?: number;
+    signal?: AbortSignal;
   }) {
     await this.login();
 
-    const response = await this.network.fetch(
-      `${this.url.href}_request-forward`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
-        },
-        body: JSON.stringify(args),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Request forward failed: ${response.status} - ${errorText}`,
-      );
+    let { timeoutMs, signal: callerSignal, ...forwardedRequest } = args;
+    let deadline: AbortController | undefined;
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    if (timeoutMs != null && timeoutMs > 0) {
+      deadline = new AbortController();
+      deadlineTimer = setTimeout(() => deadline!.abort(), timeoutMs);
     }
+    let signal =
+      deadline && callerSignal
+        ? AbortSignal.any([deadline.signal, callerSignal])
+        : (deadline?.signal ?? callerSignal);
 
-    return response;
+    let responded = false;
+    try {
+      const response = await this.network.fetch(
+        `${this.url.href}_request-forward`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify(forwardedRequest),
+          signal,
+        },
+      );
+      // The budget covers time-to-response, so it stops the moment a response
+      // is in hand — here rather than on the way out, because the error path
+      // below reads the body while the timer would still be armed. A firing
+      // during that read aborts a body the server did answer with.
+      responded = true;
+      clearTimeout(deadlineTimer);
+      deadlineTimer = undefined;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Request forward failed: ${response.status} - ${errorText}`,
+        );
+      }
+
+      return response;
+    } catch (e) {
+      // The abort surfaces as a generic `AbortError` from whichever layer
+      // noticed it first; the controller is the only thing that knows the
+      // deadline was the reason, so name it here.
+      // Only a deadline that fired before any response is a timeout. Once the
+      // server has answered, a later failure is that failure — reporting it as
+      // a timeout would discard the status and body that did arrive.
+      if (!responded && deadline?.signal.aborted) {
+        throw new Error(`Request forward timed out after ${timeoutMs}ms`);
+      }
+      throw e;
+    } finally {
+      // Already cleared on the responded path; this covers a fetch that threw.
+      clearTimeout(deadlineTimer);
+    }
   }
 
   async registerBot(username: string) {
@@ -1587,11 +1847,45 @@ export default class RealmServerService extends Service {
     return this.token;
   }
 
+  // Every token filed for a realm, in the order its spellings are tried. A
+  // token is filed under the realm resource's own url, which is whatever
+  // spelling created the resource: a registered prefix, the URL it is served
+  // from, or its alias (`equivalentURLForms` yields all three). A realm
+  // reached under two spellings across visits can hold a token under each,
+  // and a refresh rewrites only one of them, so one may be stale.
+  private sessionTokensFor(
+    sessionTokens: Record<string, string>,
+    realm: string,
+  ): string[] {
+    let { virtualNetwork } = this.network;
+    let normalized = ensureTrailingSlash(realm);
+    let spellings = new Set([
+      normalized,
+      realm,
+      ...virtualNetwork.equivalentURLForms(
+        resolvedRealmURLHref(virtualNetwork, normalized),
+      ),
+    ]);
+    return [
+      ...new Set(
+        [...spellings]
+          .map((spelling) => sessionTokens[spelling])
+          .filter((token): token is string => Boolean(token)),
+      ),
+    ];
+  }
+
   private getRealmTokenForRealms(realms: string[]): string | undefined {
     let sessionTokens = this.readSessionTokens();
     for (let realmURL of realms) {
-      let normalizedRealmURL = ensureTrailingSlash(realmURL);
-      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
+      // An expired token buys nothing: the server rejects it, so sending it
+      // spends a round trip to learn what its own `exp` claim already says.
+      // Skipping it lets a publicly-readable realm answer the unauthenticated
+      // request, and leaves the 401 path to mint a realm-server session. A
+      // stale token under one spelling does not hide a live one under another.
+      let token = this.sessionTokensFor(sessionTokens, realmURL).find(
+        (candidate) => !isTokenExpired(candidate),
+      );
       if (token) {
         return token;
       }
@@ -1602,10 +1896,22 @@ export default class RealmServerService extends Service {
 
 const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
 const sessionLocalStorageKey = RealmServerSessionLocalStorageKey;
+// How long signing the secure window out may take before it is abandoned.
+const secureWindowSignOutTimeoutMs = 10_000;
 
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as RealmServerJWTPayload;
+}
+
+// `exp` is unix seconds. A token whose claims will not parse — or whose `exp`
+// is absent, or is not a finite number — is treated as expired, since nothing
+// usable can be said about it. Comparing a non-finite `exp` would answer
+// "not expired" and send the token anyway, which is the opposite of what an
+// unreadable claim should buy.
+function isTokenExpired(rawToken: string): boolean {
+  let exp = realmClaimsFromRawToken(rawToken)?.exp;
+  return !Number.isFinite(exp) || (exp as number) * 1000 <= Date.now();
 }
 
 function realmClaimsFromRawToken(rawToken: string): JWTPayload | undefined {

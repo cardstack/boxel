@@ -1,11 +1,13 @@
 import type Koa from 'koa';
 import {
   ensureTrailingSlash,
+  fetchRealmPermissions,
   insertPermissions,
   logger,
   type RealmAction,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   sendResponseForBadRequest,
   setContextResponse,
@@ -13,10 +15,10 @@ import {
 import type { CreateRoutesArgs } from '../routes.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import {
-  adminImpersonateUser,
   appendRealmServerToUserAccountData,
   appendRealmToUserAccountData,
-  loginAsMatrixAdmin,
+  impersonateAsMatrixAdmin,
+  resolveAdminCreds,
   logoutMatrixAccessToken,
 } from '../synapse.ts';
 
@@ -49,45 +51,12 @@ function isMatrixUserId(user: string): boolean {
   return user.startsWith('@') && user.includes(':');
 }
 
-// Resolve admin credentials for the synapse admin-impersonate flow. When
-// explicit env-derived values are present (any environment), use them.
-// When both are absent AND the matrix homeserver is on a `.localhost`
-// hostname (covers bare `localhost` and env-mode Traefik names like
-// `matrix.<slug>.localhost`), fall back to the dev `admin`/`password`
-// pair that register-matrix-users.ts seeds — keeps local dev and tests
-// friction-free without baking the default into every other deployment.
-function resolveAdminCreds(
-  matrixURL: URL,
-  username: string | undefined,
-  password: string | undefined,
-):
-  | { ok: true; username: string; password: string }
-  | { ok: false; reason: string } {
-  if (username && password) {
-    return { ok: true, username, password };
-  }
-  if (username || password) {
-    return {
-      ok: false,
-      reason: `MATRIX_ADMIN_USERNAME and MATRIX_ADMIN_PASSWORD must be set together (got only ${username ? 'USERNAME' : 'PASSWORD'})`,
-    };
-  }
-  let h = matrixURL.hostname;
-  if (h === 'localhost' || h.endsWith('.localhost')) {
-    return { ok: true, username: 'admin', password: 'password' };
-  }
-  return {
-    ok: false,
-    reason:
-      'MATRIX_ADMIN_USERNAME / MATRIX_ADMIN_PASSWORD unset and MATRIX_URL is not a local homeserver',
-  };
-}
-
 export default function handleUpsertRealmUserPermission({
   dbAdapter,
   matrixClient,
   matrixAdminUsername,
   matrixAdminPassword,
+  sendEvent,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let realm = ctxt.URL.searchParams.get('realm');
@@ -143,6 +112,20 @@ export default function handleUpsertRealmUserPermission({
       return;
     }
 
+    // The upsert writes every permission column, so granting read/write to the
+    // realm owner would clear their `realm_owner` flag (ADR 006 §1.2).
+    let currentPermissions = await fetchRealmPermissions(
+      dbAdapter,
+      new URL(normalizedRealmHref),
+    );
+    if (currentPermissions[user]?.includes('realm-owner')) {
+      await sendResponseForBadRequest(
+        ctxt,
+        `cannot modify permissions of the realm owner ${user}`,
+      );
+      return;
+    }
+
     let actions: RealmAction[] = [];
     if (read) {
       actions.push('read');
@@ -153,6 +136,20 @@ export default function handleUpsertRealmUserPermission({
     await insertPermissions(dbAdapter, new URL(normalizedRealmHref), {
       [user]: actions,
     });
+
+    // Push a live "your realms changed" signal so a running session re-derives
+    // its list from `_realm-auth` without a reload. This also covers the case
+    // where the account-data append below is a no-op (server already present),
+    // which on its own produces no Matrix event. Best-effort: a delivery
+    // failure must not fail the grant, and `sendEvent` is itself a no-op when
+    // the user has no session room to deliver to.
+    try {
+      await sendEvent(user, REALMS_LIST_UPDATED_EVENT_TYPE);
+    } catch (e: any) {
+      log.warn(
+        `[grafana-upsert-realm-user-permission] failed to send ${REALMS_LIST_UPDATED_EVENT_TYPE} to ${user}: ${e?.message ?? String(e)}`,
+      );
+    }
 
     // The granted user only learns about the realm on their next host
     // load if it's present in their matrix `app.boxel.realms`
@@ -170,17 +167,12 @@ export default function handleUpsertRealmUserPermission({
         matrixAdminPassword,
       );
       if (creds.ok) {
-        let adminToken: string | undefined;
         let userToken: string | undefined;
         try {
-          adminToken = await loginAsMatrixAdmin({
+          userToken = await impersonateAsMatrixAdmin({
             matrixURL: matrixClient.matrixURL,
             adminUsername: creds.username,
             adminPassword: creds.password,
-          });
-          userToken = await adminImpersonateUser({
-            matrixURL: matrixClient.matrixURL,
-            adminAccessToken: adminToken,
             userId: user,
           });
           let { alreadyPresent } = await appendRealmToUserAccountData({
@@ -209,35 +201,22 @@ export default function handleUpsertRealmUserPermission({
             `[grafana-upsert-realm-user-permission] ${matrixAccountDataWarning}`,
           );
         } finally {
-          // Synapse admin login + admin-impersonate both mint
-          // non-expiring tokens by default. Invalidate them after the
-          // sync so each grafana grant doesn't leave a long-lived
-          // credential behind in synapse's access_tokens table.
-          // Best-effort: a logout failure does not change the sync
-          // result reported above.
-          let cleanups: Promise<unknown>[] = [];
+          // The impersonation token never expires by default, so log it out
+          // once the sync is done rather than leave a credential behind per
+          // grant. It has no device, so this deletes only the token. The
+          // admin token is shared across requests and stays logged in.
+          // Best-effort: a logout failure does not change the sync result
+          // reported above.
           if (userToken) {
-            cleanups.push(
-              logoutMatrixAccessToken({
+            try {
+              await logoutMatrixAccessToken({
                 matrixURL: matrixClient.matrixURL,
                 accessToken: userToken,
-              }),
-            );
-          }
-          if (adminToken) {
-            cleanups.push(
-              logoutMatrixAccessToken({
-                matrixURL: matrixClient.matrixURL,
-                accessToken: adminToken,
-              }),
-            );
-          }
-          let results = await Promise.allSettled(cleanups);
-          for (let r of results) {
-            if (r.status === 'rejected') {
+              });
+            } catch (e: any) {
               log.warn(
                 `[grafana-upsert-realm-user-permission] token logout failed: ${
-                  (r.reason as any)?.message ?? String(r.reason)
+                  e?.message ?? String(e)
                 }`,
               );
             }

@@ -1,9 +1,28 @@
-import { notFound, CardError, responseWithError } from './error.ts';
+import { withholdsErrorStacks } from './create-response.ts';
+import { CardError, responseWithError } from './error.ts';
 import type { RequestContext } from './index.ts';
 import { RealmPaths, logger } from './index.ts';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
+// The realm's ACL declining a caller, as distinct from a credential that could
+// not be accepted at all. A request with no credentials the ACL would honor
+// and a caller whose permissions fall short are the two decisions a realm's
+// ACL makes; each is still the 401 or 403 it always was, and the realm records
+// it on the request rather than refusing at once (see `coarseAllowed` on
+// `RequestContext`). A token that is invalid, expired, revoked or out of step
+// with the realm's permissions is not an ACL decision and is refused at once.
+export class CoarseAuthenticationRequired extends AuthenticationError {}
+export class CoarsePermissionInsufficient extends AuthorizationError {}
+export type CoarseRefusal =
+  | CoarseAuthenticationRequired
+  | CoarsePermissionInsufficient;
+export function isCoarseRefusal(error: unknown): error is CoarseRefusal {
+  return (
+    error instanceof CoarseAuthenticationRequired ||
+    error instanceof CoarsePermissionInsufficient
+  );
+}
 // Thrown at the realm request boundary when a request targets an archived
 // (sealed) realm. Surfaced as a 403 carrying an "archived" marker so the
 // client can render the sealed state rather than a generic forbidden error.
@@ -30,9 +49,12 @@ type Handler = (
   requestContext: RequestContext,
 ) => Promise<Response>;
 
-function formatUnknownError(error: unknown): string {
+function formatUnknownError(
+  error: unknown,
+  { withStack = true }: { withStack?: boolean } = {},
+): string {
   if (error instanceof Error) {
-    return error.stack?.trim() || error.message;
+    return (withStack && error.stack?.trim()) || error.message;
   }
 
   if (
@@ -86,52 +108,152 @@ export function extractSupportedMimeType(
       return candidateMimeType as SupportedMimeType;
     }
   }
+  // A media type is its type and subtype; its parameters qualify it without
+  // making it a different type. The pass above compares whole header values,
+  // so it answers only for the one spelling a registered type is written in —
+  // which is every spelling anything sent until a registered type carried a
+  // parameter of its own. One does now: the operations envelope is
+  // `application/vnd.api+json` with an `ext` naming its extension, and the
+  // ways a client legitimately writes that (a space after the semicolon, an
+  // unquoted value, a `charset` alongside, its URI in a list with another
+  // extension's) are all the same media type and none of them is that string.
+  //
+  // So a second pass compares the parts. It only ever adds a match where the
+  // first pass found none, and it prefers the registered type whose own
+  // extensions the candidate carries — otherwise a body that named the
+  // envelope's extension would route to the plain JSON:API family and be
+  // answered as though it had named none.
+  for (const candidateMimeType of acceptMimeTypes) {
+    let matched = matchParameterized(candidateMimeType, supportedMimeTypes);
+    if (matched) {
+      return matched;
+    }
+  }
   return undefined;
 }
 
-export type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
+interface ParsedMediaType {
+  type: string;
+  // The extension URIs the `ext` parameter names, which JSON:API writes as a
+  // space-separated list. Compared case-sensitively — they are URIs — while
+  // the type and the parameter's name are not.
+  extensions: string[];
+}
 
-export function lookupRouteTable<T>(
+function parseMediaType(value: string): ParsedMediaType {
+  let [type, ...parameters] = value.split(';');
+  let extensions: string[] = [];
+  for (let parameter of parameters) {
+    let separator = parameter.indexOf('=');
+    if (separator === -1) {
+      continue;
+    }
+    if (parameter.slice(0, separator).trim().toLowerCase() !== 'ext') {
+      continue;
+    }
+    let raw = parameter.slice(separator + 1).trim();
+    if (raw.startsWith('"') && raw.endsWith('"')) {
+      raw = raw.slice(1, -1);
+    }
+    extensions.push(...raw.split(/\s+/).filter(Boolean));
+  }
+  return { type: type.trim().toLowerCase(), extensions };
+}
+
+function matchParameterized(
+  candidate: string,
+  supportedMimeTypes: SupportedMimeType[],
+): SupportedMimeType | undefined {
+  let sent = parseMediaType(candidate);
+  if (!sent.type) {
+    return undefined;
+  }
+  let plain: SupportedMimeType | undefined;
+  for (let supported of supportedMimeTypes) {
+    let registered = parseMediaType(supported);
+    if (registered.type !== sent.type) {
+      continue;
+    }
+    if (registered.extensions.length === 0) {
+      plain ??= supported;
+      continue;
+    }
+    if (
+      registered.extensions.every((extension) =>
+        sent.extensions.includes(extension),
+      )
+    ) {
+      return supported;
+    }
+  }
+  return plain;
+}
+
+type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
+
+// The path a request is routed on: its path within the realm with a leading
+// slash, keeping the trailing slash that names a directory, so a route for a
+// path never matches the directory of the same name.
+export function routedPath(paths: RealmPaths, request: Request): string {
+  // we construct a new URL within RealmPath.local() param that strips off the query string
+  let requestPath = `/${paths.local(new URL(request.url))}`;
+  // add a leading and trailing slashes back so we can match on routing rules for directories.
+  return request.url.endsWith('/') && requestPath !== '/'
+    ? `${requestPath}/`
+    : requestPath;
+}
+
+function lookupRouteTable<T>(
   routeTable: RouteTable<T>,
   paths: RealmPaths,
   request: Request,
 ) {
-  let acceptMimeType = extractSupportedMimeType(
-    request.headers.get('Accept') as unknown as null | string | [string],
-  );
   if (!isHTTPMethod(request.method)) {
     return;
   }
-  let routes = acceptMimeType
-    ? routeTable.get(acceptMimeType)?.get(request.method)
+  let requestPath = routedPath(paths, request);
+
+  let acceptMimeType = extractSupportedMimeType(
+    request.headers.get('Accept') as unknown as null | string | [string],
+  );
+  let matched = acceptMimeType
+    ? matchRoute(
+        routeTable.get(acceptMimeType)?.get(request.method),
+        requestPath,
+      )
     : undefined;
-  // Fall back to Content-Type when Accept doesn't match a route. This
+  if (matched !== undefined) {
+    return matched;
+  }
+  // Fall back to Content-Type when `Accept` doesn't match a route. This
   // supports POST/PATCH routes where the request body type (e.g.
   // application/octet-stream) is the meaningful discriminator rather than the
   // desired response type.
-  if (!routes) {
-    let contentType = extractSupportedMimeType(
-      request.headers.get('Content-Type') as unknown as
-        | null
-        | string
-        | [string],
-    );
-    if (!contentType) {
-      return;
-    }
-    routes = routeTable.get(contentType)?.get(request.method);
-    if (!routes) {
-      return;
-    }
+  //
+  // The fall-through is on failing to match a *route*, not on the family
+  // holding no routes for the method. A family can hold routes for this
+  // method and none for this path — `application/json` has three `POST`
+  // routes, all of them other paths — and stopping there would answer "no
+  // such route" to a request whose `Content-Type` named one.
+  let contentType = extractSupportedMimeType(
+    request.headers.get('Content-Type') as unknown as null | string | [string],
+  );
+  if (!contentType || contentType === acceptMimeType) {
+    return;
   }
+  return matchRoute(
+    routeTable.get(contentType)?.get(request.method),
+    requestPath,
+  );
+}
 
-  // we construct a new URL within RealmPath.local() param that strips off the query string
-  let requestPath = `/${paths.local(new URL(request.url))}`;
-  // add a leading and trailing slashes back so we can match on routing rules for directories.
-  requestPath =
-    request.url.endsWith('/') && requestPath !== '/'
-      ? `${requestPath}/`
-      : requestPath;
+function matchRoute<T>(
+  routes: Map<string, T> | undefined,
+  requestPath: string,
+): T | undefined {
+  if (!routes) {
+    return undefined;
+  }
   for (let [route, value] of routes) {
     // let's take care of auto escaping '/' and anchoring in our route regex's
     // to make it more readable in our config
@@ -140,13 +262,110 @@ export function lookupRouteTable<T>(
       return value;
     }
   }
-  return;
+  return undefined;
+}
+
+export interface RouteOptions {
+  // The route takes the realm ACL's recorded outcome instead of being refused
+  // by it: a request the ACL declined still reaches the route's dispatch,
+  // which is the one place anything may admit it. Every other route is
+  // refused with the ACL's own refusal before its handler runs.
+  consumesCoarseOutcome?: true;
+  // No policy grant reaches what the route serves: the file tree, and a
+  // file's stored bytes wherever `grantableBytes` does not hand them to the
+  // gate. Only the realm ACL admits a caller to it. In
+  // a realm with a policy, a caller the ACL does not let read the realm is
+  // told nothing is there, as they are told of every card no grant admits
+  // them to, rather than that they may not look. A `HEAD`, which the ACL
+  // admits from anyone, is answered with the realm's discovery response
+  // when the ACL would not let its caller read the realm, whether or not the
+  // realm has a policy.
+  coarseReadOnly?: true;
+  // The route applies an archived realm's seal itself to a caller the realm
+  // ACL declined outright and its policy was handed, at the point where it
+  // would run what that caller asked for. Anything it refuses them before that
+  // point is refused as it is while the realm is active, so a caller no grant
+  // admits is not told the realm is archived. Only a route that consumes the
+  // ACL's outcome can take this. Every other route that does meets such a
+  // caller with the seal as soon as it admits them.
+  appliesArchivedSeal?: true;
+  // The route admits every verified user the realm ACL refused, whether or
+  // not the realm names a policy, and answers one the policy has nothing for
+  // as a realm whose grants admit nothing would. A realm's search is the one:
+  // a federated search answers such a user with no rows from a realm with no
+  // policy, so the realm's own search does too, and it doesn't tell a caller
+  // who may not read the realm whether the realm names a policy. Only a route
+  // that consumes the ACL's outcome can take this. Every other consuming route
+  // admits a refused user only in a realm that names a policy, and a realm
+  // with none answers them with the ACL's refusal. A request that
+  // authenticated nobody is told to authenticate either way.
+  admitsVerifiedNonReaders?: true;
+  // The route serves a path's stored bytes, and for a path that names a file
+  // or a card's document those bytes are a `readSource` a policy grant can
+  // reach. A request for one consumes the ACL's outcome and is resolved
+  // through the gate, `HEAD` included. Every other path the route serves stays
+  // `coarseReadOnly`.
+  grantableBytes?: true;
+  // The route is one of the realm's operational endpoints, which answer a
+  // caller without credentials and keep working while the realm is archived:
+  // the realm's credential check and its seal both let through a request the
+  // router dispatches here. The route is the exemption, rather than its path
+  // or a media type the request carries, so a request for that path which the
+  // router hands to another route (a directory of the same name, or a media
+  // type the endpoint does not answer) needs the credentials that route needs
+  // and is sealed like any other.
+  operationalEndpoint?: true;
+  // The route answers on the realm ACL alone, by decision: a caller the ACL
+  // declines is refused with the ACL's own refusal in a realm with a policy
+  // as in one without, because what the route serves or does is something no
+  // policy grant reaches. It changes nothing about how a request is answered,
+  // since a route that does not consume the ACL's outcome is refused by it
+  // anyway. It records that the route was weighed and left to the ACL, so
+  // that a route that says nothing about the policy is one nobody decided.
+  aclOnly?: true;
+  // What the route would run for a caller who isn't signed in, where a grant
+  // could admit one: the operations any one of which the realm's policy has to
+  // open to such callers (`any` for any at all, `any-write` for any write),
+  // and how the request counts against the realm's anonymous rate limit. Only
+  // a route that consumes the ACL's outcome can take this. A route without it
+  // answers such a caller as the ACL does.
+  anonymous?: AnonymousRouteOptions;
+}
+
+export interface AnonymousRouteOptions {
+  operations: readonly string[] | 'any' | 'any-write';
+  counted: 'once-served' | 'by-handler' | 'never';
+}
+
+export interface Route {
+  handler: Handler;
+  consumesCoarseOutcome: boolean;
+  coarseReadOnly: boolean;
+  appliesArchivedSeal: boolean;
+  admitsVerifiedNonReaders: boolean;
+  grantableBytes: boolean;
+  operationalEndpoint: boolean;
+  aclOnly: boolean;
+  anonymous?: AnonymousRouteOptions;
+}
+
+export interface RouteDescription {
+  method: Method;
+  mimeType: SupportedMimeType;
+  path: string;
+  consumesCoarseOutcome: boolean;
+  coarseReadOnly: boolean;
+  appliesArchivedSeal: boolean;
+  admitsVerifiedNonReaders: boolean;
+  grantableBytes: boolean;
+  operationalEndpoint: boolean;
+  aclOnly: boolean;
 }
 
 export class Router {
-  #routeTable: RouteTable<Handler> = new Map<
+  #routeTable: RouteTable<Route> = new Map<
     SupportedMimeType,
-    Map<Method, Map<string, Handler>>
+    Map<Method, Map<string, Route>>
   >();
   log = logger('realm:router');
   #paths: RealmPaths;
@@ -154,28 +373,58 @@ export class Router {
     this.#paths = new RealmPaths(mountURL);
   }
 
-  get(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'GET', path, handler);
+  get(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'GET', path, handler, opts);
     return this;
   }
-  query(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'QUERY', path, handler);
+  query(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'QUERY', path, handler, opts);
     return this;
   }
-  post(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'POST', path, handler);
+  post(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'POST', path, handler, opts);
     return this;
   }
-  patch(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'PATCH', path, handler);
+  patch(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'PATCH', path, handler, opts);
     return this;
   }
-  delete(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'DELETE', path, handler);
+  delete(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'DELETE', path, handler, opts);
     return this;
   }
-  head(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'HEAD', path, handler);
+  head(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'HEAD', path, handler, opts);
     return this;
   }
 
@@ -184,6 +433,7 @@ export class Router {
     method: Method,
     path: string,
     handler: Handler,
+    opts: RouteOptions = {},
   ) {
     let routeFamily = this.#routeTable.get(mimeType);
     if (!routeFamily) {
@@ -195,24 +445,64 @@ export class Router {
       routes = new Map();
       routeFamily.set(method, routes);
     }
-    routes.set(path, handler);
+    routes.set(path, {
+      handler,
+      consumesCoarseOutcome: opts.consumesCoarseOutcome === true,
+      coarseReadOnly: opts.coarseReadOnly === true,
+      appliesArchivedSeal: opts.appliesArchivedSeal === true,
+      admitsVerifiedNonReaders: opts.admitsVerifiedNonReaders === true,
+      grantableBytes: opts.grantableBytes === true,
+      operationalEndpoint: opts.operationalEndpoint === true,
+      aclOnly: opts.aclOnly === true,
+      ...(opts.anonymous ? { anonymous: opts.anonymous } : {}),
+    });
   }
 
-  handles(request: Request): boolean {
-    return !!this.lookupHandler(request);
+  // Every registered route, in registration order within each family, so a
+  // caller can check what each route does with the realm ACL's outcome
+  // without having to reach it with a request.
+  routes(): RouteDescription[] {
+    let descriptions: RouteDescription[] = [];
+    for (let [mimeType, family] of this.#routeTable) {
+      for (let [method, routes] of family) {
+        for (let [path, route] of routes) {
+          descriptions.push({
+            method,
+            mimeType,
+            path,
+            consumesCoarseOutcome: route.consumesCoarseOutcome,
+            coarseReadOnly: route.coarseReadOnly,
+            appliesArchivedSeal: route.appliesArchivedSeal,
+            admitsVerifiedNonReaders: route.admitsVerifiedNonReaders,
+            grantableBytes: route.grantableBytes,
+            operationalEndpoint: route.operationalEndpoint,
+            aclOnly: route.aclOnly,
+          });
+        }
+      }
+    }
+    return descriptions;
+  }
+
+  lookupRoute(request: Request): Route | undefined {
+    return lookupRouteTable(this.#routeTable, this.#paths, request);
   }
 
   async handle(
     request: Request,
     requestContext: RequestContext,
+    route: Route,
   ): Promise<Response> {
-    let handler = this.lookupHandler(request);
-    if (!handler) {
-      return notFound(request, requestContext);
-    }
     try {
-      return await handler(request, requestContext);
+      return await route.handler(request, requestContext);
     } catch (err) {
+      // The archived seal is answered at the realm's request boundary, with
+      // the marker a client reads it by, wherever in a request it is raised.
+      // A handler raises it where the realm would run what a caller its
+      // policy admitted asked for.
+      if (err instanceof ArchivedRealmError) {
+        throw err;
+      }
       if (err instanceof CardError) {
         // Without this line a thrown CardError is indistinguishable in the
         // request log from a handler that returned the same status
@@ -228,16 +518,15 @@ export class Router {
 
       this.log.error(err);
 
-      return new Response(
-        `unexpected exception in realm ${formatUnknownError(err)}`,
-        {
-          status: 500,
-        },
-      );
+      // The full error stays in the log above; the response names only what
+      // went wrong for a caller that may not see a stack (see
+      // `withholdsErrorStacks`).
+      let detail = withholdsErrorStacks(500, requestContext)
+        ? formatUnknownError(err, { withStack: false })
+        : formatUnknownError(err);
+      return new Response(`unexpected exception in realm ${detail}`, {
+        status: 500,
+      });
     }
-  }
-
-  private lookupHandler(request: Request): Handler | undefined {
-    return lookupRouteTable(this.#routeTable, this.#paths, request);
   }
 }

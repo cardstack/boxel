@@ -151,31 +151,30 @@ export default class RoomMessage extends Component<Signature> {
     );
   }
 
-  private get userMessageThisMessageIsRespondingTo() {
-    if (!this.isFromAssistant) {
-      return undefined;
-    }
-
-    // Going backwards, find the first message that is not from the assistant
-    for (let i = this.args.index - 1; i >= 0; i--) {
-      let message = this.args.roomResource.messages[i];
-      if (message.author.userId !== aiBotUserId) {
-        return message;
-      }
-    }
-
-    return undefined;
-  }
-
+  // A call ai-bot holds for approval is "run" by approving it; ai-bot then
+  // runs it. Every other call runs on the host.
   private run = task(async (command: MessageTool) => {
+    if (command.awaitsApproval) {
+      return this.toolService.answerApproval
+        .unlinked()
+        .perform(command, 'approve');
+    }
     return this.toolService.run.unlinked().perform(command);
+  });
+
+  private decline = task(async (command: MessageTool) => {
+    return this.toolService.answerApproval
+      .unlinked()
+      .perform(command, 'decline');
   });
 
   // Correctness-check messages render all their tools compactly; bot-executed
   // tools (e.g. readRealmFile) render compactly even inside a regular message,
-  // since they are status indicators rather than actionable tool calls.
+  // since they are status indicators rather than actionable tool calls — except
+  // one ai-bot holds for the user's approval, which shows in full.
   private isCompactTool = (tool: MessageTool) =>
-    this.message.isCodePatchCorrectness || tool.isBotExecuted;
+    this.message.isCodePatchCorrectness ||
+    (tool.isBotExecuted && !tool.awaitsApproval);
 
   // A message carrying only bot-executed tool indicators — no prose,
   // reasoning, or attachments — stacks flush against a neighboring message of
@@ -183,7 +182,9 @@ export default class RoomMessage extends Component<Signature> {
   private get isBotToolsOnlyMessage() {
     return (
       !!this.message.tools?.length &&
-      this.message.tools.every((tool) => tool.isBotExecuted) &&
+      this.message.tools.every(
+        (tool) => tool.isBotExecuted && !tool.awaitsApproval,
+      ) &&
       !this.message.htmlParts?.length &&
       !this.message.reasoningContent &&
       !this.message.attachedFiles?.length &&
@@ -231,9 +232,7 @@ export default class RoomMessage extends Component<Signature> {
         @roomId={{this.message.roomId}}
         @eventId={{this.message.eventId}}
         @index={{@index}}
-        @isLastAssistantMessage={{this.isLastAssistantMessage}}
         @isMostRecentMessage={{@isMostRecentMessage}}
-        @userMessageThisMessageIsRespondingTo={{this.userMessageThisMessageIsRespondingTo}}
         @registerScroller={{@registerScroller}}
         @unregisterScroller={{@unregisterScroller}}
         @isFromAssistant={{this.isFromAssistant}}
@@ -258,6 +257,7 @@ export default class RoomMessage extends Component<Signature> {
         @isCodePatchCorrectness={{this.message.isCodePatchCorrectness}}
         @commands={{this.message.tools}}
         @usage={{this.message.usage}}
+        @compaction={{this.message.compaction}}
         data-test-boxel-message-from={{this.message.author.name}}
         class={{cn bot-tools-only=this.isBotToolsOnlyMessage}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
@@ -268,6 +268,7 @@ export default class RoomMessage extends Component<Signature> {
             @messageTool={{command}}
             @roomResource={{@roomResource}}
             @runCommand={{fn (perform this.run) command}}
+            @declineCommand={{fn (perform this.decline) command}}
             @roomId={{@roomId}}
             @isPending={{@isPending}}
             @isCompact={{this.isCompactTool command}}

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Speech therapy \u2014 Maya",
+      "studentName": "Maya S.",
+      "meets": "Wednesdays 13:30",
+      "providerId": "@carmen:school.example"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../school-code/service-plan-schedule",
+        "name": "ServicePlanSchedule"
+      }
+    },
+    "relationships": {
+      "provider": {
+        "links": {
+          "self": "../../school-org/StaffMember/carmen"
+        }
+      }
+    }
+  }
+}

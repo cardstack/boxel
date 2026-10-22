@@ -1,16 +1,15 @@
 // S3-backed MediaCache object store. The bucket holds only content-addressed
-// derived media (screenshots); the `media_cache_ledger` table is the sole
+// derived media (captures); the `media_cache_ledger` table is the sole
 // catalog of what's in here, so nothing in this adapter ever lists the
-// bucket. Region/credential resolution mirrors `prerender/artifact-sink.ts`:
-// in ECS the write grant rides on the task role, which the SDK resolves from
-// the container credentials endpoint — no keys are configured here.
+// bucket. The client comes from `lib/s3-client.ts`, which resolves the
+// endpoint, region and credentials for every S3 client in the runtime.
 
 import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
-  S3Client,
+  type S3Client,
 } from '@aws-sdk/client-s3';
 import type {
   MediaCacheAdapter,
@@ -18,8 +17,7 @@ import type {
   MediaPutResult,
 } from '@cardstack/runtime-common';
 import type { Readable } from 'stream';
-
-const DEFAULT_REGION = 'us-east-1';
+import { createS3Client } from '../lib/s3-client.ts';
 
 export class S3MediaCacheAdapter implements MediaCacheAdapter {
   #client: S3Client;
@@ -42,11 +40,7 @@ export class S3MediaCacheAdapter implements MediaCacheAdapter {
   }) {
     this.#bucket = bucket;
     this.#keyPrefix = keyPrefix;
-    this.#client =
-      client ??
-      new S3Client({
-        region: region ?? process.env.AWS_REGION?.trim() ?? DEFAULT_REGION,
-      });
+    this.#client = client ?? createS3Client({ region });
   }
 
   private objectKey(key: string): string {

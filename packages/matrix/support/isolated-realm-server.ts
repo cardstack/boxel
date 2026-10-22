@@ -7,6 +7,7 @@ const { ensureDirSync, copySync, readFileSync } = fsExtra;
 import { Pool } from 'pg';
 import { createServer as createNetServer, type AddressInfo } from 'net';
 import type { SynapseInstance } from './synapse/index.ts';
+import { MOCK_OAUTH2_HOST_PORT } from '../docker/mock-oauth2.ts';
 
 setGracefulCleanup();
 
@@ -34,6 +35,9 @@ const skillsRealmDir = resolve(
 const baseRealmDir = resolve(join(import.meta.dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(import.meta.dirname, '..'));
 export const appURL = 'https://localhost:4205/test';
+const SECURE_ORIGIN_PORT = 4208;
+// Where the secure window's pages are served.
+export const secureOriginURL = `https://localhost:${SECURE_ORIGIN_PORT}/secure`;
 export const skillsRealmURL = 'https://localhost:4205/skills/';
 
 const DEFAULT_PRERENDER_PORT = 4231;
@@ -485,8 +489,8 @@ export async function startServer({
     // The skills realm's boot index would otherwise spawn a prerender_html job
     // covering ~900 files, which takes longer than the test run it is meant to
     // precede. Nothing waits for it: the readiness gate below asks whether the
-    // `indexing:<realm>` queue lane is clear, and this work lives in
-    // `prerender-html:<realm>`, so the gate releases while the render is still
+    // realm's `indexing:<realm>` lane family is clear, and this work lives in
+    // the `prerender-html:<realm>` family, so the gate releases while the render is still
     // going. It then holds an all-priority worker for the length of the suite,
     // competing with the realms the specs themselves create — which is felt as
     // timeouts in specs that wait on a publish or an index.
@@ -612,6 +616,11 @@ export async function startServer({
     `--workerManagerPort=${workerManagerPort}`,
     `--prerendererUrl="${prerenderURL}"`,
     `--useRegistrationSecretFunction`,
+    // The secure origin, which serves the credential fields the app's
+    // sign-in, registration and password forms are typed into. The host build
+    // the harness serves expects it where the dev stack puts it.
+    `--securePort=${SECURE_ORIGIN_PORT}`,
+    `--secureOriginURL='${secureOriginURL}'`,
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,
@@ -656,6 +665,16 @@ export async function startServer({
       PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
       PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
       TEST_HARNESS_REALM_SERVER_METADATA_FILE: realmServerMetadataFile,
+      // The admin global.setup.ts registers. Signing in on the secure origin
+      // drives Synapse's admin API with it.
+      MATRIX_ADMIN_USERNAME: 'admin',
+      MATRIX_ADMIN_PASSWORD: 'adminpass',
+      // The secure window signs in with Google through the same mock
+      // provider Synapse uses, reached on its host port, which the realm
+      // server and the browser can both reach.
+      GOOGLE_OAUTH_CLIENT_ID: 'boxel-secure-window-test',
+      GOOGLE_OAUTH_CLIENT_SECRET: 'boxel-secure-window-test-secret',
+      GOOGLE_OAUTH_ISSUER: `http://localhost:${MOCK_OAUTH2_HOST_PORT}/default`,
     },
   });
   realmServer.unref();
@@ -774,8 +793,8 @@ export async function startServer({
   // base, ~600 files) is still running on the single indexing worker.
   //
   // Scope, because the log line below reads as a stronger claim than it is:
-  // `_readiness-check` gates on the realm's `indexing:<realm>` queue lane. The
-  // separate `prerender-html:<realm>` lane is invisible to it, so this waits
+  // `_readiness-check` gates on the realm's `indexing:<realm>` lane family. The
+  // separate `prerender-html:<realm>` family is invisible to it, so this waits
   // for a realm to be indexed, never for its HTML to be rendered. Any realm
   // a test creates while that boot index is in flight queues behind it, so its
   // `_create-realm` can take 30-100s to return and blows the per-test

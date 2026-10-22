@@ -14,16 +14,18 @@ import { BOT_TRIGGER_EVENT_TYPE } from '@cardstack/runtime-common';
 import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_COMPACTION_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_LLM_MODE,
+  APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+  APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import ENV from '@cardstack/host/config/environment';
@@ -106,6 +108,10 @@ export class MockClient implements ExtendedClient {
     } else if (_eventType === APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE) {
       return {
         favorites: this.sdkOpts.workspaceFavorites ?? [],
+      } as unknown as K;
+    } else if (_eventType === APP_BOXEL_CATALOG_REALMS_EVENT_TYPE) {
+      return {
+        realms: this.sdkOpts.catalogRealms ?? [],
       } as unknown as K;
     }
     return null;
@@ -210,8 +216,12 @@ export class MockClient implements ExtendedClient {
     return this.clientOpts.baseUrl;
   }
 
-  downloadContentAsBlob(_file: FileDef): Promise<Blob> {
-    throw new Error('Method not implemented.');
+  async downloadContentAsBlob(serializedFile: SerializedFile): Promise<Blob> {
+    let content = this.serverState.getContent(serializedFile.url);
+    if (!content) {
+      throw new Error(`content not found for ${serializedFile.url}`);
+    }
+    return new Blob([content], { type: serializedFile.contentType });
   }
 
   hashMessageWithSecret(_message: string): Promise<string> {
@@ -253,6 +263,8 @@ export class MockClient implements ExtendedClient {
       this.sdkOpts.systemCardAccountData = data as any;
     } else if (type === APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE) {
       this.sdkOpts.workspaceFavorites = (data as any).favorites;
+    } else if (type === APP_BOXEL_CATALOG_REALMS_EVENT_TYPE) {
+      this.sdkOpts.catalogRealms = (data as any).realms;
     } else {
       throw new Error(
         'Support for updating this event type in account data is not yet implemented in this mock.',
@@ -268,10 +280,6 @@ export class MockClient implements ExtendedClient {
   }
 
   getAccountData<T>(_type: string): Promise<T> {
-    throw new Error('Method not implemented.');
-  }
-
-  addThreePidOnly(_data: MatrixSDK.IAddThreePidOnlyBody): Promise<{}> {
     throw new Error('Method not implemented.');
   }
 
@@ -308,13 +316,6 @@ export class MockClient implements ExtendedClient {
   }
 
   leave(_roomId: string): Promise<{}> {
-    throw new Error('Method not implemented.');
-  }
-
-  registerRequest(
-    _data: MatrixSDK.RegisterRequest,
-    _kind?: string | undefined,
-  ): Promise<MatrixSDK.RegisterResponse> {
     throw new Error('Method not implemented.');
   }
 
@@ -357,14 +358,6 @@ export class MockClient implements ExtendedClient {
     );
 
     return Promise.resolve({});
-  }
-
-  setPassword(
-    _authDict: MatrixSDK.AuthDict,
-    _newPassword: string,
-    _logoutDevices?: boolean | undefined,
-  ): Promise<{}> {
-    throw new Error('Method not implemented.');
   }
 
   setRoomName(
@@ -430,21 +423,6 @@ export class MockClient implements ExtendedClient {
     } as unknown as MatrixSDK.Room);
   }
 
-  // Mirrors what `loggedInAs` bootstraps at setup, so a test can drive the
-  // real login form. Any password is accepted.
-  loginWithPassword(
-    user: string,
-    _password: string,
-  ): Promise<MatrixSDK.LoginResponse> {
-    let userId = user.startsWith('@') ? user : `@${user}:localhost`;
-    this.clientOpts.userId = userId;
-    return Promise.resolve({
-      access_token: 'mock-access-token',
-      device_id: 'mock-device-id',
-      user_id: userId,
-    } as MatrixSDK.LoginResponse);
-  }
-
   loginFlows(): Promise<{ flows: MatrixSDK.LoginFlow[] }> {
     return Promise.resolve(
       this.sdkOpts.loginFlowsResponse ?? {
@@ -491,13 +469,6 @@ export class MockClient implements ExtendedClient {
     _clientSecret: string,
     _sendAttempt: number,
   ): Promise<MatrixSDK.IRequestTokenResponse> {
-    throw new Error('Method not implemented.');
-  }
-
-  loginWithEmail(
-    _email: string,
-    _password: string,
-  ): Promise<MatrixSDK.LoginResponse> {
     throw new Error('Method not implemented.');
   }
 
@@ -683,13 +654,14 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_REALM_SERVERS_EVENT_TYPE:
       case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
       case APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE:
+      case APP_BOXEL_CATALOG_REALMS_EVENT_TYPE:
       case 'm.direct':
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
-      case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
       case APP_BOXEL_TOOL_RESULT_EVENT_TYPE:
       case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
+      case APP_BOXEL_COMPACTION_EVENT_TYPE:
       case APP_BOXEL_REALM_EVENT_TYPE:
       case BOT_TRIGGER_EVENT_TYPE:
       case 'm.room.create':
@@ -697,6 +669,7 @@ export class MockClient implements ExtendedClient {
       case 'm.room.name':
       case 'm.room.member':
       case APP_BOXEL_LLM_MODE:
+      case APP_BOXEL_STOP_GENERATING_EVENT_TYPE:
         return this.sdk.RoomEvent.Timeline;
       case 'm.receipt':
         return this.sdk.RoomEvent.Receipt;

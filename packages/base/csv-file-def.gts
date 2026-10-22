@@ -2,8 +2,8 @@ import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import CsvIcon from '@cardstack/boxel-icons/csv';
 import GlimmerComponent from '@glimmer/component';
+import type { BaseDefComponent } from './card-api';
 import {
-  BaseDefComponent,
   Component,
   StringField,
   contains,

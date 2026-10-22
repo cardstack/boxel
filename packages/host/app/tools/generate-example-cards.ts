@@ -2,6 +2,7 @@ import { service } from '@ember/service';
 
 import {
   isCardInstance,
+  rri,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
@@ -234,10 +235,9 @@ export async function createExampleInstanceFromPayload(opts: {
     },
   };
 
-  const creationResult = await opts.store.add(doc, {
+  const creationResult = await opts.store.addWithoutWaiting(doc, {
     realm: opts.realm ?? opts.defaultRealm,
     localDir: opts.localDir ?? undefined,
-    doNotWaitForPersist: true,
   });
   if (!isCardInstance(creationResult)) {
     console.warn('Failed to save generated example card', {
@@ -292,7 +292,7 @@ function resolveExampleCodeRef(
     return codeRef;
   }
   try {
-    const relativeTo = realm ? new URL(realm) : undefined;
+    const relativeTo = realm ? rri(realm) : undefined;
     const resolved = codeRefWithAbsoluteIdentifier(
       codeRef,
       relativeTo,

@@ -1,0 +1,54 @@
+import type { BotTool } from '../types.ts';
+import { fulfillReadRealmFileCall } from './fulfillment.ts';
+import { realmPrefixesFromHistory } from '../realm-prefixes.ts';
+import {
+  READ_REALM_FILE_TOOL_NAME,
+  readFilesLabel,
+  readRealmFileTool,
+  urlsFromReadRealmFileArguments,
+} from './read.ts';
+
+// readRealmFile: reads realm files for the model with the requesting user's
+// own realm permissions (see read.ts).
+export const readRealmFileBotTool: BotTool = {
+  name: READ_REALM_FILE_TOOL_NAME,
+  definition: readRealmFileTool,
+
+  // Reads act on one human's realm permissions, so the room must have
+  // exactly one human, and delegation must be configured.
+  isOffered(room) {
+    return room.realmDelegation && room.humanMemberCount === 1;
+  },
+
+  label(argumentsJson) {
+    return readFilesLabel(urlsFromReadRealmFileArguments(argumentsJson));
+  },
+
+  async startTurn(room) {
+    let realmPrefixes = realmPrefixesFromHistory(
+      room.history,
+      room.aiBotUserId,
+    );
+    return {
+      needsApproval() {
+        return false;
+      },
+      async fulfill(call, target) {
+        let { commandRequestId, published } = await fulfillReadRealmFileCall(
+          call,
+          {
+            ...target,
+            onBehalfOf: room.onBehalfOf,
+            delegatedUserRealmSessions: room.delegatedUserRealmSessions,
+            realmPrefixes,
+          },
+        );
+        return { commandRequestId, published };
+      },
+    };
+  },
+
+  recoversFromCutOff(argumentsJson) {
+    return urlsFromReadRealmFileArguments(argumentsJson).length > 0;
+  },
+};

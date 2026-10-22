@@ -2,6 +2,16 @@ export const APP_BOXEL_STOP_GENERATING_EVENT_TYPE = 'app.boxel.stopGenerating';
 export const APP_BOXEL_MESSAGE_MSGTYPE = 'app.boxel.message';
 export const APP_BOXEL_CARD_FORMAT = 'app.boxel.card';
 
+// Leads the source URL of a file attached to a message that is not in any
+// workspace: one the user attached from their computer, or an image a tool
+// captured. Its content is uploaded from the bytes the host holds, never
+// fetched from its source URL.
+export const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
+// Leads the source URL of an image a tool captured for the model, such as one
+// `realm.capture` took in a run-realm-code script. The capture is a picture of
+// a render, not a file in a workspace.
+export const CAPTURE_SOURCE_URL_PREFIX = `${LOCAL_SOURCE_URL_PREFIX}capture/`;
+
 // ─── Tool wire keys (command → tool rename) ───
 //
 // New events are written ONLY with the tool-named keys. The LEGACY_* spellings
@@ -97,6 +107,20 @@ export function getToolRequests<T = unknown>(
   );
 }
 
+// An event's latest content. Room history fetched without edits keeps a
+// streamed bot message's placeholder content; the server carries the latest
+// edit, whose content holds the final body and tool requests, under
+// `unsigned['m.relations']['m.replace']`. ai-bot's edits carry their full
+// content at the top level, which is what this reads.
+export function latestEventContent(event: {
+  content?: Record<string, any>;
+  unsigned?: Record<string, any>;
+}): Record<string, any> | undefined {
+  return (
+    event.unsigned?.['m.relations']?.['m.replace']?.content ?? event.content
+  );
+}
+
 // Reads the room-skills state event's tool definitions under either key.
 // Pre-rename rooms carry `commandDefinitions` until the host next rewrites the
 // state event (which emits only `toolDefinitions`).
@@ -105,16 +129,15 @@ export function getToolDefinitions<T = unknown>(
 ): T[] | undefined {
   return content?.toolDefinitions ?? content?.commandDefinitions;
 }
-export const APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE =
-  'app.boxel.codePatchResult';
-export const APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE = 'app.boxel.codePatchResult';
-export const APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE =
-  'app.boxel.codePatchAnnotation';
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE =
   'app.boxel.codePatchCorrectness';
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE =
   'app.boxel.codePatchCorrectnessAnnotation';
 export const APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE = 'app.boxel.debug';
+// Posted by ai-bot when a room's prompt outgrows the model's context window.
+// It carries a summary of the history up to and including `upToEventId`; the
+// prompt uses the summary in place of that history from then on.
+export const APP_BOXEL_COMPACTION_EVENT_TYPE = 'app.boxel.compaction';
 export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';
 // `eventType` carried inside a realm-server-event body (see send-event.ts /
@@ -133,6 +156,9 @@ export interface AppBoxelRealmServersContent {
 }
 export const APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE =
   'app.boxel.workspace-favorites';
+// The public realms a user has added to the Catalogs section of their
+// dashboard, alongside the operator-chosen catalogs every user sees.
+export const APP_BOXEL_CATALOG_REALMS_EVENT_TYPE = 'app.boxel.catalog-realms';
 export const APP_BOXEL_SYSTEM_CARD_EVENT_TYPE = 'app.boxel.system-card';
 export const APP_BOXEL_REALM_EVENT_TYPE = 'app.boxel.realm-event';
 export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';
@@ -163,7 +189,8 @@ export interface AppBoxelResponseStreamContent {
   // Same wire shape as APP_BOXEL_TOOL_REQUESTS_KEY on the room event: ai-bot
   // runs previews through the same normalization, so each request is
   // `{ id, name, arguments: <object> }`. `arguments` is `{}` while the tool
-  // call's JSON is still incomplete mid-stream.
+  // call's JSON is still incomplete mid-stream; `argumentsText` then carries
+  // the raw text received so far, for display only.
   toolRequests: unknown[];
 }
 
@@ -201,44 +228,44 @@ export interface FallbackModelConfig {
 
 export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
   {
+    modelId: 'anthropic/claude-opus-5.5',
+    displayName: 'Anthropic: Claude Opus 5.5',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
+    modelId: 'anthropic/claude-sonnet-5.5',
+    displayName: 'Anthropic: Claude Sonnet 5.5',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
+    modelId: 'anthropic/claude-haiku-5.5',
+    displayName: 'Anthropic: Claude Haiku 5.5',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
     modelId: 'anthropic/claude-sonnet-4.6',
     displayName: 'Anthropic: Claude Sonnet 4.6',
     toolsSupported: true,
     inputModalities: ['text', 'image', 'file'],
   },
   {
-    modelId: 'anthropic/claude-opus-4.7',
-    displayName: 'Anthropic: Claude Opus 4.7',
+    modelId: 'openai/gpt-6-luna',
+    displayName: 'OpenAI: GPT-6 Luna',
     toolsSupported: true,
-    inputModalities: ['text', 'image', 'file'],
+    inputModalities: ['file', 'image', 'text'],
   },
   {
-    modelId: 'google/gemini-3-flash-preview',
-    displayName: 'Google: Gemini 3 Flash Preview',
-    toolsSupported: true,
-    inputModalities: ['text', 'image', 'file', 'audio', 'video'],
-  },
-  {
-    modelId: 'google/gemini-3.1-pro-preview',
-    displayName: 'Google: Gemini 3.1 Pro Preview',
-    toolsSupported: true,
-    inputModalities: ['audio', 'file', 'image', 'text', 'video'],
-  },
-  {
-    modelId: 'openai/gpt-5.4',
-    displayName: 'OpenAI: GPT-5.4',
-    toolsSupported: true,
-    inputModalities: ['text', 'image', 'file'],
-  },
-  {
-    modelId: 'openai/gpt-5.5',
-    displayName: 'OpenAI: GPT-5.5',
+    modelId: 'openai/gpt-5.6-sol',
+    displayName: 'OpenAI: GPT-5.6 Sol',
     toolsSupported: true,
     inputModalities: ['file', 'image', 'text'],
   },
 ] as const;
 
-export const DEFAULT_FALLBACK_MODEL_ID = 'anthropic/claude-sonnet-4.6';
+export const DEFAULT_FALLBACK_MODEL_ID = 'openai/gpt-6-luna';
 
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';

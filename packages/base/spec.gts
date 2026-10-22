@@ -1,3 +1,4 @@
+import type { BaseDef } from './card-api';
 import {
   contains,
   field,
@@ -10,7 +11,6 @@ import {
   getCardMeta,
   resolveInstanceURL,
   type CardOrFieldTypeIcon,
-  BaseDef,
   type CardContext,
   type PartialBaseInstanceType,
 } from './card-api';
@@ -26,6 +26,7 @@ import {
   BoxelButton,
   BasicFitted,
 } from '@cardstack/boxel-ui/components';
+import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import {
   getMenuItems,
   codeRefWithAbsoluteIdentifier,
@@ -34,7 +35,6 @@ import {
   isResolvedCodeRef,
   isSpec,
   loadCardDef,
-  Loader,
   realmURL,
   type ToolContext,
   type ResolvedCodeRef,
@@ -60,7 +60,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import GenerateReadmeSpecTool from '@cardstack/boxel-host/commands/generate-readme-spec';
 import PopulateWithSampleDataTool from '@cardstack/boxel-host/commands/populate-with-sample-data';
 import GenerateExampleCardsTool from '@cardstack/boxel-host/commands/generate-example-cards';
-import { type GetMenuItemParams } from './menu-items';
+import type { GetMenuItemParams } from './menu-items';
 import { provide } from 'ember-provide-consume-context';
 import {
   PermissionsContextName,
@@ -294,9 +294,7 @@ export class SpecReadmeSection extends GlimmerComponent<SpecReadmeSectionSignatu
     }
 
     try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecTool(
-        toolContext,
-      );
+      const generateReadmeSpecCommand = new GenerateReadmeSpecTool(toolContext);
       await generateReadmeSpecCommand.execute({
         spec: this.args.model as Spec,
       });
@@ -1144,12 +1142,8 @@ function getIcon(specType: string) {
 }
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
-
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
   // @ts-ignore
-  return (import.meta as any).loader;
+  return loaderForModule(import.meta);
 }

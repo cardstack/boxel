@@ -133,4 +133,42 @@ module('Unit | render-error', function () {
       'a module is served under its own extension, so it names its own file',
     );
   });
+
+  test('a gateway failure survives normalization untouched', function (assert) {
+    // The gateway-failure classifier keys on the `gatewayFailure` marker the
+    // fetch boundary stamps, so that marker has to reach the row unchanged —
+    // a normalization pass that dropped it would make the whole classification
+    // silently inert, the same inert-verdict mode the write side hit once. The
+    // status has to survive too, for the human-facing detail. Normalization
+    // only rewrites 404 (missing-link) and the auth-message case, but nothing
+    // else pins either field passing through.
+    let renderError: RenderError = {
+      type: 'instance-error',
+      error: {
+        status: 502,
+        title: 'Bad Gateway',
+        message:
+          'Gateway or network failure while fetching the card document for http://test-realm/test/mango.json',
+        gatewayFailure: true,
+        additionalErrors: null,
+      },
+    };
+
+    let normalized = normalizeRenderError(renderError);
+
+    assert.true(
+      normalized.error.gatewayFailure,
+      'the marker the classifier keys on is not dropped',
+    );
+    assert.strictEqual(
+      normalized.error.status,
+      502,
+      'the gateway status is not rewritten',
+    );
+    assert.strictEqual(
+      normalized.error.message,
+      'Gateway or network failure while fetching the card document for http://test-realm/test/mango.json',
+      'a gateway failure is not treated as a missing link, so its message stands',
+    );
+  });
 });

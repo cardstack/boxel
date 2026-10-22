@@ -61,7 +61,7 @@ The shared runtime layer. Available in any `.gts` or `.ts` in the realm.
 | `prerenderedCardSearchComponent`                          | Older card-grid surface (via `@context.prerenderedCardSearchComponent`), superseded by `searchResultsComponent`.                                                                          |
 | `searchEntryWireQueryFromQuery`, `SearchEntryWireQuery`   | Build the entry-rooted query that `@context.searchResultsComponent` takes, from an ordinary `Query`.                                                                                      |
 | `getMenuItems`, `GetMenuItemParams`                       | Typed menu construction.                                                                                                                                                                  |
-| `baseRRI('<module>')`                                     | Canonical base-realm module URL.                                                                                                                                                          |
+| `baseRRI('<module>')`                                     | Canonical base-realm module identifier, in prefix form (`@cardstack/base/<module>`).                                                                                                      |
 | `Query`, `Sort`, `TypedFilter`                            | Query type primitives.                                                                                                                                                                    |
 | `ResolvedCodeRef`                                         | Strongly-typed code references.                                                                                                                                                           |
 | `Relationship`, `extractRelationshipIds`                  | JSON:API relationship helpers.                                                                                                                                                            |
@@ -70,7 +70,7 @@ The shared runtime layer. Available in any `.gts` or `.ts` in the realm.
 | `logger('namespace:operation')`                           | Realm-side structured logging.                                                                                                                                                            |
 | `join`                                                    | URL join helper.                                                                                                                                                                          |
 | `loadCommandModule`, `CommandContext`, `Loader`           | Command-loading internals.                                                                                                                                                                |
-| `baseRealm`, `devSkillLocalPath`, `envSkillLocalPath`     | Base-realm constants.                                                                                                                                                                     |
+| `baseRealm`                                               | Base-realm constants.                                                                                                                                                                     |
 
 ---
 
@@ -81,7 +81,7 @@ Available only inside the running Boxel app. Each is a default-export
 
 **Live audit:** verify tool names against the Boxel monorepo's
 `packages/host/app/tools/index.ts` shim list. `write-binary-file`,
-`screenshot-card`, and `generate-thumbnail` are present in current mainline;
+`capture-card`, and `generate-thumbnail` are present in current mainline;
 if something looks "missing," check the freshness of the checkout you
 audited before concluding the tool isn't live.
 
@@ -114,6 +114,7 @@ audited before concluding the tool isn't live.
 | `execute-atomic-operations`                                                                                             | Run a transactional plan (used by listing-install).                                                                         |
 | `fetch-card-json`, `get-card`, `read-source`, `serialize-card`, `validate-realm`                                        | Realm-server primitives.                                                                                                    |
 | `get-card-type-schema`                                                                                                  | Introspect a CardDef's field shape.                                                                                         |
+| `capture-card`                                                                                                          | Capture a card as PNG, or PDF with `type: 'pdf'` (+ `media: 'print'`); returns its durable `_capture/` URL.                 |
 | `get-all-realm-metas`, `get-available-realm-urls`, `get-default-writable-realm`                                         | Realm metadata and writable-realm discovery.                                                                                |
 | `get-catalog-realm-urls`, `get-realm-of-url`, `can-read-realm`                                                          | Catalog/realm lookups and access checks.                                                                                    |
 | `store-add`                                                                                                             | Add a card to the store.                                                                                                    |
@@ -132,8 +133,7 @@ via `curl` or `boxel-cli`:
 
 OpenRouter calls go through `/_request-forward` to the external
 `https://openrouter.ai/api/v1/chat/completions` URL. There is no live
-`/_openrouter/chat/completions` or `/_screenshot-card` endpoint in the
-current monorepo.
+`/_openrouter/chat/completions` endpoint in the current monorepo.
 
 | Endpoint                                                             | Method | Purpose                                                                                         |
 | -------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- |
@@ -146,6 +146,8 @@ current monorepo.
 | `/_publish-realm`, `/_unpublish-realm`                               | POST   | Realm publishing controls.                                                                      |
 | `/_create-realm`, `/_delete-realm`                                   | POST   | Realm lifecycle.                                                                                |
 | `/_run-command`                                                      | POST   | Server-side host command execution (underlying `boxel run-command`).                            |
+| `/_capture`                                                          | POST   | Capture a card or file as a PNG or PDF (underlying `boxel capture`).                            |
+| `{realm}_capture/{path}`                                             | GET    | Serve a capture. `download` → attachment; `filename=` names the saved file.                     |
 | `/_realm-auth`                                                       | GET    | Realm auth metadata.                                                                            |
 | `/_queue-status`                                                     | GET    | Indexing queue state.                                                                           |
 | `/_catalog-realms`                                                   | GET    | List of catalog realms.                                                                         |

@@ -1,0 +1,15 @@
+{
+  "extends": "@ember/library-tsconfig",
+  "include": ["src/**/*", "tests/**/*", "unpublished-development-types/**/*"],
+  "compilerOptions": {
+    "allowJs": true,
+    /**
+      The test harness imports glimmer-motion by its public specifiers, and
+      the `developing:choreo` export condition resolves those to the source,
+      so type-checking needs nothing built. The declarations build
+      (tsconfig.declarations.json) covers `src` alone.
+    */
+    "customConditions": ["developing:choreo"],
+    "types": ["ember-source/types"]
+  }
+}

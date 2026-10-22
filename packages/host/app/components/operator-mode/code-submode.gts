@@ -230,13 +230,12 @@ export default class CodeSubmode extends Component<Signature> {
   //  as part of the DOM rendering
   private makeCardResource = () => {
     this.cardResource = this.getCard(this, () => {
-      if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
+      if (!this.codePath || this.codePath.split('.').pop() !== 'json') {
         return undefined;
       }
       // this includes all JSON files, but the card resource is smart enough
       // to skip JSON that are not card instances
-      let url = this.codePath.href.replace(/\.json$/, '');
-      return url;
+      return this.codePath.replace(/\.json$/, '');
     });
   };
 
@@ -363,9 +362,9 @@ export default class CodeSubmode extends Component<Signature> {
   ) {
     await this.goToDefinition(codeRef, localName, fieldName);
     if (this.codePath) {
-      let urlString = this.codePath.toString();
+      let codePath = this.codePath;
       this.recentFilesService.updateCursorPositionByURL(
-        urlString.endsWith('gts') ? urlString : `${urlString}.gts`,
+        codePath.endsWith('gts') ? codePath : `${codePath}.gts`,
         undefined,
       );
     }
@@ -659,6 +658,8 @@ export default class CodeSubmode extends Component<Signature> {
       kind === 'file'
         ? rri(cardId)
         : rri(cardId.endsWith('.json') ? cardId : `${cardId}.json`);
+    // Close first: resolving the canonical path is a network round-trip.
+    this.operatorModeStateService.closeWorkspaceChooser();
     await this.operatorModeStateService.updateCodePath(codePath);
   }
 
@@ -755,6 +756,10 @@ export default class CodeSubmode extends Component<Signature> {
     return this.codeSemanticsService.codePath;
   }
 
+  private get scrollPositionKey() {
+    return this.operatorModeStateService.state.codePath ?? undefined;
+  }
+
   <template>
     {{consumeContext this.makeCardResource}}
     <SubmodeLayout
@@ -832,7 +837,7 @@ export default class CodeSubmode extends Component<Signature> {
                             this.canWriteToRealm
                             this.deleteFileInTree
                           }}
-                          @scrollPositionKey={{this.operatorModeStateService.codePathString}}
+                          @scrollPositionKey={{this.scrollPositionKey}}
                         />
                       </:browser>
                     </CodeSubmodeLeftPanelToggle>

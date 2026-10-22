@@ -8,6 +8,7 @@ import {
   isRealmIndexCardId,
   isValidFormat,
   realmURL,
+  rri,
   type CodeRef,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -39,7 +40,7 @@ export interface Model {
   format: Format;
   Component: BoxComponent;
   // Fixed-size parent box (CSS px) to render the card into, from the
-  // `envelopeWidth`/`envelopeHeight` query params. Present only for screenshot
+  // `envelopeWidth`/`envelopeHeight` query params. Present only for capture
   // captures of the fitted format; the template wraps the card
   // in a non-scrolling box of this size so `@container fitted-card` queries
   // fire against it. Absent for the viewport-filling formats and for indexing
@@ -62,7 +63,7 @@ export default class RenderHtmlRoute extends Route<Model> {
   @service declare router: RouterService;
   @service declare realm: RealmService;
 
-  // `refreshModel: true` so a batch screenshot capture can re-transition to a
+  // `refreshModel: true` so a batch capture can re-transition to a
   // different envelope on the same hydrated card (parent render model is
   // unchanged) and have model() re-run to re-render into the new box.
   queryParams = {
@@ -153,7 +154,7 @@ export default class RenderHtmlRoute extends Route<Model> {
     if (
       !cardRealmURL ||
       !isRealmIndexCardId(
-        instance.id,
+        instance.id ? rri(instance.id) : undefined,
         cardRealmURL,
         this.network.virtualNetwork,
       )

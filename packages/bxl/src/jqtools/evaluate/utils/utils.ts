@@ -197,11 +197,32 @@ export function indices<T extends string | any[]>(
   return out;
 }
 
+// jq objects have no prototype: a key that is not the object's own is null,
+// and `has` is false for it. Plain property access would find `toString`,
+// `constructor` or `__proto__` on Object.prototype and leak a function into
+// the data (or, through a path write, redirect the object's prototype).
+export function ownValue(obj: any, key: string): any {
+  return Object.hasOwn(obj, key) ? (obj[key] ?? null) : null;
+}
+
+export function setOwn(obj: any, key: string | number, value: any): void {
+  if (Array.isArray(obj)) {
+    obj[key as number] = value;
+    return;
+  }
+  Object.defineProperty(obj, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
 export function access(val: any, index: PathItem | any[]) {
   if (typesMatch(index, val, Type.number, Type.array)) {
     return val[normalizeArrayIndex(val.length, index as number)] ?? null;
   } else if (typesMatch(index, val, Type.string, Type.object)) {
-    return val[index as string] ?? null;
+    return ownValue(val, index as string);
   } else if (typesMatch(index, val, Type.array, Type.array)) {
     return indices(val, index as any[]);
   } else if (
@@ -417,7 +438,8 @@ export function delPaths(value: any, paths: Path[]) {
     for (const [key, childPaths] of Object.entries(
       getChildPaths(normalizedPaths),
     )) {
-      if (key in clone) clone[key] = delPaths(clone[key], childPaths);
+      if (Array.isArray(clone) ? key in clone : Object.hasOwn(clone, key))
+        setOwn(clone, key, delPaths(clone[key], childPaths));
     }
     return clone;
   } else {
@@ -496,7 +518,9 @@ export function has(value: any[] | Record<string, any>, key: string | number) {
       `Cannot check whether ${typeOf(value)} has a ${typeOf(key)} key`,
     );
   }
-  return key in value;
+  return typeOf(value) === Type.object
+    ? Object.hasOwn(value, key as string)
+    : key in value;
 }
 
 export function sort(values: any[]) {

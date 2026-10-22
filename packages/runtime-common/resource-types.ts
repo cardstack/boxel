@@ -9,7 +9,7 @@ import type {
 } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { Query } from './query.ts';
-import type { ScreenshotsMeta } from './capture-spec.ts';
+import type { CapturesMeta } from './capture-spec.ts';
 
 // Metadata for a query-based linksTo/linksToMany field on a FileDef subclass,
 // extracted during file prerendering so that file-meta responses can populate
@@ -103,6 +103,15 @@ export type CardResourceMeta = Meta & {
   // the instance and could clobber a correctly-loaded full one). Absence
   // marks the serialization full.
   sparseFields?: string[];
+  // Set on a search item served with its relationships withheld: a row of a
+  // query that declares `links: 'none'`. The item says nothing about what the
+  // card links to, which is not the same as linking to nothing, so like a
+  // sparse item it must never enter the Store as the card's instance — every
+  // link field of an instance built from it would read empty, in every live
+  // view and editor, whatever the card's own `read` declares. It describes the
+  // response rather than the card, so it is stripped from incoming writes and
+  // never persisted into the source file.
+  relationshipsWithheld?: true;
   // The result's error doc, when this serialization stands in for a card that
   // failed to render/index. Present => the live `item` cannot render, so a
   // consumer falls through to the host error component (the terminal rung of
@@ -113,12 +122,60 @@ export type CardResourceMeta = Meta & {
   // data from stale. Additive — absent when the serialization did not come off
   // the index (e.g. a freshly-built resource that has not been persisted).
   generation?: number;
-  // The instance's declared-screenshot captures, joined at serve time from
-  // the prerendered manifest (`prerendered_html.screenshots`) — never
+  // A fingerprint of the bytes the card's source file holds — the
+  // `content_hash` the realm records on the file's `realm_file_meta` row — and
+  // the card's version: a holder of one can tell whether the file has moved on
+  // since, and can name the base its next write was computed against.
+  //
+  // Stamped by the card+json *writes* (`POST` 201, `PATCH` 200) and by the
+  // single-card card+json `GET`. The two answer the same question about
+  // different bytes, and only one of them binds the version to the document it
+  // travels with:
+  //
+  //   - A write knows it because the commit computed it over the bytes it
+  //     stored.
+  //   - A read takes it off the index row, where the pass that indexed the
+  //     bytes recorded it (`boxel_index.source_content_hash`), so it describes
+  //     the source the served document was assembled from. Not read from
+  //     `realm_file_meta` at serve time, which answers for whatever the file
+  //     holds now rather than for the document being served, and which is null
+  //     for every file that reached disk outside the realm's own write API.
+  //
+  // Absent on a read whose row carries no fingerprint, so a caller reads "no
+  // version" rather than a value it cannot rely on.
+  //
+  // Neither the HTTP `ETag` nor `generation`, both of which move for reasons
+  // this does not. The `ETag` is index-time and moves whenever the *served*
+  // document may differ, a linked card's re-index included, so it stays the
+  // cache validator and the `If-Match` comparand; `generation` is the index's
+  // last-touched watermark and moves when a dependent invalidation touches the
+  // row. This moves only when the card's own bytes do.
+  //
+  // On a *write* response it describes the bytes the write stored, and NOT the
+  // document it arrives beside. The two are separate channels and a write
+  // response can pair them from different moments in both directions: the
+  // commit records the file's metadata before it indexes, and it releases its
+  // write locks at that same boundary — so a response assembled from the index
+  // can carry a concurrent writer's document next to this commit's version, and
+  // a response that deferred its indexing carries a version for bytes the index
+  // has not read yet. Neither is a defect to route around; on a write the
+  // pairing is simply not a promise, and a caller reconciling on it compares it
+  // against a version rather than against the body it came with.
+  //
+  // On a *read* the pairing IS the promise: the version and the document are
+  // written by one index pass, from one read of the source, so the version
+  // never describes newer bytes than the document beside it. That is what lets
+  // a client send it as the base its next write is computed against.
+  //
+  // Never persisted into the source file and stripped from incoming writes,
+  // like `realmInfo` / `realmURL` / `captures`.
+  version?: string;
+  // The instance's declared captures, joined at serve time from
+  // the prerendered manifest (`prerendered_html.captures`) — never
   // persisted into the index or the source file, and stripped from incoming
-  // writes like `realmInfo`/`realmURL`. The `screenshotURLs` getter on
+  // writes like `realmInfo`/`realmURL`. The `captureURLs` getter on
   // CardDef/FileDef reads this.
-  screenshots?: ScreenshotsMeta;
+  captures?: CapturesMeta;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
@@ -135,14 +192,17 @@ export type FileMetaResourceResourceMeta = Meta & {
   // See CardResourceMeta.sparseFields — a file-meta serialization can likewise
   // be field-limited.
   sparseFields?: string[];
+  // See CardResourceMeta.relationshipsWithheld — a file-meta search item is
+  // served without its relationships under the same declaration.
+  relationshipsWithheld?: true;
   // See CardResourceMeta.error — a file-meta serialization can likewise carry
   // the result's error doc when it failed to render.
   error?: ErrorEntry;
-  // See CardResourceMeta.screenshots. Stamped at serve time from the file
+  // See CardResourceMeta.captures. Stamped at serve time from the file
   // row's prerendered manifest — the file-meta GET and linked-file resources
   // join it exactly as a card+json GET joins an instance row's, so FileDef's
-  // `screenshotURLs` getter reads both kinds uniformly.
-  screenshots?: ScreenshotsMeta;
+  // `captureURLs` getter reads both kinds uniformly.
+  captures?: CapturesMeta;
 };
 
 // The single home for how a file's timestamps land in `meta`: the card key
@@ -188,11 +248,15 @@ export interface FileMetaResource {
   };
 }
 
-// A scoped stylesheet referenced by an `html` rendering. The scoped-CSS
-// URL base64-embeds the whole stylesheet, so it travels exactly once here in
-// `attributes.href` (the host loads it via `loader.import`); the `id` is a
-// stable content hash of that URL (see `cssResourceId`) so `styles.data[].id`
-// references stay short and `included` dedupes identical stylesheets for free.
+// A scoped stylesheet referenced by an `html` rendering. `attributes.href` is
+// the scoped-CSS module URL the host loads via `loader.import` — hashed form
+// (`…md5-<hash>.glimmer-scoped.css`, rooted under the answering realm's
+// `_scoped-css/` space and served from its `scoped_css` table) for indexed
+// deps, or inline form (the whole stylesheet base64-embedded in the URL,
+// loaded with no network hop) for rows indexed before interning. The `id` is
+// a stable content hash of that URL (see `cssResourceId`) so
+// `styles.data[].id` references stay short and `included` dedupes identical
+// stylesheets for free.
 export interface CssResource {
   id: string;
   type: typeof CssResourceType;
@@ -355,6 +419,7 @@ export {
   isEntryResource,
   isHtmlResource,
   isSparseItemResource,
+  hasWithheldRelationships,
 } from './card-document-shape.ts';
 
 // The map/set key for a JSON:API `(type, id)` identity pair lives in its own

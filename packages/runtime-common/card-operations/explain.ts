@@ -1,0 +1,1397 @@
+import { isCodeRef } from '../card-document-shape.ts';
+import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
+import { urlNamesFile } from '../file-def-code-ref.ts';
+import { ensureTrailingSlash } from '../paths.ts';
+import { runWithSearchTimeBudget, SearchBoundError } from '../search-bounds.ts';
+import {
+  parseSearchEntryQueryFromPayload,
+  wireFilterFromFilter,
+  type SearchEntryWireFilter,
+  type SearchEntryWireQuery,
+} from '../search-entry.ts';
+import {
+  canonicalizeTarget,
+  instanceTargetURL,
+  localPathFor,
+  newOperationScope,
+  resolveGatedOperation,
+  resolvesToWrite,
+  scopeCallerFor,
+  servedRealmsRead,
+  type CoarseDeclined,
+  type OperationCore,
+  type ScopeCaller,
+} from './dispatch.ts';
+import { needsActor } from './envelope.ts';
+import { GateTrace } from './gate-trace.ts';
+import {
+  GATE_FAULTED,
+  GATE_REFUSED,
+  gateRefusal,
+  matchingGrants,
+  namesPolicyCard,
+  pendingWriteAdmission,
+  type GateDecision,
+  type MatchedGrant,
+} from './gate.ts';
+import {
+  admitsNothing,
+  resolveNamedQuery,
+  searchInvocation,
+} from './named-query.ts';
+import {
+  DEFAULT_ANONYMOUS_RATE_LIMIT,
+  formatAddressRange as formatRange,
+} from '../anonymous-access.ts';
+import { AnonymousRequest } from './anonymous-request.ts';
+import { actingUserResolver } from './gate.ts';
+import {
+  blocklistCloses,
+  settleGrants,
+  type GrantTraffic,
+} from './grant-expressions.ts';
+import {
+  opensToAnonymous as grantOpensToAnonymous,
+  type CompiledOperationGrant,
+  type CompiledRealmPolicy,
+} from './policy.ts';
+import { policyQueryScope, type PolicyQueryScope } from './policy-query.ts';
+import type { PolicyRoute } from './telemetry.ts';
+import {
+  EXPLAIN_CAP,
+  OperationFailure,
+  isDefinitionFreeBaseOperation,
+  isOperationFailure,
+  refusalForNonReader,
+  refusalSeenBy,
+  type ExplainedGrant,
+  type ExplainedGrantAnonymous,
+  type ExplainedGrantOutcome,
+  type ExplainedIndexLag,
+  type ExplainedRule,
+  type ExplainedSearch,
+  type OperationError,
+  type OperationExplainListingResult,
+  type OperationDefinition,
+  type OperationExplainResult,
+  type OperationRequest,
+  type OperationTarget,
+  type PolicyExplanation,
+  type PolicyExplanationReason,
+} from './types.ts';
+
+// ============================================================================
+// The explain operation.
+//
+// A realm owner cannot tell whether a policy works by watching it not fail. A
+// policy narrower than its author meant produces refusals that someone has to
+// report, and one wider than they meant produces nothing at all. An explain
+// answers the question directly: given an actor, a target and an operation, it
+// runs the target realm's policy gate the way that invocation would, stops at
+// the decision, and reports how the gate reached it.
+//
+// It is an operation on the policy card, invoked like any other, so it rides
+// both transports and the gate that guards every operation. The target is
+// commonly in another realm: the worked example keeps a school's policy card in
+// its Org realm and the classrooms it governs in its Education realm. So the
+// explain runs in the policy card's realm and asks the gate of the realm that
+// holds the target, which has to name this card as its policy. A card that a
+// realm does not name governs nothing there, and has nothing to explain.
+//
+// What an explain answers is exactly what a refusal withholds. A caller the
+// target realm's ACL does not let read that realm is told a card they may not
+// touch is not there, so that they cannot learn which cards exist, and an
+// explain would tell them otherwise. So the caller asking must be able to read
+// both realms: the policy card's, which the gate checks, since no grant ever
+// reaches an explain, and the target's, which this checks. A caller missing
+// read on the target's realm is told what a target that does not exist is
+// told, the same bytes either way. A caller missing read on the policy card's
+// realm is refused by that realm before the explain runs, with the answer it
+// gives any refused request: a missing target where it names a policy of its
+// own, its permissions' 403 where it doesn't, and the same bytes whatever the
+// question names. So a caller refused because they may not read the target's
+// realm cannot ask why, since the answer would say what the refusal did not.
+// A caller who reads both realms can ask about any actor, themselves
+// included. The caller is judged in the target's realm by a session that
+// realm would accept as theirs, so a revoked session, or one delegated to the
+// policy card's realm alone, asks as nobody.
+//
+// Read on both realms is the whole gate, not realm ownership. So a reader of
+// both learns, for any actor they name, what the target realm's ACL allows
+// that actor, which the realm's permissions listing tells only its owners.
+// That is the first half of the question an explain answers.
+//
+// Nothing here decides. The decision is `resolveGatedOperation`'s, reached
+// through the same code the invocation runs, with a trace attached to the
+// scope for the gate to record into. A write whose grants all carry a
+// predicate is decided under the write lock when it runs, and this answers it
+// the way `pendingWriteHolds` does: against the card as it is stored now.
+//
+// Three further forms answer what a single triple against the policy in force
+// cannot.
+//
+// A draft. An administrator about to widen a rule wants to know what the
+// widening would do before it is live. The question may carry a policy
+// document, which the target's realm compiles as it would compile the card its
+// key names were the card to hold it, and the gate answers against that
+// instead. The draft rides the explain of the card in force, so the card that
+// has something to explain is still the one the realm names, and the draft is
+// read on exactly the authority the live form is. It is compiled for this
+// answer alone: no cache holds it, and the policy in force is untouched. A
+// draft names its own types, and they resolve as the live policy's do,
+// through the target realm's definition lookup, which reads a module in any
+// realm this server serves as that realm's owner. What compiling records
+// describes those types, down to which of their fields a search filter can
+// read, so a draft is answered only to a caller who may read every such realm
+// compiling read from.
+//
+// A search. A search is not decided by the gate: the search engine composes
+// the grants that admit it into its filter, and it reads the index, so it is
+// only as fresh as the index. Answering one with the gate's decision would say
+// nothing true about it. So a question about a search is answered from the
+// search lane itself: the fragment `policyQueryScope` composes, which is what
+// `_search` composes for the same caller, and how far behind its source the
+// index the search reads is.
+//
+// A listing. Who can read a card is every actor, and what an actor can reach
+// is every card, so the default shape stays a single triple and the listing is
+// bounded: one page of the target realm's cards, each explained as its own
+// triple. A request explains at most `EXPLAIN_CAP` triples, a listing's page
+// and a batch's explain entries alike, so no number of entries lifts the
+// bound.
+// ============================================================================
+
+// The realm a target belongs to, as an explain reaches it. It is found without
+// being mounted, so what the explain asks of it first, whether its caller may
+// read it, is answered before the server pays to mount a realm the caller may
+// be told nothing about.
+export interface TargetRealm {
+  // Where the target the explain was asked about resolves, in this realm.
+  url: URL;
+  // What the realm's ACL allows this caller, read from the permissions a
+  // request from them is checked against. Read and write are kept apart
+  // because a request is judged on one of them: the one its method needs.
+  aclFor(caller: ScopeCaller): Promise<Acl>;
+  // The realm's operation core, whose policy gate the explain runs. Reaching
+  // it mounts the realm if it is not mounted. A realm this process has already
+  // published may still be starting, and until it has indexed, a target there
+  // is told of as a missing one. Undefined for a realm that will not mount.
+  core(): Promise<OperationCore | undefined>;
+  // How far behind its source the realm's index is (see `indexLag`).
+  indexLag(): Promise<ExplainedIndexLag>;
+}
+
+interface Acl {
+  read: boolean;
+  write: boolean;
+}
+
+// The question, as the payload carries it.
+interface Question {
+  // Empty for a caller who presents no credentials.
+  actor: string;
+  // A card or file, or for a search or a listing, the realm it runs in.
+  target: string;
+  operation: string;
+  // A policy document to answer against in place of the policy in force.
+  draft?: Record<string, unknown>;
+  search?: SearchQuestion;
+  list?: ListQuestion;
+}
+
+// A search, as its request would name it: a named query by the type that
+// declares it and the params it is invoked with, or an ad-hoc one by its
+// filter.
+type SearchQuestion =
+  | { on: CodeRef; params?: Record<string, unknown> }
+  | { filter: SearchEntryWireFilter };
+
+// One page of the target realm's cards, of one type or of every type.
+interface ListQuestion {
+  on?: CodeRef;
+  page: { number: number; size: number };
+}
+
+export async function explainOperation(
+  core: OperationCore,
+  request: OperationRequest,
+): Promise<OperationExplainResult | OperationExplainListingResult> {
+  let policyCard = instanceTargetURL(request);
+  let question = questionIn(request);
+  // The caller is judged in the target's realm as that realm would judge
+  // them: by a session vouched for as their own, never by an identity
+  // another realm merely recorded. A request with no such session is judged
+  // as nobody.
+  let asker = scopeCallerFor(request.principal ?? '');
+  let realm = await core.targetRealm?.(question.target);
+  // Whether the target's realm is served here, whether the caller may read
+  // it, and whether the target is there are all answered as a missing target
+  // is, before anything else about the target is read. The first two are
+  // answered before the realm is mounted, so a caller cannot make the server
+  // mount a realm by asking about it unless they may read it.
+  if (!realm || !(await realm.aclFor(asker)).read) {
+    throw noSuchTarget();
+  }
+  let targetCore = await realm.core();
+  if (!targetCore) {
+    throw noSuchTarget();
+  }
+  let asksOfRealm = Boolean(question.search || question.list);
+  let target: OperationTarget | undefined;
+  if (asksOfRealm) {
+    // A search and a listing run in a realm rather than on a card, so their
+    // target names the realm. Refused only once the caller may read it, since
+    // it says nothing the caller is not entitled to.
+    if (
+      ensureTrailingSlash(realm.url.href) !==
+      ensureTrailingSlash(targetCore.realmURL)
+    ) {
+      throw invalidQuestion(
+        request,
+        `to ask about a ${question.search ? 'search' : 'listing'}, use the realm it runs in as the \`target\`, and ${question.target} is a card in ${targetCore.realmURL}, not a realm`,
+      );
+    }
+  } else {
+    target = canonicalizeTarget(
+      targetCore,
+      { kind: 'instance', url: realm.url.href },
+      {
+        rootNamesIndexCard: !isDefinitionFreeBaseOperation(question.operation),
+      },
+    );
+    if (target.kind !== 'instance' || !(await exists(targetCore, target))) {
+      throw noSuchTarget();
+    }
+  }
+  if (
+    !targetCore.policy ||
+    !(await namesPolicyCard(targetCore.policy, policyCard))
+  ) {
+    throw new OperationFailure({
+      id: policyCard.href,
+      status: 422,
+      code: 'policy-not-in-force',
+      title: 'Policy not in force',
+      detail:
+        `${target?.kind === 'instance' ? target.url : targetCore.realmURL} ` +
+        `is in a realm that doesn't use the policy ${policyCard.href}, so ` +
+        `that policy has no say over it`,
+    });
+  }
+  let governing = question.draft
+    ? await draftGoverned(targetCore, policyCard, question.draft)
+    : { core: targetCore };
+  // What compiling a draft records describes the definitions it read, and a
+  // draft names its own types, in any realm this server serves. So a draft is
+  // answered only to a caller who may read every such realm compiling read
+  // from, judged as a validate judges it, and is refused whole otherwise.
+  if (
+    'reads' in governing &&
+    !(await servedRealmsRead(core, asker, governing.reads))
+  ) {
+    throw new OperationFailure({
+      id: policyCard.href,
+      status: 403,
+      code: 'operation-not-permitted',
+      title: 'Operation not permitted',
+      detail:
+        `this draft uses card types from a realm you can't read, so what it ` +
+        `would decide can't be shown to you`,
+    });
+  }
+  // Explaining a named query reports what resolving its declaration did for
+  // the actor: the refusal it gave, or the filter it lowered to. Either one
+  // describes the type, so it is refused whole to a caller who may not read
+  // the realm this server serves the type's module from, whoever the actor
+  // is, as a draft naming such a type is.
+  if (
+    question.search &&
+    'on' in question.search &&
+    (await servesUnreadableModule(targetCore, question.search.on, asker))
+  ) {
+    throw new OperationFailure({
+      id: policyCard.href,
+      status: 403,
+      code: 'operation-not-permitted',
+      title: 'Operation not permitted',
+      detail:
+        `this search names a card type from a realm you can't read, so what ` +
+        `it would decide can't be shown to you`,
+    });
+  }
+  let actor = scopeCallerFor(question.actor);
+  let acl = await realm.aclFor(actor);
+  let draft = 'draft' in governing ? governing.draft : undefined;
+  let deciding = await pinnedForExplain(governing.core);
+  let anonymous =
+    actor.kind === 'user' ? undefined : await anonymousAdmission(deciding);
+  let detailed = await detailer(deciding, anonymous);
+  let answered = async (
+    explanation: PolicyExplanation,
+  ): Promise<PolicyExplanation> => {
+    let withDetail = await detailed(explanation);
+    return draft
+      ? { ...withDetail, draft: { issues: draft.issues } }
+      : withDetail;
+  };
+  if (question.search) {
+    return {
+      explanation: await answered(
+        await explainSearch(
+          deciding,
+          realm,
+          question.search,
+          question,
+          actor,
+          acl,
+          anonymous,
+        ),
+      ),
+    };
+  }
+  if (question.list) {
+    let { cards, total } = await listedCards(targetCore, question.list);
+    let explanations: PolicyExplanation[] = [];
+    // One at a time: each runs the gate, and a predicate reads the card it
+    // judges, so a page costs its realm one gate at a time however large it
+    // is.
+    for (let url of cards) {
+      try {
+        explanations.push(
+          await detailed(
+            await explain(
+              deciding,
+              { kind: 'instance', url },
+              question,
+              actor,
+              acl,
+              anonymous,
+            ),
+          ),
+        );
+      } catch (e: unknown) {
+        // A card removed since the page was read is no longer on it. It is
+        // left out rather than failing the page, as the page read a moment
+        // later would leave it out.
+        if (isOperationFailure(e) && e.error.code === 'target-not-found') {
+          continue;
+        }
+        throw e;
+      }
+    }
+    return {
+      listing: {
+        explanations,
+        page: { ...question.list.page, total },
+        ...(draft ? { draft: { issues: draft.issues } } : {}),
+      },
+    };
+  }
+  let explanation = await explain(
+    deciding,
+    target as OperationTarget & { kind: 'instance' },
+    question,
+    actor,
+    acl,
+    anonymous,
+  );
+  return { explanation: await answered(explanation) };
+}
+
+// The core an explain decides with: the governing core, holding one compile
+// of its policy for the whole explain. A listing runs the gate once per card,
+// and the policy can recompile between them, so without this one card could be
+// judged against a different policy from the next.
+async function pinnedForExplain(core: OperationCore): Promise<OperationCore> {
+  let access = core.policy;
+  if (!access) {
+    return core;
+  }
+  let compiled = await access.compiledPolicy();
+  return {
+    ...core,
+    policy: {
+      ...access,
+      compiledPolicy: async () => compiled,
+    },
+  };
+}
+
+// How an explain judges a caller who isn't signed in: through the grants whose
+// `where` names them, each with its blocklist and rate limit settled as the
+// realm would settle them for a request. A question names no address, so a
+// grant is judged as admitting the caller unless its blocklist closes it to
+// every one. The same admission is shared by every gate the explain runs, and
+// holds the acting users they resolved.
+interface ExplainAnonymous {
+  request: AnonymousRequest;
+  traffic: Map<string, GrantTraffic>;
+  platformLimit: { requests: number; windowSeconds: number };
+}
+
+async function anonymousAdmission(
+  core: OperationCore,
+): Promise<ExplainAnonymous> {
+  let policy = await core.policy?.compiledPolicy();
+  let platformLimit =
+    core.policy?.platformAnonymousRateLimit?.() ?? DEFAULT_ANONYMOUS_RATE_LIMIT;
+  let settled = await settleGrants(
+    (policy?.rules ?? []).flatMap((rule) => rule.grants),
+    { realmConfig: await core.realmConfig(), policy: policy?.fields ?? {} },
+    platformLimit,
+  );
+  return {
+    request: new AnonymousRequest(
+      actingUserResolver(core),
+      settled
+        .filter(
+          ({ grant, traffic }) =>
+            grantOpensToAnonymous(grant) && !blocklistCloses(traffic),
+        )
+        .map(({ grant, traffic }) => ({
+          id: grant.anonymous.id,
+          path: grant.path,
+          limit: traffic.limit,
+        })),
+    ),
+    traffic: new Map(
+      settled.map(({ grant, traffic }) => [grant.path, traffic]),
+    ),
+    platformLimit: { ...platformLimit },
+  };
+}
+
+// What an explanation reports beyond the decision itself, read from the
+// policy and the realm that decided it: for a question about a caller who
+// isn't signed in, the platform's rate limit, and for each grant listed whose
+// `where` names them, each of its expressions and what it produced; and for
+// each grant listed, what compiling the policy recorded against it. It reads
+// the same compile and acting users the gate decided with (see
+// `pinnedForExplain`).
+async function detailer(
+  core: OperationCore,
+  anonymous: ExplainAnonymous | undefined,
+): Promise<(explanation: PolicyExplanation) => Promise<PolicyExplanation>> {
+  let compiled = await core.policy?.compiledPolicy();
+  let grants = new Map<string, CompiledOperationGrant>();
+  for (let rule of compiled?.rules ?? []) {
+    for (let grant of rule.grants) {
+      grants.set(grant.path, grant);
+    }
+  }
+  let issues = compiled?.issues ?? [];
+  let detail = async (explained: ExplainedGrant): Promise<ExplainedGrant> => {
+    let grant = grants.get(explained.path);
+    // Issues are recorded at a grant's path or at a part of it, and
+    // `rules[1]` is a prefix of `rules[10]`, so only the path itself or one
+    // followed by `.` is this grant's.
+    let own = issues.filter(
+      ({ path }) =>
+        path === explained.path || path.startsWith(`${explained.path}.`),
+    );
+    let traffic = grant ? anonymous?.traffic.get(grant.path) : undefined;
+    let explainedAnonymous =
+      grant?.anonymous && traffic && anonymous
+        ? await anonymousDetail(grant, traffic, anonymous.request)
+        : undefined;
+    return {
+      ...explained,
+      ...(explainedAnonymous ? { anonymous: explainedAnonymous } : {}),
+      ...(own.length > 0 ? { issues: own } : {}),
+    };
+  };
+  return async (explanation) => ({
+    ...explanation,
+    rules: await Promise.all(
+      explanation.rules.map(async (rule) => ({
+        ...rule,
+        grants: await Promise.all(rule.grants.map(detail)),
+      })),
+    ),
+    ...(anonymous
+      ? { anonymous: { platformLimit: { ...anonymous.platformLimit } } }
+      : {}),
+  });
+}
+
+// A grant's expressions, and what each produced for the question. An acting
+// user that reads the target is reported as the gate resolved it for the card
+// the question named, or as written where the gate didn't get that far.
+async function anonymousDetail(
+  grant: CompiledOperationGrant,
+  traffic: GrantTraffic,
+  request: AnonymousRequest,
+): Promise<ExplainedGrantAnonymous> {
+  let anonymous = grant.anonymous!;
+  let actingUser: ExplainedGrantAnonymous['actingUser'];
+  if (anonymous.writes) {
+    let expression = anonymous.actingUser;
+    let resolution =
+      request.lastActingUser(grant) ??
+      (expression && !expression.readsInstance
+        ? await request.actingUser(grant, undefined)
+        : undefined);
+    actingUser = {
+      ...(expression ? { expression: expression.source } : {}),
+      ...(resolution ?? (expression ? {} : { failure: 'expression-failed' })),
+    };
+  }
+  let { blocklist, limit } = traffic;
+  return {
+    ...(actingUser ? { actingUser } : {}),
+    ...(anonymous.blocklist
+      ? {
+          blocklist: {
+            expression: anonymous.blocklist.source,
+            ...(blocklist.failed !== undefined
+              ? { failed: blocklist.failed }
+              : {
+                  entries: blocklist.ranges.map(formatRange),
+                  ...(blocklist.invalid.length > 0
+                    ? { invalid: [...blocklist.invalid] }
+                    : {}),
+                }),
+          },
+        }
+      : {}),
+    rateLimit: {
+      requests: limit.requests,
+      windowSeconds: limit.windowSeconds,
+      requestsFrom: limit.requestsFrom,
+      windowSecondsFrom: limit.windowSecondsFrom,
+      ...(anonymous.rateLimitRequests
+        ? { requestsExpression: anonymous.rateLimitRequests.source }
+        : {}),
+      ...(anonymous.rateLimitWindowSeconds
+        ? { windowSecondsExpression: anonymous.rateLimitWindowSeconds.source }
+        : {}),
+    },
+  };
+}
+
+// The core the target's realm would decide with were its policy card to hold
+// `document`: the realm's own core, answering the draft wherever its compiled
+// policy is read, which is the gate, the search lane and the pending-write
+// check alike. Everything else is the realm's own, the pointer included, so the
+// card its key names is still the one no grant reaches.
+//
+// The draft is compiled against the card the key names, as the card itself
+// would be, so a relative `targetType` module resolves against that card.
+async function draftGoverned(
+  core: OperationCore,
+  policyCard: URL,
+  document: Record<string, unknown>,
+): Promise<{
+  core: OperationCore;
+  draft: CompiledRealmPolicy;
+  reads: string[];
+}> {
+  let access = core.policy!;
+  let card = (await access.policyCard()) ?? policyCard.href;
+  let { compiled: draft, reads } = await access.compileDraft(card, document);
+  return {
+    core: {
+      ...core,
+      policy: { ...access, compiledPolicy: async () => draft },
+    },
+    draft,
+    reads,
+  };
+}
+
+// Whether the realm this server serves `on`'s module from is one the asker may
+// not read. A module no realm here serves is read as the owner of the realm
+// that looked it up, and so is not one, as the draft gate above passes it. Nor
+// is a code ref that does not resolve, which describes no declaration.
+async function servesUnreadableModule(
+  core: OperationCore,
+  on: CodeRef,
+  asker: ScopeCaller,
+): Promise<boolean> {
+  let type: ResolvedCodeRef | undefined;
+  try {
+    type = core.resolveCodeRef(on, new URL(core.realmURL));
+  } catch {
+    return false;
+  }
+  if (!type) {
+    return false;
+  }
+  let served = await core.readsRealmOf?.(type.module, asker);
+  return served !== undefined && !served.read;
+}
+
+// What a search asked of the target's realm would compose, for the actor, and
+// how fresh an answer from it can be.
+//
+// Asked of the search lane itself: the search's invocation as `_search` reads
+// it off the same request, a named query resolved as `_search` resolves it,
+// and the grants `policyQueryScope` composes, which is the lookup every search
+// composes through. So the fragment is the one the search runs for the actor,
+// for as long as nothing it read changes. It is asked for a user, never as a
+// realm-authority principal, which no policy scopes.
+async function explainSearch(
+  core: OperationCore,
+  realm: TargetRealm,
+  search: SearchQuestion,
+  question: Question,
+  actor: ScopeCaller,
+  acl: Acl,
+  anonymous: ExplainAnonymous | undefined,
+): Promise<PolicyExplanation> {
+  let payload: Record<string, unknown> =
+    'filter' in search
+      ? { filter: search.filter }
+      : {
+          operation: question.operation,
+          on: search.on,
+          ...(search.params ? { params: search.params } : {}),
+        };
+  // Defined for both shapes `searchQuestionIn` admits: a named query carries
+  // its operation and a code ref, and an ad-hoc one is always an invocation.
+  let invocation = searchInvocation(payload)!;
+  let answer: ExplainedSearch = {
+    operation: invocation.operation,
+    types: invocation.types,
+    ...('filter' in search ? { filter: search.filter } : {}),
+    index: await realm.indexLag(),
+  };
+  let base: PolicyExplanation = {
+    actor: actor.kind === 'user' ? actor.actor : null,
+    target: core.realmURL,
+    operation: question.operation,
+    acl,
+    decision: 'denied',
+    reason: 'acl',
+    rules: [],
+    search: answer,
+  };
+  // A named query is resolved before anything consults a policy, for every
+  // caller, and a request naming one that does not resolve is refused as it
+  // is sent, or, for an actor who may not read its type's module, answered
+  // with no rows. An ad-hoc filter the search grammar does not accept is
+  // refused too.
+  if ('filter' in search) {
+    try {
+      parseSearchEntryQueryFromPayload({ filter: search.filter });
+    } catch {
+      return refused(base, 'not-resolved', {
+        status: 400,
+        code: 'invalid-params',
+      });
+    }
+  } else {
+    try {
+      let resolved = await resolveNamedQuery(core, payload, {
+        principal:
+          actor.kind === 'user'
+            ? { kind: 'user', user: actor.actor }
+            : undefined,
+        realms: [core.realmURL],
+      });
+      if (admitsNothing(resolved)) {
+        return { ...base, reason: 'not-resolved' };
+      }
+      if (resolved.query.filter) {
+        answer.filter = resolved.query.filter;
+      }
+    } catch (e: unknown) {
+      if (!isOperationFailure(e)) {
+        throw e;
+      }
+      return refused(base, 'not-resolved', {
+        status: e.error.status,
+        code: e.error.code,
+      });
+    }
+  }
+  // A caller who reads the realm searches it unscoped: a policy widens what
+  // the ACL refused, and has nothing to add to what it allowed.
+  if (acl.read) {
+    return { ...base, decision: 'allowed', reason: 'acl' };
+  }
+  // A caller who isn't signed in is judged, as the search judges one, by the
+  // grants that opt in to such callers, where the policy opens the operation
+  // to them, and told to authenticate everywhere else.
+  if (
+    actor.kind !== 'user' &&
+    !(await opensToAnonymous(core, invocation.operation))
+  ) {
+    return refused(base, 'actor-required', {
+      status: 401,
+      code: 'actor-required',
+    });
+  }
+  // A policy that did not compile as a whole cannot say what it grants. The
+  // gate refuses every caller it judges with a 500 for it, and this answers
+  // the search lane the same way rather than as a policy granting nothing.
+  if ((await core.policy?.compiledPolicy())?.uncompilable) {
+    return refused(
+      base,
+      'policy-unloadable',
+      { status: 500, code: 'internal-error' },
+      'failed',
+    );
+  }
+  let scope: PolicyQueryScope;
+  try {
+    scope = await policyQueryScope(core, {
+      operation: invocation.operation,
+      types: invocation.types,
+      principal:
+        actor.kind === 'user'
+          ? { kind: 'user', user: actor.actor }
+          : { kind: 'anonymous', request: anonymous!.request },
+      transport: 'explain',
+      hypothetical: true,
+    });
+  } catch (e: unknown) {
+    if (!isOperationFailure(e) || e.error.status < 500) {
+      throw e;
+    }
+    return refused(
+      base,
+      'policy-unloadable',
+      { status: e.error.status, code: e.error.code },
+      'failed',
+    );
+  }
+  let rules = await searchRules(core, invocation, actor);
+  if (scope.kind === 'scoped') {
+    return {
+      ...base,
+      decision: 'allowed',
+      reason: 'granted',
+      rules,
+      search: {
+        ...answer,
+        fragment: wireFilterFromFilter({ any: scope.filters }),
+      },
+    };
+  }
+  // A grant that compiled a filter and composed nothing was kept out of the
+  // search by a declaration: the query is non-grantable on its type or one it
+  // descends from. Without one, nothing grants the search.
+  let kept = rules.some(({ grants }) =>
+    grants.some(({ filterable }) => filterable),
+  );
+  return {
+    ...base,
+    decision: 'denied',
+    reason: kept ? 'non-grantable' : 'no-grant',
+    rules,
+  };
+}
+
+// The rules governing the types a search is judged by, each with its grants
+// for the search's operation, matched as `policyQueryScope` matches them:
+// against the adoption chain the definition cache records beside each type. A
+// rule governing several of the types is listed once.
+// A grant is filterable for the caller the question names: a caller who isn't
+// signed in is scoped by a grant's reading for them, and only a grant whose
+// `where` names them has one.
+async function searchRules(
+  core: OperationCore,
+  invocation: { operation: string; types: readonly CodeRef[] },
+  actor: ScopeCaller,
+): Promise<ExplainedRule[]> {
+  let policy = await core.policy?.compiledPolicy();
+  if (!policy || !core.policy) {
+    return [];
+  }
+  let trace = new GateTrace();
+  for (let on of invocation.types) {
+    let resolved = core.resolveCodeRef(on, new URL(core.realmURL));
+    if (!resolved) {
+      continue;
+    }
+    let entry: { types: string[] } | undefined;
+    try {
+      entry = await core.definitionLookup.lookupDefinitionEntry(resolved);
+    } catch {
+      entry = undefined;
+    }
+    if (entry?.types) {
+      await matchingGrants(
+        policy,
+        entry.types,
+        invocation.operation,
+        core.policy,
+        trace,
+      );
+    }
+  }
+  let seen = new Set<unknown>();
+  return trace.rules
+    .filter(({ rule }) => !seen.has(rule) && Boolean(seen.add(rule)))
+    .map(({ rule, grants }) => ({
+      targetType: {
+        module: rule.targetType.module,
+        name: rule.targetType.name,
+      },
+      path: rule.path,
+      grants: grants.map((grant) => ({
+        path: grant.path,
+        ...(grant.where
+          ? {
+              where: grant.where.source,
+              tier: grant.where.snapshot ? 'snapshot' : 'stored',
+            }
+          : {}),
+        outcome: grant.where ? 'not-evaluated' : 'unconditional',
+        filterable:
+          (actor.kind === 'user' ? grant.filter : grant.anonymousFilter) !==
+          undefined,
+      })),
+    }));
+}
+
+// One page of the realm's cards, of `on` or of every type, in the order of
+// their URLs so the pages of a listing do not overlap. Read from the realm's
+// own index, which is what a reader of the realm could search for themselves.
+async function listedCards(
+  core: OperationCore,
+  list: ListQuestion,
+): Promise<{ cards: string[]; total: number }> {
+  let wire: SearchEntryWireQuery = {
+    ...(list.on ? { filter: { 'item.on': list.on } } : {}),
+    scope: 'cards',
+    fields: { entry: ['item.id'] },
+    sort: [{ by: 'item.cardURL' }],
+    page: list.page,
+  };
+  let query = parseSearchEntryQueryFromPayload(wire);
+  // Under the wall-clock budget every search runs under, whatever door it
+  // reaches the engine by.
+  let doc: Awaited<ReturnType<typeof core.indexQueryEngine.searchEntries>>;
+  try {
+    doc = await runWithSearchTimeBudget((signal) =>
+      core.indexQueryEngine.searchEntries(query, { signal }),
+    );
+  } catch (err: unknown) {
+    if (err instanceof SearchBoundError) {
+      throw new OperationFailure({
+        status: err.status,
+        code: 'invalid-params',
+        title: 'Listing not read',
+        detail: `the realm couldn't read the page of cards this listing asks for: ${err.message}`,
+      });
+    }
+    throw err;
+  }
+  return {
+    cards: doc.data.map((match) => match.id),
+    total: doc.meta.page.total,
+  };
+}
+
+// Whether the realm's policy opens `operation` to callers who aren't signed in,
+// as the realm reads it to admit one.
+async function opensToAnonymous(
+  core: OperationCore,
+  operation: string,
+): Promise<boolean> {
+  let policy = await core.policy?.compiledPolicy();
+  return (
+    !policy?.uncompilable &&
+    (policy?.anonymous?.operations.includes(operation) ?? false)
+  );
+}
+
+// What an explain's gate decisions are recorded as having arrived on.
+const EXPLAIN_ROUTE: PolicyRoute = Object.freeze({
+  transport: 'explain' as const,
+  route: 'explain',
+});
+
+// The gate's decision for the question, and how it got there.
+async function explain(
+  core: OperationCore,
+  target: OperationTarget & { kind: 'instance' },
+  question: Question,
+  actor: ScopeCaller,
+  acl: Acl,
+  anonymous: ExplainAnonymous | undefined,
+): Promise<PolicyExplanation> {
+  let base: PolicyExplanation = {
+    actor: actor.kind === 'user' ? actor.actor : null,
+    target: target.url,
+    operation: question.operation,
+    acl,
+    decision: 'denied',
+    reason: 'acl',
+    rules: [],
+  };
+  let coarseDeclined = await coarseDeclinedFor(
+    core,
+    target,
+    question,
+    actor,
+    acl,
+  );
+  // A realm that names a policy answers a caller who presented no credentials
+  // with a 401 before the request is routed, for every request its ACL
+  // declines them that its policy opens nothing to, so nothing about the
+  // target is read. One its policy opens the operation to is judged by the
+  // gate as such a caller, against the grants that opt in to them.
+  if (
+    actor.kind !== 'user' &&
+    coarseDeclined !== 'none' &&
+    !(await opensToAnonymous(core, question.operation))
+  ) {
+    return refused(base, 'actor-required', {
+      status: 401,
+      code: 'actor-required',
+    });
+  }
+  let trace = new GateTrace();
+  let scope = newOperationScope(core, {
+    caller: actor,
+    coarseDeclined,
+    trace,
+    route: EXPLAIN_ROUTE,
+    ...(anonymous ? { anonymousRequest: anonymous.request } : {}),
+  });
+  let definition: OperationDefinition | undefined;
+  let decision: GateDecision | undefined;
+  let failure: OperationFailure | undefined;
+  try {
+    ({ definition, decision } = await resolveGatedOperation(
+      core,
+      target,
+      question.operation,
+      scope,
+    ));
+  } catch (e: unknown) {
+    if (!isOperationFailure(e)) {
+      throw e;
+    }
+    failure = e;
+  }
+  if (failure || !decision || !definition) {
+    let error = failure?.error ?? {
+      status: 500,
+      code: 'internal-error' as const,
+      title: '',
+      detail: '',
+    };
+    // The gate found no row for the target. It had one when this began, so
+    // it went while this ran, and is told of as any missing target is.
+    if (!trace.resolutionFailure && error.code === 'target-not-found') {
+      throw noSuchTarget();
+    }
+    return withRules(
+      refused(
+        base,
+        refusalReason(trace, error.status),
+        seenBy(actor, coarseDeclined, error),
+        error.status >= 500 ? 'failed' : 'denied',
+      ),
+      trace,
+    );
+  }
+  // An operation that reads `actor()` has no actor to read for a caller who
+  // isn't signed in. The realm refuses such an invocation with a 401 once the
+  // gate has let it through, before any write lock decides it, so that is
+  // what this caller would receive however the gate let it through.
+  if (actor.kind !== 'user' && needsActor(definition)) {
+    return withRules(
+      refused(base, 'reads-actor', { status: 401, code: 'actor-required' }),
+      trace,
+    );
+  }
+  if (decision.kind === 'coarse') {
+    return { ...base, decision: 'allowed', reason: 'acl' };
+  }
+  let admitting: MatchedGrant | undefined;
+  if (decision.kind === 'granted') {
+    admitting = decision.grant;
+  } else {
+    let admission = await pendingWriteAdmission(core, {
+      target,
+      name: question.operation,
+      decision,
+      scope,
+    });
+    if (admission && 'grant' in admission) {
+      admitting = admission;
+    }
+  }
+  let explained = withRules(base, trace);
+  if (!admitting) {
+    // A pending write refused under the lock is refused as the gate refuses:
+    // a 500 where a predicate threw and none held, and otherwise the gate's
+    // own refusal.
+    let threw = [...trace.outcomes.values()].includes('threw');
+    let refusal = gateRefusal(
+      core,
+      threw ? GATE_FAULTED : GATE_REFUSED,
+      target,
+      question.operation,
+    ).error;
+    return refused(
+      explained,
+      refusalReason(trace, refusal.status),
+      seenBy(actor, coarseDeclined, refusal),
+      threw ? 'failed' : 'denied',
+    );
+  }
+  return {
+    ...explained,
+    decision: 'allowed',
+    reason: 'granted',
+    ...admittedBy(explained, trace, admitting),
+  };
+}
+
+// What the realm's ACL declines for the request that would carry this
+// invocation (see `resolvesToWrite`). So a caller the ACL lets write and not
+// read is allowed a write and declined a read.
+//
+// The realm asks whether a caller it declined a write could read the realm
+// only where its policy judges the write, which it does only for a signed-in
+// caller on a realm that names a policy, as every realm an explain describes
+// does. So a write from a caller who isn't signed in is declined outright even
+// where anyone may read the realm, and is judged and answered as such.
+async function coarseDeclinedFor(
+  core: OperationCore,
+  target: OperationTarget,
+  question: Question,
+  actor: ScopeCaller,
+  acl: Acl,
+): Promise<CoarseDeclined> {
+  let writes = await resolvesToWrite(
+    core,
+    target,
+    question.operation,
+    newOperationScope(core, { caller: actor }),
+  );
+  if (writes ? acl.write : acl.read) {
+    return 'none';
+  }
+  return acl.read && actor.kind === 'user' ? 'writes' : 'all';
+}
+
+function refused(
+  explanation: PolicyExplanation,
+  reason: PolicyExplanationReason,
+  refusal: { status: number; code: OperationError['code'] },
+  decision: 'denied' | 'failed' = 'denied',
+): PolicyExplanation {
+  return { ...explanation, decision, reason, refusal };
+}
+
+// The refusal as the actor would receive it (see `refusalSeenBy`).
+function seenBy(
+  actor: ScopeCaller,
+  coarseDeclined: CoarseDeclined,
+  error: OperationError,
+): { status: number; code: OperationError['code'] } {
+  let seen = refusalSeenBy(error, {
+    readDeclined: coarseDeclined === 'all',
+    signedIn: actor.kind === 'user',
+  });
+  return { status: seen.status, code: seen.code };
+}
+
+// Why the gate refused, in the terms an explanation reports.
+function refusalReason(
+  trace: GateTrace,
+  status: number,
+): PolicyExplanationReason {
+  if (trace.resolutionFailure) {
+    return 'not-resolved';
+  }
+  if (status >= 500) {
+    return [...trace.outcomes.values()].includes('threw')
+      ? 'predicate-threw'
+      : 'policy-unloadable';
+  }
+  switch (trace.refusal) {
+    case 'non-grantable':
+      return 'non-grantable';
+    case 'query-lane':
+      return 'query-lane';
+    case 'authorization-infrastructure':
+      return 'authorization-infrastructure';
+    case 'unmatchable-target':
+      return 'unmatchable-target';
+    case 'no-grant':
+      return 'no-grant';
+    case 'reads-actor':
+      return 'reads-actor';
+    default:
+      return trace.rules.some(({ grants }) => grants.length > 0)
+        ? 'predicate-false'
+        : 'no-grant';
+  }
+}
+
+// The rules the gate matched, each with its grants for the operation and what
+// each grant's predicate said.
+function withRules(
+  explanation: PolicyExplanation,
+  trace: GateTrace,
+): PolicyExplanation {
+  let rules: ExplainedRule[] = trace.rules.map(({ rule, grants }) => ({
+    targetType: { module: rule.targetType.module, name: rule.targetType.name },
+    path: rule.path,
+    grants: grants.map((grant) => ({
+      path: grant.path,
+      ...(grant.where
+        ? {
+            where: grant.where.source,
+            tier: grant.where.snapshot ? 'snapshot' : 'stored',
+          }
+        : {}),
+      outcome: grantOutcome(trace, grant),
+    })),
+  }));
+  return { ...explanation, rules };
+}
+
+function grantOutcome(
+  trace: GateTrace,
+  grant: MatchedGrant['grant'],
+): ExplainedGrantOutcome {
+  if (!grant.where) {
+    return 'unconditional';
+  }
+  return trace.outcomes.get(grant) ?? 'not-evaluated';
+}
+
+// Where the admitting grant sits in the explanation's own rules.
+function admittedBy(
+  explanation: PolicyExplanation,
+  trace: GateTrace,
+  { rule, grant }: MatchedGrant,
+): Pick<PolicyExplanation, 'admittedBy'> {
+  let ruleIndex = trace.rules.findIndex((matched) => matched.rule === rule);
+  let grantIndex =
+    ruleIndex === -1 ? -1 : trace.rules[ruleIndex].grants.indexOf(grant);
+  return ruleIndex === -1 || grantIndex === -1 || !explanation.rules[ruleIndex]
+    ? {}
+    : { admittedBy: { rule: ruleIndex, grant: grantIndex } };
+}
+
+// Whether the target is there to explain. A card is there when the index
+// holds a row for it, a row recording that it failed to index included: that
+// card exists, and the gate refuses it for the row it has. A file is there when
+// its bytes are.
+async function exists(
+  core: OperationCore,
+  target: OperationTarget & { kind: 'instance' },
+): Promise<boolean> {
+  let url = new URL(target.url);
+  if (urlNamesFile(url)) {
+    try {
+      return (await core.openStoredFile(localPathFor(core, url))) !== undefined;
+    } catch {
+      return false;
+    }
+  }
+  let row = await core.indexQueryEngine.instance(url, { includeErrors: true });
+  return row !== undefined;
+}
+
+// What a caller is told of a target they may not be told about: the answer a
+// caller who may not read a realm gets for a card that is not there, which is
+// also what they get for one that is and that they were refused.
+function noSuchTarget(): OperationFailure {
+  return new OperationFailure(
+    refusalForNonReader({
+      status: 404,
+      code: 'target-not-found',
+      title: 'Not found',
+      detail: '',
+    }),
+  );
+}
+
+function questionIn(request: OperationRequest): Question {
+  let params = request.params ?? {};
+  let invalid = (detail: string) => invalidQuestion(request, detail);
+  let { actor, target, operation, draft, search, list } = params as Record<
+    string,
+    unknown
+  >;
+  if (actor !== undefined && actor !== null && typeof actor !== 'string') {
+    throw invalid(
+      `operation "${request.name}" explains a decision for \`actor\`, a user id, or an empty string for a caller who presents no credentials`,
+    );
+  }
+  if (typeof target !== 'string' || target.length === 0) {
+    throw invalid(
+      `operation "${request.name}" explains a decision about \`target\`, the URL of a card or file, or of the realm a search or a listing runs in`,
+    );
+  }
+  if (typeof operation !== 'string' || operation.length === 0) {
+    throw invalid(
+      `operation "${request.name}" explains a decision about \`operation\`, the name an invocation would invoke`,
+    );
+  }
+  // A draft is read the way a policy card's attributes are, so one with no
+  // `rules` would compile to a policy granting nothing, and nothing would say
+  // it was the wrong shape: a card's whole document, say, whose rules sit
+  // under `data.attributes`.
+  if (
+    draft != null &&
+    (!isPlainRecord(draft) ||
+      !Object.prototype.hasOwnProperty.call(draft, 'rules'))
+  ) {
+    throw invalid(
+      `operation "${request.name}" answers against a \`draft\` that is a policy document: an object holding the \`rules\` a RealmPolicy card holds`,
+    );
+  }
+  if (search != null && list != null) {
+    throw invalid(
+      `operation "${request.name}" explains a search or a listing, not both at once`,
+    );
+  }
+  return {
+    actor: actor ?? '',
+    target,
+    operation,
+    ...(draft != null ? { draft: draft as Record<string, unknown> } : {}),
+    ...(search != null
+      ? { search: searchQuestionIn(search, operation, invalid) }
+      : {}),
+    ...(list != null ? { list: listQuestionIn(list, invalid) } : {}),
+  };
+}
+
+// A search as its request would name it. An ad-hoc search runs under the
+// reserved name `query` and carries its filter; a named one runs under its own
+// name, on the type that declares it, with its params.
+function searchQuestionIn(
+  search: unknown,
+  operation: string,
+  invalid: (detail: string) => OperationFailure,
+): SearchQuestion {
+  if (!isPlainRecord(search)) {
+    throw invalid(
+      `\`search\` names the search to explain: \`{ on, params }\` for a named query, or \`{ filter }\` for an ad-hoc one`,
+    );
+  }
+  let { on, params, filter, ...rest } = search;
+  let extra = Object.keys(rest);
+  if (extra.length > 0) {
+    throw invalid(
+      `\`search\` carries only \`on\` and \`params\` for a named query, or \`filter\` for an ad-hoc one, and not ${extra.map((key) => `\`${key}\``).join(', ')}`,
+    );
+  }
+  if (operation === 'query') {
+    if (!isPlainRecord(filter) || on !== undefined || params !== undefined) {
+      throw invalid(
+        `an ad-hoc search runs as \`query\` on the types its filter anchors to, so \`search\` carries its \`filter\` and nothing else`,
+      );
+    }
+    return { filter: filter as SearchEntryWireFilter };
+  }
+  if (!isCodeRef(on) || filter !== undefined) {
+    throw invalid(
+      `a named query runs on the type that declares it, so \`search\` carries that type as \`on\`, and its \`params\` where it takes any`,
+    );
+  }
+  if (params !== undefined && !isPlainRecord(params)) {
+    throw invalid(
+      `\`search.params\` is an object keyed the way operation "${operation}" declares them`,
+    );
+  }
+  return {
+    on,
+    ...(params !== undefined ? { params } : {}),
+  };
+}
+
+// A page of the realm's cards. Its size defaults to the cap and may not
+// exceed it.
+function listQuestionIn(
+  list: unknown,
+  invalid: (detail: string) => OperationFailure,
+): ListQuestion {
+  let shape = `\`list\` asks for one page of the realm's cards: \`{ on?, page?: { number?, size? } }\`, where \`on\` is the type to list and \`size\` is at most ${EXPLAIN_CAP}`;
+  if (!isPlainRecord(list)) {
+    throw invalid(shape);
+  }
+  let { on, page } = list;
+  if (on !== undefined && !isCodeRef(on)) {
+    throw invalid(shape);
+  }
+  if (page !== undefined && !isPlainRecord(page)) {
+    throw invalid(shape);
+  }
+  let number = page?.number ?? 0;
+  let size = page?.size ?? EXPLAIN_CAP;
+  if (
+    typeof number !== 'number' ||
+    !Number.isInteger(number) ||
+    number < 0 ||
+    typeof size !== 'number' ||
+    !Number.isInteger(size) ||
+    size < 1 ||
+    size > EXPLAIN_CAP
+  ) {
+    throw invalid(shape);
+  }
+  return { ...(on !== undefined ? { on } : {}), page: { number, size } };
+}
+
+function invalidQuestion(
+  request: OperationRequest,
+  detail: string,
+): OperationFailure {
+  return new OperationFailure({
+    ...(request.target.kind === 'instance' ? { id: request.target.url } : {}),
+    status: 400,
+    code: 'invalid-params',
+    title: 'Invalid params',
+    detail,
+  });
+}
+
+// How many triples one explain's params ask to have explained: a listing's
+// page, and one for anything else. Read off the params as sent, so a batch is
+// bounded before any of it is explained, and a listing whose page does not
+// parse counts as the largest page it could ask for: it is refused either way.
+function triplesAsked(params: Record<string, unknown> | undefined): number {
+  let list = params?.list;
+  if (list == null) {
+    return 1;
+  }
+  let size =
+    isPlainRecord(list) && isPlainRecord(list.page)
+      ? list.page.size
+      : undefined;
+  return typeof size === 'number' && Number.isInteger(size) && size > 0
+    ? size
+    : EXPLAIN_CAP;
+}
+
+// Refuses a request whose explains together ask for more than `EXPLAIN_CAP`
+// triples, whole, before any of them is explained. A batch is where this
+// matters: each entry is within the cap on its own, and ten thousand of them
+// are an enumeration of every actor or every card all the same.
+export function assertWithinExplainCap(
+  explains: { params?: Record<string, unknown> }[],
+): void {
+  let asked = explains.reduce(
+    (sum, { params }) => sum + triplesAsked(params),
+    0,
+  );
+  if (asked > EXPLAIN_CAP) {
+    throw new OperationFailure({
+      status: 400,
+      code: 'invalid-params',
+      title: 'Too many explanations',
+      detail:
+        `one request can ask about at most ${EXPLAIN_CAP} decisions, counting ` +
+        `every card on a listing's page and every explain in a batch, and ` +
+        `this one asks about ${asked}. Ask about the rest in another request`,
+    });
+  }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}

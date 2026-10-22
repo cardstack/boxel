@@ -4,6 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import ENV from '@cardstack/host/config/environment';
+import type NetworkService from '@cardstack/host/services/network';
 import RealmService from '@cardstack/host/services/realm';
 import GetUserSystemCardTool from '@cardstack/host/tools/get-user-system-card';
 
@@ -85,5 +87,28 @@ module('Integration | tools | get-user-system-card', function (hooks) {
       result.isDefault,
       'isDefault should be false when a non-default system card is set',
     );
+  });
+
+  test('recognizes the default system card however its id is spelled', async function (assert) {
+    let defaultId = '@cardstack/catalog/SystemCard/default';
+    let network = getService('network') as NetworkService;
+    let urlFormId = network.virtualNetwork.toURL(defaultId).href;
+    let originalDefault = ENV.defaultSystemCardId;
+    ENV.defaultSystemCardId = defaultId;
+    try {
+      let matrixService = getService('matrix-service') as any;
+      matrixService._systemCard = new SystemCard({ id: urlFormId });
+
+      let toolService = getService('tool-service');
+      let command = new GetUserSystemCardTool(toolService.toolContext);
+
+      let result = await command.execute();
+      assert.true(
+        result.isDefault,
+        'a URL-form id names the default configured by prefix',
+      );
+    } finally {
+      ENV.defaultSystemCardId = originalDefault;
+    }
   });
 });

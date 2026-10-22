@@ -3,7 +3,9 @@ import type {
   Kind,
   FileRef,
   DBAdapter,
+  SplicedSource,
 } from '@cardstack/runtime-common';
+import { streamSpliced } from '@cardstack/runtime-common';
 import {
   createResponse,
   logger,
@@ -12,27 +14,39 @@ import {
   type TokenClaims,
   clearSessionRoom,
   fetchRealmSessionRooms,
+  isRealmServerNotInRoomError,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import type { LocalPath } from '@cardstack/runtime-common/paths';
+import {
+  partialWritePath,
+  type LocalPath,
+} from '@cardstack/runtime-common/paths';
 import type { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
 
-import type { Dirent, ReadStream, Stats } from 'fs-extra';
+import type { Dirent, Stats } from 'fs-extra';
 import fsExtra from 'fs-extra';
 const {
   existsSync,
   writeFileSync,
+  appendFileSync,
   statSync,
   ensureDirSync,
   ensureFileSync,
   createReadStream,
+  createWriteStream,
+  renameSync,
   removeSync,
+  openSync,
+  fstatSync,
+  closeSync,
 } = fsExtra;
 import { join } from 'path';
-import { Duplex } from 'node:stream';
+import { Duplex, Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type {
   RequestContext,
+  AdapterAppendResult,
   AdapterWriteResult,
 } from '@cardstack/runtime-common/realm';
 import type {
@@ -41,6 +55,12 @@ import type {
 } from '@cardstack/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { createJWT, verifyJWT } from './jwt.ts';
+import {
+  isBackPressure,
+  realmEventDispatcher,
+  type RealmEventDispatcher,
+  type RealmEventSend,
+} from './realm-event-dispatcher.ts';
 
 const realmEventsLog = logger('realm:events');
 
@@ -60,47 +80,34 @@ function statIfExists(absolutePath: string): Stats | undefined {
   }
 }
 
-function parseMatrixSendEventError(error: unknown): {
-  status?: number;
-  errcode?: string;
-  error?: string;
-} | null {
-  if (!(error instanceof Error)) {
-    return null;
-  }
-
-  let match = error.message.match(/status (\d+) - (\{.*\})$/);
-  if (!match) {
-    return null;
-  }
-
-  let [, status, body] = match;
-  try {
-    return {
-      status: Number(status),
-      ...(JSON.parse(body) as { errcode?: string; error?: string }),
-    };
-  } catch (_err) {
-    return { status: Number(status) };
-  }
-}
-
-function isRealmServerNotInRoomError(error: unknown, roomId: string): boolean {
-  let details = parseMatrixSendEventError(error);
-  return Boolean(
-    details?.status === 403 &&
-    details?.errcode === 'M_FORBIDDEN' &&
-    details?.error?.includes(`not in room ${roomId}`),
-  );
+// A file's modification time in whole seconds, floored from `mtimeMs`.
+// `Stats.mtime` is a `Date` that Node rounds to the nearest millisecond, so
+// flooring it puts an mtime in the last half-millisecond of a second into the
+// next second — a second later than the one `mtimeMs` names, which is what an
+// open descriptor's stat reports and what a `Last-Modified` formatted from it
+// says. Every whole-second time this adapter reports comes from here, so a
+// write's reported time, `lastModified`, and a read of the file agree.
+function lastModifiedSeconds(stat: Stats): number {
+  return unixTime(stat.mtimeMs);
 }
 
 export class NodeAdapter implements RealmAdapter {
   private realmDir: string;
   private enableFileWatcher?: boolean;
+  private dispatcher: RealmEventDispatcher;
+  // Set when the realm's last room lookup found no session rooms. The lookup
+  // waits and retries only when this is clear, so a realm nobody has open
+  // pays the wait once rather than on every queued event.
+  private lastLookupFoundNoRooms = false;
 
-  constructor(realmDir: string, enableFileWatcher?: boolean) {
+  constructor(
+    realmDir: string,
+    enableFileWatcher?: boolean,
+    dispatcher: RealmEventDispatcher = realmEventDispatcher(),
+  ) {
     this.realmDir = realmDir;
     this.enableFileWatcher = enableFileWatcher;
+    this.dispatcher = dispatcher;
   }
 
   get dir(): string {
@@ -217,7 +224,7 @@ export class NodeAdapter implements RealmAdapter {
       return undefined;
     }
 
-    return unixTime(stat.mtime.getTime());
+    return lastModifiedSeconds(stat);
   }
 
   async openFile(path: string): Promise<FileRef | undefined> {
@@ -227,19 +234,62 @@ export class NodeAdapter implements RealmAdapter {
     if (!stat || stat.isDirectory()) {
       return undefined;
     }
-    let lazyStream: ReadStream;
+    // Opening is lazy because a consumer that only checks for the path, or
+    // reads its metadata, must not be left holding an unconsumed stream.
+    //
+    // `size` above comes from a path stat, and on a network filesystem a path
+    // stat can be answered from the client's attribute cache: when another
+    // host has just rewritten the file, it reports the length the file had
+    // before. Opening the file revalidates its attributes (close-to-open
+    // consistency), so the length is taken from the open descriptor and the
+    // stream reads from that same descriptor. That is the length a response
+    // can declare for this body: it describes the bytes the stream delivers,
+    // where the path stat's length may not. The stream stops at that length,
+    // so content an append adds while it is being read is left for the next
+    // read rather than sent past the length this one declared.
+    let opened:
+      | { content: Readable; size?: number; lastModifiedMs?: number }
+      | undefined;
+    let open = () => {
+      if (!opened) {
+        let fd: number | undefined;
+        try {
+          fd = openSync(absolutePath, 'r');
+          let { size, mtimeMs: lastModifiedMs } = fstatSync(fd);
+          if (size === 0) {
+            closeSync(fd);
+            opened = { content: Readable.from([]), size, lastModifiedMs };
+          } else {
+            opened = {
+              content: createReadStream(absolutePath, {
+                fd,
+                start: 0,
+                end: size - 1,
+              }),
+              size,
+              lastModifiedMs,
+            };
+          }
+        } catch (_err) {
+          if (fd !== undefined) {
+            closeSync(fd);
+          }
+          // A file deleted since the stat above surfaces as the stream's own
+          // error when it is read, which is where consumers already handle a
+          // vanished file. No length is claimed for it.
+          opened = { content: createReadStream(absolutePath) };
+        }
+      }
+      return opened;
+    };
     return {
       path,
       get content() {
-        // making this lazy is important because it means that consumers who are
-        // only interested in checking for the existence of the path and never
-        // consume the content don't leave an unconsumed stream.
-        if (!lazyStream) {
-          lazyStream = createReadStream(absolutePath);
-        }
-        return lazyStream;
+        return open().content;
       },
-      lastModified: unixTime(stat.mtime.getTime()),
+      openContent: open,
+      lastModified: lastModifiedSeconds(stat),
+      lastModifiedMs: stat.mtimeMs,
       size: stat.size,
       createRangeStream: (start: number, end: number) =>
         createReadStream(absolutePath, { start, end }),
@@ -250,14 +300,100 @@ export class NodeAdapter implements RealmAdapter {
     path: string,
     contents: string | Uint8Array,
   ): Promise<AdapterWriteResult> {
+    // Written beside the file and renamed onto it, which is atomic, so the
+    // file never holds a half-written version: a read that saw part of a
+    // rewrite would come up shorter than the length its response declared. A
+    // reader on this host that already has the file open keeps reading the
+    // version it opened. A reader on another host of a network filesystem may
+    // instead see its read fail once the file is replaced; that read errors
+    // rather than coming up short, and the response it was feeding is torn
+    // down so the client can ask again. The staging name is one the realm
+    // treats as no part of itself, and the per-file write locks the realm
+    // takes keep two writers of one path from sharing it.
     let absolutePath = join(this.realmDir, path);
-    ensureFileSync(absolutePath);
-    writeFileSync(absolutePath, contents);
-    let { mtime } = statSync(absolutePath);
+    let stagedPath = join(this.realmDir, partialWritePath(path as LocalPath));
+    try {
+      ensureFileSync(stagedPath);
+      writeFileSync(stagedPath, contents);
+      renameSync(stagedPath, absolutePath);
+    } finally {
+      removeSync(stagedPath);
+    }
     return {
       path: absolutePath,
-      lastModified: unixTime(mtime.getTime()),
+      lastModified: lastModifiedSeconds(statSync(absolutePath)),
     };
+  }
+
+  // Opened in append mode, so the file system positions the write at the end
+  // of the file and nothing here reads or rewrites what is already stored
+  // there — which is what keeps the cost the added content's rather than the
+  // file's, and what makes the write safe to hand a path holding hundreds of
+  // megabytes.
+  //
+  // The length comes from the stat the modification time already needs, so it
+  // costs nothing beyond it and describes the same state.
+  async append(
+    path: LocalPath,
+    contents: string | Uint8Array,
+  ): Promise<AdapterAppendResult> {
+    let absolutePath = join(this.realmDir, path);
+    ensureFileSync(absolutePath);
+    appendFileSync(absolutePath, contents);
+    let stat = statSync(absolutePath);
+    return {
+      path: absolutePath,
+      lastModified: lastModifiedSeconds(stat),
+      size: stat.size,
+    };
+  }
+
+  // The described content's ranges name the very file being replaced, so it
+  // cannot be written straight over: the read would be reading what the write
+  // had already truncated. It is assembled beside the file and renamed onto
+  // it, which is atomic, so the file only ever holds the content it had or the
+  // content it now has — and the staging name is one the realm treats as no
+  // part of itself, so a half-written file is never indexed or served.
+  async writeSpliced(
+    path: LocalPath,
+    content: SplicedSource,
+  ): Promise<AdapterWriteResult> {
+    let absolutePath = join(this.realmDir, path);
+    let stagedPath = join(this.realmDir, partialWritePath(path));
+    try {
+      ensureFileSync(stagedPath);
+      await pipeline(
+        streamSpliced(content, (start, end) =>
+          // `end` is exclusive here and inclusive for a read stream.
+          createReadStream(absolutePath, { start, end: end - 1 }),
+        ),
+        createWriteStream(stagedPath),
+      );
+      renameSync(stagedPath, absolutePath);
+    } finally {
+      removeSync(stagedPath);
+    }
+    return {
+      path: absolutePath,
+      lastModified: lastModifiedSeconds(statSync(absolutePath)),
+    };
+  }
+
+  async *readRange(
+    path: LocalPath,
+    start: number,
+    end: number,
+  ): AsyncIterable<Uint8Array> {
+    if (end <= start) {
+      return;
+    }
+    // `end` is exclusive here and inclusive for a read stream.
+    for await (let chunk of createReadStream(join(this.realmDir, path), {
+      start,
+      end: end - 1,
+    })) {
+      yield chunk as Uint8Array;
+    }
   }
 
   async remove(path: LocalPath): Promise<void> {
@@ -301,6 +437,9 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
+  // Resolves once the event has reached every session room subscribed to the
+  // realm, or has been merged or dropped by the process's realm event line
+  // (see realm-event-dispatcher.ts). Never rejects: a failed send is logged.
   async broadcastRealmEvent(
     event: RealmEventContent,
     realmUrl: string,
@@ -318,6 +457,26 @@ export class NodeAdapter implements RealmAdapter {
       );
       return;
     }
+    await this.dispatcher.broadcast({
+      realmURL: realmUrl,
+      event: eventWithRealmURL,
+      newTxnId: () => matrixClient.nextTxnId(),
+      prepare: (content) =>
+        this.prepareRoomSends(content, realmUrl, matrixClient, dbAdapter),
+    });
+  }
+
+  private async prepareRoomSends(
+    event: RealmEventContent,
+    realmUrl: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+  ): Promise<RealmEventSend[]> {
+    if (dbAdapter.isClosed) {
+      return [];
+    }
+    // A logged-in client reuses its session; this logs in only on the first
+    // broadcast, or after the session was revoked.
     try {
       await matrixClient.login();
       if (!matrixClient.getUserId()) {
@@ -325,26 +484,43 @@ export class NodeAdapter implements RealmAdapter {
           'Matrix client has no user ID after login, unable to broadcast realm event',
           event,
         );
-        return;
+        return [];
       }
     } catch (e) {
+      // An overloaded or unreachable homeserver is back-pressure: the
+      // dispatcher pauses and prepares the event again rather than skip it.
+      if (isBackPressure(e)) {
+        throw e;
+      }
       realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
-      return;
+      return [];
     }
 
-    let dmRooms = await this.waitForSessionRooms(dbAdapter, realmUrl);
+    let dmRooms = await this.waitForSessionRooms(
+      dbAdapter,
+      realmUrl,
+      this.lastLookupFoundNoRooms ? 0 : undefined,
+    );
+    this.lastLookupFoundNoRooms = Object.keys(dmRooms).length === 0;
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
 
-    for (let userId of Object.keys(dmRooms)) {
-      let roomId = dmRooms[userId];
-      try {
+    return Object.entries(dmRooms).map(([userId, roomId]) => ({
+      roomId,
+      send: async (txnId: string) => {
+        // A send can start while a revoked session is being replaced, when
+        // the client holds no token; wait for the new one rather than fail.
+        if (!matrixClient.isLoggedIn()) {
+          await matrixClient.login();
+        }
         await matrixClient.sendEvent(
           roomId,
           APP_BOXEL_REALM_EVENT_TYPE,
-          eventWithRealmURL,
+          event,
+          txnId,
         );
-      } catch (e) {
+      },
+      onFailure: async (e: unknown) => {
         if (isRealmServerNotInRoomError(e, roomId)) {
           try {
             let cleared = await clearSessionRoom(dbAdapter, userId, roomId);
@@ -363,15 +539,18 @@ export class NodeAdapter implements RealmAdapter {
               e,
             );
           }
-          continue;
+          return;
         }
+        // The error's message carries the status and the homeserver's answer,
+        // which is all a failed send has to say; its stack is the same for
+        // every room.
         realmEventsLog.error(
-          `Unable to send event in room ${roomId} for user ${userId}`,
-          event,
-          e,
+          `Unable to send event in room ${roomId} for user ${userId}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
         );
-      }
-    }
+      },
+    }));
   }
 
   private async waitForSessionRooms(

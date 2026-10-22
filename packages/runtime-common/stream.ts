@@ -98,6 +98,51 @@ export async function readFirstBytes(
   return merged.slice(0, n);
 }
 
+// Reads a prefix of `stream`, like `readFirstBytes`, but stops as soon as
+// `decided` reports that the bytes read so far are enough. For readers that
+// walk a file's structure (a GIF's frames, a PNG's chunks) and usually reach
+// an answer long before `maxBytes`, this bounds the fetch by the answer rather
+// than by the cap. `decided` sees the whole prefix read so far after each
+// chunk arrives. The stream is cancelled either way, so an unread remainder
+// never holds the connection open.
+export async function readBytesUntil(
+  stream: ByteStream,
+  maxBytes: number,
+  decided: (bytes: Uint8Array) => boolean,
+): Promise<Uint8Array> {
+  if (stream instanceof Uint8Array) {
+    return stream.slice(0, maxBytes);
+  }
+  let reader = stream.getReader();
+  let buffer = new Uint8Array(0);
+  let total = 0;
+  try {
+    while (total < maxBytes) {
+      let { done, value } = await reader.read();
+      if (done || !value) {
+        break;
+      }
+      if (total + value.length > buffer.length) {
+        // Grow geometrically so a many-chunk read copies O(n) bytes overall.
+        let grown = new Uint8Array(
+          Math.max(total + value.length, buffer.length * 2),
+        );
+        grown.set(buffer.subarray(0, total));
+        buffer = grown;
+      }
+      buffer.set(value, total);
+      total += value.length;
+      if (decided(buffer.subarray(0, Math.min(total, maxBytes)))) {
+        break;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+    stream.cancel().catch(() => {});
+  }
+  return buffer.slice(0, Math.min(total, maxBytes));
+}
+
 export async function fileContentToText({
   content,
 }: Pick<FileRef, 'content'>): Promise<string> {
@@ -157,6 +202,60 @@ export async function fileContentToBytes({
     chunks.push(B.from(chunk));
   }
   return new Uint8Array(B.concat(chunks));
+}
+
+// Whether a file's content is exactly `bytes`, compared as bytes. A streamed
+// file is compared one chunk at a time, so the comparison holds a chunk of the
+// file rather than all of it, and it stops reading at the first chunk that
+// differs.
+export async function fileContentEquals(
+  { content }: Pick<FileRef, 'content'>,
+  bytes: Uint8Array,
+): Promise<boolean> {
+  let offset = 0;
+  let matchesNext = (chunk: Uint8Array | string): boolean => {
+    let piece =
+      typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk;
+    if (offset + piece.length > bytes.length) {
+      return false;
+    }
+    for (let i = 0; i < piece.length; i++) {
+      if (piece[i] !== bytes[offset + i]) {
+        return false;
+      }
+    }
+    offset += piece.length;
+    return true;
+  };
+  if (typeof content === 'string' || content instanceof Uint8Array) {
+    return matchesNext(content) && offset === bytes.length;
+  }
+  if (content instanceof ReadableStream) {
+    let reader = content.getReader();
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        let { done, value } = await reader.read();
+        if (done) {
+          return offset === bytes.length;
+        }
+        if (value && !matchesNext(value)) {
+          return false;
+        }
+      }
+    } finally {
+      reader.releaseLock();
+      content.cancel().catch(() => {});
+    }
+  }
+  // A node stream. Returning from inside the loop destroys it, so a mismatch
+  // does not leave the rest of the file open.
+  for await (const chunk of content as AsyncIterable<Uint8Array | string>) {
+    if (!matchesNext(chunk)) {
+      return false;
+    }
+  }
+  return offset === bytes.length;
 }
 
 export interface TextFileRef {

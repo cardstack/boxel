@@ -35,10 +35,12 @@ export function baseRRI(path: string): RealmResourceIdentifier {
 // skill the system card's `defaultSkillFiles` names.
 export const skillsIndexLocalPath = 'index.md';
 
-// The legacy `Skill` card carrying the Boxel coding guidance, enabled by the
-// build-listing and readme-spec flows, which set up their own skill lists
-// rather than going through the room defaults.
-export const devSkillLocalPath = 'Skill/boxel-development';
+// The extensions the realm serves as compiled modules rather than as stored
+// content. Declared here, in a leaf, rather than in the barrel: modules low in
+// the import graph read it while their own body runs, and reaching the barrel
+// from one of them is a cycle — `index.ts` re-exports them, so a const
+// declared there is still in temporal dead zone at that point.
+export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 
 export const baseRef: ResolvedCodeRef = {
   module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,
@@ -84,6 +86,7 @@ export const fields = Symbol.for('cardstack-fields');
 export const fieldSerializer = Symbol.for('cardstack-field-serializer');
 export const fieldsUntracked = Symbol.for('cardstack-fields-untracked');
 export const getMenuItems = Symbol.for('cardstack-get-menu-items');
+export const hasNothingToShow = Symbol.for('cardstack-has-nothing-to-show');
 export const isBaseInstance = Symbol.for('isBaseInstance');
 export const localId = Symbol.for('cardstack-local-id');
 export const meta = Symbol.for('cardstack-meta');
@@ -120,10 +123,6 @@ export interface Permissions {
   readonly canWrite: boolean;
 }
 
-export const SEARCH_MARKER: string = '╔═══ SEARCH ════╗';
-export const SEPARATOR_MARKER: string = '╠═══════════════╣';
-export const REPLACE_MARKER: string = '╚═══ REPLACE ═══╝';
-
 export const MINIMUM_AI_CREDITS_TO_CONTINUE = 10;
 
 // Default max card payload size, in bytes.
@@ -153,8 +152,6 @@ export const EXTRA_TOKENS_PRICING: Record<number, number> = {
   20000: 30,
   80000: 100, // in USD
 };
-
-export const maxLinkDepth = 5;
 
 export const DEFAULT_PERMISSIONS = Object.freeze([
   'read',

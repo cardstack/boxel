@@ -48,13 +48,22 @@ export interface ContextBuilderConfig {
   /** Loader for traversing issue relationships (required for buildForIssue). */
   issueLoader?: IssueRelationshipLoader;
   /**
-   * Feature flag — when true, the AgentContext carries
-   * `enableBoxelUiDiscovery: true` so the system prompt template enables the
-   * catalog-search exception. The resolver should also have been constructed
-   * with the same value so the discovery skill is included in the load list.
-   * See CS-10527.
+   * Sanctions reading the catalog realm. Three things move together, and
+   * all three have to, or the run gets contradictory instruction:
+   *
+   * 1. the `catalog-reuse` and `boxel-ui-component-discovery` skills are
+   *    loaded into the core (`DefaultSkillResolver`);
+   * 2. the system prompt's cross-realm firewall opens to catalog searches;
+   * 3. the turn prompts render their reuse steps — the REUSE section, the
+   *    Reuse decisions table and its `searched:` line, and the build turn's
+   *    wiring step and self-audit.
+   *
+   * Base-realm type selection is deliberately NOT gated: picking `EmailField`
+   * over `StringField` is not catalog reuse and survives the flag being off.
+   *
+   * The built AgentContext carries it so the prompt loaders can read it.
    */
-  enableBoxelUiDiscovery?: boolean;
+  enableCatalogReuse?: boolean;
   /**
    * Valid `@cardstack/boxel-host/tools/<name>` module names derived from
    * the host build (import gate). When set, every built context gains
@@ -74,7 +83,7 @@ export class ContextBuilder {
   private skillLoader: SkillLoaderInterface;
   private maxSkillTokens: number | undefined;
   private issueLoader: IssueRelationshipLoader | undefined;
-  private enableBoxelUiDiscovery: boolean;
+  private enableCatalogReuse: boolean;
   private hostToolImports: string[] | undefined;
 
   constructor(config: ContextBuilderConfig) {
@@ -82,7 +91,11 @@ export class ContextBuilder {
     this.skillLoader = config.skillLoader;
     this.maxSkillTokens = config.maxSkillTokens;
     this.issueLoader = config.issueLoader;
-    this.enableBoxelUiDiscovery = config.enableBoxelUiDiscovery === true;
+    // `!== false`, matching factory-issue-loop-wiring.ts and
+    // factory-entrypoint.ts. This read used to be `=== true`, so an omitted
+    // flag meant off here and on in both callers — latent only because both
+    // pass it explicitly.
+    this.enableCatalogReuse = config.enableCatalogReuse !== false;
     this.hostToolImports = config.hostToolImports;
   }
 
@@ -140,7 +153,7 @@ export class ContextBuilder {
       knowledge,
       skills,
       targetRealm,
-      enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
+      enableCatalogReuse: this.enableCatalogReuse,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
@@ -255,7 +268,7 @@ export class ContextBuilder {
       knowledge,
       skills,
       targetRealm,
-      enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
+      enableCatalogReuse: this.enableCatalogReuse,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 

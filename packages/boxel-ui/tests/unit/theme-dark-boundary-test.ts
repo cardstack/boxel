@@ -56,6 +56,39 @@ function findThemeRule(
 }
 
 module('Unit | theme dark boundary', function () {
+  test('scheme islands reset the same chrome knobs as themed card boundaries', function (assert) {
+    const resetRule = findThemeRule(
+      (rule) =>
+        matchesSelector(rule, BOUNDARY_SELECTOR) &&
+        !(rule.parentRule instanceof CSSContainerRule) &&
+        rule.style.getPropertyValue(customProperties(rule)[0] ?? '') ===
+          'initial',
+    );
+    const islandRule = findThemeRule((rule) =>
+      matchesSelector(
+        rule,
+        '[data-boxel-theme-scope] :is(.dark, [data-theme])',
+      ),
+    );
+    assert.ok(resetRule, 'found the boundary reset rule');
+    assert.ok(islandRule, 'found the scheme island reset rule');
+    if (!resetRule || !islandRule) {
+      return;
+    }
+    assert.deepEqual(
+      customProperties(islandRule).sort(),
+      customProperties(resetRule).sort(),
+      'islands and boundaries reset the same custom properties',
+    );
+    for (const name of customProperties(islandRule)) {
+      assert.strictEqual(
+        islandRule.style.getPropertyValue(name),
+        'initial',
+        `${name} is reset inside scheme islands`,
+      );
+    }
+  });
+
   test('the dark boundary reset declares the same tokens as the dark block', function (assert) {
     const darkRule = findThemeRule((rule) =>
       matchesSelector(rule, DARK_SELECTOR),

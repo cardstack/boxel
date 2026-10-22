@@ -167,6 +167,38 @@ module('Integration | Service | client-telemetry', function (hooks) {
     assert.true(e.retried, 'retried flag carried through');
     assert.strictEqual(e.realm, 'https://realm.example/my-realm/');
     assert.strictEqual(typeof e.ts, 'number', 'timestamp stamped');
+    assert.notOk(
+      'search_cache' in e,
+      'a response the search cache did not serve carries no outcome for it',
+    );
+  });
+
+  test('carries the live-search cache outcome when the response names one', function (assert) {
+    let svc = telemetry();
+    svc.enableForTest();
+    svc.drainBufferForTest();
+
+    svc.recordServerRequestTiming(
+      new Request('https://realm.example/_federated-search', {
+        method: 'POST',
+      }),
+      new Response('{}', {
+        status: 200,
+        headers: {
+          'content-length': '2',
+          'x-boxel-live-search-cache': 'hit',
+        },
+      }),
+      12,
+      false,
+    );
+
+    let e = svc.drainBufferForTest()[0] as any;
+    assert.strictEqual(
+      e.search_cache,
+      'hit',
+      'how the cache served this request is attributable to the request itself',
+    );
   });
 
   test('normalizes a card GET to a low-cardinality label', function (assert) {

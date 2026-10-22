@@ -16,7 +16,6 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -39,7 +38,6 @@ class StubCardService extends CardService {
 
 module('Integration | tools | execute-atomic-operations', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -94,3 +92,59 @@ module('Integration | tools | execute-atomic-operations', function (hooks) {
     }
   });
 });
+
+module(
+  'Integration | tools | execute-atomic-operations | realm',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupLocalIndexing(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: true,
+    });
+
+    setupRealmCacheTeardown(hooks);
+
+    hooks.beforeEach(async function () {
+      await withCachedRealmSetup(async () =>
+        setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {},
+        }),
+      );
+    });
+
+    test('writes to a realm named by a prefix-form identifier', async function (assert) {
+      let { virtualNetwork } = getService('network');
+      let testRealmPrefix = '@test/atomic-realm/';
+      virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+      try {
+        let toolService = getService('tool-service');
+        let result = await new ExecuteAtomicOperationsTool(
+          toolService.toolContext,
+        ).execute({
+          realmIdentifier: testRealmPrefix,
+          operations: [
+            {
+              op: 'add',
+              href: 'atomic-prefix.txt',
+              data: {
+                type: 'source',
+                attributes: { content: 'Hello, atomic!' },
+                meta: {},
+              },
+            },
+          ] as any,
+        });
+
+        assert.strictEqual(result.results.length, 1, 'one result');
+        let response = await fetch(new URL('atomic-prefix.txt', testRealmURL));
+        assert.strictEqual(await response.text(), 'Hello, atomic!');
+      } finally {
+        virtualNetwork.removeRealmMapping(testRealmPrefix);
+      }
+    });
+  },
+);

@@ -10,7 +10,7 @@
  */
 
 import { readFileSync } from 'fs';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { resolve } from 'path';
 
 import semver from 'semver';
@@ -42,6 +42,25 @@ const CONVENTIONAL_PREFIX_RE = /^([a-z]+)(?:\([^)]+\))?(!?):\s*/;
 
 const BUMP_BY_PREFIX = bumpByPrefixJson as Record<string, BumpLevel>;
 
+// Monorepo source that `scripts/build-types.ts` copies into `bundled-types/`,
+// the type surface `boxel parse` checks cards against. A change here ships
+// only in a new boxel-cli release, so it is npm surface like `src/`.
+//
+// Only bundled packages whose PRs must carry a conventional-commit title (a
+// `*-pr-title.yml` check) belong here: the bump comes from that title, so a
+// package whose PRs take plain titles would compute no bump even if listed.
+// The other bundled sources (base, runtime-common, host, boxel-ui,
+// local-types) reach the published CLI with the next release cut for any
+// other reason. The publish workflow's `paths:` filter lists the same
+// directories, and `tests/scripts/compute-release.test.ts` holds the three
+// in step.
+export const BUNDLED_SOURCE_DIRS = [
+  'packages/bxl/src/',
+  'packages/glimmer-motion/src/',
+  'packages/choreo/src/',
+  'packages/choreo-player/src/',
+];
+
 const NPM_SURFACE_PATTERNS: RegExp[] = [
   /^packages\/boxel-cli\/src\//,
   /^packages\/boxel-cli\/api\.ts$/,
@@ -51,7 +70,6 @@ const NPM_SURFACE_PATTERNS: RegExp[] = [
 const PLUGIN_SURFACE_PATTERNS: RegExp[] = [
   /^packages\/boxel-cli\/plugin\//,
   /^packages\/boxel-cli\/scripts\/build-plugin\.ts$/,
-  /^packages\/boxel-cli\/scripts\/build-skills\.ts$/,
 ];
 
 const PACKAGE_JSON_PATH = 'packages/boxel-cli/package.json';
@@ -84,7 +102,10 @@ export function detectSurfaces(changedFiles: string[]): {
   let npmTouched = false;
   let pluginTouched = false;
   for (const file of changedFiles) {
-    if (matchesAny(file, NPM_SURFACE_PATTERNS)) {
+    if (
+      matchesAny(file, NPM_SURFACE_PATTERNS) ||
+      BUNDLED_SOURCE_DIRS.some((dir) => file.startsWith(dir))
+    ) {
       npmTouched = true;
     } else if (file === PACKAGE_JSON_PATH) {
       // package.json bumps the npm surface, but only if dependencies (or
@@ -195,24 +216,69 @@ function repoRoot(): string {
   return execSync('git rev-parse --show-toplevel').toString().trim();
 }
 
-function changedFilesAgainstHead1(root: string): string[] {
-  // Union PR-committed files (HEAD^..HEAD) with working-tree changes. The
-  // on-main workflow regenerates plugin/skills/ before invoking this script,
-  // and that regen lives in the working tree — invisible to HEAD^..HEAD.
-  // Without the union, a `feat:` PR adding a new command in src/ would bump
-  // npm but not plugin.json, leaving the marketplace cache key stale.
+/**
+ * The commit range this run's push introduced. The checkout is of `main`,
+ * whose tip may already have moved past this push — a run that waited its
+ * turn in the concurrency group, or one that started while another merge or
+ * release commit was landing, sees the newer commits. Diffing from `HEAD`
+ * would then describe someone else's commit and conclude boxel-cli was
+ * untouched, silently skipping a release. `PUSH_BEFORE` (the branch tip
+ * before the push) and `PUSH_SHA` (after) pin the range to this run's own
+ * event, whatever main has done since.
+ *
+ * `PUSH_BEFORE` is absent when a branch is created and can name a commit that
+ * a force-push has since orphaned, so it is used only once resolved; the
+ * pushed commit's first parent stands in otherwise. With neither — a local
+ * run — the checkout's own last commit is the best available guess.
+ */
+function pushedRange(root: string): [string, string] {
+  const before = process.env.PUSH_BEFORE ?? '';
+  const sha = process.env.PUSH_SHA ?? '';
+  if (!sha) {
+    return ['HEAD^', 'HEAD'];
+  }
+  if (before && !/^0+$/.test(before) && resolvesToCommit(root, before)) {
+    return [before, sha];
+  }
+  return [`${sha}^`, sha];
+}
+
+function resolvesToCommit(root: string, ref: string): boolean {
+  try {
+    // Silenced: an absent object is this function's answer, not a failure
+    // worth printing into the workflow log as though something went wrong.
+    execFileSync('git', ['cat-file', '-e', `${ref}^{commit}`], {
+      cwd: root,
+      stdio: ['ignore', 'ignore', 'ignore'],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function changedFilesInPush(root: string): string[] {
+  // Union the pushed commits' files with working-tree changes. The on-main
+  // workflow regenerates plugin/skills/ before invoking this script, and that
+  // regen lives in the working tree — invisible to the pushed range. Without
+  // the union, a `feat:` PR adding a new command in src/ would bump npm but
+  // not plugin.json, leaving the marketplace cache key stale.
   //
   // We force cwd to the repo root because Git resolves pathspec relatively
   // and the workflow invokes this script from `packages/boxel-cli/`, where
   // the literal `packages/boxel-cli/` pathspec resolves to a non-existent
   // nested directory and matches nothing.
   const opts = { cwd: root };
-  const committed = execSync(
-    'git diff --name-only HEAD^ -- packages/boxel-cli/',
+  const pathspecs = ['packages/boxel-cli/', ...BUNDLED_SOURCE_DIRS];
+  const [from, to] = pushedRange(root);
+  const committed = execFileSync(
+    'git',
+    ['diff', '--name-only', from, to, '--', ...pathspecs],
     opts,
   ).toString();
-  const workingTree = execSync(
-    'git diff --name-only -- packages/boxel-cli/',
+  const workingTree = execFileSync(
+    'git',
+    ['diff', '--name-only', '--', ...pathspecs],
     opts,
   ).toString();
   const set = new Set(
@@ -292,7 +358,7 @@ function main(): void {
     resolve(root, 'packages/boxel-cli/plugin/.claude-plugin/plugin.json'),
   );
   const stableBase = lastStableTag();
-  const changedFiles = changedFilesAgainstHead1(root);
+  const changedFiles = changedFilesInPush(root);
 
   // Resolve the bumped base with a placeholder counter, then pick the next
   // counter free for that base on npm. npm is the source of truth: the manual

@@ -1,3 +1,6 @@
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 
@@ -188,6 +191,257 @@ module('factory-prompt-loader > interpolate > #if blocks', function () {
     });
     assert.strictEqual(result, 'has checklist');
   });
+
+  test('splits a flat if/else on its own else', function (assert) {
+    let template = 'A{{#if x}}T{{else}}F{{/if}}B';
+    assert.strictEqual(interpolate(template, { x: false }), 'AFB');
+  });
+
+  test('renders a nested if with no else inside the true branch', function (assert) {
+    let template = 'A{{#if x}}T{{#if y}}N{{/if}}{{/if}}B';
+    assert.strictEqual(interpolate(template, { x: true, y: false }), 'ATB');
+  });
+
+  // The outer block's true branch ends at the outer {{else}}, not at the one
+  // belonging to the nested block. Splitting on the first {{else}} found
+  // truncated the true branch mid-nesting and leaked the raw inner tag.
+  test('a nested if/else does not donate its else to the outer block', function (assert) {
+    let template = 'A{{#if x}}T{{#if y}}Y{{else}}N{{/if}}{{else}}F{{/if}}B';
+    assert.strictEqual(interpolate(template, { x: true, y: false }), 'ATNB');
+  });
+
+  test('takes the outer false branch past a nested if/else', function (assert) {
+    let template = 'A{{#if x}}T{{#if y}}Y{{else}}M{{/if}}{{else}}N{{/if}}B';
+    assert.strictEqual(interpolate(template, { x: false, y: true }), 'ANB');
+  });
+
+  test('renders two sibling if blocks independently', function (assert) {
+    let template = 'A{{#if x}}X{{/if}}M{{#if y}}Y{{/if}}B';
+    assert.strictEqual(interpolate(template, { x: true, y: true }), 'AXMYB');
+  });
+
+  // The `each` handler has no else branch of its own, so the only guarantee
+  // here is that the enclosing `if` does not mistake one for its own.
+  test('resolves a nested if/else inside an each over strings', function (assert) {
+    assert.strictEqual(
+      interpolate(
+        '{{#each items}}{{#if flag}}[{{.}}]{{else}}none{{/if}}{{/each}}',
+        { items: ['a', 'b'], flag: true },
+      ),
+      '[a][b]',
+    );
+  });
+
+  test('a nested each over strings uses its own item', function (assert) {
+    assert.strictEqual(
+      interpolate(
+        '{{#each items}}{{.}}:{{#each sub}}{{.}}{{/each}};{{/each}}',
+        {
+          items: ['a', 'b'],
+          sub: ['x', 'y'],
+        },
+      ),
+      'a:xy;b:xy;',
+    );
+  });
+
+  test('renders the else branch of an each over a missing or empty array', function (assert) {
+    let template = '{{#each items}}{{.}}{{else}}none{{/each}}';
+    assert.strictEqual(interpolate(template, { items: ['a'] }), 'a');
+    assert.strictEqual(interpolate(template, { items: [] }), 'none');
+    assert.strictEqual(interpolate(template, {}), 'none');
+  });
+
+  test('renders tags that do not form a block as written', function (assert) {
+    assert.strictEqual(
+      interpolate('A {{#if x}} B {{v}}', { x: true, v: 'V' }),
+      'A {{#if x}} B V',
+    );
+    assert.strictEqual(
+      interpolate('A {{/each}} {{else}} {{/if}} B', {}),
+      'A {{/each}} {{else}} {{/if}} B',
+    );
+    assert.strictEqual(interpolate('[{{.}}]', {}), '[{{.}}]');
+  });
+
+  test('a nested each does not donate its else to the enclosing if', function (assert) {
+    let template =
+      'A{{#if x}}{{#each items}}{{.}}{{else}}E{{/each}}{{else}}F{{/if}}B';
+    assert.strictEqual(
+      interpolate(template, { x: false, items: ['1'] }),
+      'AFB',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// interpolate — substituted values are never parsed as template syntax
+// ---------------------------------------------------------------------------
+
+module('factory-prompt-loader > interpolate > opaque values', function () {
+  test('a value inside #each keeps its template syntax', function (assert) {
+    let content =
+      '{{#if done}}finished{{else}}open{{/if}} {{#each tags}}{{.}}{{/each}} {{name}}';
+    assert.strictEqual(
+      interpolate('{{#each skills}}{{content}}{{/each}}', {
+        skills: [{ content }],
+        done: true,
+        tags: ['a'],
+        name: 'n',
+      }),
+      content,
+    );
+  });
+
+  test('a glimmer argument in a value survives', function (assert) {
+    let content = '<Results @query={{this.query}} @mode="hover" />';
+    assert.strictEqual(
+      interpolate('{{#each skills}}[{{content}}]{{/each}}', {
+        skills: [{ content }],
+      }),
+      `[${content}]`,
+    );
+  });
+
+  test('a string item in #each renders verbatim', function (assert) {
+    assert.strictEqual(
+      interpolate('{{#each items}}- {{.}}\n{{/each}}', {
+        items: ['{{x}}', 'a{{#if y}}b{{/if}}'],
+        x: 'X',
+        y: true,
+      }),
+      '- {{x}}\n- a{{#if y}}b{{/if}}',
+    );
+  });
+
+  test('values in a nested #each over string items render verbatim', function (assert) {
+    let template =
+      '{{#each skills}}# {{name}}\n{{content}}\n{{#each references}}> {{.}}\n{{/each}}{{/each}}';
+    assert.strictEqual(
+      interpolate(template, {
+        skills: [
+          {
+            name: 'live',
+            content: '{{@model.title}}',
+            references: ['{{#each r as |e|}}{{e}}{{/each}}'],
+          },
+        ],
+      }),
+      '# live\n{{@model.title}}\n> {{#each r as |e|}}{{e}}{{/each}}',
+    );
+  });
+
+  test('a value in either branch of #if renders verbatim', function (assert) {
+    let template = '{{#if v}}{{v}}{{else}}{{w}}{{/if}}';
+    assert.strictEqual(
+      interpolate(template, { v: '{{#if v}}x{{/if}}' }),
+      '{{#if v}}x{{/if}}',
+    );
+    assert.strictEqual(
+      interpolate(template, { v: '', w: '{{#if v}}x{{else}}y{{/if}}' }),
+      '{{#if v}}x{{else}}y{{/if}}',
+    );
+  });
+
+  test('an unclosed block opener in a value does not swallow a later block', function (assert) {
+    assert.strictEqual(
+      interpolate('{{#each items}}{{text}} {{/each}}{{#if show}}TAIL{{/if}}', {
+        items: [{ text: '{{#if foo}} open only' }],
+        show: true,
+      }),
+      '{{#if foo}} open only TAIL',
+    );
+  });
+
+  test('replacement patterns in a value render verbatim', function (assert) {
+    let value = "$& $$ $` $' $1";
+    assert.strictEqual(
+      interpolate('{{#each items}}<{{.}}>{{/each}}', { items: [value] }),
+      `<${value}>`,
+    );
+    assert.strictEqual(
+      interpolate('{{#each items}}<{{text}}>{{/each}}', {
+        items: [{ text: value }],
+      }),
+      `<${value}>`,
+    );
+  });
+
+  test('a top-level value keeps its template syntax', function (assert) {
+    assert.strictEqual(
+      interpolate('A {{v}} B', { v: '{{#if v}}{{v}}{{/if}}' }),
+      'A {{#if v}}{{v}}{{/if}} B',
+    );
+  });
+
+  test('an object value inside #each keeps its template syntax', function (assert) {
+    assert.strictEqual(
+      interpolate('{{#each items}}{{data}}{{/each}}', {
+        items: [{ data: { html: '{{x}}' } }],
+        x: 'X',
+      }),
+      '{"html":"{{x}}"}',
+    );
+  });
+
+  test('a value holding a NUL-delimited index renders verbatim', function (assert) {
+    assert.strictEqual(
+      interpolate('{{#each items}}[{{t}}]{{/each}}', {
+        items: [{ t: '\u00001\u0000' }, { t: 'b' }],
+      }),
+      '[\u00001\u0000][b]',
+    );
+  });
+
+  test('an empty value still takes part in the blank-line collapse', function (assert) {
+    assert.strictEqual(interpolate('A\n\n{{v}}\n\nB', { v: '' }), 'A\n\nB');
+  });
+
+  test('a value keeps its own blank lines', function (assert) {
+    let value = 'line1\n\n\n\nline2';
+    assert.strictEqual(interpolate('A {{v}} B', { v: value }), `A ${value} B`);
+    assert.strictEqual(
+      interpolate('{{#each items}}<{{t}}>{{/each}}', { items: [{ t: value }] }),
+      `<${value}>`,
+    );
+    assert.strictEqual(
+      interpolate('{{#each items}}<{{.}}>{{/each}}', { items: [value] }),
+      `<${value}>`,
+    );
+  });
+
+  test('a value keeps its leading and trailing whitespace', function (assert) {
+    let value = '\n\n  x  \n\n\n';
+    assert.strictEqual(interpolate('\n{{v}}\n', { v: value }), value);
+    assert.strictEqual(
+      interpolate('A\n\n{{v}}\n\nB', { v: value }),
+      `A\n\n${value}\n\nB`,
+    );
+  });
+
+  test('template blank lines around a value still collapse', function (assert) {
+    assert.strictEqual(
+      interpolate('A\n\n\n\n{{v}}\n\n\n\nB', { v: 'x' }),
+      'A\n\nx\n\nB',
+    );
+  });
+
+  test('an empty string item takes part in the blank-line collapse', function (assert) {
+    assert.strictEqual(
+      interpolate('A\n\n{{#each items}}{{.}}{{/each}}\n\nB', { items: [''] }),
+      'A\n\nB',
+    );
+  });
+
+  test('a null or undefined string item renders as empty, like a variable', function (assert) {
+    assert.strictEqual(
+      interpolate('{{#each items}}[{{.}}]{{/each}}', {
+        items: ['a', null, undefined, 'b'],
+      }),
+      '[a][][][b]',
+    );
+    assert.strictEqual(interpolate('[{{v}}]', { v: null }), '[]');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -212,6 +466,21 @@ module('factory-prompt-loader > FilePromptLoader', function () {
       result.includes('workspace mirror of'),
       'system prompt names the workspace mirror as the read/write surface',
     );
+  });
+
+  test('renders skill content and references verbatim', function (assert) {
+    let loader = new FilePromptLoader();
+    let content =
+      '<@context.searchResultsComponent @query={{this.q}} />\n{{#if a}}x{{/if}}';
+    let reference = '{{#each r as |e|}}{{e}}{{/each}}';
+    let result = loader.load('system', {
+      targetRealm: 'https://example.test/target/',
+      darkfactoryModuleUrl: 'https://example.test/software-factory/darkfactory',
+      enableCatalogReuse: false,
+      skills: [{ name: 'live', content, references: [reference] }],
+    });
+    assert.ok(result.includes(content), 'skill content is verbatim');
+    assert.ok(result.includes(reference), 'skill reference is verbatim');
   });
 
   test('caches templates on subsequent loads', function (assert) {
@@ -647,6 +916,39 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
     );
   });
 
+  test('renders tool output, previous actions and validation context verbatim', function (assert) {
+    let loader = new FilePromptLoader();
+    let output =
+      '<h1>{{@model.title}}</h1>\n{{#each @model.items as |i|}}{{i}}{{/each}}';
+    let fileContent = '<template>{{#if @model.done}}✓{{/if}}</template>';
+    let validationContext = 'FAILED: expected {{@model.title}} to render $&';
+    let ctx = makeMinimalContext({
+      validationContext,
+      toolResults: [{ tool: 'read-file', exitCode: 0, output, durationMs: 10 }],
+    });
+
+    let result = assembleIteratePrompt({
+      context: ctx,
+      previousActions: [
+        {
+          type: 'create_file',
+          path: 'card.gts',
+          content: fileContent,
+          realm: 'target',
+        },
+      ],
+      iteration: 1,
+      loader,
+    });
+
+    assert.ok(result.includes(output), 'tool output is verbatim');
+    assert.ok(result.includes(fileContent), 'action content is verbatim');
+    assert.ok(
+      result.includes(validationContext),
+      'validation context is verbatim',
+    );
+  });
+
   test('is self-contained: includes project, issue, actions, validation context', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
@@ -876,5 +1178,37 @@ module('factory-prompt-loader > bug-fix routing', function () {
       /DESIGN — HTML mockup before any schema/i.test(prompt),
       'feature build keeps the design round',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Every template renders
+// ---------------------------------------------------------------------------
+
+// Prompt templates are exempt from prettier because the markdown formatter
+// indents block closers and shifts the rendered output. The exemption lives in
+// this package's .prettierignore and holds only because the pre-commit autofix
+// runs prettier from the owning package directory — so this asserts the
+// property that exemption protects, rather than the exemption itself.
+module('factory-prompt-loader > every template', function () {
+  test('renders with nothing left unsubstituted', async function (assert) {
+    let promptsDir = join(import.meta.dirname, '..', 'prompts');
+    let templates = (await readdir(promptsDir)).filter((f) =>
+      f.endsWith('.md'),
+    );
+
+    assert.true(templates.length > 0, 'there are templates to check');
+
+    for (let file of templates) {
+      let source = await readFile(join(promptsDir, file), 'utf8');
+      // Empty variables: every {{#if}} is falsy and every {{var}} resolves to
+      // the empty string, so anything still bearing {{ is an unclosed or
+      // malformed block rather than a missing value.
+      let rendered = interpolate(source, {});
+      assert.false(
+        rendered.includes('{{'),
+        `${file} leaves no unrendered template syntax`,
+      );
+    }
   });
 });

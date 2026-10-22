@@ -28,19 +28,25 @@ cid=$(docker run -d \
 docker exec "$TEST_PG_SEED_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c \
   "CREATE DATABASE ${TEST_PG_SEED_DB};"
 
+# Both migration phases, additive then removal, so the tests run against the
+# schema a deployed environment has once a release finishes rolling out.
 (
   cd "$POSTGRES_PKG_DIR"
 
-  PGHOST=127.0.0.1 \
-  PGPORT="${TEST_PG_SEED_PORT}" \
-  PGUSER=postgres \
-  PGDATABASE="${TEST_PG_SEED_DB}" \
-  pnpm exec node-pg-migrate \
-    --migrations-table migrations \
-    --check-order false \
-    --ignore-pattern '.*\.eslintrc\.js|package\.json' \
-    --no-verbose \
-    up
+  for phase in "migrations migrations" "migrations-removal migrations_removal"; do
+    read -r dir table <<< "$phase"
+    PGHOST=127.0.0.1 \
+    PGPORT="${TEST_PG_SEED_PORT}" \
+    PGUSER=postgres \
+    PGDATABASE="${TEST_PG_SEED_DB}" \
+    pnpm exec node-pg-migrate \
+      --migrations-dir "$dir" \
+      --migrations-table "$table" \
+      --check-order false \
+      --ignore-pattern '.*\.eslintrc\.js|package\.json' \
+      --no-verbose \
+      up
+  done
 )
 
 # Pre-create a template DB in the seed for future test-db cloning paths.

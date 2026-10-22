@@ -1,0 +1,29 @@
+/**
+ * Lint rules for choreo-gallery: the shared Choreo config, plus what differs
+ * for this package.
+ */
+import base from '@cardstack/choreo-eslint-config';
+import { defineConfig, globalIgnores } from 'eslint/config';
+import globals from 'globals';
+
+export default defineConfig([
+  globalIgnores([
+    'out/**',
+    // the film app's build (choreo-film-app) and the films' vendored scripts
+    'realm/film-app/**',
+    'realm/asset/**',
+  ]),
+  base,
+  {
+    // realm test files run under `boxel test`, which serves them the test
+    // helpers alongside the cards they test
+    files: ['realm/**/*.test.gts'],
+    rules: { 'ember/no-test-support-import': 'off' },
+  },
+  {
+    // Node browser checks contain functions evaluated in the page.
+    files: ['tools/sagrada-model-review.mjs'],
+    languageOptions: { globals: { ...globals.browser } },
+    settings: { node: { version: '>=22.16.0' } },
+  },
+]);

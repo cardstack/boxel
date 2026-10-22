@@ -19,7 +19,9 @@ import {
   RunLogWriter,
   buildLegacyMigration,
   autolinkCardReferences,
+  RUN_LOG_GTS,
 } from '../src/run-log.ts';
+import { runGlintCheck } from '../src/parse-execution.ts';
 
 const CONTROL = 'https://app.boxel.ai/me/proj-ops/';
 const PRODUCT = 'https://app.boxel.ai/me/proj/';
@@ -786,6 +788,33 @@ module('run-log > autolinkCardReferences directives', function () {
     assert.strictEqual(
       out,
       `Shipped ::card[${PRODUCT}Garment/tee | embedded] linked from :card[${PRODUCT}Outfit/summer].`,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The seeded module vs. the parse gate
+// ---------------------------------------------------------------------------
+
+// Every run writes this module into its control realm and then runs the parse
+// gate over the realm, so a type error here is not cosmetic: the agent opens
+// its first iteration with a red gate it did not cause and cannot fix from the
+// workspace. Nothing else type-checks these bytes — they live in a template
+// literal, invisible to this package's own build.
+module('run-log > seeded module', function () {
+  test('passes the parse gate', async function (assert) {
+    // ember-tsc caps itself at 120s, but that clock starts only after the temp
+    // dir, files, and node_modules symlink are in place — strictly after
+    // QUnit's would. Give QUnit slack above 120s so a hung compile surfaces as
+    // the gate's own "ember-tsc was killed" rejection, not a bare QUnit timeout.
+    assert.timeout(130_000);
+    let { errors } = await runGlintCheck([
+      { path: 'run-log.gts', content: RUN_LOG_GTS },
+    ]);
+    assert.deepEqual(
+      errors.map((e) => `${e.line}:${e.column} ${e.message}`),
+      [],
+      'run-log.gts type-checks clean',
     );
   });
 });

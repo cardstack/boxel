@@ -9,14 +9,13 @@
 
 // @ts-ignore no public types for `precompileTemplate`
 import { precompileTemplate } from '@ember/template-compilation';
-import { render } from '@ember/test-helpers';
+import { render, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type * as CardApiModule from '@cardstack/base/card-api';
@@ -24,7 +23,6 @@ import type * as FileResourcesModule from '@cardstack/base/file-formats/file-res
 
 module('Integration | FileDef resource primitives', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let FileDef: typeof CardApiModule.FileDef;
@@ -35,11 +33,12 @@ module('Integration | FileDef resource primitives', function (hooks) {
   let FileObject: typeof FileResourcesModule.FileObject;
   let applyFileFont: typeof FileResourcesModule.applyFileFont;
   let fileResourceURL: typeof FileResourcesModule.fileResourceURL;
+  let fileElementURL: typeof FileResourcesModule.fileElementURL;
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
     FileDef = (
-      await loader.import<typeof CardApiModule>(`${baseRealm.url}card-api`)
+      await loader.import<typeof CardApiModule>(`@cardstack/base/card-api`)
     ).FileDef;
     ({
       FileResource,
@@ -49,6 +48,7 @@ module('Integration | FileDef resource primitives', function (hooks) {
       FileObject,
       applyFileFont,
       fileResourceURL,
+      fileElementURL,
     } = await loader.import<typeof FileResourcesModule>(
       '@cardstack/base/file-formats/file-resources',
     ));
@@ -90,6 +90,77 @@ module('Integration | FileDef resource primitives', function (hooks) {
       'http://example.com/a.png',
       'a URL object normalizes the same as a string',
     );
+  });
+
+  test('an element URL resolved from the file carries its content revision', function (assert) {
+    let file = {
+      url: 'http://example.com/img/hero.png',
+      contentHash: 'abc123',
+      lastModified: 1700000000,
+    };
+    assert.strictEqual(
+      fileElementURL(file),
+      'http://example.com/img/hero.png?rev=abc123%3A1700000000',
+      'the hash and modification time both name the revision',
+    );
+    assert.strictEqual(
+      fileElementURL({
+        ...file,
+        url: 'http://example.com/img/hero.png?w=2#top',
+      }),
+      'http://example.com/img/hero.png?w=2&rev=abc123%3A1700000000#top',
+      'an existing query and fragment are kept',
+    );
+    assert.strictEqual(
+      fileElementURL(file, 'http://example.com/explicit.png'),
+      'http://example.com/explicit.png',
+      'an explicit URL passes through as given',
+    );
+    assert.strictEqual(
+      fileElementURL({ url: 'http://example.com/img/hero.png' }),
+      'http://example.com/img/hero.png',
+      'a file with no revision keeps its own URL',
+    );
+    assert.strictEqual(
+      fileElementURL({ ...file, url: 'blob:http://example.com/1234' }),
+      'blob:http://example.com/1234',
+      'an object URL passes through',
+    );
+  });
+
+  test('a primitive loads the revisioned URL while FileResource yields the clean one', async function (assert) {
+    let file = {
+      url: 'http://example.com/img/hero.png',
+      name: 'hero.png',
+      contentType: 'image/png',
+      contentHash: 'abc123',
+      lastModified: 1700000000,
+    };
+    await render(
+      precompileTemplate(
+        `<div class="probe"><FileImage @file={{file}} /><FileResource @file={{file}} as |resource|>
+           <span class="url">{{resource.url}}</span>
+           <span class="element-url">{{resource.elementUrl}}</span>
+           <span class="bg">{{resource.backgroundImage}}</span>
+         </FileResource></div>`,
+        { strictMode: true, scope: () => ({ FileImage, FileResource, file }) },
+      ),
+    );
+    assert
+      .dom('.probe img')
+      .hasAttribute(
+        'src',
+        'http://example.com/img/hero.png?rev=abc123%3A1700000000',
+      );
+    assert.dom('.url').hasText('http://example.com/img/hero.png');
+    assert
+      .dom('.element-url')
+      .hasText('http://example.com/img/hero.png?rev=abc123%3A1700000000');
+    assert
+      .dom('.bg')
+      .hasText(
+        'url("http://example.com/img/hero.png?rev=abc123%3A1700000000")',
+      );
   });
 
   test('FileResource yields resolved facts and emits no DOM of its own', async function (assert) {
@@ -242,8 +313,13 @@ module('Integration | FileDef resource primitives', function (hooks) {
   // When that fetch can't succeed — as here, where the host is unreachable —
   // playback has to degrade to the canonical source rather than disappear.
   test('FileAudio falls back to the canonical source when the blob fetch fails', async function (assert) {
+    // Port 1 is on the WHATWG bad-port list, so the browser refuses the
+    // request before it reaches the network stack: the blob load fails
+    // immediately, for the same reason on every machine. An unreachable host
+    // instead leaves the failure to DNS and a connection timeout, which is
+    // neither immediate nor the same twice.
     let file = new FileDef({
-      url: 'http://example.com/a/take.mp3',
+      url: 'http://127.0.0.1:1/a/take.mp3',
       name: 'take.mp3',
     });
     await render(
@@ -252,11 +328,22 @@ module('Integration | FileDef resource primitives', function (hooks) {
         scope: () => ({ FileAudio, file }),
       }),
     );
+    // The blob load runs outside the runloop — the modifier starts it without
+    // handing the promise to anything Ember settles on — so `render` returns
+    // while the fetch is still in flight. What the resource promises is that
+    // playback degrades to the canonical source, not that it does so within a
+    // render, so wait for that source rather than for any source: the blob URL
+    // this falls back from would also satisfy "has a src".
+    await waitUntil(
+      () =>
+        document.querySelector('audio')?.getAttribute('src') ===
+        'http://127.0.0.1:1/a/take.mp3',
+    );
     assert
       .dom('audio')
       .hasAttribute(
         'src',
-        'http://example.com/a/take.mp3',
+        'http://127.0.0.1:1/a/take.mp3',
         'the element is playable from the canonical URL',
       );
     assert.notOk(

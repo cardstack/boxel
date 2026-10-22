@@ -17,7 +17,7 @@ Expect most of the work to stay invisible. A review that traced six paths and fo
 Load these companion skills before writing a single comment; each applies in **both directions** — to the diff under review and to the review's own output:
 
 - **pr-comment-attribution** — every comment the review posts — inline comments, thread replies, and the review body — begins with the `[Claude Code 🤖]` prefix.
-- **pr-privacy** — scan the diff for user data the author is about to publish (fixtures, code comments, screenshots, PR text), and scan the review's own comments before posting: quoting a log line or DB row into a review comment publishes it.
+- **pr-privacy** — scan the diff for user data the author is about to publish (fixtures, code comments, captures, PR text), and scan the review's own comments before posting: quoting a log line or DB row into a review comment publishes it.
 - **evergreen-comments** — the review's own prose is evergreen (no ticket IDs, no PR numbers, no journey narration), and the diff's new or edited comments, docs, and skill files are checked for temporal wording, tracker references, and journey narration as a standing review dimension.
 
 If the diff touches an area with a dedicated domain skill (index-query-engine, search, gts-component-conventions, ember-best-practices, …), load it — those files carry the invariants the change must preserve, which is exactly what a review checks.
@@ -29,6 +29,7 @@ If the diff touches an area with a dedicated domain skill (index-query-engine, s
 3. **Bot findings are leads, not findings.** Verify reachability with a concrete path through the code before repeating one. Confirmed → fold it into the relevant comment along with the verification. Unverified → don't amplify it.
 4. **Check out the head branch** read-only in a worktree under `.claude/worktrees/`. Never commit to or push another author's branch. The diff shows what changed; the review is about how that lands in the code around it, which requires the whole tree.
 5. **Read beyond the diff.** For each non-trivial hunk, read the enclosing file, then the callers and callees of everything it touches. The highest-value findings usually live one call site away from the diff.
+6. **Read the ADRs that govern the diff.** Run `node scripts/adr-for.mts $(gh pr diff {n} --name-only)` from the head worktree; it lists the ADRs whose scope globs match the changed files. Read every `accepted` or `proposed` ADR that matches before judging the change. Each one records a decision the change must keep, or must explicitly supersede.
 
 ## Phase 2 — Investigate like the next owner
 
@@ -62,6 +63,20 @@ Work through the diff as if inheriting the code, not skimming it.
 
 - **Docs move with contracts.** If the diff changes documented behavior, the docs are part of the diff — and doc claims get verified like code claims (a key documented as "present on both row kinds" is checked against the code that stamps it).
 - **Migrations**: paired schema regeneration, `down()` fidelity against the exact names/opclasses the original migration created, and the concurrency pattern established in the migrations directory.
+- **Decisions hold, or are superseded on purpose.** Load the `adr` skill when any of the following applies:
+  - A change breaks an ADR from Phase 1. Severity follows the key word (ADR 001 §1.9):
+    - Breaking a MUST or MUST NOT of an `accepted` ADR, with no superseding ADR in the diff, is blocking. Ask the author to conform or to add the superseding ADR.
+    - Breaking a MUST or MUST NOT of a `proposed` ADR in new code is blocking in the same way, including in the PR that adds the ADR. Ask the author to conform or to edit the ADR's Decision (§1.6). Code listed under its Remediation section is a known gap and not a finding, unless the diff copies it into new code (§1.9).
+    - A diff that closes a listed gap and leaves its entry is blocking. An existing gap that isn't listed is non-blocking: ask for an entry (§1.9).
+    - Departing from a SHOULD with no stated reason is non-blocking. Ask for the reason.
+    - Cite the requirement by number ("ADR 004 §1.2") rather than restating it.
+  - The diff makes a new decision that meets ADR 001 §1.1 and has no ADR. Ask for a `proposed` one. This is non-blocking unless the decision is hard to reverse.
+  - An ADR is part of the diff. Check it against ADR 001:
+    - it is not self-marked `accepted` (§1.6);
+    - its `scope` globs match the code it governs, and the index row is added (§1.2);
+    - its structure and length follow §1.3 and §1.5;
+    - if it is `proposed`, it ends with a Remediation section that lists, by file, the gaps you can find in its scope, or says there are none (§1.3, §1.6). A missing section, a missing gap, or an entry whose file its `scope` doesn't match is a finding;
+    - in a retroactive ADR, every reason cites a source or sits under Open questions (§1.7). An uncited "why" is a finding even when it sounds right.
 
 ## Phase 3 — Classify every finding
 

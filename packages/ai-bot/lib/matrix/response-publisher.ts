@@ -2,10 +2,12 @@ import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/cha
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import {
-  READ_REALM_FILE_TOOL_NAME,
-  readFilesLabel,
-} from '../read-realm-file.ts';
+  botToolNamed,
+  hasRecoverableBotToolCall,
+  type BotToolTurn,
+} from '../bot-tools/index.ts';
 import {
+  maxOutputTokensDuringFileReadErrorMessage,
   maxOutputTokensErrorMessage,
   thinkingMessage,
 } from '../../constants.ts';
@@ -23,10 +25,23 @@ import ResponseEventData from './response-event-data.ts';
 import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient } from 'matrix-js-sdk';
 
+import { parseLenientJson } from '../lenient-json.ts';
+
 let log = logger('ai-bot');
 
+// With `argumentsText`, arguments that are still streaming also go out as the
+// raw text received so far, so a preview can show them growing. Only the
+// ephemeral stream preview asks for that; `arguments` stays empty until the
+// JSON is complete on every channel, so nothing can run a half-written call.
 export function toCommandRequest(
   toolCall: ChatCompletionMessageFunctionToolCall,
+  opts?: {
+    argumentsText?: boolean;
+    finished?: boolean;
+    // This turn's state for each offered bot tool, which decides whether a
+    // call waits for the user's approval.
+    botToolTurns?: ReadonlyMap<string, BotToolTurn>;
+  },
 ): Partial<ToolRequest> {
   let { id, function: f } = toolCall;
   let result = {} as Partial<ToolRequest>;
@@ -38,24 +53,50 @@ export function toCommandRequest(
   }
   if (f.arguments) {
     try {
-      result['arguments'] = JSON.parse(f.arguments);
+      result['arguments'] = parseLenientJson(
+        f.arguments,
+      ) as ToolRequest['arguments'];
     } catch (error) {
       // If the arguments are not valid JSON, we'll just return an empty object
       // This will happen during streaming, when the tool call is not yet complete
       // and the arguments are not yet available
       result['arguments'] = {};
+      if (opts?.argumentsText) {
+        result['argumentsText'] = f.arguments;
+      }
+      if (opts?.finished) {
+        // The turn is over, so these arguments will never complete. Say so,
+        // rather than letting the call fail on the empty arguments with a
+        // schema error that does not point at the cause.
+        let message = error instanceof Error ? error.message : String(error);
+        result['argumentsError'] = message;
+        // The arguments can be a whole script with the user's card source;
+        // log only its ends, which is where a cut or a bad escape shows.
+        let raw = f.arguments;
+        let excerpt =
+          raw.length <= 1000
+            ? raw
+            : `${raw.slice(0, 500)} … ${raw.slice(-500)}`;
+        log.warn(
+          `tool call ${id ?? '(no id)'} (${f.name ?? 'unnamed'}) finished with arguments that are not valid JSON: ${message}. Raw arguments (${raw.length} chars): ${excerpt}`,
+        );
+      }
     }
   }
-  // readRealmFile is a tool ai-bot fulfills itself: tag it so the host records
-  // it in the timeline but never runs it, and give it a human label the
-  // timeline indicator can show ("Read files: <names>") since the raw
-  // arguments carry no description of their own.
-  if (result.name === READ_REALM_FILE_TOOL_NAME) {
+  // A tool ai-bot runs itself is tagged so the host records it in the
+  // timeline but never runs it, labeled by the tool, and marked when it waits
+  // for the user's approval.
+  let botTool = botToolNamed(result.name);
+  if (botTool) {
+    let argumentsJson = f.arguments ?? '';
     result.executedBy = AI_BOT_EXECUTOR;
     result.arguments = {
       ...(result.arguments ?? {}),
-      description: readFilesLabel(result.arguments?.urls),
+      description: botTool.label(argumentsJson),
     };
+    if (opts?.botToolTurns?.get(botTool.name)?.needsApproval(argumentsJson)) {
+      result.approvalRequired = true;
+    }
   }
   return result;
 }
@@ -100,6 +141,10 @@ export default class MatrixResponsePublisher {
   get initialMessageSent() {
     return !!this.originalResponseEventId;
   }
+
+  // This turn's state for each offered bot tool; set before generation
+  // starts.
+  botToolTurns: ReadonlyMap<string, BotToolTurn> | undefined;
 
   constructor(
     client: MatrixClient,
@@ -200,13 +245,19 @@ export default class MatrixResponsePublisher {
       // is incomplete, so tell the user. The error rides the final part of the
       // answer (like tools and usage) rather than replacing it — the partial
       // content is still worth keeping. A canceled turn is cut off on purpose
-      // and already labeled as such.
+      // and already labeled as such. A cut inside a readRealmFile call whose
+      // urls were recovered gets its own wording: the bot reads those files
+      // and continues by itself, so the user has nothing to do.
       if (
         responseStateSnapshot.isStreamingFinished &&
         !responseStateSnapshot.isCanceled &&
         responseStateSnapshot.finishReason === 'length'
       ) {
-        extraData.errorMessage = maxOutputTokensErrorMessage;
+        extraData.errorMessage = hasRecoverableBotToolCall(
+          responseStateSnapshot.toolCalls,
+        )
+          ? maxOutputTokensDuringFileReadErrorMessage
+          : maxOutputTokensErrorMessage;
       }
       if (this.currentResponseEvent.needsContinuation) {
         extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
@@ -225,7 +276,13 @@ export default class MatrixResponsePublisher {
         responseStateSnapshot.toolCalls
           .filter(Boolean) // Elide empty tool calls, which can be produced by gpt-5 at the time of this writing
           .map((toolCall) =>
-            toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
+            toCommandRequest(
+              toolCall as ChatCompletionMessageFunctionToolCall,
+              {
+                finished: responseStateSnapshot.isStreamingFinished,
+                botToolTurns: this.botToolTurns,
+              },
+            ),
           ),
         contentAndReasoning.reasoning,
       );

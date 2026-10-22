@@ -465,7 +465,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       targetRealm: context.targetRealm,
       catalogRealm: deriveCatalogRealmUrl(context.targetRealm),
       darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
-      enableBoxelUiDiscovery: context.enableBoxelUiDiscovery === true,
+      enableCatalogReuse: context.enableCatalogReuse === true,
       skills,
     });
 
@@ -586,6 +586,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
         issue: context.issue,
         project: context.project,
         knowledge: context.knowledge,
+        enableCatalogReuse: context.enableCatalogReuse !== false,
       });
     }
     if (issueType === 'analysis') {

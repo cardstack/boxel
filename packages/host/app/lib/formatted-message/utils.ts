@@ -1,15 +1,8 @@
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 
-import { startsSearchMarker } from '@cardstack/runtime-common';
 import { unescapeHtml } from '@cardstack/runtime-common/helpers/html';
 
-import {
-  isCompleteSearchReplaceBlock,
-  parseSearchReplace,
-} from '../search-replace-block-parsing';
-
-import type * as _MonacoSDK from 'monaco-editor';
 export function extractCodeData(
   preElementString: string,
   roomId: string,
@@ -27,12 +20,8 @@ export function extractCodeData(
   if (!preElement) {
     tempContainer.remove();
     return {
-      fileUrl: null,
-      isNewFile: null,
       code: null,
       language: null,
-      searchReplaceBlock: null,
-      malformedPatch: false,
       roomId: '',
       eventId: '',
       codeBlockIndex: -1,
@@ -41,79 +30,13 @@ export function extractCodeData(
 
   let language = preElement.getAttribute('data-code-language') || 'text';
 
-  let content = preElement.innerHTML;
   // Decode HTML entities to handle special characters like < and >
-  content = unescapeHtml(content);
-  let parsedContent = parseSearchReplace(content);
+  let content = unescapeHtml(preElement.innerHTML);
   tempContainer.remove();
 
-  // Transform the incomplete search/replace block into a format for streaming,
-  // so that the user can see the search replace block in a human friendly format.
-  // // existing code ...
-  // SEARCH BLOCK
-  // // new code ...
-  // REPLACE BLOCK
-  let adjustedCodeForStreamingSearchAndReplaceBlock = '';
-  if (parsedContent.searchContent) {
-    // get count of leading spaces in the first line of searchContent
-    let firstLine = parsedContent.searchContent.split('\n')[0];
-    let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
-    let emptyString = ' '.repeat(leadingSpaces);
-    adjustedCodeForStreamingSearchAndReplaceBlock = `// existing code ... \n\n${parsedContent.searchContent.replace(
-      new RegExp(emptyString, 'g'),
-      '',
-    )}`;
-
-    if (parsedContent.replaceContent) {
-      adjustedCodeForStreamingSearchAndReplaceBlock += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
-        new RegExp(emptyString, 'g'),
-        '',
-      )}`;
-    }
-  }
-
-  let lines = content.split('\n');
-
-  let fileUrl: string | undefined = undefined;
-  let isBeginningOfSearchReplaceBlock =
-    lines.length > 1 && startsSearchMarker(lines[1]);
-
-  let isNewFile = false;
-
-  if (isBeginningOfSearchReplaceBlock) {
-    isNewFile = lines[0].endsWith('(new)');
-    fileUrl = lines[0].replace(' (new)', '');
-  }
-
-  let firstLineIsUrl = lines.length == 1 && lines[0].startsWith('http');
-
-  let codeToDisplay = '';
-  if (firstLineIsUrl && lines.length === 1) {
-    codeToDisplay = lines[0];
-  } else if (
-    firstLineIsUrl ||
-    (isBeginningOfSearchReplaceBlock && !parsedContent.searchContent)
-  ) {
-    codeToDisplay = parsedContent.replaceContent || '';
-  } else {
-    codeToDisplay =
-      adjustedCodeForStreamingSearchAndReplaceBlock ||
-      parsedContent.replaceContent ||
-      content;
-  }
-
-  let contentWithoutFirstLine = content.slice(lines[0].length).trimStart();
-  let searchReplaceBlock = isCompleteSearchReplaceBlock(contentWithoutFirstLine)
-    ? contentWithoutFirstLine
-    : null;
-
   return {
-    language: language ?? '',
-    code: codeToDisplay,
-    fileUrl: fileUrl ?? null,
-    isNewFile,
-    searchReplaceBlock,
-    malformedPatch: isBeginningOfSearchReplaceBlock && !searchReplaceBlock,
+    language,
+    code: content,
     roomId,
     eventId,
     codeBlockIndex,
@@ -150,15 +73,8 @@ export function wrapLastTextNodeInStreamingTextSpan(
 }
 
 export interface CodeData {
-  fileUrl: string | null;
-  isNewFile: boolean | null;
   code: string | null;
   language: string | null;
-  searchReplaceBlock?: string | null;
-  // The block opened a SEARCH marker but never resolved into a complete
-  // search/replace block. True while a patch is still streaming in, and true
-  // afterwards only when the markers came through malformed.
-  malformedPatch: boolean;
   roomId: string;
   eventId: string;
   codeBlockIndex: number;
@@ -238,42 +154,4 @@ export function parseHtmlContent(
 
   doc.remove();
   return result;
-}
-
-export interface CodeDiffStats {
-  linesAdded: number;
-  linesRemoved: number;
-}
-
-// Takes output from editor.getLineChanges() and returns the number of lines added and removed.
-// This is used to display the diff stats in the code block header.
-export function makeCodeDiffStats(
-  lineChanges: _MonacoSDK.editor.ILineChange[] | null | undefined,
-) {
-  if (!lineChanges || !Array.isArray(lineChanges)) {
-    return { linesAdded: 0, linesRemoved: 0 };
-  }
-
-  let linesAdded = 0;
-  let linesRemoved = 0;
-
-  lineChanges.forEach((change) => {
-    const originalStart = change.originalStartLineNumber;
-    const originalEnd = change.originalEndLineNumber;
-    const modifiedStart = change.modifiedStartLineNumber;
-    const modifiedEnd = change.modifiedEndLineNumber;
-
-    if (originalStart === 0) {
-      linesAdded += modifiedEnd - modifiedStart + 1;
-    } else if (modifiedStart === 0) {
-      linesRemoved += originalEnd - originalStart + 1;
-    } else if (originalEnd === 0) {
-      linesAdded += modifiedEnd - modifiedStart + 1;
-    } else {
-      linesRemoved += originalEnd - originalStart + 1;
-      linesAdded += modifiedEnd - modifiedStart + 1;
-    }
-  });
-
-  return { linesAdded, linesRemoved };
 }

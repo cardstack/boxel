@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 import {
+  credentialFields,
   clearLocalStorage,
   assertLoggedIn,
   gotoForgotPassword,
@@ -9,6 +10,10 @@ import {
   createSubscribedUser,
   updateSynapseUser,
 } from '../helpers/index.ts';
+import {
+  keyWriteTicketStatus,
+  signInSecureSession,
+} from '../helpers/secure-origin-pages.ts';
 
 test.describe('Forgot password', () => {
   let user: { username: string; password: string; credentials: any };
@@ -25,6 +30,14 @@ test.describe('Forgot password', () => {
 
   test('It can reset password', async ({ page }) => {
     let newPassword = 'mynewpassword!1';
+    // A secure session signed in with the old password, as whoever it leaked
+    // to would have.
+    let secureSession = await signInSecureSession(
+      page,
+      user.username,
+      user.password,
+    );
+    expect(await keyWriteTicketStatus(page, secureSession)).toBe(201);
     await gotoForgotPassword(page, appURL);
 
     await expect(
@@ -68,15 +81,17 @@ test.describe('Forgot password', () => {
       resetPasswordPage.locator('[data-test-reset-password-btn]'),
     ).toBeDisabled();
     await expect(
-      resetPasswordPage.locator('[data-test-password-field]'),
+      credentialFields(resetPasswordPage).locator('[data-test-password-field]'),
     ).toHaveAttribute('name', 'password');
     await expect(
-      resetPasswordPage.locator('[data-test-confirm-password-field]'),
+      credentialFields(resetPasswordPage).locator(
+        '[data-test-confirm-password-field]',
+      ),
     ).toHaveAttribute('name', 'confirm-password');
-    await resetPasswordPage
+    await credentialFields(resetPasswordPage)
       .locator('[data-test-password-field]')
       .fill(newPassword);
-    await resetPasswordPage
+    await credentialFields(resetPasswordPage)
       .locator('[data-test-confirm-password-field]')
       .fill(newPassword);
     await expect(
@@ -87,6 +102,10 @@ test.describe('Forgot password', () => {
     await expect(
       resetPasswordPage.locator('[data-test-reset-password-success]'),
     ).toContainText('Your password is now reset');
+    expect(
+      await keyWriteTicketStatus(page, secureSession),
+      'the reset ended the secure session signed in with the old password',
+    ).toBe(403);
     await resetPasswordPage.locator('[data-test-back-to-login-btn]').click();
 
     await login(resetPasswordPage, user.username, newPassword, {
@@ -167,41 +186,43 @@ test.describe('Forgot password', () => {
     await expect(
       resetPasswordPage.locator('[data-test-reset-password-btn]'),
     ).toBeDisabled();
-    await resetPasswordPage.locator('[data-test-password-field]').fill('short');
-    await resetPasswordPage
+    await credentialFields(resetPasswordPage)
+      .locator('[data-test-password-field]')
+      .fill('short');
+    await credentialFields(resetPasswordPage)
       .locator('[data-test-confirm-password-field]')
       .fill('short');
     await expect(
-      resetPasswordPage.locator(
+      credentialFields(resetPasswordPage).locator(
         '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
       'password field displays invalid validation state',
     ).toHaveCount(1);
     await expect(
-      resetPasswordPage.locator(
+      credentialFields(resetPasswordPage).locator(
         '[data-test-password-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toContainText('Password must be at least 8 characters long');
 
-    await resetPasswordPage
+    await credentialFields(resetPasswordPage)
       .locator('[data-test-password-field]')
       .fill('mypassword!1');
-    await resetPasswordPage
+    await credentialFields(resetPasswordPage)
       .locator('[data-test-confirm-password-field]')
       .fill('mypassword!');
     await resetPasswordPage.locator('[data-test-reset-password-btn]').click();
     await expect(
-      resetPasswordPage.locator(
+      credentialFields(resetPasswordPage).locator(
         '[data-test-confirm-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
       'confirm password displays invalid validation state',
     ).toHaveCount(1);
     await expect(
-      resetPasswordPage.locator(
+      credentialFields(resetPasswordPage).locator(
         '[data-test-confirm-password-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toContainText('Passwords do not match');
-    await resetPasswordPage
+    await credentialFields(resetPasswordPage)
       .locator('[data-test-confirm-password-field]')
       .fill('mypassword!1');
 

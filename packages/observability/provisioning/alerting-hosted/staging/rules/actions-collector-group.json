@@ -1,0 +1,100 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "actions-collector-group",
+      "folder": "defd2d156sav4d",
+      "interval": "60s",
+      "rules": [
+        {
+          "uid": "actions-collector-silent",
+          "title": "Actions Collector Silent in Loki",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service=\"actions-collector\", env=\"staging\"}[5m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [1],
+                      "type": "lt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "Alerting",
+          "execErrState": "Alerting",
+          "for": "5m",
+          "annotations": {
+            "summary": "Loki has received no lines from the GitHub Actions queue collector for at least 10 minutes, so the GitHub Actions Queue dashboard shows no data. The collector writes at least one line a minute. A stalled query returns no series rather than zero, so noDataState is Alerting. Compare with CloudWatch group ecs-boxel-actions-collector-staging: if lines still arrive there, the FireLens log router has stopped sending to Loki, and `aws ecs update-service --cluster staging --service boxel-actions-collector-staging --force-new-deployment` restores it. If CloudWatch is silent too, the collector itself has stopped."
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Discord alarms-staging-internal"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -22,6 +22,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=job_reservations \
   --exclude-table-and-children=job_progress \
   --exclude-table-and-children=job_scoped_search_cache \
+  --exclude-table-and-children=job_claim_holds \
   --exclude-table-and-children=subscription_cycles \
   --exclude-table-and-children=subscriptions \
   --exclude-table-and-children=ai_actions \
@@ -31,8 +32,16 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=stripe_events \
   --exclude-table-and-children=ai_bot_event_processing \
   --exclude-table-and-children=proxy_endpoints \
+  --exclude-table-and-children=user_keys \
+  --exclude-table-and-children=key_write_tickets \
+  --exclude-table-and-children=key_shares \
+  --exclude-table-and-children=key_share_notices \
+  --exclude-table-and-children=secure_sessions \
+  --exclude-table-and-children=proxy_endpoint_history \
+  --exclude-table-and-children=billable_call_reservations \
   --exclude-table-and-children=claimed_domains_for_sites \
   --exclude-table-and-children=session_rooms \
+  --exclude-table-and-children=host_shell_generation \
   --no-tablespaces \
   --no-table-access-method \
   --no-owner \

@@ -12,6 +12,7 @@ import {
   type LooseSingleCardDocument,
   type RealmInfo,
   type Loader,
+  type RealmIdentifier,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
@@ -185,7 +186,7 @@ export default class CardService extends Service {
         typeof requestInit.body === 'string'
           ? requestInit.body
           : JSON.stringify(requestInit.body, null, 2);
-      this.validateSizeLimit(urlString, jsonString, 'card');
+      this.validateCardWriteSize(urlString, jsonString);
     }
 
     let response = await this.network.authedFetch(url, requestInit);
@@ -233,18 +234,61 @@ export default class CardService extends Service {
     return;
   }
 
+  // `includedScope` is this method's to decide — a caller states its intent
+  // with `withLocalResourcesIncluded` and the scope follows — so the parameter
+  // does not accept one rather than silently discarding it in the spread below.
   async serializeCard(
     card: CardDef,
-    opts?: SerializeOpts & { withIncluded?: true },
+    opts?: Omit<SerializeOpts, 'includedScope'> & {
+      withLocalResourcesIncluded?: true;
+    },
   ): Promise<LooseSingleCardDocument> {
     let api = await this.getAPI();
+    if (opts?.includeComputeds) {
+      await this.settleQueryBackedFields(api, card);
+    }
+    // The scope pushes the realm's write-retention rule into the serializer
+    // itself: the realm keeps only the primary card plus the local (unsaved,
+    // `lid`-bearing) links it co-creates, and discards every already-saved
+    // link in `included` — so saved link targets are never serialized here at
+    // all, and a card linking into a large resident graph pays nothing for
+    // it on save.
     let serialized = api.serializeCard(card, {
       ...opts,
+      includedScope: opts?.withLocalResourcesIncluded ? 'local' : 'none',
     });
-    if (!opts?.withIncluded) {
+    if (!opts?.withLocalResourcesIncluded) {
+      // includedScope 'none' builds no included; the delete guards the
+      // contract against any custom serialize hook that pushes one anyway.
       delete serialized.included;
     }
     return serialized;
+  }
+
+  // Asking for computed fields is asking for a document that stands on its own,
+  // and a computed reducing over a query-backed relationship cannot answer that
+  // on demand: such a relationship holds nothing until its search answers, and
+  // being read is what sends that search. A render is spared this because it
+  // re-renders when the answer lands. A document is written once, so it would
+  // record a rollup of nothing — indistinguishable from a card that genuinely
+  // has none. Reading the fields first puts their searches in flight; waiting
+  // on the store that owns the card is what makes the values settled by the
+  // time they are written.
+  private async settleQueryBackedFields(
+    api: typeof CardAPI,
+    card: CardDef,
+  ): Promise<void> {
+    let fields = api.getFields(card, { includeComputeds: true });
+    let queryBacked = Object.entries(fields).filter(
+      ([, field]) => field?.queryDefinition,
+    );
+    if (queryBacked.length === 0) {
+      return;
+    }
+    for (let [fieldName] of queryBacked) {
+      (card as unknown as Record<string, unknown>)[fieldName];
+    }
+    await api.getStore(card).loaded();
   }
 
   async getSource(
@@ -264,13 +308,22 @@ export default class CardService extends Service {
     };
   }
 
+  // Identifiers stay in the form the caller holds them in until a request is
+  // made; a prefix-form identifier resolves through the virtual network here.
+  private toURL(id: RealmResourceIdentifier | RealmIdentifier | URL): URL {
+    return id instanceof URL ? id : this.network.virtualNetwork.toURL(id);
+  }
+
   async saveSource(
-    url: URL,
+    id: RealmResourceIdentifier | URL,
     content: string,
     type: SaveType,
     options?: SaveSourceOptions,
   ) {
     try {
+      // Resolved inside the try so an identifier that resolves nowhere is
+      // reported like any other failed write.
+      let url = this.toURL(id);
       let sizeType: 'card' | 'file' = url.href.endsWith('.json')
         ? 'card'
         : 'file';
@@ -316,7 +369,11 @@ export default class CardService extends Service {
     }
   }
 
-  async copySource(fromUrl: URL, toUrl: URL) {
+  async copySource(
+    from: RealmResourceIdentifier | URL,
+    to: RealmResourceIdentifier | URL,
+  ) {
+    let fromUrl = this.toURL(from);
     let response = await this.network.authedFetch(fromUrl, {
       method: 'GET',
       headers: {
@@ -334,10 +391,11 @@ export default class CardService extends Service {
     }
 
     const content = await response.text();
-    return await this.saveSource(toUrl, content, 'copy');
+    return await this.saveSource(to, content, 'copy');
   }
 
-  async deleteSource(url: URL) {
+  async deleteSource(id: RealmResourceIdentifier | URL) {
+    let url = this.toURL(id);
     let response = await this.network.authedFetch(url, {
       method: 'DELETE',
       headers: {
@@ -377,7 +435,12 @@ export default class CardService extends Service {
     await api.flushLogs();
   }
 
-  async executeAtomicOperations(operations: AtomicOperation[], realmURL: URL) {
+  async executeAtomicOperations(
+    operations: AtomicOperation[],
+    realm: RealmIdentifier | URL,
+    opts?: { clientRequestId?: string },
+  ) {
+    let realmURL = this.toURL(realm);
     for (let operation of operations) {
       if (operation.data?.type === 'source') {
         let content = operation.data.attributes?.content;
@@ -390,14 +453,66 @@ export default class CardService extends Service {
       }
     }
     let doc = createAtomicDocument(operations);
+    if (opts?.clientRequestId) {
+      this.clientRequestIds.add(opts.clientRequestId);
+    }
     let response = await this.network.authedFetch(`${realmURL.href}_atomic`, {
       method: 'POST',
       headers: {
         Accept: SupportedMimeType.JSONAPI,
+        ...(opts?.clientRequestId
+          ? { 'X-Boxel-Client-Request-Id': opts.clientRequestId }
+          : {}),
       },
       body: JSON.stringify(doc),
     });
     return response.json();
+  }
+
+  // The 512 KB ceiling is a per-card-*file* limit, but a card write POSTs a
+  // document whose `included[]` inlines every linked card the tab happens to
+  // have resident — and the realm discards every included member that has no
+  // `lid` (it keeps only the primary card plus any brand-new, unsaved links it
+  // is being asked to create in the same request; see the realm's card POST
+  // handler). Measuring the concatenated body would therefore fail a tiny card
+  // because of cards it merely links to, so validate each resource that will
+  // actually become a file on its own — mirroring the realm's own per-file
+  // `assertWriteSize` — rather than the whole request body.
+  //
+  // The client is deliberately the stricter of the two on one edge: the realm
+  // additionally skips (without error) any resource whose `meta.realmURL`
+  // names a different realm, so a foreign-realm `lid` side-load is measured
+  // here but silently dropped there. That shape is a request defect the realm
+  // currently swallows — a co-create the write will never perform — so
+  // refusing it client-side over size is acceptable, and matching the skip
+  // would mean reproducing a silent-drop behavior rather than a contract.
+  private validateCardWriteSize(url: string, body: string) {
+    let doc: LooseSingleCardDocument | undefined;
+    try {
+      doc = JSON.parse(body);
+    } catch {
+      // Not a JSON document we can split into resources; fall back to holding
+      // the whole body to the limit rather than letting an unmeasured write by.
+    }
+    if (!doc || typeof doc !== 'object' || !doc.data) {
+      this.validateSizeLimit(url, body, 'card');
+      return;
+    }
+    // The primary card is always written; an included member is written only
+    // when it carries a `lid` (an unsaved link created alongside this card).
+    let resources = [
+      doc.data,
+      ...(doc.included ?? []).filter(
+        (resource) => typeof (resource as { lid?: unknown }).lid === 'string',
+      ),
+    ];
+    for (let resource of resources) {
+      this.validateSizeLimit(
+        url,
+        JSON.stringify({ data: resource }, null, 2),
+        'card',
+      );
+    }
   }
 
   private validateSizeLimit(

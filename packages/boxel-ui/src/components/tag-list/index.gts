@@ -19,6 +19,7 @@ export interface TagListSignature {
   Element: HTMLElement;
 }
 
+/** @deprecated Use Pret UI FilterChips instead */
 export default class TagList extends Component<TagListSignature> {
   get isTagSelected() {
     return (itemId: string) =>

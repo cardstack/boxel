@@ -26,9 +26,11 @@ module.exports = {
     {
       files: ['tests/**/*-test.{js,ts}'],
       extends: ['plugin:qunit/recommended'],
+      plugins: ['@cardstack/boxel'],
       rules: {
         'qunit/require-expect': 'off',
         'qunit/no-conditional-assertions': 'off',
+        '@cardstack/boxel/realm-server-test-template-database': 'error',
       },
     },
   ],

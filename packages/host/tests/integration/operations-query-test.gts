@@ -1,0 +1,738 @@
+import { render, settled, waitUntil } from '@ember/test-helpers';
+
+import GlimmerComponent from '@glimmer/component';
+
+import { getService } from '@universal-ember/test-support';
+import { provide } from 'ember-provide-consume-context';
+
+import { module, test } from 'qunit';
+
+import {
+  CardSearchDefaultRealmContextName,
+  GetCardContextName,
+  isCardInstance,
+  type CardResource,
+  type Saved,
+  type getCard as GetCardType,
+  type Realm,
+  type SearchEntries,
+  type SearchEntryResults,
+  type NamedSearchWireQuery,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common/loader';
+
+import CardContextSearchResults from '@cardstack/host/components/search/card-context-search-results';
+import { getCardCollection } from '@cardstack/host/resources/card-collection';
+import { getCard } from '@cardstack/host/resources/card-resource';
+
+import {
+  setupCardLogs,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  testRealmURL,
+  testRRI,
+} from '../helpers';
+import { setupMockMatrix } from '../helpers/mock-matrix';
+import {
+  registerDefaultRoutes,
+  registerRealmServerRoute,
+} from '../helpers/realm-server-mock/routes';
+import { setupRenderingTest } from '../helpers/setup';
+
+import type { CardContext, CardDef } from '@cardstack/base/card-api';
+import type * as OperationsModule from '@cardstack/base/operations';
+
+// ============================================================================
+// A saved search: `operations(Report).openReports()`.
+//
+// A `query` operation is declared next to a card type's other operations and
+// carried out nowhere near them — the search engine plans and runs it, so a
+// call answers with the same live entries resource every other search on the
+// host answers with, and `.query()` answers the wire query behind it for a
+// card that renders the rows itself.
+//
+// The realm under test is the in-browser one and the searches here are real:
+// what a declared query matches is what the realm's index answers, and the
+// caller a query compares against is the session's own user.
+// ============================================================================
+
+const testRealm2URL = 'http://test-realm/test2/';
+const CALLER = '@testuser:localhost';
+
+// The declarations are realm source, compiled by the realm and lowered by the
+// in-browser indexer, so the queries under test are the ones an author writes.
+const REPORT_MODULE = `
+  import {
+    contains,
+    field,
+    CardDef,
+    Component,
+  } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import { operation, actor, params } from "@cardstack/base/operations";
+
+  export class Report extends CardDef {
+    @field headline = contains(StringField);
+    @field status = contains(StringField);
+    @field postedBy = contains(StringField);
+
+    @operation static openReports = {
+      base: 'query',
+      query: {
+        filter: { on: () => Report, eq: { status: 'open' } },
+        sort: [{ on: () => Report, by: 'headline', direction: 'asc' }],
+      },
+    };
+
+    @operation static myReports = {
+      base: 'query',
+      query: { filter: { on: () => Report, eq: { postedBy: actor() } } },
+    };
+
+    @operation static byStatus = {
+      base: 'query',
+      params: { status: StringField },
+      query: {
+        filter: { on: () => Report, eq: { status: params('status') } },
+      },
+    };
+
+    static isolated = class Isolated extends Component<typeof this> {
+      <template><h1 data-test-report><@fields.headline /></h1></template>
+    }
+    static embedded = class Embedded extends Component<typeof this> {
+      <template><h1 data-test-report><@fields.headline /></h1></template>
+    }
+    static fitted = class Fitted extends Component<typeof this> {
+      <template><h1 data-test-report><@fields.headline /></h1></template>
+    }
+  }
+`;
+
+// A type no report is, for a filter that could never match one.
+const MEMO_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+
+  export class Memo extends CardDef {
+    @field body = contains(StringField);
+  }
+`;
+
+// A saved search that withholds its rows' relationships, on a type whose own
+// `read` declares nothing and so carries its links whole.
+const STUDENT_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+
+  export class Student extends CardDef {
+    @field name = contains(StringField);
+  }
+`;
+
+const ROSTER_MODULE = `
+  import {
+    contains,
+    field,
+    linksToMany,
+    CardDef,
+  } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import { operation } from "@cardstack/base/operations";
+  import { Student } from "./student";
+
+  export class Roster extends CardDef {
+    @field title = contains(StringField);
+    @field students = linksToMany(Student);
+
+    @operation static listNone = {
+      base: 'query',
+      query: { filter: { type: () => Roster } },
+      links: 'none',
+    };
+    @operation static listNoneDataOnly = {
+      base: 'query',
+      query: { filter: { type: () => Roster } },
+      links: 'none',
+      html: { fitted: 'unshareable', embedded: 'unshareable' },
+    };
+  }
+`;
+
+const ALGEBRA = `${testRealmURL}rosters/algebra`;
+const ADA = `${testRealmURL}students/ada`;
+const BEN = `${testRealmURL}students/ben`;
+
+function studentFile(name: string) {
+  return {
+    data: {
+      type: 'card',
+      attributes: { name },
+      meta: { adoptsFrom: { module: testRRI('student'), name: 'Student' } },
+    },
+  };
+}
+
+function reportRef() {
+  return { module: testRRI('report'), name: 'Report' };
+}
+
+function reportFile(attributes: {
+  headline: string;
+  status: string;
+  postedBy?: string;
+}) {
+  return {
+    data: {
+      type: 'card',
+      attributes: { postedBy: CALLER, ...attributes },
+      meta: { adoptsFrom: reportRef() },
+    },
+  };
+}
+
+// The full card `@context` the host hands a card, so a template renders the
+// rows exactly as a card author would.
+class CardSearchContext extends GlimmerComponent<{
+  Blocks: { default: [CardContext] };
+}> {
+  @provide(GetCardContextName)
+  get getCardFn() {
+    return getCard;
+  }
+
+  @provide(CardSearchDefaultRealmContextName)
+  get cardSearchDefaultRealm(): () => string | undefined {
+    return () => testRealmURL;
+  }
+
+  get context(): CardContext {
+    let store = getService('store');
+    return {
+      getCard: getCard as unknown as GetCardType,
+      getCards: store.getSearchResource.bind(store),
+      getCardCollection,
+      store,
+      searchResultsComponent: CardContextSearchResults,
+    };
+  }
+
+  <template>{{yield this.context}}</template>
+}
+
+module('Integration | operations query', function (hooks) {
+  let loader: Loader;
+  let operations: (typeof OperationsModule)['operations'];
+  let Report: typeof CardDef;
+  let realm: Realm;
+
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+  setupCardLogs(hooks, async () =>
+    getService('loader-service').loader.import('@cardstack/base/card-api'),
+  );
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: CALLER,
+    activeRealms: [testRealmURL, testRealm2URL],
+    autostart: true,
+  });
+
+  hooks.beforeEach(async function () {
+    ({ realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: testRealmURL,
+      contents: {
+        'report.gts': REPORT_MODULE,
+        'memo.gts': MEMO_MODULE,
+        'reports/open-1.json': reportFile({
+          headline: 'Air quality',
+          status: 'open',
+        }),
+        'reports/open-2.json': reportFile({
+          headline: 'Boiler noise',
+          status: 'open',
+        }),
+        'reports/closed.json': reportFile({
+          headline: 'Closed one',
+          status: 'closed',
+        }),
+        'reports/someone-elses.json': reportFile({
+          headline: 'Not yours',
+          status: 'open',
+          postedBy: '@someone-else:localhost',
+        }),
+        'student.gts': STUDENT_MODULE,
+        'roster.gts': ROSTER_MODULE,
+        'students/ada.json': studentFile('Ada'),
+        'students/ben.json': studentFile('Ben'),
+        'rosters/algebra.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Algebra' },
+            relationships: {
+              'students.0': { links: { self: '../students/ada' } },
+              'students.1': { links: { self: '../students/ben' } },
+            },
+            meta: { adoptsFrom: { module: testRRI('roster'), name: 'Roster' } },
+          },
+        },
+      },
+    }));
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: testRealm2URL,
+      contents: {
+        'reports/elsewhere.json': reportFile({
+          headline: 'Another realm',
+          status: 'open',
+        }),
+      },
+    });
+    // Imported after the realms are up, and through the loader their instances
+    // were built by: `operations()` reads a def's declarations off the class,
+    // and a copy of the module from an earlier loader carries none of them.
+    loader = getService('loader-service').loader;
+    ({ operations } = await loader.import<typeof OperationsModule>(
+      '@cardstack/base/operations',
+    ));
+    ({ Report } = await loader.import<{ Report: typeof CardDef }>(
+      `${testRealmURL}report`,
+    ));
+    await getService('realm').login(testRealmURL);
+    // Looking the service up is what arms the bridge a card reads the session
+    // back through, the same as the app's own boot does.
+    getService('operations');
+  });
+
+  function saved(name: string) {
+    return (operations(Report as never) as any)[name];
+  }
+
+  async function settledEntries(search: SearchEntries): Promise<string[]> {
+    await waitUntil(() => !search.isLoading, { timeout: 10_000 });
+    return search.entries.map((entry) => entry.id).sort();
+  }
+
+  test('a declared query answers the cards its filter matches', async function (assert) {
+    let reports = saved('openReports')() as SearchEntries;
+
+    assert.deepEqual(
+      await settledEntries(reports),
+      [
+        `${testRealmURL}reports/open-1`,
+        `${testRealmURL}reports/open-2`,
+        `${testRealmURL}reports/someone-elses`,
+      ],
+      'every open report in the realm, and nothing the filter excludes',
+    );
+    assert.strictEqual(
+      reports.meta.page.total,
+      3,
+      'and the search reports what it found',
+    );
+  });
+
+  test('the caller is what a query compares against', async function (assert) {
+    let mine = saved('myReports')() as SearchEntries;
+
+    assert.deepEqual(
+      await settledEntries(mine),
+      [
+        `${testRealmURL}reports/closed`,
+        `${testRealmURL}reports/open-1`,
+        `${testRealmURL}reports/open-2`,
+      ],
+      'the actor marker resolved to the signed-in user, so the report posted by somebody else is not a match',
+    );
+    assert.deepEqual(
+      saved('myReports').query().filter,
+      { 'item.on': reportRef(), eq: { 'item.postedBy': CALLER } },
+      'which is what the query the search ran compares',
+    );
+  });
+
+  test('a payload fills the markers its declaration names', async function (assert) {
+    let closed = saved('byStatus')({ status: 'closed' }) as SearchEntries;
+
+    assert.deepEqual(
+      await settledEntries(closed),
+      [`${testRealmURL}reports/closed`],
+      'the payload member the declaration names is what the filter compares against',
+    );
+  });
+
+  test('the wire query a call resolves to is the one the search component takes', async function (assert) {
+    let query = saved('openReports').query() as NamedSearchWireQuery;
+
+    assert.deepEqual(
+      query,
+      {
+        filter: { 'item.on': reportRef(), eq: { 'item.status': 'open' } },
+        sort: [
+          {
+            by: 'item.headline',
+            'item.on': reportRef(),
+            direction: 'asc',
+          },
+        ],
+        realms: [testRealmURL],
+        operation: 'openReports',
+        on: reportRef(),
+      },
+      'the classes became the type they name, the card-rooted query became the entry-addressed one, and the request names the operation the realm resolves it from',
+    );
+
+    await render(
+      <template>
+        <CardSearchContext as |context|>
+          <context.searchResultsComponent @query={{query}} @mode='hover' />
+        </CardSearchContext>
+      </template>,
+    );
+    await waitUntil(() =>
+      Boolean(document.querySelector('[data-test-search-result]')),
+    );
+
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}reports/open-1"]`)
+      .exists('a card hands the resolved query over and renders the rows');
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}reports/closed"]`)
+      .doesNotExist('and the rows are the ones the saved search matched');
+  });
+
+  test('a search covers the realm holding its type until the call names others', async function (assert) {
+    let here = saved('openReports')() as SearchEntries;
+    assert.deepEqual(
+      await settledEntries(here),
+      [
+        `${testRealmURL}reports/open-1`,
+        `${testRealmURL}reports/open-2`,
+        `${testRealmURL}reports/someone-elses`,
+      ],
+      'a declaration and a call that both named no realm search the one the type is defined in',
+    );
+
+    let across = saved('openReports')(undefined, {
+      realms: [testRealmURL, testRealm2URL],
+    }) as SearchEntries;
+    assert.deepEqual(
+      await settledEntries(across),
+      [
+        `${testRealmURL}reports/open-1`,
+        `${testRealmURL}reports/open-2`,
+        `${testRealmURL}reports/someone-elses`,
+        `${testRealm2URL}reports/elsewhere`,
+      ],
+      'and a call that names realms fans the same saved search out across them',
+    );
+  });
+
+  test('the search re-runs as the realms it covers index', async function (assert) {
+    let reports = saved('openReports')() as SearchEntries;
+    assert.strictEqual((await settledEntries(reports)).length, 3);
+
+    await realm.write(
+      'reports/open-3.json',
+      JSON.stringify(
+        reportFile({ headline: 'Filed just now', status: 'open' }),
+      ),
+    );
+    await waitUntil(() => reports.entries.length === 4, { timeout: 10_000 });
+
+    assert.ok(
+      reports.entries.find(
+        (entry) => entry.id === `${testRealmURL}reports/open-3`,
+      ),
+      'the report written after the search started joined it when the realm indexed it — a query is as fresh as the index',
+    );
+  });
+
+  test('a search the realm resolves by name re-runs on writes its own filter cannot see', async function (assert) {
+    // What a host holding a stale definition sends: the named operation, and
+    // beside it a lowering of that operation which no longer matches what the
+    // realm resolves it to. The realm answers with its own resolution, so the
+    // carried filter cannot be what decides which writes the search skips.
+    let stale = {
+      ...(saved('openReports').query() as NamedSearchWireQuery),
+      filter: { 'item.on': { module: testRRI('memo'), name: 'Memo' } },
+    };
+    let reports = getService('operations').search.entries(() => stale);
+    assert.strictEqual(
+      (await settledEntries(reports)).length,
+      3,
+      'the realm answered with the open reports its declaration matches',
+    );
+
+    // The gate resolves its anchors off the first typed event, which takes the
+    // re-run it would have taken anyway, and judges the ones after it. A
+    // closed report moves nothing here, so it only primes the gate.
+    await realm.write(
+      'reports/closed-2.json',
+      JSON.stringify(
+        reportFile({ headline: 'Closed again', status: 'closed' }),
+      ),
+    );
+    await settled();
+    assert.strictEqual(
+      (await settledEntries(reports)).length,
+      3,
+      'a closed report is not one the realm’s declaration matches',
+    );
+
+    await realm.write(
+      'reports/open-4.json',
+      JSON.stringify(
+        reportFile({
+          headline: 'Filed under a stale definition',
+          status: 'open',
+        }),
+      ),
+    );
+    await waitUntil(() => reports.entries.length === 4, { timeout: 10_000 });
+
+    assert.ok(
+      reports.entries.find(
+        (entry) => entry.id === `${testRealmURL}reports/open-4`,
+      ),
+      'the report joined the search though the filter it carries could never match one',
+    );
+  });
+
+  test('a render its server pinned no actor on has no viewer, whatever sessions the tab holds', async function (assert) {
+    // A realm renders its own cards with no actor, and what it produces is
+    // served to everyone. The tab's sessions here are the signed-in user's
+    // ordinary ones, which is what a realm's own render holds once a sibling
+    // tab's capture has replaced its sessions in the storage they share. A
+    // saved search that resolved the caller from them would put that user's
+    // rows into shared HTML.
+    (globalThis as any).__boxelPrerenderApp = true;
+    try {
+      assert.strictEqual(
+        saved('myReports').query(),
+        undefined,
+        'the actor-scoped search answers no query, which the search surface reads as an idle search',
+      );
+      assert.ok(
+        saved('openReports').query(),
+        'and a saved search that does not read the caller is unaffected',
+      );
+    } finally {
+      delete (globalThis as any).__boxelPrerenderApp;
+    }
+
+    assert.ok(
+      saved('myReports').query(),
+      'outside a render the same search resolves against the signed-in user',
+    );
+  });
+
+  test('a render a user asks for has that user as its viewer', async function (assert) {
+    // A capture or a command renders as the user who asked for it, and its
+    // render server pins that user on the tab.
+    (globalThis as any).__boxelPrerenderApp = true;
+    (globalThis as any).__boxelRenderActor = '@requester:localhost';
+    try {
+      assert.deepEqual(
+        saved('myReports').query()?.filter,
+        {
+          'item.on': reportRef(),
+          eq: { 'item.postedBy': '@requester:localhost' },
+        },
+        'the actor-scoped search compares against the user the server pinned',
+      );
+    } finally {
+      delete (globalThis as any).__boxelRenderActor;
+      delete (globalThis as any).__boxelPrerenderApp;
+    }
+  });
+
+  module('a query declaring `none`', function () {
+    // Each row's card is served with its relationships withheld, which is
+    // silent about what the card links to rather than saying it links to
+    // nothing. The host keeps full search rows as live instances, so a row
+    // adopted as one would show every link field empty, in every view and
+    // editor, although the card's own `read` carries its links.
+    type RosterCard = CardDef & { students: CardDef[] };
+
+    async function listNone(): Promise<
+      NamedSearchWireQuery & { fields: { entry: string[] } }
+    > {
+      let { Roster } = await loader.import<{ Roster: typeof CardDef }>(
+        `${testRealmURL}roster`,
+      );
+      return {
+        ...((
+          operations(Roster as never) as any
+        ).listNone.query() as NamedSearchWireQuery),
+        fields: { entry: ['html', 'item'] },
+      };
+    }
+
+    // The card a served row carries, as the realm sent it.
+    function servedItem(
+      doc: SearchEntryResults,
+      id: string,
+    ): CardResource<Saved> | undefined {
+      return doc.included?.find(
+        (resource) => resource.type === 'card' && resource.id === id,
+      ) as CardResource<Saved> | undefined;
+    }
+
+    test('a row rendered through the search component leaves its card to load through its own read', async function (assert) {
+      let store = getService('store');
+      let query = await listNone();
+      let item = servedItem(
+        await store.searchEntries(query, [testRealmURL]),
+        ALGEBRA,
+      );
+      assert.strictEqual(
+        item?.relationships,
+        undefined,
+        'the row arrives with its card’s relationships withheld',
+      );
+      assert.true(
+        item?.meta?.relationshipsWithheld,
+        'and says they were withheld',
+      );
+      // The store rule itself, awaited: the search component's own inflate
+      // runs without anything waiting on it.
+      await store.inflateSearchEntryItem(item!);
+      assert.notOk(
+        isCardInstance(store.peek(ALGEBRA)),
+        'the store never deposits the row as the card’s instance',
+      );
+
+      await render(
+        <template>
+          <CardSearchContext as |context|>
+            <context.searchResultsComponent @query={{query}} />
+          </CardSearchContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(
+          document.querySelector(`[data-test-search-result="${ALGEBRA}"]`),
+        ),
+      );
+      await settled();
+
+      let roster = await store.get(ALGEBRA);
+      assert.true(
+        isCardInstance(roster),
+        'opened after its row rendered, the card loads',
+      );
+      assert.deepEqual(
+        (roster as RosterCard).students.map((student) => student.id),
+        [ADA, BEN],
+        'and carries the links its own read declares',
+      );
+    });
+
+    test('a row served with neither its markup nor its links renders the card loaded through its own read', async function (assert) {
+      // A `none` row usually renders from its prerendered HTML. One the query
+      // also serves data-only for the format asked for arrives with neither
+      // markup nor an item the host may adopt as the card's instance, so the
+      // row falls back to the card's own read.
+      let store = getService('store');
+      let { Roster } = await loader.import<{ Roster: typeof CardDef }>(
+        `${testRealmURL}roster`,
+      );
+      let query = (
+        operations(Roster as never) as any
+      ).listNoneDataOnly.query() as NamedSearchWireQuery;
+      let served = await store.searchEntries(query, [testRealmURL]);
+      let entry = served.data.find((row) => row.id === ALGEBRA);
+      assert.strictEqual(
+        (entry?.relationships?.html?.data ?? []).length,
+        0,
+        'the row arrives with no markup',
+      );
+      assert.true(
+        servedItem(served, ALGEBRA)?.meta?.relationshipsWithheld,
+        'and with its card’s relationships withheld',
+      );
+      assert.notOk(
+        isCardInstance(store.peek(ALGEBRA)),
+        'nothing has loaded the card yet',
+      );
+
+      await render(
+        <template>
+          <CardSearchContext as |context|>
+            <context.searchResultsComponent @query={{query}} />
+          </CardSearchContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(
+          document.querySelector(`[data-test-search-result="${ALGEBRA}"]`),
+        ),
+      );
+      await waitUntil(() => isCardInstance(store.peek(ALGEBRA)));
+      await settled();
+
+      assert.deepEqual(
+        (store.peek(ALGEBRA) as RosterCard).students.map(
+          (student) => student.id,
+        ),
+        [ADA, BEN],
+        'rendering the row loaded the card through its own read, with the links that read declares',
+      );
+    });
+
+    test('a row answered to the store’s search is loaded through its card’s own read', async function (assert) {
+      // The store's instance search takes an ad-hoc query, which declares no
+      // strategy of its own, so the rows a `none` query answers with are
+      // replayed to it as the realm served them.
+      let store = getService('store');
+      let served = await store.searchEntries(
+        { ...(await listNone()), fields: { entry: ['item'] } },
+        [testRealmURL],
+      );
+      assert.true(
+        servedItem(served, ALGEBRA)?.meta?.relationshipsWithheld,
+        'the replayed row is one the realm served with its relationships withheld',
+      );
+      registerRealmServerRoute({
+        path: '/_federated-search',
+        handler: async () =>
+          new Response(JSON.stringify(served), {
+            status: 200,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          }),
+      });
+      try {
+        let results = (await store.search(
+          { filter: { type: { module: testRRI('roster'), name: 'Roster' } } },
+          [testRealmURL],
+        )) as RosterCard[];
+        assert.deepEqual(
+          results.map((result) => result.id),
+          [ALGEBRA],
+          'the search answers with the card',
+        );
+        assert.deepEqual(
+          results[0].students.map((student) => student.id),
+          [ADA, BEN],
+          'and the instance it answers with carries the links its own read declares',
+        );
+      } finally {
+        registerDefaultRoutes();
+      }
+    });
+  });
+
+  test('a saved search is invoked on the class that declares it', async function (assert) {
+    let card = await getService('store').get(`${testRealmURL}reports/open-1`);
+    await settled();
+
+    assert.strictEqual(
+      (operations(card as never) as any).openReports,
+      undefined,
+      'a saved search reads a collection of a type, so one card carries no member for it',
+    );
+  });
+});

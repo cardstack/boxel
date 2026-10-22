@@ -6,24 +6,22 @@ import { join, resolve, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
 import fsExtra from 'fs-extra';
-const { copySync, ensureDirSync, readFileSync, readJSONSync } = fsExtra;
-import { utimesSync } from 'fs';
+const { readFileSync, readJSONSync } = fsExtra;
+import { utimesSync, writeFileSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
   baseRealmRRI,
   baseRRI,
   CachingDefinitionLookup,
+  scopedCSSInjectorSource,
   SupportedMimeType,
   type LooseSingleCardDocument,
-  type QueuePublisher,
-  type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
   acquireBaseRealmTemplate,
   withIndexProgressHeartbeat,
   setupPermissionedRealmCached,
-  runTestRealmServer,
   setupDB,
   setupMatrixRoom,
   createRealm,
@@ -33,7 +31,6 @@ import {
   realmSecretSeed,
   grafanaSecret,
   createVirtualNetwork,
-  matrixURL,
   closeServer,
   getIndexHTML,
   makeTestReconciler,
@@ -65,8 +62,6 @@ import type {
   UpdateRealmEventContent,
 } from '@cardstack/base/matrix-event';
 
-const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
-
 module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
@@ -79,12 +74,6 @@ module(basename(import.meta.filename), function () {
     let serverRequest: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
-    let testRealmHttpServer2: Server;
-    let testRealm2: Realm;
-    let dbAdapter2: PgAdapter;
-    let publisher: QueuePublisher;
-    let runner: QueueRunner;
-    let testRealmDir: string;
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -127,45 +116,6 @@ module(basename(import.meta.filename), function () {
     });
 
     let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
-    let virtualNetwork = createVirtualNetwork();
-
-    async function startRealmServer(
-      dbAdapter: PgAdapter,
-      publisher: QueuePublisher,
-      runner: QueueRunner,
-    ) {
-      if (testRealm2) {
-        virtualNetwork.unmount(testRealm2.handle);
-      }
-      ({ testRealm: testRealm2, testRealmHttpServer: testRealmHttpServer2 } =
-        await runTestRealmServer({
-          virtualNetwork,
-          testRealmDir,
-          realmsRootPath: join(dir.name, 'realm_server_2'),
-          realmURL: testRealm2URL,
-          dbAdapter,
-          publisher,
-          runner,
-          matrixURL,
-        }));
-
-      await testRealm.logInToMatrix();
-    }
-
-    setupDB(hooks, {
-      beforeEach: async (_dbAdapter, _publisher, _runner) => {
-        dbAdapter2 = _dbAdapter;
-        publisher = _publisher;
-        runner = _runner;
-        testRealmDir = join(dir.name, 'realm_server_2', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(fixtureDir('simple'), testRealmDir);
-        await startRealmServer(dbAdapter2, publisher, runner);
-      },
-      afterEach: async () => {
-        await closeServer(testRealmHttpServer2);
-      },
-    });
 
     test('can set response ETag and Cache-Control headers for module request', async function (assert) {
       let response = await request
@@ -216,6 +166,153 @@ module(basename(import.meta.filename), function () {
         'cache control header is set correctly',
       );
       assert.ok(response.headers['etag'], 'ETag header is present');
+    });
+
+    // A card's module graph pulls one hashed scoped-CSS request per styled
+    // module — hundreds on a single page load — so this response's headers
+    // decide whether that population costs a page load nothing or one round
+    // trip per URL. Both assertions below are about staying out of the
+    // network: the URL carries the content hash, so the bytes can never go
+    // stale under it, and neither a revalidation nor a cache-variant miss
+    // has anything to discover.
+    test('hashed scoped-CSS is served with headers that let a browser answer it from cache', async function (assert) {
+      let interned = (await dbAdapter.execute(
+        `SELECT hash, css FROM scoped_css WHERE realm_url = $1 LIMIT 1`,
+        { bind: [testRealmURL.href] },
+      )) as { hash: string; css: string }[];
+      assert.strictEqual(
+        interned.length,
+        1,
+        'precondition: indexing interned scoped CSS for the fixture realm',
+      );
+      let { hash, css } = interned[0];
+
+      let response = await request
+        .get(`/_scoped-css/person.gts.md5-${hash}.glimmer-scoped.css`)
+        .set('Accept', SupportedMimeType.All)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.headers['content-type'],
+        'text/javascript',
+        'served as the JS module `loader.import` evaluates',
+      );
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'public, max-age=31536000, immutable',
+        'cache control header is set correctly',
+      );
+      assert.strictEqual(
+        response.text,
+        scopedCSSInjectorSource(
+          `${testRealmURL.pathname}_scoped-css/person.gts.md5-${hash}.glimmer-scoped.css`,
+          css,
+        ),
+        'the body is the injector for the interned stylesheet',
+      );
+
+      // No validator: `cachedFetch` conditionalizes any request it holds an
+      // ETag for, and a caller-supplied `If-None-Match` makes the browser
+      // skip its own cache and ask the server. An ETag here would buy a 304
+      // where otherwise there is no request at all.
+      assert.strictEqual(
+        response.headers['etag'],
+        undefined,
+        'no ETag, so nothing conditionalizes the request',
+      );
+      // The body is keyed by the URL's content hash alone, so the response
+      // must not claim to vary on `Accept`: a browser cache stores one
+      // variant per URL, and a `Vary` the route does not honor lets two
+      // `Accept` spellings evict each other's copy. What reaches the wire is
+      // `@koa/cors`'s own `Vary: Origin` — pinned exactly, so this asserts
+      // what the response carries rather than only what it omits. That one is
+      // no more honored than the header it replaces (the server configures
+      // `origin: '*'` with no credentials, so `Access-Control-Allow-Origin`
+      // is the literal `*` for every caller); it is harmless because its
+      // value is the same for every request, so it names one variant rather
+      // than splitting the population into several.
+      assert.strictEqual(
+        response.headers['vary'],
+        'Origin',
+        'does not vary on Accept, so no Accept spelling can evict the stored entry',
+      );
+    });
+
+    // Declining to vary on `Accept` asserts a contract, not just the absence
+    // of a header: every `Accept` gets this same response. A browser stores
+    // one variant per URL and holds it for the full year, so a spelling that
+    // routed somewhere else would be cached under this URL and served in
+    // place of the stylesheet — or the reverse. `text/html` is the spelling
+    // that can: it is what a tab navigation sends, and the index handler
+    // answers those with the app shell for realm paths it does not exempt.
+    test('every Accept spelling gets the same hashed scoped-CSS response', async function (assert) {
+      let interned = (await dbAdapter.execute(
+        `SELECT hash FROM scoped_css WHERE realm_url = $1 LIMIT 1`,
+        { bind: [testRealmURL.href] },
+      )) as { hash: string }[];
+      assert.strictEqual(
+        interned.length,
+        1,
+        'precondition: indexing interned scoped CSS for the fixture realm',
+      );
+      let path = `/_scoped-css/person.gts.md5-${interned[0].hash}.glimmer-scoped.css`;
+      let get = (accept: string) =>
+        request
+          .get(path)
+          .set('Accept', accept)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+          );
+
+      let baseline = await get(SupportedMimeType.All);
+      for (let accept of ['text/html', 'text/javascript', '*/*']) {
+        let response = await get(accept);
+        assert.strictEqual(
+          response.status,
+          baseline.status,
+          `same status for Accept: ${accept}`,
+        );
+        assert.strictEqual(
+          response.headers['content-type'],
+          baseline.headers['content-type'],
+          `same content type for Accept: ${accept}`,
+        );
+        assert.strictEqual(
+          response.headers['cache-control'],
+          baseline.headers['cache-control'],
+          `same cache-control for Accept: ${accept}`,
+        );
+        assert.strictEqual(
+          response.text,
+          baseline.text,
+          `same body for Accept: ${accept}`,
+        );
+      }
+    });
+
+    // Positive control for the two absence assertions above: the same realm,
+    // reached through a route that really does content-negotiate, still
+    // declares `Vary: Accept`. Without this, dropping the header everywhere
+    // would leave that test green.
+    test('a content-negotiating route still declares Vary: Accept', async function (assert) {
+      let response = await request
+        .get(`/person`)
+        .set('Accept', SupportedMimeType.All)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.headers['vary'],
+        'Accept',
+        'module serving negotiates on Accept and says so',
+      );
     });
 
     test('serves file meta with dedicated accept header', async function (assert) {
@@ -586,6 +683,101 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // A `noCache` read streams the file rather than hashing it, and it is how a
+    // prerender tab loads a linked card for an index render, so a same-second
+    // rewrite it could not see would be baked into the dependent's row.
+    test('a noCache source read distinguishes content even when on-disk lastModified collides', async function (assert) {
+      let cardPath = 'etag-collision-no-cache.json';
+      // Equal lengths, so the size alone cannot tell the two apart.
+      let initial = JSON.stringify({ value: 'initial' });
+      let updated = JSON.stringify({ value: 'changed' });
+      let collidingMtime = new Date('2026-01-01T00:00:00Z');
+      let absolutePath = join(testRealmPath, cardPath);
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(cardPath, initial);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let firstResponse = await request
+        .get(`/${cardPath}?noCache=true`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader);
+      assert.strictEqual(firstResponse.status, 200, 'first request succeeds');
+      assert.strictEqual(
+        firstResponse.text.trim(),
+        initial,
+        'first request serves the initial body',
+      );
+      let firstEtag = firstResponse.headers['etag'];
+      assert.ok(firstEtag, 'first response carries an ETag');
+
+      await testRealm.write(cardPath, updated);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let conditionalResponse = await request
+        .get(`/${cardPath}?noCache=true`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader)
+        .set('If-None-Match', firstEtag);
+      assert.strictEqual(
+        conditionalResponse.status,
+        200,
+        'conditional GET with the prior ETag must not return 304',
+      );
+      assert.strictEqual(
+        conditionalResponse.text.trim(),
+        updated,
+        'conditional GET serves the updated body, not the cached prior body',
+      );
+      assert.notStrictEqual(
+        conditionalResponse.headers['etag'],
+        firstEtag,
+        'distinct content yields distinct ETags despite identical lastModified',
+      );
+    });
+
+    // An out-of-band rewrite goes around the realm, so the hash it recorded for
+    // the previous bytes stays behind, and at the same length only the file's
+    // content can tell the two apart.
+    test('a noCache source read distinguishes a same-length rewrite made out of band within the same second', async function (assert) {
+      let cardPath = 'etag-collision-out-of-band.json';
+      let initial = JSON.stringify({ value: 'initial' });
+      let updated = JSON.stringify({ value: 'changed' });
+      let collidingMtime = new Date('2026-01-01T00:00:00Z');
+      let absolutePath = join(testRealmPath, cardPath);
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(cardPath, initial);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let firstResponse = await request
+        .get(`/${cardPath}?noCache=true`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader);
+      assert.strictEqual(firstResponse.status, 200, 'first request succeeds');
+      let firstEtag = firstResponse.headers['etag'];
+      assert.ok(firstEtag, 'first response carries an ETag');
+
+      writeFileSync(absolutePath, updated);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let conditionalResponse = await request
+        .get(`/${cardPath}?noCache=true`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader)
+        .set('If-None-Match', firstEtag);
+      assert.strictEqual(
+        conditionalResponse.status,
+        200,
+        'conditional GET with the prior ETag must not return 304',
+      );
+      assert.strictEqual(
+        conditionalResponse.text.trim(),
+        updated,
+        'conditional GET serves the rewritten body',
+      );
+    });
+
     test('returns 304 for module requests with matching ETag', async function (assert) {
       let modulePath = 'module-cache-not-modified.js';
       let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
@@ -775,6 +967,19 @@ module(basename(import.meta.filename), function () {
           `incremental event carries a positive generation: ${content.generation}`,
         );
         delete content.generation;
+        // The card is brand new, so the index held no row for it before this
+        // pass: its adoption chain can only have come from what the pass
+        // wrote. A live query anchored on Person — or on the CardDef its
+        // chain passes through — has to hear about it; one anchored on the
+        // markdown file in this realm does not.
+        assertInvalidatedTypes(assert, content, {
+          includes: [
+            `${testRealmHref}person/Person`,
+            `${baseRealmRRI}card-api/CardDef`,
+          ],
+          excludes: [`${baseRealmRRI}markdown-file-def/MarkdownDef`],
+        });
+        assertVersions(assert, content, [newCardId]);
         assert.deepEqual(content, {
           eventName: 'index',
           indexType: 'incremental',
@@ -794,6 +999,7 @@ module(basename(import.meta.filename), function () {
         delete json.data.meta.lastModified;
         delete json.data.meta.resourceCreatedAt;
         delete json.data.meta.generation;
+        delete json.data.meta.version;
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
           testRealmHref,
@@ -877,6 +1083,8 @@ module(basename(import.meta.filename), function () {
           assert,
           getMessagesSince,
           realm: testRealmHref,
+          clientRequestId: null,
+          versions: 'written',
         },
       );
 
@@ -942,6 +1150,30 @@ module(basename(import.meta.filename), function () {
           `incremental event carries a positive generation: ${content.generation}`,
         );
         delete content.generation;
+        // The pass wrote no row for a deleted card, so this chain can only
+        // have come from the row the index held before it — which is what a
+        // query anchored on Person needs in order to drop the member.
+        assertInvalidatedTypes(assert, content, {
+          includes: [
+            `${testRealmHref}person/Person`,
+            `${baseRealmRRI}card-api/CardDef`,
+          ],
+          excludes: [`${baseRealmRRI}markdown-file-def/MarkdownDef`],
+        });
+        // A removal does not read `X-Boxel-Client-Request-Id`, so there is no
+        // id for a client to recognize its own delete by — the field is
+        // asserted as carrying none rather than compared, so it stays a true
+        // statement about that path whichever way it is spelled.
+        let carriesNoClientRequestId =
+          content.clientRequestId === null ||
+          content.clientRequestId === undefined;
+        assert.true(
+          carriesNoClientRequestId,
+          `the event carries no client request id (got ${JSON.stringify(
+            content.clientRequestId,
+          )})`,
+        );
+        delete content.clientRequestId;
         assert.deepEqual(content, {
           eventName: 'index',
           indexType: 'incremental',
@@ -1754,6 +1986,60 @@ function findRealmEvent(
       m.content.eventName === eventName &&
       (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
   ) as RealmEvent | undefined;
+}
+
+// Check the adoption chains an incremental index event carries, then strip the
+// field so the caller's `deepEqual` over the rest of the content stays exact.
+function assertInvalidatedTypes(
+  assert: Assert,
+  content: Record<string, any>,
+  expected: { includes: string[]; excludes: string[] },
+) {
+  let invalidatedTypes = content.invalidatedTypes as string[] | undefined;
+  assert.ok(
+    Array.isArray(invalidatedTypes),
+    'the incremental event carries the types its pass touched',
+  );
+  for (let type of expected.includes) {
+    assert.true(
+      (invalidatedTypes ?? []).includes(type),
+      `${type} is named: ${(invalidatedTypes ?? []).join(', ')}`,
+    );
+  }
+  for (let type of expected.excludes) {
+    assert.false(
+      (invalidatedTypes ?? []).includes(type),
+      `${type} is not named: ${(invalidatedTypes ?? []).join(', ')}`,
+    );
+  }
+  delete content.invalidatedTypes;
+}
+
+// The versions an index event reports, checked over its key set and removed so
+// the caller's structural comparison can be exact. The hash itself is a
+// function of the bytes the fixture stored, so only a caller that read them can
+// state it — which `card-endpoints-test.ts` does, against the file on disk.
+function assertVersions(
+  assert: Assert,
+  content: Record<string, any>,
+  urls: string[],
+) {
+  let versions = content.versions as Record<string, string> | undefined;
+  assert.deepEqual(
+    Object.keys(versions ?? {}).sort(),
+    [...urls].sort(),
+    'the event names a version for exactly the urls this request wrote',
+  );
+  for (let url of urls) {
+    let reported = versions?.[url];
+    assert.true(
+      typeof reported === 'string' && reported.length > 0,
+      `the version for ${url} is a non-empty string: ${JSON.stringify(
+        reported,
+      )}`,
+    );
+  }
+  delete content.versions;
 }
 
 function realmEventIsIndex(

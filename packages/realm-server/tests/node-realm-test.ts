@@ -11,7 +11,10 @@ import {
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 import { NodeAdapter } from '../node-realm.ts';
+import { RealmEventDispatcher } from '../realm-event-dispatcher.ts';
+import { MatrixRequestError } from '@cardstack/runtime-common/matrix-client';
 import { insertUser, setupDB } from './helpers/index.ts';
 
 module(basename(import.meta.filename), function (hooks) {
@@ -55,6 +58,8 @@ module(basename(import.meta.filename), function (hooks) {
     let matrixClient = {
       login: async () => undefined,
       getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn-1',
       sendEvent: async () => {
         sendEventCalls++;
         throw new Error(
@@ -63,7 +68,7 @@ module(basename(import.meta.filename), function (hooks) {
       },
     } as unknown as MatrixClient;
 
-    let adapter = new NodeAdapter('/tmp');
+    let adapter = new NodeAdapter('/tmp', false, new RealmEventDispatcher());
     await adapter.broadcastRealmEvent(
       makeEvent(),
       realmURL.href,
@@ -89,6 +94,8 @@ module(basename(import.meta.filename), function (hooks) {
     let matrixClient = {
       login: async () => undefined,
       getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn-1',
       sendEvent: async () => {
         throw new Error(
           `Unable to send room event 'app.boxel.realm-event' to room ${staleRoomId}: status 500 - {"errcode":"M_UNKNOWN","error":"boom"}`,
@@ -96,7 +103,7 @@ module(basename(import.meta.filename), function (hooks) {
       },
     } as unknown as MatrixClient;
 
-    let adapter = new NodeAdapter('/tmp');
+    let adapter = new NodeAdapter('/tmp', false, new RealmEventDispatcher());
     await adapter.broadcastRealmEvent(
       makeEvent(),
       realmURL.href,
@@ -127,6 +134,8 @@ module(basename(import.meta.filename), function (hooks) {
     let matrixClient = {
       login: async () => undefined,
       getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn-1',
       sendEvent: async () => {
         failCleanup = true;
         throw new Error(
@@ -135,7 +144,7 @@ module(basename(import.meta.filename), function (hooks) {
       },
     } as unknown as MatrixClient;
 
-    let adapter = new NodeAdapter('/tmp');
+    let adapter = new NodeAdapter('/tmp', false, new RealmEventDispatcher());
 
     await adapter.broadcastRealmEvent(
       makeEvent(),
@@ -145,6 +154,96 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     assert.true(true, 'broadcast resolves even if stale room cleanup fails');
+  });
+
+  test('retries a send synapse answers as overloaded, with the same transaction id', async function (assert) {
+    await insertSessionForAlice();
+
+    let txnIds: string[] = [];
+    let matrixClient = {
+      login: async () => undefined,
+      getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => `txn-${txnIds.length}`,
+      sendEvent: async (
+        _roomId: string,
+        _type: string,
+        _content: unknown,
+        txnId: string,
+      ) => {
+        txnIds.push(txnId);
+        if (txnIds.length === 1) {
+          throw new MatrixRequestError(
+            `Unable to send room event 'app.boxel.realm-event' to room ${staleRoomId}: status 504 - non-JSON body (122 bytes)`,
+            504,
+          );
+        }
+        return '$event';
+      },
+    } as unknown as MatrixClient;
+
+    let adapter = new NodeAdapter(
+      '/tmp',
+      false,
+      new RealmEventDispatcher({ initialBackoffMs: 1 }),
+    );
+    await adapter.broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.deepEqual(
+      txnIds,
+      ['txn-0', 'txn-0'],
+      'the retry reuses the transaction id of the first attempt',
+    );
+    assert.strictEqual(
+      await fetchSessionRoom(dbAdapter, '@alice:localhost'),
+      staleRoomId,
+      'an overloaded homeserver does not clear the session room',
+    );
+  });
+
+  test('logs in again after a login synapse answers as overloaded, rather than skip the event', async function (assert) {
+    await insertSessionForAlice();
+
+    let logins = 0;
+    let sent: string[] = [];
+    let matrixClient = {
+      login: async () => {
+        logins++;
+        if (logins === 1) {
+          throw new MatrixRequestError(
+            `Unable to login to matrix: status 502 - non-JSON body (150 bytes)`,
+            502,
+          );
+        }
+      },
+      getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn-1',
+      sendEvent: async (roomId: string) => {
+        sent.push(roomId);
+        return '$event';
+      },
+    } as unknown as MatrixClient;
+
+    let adapter = new NodeAdapter(
+      '/tmp',
+      false,
+      new RealmEventDispatcher({ initialBackoffMs: 1 }),
+    );
+    await adapter.broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.strictEqual(logins, 2, 'the login is tried again after a pause');
+    assert.deepEqual(sent, [staleRoomId], 'the event still reaches the room');
   });
 });
 
@@ -177,6 +276,44 @@ module(`${basename(import.meta.filename)} | file stat probing`, function () {
 
       assert.strictEqual(await adapter.openFile('absent.txt'), undefined);
       assert.strictEqual(await adapter.lastModified('absent.txt'), undefined);
+    } finally {
+      fsExtra.removeSync(dir);
+    }
+  });
+
+  test('lastModified and openFile report the second mtimeMs falls in, even in its last half-millisecond', async function (assert) {
+    let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+    try {
+      let path = join(dir, 'late.txt');
+      fsExtra.writeFileSync(path, 'hello');
+      // An mtime 0.4ms before the next second, which `Stats.mtime` rounds up
+      // into that next second and `mtimeMs` does not.
+      let seconds = 1791998271;
+      fsExtra.utimesSync(path, seconds + 0.9996, seconds + 0.9996);
+      let stat = fsExtra.statSync(path);
+      assert.strictEqual(
+        Math.floor(stat.mtime.getTime() / 1000),
+        seconds + 1,
+        `the file system keeps sub-millisecond mtimes (mtimeMs ${stat.mtimeMs}), so the rounded Date lands in the next second`,
+      );
+
+      let adapter = new NodeAdapter(dir);
+      assert.strictEqual(
+        await adapter.lastModified('late.txt'),
+        seconds,
+        'lastModified reports the second mtimeMs falls in',
+      );
+      let ref = await adapter.openFile('late.txt');
+      assert.strictEqual(
+        ref?.lastModified,
+        seconds,
+        'openFile reports the second mtimeMs falls in',
+      );
+      assert.strictEqual(
+        ref?.lastModified,
+        Math.floor(ref!.lastModifiedMs! / 1000),
+        'openFile’s whole-second time agrees with its own lastModifiedMs',
+      );
     } finally {
       fsExtra.removeSync(dir);
     }
@@ -235,3 +372,116 @@ module(`${basename(import.meta.filename)} | file stat probing`, function () {
     }
   });
 });
+
+module(
+  `${basename(import.meta.filename)} | file content and length`,
+  function () {
+    async function readAll(stream: NodeJS.ReadableStream): Promise<string> {
+      let chunks: Buffer[] = [];
+      for await (let chunk of stream) {
+        chunks.push(Buffer.from(chunk as Buffer));
+      }
+      return Buffer.concat(chunks).toString('utf8');
+    }
+
+    test('openContent reports the length of the bytes it streams, not the earlier stat', async function (assert) {
+      let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+      try {
+        fsExtra.writeFileSync(join(dir, 'page.html'), '<p>hello world</p>');
+        let adapter = new NodeAdapter(dir);
+        let ref = await adapter.openFile('page.html');
+
+        // The file changes between the stat the ref was opened with and the
+        // read, as when another host rewrites it.
+        fsExtra.writeFileSync(join(dir, 'page.html'), '<p>hello</p>');
+        let opened = ref!.openContent!();
+
+        assert.strictEqual(
+          opened.size,
+          Buffer.byteLength('<p>hello</p>'),
+          'the length describes the content that is streamed',
+        );
+        assert.strictEqual(
+          await readAll(opened.content as NodeJS.ReadableStream),
+          '<p>hello</p>',
+          'the stream delivers the content the length describes',
+        );
+        assert.strictEqual(
+          ref!.content,
+          opened.content,
+          'content and openContent share one stream',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    });
+
+    test('write replaces a file whole, so a read already open keeps the content it opened', async function (assert) {
+      let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+      try {
+        let adapter = new NodeAdapter(dir);
+        let original = 'a'.repeat(64 * 1024);
+        await adapter.write('page.html', original);
+        let opened = (await adapter.openFile('page.html'))!.openContent!();
+
+        await adapter.write('page.html', 'b');
+
+        assert.strictEqual(
+          await readAll(opened.content as NodeJS.ReadableStream),
+          original,
+          'the open read sees the whole file it opened, not a truncated rewrite',
+        );
+        assert.strictEqual(opened.size, original.length);
+        assert.strictEqual(
+          fsExtra.readFileSync(join(dir, 'page.html'), 'utf8'),
+          'b',
+          'the new content is in place',
+        );
+        assert.deepEqual(
+          fsExtra.readdirSync(dir),
+          ['page.html'],
+          'no staging file is left beside it',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    });
+
+    test('openContent stops at the length it measured when the file grows during the read', async function (assert) {
+      let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+      try {
+        let adapter = new NodeAdapter(dir);
+        await adapter.write('log.txt', 'a'.repeat(100));
+        let opened = (await adapter.openFile('log.txt'))!.openContent!();
+
+        await adapter.append('log.txt' as LocalPath, 'b'.repeat(50));
+
+        assert.strictEqual(opened.size, 100);
+        assert.strictEqual(
+          await readAll(opened.content as NodeJS.ReadableStream),
+          'a'.repeat(100),
+          'the stream delivers exactly the measured length',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    });
+
+    test('openContent of an empty file reports no bytes and streams none', async function (assert) {
+      let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+      try {
+        fsExtra.writeFileSync(join(dir, 'empty.txt'), '');
+        let adapter = new NodeAdapter(dir);
+        let opened = (await adapter.openFile('empty.txt'))!.openContent!();
+
+        assert.strictEqual(opened.size, 0);
+        assert.strictEqual(
+          await readAll(opened.content as NodeJS.ReadableStream),
+          '',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    });
+  },
+);

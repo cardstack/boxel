@@ -1,0 +1,51 @@
+{
+  "name": "@cardstack/pretui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pret UI component kit. Served by the realm-server as the realm @cardstack/pretui/ and consumed by the host as a workspace dependency; both resolve the same source through package.json#exports.",
+  "license": "MIT",
+  "scripts": {
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "lint:js": "eslint . --ext .ts,.gts --cache",
+    "lint:js:fix": "eslint . --ext .ts,.gts --fix",
+    "lint:types": "ember-tsc --noEmit",
+    "lint:usage-proof": "node scripts/usage-proof.mjs"
+  },
+  "dependencies": {
+    "ember-modifier": "^4.1.0"
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-decorators": "catalog:",
+    "@cardstack/boxel-icons": "workspace:*",
+    "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/eslint-plugin-boxel": "workspace:*",
+    "@cardstack/local-types": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "@ember/test-helpers": "catalog:",
+    "@glimmer/component": "catalog:",
+    "@glimmer/tracking": "^1.0.4",
+    "@glint/ember-tsc": "catalog:",
+    "@glint/template": "catalog:",
+    "@types/qunit": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "concurrently": "catalog:",
+    "ember-eslint-parser": "catalog:",
+    "ember-provide-consume-context": "catalog:",
+    "ember-source": "catalog:",
+    "ember-template-lint": "catalog:",
+    "eslint": "catalog:",
+    "eslint-plugin-import": "catalog:",
+    "qunit": "catalog:",
+    "qunit-dom": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "ember-source": "catalog:"
+  },
+  "exports": {
+    "./*": "./*.gts"
+  }
+}

@@ -32,6 +32,10 @@ const testRealm = new URL('http://127.0.0.1:4445/test/');
 //      loaded from scratch across a loader-epoch reset (the module
 //      invalidation re-mints the epoch, resetting the loader on top of the
 //      empty store the scope crossing already leaves).
+// A fifth case pins how the edit in case 3 is split between the two jobs:
+// the listing only renders its vendor, so the index pass leaves it to the
+// prerender-html job, while a card whose computed field reads the vendor is
+// re-indexed in the same pass.
 // Residency note: a prerender tab's instance residency is job-scoped —
 // gc-card-store's observeIndexingJob drops it when the render scope crosses
 // to a new index pass (see render.ts #buildModel, which observes before the
@@ -58,6 +62,18 @@ const CARDS_GTS = `
             <span>Supplied by <@fields.name/></span>
           </template>
         }
+      }
+
+      // Reads its linked vendor from a computed field, so the vendor is part
+      // of what this card's search document holds — an index edge, unlike
+      // the listing's rendered-only link.
+      export class VendorTag extends CardDef {
+        @field vendor = linksTo(Vendor);
+        @field vendorName = contains(StringField, {
+          computeVia: function (this: VendorTag) {
+            return this.vendor?.name;
+          },
+        });
       }
 
       export class Listing extends CardDef {
@@ -238,6 +254,90 @@ module(basename(import.meta.filename), function (hooks) {
         );
       }
     }
+  });
+
+  // The newest job in one of the realm's lane families, and that job's row.
+  async function newestJob(lane: string, afterJobId: number) {
+    let rows = (await testDbAdapter.execute(
+      `SELECT id, args, result FROM jobs
+        WHERE (concurrency_group = $1 OR lane_family = $1) AND id > $2
+        ORDER BY id DESC LIMIT 1`,
+      { bind: [`${lane}:${realm.url}`, afterJobId] },
+    )) as {
+      id: number;
+      args: { changes?: { url: string }[] };
+      result: { invalidations?: string[] } | null;
+    }[];
+    return rows[0];
+  }
+
+  async function newestJobId(lane: string) {
+    let rows = (await testDbAdapter.execute(
+      `SELECT COALESCE(MAX(id), 0)::int AS max_id FROM jobs
+        WHERE concurrency_group = $1 OR lane_family = $1`,
+      { bind: [`${lane}:${realm.url}`] },
+    )) as { max_id: number }[];
+    return rows[0]?.max_id ?? 0;
+  }
+
+  test('editing a card only rendered by another leaves the renderer to the HTML job, not the index pass', async function (assert) {
+    assert.timeout(240_000);
+    await writeAndSettle('vendor.json', vendorDoc('Initech'));
+    await writeAndSettle('listing.json', listingDoc());
+    await writeAndSettle(
+      'tag.json',
+      JSON.stringify({
+        data: {
+          relationships: { vendor: { links: { self: './vendor' } } },
+          meta: {
+            adoptsFrom: { module: rri('./cards'), name: 'VendorTag' },
+          },
+        },
+      }),
+    );
+    let indexBaseline = await newestJobId('indexing');
+    let htmlBaseline = await newestJobId('prerender-html');
+
+    await writeAndSettle('vendor.json', vendorDoc('Initrode'));
+
+    let indexJob = await newestJob('indexing', indexBaseline);
+    let visited = indexJob?.result?.invalidations ?? [];
+    assert.deepEqual(
+      [...visited].sort(),
+      [`${testRealm}tag.json`, `${testRealm}vendor.json`],
+      `the index pass visits the edited card and the card whose data reads it (job ${indexJob?.id})`,
+    );
+    let htmlJob = await newestJob('prerender-html', htmlBaseline);
+    let rendered = (htmlJob?.args.changes ?? []).map(({ url }) => url);
+    assert.deepEqual(
+      [...rendered].sort(),
+      [
+        `${testRealm}listing.json`,
+        `${testRealm}tag.json`,
+        `${testRealm}vendor.json`,
+      ],
+      `the HTML job renders the visited cards and the render-only listing (job ${htmlJob?.id})`,
+    );
+
+    let listing = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}listing.json`,
+    );
+    assert.ok(
+      listing?.isolated_html?.includes('Initrode'),
+      `the render-only consumer's HTML shows the edit (html: ${compactHTML(
+        listing?.isolated_html,
+      )})`,
+    );
+    let tag = (await testDbAdapter.execute(
+      `SELECT search_doc FROM boxel_index WHERE url = $1 AND type = 'instance'`,
+      { bind: [`${testRealm}tag.json`] },
+    )) as { search_doc: { vendorName?: string } | null }[];
+    assert.strictEqual(
+      tag[0]?.search_doc?.vendorName,
+      'Initrode',
+      'the index-edge consumer’s search document picked up the edit in the same pass',
+    );
   });
 
   test('a module edit re-renders the consumer with a cold-loaded linked card', async function (assert) {

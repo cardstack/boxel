@@ -16,6 +16,7 @@ import {
   closeServer,
   createVirtualNetwork,
   setupDB,
+  setupTestDatabaseTemplate,
   matrixURL,
   realmSecretSeed,
   runTestRealmServerWithRealms,
@@ -94,7 +95,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       resetCatalogRealms();
     }
 
+    let templateDatabase = setupTestDatabaseTemplate(hooks, {
+      key: import.meta.filename,
+      build: async (args) => {
+        await startInfoRealmServer(args);
+        return stopInfoRealmServer;
+      },
+    });
+
     setupDB(hooks, {
+      templateDatabase,
       beforeEach: async (_dbAdapter, publisher, runner) => {
         dbAdapter = _dbAdapter;
         await startInfoRealmServer({ dbAdapter, publisher, runner });

@@ -4,6 +4,8 @@ import stringify from 'safe-stable-stringify';
 import {
   type CardResource,
   type CodeRef,
+  type Diagnostics,
+  type ResolvedCodeRef,
   baseCardRef,
   internalKeyFor,
   isResolvedCodeRef,
@@ -11,6 +13,7 @@ import {
   getSerializer,
 } from './index.ts';
 import { isValidPrerenderedHtmlFormat } from './prerendered-html-format.ts';
+import { verdictCoversRow } from './index-writer.ts';
 import {
   type Expression,
   type CardExpression,
@@ -52,11 +55,16 @@ import {
   RANGE_OPERATORS,
   InvalidQueryError,
   collectPositiveMatchTerms,
+  filterOperators,
   isCardTypeFilter,
   isReferenceFilterField,
 } from './query.ts';
-import type { SerializedError } from './error.ts';
-import type { ScreenshotManifest } from './capture-spec.ts';
+import {
+  renderErrorSummary,
+  type RenderErrorSummary,
+  type SerializedError,
+} from './error.ts';
+import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
 import {
   coerceTypes,
@@ -169,8 +177,11 @@ type IndexRowWithHtml = BoxelIndexTable &
     | 'fitted_html'
     | 'atom_html'
     | 'markdown'
-    | 'screenshots'
-  >;
+    | 'captures'
+  > & {
+    // `getInstance`'s `RENDER_ERROR_SELECT`; absent from the other paths.
+    render_error_doc?: SerializedError | null;
+  };
 
 export interface IndexedFile {
   type: 'file';
@@ -189,11 +200,11 @@ export interface IndexedFile {
   atomHtml: string | null;
   iconHtml: string | null;
   markdown: string | null;
-  // The file row's declared-screenshot manifest
-  // (`prerendered_html.screenshots`, type 'file') — joined into the served
-  // file-meta resource's `meta.screenshots` the way an instance row's
+  // The file row's declared-capture manifest
+  // (`prerendered_html.captures`, type 'file') — joined into the served
+  // file-meta resource's `meta.captures` the way an instance row's
   // manifest is joined into a card's.
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
   generation: number;
   // The generation the file's prerendered HTML was produced at
   // (`prerendered_html.generation`; a file with no prerendered row falls back
@@ -203,6 +214,48 @@ export interface IndexedFile {
   htmlGeneration?: number;
   realmURL: string;
   indexedAt: number | null;
+}
+
+// What link expansion reads off a side-loaded link target. Deliberately not
+// an `IndexedInstance`: that shape promises the prerendered formats, the
+// search doc and both dependency graphs, and a read that selects them on
+// this path fetches bytes no caller can have asked for. A narrower type is
+// what keeps the next caller from quietly depending on fields this read does
+// not fetch.
+// The file-row counterpart of `LinkTargetInstance`, and narrow for the same
+// reason: `IndexedFile` promises the prerendered formats, the icon, the
+// display names and the dependency graph, none of which building a
+// side-loaded file-meta resource reads. Kept structurally a subset of
+// `IndexedFile` so the paths that do hold a full one can still be assembled
+// through the same function.
+export interface LinkTargetFile {
+  canonicalURL: string;
+  // The file row's stored document, and the search doc it falls back to for
+  // any attribute the document does not carry.
+  resource: FileMetaResource | null;
+  searchDoc: Record<string, any> | null;
+  // `types[0]` names the adopted FileDef ref; the resource's own
+  // `meta.adoptsFrom` is the fallback.
+  types: string[] | null;
+  lastModified: number | null;
+  resourceCreatedAt: number | null;
+  // Both the resource's `meta.realmURL` and the prefix test that decides
+  // whether the capture manifest applies to this URL.
+  realmURL: string;
+  captures: CaptureManifest | null;
+}
+
+export interface LinkTargetInstance {
+  // The row's own spelling of its URL — a lookup may have addressed it by
+  // `file_alias`, and the resource's local path is derived from this.
+  canonicalURL: string;
+  // The stored card resource, as `pristine_doc` holds it: relationships
+  // carrying relative `links.self` and no `data`, which link expansion
+  // resolves and rewrites.
+  resource: CardResource;
+  // Rides the prerendered_html channel and is joined into the side-loaded
+  // resource's `meta`, so it is read here even though the formats are not.
+  captures: CaptureManifest | null;
 }
 
 export interface IndexedInstance {
@@ -220,13 +273,55 @@ export interface IndexedInstance {
   searchDoc: Record<string, any> | null;
   types: string[] | null;
   deps: string[] | null;
-  // The row's declared-screenshot manifest (`prerendered_html.screenshots`)
+  // The row's declared-capture manifest (`prerendered_html.captures`)
   // — like the HTML columns, whatever rendering currently exists, which may
   // trail the index-data generation until the row's prerender pass lands.
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
   generation: number;
   realmURL: string;
   indexedAt: number | null;
+  // The content hash of the stored source `instance` was serialized from, as
+  // the pass that indexed those bytes recorded it. The card+json GET serves it
+  // as `meta.version`; a client sends it back as the base its next write is
+  // computed against.
+  //
+  // Null when the row predates the stamp or its pass produced no fingerprint,
+  // in which case the GET reports no version at all. Never substitute
+  // `realm_file_meta.content_hash` for a null here: that column describes
+  // whatever the file holds now rather than the bytes behind this row's
+  // document, and it is empty for every file that reached disk outside the
+  // realm's own write API.
+  sourceContentHash: string | null;
+  // The error the card's current render recorded on the prerendered_html
+  // channel, while its index visit succeeded. The card's data is intact —
+  // `instance` is what that visit read — and only its prerendered output is
+  // affected: the HTML columns above hold the last-known-good rendering, or
+  // nothing when no render ever succeeded. A consumer serving the card's data
+  // reports this alongside it, and a consumer serving the prerendered output
+  // treats the card as errored. Null when the render channel holds no current
+  // error.
+  renderError: RenderErrorSummary | null;
+}
+
+// An instance's row as its index visit left it, and nothing from its render.
+// `error` is set when the visit itself failed, and `instance` otherwise.
+export interface IndexedInstanceSource {
+  // The row's own URL: the file the instance is stored in, which is what an
+  // index visit of it is asked to visit.
+  url: string;
+  realmURL: string;
+  generation: number;
+  sourceContentHash: string | null;
+  types: string[] | null;
+  instance: CardResource | null;
+  error: SerializedError | null;
+  // Whether the latest visit failed for a reason the prerender server did not
+  // attribute to the card: a stale host shell, or a gateway failure on a fetch
+  // the visit made. The index keeps such a failure off the row, so the row
+  // reads as healthy, and everything on it, `instance` and `sourceContentHash`
+  // included, is what an earlier visit recorded. The card's source may have
+  // changed since.
+  failureWithheld: boolean;
 }
 
 interface InstanceError extends Partial<
@@ -268,7 +363,11 @@ export type QueryOptions = WIPOptions & {
 export type SearchProjection = { kind: 'dataOnly' } | { kind: 'renderSet' };
 
 export interface WIPOptions {
-  useWorkInProgressIndex?: boolean;
+  // Read one index pass's staged rows — its `boxel_index_pending` rows, with
+  // its own `prerendered_html_pending` rows joined — instead of the committed
+  // index. Takes the pass's `Batch.stagingId`, so a read sees that pass's
+  // uncommitted work and no other pass's.
+  pendingStagingId?: string;
 }
 
 export interface QueryResultsMeta {
@@ -300,10 +399,10 @@ export interface QueryResultsMeta {
 // tsvector at 1,048,575 bytes and throws SQLSTATE 54000 (`make_tsvector`) above
 // it — which, for a plain GIN expression index, aborts the whole index build.
 // Some instances carry multi-megabyte markdown (base64 image data embedded by
-// image cards), so the raw column can't be indexed. The markdown GIN indexes
-// (prerendered_html and prerendered_html_working) both index
-// `to_tsvector('english', markdown_search_text(markdown))`, so the query
-// predicate below must call the same function or the planner won't use them.
+// image cards), so the raw column can't be indexed. prerendered_html's markdown
+// GIN index is built on `to_tsvector('english', markdown_search_text(markdown))`,
+// so the query predicate below must call the same function or the planner
+// won't use it.
 export const generalSortFields: Record<string, string> = {
   lastModified: 'i.last_modified',
   createdAt: 'i.resource_created_at',
@@ -319,6 +418,14 @@ export const generalSortFields: Record<string, string> = {
 // flows through `generalFieldSortColumn` (it has no static column). Sorting by
 // it defaults to `desc` (best match first).
 export const MATCH_RELEVANCE_SORT_KEY = '_matchRelevance';
+
+// A relevance sort is recognized by its key alone. The score belongs to the
+// query, not to any card type, so an `on` beside it anchors nothing and is
+// ignored rather than sending the key down the card-field path, where it
+// would resolve as a nonexistent field.
+export function isMatchRelevanceSort(sort: { by: string }): boolean {
+  return sort.by === MATCH_RELEVANCE_SORT_KEY;
+}
 
 export { isValidPrerenderedHtmlFormat };
 
@@ -373,12 +480,16 @@ export class IndexQueryEngine {
       : this.#query(expression);
   }
 
+  // A card's row, read as its data: the instance its index visit read, or the
+  // error that visit recorded. Only the index channel decides between the two.
+  // A render failure leaves the data intact, so it comes back as the instance
+  // with `renderError` set rather than as an `instance-error`.
   async getInstance(
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<InstanceOrError | undefined> {
     let result = (await this.#query([
-      `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+      `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${RENDER_ERROR_SELECT}`,
       `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
@@ -393,14 +504,40 @@ export class IndexQueryEngine {
     return this.#rowToInstanceOrError(result[0], url, opts);
   }
 
-  // Batch variant of getInstance: one DB round-trip for many URLs.
-  // Returns a map keyed by the LOOKUP URL (matching either i.url or i.file_alias)
-  // so callers can address results by the URL they passed in.
-  async getInstances(
+  // Batch read of the link targets `loadLinks` side-loads, selecting what link
+  // expansion actually consumes and nothing else.
+  //
+  // The wide `getInstance` shape is the wrong one here, and not merely
+  // wasteful. Whichever entry point reaches link expansion — a search's
+  // projected roots or a single card+json document's own — expansion puts
+  // only the resource into `included[]`. Rendered output for any of these
+  // URLs is served by the render-set projection, which joins
+  // `prerendered_html` itself and never reaches this code. So no caller of
+  // this read can have asked for prerendered HTML.
+  //
+  // A `SELECT i.*` costs more than those formats, though: it also drags
+  // `deps` and `last_known_good_deps`, each holding a few hundred dependency
+  // URLs, which together dwarf everything else on the row. Both stay far
+  // larger than the document even if a scoped-CSS dep stops carrying its
+  // stylesheet inline, since the row's cost there is the number of deps
+  // rather than the width of any one.
+  //
+  // So the select names its columns rather than starring: what a star
+  // quietly includes is the whole of the expense, and two of the columns it
+  // includes are ones nothing on this path reads.
+  //
+  // Returns a map keyed by the LOOKUP URL (matching either `i.url` or
+  // `i.file_alias`), matching rows on the same type/tombstone predicate
+  // `getInstance` uses. A row that is absent, deleted, or whose index visit
+  // failed is simply not in the map — which is what link expansion does with
+  // one anyway: it leaves the relationship naming a target the document does
+  // not carry. A target whose render failed is included: side-loading puts
+  // only its data into `included[]`, and that data is intact.
+  async getLinkTargetInstances(
     urls: URL[],
     opts?: GetEntryOptions,
-  ): Promise<Map<string, InstanceOrError>> {
-    let resultMap = new Map<string, InstanceOrError>();
+  ): Promise<Map<string, LinkTargetInstance>> {
+    let resultMap = new Map<string, LinkTargetInstance>();
     if (urls.length === 0) {
       return resultMap;
     }
@@ -415,7 +552,10 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+        // `ph.captures` is the join's only consumer: it is joined into the
+        // side-loaded resource's `meta`.
+        `SELECT i.url, i.file_alias, i.pristine_doc,
+                ph.captures AS captures`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -428,20 +568,47 @@ export class IndexQueryEngine {
           ]),
           ['i.type =', param('instance')],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+          // An index error is excluded here rather than after the fact, as
+          // the file leg of this same batch does: it keeps an errored
+          // target's document off the wire too, which is this read's own
+          // argument.
+          [`NOT ${INDEX_HAS_ERROR}`],
         ]),
-      ] as Expression)) as unknown as IndexRowWithHtml[];
+      ] as Expression)) as unknown as {
+        url: string | null;
+        file_alias: string | null;
+        pristine_doc: CardResource | null;
+        captures: CaptureManifest | null;
+      }[];
       for (let row of rows) {
-        let mapped = this.#rowToInstanceOrError(row, undefined, opts);
-        if (!mapped) {
+        if (!row.url) {
           continue;
         }
+        // Every row here is live and unerrored, and such a row is required to
+        // carry a document. One that does not is unrepresentable rather than
+        // merely unavailable, so it is reported instead of dropped — a
+        // dropped one is indistinguishable from a link whose target is
+        // legitimately gone, and would silently cost the document a
+        // relationship. This rejects the whole read, as the singular one does.
+        if (!row.pristine_doc) {
+          throw new Error(
+            `bug: live index entry for ${row.url} with opts: ${stringify(
+              opts,
+            )} has no pristine_doc`,
+          );
+        }
+        let target: LinkTargetInstance = {
+          canonicalURL: row.url,
+          resource: row.pristine_doc,
+          captures: row.captures ?? null,
+        };
         // A row may be addressable by its url or its file_alias.
         // Index the result under whichever lookup keys the caller asked about.
-        if (row.url && chunkSet.has(row.url)) {
-          resultMap.set(row.url, mapped);
+        if (chunkSet.has(row.url)) {
+          resultMap.set(row.url, target);
         }
         if (row.file_alias && chunkSet.has(row.file_alias)) {
-          resultMap.set(row.file_alias, mapped);
+          resultMap.set(row.file_alias, target);
         }
       }
     }
@@ -450,11 +617,12 @@ export class IndexQueryEngine {
 
   // The live-instance row predicate, defined once: `getInstance`'s
   // url/file_alias match, instance type, and tombstone exclusion, plus the
-  // effective-error channel (a row `getInstance` would map to
-  // `instance-error` is not live). Every liveness gate — `hasLiveInstance`,
-  // `liveInstanceGeneration`, `liveInstanceScreenshots` — spreads this one
-  // fragment, so the DSL and `?name=` screenshot routes' liveness semantics
-  // cannot silently split. (`findLiveInstanceGeneration` in media-cache.ts
+  // effective error across both channels. The gates below serve prerendered
+  // output, so a card whose render failed is not live to them even though
+  // `getInstance` reads its data as an instance. Every liveness gate —
+  // `hasLiveInstance`, `liveInstanceGeneration`, `liveInstanceCaptures` —
+  // spreads this one fragment, so the DSL and `?name=` capture routes'
+  // liveness semantics cannot silently split. (`findLiveInstanceGeneration` in media-cache.ts
   // is the realm-scoped raw-SQL twin, built from the same exported join
   // fragments.)
   #liveInstanceConditions(url: URL): Expression {
@@ -462,7 +630,7 @@ export class IndexQueryEngine {
   }
 
   // The same predicate over the URL's 'file' row — the file-flavored liveness
-  // gate the `?name=` screenshot route falls back to when no instance
+  // gate the `?name=` capture route falls back to when no instance
   // matches (a FileDef family's declared captures live on the file row).
   #liveRowConditions(url: URL, type: 'instance' | 'file'): Expression {
     return every([
@@ -479,7 +647,7 @@ export class IndexQueryEngine {
   // Existence probe with the live-instance predicate, without hydrating the
   // row. `getInstance` selects every wide column in the index (prerendered
   // HTML, pristine/search docs), so callers that gate on liveness alone —
-  // the screenshot route runs this on every request, 304 revalidations
+  // the capture route runs this on every request, 304 revalidations
   // included — must not pay for a hydration they discard.
   async hasLiveInstance(url: URL, opts?: GetEntryOptions): Promise<boolean> {
     let rows = (await this.#query([
@@ -494,7 +662,7 @@ export class IndexQueryEngine {
 
   // The index generation of a live instance, or undefined when none matches —
   // the generation companion to `hasLiveInstance`, selecting the one column
-  // the screenshot cache key needs, still without hydrating the row. Used
+  // the capture cache key needs, still without hydrating the row. Used
   // where the caller needs both the liveness gate and the generation, so the
   // two collapse into a single narrow read.
   async liveInstanceGeneration(
@@ -511,53 +679,104 @@ export class IndexQueryEngine {
     return rows.length > 0 ? Number(rows[0].generation) : undefined;
   }
 
-  // The declared-screenshot manifest of a live instance — the `?name=`
+  // An instance's row from `boxel_index` alone, with no `prerendered_html`
+  // join: what its index visit read and recorded, and whether that visit
+  // failed. A render error is not reflected, so a card whose rendering failed
+  // still reads as the instance its source says it is. For a reader that
+  // needs the card's data and adoption chain, and none of its rendering.
+  async getInstanceSource(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedInstanceSource | undefined> {
+    let rows = (await this.#query([
+      'SELECT i.url, i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc, i.diagnostics',
+      `FROM ${tableFromOpts(opts)} AS i`,
+      'WHERE',
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      ]),
+      'LIMIT 1',
+    ] as Expression)) as unknown as {
+      url: string;
+      realm_url: string;
+      generation: number;
+      source_content_hash: string | null;
+      types: string[] | null;
+      pristine_doc: CardResource | null;
+      has_error: boolean | null;
+      error_doc: SerializedError | null;
+      diagnostics: Diagnostics | null;
+    }[];
+    let row = rows[0];
+    if (!row) {
+      return undefined;
+    }
+    return {
+      url: row.url,
+      realmURL: row.realm_url,
+      generation: Number(row.generation),
+      sourceContentHash: row.source_content_hash ?? null,
+      types: row.types,
+      instance: row.has_error ? null : row.pristine_doc,
+      error: row.has_error ? row.error_doc : null,
+      failureWithheld:
+        !row.has_error &&
+        verdictCoversRow(row.diagnostics ?? undefined, 'instance'),
+    };
+  }
+
+  // The declared-capture manifest of a live instance — the `?name=`
   // serving route's addressing read: the shared live-instance predicate (so
   // a name resolves exactly when a DSL capture of the same instance would).
   // `undefined` means no live instance matches; a live row comes back with
   // its canonical `url` (the lookup also matches `file_alias`, and the
   // MediaCache ledger is keyed off the row's own spelling, never the
   // request's) and a `manifest` that is null when nothing has been captured.
-  async liveInstanceScreenshots(
+  async liveInstanceCaptures(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
-    return await this.#liveRowScreenshots(url, 'instance', opts);
+  ): Promise<{ url: string; manifest: CaptureManifest | null } | undefined> {
+    return await this.#liveRowCaptures(url, 'instance', opts);
   }
 
-  // The file-row twin of `liveInstanceScreenshots`: the declared-screenshot
+  // The file-row twin of `liveInstanceCaptures`: the declared-capture
   // manifest of a live 'file' row. The `?name=` serving route falls back to
   // this when the addressed path resolves to no live instance — a FileDef
   // family's declared captures are persisted on the file rendering's row.
-  async liveFileScreenshots(
+  async liveFileCaptures(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
-    return await this.#liveRowScreenshots(url, 'file', opts);
+  ): Promise<{ url: string; manifest: CaptureManifest | null } | undefined> {
+    return await this.#liveRowCaptures(url, 'file', opts);
   }
 
-  async #liveRowScreenshots(
+  async #liveRowCaptures(
     url: URL,
     type: 'instance' | 'file',
     opts?: GetEntryOptions,
-  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
+  ): Promise<{ url: string; manifest: CaptureManifest | null } | undefined> {
     let rows = (await this.#query([
-      'SELECT i.url AS url, ph.screenshots AS screenshots',
+      'SELECT i.url AS url, ph.captures AS captures',
       `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
       'WHERE',
       ...this.#liveRowConditions(url, type),
       'LIMIT 1',
     ] as Expression)) as unknown as {
       url: string;
-      screenshots: ScreenshotManifest | null;
+      captures: CaptureManifest | null;
     }[];
     if (rows.length === 0) {
       return undefined;
     }
-    return { url: rows[0].url, manifest: rows[0].screenshots ?? null };
+    return { url: rows[0].url, manifest: rows[0].captures ?? null };
   }
 
-  // Shared row → InstanceOrError mapping for getInstance / getInstances.
+  // Shared row → InstanceOrError mapping for getInstance.
   // `lookupURL` is used only for error context and is optional in the batch path.
   #rowToInstanceOrError(
     maybeResult: IndexRowWithHtml | undefined,
@@ -580,7 +799,7 @@ export class IndexQueryEngine {
       fitted_html: fittedHtml,
       markdown,
       search_doc: searchDoc,
-      screenshots,
+      captures,
       generation,
       realm_url: realmURL,
       indexed_at: indexedAt,
@@ -588,11 +807,13 @@ export class IndexQueryEngine {
       resource_created_at: resourceCreatedAt,
       types,
       deps,
+      source_content_hash: sourceContentHash,
     } = maybeResult;
     let baseResult = {
       canonicalURL,
       realmURL,
       instance,
+      sourceContentHash: sourceContentHash ?? null,
       isolatedHtml,
       headHtml,
       embeddedHtml,
@@ -600,7 +821,7 @@ export class IndexQueryEngine {
       atomHtml,
       markdown,
       searchDoc,
-      screenshots: (screenshots as ScreenshotManifest | null) ?? null,
+      captures: (captures as CaptureManifest | null) ?? null,
       types,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
       deps,
@@ -631,6 +852,9 @@ export class IndexQueryEngine {
       ...baseResult,
       type: 'instance',
       instance,
+      renderError: maybeResult.render_error_doc
+        ? renderErrorSummary(maybeResult.render_error_doc)
+        : null,
       lastModified:
         instanceEntry.last_modified != null
           ? parseInt(instanceEntry.last_modified)
@@ -660,18 +884,26 @@ export class IndexQueryEngine {
     return this.#rowToIndexedFile(result[0]);
   }
 
-  // Batch variant of getFile.
-  // Keys are the LOOKUP URLs the caller passed in (matching either i.url or i.file_alias).
-  async getFiles(
+  // Batch read of the file-meta link targets `loadLinks` side-loads — the
+  // file leg of the same batch `getLinkTargetInstances` serves, narrow for the
+  // same reason. A side-loaded file's resource is assembled from its stored
+  // document, its search doc and its timestamps; the formats, the icon, the
+  // display names and the dependency graph are all fetched and discarded by a
+  // star select, and `deps` is the widest column on the row.
+  //
+  // Keys are the LOOKUP URLs the caller passed in (matching either `i.url` or
+  // `i.file_alias`). As on the instance leg, only an index error keeps a file
+  // out: a file whose render failed still has the data side-loading reads.
+  async getLinkTargetFiles(
     urls: URL[],
     opts?: GetEntryOptions,
-  ): Promise<Map<string, IndexedFile>> {
-    let resultMap = new Map<string, IndexedFile>();
+  ): Promise<Map<string, LinkTargetFile>> {
+    let resultMap = new Map<string, LinkTargetFile>();
     if (urls.length === 0) {
       return resultMap;
     }
     let lookupHrefs = [...new Set(urls.map((u) => u.href))];
-    // Same chunking discipline as getInstances — keeps placeholder count
+    // Same chunking discipline as getLinkTargetInstances — keeps placeholder count
     // safely below the sqlite/pg parameter limits.
     let chunkSize = this.#dbAdapter.kind === 'sqlite' ? 450 : 2500;
     for (let start = 0; start < lookupHrefs.length; start += chunkSize) {
@@ -679,7 +911,11 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+        // `ph.captures` is the join's only consumer: it is joined into the
+        // side-loaded resource's `meta`.
+        `SELECT i.url, i.file_alias, i.pristine_doc, i.search_doc, i.types,
+                i.last_modified, i.resource_created_at, i.realm_url,
+                ph.captures AS captures`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -691,16 +927,38 @@ export class IndexQueryEngine {
             ],
           ]),
           ['i.type =', param('file')],
-          [`NOT ${effectiveHasError()}`],
+          [`NOT ${INDEX_HAS_ERROR}`],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
         ]),
-      ] as Expression)) as unknown as IndexRowWithHtml[];
+      ] as Expression)) as unknown as {
+        url: string | null;
+        file_alias: string | null;
+        pristine_doc: FileMetaResource | null;
+        search_doc: Record<string, any> | null;
+        types: string[] | null;
+        last_modified: string | number | null;
+        resource_created_at: string | number | null;
+        realm_url: string | null;
+        captures: CaptureManifest | null;
+      }[];
       for (let row of rows) {
-        let mapped = this.#rowToIndexedFile(row);
-        if (!mapped) {
+        if (!row.url) {
           continue;
         }
-        if (row.url && chunkSet.has(row.url)) {
+        // Postgres hands back a bigint column as a string; SQLite as a number.
+        let toEpoch = (v: string | number | null) =>
+          typeof v === 'string' ? parseInt(v) : (v ?? null);
+        let mapped: LinkTargetFile = {
+          canonicalURL: row.url,
+          resource: row.pristine_doc ?? null,
+          searchDoc: row.search_doc ?? null,
+          types: row.types ?? null,
+          lastModified: toEpoch(row.last_modified),
+          resourceCreatedAt: toEpoch(row.resource_created_at),
+          realmURL: row.realm_url ?? '',
+          captures: row.captures ?? null,
+        };
+        if (chunkSet.has(row.url)) {
           resultMap.set(row.url, mapped);
         }
         if (row.file_alias && chunkSet.has(row.file_alias)) {
@@ -731,7 +989,7 @@ export class IndexQueryEngine {
       atom_html: atomHtml,
       icon_html: iconHtml,
       markdown,
-      screenshots,
+      captures,
       generation,
       realm_url: realmURL,
       indexed_at: indexedAt,
@@ -758,7 +1016,7 @@ export class IndexQueryEngine {
       atomHtml,
       iconHtml: iconHtml ?? null,
       markdown,
-      screenshots: (screenshots as ScreenshotManifest | null) ?? null,
+      captures: (captures as CaptureManifest | null) ?? null,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
         resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
@@ -812,6 +1070,38 @@ export class IndexQueryEngine {
       'LIMIT 1',
     ] as Expression)) as unknown as { 1: number }[];
     return rows.length > 0;
+  }
+
+  // The types a realm holds cards of that descend from `ref`: the first entry
+  // of the adoption chain of every live instance row whose chain carries one
+  // of the ref's keys, once each. A row of the ref's own type contributes its
+  // own key. Rows whose visit failed count too, since a search that includes
+  // errors can return them.
+  async instanceTypesUnder(
+    realmURL: URL,
+    ref: ResolvedCodeRef,
+  ): Promise<string[]> {
+    let typeKeys = await this.typeKeysFor(ref);
+    let rows = (await this.#query([
+      'SELECT DISTINCT',
+      dbExpression({
+        pg: `i.types->>0`,
+        sqlite: `json_extract(i.types, '$[0]')`,
+      }),
+      'AS type_key',
+      'FROM boxel_index AS i',
+      'WHERE',
+      ...every([
+        ['i.realm_url =', param(realmURL.href)],
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+        any(typeKeys.map((typeKey) => [typesContains(typeKey)])),
+      ]),
+    ] as Expression)) as unknown as { type_key: string | null }[];
+    return rows
+      .map(({ type_key }) => type_key)
+      .filter((key): key is string => typeof key === 'string')
+      .sort();
   }
 
   private async getDefinition(codeRef: CodeRef): Promise<Definition> {
@@ -903,9 +1193,7 @@ export class IndexQueryEngine {
       // `_matchRelevance`, so every existing `matches` caller pays nothing. When
       // present it rides the projection as an aggregated, aliased column that the
       // ORDER BY (below) references — see `matchRelevanceExpression`.
-      let sortsByMatchRelevance = (sort ?? []).some(
-        (s) => !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY,
-      );
+      let sortsByMatchRelevance = (sort ?? []).some(isMatchRelevanceSort);
       let relevanceColumn: CardExpression = [];
       if (sortsByMatchRelevance) {
         // `assertQuery` already rejects this on the wire surfaces (as an
@@ -1161,7 +1449,7 @@ export class IndexQueryEngine {
           // `_matchRelevance` is the aggregated relevance column projected by
           // the SELECT (see `_search`); reference the alias directly and default
           // to `desc` (best match first). Everything else sorts on a column.
-          !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY
+          isMatchRelevanceSort(s)
             ? [
                 `"${MATCH_RELEVANCE_SORT_KEY}"`,
                 sortDirection(s.direction ?? 'desc'),
@@ -1211,7 +1499,7 @@ export class IndexQueryEngine {
       // `_matchRelevance` is already projected by the inner SELECT (see
       // `_search`), so it rides through `sub.*` — reference it in the outer
       // ORDER BY directly, with no inner `_sort_i` alias, defaulting to `desc`.
-      if (!('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY) {
+      if (isMatchRelevanceSort(s)) {
         outerKeys.push([
           `"${MATCH_RELEVANCE_SORT_KEY}"`,
           sortDirection(s.direction ?? 'desc'),
@@ -1277,6 +1565,23 @@ export class IndexQueryEngine {
 
     if (typeRef && Object.keys(filter).length === 1) {
       return this.typeCondition(typeRef);
+    }
+
+    // The validator rejects a multi-operator node on the wire, but a
+    // query-backed field is indexed through here with no `assertQuery` in the
+    // path. Each branch below picks a single operator, so without this backstop
+    // such a node would compile on whichever one comes first and silently drop
+    // the rest — diverging from the host, which rejects the same query. Reject
+    // here too so every path agrees. `type`/`on` are not operators.
+    let operators = filterOperators(filter);
+    if (operators.length > 1) {
+      throw new InvalidQueryError(
+        `a filter may use only one operator, but found ${operators
+          .map((key) => `"${key}"`)
+          .join(
+            ', ',
+          )}; combine operators by nesting them under "every" or "any"`,
+      );
     }
 
     if ('eq' in filter) {
@@ -1347,7 +1652,13 @@ export class IndexQueryEngine {
   //
   // A ref whose definition doesn't resolve keeps only its own key and matches
   // nothing (unless rows were stamped under that spelling).
-  private async typeKeysFor(ref: CodeRef): Promise<string[]> {
+  //
+  // Public because the live-search cache key is scoped by the same keys: it
+  // reads a per-type watermark for each of a query's type anchors, and those
+  // keys have to be the ones this engine matches rows on or the key would
+  // address a row nothing writes. Calling the engine rather than reproducing
+  // it is what keeps the two from drifting.
+  async typeKeysFor(ref: CodeRef): Promise<string[]> {
     let keys = [internalKeyFor(ref, undefined, this.#virtualNetwork)];
     if (isResolvedCodeRef(ref)) {
       try {
@@ -1848,13 +2159,12 @@ export class IndexQueryEngine {
   //   SELECT url, pristine_doc
   //   FROM
   //     boxel_index,
-  //   CROSS JOIN LATERAL jsonb_array_elements_text(types) as types0_array_element
   //     -- This json_tree was derived by this handler:
   //   CROSS JOIN LATERAL jsonb_tree(search_doc, '$.friends') as friends1_tree
   //   WHERE
   //     ( ( is_deleted = FALSE OR is_deleted IS NULL ) )
   //     AND (
-  //       ( types0_array_element = $1 )
+  //       ( COALESCE(types, '[]'::jsonb) @> $1::jsonb )
   //       AND (
   //         ( friends1_tree.text_value = $2 )
   //         AND
@@ -2323,16 +2633,33 @@ function assertIndexEntry<T>(obj: T): Omit<
 }
 
 function tableFromOpts(opts: WIPOptions | undefined) {
-  return opts?.useWorkInProgressIndex ? 'boxel_index_working' : 'boxel_index';
+  return opts?.pendingStagingId === undefined
+    ? 'boxel_index'
+    : stagedRows('boxel_index_pending', opts.pendingStagingId);
 }
 
-// The prerendered_html table paired with the boxel_index table `tableFromOpts`
-// selects: the working table mirrors boxel_index_working during an in-progress
-// pass, the production table mirrors boxel_index.
+// The prerendered_html rows paired with the boxel_index rows `tableFromOpts`
+// selects: the same pass's staged HTML rows for a staged read, the production
+// table otherwise.
 function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
-  return opts?.useWorkInProgressIndex
-    ? 'prerendered_html_working'
-    : 'prerendered_html';
+  return opts?.pendingStagingId === undefined
+    ? 'prerendered_html'
+    : stagedRows('prerendered_html_pending', opts.pendingStagingId);
+}
+
+// A pass's rows of a pending table, as a derived table the callers alias like
+// the table it stands in for. The staging id is spliced into the statement
+// text because the table expression is interpolated into it rather than built
+// from parameters, so only the two shapes a batch mints are accepted.
+const STAGING_ID_PATTERN = /^(job:\d+\.-?\d+|adhoc:[0-9a-f-]+)$/;
+function stagedRows(
+  table: 'boxel_index_pending' | 'prerendered_html_pending',
+  stagingId: string,
+) {
+  if (!STAGING_ID_PATTERN.test(stagingId)) {
+    throw new Error(`not a staging id: ${JSON.stringify(stagingId)}`);
+  }
+  return `(SELECT * FROM ${table} WHERE staging_id = '${stagingId}')`;
 }
 
 // HTML-channel LEFT JOIN: attaches the prerendered_html row (aliased `ph`) for
@@ -2364,11 +2691,22 @@ export function prerenderedJoin(opts?: WIPOptions) {
 // index pass (e.g. the content was since fixed) and must not gate the row —
 // the fresh render lands on its own channel and re-runs live searches via
 // the prerender_html event.
+//
+// The effective state is for readers of the prerendered output: searches,
+// the liveness gates of the capture routes, publishing. A reader of the
+// card's data asks the index channel alone (`INDEX_HAS_ERROR`), because a
+// render failure leaves the data the index visit read intact.
 const RENDER_ERROR_IS_CURRENT = `(ph.url IS NOT NULL AND ph.error_doc IS NOT NULL AND ph.generation >= i.generation)`;
 
+const INDEX_HAS_ERROR = `COALESCE(i.has_error, FALSE)`;
+
 export function effectiveHasError(): string {
-  return `(COALESCE(i.has_error, FALSE) OR ${RENDER_ERROR_IS_CURRENT})`;
+  return `(${INDEX_HAS_ERROR} OR ${RENDER_ERROR_IS_CURRENT})`;
 }
+
+// The current render error, as a column beside a data read's `SELECT i.*`.
+// NULL when the render channel holds no current error.
+const RENDER_ERROR_SELECT = `CASE WHEN ${RENDER_ERROR_IS_CURRENT} THEN ph.error_doc END AS render_error_doc`;
 
 function effectiveErrorDoc(): string {
   return `CASE WHEN COALESCE(i.has_error, FALSE) THEN i.error_doc WHEN ${RENDER_ERROR_IS_CURRENT} THEN ph.error_doc ELSE i.error_doc END`;
@@ -2422,10 +2760,10 @@ export function fileEntryFromResult(
     iconHtml: result.icon_html ?? null,
     markdown: result.markdown ?? null,
     // The search projections don't select the manifest — like an instance
-    // search entry, whose `meta.screenshots` joins only on the single-card
+    // search entry, whose `meta.captures` joins only on the single-card
     // GET — so this is null on the search path and populated on the
-    // `getFile`/`getFiles` paths, whose SELECT carries `ph.screenshots`.
-    screenshots: (result.screenshots as ScreenshotManifest | null) ?? null,
+    // `getFile`/`getFiles` paths, whose SELECT carries `ph.captures`.
+    captures: (result.captures as CaptureManifest | null) ?? null,
     lastModified,
     resourceCreatedAt,
     generation: result.generation ?? 0,
@@ -2452,7 +2790,7 @@ const PRERENDERED_HTML_SELECTS = [
   'embedded_html',
   'fitted_html',
   'markdown',
-  'screenshots',
+  'captures',
 ]
   .map((col) => `ph.${col} AS ${col}`)
   .join(', ');

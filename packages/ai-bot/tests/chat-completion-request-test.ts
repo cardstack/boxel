@@ -7,6 +7,8 @@ import {
   buildChatCompletionRequest,
   type ChatCompletionRequest,
 } from '../lib/chat-completion-request.ts';
+import { readRealmFileTool } from '../lib/bot-tools/read-realm-file/read.ts';
+import { readUrlTool } from '../lib/bot-tools/read-url/read.ts';
 
 function promptParts(overrides: Partial<PromptParts> = {}): PromptParts {
   return {
@@ -101,33 +103,32 @@ module('chat completion request', () => {
     assert.false('user' in anonymous);
   });
 
-  test('offers the readRealmFile tool only when the caller allows it', () => {
-    let offered = buildChatCompletionRequest(promptParts(), undefined, true);
-    assert.deepEqual(toolNames(offered), ['readRealmFile']);
+  test('offers the bot tools it is given', () => {
+    let offered = buildChatCompletionRequest(promptParts(), undefined, [
+      readRealmFileTool,
+      readUrlTool,
+    ]);
+    assert.deepEqual(toolNames(offered), ['readRealmFile', 'readUrl']);
 
-    let notOffered = buildChatCompletionRequest(
-      promptParts(),
-      undefined,
-      false,
-    );
+    let notOffered = buildChatCompletionRequest(promptParts(), undefined, []);
     assert.false('tools' in notOffered);
   });
 
-  test('appends the readRealmFile offer to the room tools', () => {
+  test('appends the bot tools to the room tools', () => {
     let both = buildChatCompletionRequest(
       promptParts({ tools: [tool] }),
       undefined,
-      true,
+      [readUrlTool],
     );
-    assert.deepEqual(toolNames(both), ['doThing', 'readRealmFile']);
+    assert.deepEqual(toolNames(both), ['doThing', 'readUrl']);
     assert.strictEqual(both.tool_choice, 'auto');
   });
 
-  test('withholds the readRealmFile offer from models without tool support', () => {
+  test('withholds bot tools from models without tool support', () => {
     let unsupported = buildChatCompletionRequest(
       promptParts({ toolsSupported: false }),
       undefined,
-      true,
+      [readRealmFileTool],
     );
     assert.false('tools' in unsupported);
   });

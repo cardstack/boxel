@@ -27,26 +27,24 @@ import { hasExecutableExtension } from '@cardstack/runtime-common';
 import RestorePatchedFileModal from '@cardstack/host/components/ai-assistant/restore-file-modal';
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { Submodes } from '../submode-switcher';
 
 import type { FileDef } from '@cardstack/base/file-api';
 
-import type { CodePatchStatus } from '@cardstack/base/matrix-event';
-
 export default class AttachedFileDropdownMenu extends Component<{
   Args: {
     file: FileDef;
     isNewFile: boolean;
-    version?: 'diff-editor';
-    codePatchStatus?: CodePatchStatus | 'applying' | 'ready';
     isCardInstance?: boolean;
   };
 }> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
   @service declare cardService: CardService;
+  @service declare network: NetworkService;
   @tracked isRestorePatchedFileModalOpen = false;
   @tracked fileContent: string | null = null;
   @action private openInCodeMode() {
@@ -55,8 +53,9 @@ export default class AttachedFileDropdownMenu extends Component<{
     }
     if (
       this.operatorModeStateService.state.submode === Submodes.Code &&
-      this.operatorModeStateService.state.codePath?.toString() ===
-        this.args.file.sourceUrl
+      this.args.file.sourceUrl &&
+      this.network.virtualNetwork.unresolveURL(this.args.file.sourceUrl) ===
+        this.operatorModeStateService.state.codePath
     ) {
       return;
     }
@@ -78,32 +77,31 @@ export default class AttachedFileDropdownMenu extends Component<{
   };
 
   private get menuItems(): MenuItem[] {
-    let submittedOrGenerated =
-      this.args.version === 'diff-editor' ? 'Generated' : 'Submitted';
-
+    let sourceUrl = this.args.file?.sourceUrl;
     const items = [
+      ...(!sourceUrl ||
+      this.operatorModeStateService.codeSubmodeOffered(sourceUrl)
+        ? [
+            new MenuItem({
+              label: 'Open in Code Mode',
+              action: this.openInCodeMode,
+              icon: IconCode,
+              disabled: !sourceUrl,
+            }),
+          ]
+        : []),
       new MenuItem({
-        label: 'Open in Code Mode',
-        action: this.openInCodeMode,
-        icon: IconCode,
-        disabled: !this.args.file?.sourceUrl,
-      }),
-      new MenuItem({
-        label: `Copy ${submittedOrGenerated} Content`,
+        label: 'Copy Submitted Content',
         action: this.copySubmittedContentTask.perform,
         icon: Copy,
         disabled: !this.args.file?.sourceUrl || this.args.isNewFile,
       }),
       new MenuItem({
-        label: `Restore ${submittedOrGenerated} Content`,
+        label: 'Restore Submitted Content',
         action: this.toggleRestorePatchedFileModal,
         icon: Undo2,
         dangerous: true,
-        disabled:
-          !this.args.file?.sourceUrl ||
-          this.args.isNewFile ||
-          (this.args.codePatchStatus != null &&
-            this.args.codePatchStatus !== 'applied'),
+        disabled: !this.args.file?.sourceUrl || this.args.isNewFile,
       }),
     ];
 

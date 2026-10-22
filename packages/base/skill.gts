@@ -31,8 +31,6 @@ export class Skill extends CardDef {
   static embedded: BaseDefComponent = class Embedded extends Component<
     typeof this
   > {
-    <template>
-      <@fields.cardTitle />
-    </template>
+    <template><@fields.cardTitle /></template>
   };
 }

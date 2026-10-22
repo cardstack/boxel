@@ -17,6 +17,61 @@ export const PRERENDER_SERVER_DRAINING_STATUS_CODE = 410;
 export const PRERENDER_HOST_SHELL_HASH_HEADER =
   'X-Boxel-Prerender-Host-Shell-Hash';
 
+// The ordering position of the shell the header above names. The realm server
+// claims it from `host_shell_generation` when it reports the token, and the
+// manager echoes the pair on every heartbeat so a prerender server records a
+// number alongside each token it adopts.
+//
+// The token alone cannot order two renders: it is a hash, so it answers "same
+// shell?" and never "older shell?". A render carries the generation of the
+// shell its page was warmed against onto the row it produces, which is what
+// lets a repair pass select the rows a deploy left behind.
+//
+// Optional throughout. A manager that has been told no generation sends no
+// header, and a prerender server that receives none records none — the token
+// keeps working on its own, which is what keeps a rolling deploy of these two
+// services from changing recycle behaviour.
+export const PRERENDER_HOST_SHELL_GENERATION_HEADER =
+  'X-Boxel-Prerender-Host-Shell-Generation';
+
+// Read a host-shell generation off a header or a JSON body field. The value
+// crosses a process boundary as text and is stamped onto a row, so anything
+// that cannot order a render is discarded here rather than coerced.
+//
+// The accepted range is what a real generation can be, and both ends matter:
+//
+//   - Below 1 is not a generation. Zero is the seeded "no shell observed yet"
+//     sentinel, and a real claim never returns it — the first transition takes
+//     1. Letting it through would stamp rows with a number that reads as older
+//     than everything and enlists them in every repair, and `?? null` at the
+//     write site does not catch a zero.
+//   - Above `INTEGER` cannot be stored. The column is `integer`, so a larger
+//     value parses cleanly here and then fails at the write, turning a
+//     malformed header into a failed index row.
+//
+// Deliberately not resting on the one producer that filters the sentinel
+// upstream. This is the boundary every value crosses, and a guard that holds
+// only because of its current caller is a guard that stops holding when a
+// second one appears.
+const MAX_HOST_SHELL_GENERATION = 2147483647;
+
+export function parseHostShellGeneration(
+  raw: string | number | null | undefined,
+): number | undefined {
+  if (raw === null || raw === undefined || raw === '') {
+    return undefined;
+  }
+  let parsed = typeof raw === 'number' ? raw : Number(raw);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 1 ||
+    parsed > MAX_HOST_SHELL_GENERATION
+  ) {
+    return undefined;
+  }
+  return parsed;
+}
+
 // CS-10872: correlates one client-initiated prerender call across
 // remote-prerenderer → manager → prerender-server. The client assigns
 // the ID on the first request; the manager and prerender-server echo
@@ -128,6 +183,35 @@ export const prerenderRequestTimeoutMs = parseTimeoutMs(
   defaultPrerenderRequestTimeoutMs,
 );
 
+// Ceiling on the hang diagnostics a timed-out render gathers before it hands
+// back its RenderError, counted from the moment the render timer fires. The
+// render holds its tab lease for that whole window, and every capture in it
+// talks to Chrome, so a renderer that has stopped answering CDP must not be
+// able to stretch it: whatever has been captured when the budget runs out is
+// what the error reports. Well inside the request-timeout overhead above, so
+// the caller still gets the RenderError rather than a request-level abort.
+// A hard CPU peg reports its debugger-pause outcome (and with it whether the
+// browser answered a CDP session attach) about 17 s in, so a budget below
+// that loses those signals on exactly the renders they exist for.
+const DEFAULT_RENDER_TIMEOUT_DIAGNOSTICS_BUDGET_MS = 20_000;
+
+// Read on every timeout rather than once at load, so a test can shrink it.
+export function resolveRenderTimeoutDiagnosticsBudgetMs(): number {
+  return parseTimeoutMs(
+    process.env.RENDER_TIMEOUT_DIAGNOSTICS_BUDGET_MS,
+    DEFAULT_RENDER_TIMEOUT_DIAGNOSTICS_BUDGET_MS,
+  );
+}
+
+// How long an indexing batch on an affinity may go without starting a visit,
+// with nothing of its in flight there, before the prerender server takes it
+// for finished: its hold on the affinity is dropped (see
+// `batch-ownership-gate.ts`) and its icon memo with it. One visit's whole
+// request budget — within a live batch, visits follow one another with only
+// the pass's own bookkeeping between them, so a gap that long means the batch
+// has stopped visiting.
+export const batchStaleAfterMs = prerenderRequestTimeoutMs;
+
 export function resolvePrerenderManagerRequestTimeoutMs(): number {
   return parseTimeoutMs(
     process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS,
@@ -172,7 +256,7 @@ export type PrerenderRetryPolicy = 'any-failure' | 'only-when-undelivered';
 export type PrerenderEndpoint =
   | 'prerender-module'
   | 'prerender-visit'
-  | 'prerender-screenshot'
+  | 'prerender-capture'
   | 'run-command';
 
 // The policy for each endpoint, read by both layers that retry — the client's
@@ -183,7 +267,7 @@ export type PrerenderEndpoint =
 const RETRY_POLICY_BY_PATH: Record<PrerenderEndpoint, PrerenderRetryPolicy> = {
   'prerender-module': 'any-failure',
   'prerender-visit': 'any-failure',
-  'prerender-screenshot': 'any-failure',
+  'prerender-capture': 'any-failure',
   'run-command': 'only-when-undelivered',
 };
 

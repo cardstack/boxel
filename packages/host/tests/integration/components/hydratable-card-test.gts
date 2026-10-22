@@ -8,6 +8,8 @@ import {
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { provide } from 'ember-provide-consume-context';
 
@@ -32,14 +34,6 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../../helpers';
-import {
-  CardDef,
-  Component,
-  StringField,
-  contains,
-  field,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -71,6 +65,9 @@ class TestContext extends GlimmerComponent<TestContextSignature> {
 
 const HASSAN = `${testRealmURL}Person/hassan`;
 const INERT_HTML = `<div class='inert' data-test-inert-card>Inert</div>`;
+// Inert HTML as the prerender captures it: the card-api container with its
+// boundary class already on it.
+const BOUNDED_INERT_HTML = `<div class='boxel-card-container boxel-card-container--boundaries inert' data-test-inert-card>Inert</div>`;
 
 // Drives a mount/unmount toggle so a teardown test can destroy the rendered
 // HydratableCard and assert it releases its Store reference.
@@ -90,8 +87,6 @@ module('Integration | Component | hydratable-card', function (hooks) {
     activeRealms: [testRealmURL],
     autostart: true,
   });
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class Person extends CardDef {
@@ -292,6 +287,73 @@ module('Integration | Component | hydratable-card', function (hooks) {
       0,
       'the live element stays out of the tracker too',
     );
+  });
+
+  // The boundary ring is on by default and survives hydration: the inert HTML
+  // is rendered as handed in, and the live card renders inside its own bounded
+  // container.
+  test('displayContainer defaults to true — the hydrated card keeps its container boundaries', async function (assert) {
+    let inert = htmlComponent(BOUNDED_INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='hover'
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-inert-card]')
+      .hasClass('boxel-card-container--boundaries', 'inert ring is kept');
+
+    await triggerEvent('[data-test-hydratable-card]', 'mouseenter');
+
+    assert
+      .dom('[data-test-hydratable-card]')
+      .hasClass(
+        'boxel-card-container--boundaries',
+        'the live container draws its boundaries too',
+      );
+  });
+
+  // `@displayContainer={{false}}` reaches the live card the way
+  // `<@fields.x @displayContainer={{false}} />` does for a field render. The
+  // inert HTML is the caller's to shape (RenderableSearchEntry rewrites its
+  // container classes), so it renders exactly as handed in.
+  test('displayContainer=false — the hydrated card renders without container boundaries', async function (assert) {
+    let inert = htmlComponent(INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='hover'
+            @displayContainer={{false}}
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-inert-card]')
+      .exists('the inert HTML renders as handed in');
+
+    await triggerEvent('[data-test-hydratable-card]', 'mouseenter');
+
+    assert
+      .dom('[data-test-live-card]')
+      .hasText('Live: Hassan', 'still hydrates');
+    assert
+      .dom('[data-test-hydratable-card]')
+      .doesNotHaveClass(
+        'boxel-card-container--boundaries',
+        'the live container renders without boundaries',
+      );
   });
 
   // `none` stays inert with the diagnostic attribute and never fetches.

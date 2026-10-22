@@ -1,0 +1,160 @@
+{
+  "_comment": [
+    "The standard workload. Targets the experiments realm, which ships in the",
+    "repo as packages/experiments-realm (332 instances across 142 modules) and",
+    "exists in every deployed environment, so it is the one realm everybody can",
+    "point at. Run this to get a number comparable to someone else's.",
+    "",
+    "WHAT COMPARABILITY MEANS HERE. The realm in the repo and a realm deployed",
+    "from it are not guaranteed to hold the same instances, and nothing keeps",
+    "them in step. Instance counts measured on a deployed experiments realm",
+    "against the same types counted in packages/experiments-realm:",
+    "",
+    "                            deployed   in repo",
+    "  Spec                           117        28",
+    "  FileDefFormatPreview            37        37",
+    "  Author                          30         5",
+    "  Model                           30        30",
+    "  CardListing                     26         0",
+    "  Company                         25         5",
+    "  SprintTask                      25        15",
+    "  CRMTask                         24        13",
+    "",
+    "So these queries give comparable numbers across runs against THE SAME",
+    "TARGET — before and after a change, on one environment. They do not make",
+    "two targets comparable to each other; compare each against its own earlier",
+    "run. On a realm cloned from the repo, CardListing returns nothing and the",
+    "other shapes are smaller; that is the realm differing, not a regression.",
+    "",
+    "The types are the realm's highest-count instance types, chosen by count",
+    "rather than by interest, so the set tracks where the cost actually is.",
+    "Re-derive against whatever you are testing with --derive-workload when the",
+    "realm has moved on.",
+    "",
+    "\"fieldset\": \"entries\" pins which of the two documents _federated-search",
+    "returns, and so which code path this measures: the prerendered renderings a",
+    "grid or the search panel fetches. The other path, \"item\", is card data",
+    "only and is what store.search sends for a query-backed field; on a deployed",
+    "realm the same filter costs four to six times as much on this path as on",
+    "that one. It is pinned rather than left to the default so a number from",
+    "this file is never ambiguous about which path produced it. A workload",
+    "modelling query-backed fields should set \"item\" instead.",
+    "",
+    "The queries are unbounded: every instance of the type, with its included[]",
+    "closure assembled. That is the shape this harness exists to measure.",
+    "--derive-workload bounds its queries at 20 by default, so a derived run and",
+    "this one are not comparable to each other either.",
+    "",
+    "KNOW THE COST BEFORE A LONG RUN. The realm sizes these queries, and it is",
+    "not a realm you sized. Bounded at 20 cards, the six largest shapes on a",
+    "deployed realm total roughly 2.2 MB per pass; unbounded, as they are here,",
+    "they are larger again — Spec alone is 117 instances there. Every reader",
+    "fires the whole set on each re-run, so multiply by --readers and by the",
+    "re-run rate. The run summary prints the exact per-pass total for the run",
+    "you actually did; read it after a short run before committing to a long",
+    "one, particularly from CloudShell.",
+    "",
+    "The writers post an Author, which is in the read set, so each write",
+    "invalidates a query the readers are running. Point this at a realm you are",
+    "willing to dirty — a clone made by setup-realm.ts — or pass --writers 0 for",
+    "a read-only run.",
+    "",
+    "On a deployment the shared realms an ordinary user can reach are granted",
+    "read only, so against those --writers 0 is not a convenience, it is the",
+    "only run that works."
+  ],
+
+  "fieldset": "entries",
+
+  "queries": [
+    {
+      "label": "Spec",
+      "filter": {
+        "item.on": { "module": "@cardstack/base/spec", "name": "Spec" }
+      }
+    },
+    {
+      "label": "FileDefFormatPreview",
+      "filter": {
+        "item.on": {
+          "module": "${realm}filedef-fixtures/format-preview",
+          "name": "FileDefFormatPreview"
+        }
+      }
+    },
+    {
+      "label": "Author",
+      "filter": { "item.on": { "module": "${realm}author", "name": "Author" } }
+    },
+    {
+      "label": "Model",
+      "filter": {
+        "item.on": {
+          "module": "${realm}llm-model-environment/model",
+          "name": "Model"
+        }
+      }
+    },
+    {
+      "label": "CardListing",
+      "filter": {
+        "item.on": {
+          "module": "@cardstack/catalog/catalog-app/listing/listing",
+          "name": "CardListing"
+        }
+      }
+    },
+    {
+      "label": "Company",
+      "filter": {
+        "item.on": { "module": "${realm}crm/company", "name": "Company" }
+      }
+    },
+    {
+      "label": "SprintTask",
+      "filter": {
+        "item.on": { "module": "${realm}sprint-task", "name": "SprintTask" }
+      }
+    },
+    {
+      "label": "CRMTask",
+      "filter": {
+        "item.on": { "module": "${realm}crm/task", "name": "CRMTask" }
+      }
+    }
+  ],
+
+  "secondaryQueries": [
+    {
+      "label": "BlogPost",
+      "filter": {
+        "item.on": { "module": "${realm}blog-post", "name": "BlogPost" }
+      }
+    },
+    {
+      "label": "Contact",
+      "filter": {
+        "item.on": { "module": "${realm}crm/contact", "name": "Contact" }
+      }
+    }
+  ],
+
+  "extraQueries": [
+    {
+      "label": "Spec(page20)",
+      "filter": {
+        "item.on": { "module": "@cardstack/base/spec", "name": "Spec" }
+      },
+      "page": { "size": 20 }
+    }
+  ],
+
+  "write": {
+    "path": "Author",
+    "adoptsFrom": { "module": "${realm}author", "name": "Author" },
+    "attributes": {
+      "firstName": "Load",
+      "lastName": "Harness ${n}"
+    }
+  }
+}

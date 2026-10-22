@@ -9,20 +9,22 @@ import type {
   PromptParts,
   TextContent,
 } from './types.ts';
+import { chunk, uniqBy } from 'lodash-es';
 import { constructHistory } from './history.ts';
 import {
+  canonicalizeMatrixMediaKey,
   downloadFile,
   downloadFileAsBase64DataUrl,
-  extractCodePatchBlocks,
-  isToolOrCodePatchResult,
+  isToolResult,
 } from './matrix-utils.ts';
-import { isRecognisedDebugCommand } from './debug.ts';
+import { isRecognisedDebugCommand, sessionSkillFeatures } from './debug.ts';
 import {
   isImageContentType,
   isPdfContentType,
   isAudioContentType,
   isVideoContentType,
   isTextBasedContentType,
+  modalityLabel,
   requiredModality,
 } from './modality.ts';
 import type {
@@ -30,7 +32,6 @@ import type {
   BoxelContext,
   CardMessageContent,
   CardMessageEvent,
-  CodePatchResultEvent,
   ToolResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   EncodedToolRequest,
@@ -43,12 +44,9 @@ import type {
   SerializedFileDef,
 } from '@cardstack/base/file-api';
 import {
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   getToolDefinitions,
   getToolRequests,
   isToolResultEventType,
-  isToolResultRelType,
   isToolResultWithNoOutputMsgtype,
   isToolResultWithOutputContent,
   isToolResultWithOutputMsgtype,
@@ -59,6 +57,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
+  CAPTURE_SOURCE_URL_PREFIX,
 } from '../matrix-constants.ts';
 import {
   buildToolFunctionNameFromResolvedRef,
@@ -76,12 +75,34 @@ import { logger } from '../log.ts';
 
 import { parseFrontmatter } from '../frontmatter-parse.ts';
 import { isMarkdownFile } from '../paths.ts';
-import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
+import {
+  READ_REALM_FILE_TOOL_NAME,
+  SKILL_INSTRUCTIONS_MESSAGE,
+  SYSTEM_MESSAGE,
+} from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
+import { readStopState } from './stop.ts';
+import {
+  carriedSkillFilesMessage,
+  compactionSummaryMessage,
+  getLatestCompaction,
+  historyAfterCompaction,
+  isSkillFileUrl,
+  MAX_CARRIED_SKILL_FILE_BYTES,
+  MAX_CARRIED_SKILL_FILE_EVENTS,
+  type CompactionContent,
+} from './compaction.ts';
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
+const SOURCE_CODE_TOOL_NAME_PREFIX = 'run-realm-code_';
 const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
+
+// Leads the trailing context message. That message is the last user message
+// of every prompt, so without this a model can take the context as the
+// request and answer it instead of the user's message before it.
+export const TRAILING_CONTEXT_PREAMBLE =
+  'This message carries context for the conversation above. It is not a new request from the user. Respond to the latest user request above, or continue the work in progress.';
 
 function getLog() {
   return logger('ai-bot:prompt');
@@ -108,8 +129,10 @@ function getLog() {
  *      with line numbers, in the history message that attached them.
  *    - Media types are listed in history as metadata ([contentType,
  *      contentSize bytes]); their bodies are embedded only for the
- *      current message, as native content parts on the volatile trailing
- *      message (after the history cache breakpoint):
+ *      current turn — the current human message's attachments and those
+ *      of every tool result since it (see currentTurnToolResultMedia) — as
+ *      native content parts on the volatile trailing message (after the
+ *      history cache breakpoint):
  *      - Supported images (PNG, JPEG, WEBP, GIF) → `image_url` parts.
  *      - PDF (application/pdf) → `file` parts with base64 data URL in
  *        `file_data`.
@@ -124,11 +147,11 @@ function getLog() {
  *      it can carry the current media without touching history bytes.
  *
  * 4. **Model capability gating**: When `inputModalities` is provided
- *    (from the active LLM's model configuration), the current message's
+ *    (from the active LLM's model configuration), the current turn's
  *    media parts are only included if the model supports the required
- *    modality. Gated files are listed in a warning on the trailing
- *    message. When `inputModalities` is undefined, all modalities pass
- *    through.
+ *    modality. Gated files are named in a note on the trailing message
+ *    that tells the model it cannot see them. When `inputModalities` is
+ *    undefined, all modalities pass through.
  *
  * 5. **Read-file command scoping**: When the AI requests to read a file
  *    via a tool call, the file URL must match a sourceUrl previously
@@ -226,9 +249,23 @@ export async function getPromptParts(
     eventList,
     client,
   );
-  let shouldRespond = getShouldRespond(history);
-  let pendingCodePatchCorrectnessChecks =
-    collectPendingCodePatchCorrectnessCheck(history, aiBotUserId);
+  // A stop holds the whole loop, including the correctness check a code
+  // patch would otherwise kick off; and the edits of a stopped answer are
+  // never checked, not even once the user writes again. constructHistory
+  // keeps only messages and tool results, so the stop is read from the raw
+  // event list.
+  let { inForce: stop, stoppedMessageIds } = readStopState(
+    eventList,
+    aiBotUserId,
+  );
+  let shouldRespond = !stop && getShouldRespond(history);
+  let pendingCodePatchCorrectnessChecks = stop
+    ? undefined
+    : collectPendingCodePatchCorrectnessCheck(
+        history,
+        aiBotUserId,
+        stoppedMessageIds,
+      );
   if (!shouldRespond) {
     return {
       shouldRespond: false,
@@ -255,6 +292,8 @@ export async function getPromptParts(
     disabledSkillIds,
     client,
     inputModalities,
+    sessionSkillFeatures(eventList, aiBotUserId),
+    getLatestCompaction(eventList, aiBotUserId),
   );
   return {
     shouldRespond,
@@ -269,36 +308,20 @@ export async function getPromptParts(
   };
 }
 
-// The host reports a patch result with the fenced block's position among ALL
-// code blocks in the message, while `codePatchBlocks` holds the patch blocks
-// only. A message that quotes an example code fence before its first patch
-// therefore reports indexes that never line up with 0..n-1, so matching by
-// position waited forever on a patch the host had long applied. Match by
-// count instead: a result per distinct block index, at least one per patch.
-function allCodePatchesHaveAResult(
-  codePatchBlocks: string[],
-  results: CodePatchResultEvent[],
-  onlyApplied = false,
-): boolean {
-  if (codePatchBlocks.length === 0) {
-    return true;
-  }
-  let indexes = new Set(
-    results
-      .filter(
-        (result) =>
-          !onlyApplied || result.content['m.relates_to']?.key === 'applied',
-      )
-      .map((result) => result.content.codeBlockIndex),
-  );
-  return indexes.size >= codePatchBlocks.length;
+// A user's approval of a call ai-bot holds for approval. It is not the call's
+// outcome: the call stays unanswered — no turn starts, and the prompt shows
+// no result for it — until ai-bot publishes the real result.
+export function isApprovalResult(event: {
+  content?: { 'm.relates_to'?: { key?: string } };
+}): boolean {
+  return event.content?.['m.relates_to']?.key === 'approved';
 }
 
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
-  // If the aibot is awaiting command or code patch results, it should not respond yet.
+  // If the aibot is awaiting tool results, it should not respond yet.
   let lastEventExcludingResults = findLast(
     history,
-    (event) => !isToolOrCodePatchResult(event),
+    (event) => !isToolResult(event),
   );
 
   if (!lastEventExcludingResults) {
@@ -317,9 +340,6 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
     getToolRequests<Partial<EncodedToolRequest>>(
       lastEventExcludingResults.content as CardMessageContent,
     ) ?? [];
-  let codePatchBlocks = extractCodePatchBlocks(
-    (lastEventExcludingResults.content as CardMessageContent).body,
-  );
   let lastEventIndex = history.indexOf(lastEventExcludingResults);
   let recentEventsToCheck = history.slice(lastEventIndex + 1);
 
@@ -331,15 +351,12 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
           isToolResultEvent(event) &&
           (isToolResultWithOutputMsgtype(event.content.msgtype) ||
             isToolResultWithNoOutputMsgtype(event.content.msgtype)) &&
+          !isApprovalResult(event) &&
           event.content.commandRequestId === toolRequest.id
         );
       });
     });
-  let allCodePatchesHaveResults = allCodePatchesHaveAResult(
-    codePatchBlocks,
-    recentEventsToCheck.filter(isCodePatchResultEvent),
-  );
-  if (!allToolsHaveResults || !allCodePatchesHaveResults) {
+  if (!allToolsHaveResults) {
     return false;
   }
   if (!allCheckCorrectnessToolsHaveResults(history)) {
@@ -378,23 +395,84 @@ function allCheckCorrectnessToolsHaveResults(
 function shouldPromptCheckCorrectnessSummary(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
+  followUpsByMessage: ReadonlyMap<string, CorrectnessFollowUp[]>,
 ) {
   let lastEvent = history[history.length - 1];
   if (!isToolResultEvent(lastEvent)) {
     return false;
   }
-  if (!isCheckCorrectnessToolResultEvent(lastEvent, history)) {
+  let batch = checkCorrectnessBatchFor(lastEvent, history);
+  if (!batch) {
+    return false;
+  }
+  let followUps = followUpsByMessage.get(history[batch.sourceIndex].event_id);
+  if (!followUps || !needsCheckCorrectnessSummary(followUps)) {
     return false;
   }
   let lastNonResultIndex = findLastIndex(
     history,
-    (event) => !isToolOrCodePatchResult(event),
+    (event) => !isToolResult(event),
   );
   if (lastNonResultIndex === -1) {
     return true;
   }
   let lastNonResultEvent = history[lastNonResultIndex];
   return lastNonResultEvent.sender === aiBotUserId;
+}
+
+// Whether a batch, given the follow-ups its checks produced in the history,
+// still needs the trailing note. Only a check that did not come back clean
+// and carries no instruction of its own calls for it. A batch whose checks
+// passed already has the success note, and a second note about the same
+// results would only repeat it. A batch with any instruction to act on (fix
+// the errors, fix the warnings, stop at the attempt limit) leaves it out:
+// the note asks the model to finish its answer, which read last competes with
+// that instruction. A canceled check never ran, so there is nothing to note,
+// and telling the model to carry on would work against the stop or the newer
+// message that canceled it.
+function needsCheckCorrectnessSummary(
+  followUps: readonly CorrectnessFollowUp[],
+): boolean {
+  return (
+    followUps.includes('unresolved') &&
+    !followUps.some(
+      (followUp) =>
+        followUp === 'fix' || followUp === 'limit' || followUp === 'warnings',
+    )
+  );
+}
+
+// The checks one message asked for: the message a check result answers, and
+// that message's checkCorrectness requests. Undefined when `toolResult` does
+// not answer a checkCorrectness request.
+interface CheckCorrectnessBatch {
+  sourceIndex: number;
+  requests: ToolRequest[];
+}
+
+function checkCorrectnessBatchFor(
+  toolResult: ToolResultEvent,
+  history: DiscreteMatrixEvent[],
+): CheckCorrectnessBatch | undefined {
+  let sourceEventId = toolResult.content['m.relates_to']?.event_id;
+  if (!sourceEventId) {
+    return undefined;
+  }
+  let sourceIndex = history.findIndex(
+    (event) => event.event_id === sourceEventId,
+  );
+  if (sourceIndex === -1) {
+    return undefined;
+  }
+  let requests = getCheckCorrectnessToolRequests(history[sourceIndex]);
+  if (
+    !requests.some(
+      (request) => request.id === toolResult.content.commandRequestId,
+    )
+  ) {
+    return undefined;
+  }
+  return { sourceIndex, requests };
 }
 
 function getCheckCorrectnessToolRequests(
@@ -447,7 +525,12 @@ function isTerminalToolResultEventFor(
     return false;
   }
   let status = event.content['m.relates_to']?.key;
-  return status === 'applied' || status === 'failed' || status === 'invalid';
+  return (
+    status === 'applied' ||
+    status === 'failed' ||
+    status === 'invalid' ||
+    status === 'canceled'
+  );
 }
 
 async function getEnabledSkills(
@@ -961,47 +1044,336 @@ export async function getTools(
       continue;
     }
 
-    // Tools discovered by the bot reading a skill file (readRealmFile):
-    // each applied read's result event embeds the definitions in
-    // `data.discoveredTools`. Only the bot publishes these; a
-    // discoveredTools block on anyone else's result event is not a
-    // legitimate discovery, and a failed or invalid read is not evidence
-    // of anything.
-    if (isToolResultEvent(event) && event.sender === aiBotUserId) {
-      let content = event.content;
-      if (
-        !isToolResultWithOutputContent(content) ||
-        content['m.relates_to']?.key !== 'applied'
-      ) {
+    for (let { tool, sourceSkillUrl } of toolSourceTools(event, aiBotUserId)) {
+      if (sourceSkillUrl && disabledSkillIds.has(sourceSkillUrl)) {
         continue;
       }
-      for (let def of content.data?.discoveredTools ?? []) {
-        if (
-          !def?.sourceSkillUrl ||
-          disabledSkillIds.has(def.sourceSkillUrl) ||
-          def.definition?.type !== 'function' ||
-          !def.definition.function?.name
-        ) {
-          continue;
-        }
-        add(def.definition as Tool);
-      }
-      continue;
-    }
-
-    // Tools carried in a user message's context.
-    if (
-      event.type === 'm.room.message' &&
-      event.sender !== aiBotUserId &&
-      event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
-    ) {
-      for (let tool of event.content.data?.context?.tools ?? []) {
-        add(tool);
-      }
+      add(tool);
     }
   }
 
   return Array.from(toolMap.values());
+}
+
+// The tools an event other than a room-skills state event contributes to
+// `getTools`, with the skill each discovered one came from.
+//
+// Tools discovered by the bot reading a skill file (readRealmFile): each
+// applied read's result event embeds the definitions in
+// `data.discoveredTools`. Only the bot publishes these; a discoveredTools
+// block on anyone else's result event is not a legitimate discovery, and a
+// failed or invalid read is not evidence of anything. A user message can
+// also carry tools in its context.
+export function toolSourceTools(
+  event: DiscreteMatrixEvent,
+  aiBotUserId: string,
+): { tool: Tool; sourceSkillUrl?: string }[] {
+  if (isToolResultEvent(event) && event.sender === aiBotUserId) {
+    let content = event.content;
+    if (
+      !isToolResultWithOutputContent(content) ||
+      content['m.relates_to']?.key !== 'applied'
+    ) {
+      return [];
+    }
+    return (content.data?.discoveredTools ?? [])
+      .filter(
+        (def) =>
+          def?.sourceSkillUrl &&
+          def.definition?.type === 'function' &&
+          def.definition.function?.name,
+      )
+      .map((def) => ({
+        tool: def.definition as Tool,
+        sourceSkillUrl: def.sourceSkillUrl,
+      }));
+  }
+  if (
+    event.type === 'm.room.message' &&
+    event.sender !== aiBotUserId &&
+    event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+  ) {
+    return (event.content.data?.context?.tools ?? []).map((tool: Tool) => ({
+      tool,
+    }));
+  }
+  return [];
+}
+
+// The events a compaction carries forward for `getTools`: in order, each
+// event that contributes a tool, from a given skill, that no earlier one
+// does. The history before the compaction's cut is not loaded, and
+// `getRoomEvents` fetches these back by id. A tool is told apart by its skill
+// as well as its name: when two skills declare the same tool and the user
+// disables the first, `getTools` takes it from the second.
+export function toolSourceEventIdsToCarry(
+  eventList: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): string[] {
+  let seen = new Set<string>();
+  let eventIds: string[] = [];
+  for (let event of eventList) {
+    let newKeys = toolSourceTools(event, aiBotUserId)
+      .filter(({ tool }) => !!tool?.function?.name)
+      .map(({ tool, sourceSkillUrl }) =>
+        JSON.stringify([sourceSkillUrl ?? null, tool.function.name]),
+      )
+      .filter((key) => !seen.has(key));
+    if (newKeys.length) {
+      newKeys.forEach((key) => seen.add(key));
+      eventIds.push(event.event_id);
+    }
+  }
+  return eventIds.slice(0, MAX_CARRIED_TOOL_SOURCE_EVENTS);
+}
+
+// The most tool-source events a compaction event carries. The tools of the
+// events past it leave the prompt once the history before the cut is no
+// longer loaded, unless the compaction also lists the event in
+// `skillFileEventIds`: `getRoomEvents` fetches it back for its skill files,
+// and `getTools` takes the tools of every event it is given.
+export const MAX_CARRIED_TOOL_SOURCE_EVENTS = 200;
+
+// The skill files an applied result ai-bot published attached.
+function attachedSkillFiles(
+  event: DiscreteMatrixEvent,
+  aiBotUserId: string,
+): SerializedFileDef[] {
+  if (!isToolResultEvent(event) || event.sender !== aiBotUserId) {
+    return [];
+  }
+  let content = event.content;
+  if (
+    !isToolResultWithOutputContent(content) ||
+    content['m.relates_to']?.key !== 'applied'
+  ) {
+    return [];
+  }
+  return (content.data?.attachedFiles ?? []).filter(
+    (file: SerializedFileDef) =>
+      isSkillFileUrl(file.sourceUrl) &&
+      isTextBasedContentType(file.contentType),
+  );
+}
+
+// The readRealmFile results in the history that attached skill files, in
+// order. A result counts only when the request it answers is in the history
+// too, so a file named like a skill file that came from anywhere else (a
+// readUrl call, a host command) is never taken for one.
+function skillFileReadEvents(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): DiscreteMatrixEvent[] {
+  let readRequestIds = new Set<string>();
+  for (let event of history) {
+    if (event.type !== 'm.room.message' || event.sender !== aiBotUserId) {
+      continue;
+    }
+    for (let request of getToolRequests<Partial<EncodedToolRequest>>(
+      event.content as CardMessageContent,
+    ) ?? []) {
+      if (request.id && request.name === READ_REALM_FILE_TOOL_NAME) {
+        readRequestIds.add(request.id);
+      }
+    }
+  }
+  return history.filter(
+    (event) =>
+      attachedSkillFiles(event, aiBotUserId).length > 0 &&
+      readRequestIds.has((event as ToolResultEvent).content.commandRequestId),
+  );
+}
+
+// The readRealmFile results with skill files that a prompt carries after a
+// compaction's summary: the ones the compaction lists, or, for a compaction
+// that lists none, every one in the history up to its cut point.
+function carriedSkillFileEvents(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  compaction: CompactionContent,
+): DiscreteMatrixEvent[] {
+  let cutIndex = history.findIndex(
+    (event) => event.event_id === compaction.upToEventId,
+  );
+  if (cutIndex === -1) {
+    return [];
+  }
+  let covered = history.slice(0, cutIndex + 1);
+  if (!compaction.skillFileEventIds) {
+    return skillFileReadEvents(covered, aiBotUserId);
+  }
+  let listed = new Set(compaction.skillFileEventIds);
+  return covered.filter(
+    (event) =>
+      listed.has(event.event_id) &&
+      attachedSkillFiles(event, aiBotUserId).length > 0,
+  );
+}
+
+// The readRealmFile results with skill files that a new compaction, cutting
+// at `upToEventId`, lists: those the prompt carries after the current
+// compaction, and those read since, up to the new cut point. Their history
+// is not loaded once the new compaction is in place, so `getRoomEvents`
+// fetches them back by id. The newest are kept past
+// `MAX_CARRIED_SKILL_FILE_EVENTS`.
+export function skillFileEventIdsToCarry(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  upToEventId: string,
+  currentCompaction?: CompactionContent,
+): string[] {
+  let cutIndex = history.findIndex((event) => event.event_id === upToEventId);
+  if (cutIndex === -1) {
+    return [];
+  }
+  let covered = history.slice(0, cutIndex + 1);
+  let carried = new Set(
+    (currentCompaction
+      ? carriedSkillFileEvents(history, aiBotUserId, currentCompaction)
+      : []
+    ).map((event) => event.event_id),
+  );
+  for (let event of skillFileReadEvents(covered, aiBotUserId)) {
+    carried.add(event.event_id);
+  }
+  return covered
+    .map((event) => event.event_id)
+    .filter((eventId) => carried.has(eventId))
+    .slice(-MAX_CARRIED_SKILL_FILE_EVENTS);
+}
+
+// Whether a skill file belongs to a skill the user disabled: the disabled
+// skill's own file, or a file under the directory of a disabled `SKILL.md`.
+function isDisabledSkillFile(url: string, disabledSkillIds: string[]) {
+  return disabledSkillIds.some(
+    (skillId) =>
+      url === skillId ||
+      (skillId.endsWith('/SKILL.md') &&
+        url.startsWith(skillId.slice(0, -'SKILL.md'.length))),
+  );
+}
+
+// How many carried skill files `carriedSkillFiles` downloads at once.
+const SKILL_FILE_DOWNLOAD_CONCURRENCY = 10;
+
+// The message that follows a compaction's summary with the skill files the
+// model read in the history the summary replaces, or undefined when it read
+// none. Each file appears once, as its newest read.
+//
+// Files are chosen newest first by the size their read recorded: each one
+// that still fits in `MAX_CARRIED_SKILL_FILE_BYTES` is chosen, so an older,
+// smaller file can be chosen after a newer one too large for what is left.
+// Only the chosen files are downloaded, a few at a time. The message then
+// carries them as rendered, line numbers and headings included, newest first
+// up to the same limit. The files that don't fit, files with no recorded
+// size, and files the media server no longer has or won't serve are named
+// for the model to read again. Any other download failure throws, as it does
+// for the room's tool definitions, so a transient failure never changes the
+// message. Files of a skill the user disabled are left out, as its tools
+// are.
+//
+// The message depends on the history up to the cut point, the files it
+// names, and which skills are disabled. Its bytes stay the same on every
+// prompt until the next compaction, the next time the user disables or
+// enables a skill (which also changes the tools), or a carried file's media
+// goes missing; a file read again after the cut point does not change it.
+async function carriedSkillFiles(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  compaction: CompactionContent,
+  disabledSkillIds: string[],
+  client: MatrixClient,
+): Promise<string | undefined> {
+  let seenUrls = new Set<string>();
+  let newestFirst: SerializedFileDef[] = [];
+  for (let event of [
+    ...carriedSkillFileEvents(history, aiBotUserId, compaction),
+  ].reverse()) {
+    for (let file of [...attachedSkillFiles(event, aiBotUserId)].reverse()) {
+      let url = file.sourceUrl!;
+      if (seenUrls.has(url) || isDisabledSkillFile(url, disabledSkillIds)) {
+        continue;
+      }
+      seenUrls.add(url);
+      newestFirst.push(file);
+    }
+  }
+  if (!newestFirst.length) {
+    return undefined;
+  }
+
+  let chosen: SerializedFileDef[] = [];
+  let chosenBytes = 0;
+  for (let file of newestFirst) {
+    let size = file.contentSize;
+    if (
+      typeof size === 'number' &&
+      Number.isFinite(size) &&
+      size >= 0 &&
+      chosenBytes + size <= MAX_CARRIED_SKILL_FILE_BYTES
+    ) {
+      chosenBytes += size;
+      chosen.push(file);
+    }
+  }
+
+  let downloaded: (SerializedFileDef | undefined)[] = [];
+  for (let batch of chunk(chosen, SKILL_FILE_DOWNLOAD_CONCURRENCY)) {
+    downloaded.push(
+      ...(await Promise.all(
+        batch.map(async (file) => {
+          try {
+            return {
+              ...toFileDefMetadata(file),
+              content: await downloadFile(client, file),
+            };
+          } catch (error: any) {
+            if (error?.status === 404 || error?.status === 403) {
+              getLog().warn(
+                `Skill file ${file.sourceUrl} is no longer available to carry`,
+                error,
+              );
+              return undefined;
+            }
+            throw new Error(
+              `Could not download the skill file ${file.sourceUrl} that the compaction carries: ${error?.message ?? error}`,
+              { cause: error },
+            );
+          }
+        }),
+      )),
+    );
+  }
+
+  let carried: SerializedFileDef[] = [];
+  let carriedBytes = 0;
+  let encoder = new TextEncoder();
+  for (let file of downloaded) {
+    if (!file) {
+      continue;
+    }
+    let bytes =
+      encoder.encode(attachedFilesToMessage([file])).length +
+      (carried.length ? 1 : 0);
+    if (carriedBytes + bytes <= MAX_CARRIED_SKILL_FILE_BYTES) {
+      carriedBytes += bytes;
+      carried.push(file);
+    }
+  }
+  let carriedUrls = new Set(carried.map((file) => file.sourceUrl));
+  let reReadUrls = newestFirst
+    .map((file) => file.sourceUrl!)
+    .filter((url) => !carriedUrls.has(url))
+    .reverse();
+  carried.reverse();
+  getLog().info(
+    `Carrying ${carried.length} skill files (${carriedBytes} bytes rendered) after the compaction summary; ${reReadUrls.length} to read again: %j`,
+    reReadUrls,
+  );
+  return carriedSkillFilesMessage(
+    carried.length ? attachedFilesToMessage(carried) : undefined,
+    reReadUrls,
+  );
 }
 
 export function getLastUserMessage(
@@ -1079,42 +1451,99 @@ function isCheckCorrectnessToolResultEvent(
   toolResultEvent: ToolResultEvent,
   history: DiscreteMatrixEvent[],
 ) {
-  let sourceEventId = toolResultEvent.content['m.relates_to']?.event_id;
-  if (!sourceEventId) {
-    return false;
-  }
-  let sourceEvent = history.find((event) => event.event_id === sourceEventId);
-  if (!sourceEvent) {
-    return false;
-  }
-  let checkRequests = getCheckCorrectnessToolRequests(sourceEvent);
-  if (checkRequests.length === 0) {
-    return false;
-  }
-  return checkRequests.some(
-    (request) => request.id === toolResultEvent.content.commandRequestId,
+  return checkCorrectnessBatchFor(toolResultEvent, history) !== undefined;
+}
+
+// The latest result that is a call's outcome. A request can accumulate
+// several result events — a 'failed' from a first attempt and an 'applied'
+// from a later retry — and an approval is not an outcome at all.
+function findToolResultFor(
+  toolResults: ToolResultEvent[],
+  commandRequestId: string | undefined,
+): ToolResultEvent | undefined {
+  return findLast(
+    toolResults,
+    (toolResult) =>
+      (isToolResultWithOutputMsgtype(toolResult.content.msgtype) ||
+        isToolResultWithNoOutputMsgtype(toolResult.content.msgtype)) &&
+      !isApprovalResult(toolResult) &&
+      toolResult.content.commandRequestId === commandRequestId,
   );
 }
 
-function getCodePatchResults(
-  cardMessageEvent: CardMessageEvent,
-  history: DiscreteMatrixEvent[],
-) {
-  let codePatchResultEvents = history.filter((e) => {
-    if (
-      isCodePatchResultEvent(e) &&
-      e.content['m.relates_to']?.event_id === cardMessageEvent.event_id
-    ) {
-      return true;
-    }
+// Whether a call finished streaming: it has a name, and arguments that parse.
+function isCompleteToolRequest(request: Partial<EncodedToolRequest>): boolean {
+  if (!request.name) {
     return false;
-  }) as CodePatchResultEvent[];
-  return codePatchResultEvents;
+  }
+  if (typeof request.arguments === 'object' && request.arguments !== null) {
+    // older format, already decoded
+    return true;
+  }
+  if (typeof request.arguments !== 'string') {
+    return false;
+  }
+  try {
+    JSON.parse(request.arguments);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
-  const content = event.content as CardMessageContent;
-  return (getToolRequests<Partial<EncodedToolRequest>>(content) ?? []).map(
+function isCanceledAnswer(event: CardMessageEvent): boolean {
+  return Boolean(
+    (event.content as CardMessageContent).isCanceled ||
+    (event as { status?: string }).status === 'cancelled',
+  );
+}
+
+// The calls of a bot message that go into the prompt. The provider rejects a
+// prompt whose call has no tool message after it ("No tool output found for
+// function call"), so every call carried here gets one from
+// `toResultMessages`, even when nothing answered it in the room. A call cut
+// off mid-stream, because its answer was stopped or interrupted, is not a
+// request the model finished making: it is left out, with its canceled
+// result, so the prompt never carries arguments that do not parse.
+function promptToolRequests(
+  event: CardMessageEvent,
+  toolResults: ToolResultEvent[],
+): Partial<EncodedToolRequest>[] {
+  let canceled = isCanceledAnswer(event);
+  return (
+    getToolRequests<Partial<EncodedToolRequest>>(
+      event.content as CardMessageContent,
+    ) ?? []
+  ).filter(
+    (toolRequest) =>
+      toolRequest.id &&
+      (isCompleteToolRequest(toolRequest) ||
+        (!canceled && findToolResultFor(toolResults, toolRequest.id))),
+  );
+}
+
+// The tool message for a call nothing in the room answered: the answer that
+// made it was canceled before the call ran, or its result never arrived (for
+// example ai-bot restarted, or the user wrote again without running it).
+function unansweredToolMessage(
+  event: CardMessageEvent,
+  toolCallId: string,
+): OpenAIPromptMessage {
+  let canceled = isCanceledAnswer(event);
+  return {
+    role: 'tool',
+    tool_call_id: toolCallId,
+    content: canceled
+      ? 'Tool call canceled: the answer that made this call was stopped before the call ran.\n'
+      : 'Tool call not run: no result was recorded for this call.\n',
+  };
+}
+
+function toToolCalls(
+  event: CardMessageEvent,
+  toolResults: ToolResultEvent[] = [],
+): ChatCompletionMessageToolCall[] {
+  return promptToolRequests(event, toolResults).map(
     (toolRequest: Partial<EncodedToolRequest>) => {
       return {
         id: toolRequest.id!,
@@ -1128,32 +1557,32 @@ function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   );
 }
 
+// The prompt messages for a bot message's tool results, and the follow-up
+// each of its correctness checks produced (empty when it asked for none).
 async function toResultMessages(
   event: CardMessageEvent,
   toolResults: ToolResultEvent[] = [],
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
-): Promise<OpenAIPromptMessage[]> {
-  const messageContent = event.content as CardMessageContent;
+): Promise<{
+  messages: OpenAIPromptMessage[];
+  correctnessFollowUps: CorrectnessFollowUp[];
+}> {
   let toolResultEntries = await Promise.all(
-    (getToolRequests<Partial<EncodedToolRequest>>(messageContent) ?? []).map(
+    promptToolRequests(event, toolResults).map(
       async (toolRequest: Partial<EncodedToolRequest>) => {
         let decodedToolRequest = decodeToolRequestSafe(toolRequest);
-        // A request can accumulate several result events — a 'failed' from a
-        // first attempt and an 'applied' from a later retry — and the latest
-        // one is the call's actual outcome.
-        let toolResult = findLast(
-          toolResults,
-          (toolResult) =>
-            (isToolResultWithOutputMsgtype(toolResult.content.msgtype) ||
-              isToolResultWithNoOutputMsgtype(toolResult.content.msgtype)) &&
-            toolResult.content.commandRequestId === toolRequest.id,
-        );
+        let toolResult = findToolResultFor(toolResults, toolRequest.id);
         if (!toolResult) {
-          return undefined;
+          return {
+            toolMessage: unansweredToolMessage(event, toolRequest.id!),
+            followUpMessage: undefined,
+            correctnessFollowUp: undefined,
+          };
         }
         let content: string;
         let followUpUserMessage: string | undefined;
+        let correctnessFollowUp: CorrectnessFollowUp | undefined;
         let status = toolResult.content['m.relates_to']?.key;
         let isCheckCorrectnessRequest =
           decodedToolRequest?.name === CHECK_CORRECTNESS_TOOL_NAME;
@@ -1164,6 +1593,7 @@ async function toResultMessages(
           );
           content = checkCorrectnessContent.toolMessage;
           followUpUserMessage = checkCorrectnessContent.followUpUserMessage;
+          correctnessFollowUp = checkCorrectnessContent.followUp;
         } else if (isReadFileCommand(decodedToolRequest)) {
           let fileUrl = getReadFileUrl(decodedToolRequest);
           if (fileUrl && !isFileAttachedInRoom(fileUrl, history)) {
@@ -1206,7 +1636,7 @@ async function toResultMessages(
               content: followUpUserMessage,
             } as OpenAIPromptMessage)
           : undefined;
-        return { toolMessage, followUpMessage };
+        return { toolMessage, followUpMessage, correctnessFollowUp };
       },
     ),
   );
@@ -1215,12 +1645,33 @@ async function toResultMessages(
       .map((entry) => entry?.toolMessage)
       .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
     [];
-  let followUpMessages =
+  let correctnessFollowUps = toolResultEntries
+    .map((entry) => entry?.correctnessFollowUp)
+    .filter((followUp): followUp is CorrectnessFollowUp => Boolean(followUp));
+  // The checks one message asked for get one instruction for the batch. If
+  // any of them did not pass, the success note is left out: it would tell the
+  // model the write passed and to finish, next to the instruction to fix it.
+  // A request to fix warnings displaces it the same way. Checks that end the
+  // same way share one note, so the model reads the same instruction once,
+  // not once per file.
+  let anyCheckNotPassed = correctnessFollowUps.some(
+    (followUp) => followUp !== 'success' && followUp !== 'pending',
+  );
+  let followUpMessages = uniqBy(
     toolResultEntries
       .map((entry) => entry?.followUpMessage)
-      .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
-    [];
-  return [...toolMessages, ...followUpMessages];
+      .filter((message): message is OpenAIPromptMessage => Boolean(message))
+      .filter(
+        (message) =>
+          !anyCheckNotPassed ||
+          message.content !== CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+      ) ?? [],
+    (message) => message.content,
+  );
+  return {
+    messages: [...toolMessages, ...followUpMessages],
+    correctnessFollowUps,
+  };
 }
 
 function buildCheckCorrectnessResultContent(
@@ -1231,36 +1682,65 @@ function buildCheckCorrectnessResultContent(
   if (!toolResult) {
     return {
       toolMessage: `Check correctness for ${targetDescription} is still pending.`,
+      followUp: 'pending',
     };
   }
   let status = toolResult.content['m.relates_to']?.key ?? 'unknown';
-  let resultCard = extractCorrectnessResultCard(toolResult);
-  if (resultCard) {
+  let read = readCorrectnessResult(toolResult);
+  if (read.kind === 'card') {
     let formattedSummary = formatCorrectnessResultSummary(
       targetDescription,
-      resultCard,
+      read.summary,
       status,
     );
     let attemptNumber = Math.max(
       1,
       getCorrectnessCheckAttemptFromRequest(request),
     );
-    return toCheckCorrectnessResultContent(formattedSummary, attemptNumber);
+    return toCheckCorrectnessResultContent(
+      formattedSummary,
+      correctnessCheckPassed(toolResult),
+      attemptNumber,
+      isCardCorrectnessTarget(request),
+    );
+  }
+  if (read.kind === 'unreadable' && status === 'applied') {
+    return {
+      toolMessage: `The correctness result for ${targetDescription} could not be read${read.reason ? `: ${read.reason}` : ''}.`,
+      followUp: 'unresolved',
+    };
   }
   if (status === 'applied') {
     return {
       toolMessage: `Check correctness passed for ${targetDescription}.`,
+      followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+      followUp: 'success',
     };
   }
+  let followUp: CorrectnessFollowUp =
+    status === 'canceled' ? 'canceled' : 'unresolved';
   let failureReason = toolResult.content.failureReason;
   if (failureReason) {
     return {
       toolMessage: `Check correctness was marked as ${status} for ${targetDescription}: ${failureReason}`,
+      followUp,
     };
   }
   return {
     toolMessage: `Check correctness was marked as ${status} for ${targetDescription}.`,
+    followUp,
   };
+}
+
+// Card-instance checks report warnings about what was written (undeclared
+// fields, invalid options, dangling links), so only those ask for a fix.
+// A card can be written as its .json file, so that counts too.
+function isCardCorrectnessTarget(request?: ToolRequest): boolean {
+  let { targetType, targetRef } = extractCheckCorrectnessTargetParts(request);
+  return (
+    targetType === 'card' ||
+    (typeof targetRef === 'string' && targetRef.endsWith('.json'))
+  );
 }
 
 function describeCheckCorrectnessTarget(request?: ToolRequest) {
@@ -1285,48 +1765,94 @@ type CorrectnessResultSummary = {
   warnings: string[];
 };
 
+// What a check's result asks of the model next: fix its errors, stop at the
+// attempt limit, fix its warnings, note that it passed (`success`), nothing
+// it can act on (`unresolved`: the card says incorrect without naming an
+// error, the result could not be read, the check failed or was declined),
+// nothing because the check never ran (`canceled`), or nothing yet
+// (`pending`). The history's follow-up messages and the trailing note are
+// both decided from it.
+type CorrectnessFollowUp =
+  | 'fix'
+  | 'limit'
+  | 'warnings'
+  | 'success'
+  | 'unresolved'
+  | 'canceled'
+  | 'pending';
+
 type CheckCorrectnessResultContent = {
   toolMessage: string;
   followUpUserMessage?: string;
+  followUp: CorrectnessFollowUp;
 };
 
 type FormattedCorrectnessSummary = {
   summary: string;
   hasErrors: boolean;
+  hasWarnings: boolean;
 };
 
-// Sent after a correctness check fails. The fix must be a SEARCH/REPLACE block
-// against the file: a card that just failed its check is usually not indexed,
-// so any card-editing tool (patch-fields, patchCardInstance) applies to
-// nothing and costs a turn. Name no tool, ban them all.
-const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Fix the errors above by editing the failing file(s) with SEARCH/REPLACE blocks. Do not call any tool to make the fix — a card that just failed its check is not indexed yet, so a tool applies to nothing.
-2. First re-fetch the files that have errors so the SEARCH block matches their current content, then write the fixing blocks in the same reply.
-3. One short sentence of prose before the blocks saying there is an issue you are fixing; do not mention SEARCH/REPLACE blocks in the prose.`;
+// Sent after a correctness check fails. The runner can edit source immediately
+// after a failed check, while instance-oriented tools still cannot reliably
+// address a card that has not been indexed yet.
+const CODE_FIX_INSTRUCTION = `1. Fix the errors above by re-reading the failing file(s), then use the run-realm-code tool. Make awaited realm.fs.replace calls with exact current text.
+2. Keep all fixes in one tool call or one reply, and do not repeat a failed match without re-reading the file.`;
 
+// Sent once, as a user-role message after the tool results, when every check
+// in a batch passed (see correctnessCheckPassed); the trailing summary below
+// is then left out, so this is the last instruction the model reads. A bare "summarize in one sentence"
+// in that place replaces the answer the user asked for before the write (the
+// question that came with the request, a skill's required closing line) with
+// the sentence. The note therefore sizes itself at one line and sends the
+// model back to the user's message to finish.
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
-  'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Mention any warnings if they exist. Do not mention correctness or automated checks or tool calls.';
+  'The write above passed its checks. Note that in at most one line of your reply, including any warnings listed above. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
+
+// Warnings never fail the check, but they often name a mistake in what was
+// just written (a misnamed field, an invalid option, a dangling link) that
+// left the card silently incomplete. Sent in place of the success note while
+// attempts remain; these rounds count toward MAX_CORRECTNESS_FIX_ATTEMPTS, and
+// at the cap the success note (which already asks the model to mention the
+// warnings) takes over.
+const CORRECTNESS_WARNINGS_FIX_INSTRUCTION =
+  'The write above passed its checks, but the warnings above may point at mistakes in what you just wrote: a misnamed field, a value outside the allowed options, data written in the wrong place, or a link to a card that does not exist. Fix the ones that are mistakes now by re-reading the file and using the run-realm-code tool. If none are mistakes, note the warnings in at most one line and finish your answer to the user. Do not mention correctness, automated checks or tool calls.';
 
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
-// This lands mid-answer, right after a file is written, and it is the last
-// thing the model reads before replying — so an instruction that only asks
-// for a summary reads as the end of the work. It was: a build announced as
-// two cards delivered one, reported it was clean, and stopped, because
-// nothing resumes a plan across turns.
-const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
-  'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
+// Rides the trailing context message after a batch with a check that did
+// not come back clean and no instruction to act on: a card that says it is
+// incorrect without naming an error, a result card that could not be read, or
+// a check marked failed or invalid (see needsCheckCorrectnessSummary for the
+// batches that leave it out).
+// It is the last thing the model reads before replying, right after a file
+// is written, so it sizes the note at one line and sends the model back to
+// the user's message: an instruction that only asks for a summary reads as
+// the end of the work, and nothing resumes a plan across turns.
+export const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
+  'The automated correctness checks have finished, and at least one did not come back clean. Note the outcome in at most one line of your reply, based on the tool output above; if it leaves something open, say what. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
 
-function extractCorrectnessResultCard(
-  toolResult?: ToolResultEvent,
-): CorrectnessResultSummary | undefined {
-  if (!toolResult || !isToolResultWithOutputContent(toolResult.content)) {
-    return undefined;
+// What a check result carries: no result card at all (a result with no
+// output), a card whose content could not be read (its download failed, or
+// it is not a correctness card), or the card's verdict.
+type CorrectnessResultRead =
+  | { kind: 'no-card' }
+  | { kind: 'unreadable'; reason: string | undefined }
+  | { kind: 'card'; summary: CorrectnessResultSummary };
+
+function readCorrectnessResult(
+  toolResult: ToolResultEvent,
+): CorrectnessResultRead {
+  if (!isToolResultWithOutputContent(toolResult.content)) {
+    return { kind: 'no-card' };
   }
   let cardPayload = toolResult.content.data.card;
   if (!cardPayload) {
-    return undefined;
+    return { kind: 'no-card' };
   }
-  let cardContent = cardPayload.content ?? cardPayload;
+  if (typeof cardPayload.content !== 'string') {
+    return { kind: 'unreadable', reason: cardPayload.error };
+  }
   let parsed:
     | {
         data?: {
@@ -1339,18 +1865,58 @@ function extractCorrectnessResultCard(
       }
     | undefined;
   try {
-    parsed =
-      typeof cardContent === 'string' ? JSON.parse(cardContent) : cardContent;
+    parsed = JSON.parse(cardPayload.content);
   } catch (error) {
     getLog().error('Unable to parse correctness result card', error);
-    return undefined;
+    return { kind: 'unreadable', reason: 'its content is not JSON' };
   }
-  let attributes = parsed?.data?.attributes ?? {};
+  let attributes = parsed?.data?.attributes;
+  if (!attributes) {
+    return { kind: 'unreadable', reason: 'it is not a correctness result' };
+  }
   return {
-    correct: Boolean(attributes.correct),
-    errors: Array.isArray(attributes.errors) ? attributes.errors : [],
-    warnings: Array.isArray(attributes.warnings) ? attributes.warnings : [],
+    kind: 'card',
+    summary: {
+      correct: Boolean(attributes.correct),
+      errors: Array.isArray(attributes.errors) ? attributes.errors : [],
+      warnings: Array.isArray(attributes.warnings) ? attributes.warnings : [],
+    },
   };
+}
+
+function correctnessErrorLines(summary: CorrectnessResultSummary): string[] {
+  return summary.errors.filter(
+    (entry) => typeof entry === 'string' && entry.trim().length > 0,
+  );
+}
+
+// The one definition of a check that passed. It came back applied, and
+// either carries no result card or a card that says it is correct and lists
+// no errors. Everything else, including a card that could not be read, did
+// not pass: the model is never told a write passed when nobody knows.
+function correctnessCheckPassed(toolResult: ToolResultEvent): boolean {
+  if (toolResult.content['m.relates_to']?.key !== 'applied') {
+    return false;
+  }
+  let read = readCorrectnessResult(toolResult);
+  if (read.kind === 'no-card') {
+    return true;
+  }
+  return (
+    read.kind === 'card' &&
+    read.summary.correct &&
+    correctnessErrorLines(read.summary).length === 0
+  );
+}
+
+function correctnessCheckHasWarnings(toolResult: ToolResultEvent): boolean {
+  let read = readCorrectnessResult(toolResult);
+  return (
+    read.kind === 'card' &&
+    read.summary.warnings.some(
+      (entry) => typeof entry === 'string' && entry.trim().length > 0,
+    )
+  );
 }
 
 function formatCorrectnessResultSummary(
@@ -1364,9 +1930,7 @@ function formatCorrectnessResultSummary(
       ? `Check correctness passed for ${targetDescription}.`
       : `Check correctness was marked as ${status} for ${targetDescription}.`,
   );
-  let errorLines = result.errors.filter(
-    (entry) => typeof entry === 'string' && entry.trim().length,
-  );
+  let errorLines = correctnessErrorLines(result);
   if (errorLines.length) {
     sections.push(
       `Errors:\n${errorLines.map((line) => `- ${line}`).join('\n')}`,
@@ -1384,6 +1948,7 @@ function formatCorrectnessResultSummary(
   return {
     summary,
     hasErrors: errorLines.length > 0,
+    hasWarnings: warningLines.length > 0,
   };
 }
 
@@ -1441,6 +2006,7 @@ function extractCheckCorrectnessTargetParts(
 
 function getCheckCorrectnessTargetKey(
   request?: ToolRequest,
+  { withEvent = true }: { withEvent?: boolean } = {},
 ): string | undefined {
   let { targetRef, targetType, targetEventId } =
     extractCheckCorrectnessTargetParts(request);
@@ -1450,7 +2016,7 @@ function getCheckCorrectnessTargetKey(
   return formatCorrectnessTargetKeyWithEvent(
     targetType,
     targetRef,
-    targetEventId,
+    withEvent ? targetEventId : undefined,
   );
 }
 
@@ -1474,9 +2040,18 @@ type CorrectnessCheckAttemptInfo = { attempt: number; succeeded: boolean };
 function getLatestCorrectnessCheckAttemptInfo(
   history: DiscreteMatrixEvent[],
   targetKey: string,
+  opts: {
+    // match on the target alone, across the patch events that wrote it
+    ignoreEvent?: boolean;
+    // stop looking back at (and don't look past) an event matching this
+    stopAt?: (event: DiscreteMatrixEvent) => boolean;
+  } = {},
 ): CorrectnessCheckAttemptInfo | undefined {
   for (let index = history.length - 1; index >= 0; index--) {
     let event = history[index];
+    if (opts.stopAt?.(event)) {
+      return undefined;
+    }
     if (!isToolResultEventType(event.type)) {
       continue;
     }
@@ -1491,32 +2066,47 @@ function getLatestCorrectnessCheckAttemptInfo(
     if (!sourceRequest) {
       continue;
     }
-    if (getCheckCorrectnessTargetKey(sourceRequest) !== targetKey) {
+    if (
+      getCheckCorrectnessTargetKey(sourceRequest, {
+        withEvent: !opts.ignoreEvent,
+      }) !== targetKey
+    ) {
       continue;
     }
     let attempt = Math.max(
       1,
       getCorrectnessCheckAttemptFromRequest(sourceRequest),
     );
-    let resultCard = extractCorrectnessResultCard(toolResult);
-    let status = toolResult.content['m.relates_to']?.key;
-    let succeeded =
-      status === 'applied' &&
-      Boolean(resultCard) &&
-      resultCard!.correct === true &&
-      resultCard!.errors.filter(
-        (entry) => typeof entry === 'string' && entry.trim().length,
-      ).length === 0;
-    return { attempt, succeeded };
+    // A pass that still carries warnings asks for a fix, so it keeps the
+    // attempt count running rather than resetting it.
+    return {
+      attempt,
+      succeeded:
+        correctnessCheckPassed(toolResult) &&
+        !correctnessCheckHasWarnings(toolResult),
+    };
   }
   return undefined;
 }
 
+// Attempts count consecutive automated rounds on one target. Each fix the AI
+// sends arrives in a new message, so a target with no check yet under this
+// patch event continues the count from its last check under an earlier
+// event — unless the user has spoken since, which starts a fresh run.
 function getNextCorrectnessCheckAttempt(
   history: DiscreteMatrixEvent[],
   targetKey: string,
+  targetKeyWithoutEvent: string | undefined,
+  aiBotUserId: string,
 ): number {
-  let latest = getLatestCorrectnessCheckAttemptInfo(history, targetKey);
+  let latest =
+    getLatestCorrectnessCheckAttemptInfo(history, targetKey) ??
+    (targetKeyWithoutEvent
+      ? getLatestCorrectnessCheckAttemptInfo(history, targetKeyWithoutEvent, {
+          ignoreEvent: true,
+          stopAt: (event) => isUserChatMessage(event, aiBotUserId),
+        })
+      : undefined);
   if (!latest) {
     return 1;
   }
@@ -1528,7 +2118,9 @@ function getNextCorrectnessCheckAttempt(
 
 function toCheckCorrectnessResultContent(
   formattedSummary: FormattedCorrectnessSummary,
+  passed: boolean,
   attemptNumber = 0,
+  isCardTarget = false,
 ): CheckCorrectnessResultContent {
   let attemptNote =
     formattedSummary.hasErrors && attemptNumber > 0
@@ -1538,23 +2130,42 @@ function toCheckCorrectnessResultContent(
     .filter(Boolean)
     .join('\n\n');
 
-  if (!formattedSummary.hasErrors) {
+  if (passed) {
+    if (
+      isCardTarget &&
+      formattedSummary.hasWarnings &&
+      attemptNumber < MAX_CORRECTNESS_FIX_ATTEMPTS
+    ) {
+      return {
+        toolMessage,
+        followUpUserMessage: CORRECTNESS_WARNINGS_FIX_INSTRUCTION,
+        followUp: 'warnings',
+      };
+    }
     return {
       toolMessage,
       followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+      followUp: 'success',
     };
+  }
+  // Not passed, but nothing listed to fix (the card says incorrect without
+  // naming an error): no note, and the trailing summary covers it.
+  if (!formattedSummary.hasErrors) {
+    return { toolMessage, followUp: 'unresolved' };
   }
 
   if (attemptNumber >= MAX_CORRECTNESS_FIX_ATTEMPTS) {
     return {
       toolMessage,
       followUpUserMessage: CORRECTNESS_FAILURE_LIMIT_INSTRUCTION,
+      followUp: 'limit',
     };
   }
 
   return {
     toolMessage,
-    followUpUserMessage: SEARCH_REPLACE_FIX_INSTRUCTION,
+    followUpUserMessage: CODE_FIX_INSTRUCTION,
+    followUp: 'fix',
   };
 }
 
@@ -1565,6 +2176,8 @@ export async function buildPromptForModel(
   disabledSkillIds: string[] = [],
   client: MatrixClient,
   inputModalities?: string[],
+  enabledSkillFeatures: string[] = [],
+  compaction?: CompactionContent,
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -1574,12 +2187,17 @@ export async function buildPromptForModel(
     throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
-  for (let event of history) {
+  // The follow-up each correctness check produced, by the bot message that
+  // asked for the checks, so the trailing note is decided from the same
+  // results the history carries.
+  let correctnessFollowUpsByMessage = new Map<string, CorrectnessFollowUp[]>();
+  // History through the compaction's cut point is replaced by its summary,
+  // which leads the history. Single messages are never shortened or edited.
+  for (let event of historyAfterCompaction(history, compaction)) {
+    // Tool results have their own event types, so this also skips them;
+    // they ride in with the tool calls they answer.
     if (event.type !== 'm.room.message') {
       continue;
-    }
-    if (isToolOrCodePatchResult(event)) {
-      continue; // we'll include these with the tool calls
     }
     if (
       'isStreamingFinished' in event.content &&
@@ -1590,14 +2208,13 @@ export async function buildPromptForModel(
     let body = event.content.body;
 
     if (event.sender === aiBotUserId) {
-      // Past search/replace blocks ride in history verbatim. Eliding them
-      // rewrote already-sent messages — the placeholder text even changed
-      // once the patch result arrived — which broke the cache prefix, and
-      // models imitated the "[Omitting …]" placeholder in place of a real
-      // patch, stalling the session. Carrying the blocks forward costs
-      // cached-read tokens instead.
+      // Past assistant messages ride in history verbatim, code blocks
+      // included. Rewriting or eliding already-sent messages breaks the
+      // prompt-cache prefix, and models imitate an elision placeholder in
+      // place of real code.
       let content = body;
-      let toolCalls = toToolCalls(event as CardMessageEvent);
+      let toolResults = getToolResults(event as CardMessageEvent, history);
+      let toolCalls = toToolCalls(event as CardMessageEvent, toolResults);
       if (content || toolCalls.length) {
         let historicalMessage: OpenAIPromptMessage = {
           role: 'assistant',
@@ -1608,17 +2225,22 @@ export async function buildPromptForModel(
         }
         historicalMessages.push(historicalMessage);
       }
-      let toolResults = getToolResults(event as CardMessageEvent, history);
-      (
+      let { messages: resultMessages, correctnessFollowUps } =
         await toResultMessages(
           event as CardMessageEvent,
           toolResults,
           client,
           history,
-        )
-      ).forEach((message) => historicalMessages.push(message));
+        );
+      historicalMessages.push(...resultMessages);
+      if (correctnessFollowUps.length) {
+        correctnessFollowUpsByMessage.set(event.event_id, correctnessFollowUps);
+      }
     }
-    if (event.sender !== aiBotUserId) {
+    if (
+      event.sender !== aiBotUserId &&
+      !(event.type === 'm.room.message' && isRecognisedDebugCommand(body))
+    ) {
       let attachmentText = await buildAttachmentsMessagePart(
         client,
         event as CardMessageEvent,
@@ -1640,7 +2262,7 @@ export async function buildPromptForModel(
   if (skillCards.length) {
     systemMessageParts.push(SKILL_INSTRUCTIONS_MESSAGE);
     systemMessageParts = systemMessageParts.concat(
-      skillCardsToMessages(skillCards),
+      skillCardsToMessages(skillCards, enabledSkillFeatures),
     );
   }
 
@@ -1664,6 +2286,24 @@ export async function buildPromptForModel(
       }),
     },
   ];
+  if (compaction) {
+    // A user message, not part of the system message: the summary is a
+    // record of the conversation, not instructions.
+    messages.push({
+      role: 'user',
+      content: compactionSummaryMessage(compaction.summary),
+    });
+    let skillFilesMessage = await carriedSkillFiles(
+      history,
+      aiBotUserId,
+      compaction,
+      disabledSkillIds,
+      client,
+    );
+    if (skillFilesMessage) {
+      messages.push({ role: 'user', content: skillFilesMessage });
+    }
+  }
   messages = messages.concat(historicalMessages);
   let contextContent = await buildContextMessage(
     history,
@@ -1683,22 +2323,24 @@ export async function buildPromptForModel(
   // The correctness-summary instruction applies to this request only, so it
   // rides the volatile trailing message; a history entry that vanishes on
   // the next request would both churn the history and waste the marker.
-  let currentUserMessageEvent = findLast(
-    history,
-    (event) =>
-      event.sender !== aiBotUserId &&
-      event.type === 'm.room.message' &&
-      !isToolOrCodePatchResult(event),
+  let currentUserMessageEvent = findLast(history, (event) =>
+    isHumanMessage(event, aiBotUserId),
   ) as MatrixEventWithBoxelContext | undefined;
   let { mediaParts, unsupportedNote } = await buildCurrentTurnMediaParts(
     client,
     currentUserMessageEvent,
     inputModalities,
+    currentTurnToolResultMedia(history, aiBotUserId, inputModalities),
   );
   let trailingContent = [
+    TRAILING_CONTEXT_PREAMBLE,
     contextContent,
     unsupportedNote,
-    shouldPromptCheckCorrectnessSummary(history, aiBotUserId)
+    shouldPromptCheckCorrectnessSummary(
+      history,
+      aiBotUserId,
+      correctnessFollowUpsByMessage,
+    )
       ? CHECK_CORRECTNESS_SUMMARY_INSTRUCTION
       : undefined,
   ]
@@ -1760,78 +2402,38 @@ function addHistoryCacheBreakpoint(
 function collectPendingCodePatchCorrectnessCheck(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
+  // The answers the user stopped (see readStopState); their edits are never
+  // checked. Edits that landed before the stop are ones the user walked
+  // away from, and checking them later would only delay the answer to
+  // whatever they write next.
+  stoppedMessageIds: ReadonlySet<string> = new Set(),
 ): PendingCodePatchCorrectnessCheck | undefined {
-  // If any bot message has unresolved code patches or card patch commands,
-  // defer correctness entirely until all are applied/failed.
-  if (hasUnresolvedCodePatches(history, aiBotUserId)) {
-    return undefined;
-  }
-
   for (let index = history.length - 1; index >= 0; index--) {
     let event = history[index];
     if (
       event.type !== 'm.room.message' ||
       event.sender !== aiBotUserId ||
-      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE ||
+      stoppedMessageIds.has(event.event_id)
     ) {
       continue;
     }
-
-    // Only consider messages that contain code patches or card patch commands.
-    let content = event.content as CardMessageContent;
-    let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-    let toolRequests = (
-      getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
-    ).map((request) => decodeToolRequest(request));
-    let relevantTools = toolRequests.filter((request) =>
-      isCardPatchCommand(request.name),
-    );
-    let hasRelevantChanges =
-      codePatchBlocks.length > 0 || relevantTools.length > 0;
-    if (!hasRelevantChanges) {
+    let edits = resolveCodeEdits(event as CardMessageEvent, history);
+    // Only messages with source or card edits count, and a cancelled one
+    // counts only if some of its edits landed.
+    if (!edits || edits.cancelledWithoutChanges) {
       continue;
     }
-
-    let codePatchResults = getCodePatchResults(
-      event as CardMessageEvent,
-      history,
-    );
-    let toolResults = getToolResults(event as CardMessageEvent, history);
-    let isCancelled =
-      content.isCanceled || (event as any).status === 'cancelled';
-    let appliedChanges = hasAppliedChanges(
-      codePatchResults,
-      relevantTools,
-      toolResults,
-    );
-    if (isCancelled && !appliedChanges) {
-      continue;
-    }
-
-    let appliedCodePatchResults = codePatchResults.filter(
-      (result) => result.content['m.relates_to']?.key === 'applied',
-    );
-    let allCodePatchesResolved = allCodePatchesHaveAResult(
-      codePatchBlocks,
-      appliedCodePatchResults,
-    );
-    let allRelevantToolsResolved =
-      relevantTools.length === 0 ||
-      relevantTools.every((request) =>
-        toolResults.some(
-          (result) => result.content.commandRequestId === request.id,
-        ),
-      );
-
-    // If the most recent message with patches/commands isn't resolved yet,
-    // don't walk back to earlier messages—wait for the current one to finish.
-    if (!allCodePatchesResolved || !allRelevantToolsResolved) {
+    // Wait for the most recent message with edits to finish before checking
+    // it, and do not walk back to older messages meanwhile.
+    if (!edits.allResolved) {
       return undefined;
     }
-
     let correctnessCheck = buildCodePatchCorrectnessMessage(
       event as CardMessageEvent,
+      edits,
       history,
+      aiBotUserId,
     );
     if (correctnessCheck) {
       return correctnessCheck;
@@ -1840,85 +2442,52 @@ function collectPendingCodePatchCorrectnessCheck(
   return undefined;
 }
 
-function hasUnresolvedCodePatches(
+interface ResolvedCodeEdits {
+  content: CardMessageContent;
+  relevantTools: ReturnType<typeof decodeToolRequest>[];
+  toolResults: ReturnType<typeof getToolResults>;
+  cancelledWithoutChanges: boolean;
+  allResolved: boolean;
+}
+
+// The source and card edits a bot message requested, with their results.
+// Undefined when the message requested none.
+function resolveCodeEdits(
+  messageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-): boolean {
-  // Consider only the most recent relevant bot message; older unresolved
-  // commands should not block correctness for newer changes.
-  for (let index = history.length - 1; index >= 0; index--) {
-    let event = history[index];
-    if (
-      event.type !== 'm.room.message' ||
-      event.sender !== aiBotUserId ||
-      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
-    ) {
-      continue;
-    }
-    let content = event.content as CardMessageContent;
-    let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-    let toolRequests = (
-      getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
-    ).map((request) => decodeToolRequest(request));
-    let relevantTools = toolRequests.filter((request) =>
-      isCardPatchCommand(request.name),
-    );
-    let hasRelevantChanges =
-      codePatchBlocks.length > 0 || relevantTools.length > 0;
-    if (!hasRelevantChanges) {
-      continue;
-    }
-
-    let codePatchResults = getCodePatchResults(
-      event as CardMessageEvent,
-      history,
-    );
-    let toolResults = getToolResults(event as CardMessageEvent, history);
-    let isCancelled =
-      content.isCanceled || (event as any).status === 'cancelled';
-    let appliedChanges = hasAppliedChanges(
-      codePatchResults,
-      relevantTools,
-      toolResults,
-    );
-    if (isCancelled && !appliedChanges) {
-      return false;
-    }
-    let allCodePatchesResolved = allCodePatchesHaveAResult(
-      codePatchBlocks,
-      codePatchResults,
-      true,
-    );
-    let allRelevantToolsResolved =
-      relevantTools.length === 0 ||
-      relevantTools.every((request) =>
-        toolResults.some(
-          (result) => result.content.commandRequestId === request.id,
-        ),
-      );
-
-    return !(allCodePatchesResolved && allRelevantToolsResolved);
+): ResolvedCodeEdits | undefined {
+  let content = messageEvent.content as CardMessageContent;
+  let relevantTools = (
+    getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
+  )
+    .map((request) => decodeToolRequest(request))
+    .filter((request) => isCodeEditingTool(request.name));
+  if (relevantTools.length === 0) {
+    return undefined;
   }
-  return false;
+  let toolResults = getToolResults(messageEvent, history);
+  let isCancelled =
+    content.isCanceled || (messageEvent as any).status === 'cancelled';
+  return {
+    content,
+    relevantTools,
+    toolResults,
+    cancelledWithoutChanges:
+      isCancelled && !hasAppliedChanges(relevantTools, toolResults),
+    allResolved: relevantTools.every((request) =>
+      toolResults.some(
+        (result) => result.content.commandRequestId === request.id,
+      ),
+    ),
+  };
 }
 
 function buildCodePatchCorrectnessMessage(
   messageEvent: CardMessageEvent,
+  { content, relevantTools, toolResults }: ResolvedCodeEdits,
   history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
 ): PendingCodePatchCorrectnessCheck | undefined {
-  let content = messageEvent.content as CardMessageContent;
-  let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-  let toolRequests = (
-    getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
-  ).map((request) => decodeToolRequest(request));
-  let relevantTools = toolRequests.filter((request) =>
-    isCardPatchCommand(request.name),
-  );
-
-  if (codePatchBlocks.length === 0 && relevantTools.length === 0) {
-    return undefined;
-  }
-
   if (
     history.some((event) =>
       isCodePatchCorrectnessEventForMessage(event, messageEvent.event_id!),
@@ -1927,39 +2496,7 @@ function buildCodePatchCorrectnessMessage(
     return undefined;
   }
 
-  let codePatchResults = getCodePatchResults(messageEvent, history);
-  let toolResults = getToolResults(messageEvent, history);
-  let isCancelled =
-    content.isCanceled || (messageEvent as any).status === 'cancelled';
-  let appliedChanges = hasAppliedChanges(
-    codePatchResults,
-    relevantTools,
-    toolResults,
-  );
-  if (isCancelled && !appliedChanges) {
-    return undefined;
-  }
-
-  let appliedCodePatchResults = codePatchResults.filter(
-    (result) => result.content['m.relates_to']?.key === 'applied',
-  );
-  let allCodePatchesResolved = allCodePatchesHaveAResult(
-    codePatchBlocks,
-    appliedCodePatchResults,
-  );
-  let allRelevantToolsResolved =
-    relevantTools.length === 0 ||
-    relevantTools.every((request) =>
-      toolResults.some(
-        (result) => result.content.commandRequestId === request.id,
-      ),
-    );
-
-  if (!allCodePatchesResolved || !allRelevantToolsResolved) {
-    return undefined;
-  }
-
-  let files = gatherPatchedFiles(codePatchResults);
+  let files = gatherPatchedFiles(relevantTools, toolResults);
   let cards = gatherPatchedCards(relevantTools, toolResults);
 
   if (files.length === 0 && cards.length === 0) {
@@ -1970,6 +2507,7 @@ function buildCodePatchCorrectnessMessage(
     history,
     files,
     cards,
+    aiBotUserId,
     messageEvent.event_id,
   );
 
@@ -1983,75 +2521,62 @@ function buildCodePatchCorrectnessMessage(
   };
 }
 
-function isCardPatchCommand(name?: string) {
+function isCodeEditingTool(name?: string) {
   if (!name) {
     return false;
   }
-  return CARD_PATCH_COMMAND_NAMES.has(name);
+  return (
+    CARD_PATCH_COMMAND_NAMES.has(name) ||
+    name.startsWith(SOURCE_CODE_TOOL_NAME_PREFIX)
+  );
 }
 
 function gatherPatchedFiles(
-  codePatchResults: CodePatchResultEvent[],
+  relevantTools: Partial<ToolRequest>[],
+  toolResults: ToolResultEvent[],
 ): CodePatchCorrectnessFile[] {
   let filesByKey = new Map<string, CodePatchCorrectnessFile>();
-  for (let result of codePatchResults) {
-    let status = result.content['m.relates_to']?.key;
-    if (status !== 'applied') {
+  for (let request of relevantTools) {
+    if (!request.name?.startsWith(SOURCE_CODE_TOOL_NAME_PREFIX)) {
       continue;
     }
-    let lintIssues = result.content.data?.lintIssues || [];
-    let attachments = result.content.data?.attachedFiles ?? [];
-    if (attachments.length === 0) {
-      let fallback = result.content.data?.context?.codeMode?.currentFile;
-      if (fallback) {
-        let entry = filesByKey.get(fallback) ?? {
-          sourceUrl: fallback,
-          displayName: formatFileDisplayName(fallback),
-        };
-        if (lintIssues.length) {
-          entry.lintIssues = mergeLintIssues(entry.lintIssues, lintIssues);
-        }
-        filesByKey.set(fallback, entry);
-      }
+    let result = findLast(
+      toolResults,
+      (toolResult) => toolResult.content.commandRequestId === request.id,
+    );
+    if (result?.content['m.relates_to']?.key !== 'applied') {
       continue;
     }
-    for (let file of attachments) {
+    for (let file of result.content.data?.attachedFiles ?? []) {
       let sourceUrl = file.sourceUrl ?? file.url ?? file.name ?? '';
-      let key = sourceUrl || file.name || `${result.event_id}-${file.name}`;
-      let labelSource = sourceUrl || file.name || '';
-      let entry = filesByKey.get(key) ?? {
-        sourceUrl: sourceUrl || labelSource,
-        displayName: formatFileDisplayName(labelSource),
-      };
-      if (lintIssues.length) {
-        entry.lintIssues = mergeLintIssues(entry.lintIssues, lintIssues);
+      if (
+        !sourceUrl ||
+        filesByKey.has(sourceUrl) ||
+        sourceUrl.startsWith(CAPTURE_SOURCE_URL_PREFIX) ||
+        !hasCheckableSource(file.contentType)
+      ) {
+        continue;
       }
-      filesByKey.set(key, entry);
+      filesByKey.set(sourceUrl, {
+        sourceUrl,
+        displayName: formatFileDisplayName(sourceUrl),
+      });
     }
   }
   return Array.from(filesByKey.values());
 }
 
-function mergeLintIssues(
-  existing: string[] | undefined,
-  next: string[],
-): string[] {
-  if (!existing) {
-    return [...next];
+// Correctness validation reads a file's source. A binary file a script saved,
+// such as an image, has none to check.
+function hasCheckableSource(contentType?: string): boolean {
+  if (!contentType) {
+    return true;
   }
-  if (next.length === 0) {
-    return existing;
-  }
-  let seen = new Set(existing);
-  let merged = [...existing];
-  for (let issue of next) {
-    if (seen.has(issue)) {
-      continue;
-    }
-    seen.add(issue);
-    merged.push(issue);
-  }
-  return merged;
+  return (
+    requiredModality(contentType) === undefined &&
+    !/^(image|audio|video|font)\//.test(contentType) &&
+    contentType !== 'application/octet-stream'
+  );
 }
 
 function gatherPatchedCards(
@@ -2087,32 +2612,42 @@ function buildCorrectnessCheckAttemptMap(
   history: DiscreteMatrixEvent[],
   files: CodePatchCorrectnessFile[],
   cards: CodePatchCorrectnessCard[],
+  aiBotUserId: string,
   targetEventId?: string,
 ): Record<string, number> {
   let attempts: Record<string, number> = {};
-  for (let file of files) {
+  let targets = [
+    ...files.map((file) => ({
+      type: 'file',
+      ref: file.sourceUrl || file.displayName,
+    })),
+    ...cards.map((card) => ({ type: 'card', ref: card.cardId })),
+  ];
+  for (let { type, ref } of targets) {
     let targetKey = formatCorrectnessTargetKeyWithEvent(
-      'file',
-      file.sourceUrl || file.displayName,
+      type,
+      ref,
       targetEventId,
     );
     if (!targetKey) {
       continue;
     }
-    attempts[targetKey] = getNextCorrectnessCheckAttempt(history, targetKey);
-  }
-  for (let card of cards) {
-    let targetKey = formatCorrectnessTargetKeyWithEvent(
-      'card',
-      card.cardId,
-      targetEventId,
+    attempts[targetKey] = getNextCorrectnessCheckAttempt(
+      history,
+      targetKey,
+      formatCorrectnessTargetKeyWithEvent(type, ref),
+      aiBotUserId,
     );
-    if (!targetKey) {
-      continue;
-    }
-    attempts[targetKey] = getNextCorrectnessCheckAttempt(history, targetKey);
   }
   return attempts;
+}
+
+function isUserChatMessage(event: DiscreteMatrixEvent, aiBotUserId: string) {
+  return (
+    event.type === 'm.room.message' &&
+    event.sender !== aiBotUserId &&
+    event.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+  );
 }
 
 function extractCardIdFromCommandRequest(
@@ -2171,18 +2706,9 @@ function formatFileDisplayName(identifier?: string) {
 }
 
 function hasAppliedChanges(
-  codePatchResults: CodePatchResultEvent[],
   relevantTools: Partial<ToolRequest>[],
   toolResults: ToolResultEvent[],
 ): boolean {
-  if (
-    codePatchResults.some(
-      (result) => result.content['m.relates_to']?.key === 'applied',
-    )
-  ) {
-    return true;
-  }
-
   return relevantTools.some((request) =>
     toolResults.some(
       (result) =>
@@ -2217,30 +2743,200 @@ export const buildAttachmentsMessagePart = async (
   return text;
 };
 
-// Downloads the current message's media attachments (images, PDFs, audio,
+// A message a human sent — the event that starts a turn. Tool results are
+// not messages (they have their own event types), so a human's client that
+// publishes one does not start a turn: it continues the turn the bot's tool
+// calls belong to.
+function isHumanMessage(
+  event: DiscreteMatrixEvent,
+  aiBotUserId: string,
+): boolean {
+  return event.sender !== aiBotUserId && event.type === 'm.room.message';
+}
+
+// Limits on the tool-result media one turn embeds. Every request of the turn
+// re-downloads and re-encodes each embedded file, so both the count and the
+// bytes must stay bounded however many results a tool loop produces:
+// - at most MAX_CURRENT_TURN_TOOL_RESULT_MEDIA files, the newest kept;
+// - no single file over MAX_TOOL_RESULT_MEDIA_FILE_BYTES. Anthropic, the
+//   strictest provider the bot routes to, rejects an image whose base64
+//   encoding exceeds 5 MiB, failing the whole request; base64 grows bytes by
+//   a third, so the raw limit is three quarters of that;
+// - at most MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES across the turn, which
+//   base64 grows to about 21 MiB, leaving the rest of a 32 MB provider
+//   request limit for the conversation itself.
+export const MAX_CURRENT_TURN_TOOL_RESULT_MEDIA = 8;
+export const MAX_TOOL_RESULT_MEDIA_FILE_BYTES = Math.floor(
+  (5 * 1024 * 1024 * 3) / 4,
+);
+export const MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES = 16 * 1024 * 1024;
+
+export interface CurrentTurnToolResultMedia {
+  // The files to embed, oldest first.
+  included: SerializedFileDef[];
+  // Media files the limits left out, each with the reason, so the model can
+  // be told it cannot see them.
+  omitted: { file: SerializedFileDef; reason: string }[];
+}
+
+// The media files (images, PDFs, audio, video) attached to the tool results
+// of the current turn — every tool-result event after the last message a
+// human sent, whoever published it: results the bot fulfilled itself and
+// results a client ran and sent alike. A multi-step tool loop therefore keeps
+// the media it collected earlier in the same turn. Only the latest result for
+// each tool call counts (a retry supersedes an earlier attempt, matching how
+// the call's outcome is chosen for the tool message), and a retried call
+// takes the position of its latest result. Files the active model cannot
+// take (per `inputModalities`, when given) are left out before the limits
+// apply, so they never use up a slot or budget a sendable file could have.
+// The rest are chosen newest first within the limits above; a file with no recorded size is left out, since
+// its bytes cannot be counted against the budget. Text-based attachments are
+// excluded: their content rides in the tool message itself.
+export function currentTurnToolResultMedia(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  inputModalities?: string[],
+): CurrentTurnToolResultMedia {
+  let lastHumanMessageIndex = findLastIndex(history, (event) =>
+    isHumanMessage(event, aiBotUserId),
+  );
+  let latestResultByRequestId = new Map<string, DiscreteMatrixEvent>();
+  for (let event of history.slice(lastHumanMessageIndex + 1)) {
+    if (!isToolResultEventType(event.type)) {
+      continue;
+    }
+    let requestId =
+      (event.content as { commandRequestId?: string }).commandRequestId ??
+      event.event_id;
+    // Re-inserting moves a retried call to its latest position.
+    latestResultByRequestId.delete(requestId);
+    latestResultByRequestId.set(requestId, event);
+  }
+  let candidates: SerializedFileDef[] = [];
+  for (let event of latestResultByRequestId.values()) {
+    let attachedFiles: SerializedFileDef[] =
+      (event as MatrixEventWithBoxelContext).content?.data?.attachedFiles ?? [];
+    for (let file of attachedFiles) {
+      if (file.url && requiredModality(file.contentType)) {
+        candidates.push(toFileDefMetadata(file));
+      }
+    }
+  }
+  let included: SerializedFileDef[] = [];
+  let omitted: CurrentTurnToolResultMedia['omitted'] = [];
+  let totalBytes = 0;
+  for (let file of [...candidates].reverse()) {
+    let size = file.contentSize;
+    let modality = requiredModality(file.contentType);
+    let reason: string | undefined;
+    if (inputModalities && modality && !inputModalities.includes(modality)) {
+      reason = `the active model does not accept ${modalityLabel(modality)}`;
+    } else if (typeof size !== 'number') {
+      reason = 'its size is unknown';
+    } else if (size > MAX_TOOL_RESULT_MEDIA_FILE_BYTES) {
+      reason = `it is larger than ${formatMiB(MAX_TOOL_RESULT_MEDIA_FILE_BYTES)}`;
+    } else if (included.length >= MAX_CURRENT_TURN_TOOL_RESULT_MEDIA) {
+      reason = `only the newest ${MAX_CURRENT_TURN_TOOL_RESULT_MEDIA} tool-result media files are sent`;
+    } else if (totalBytes + size > MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES) {
+      reason = `newer tool-result media already fill the ${formatMiB(MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES)} sent per turn`;
+    }
+    if (reason) {
+      omitted.unshift({ file, reason });
+    } else {
+      included.unshift(file);
+      totalBytes += size!;
+    }
+  }
+  return { included, omitted };
+}
+
+function formatMiB(bytes: number): string {
+  return `${Math.round((bytes / (1024 * 1024)) * 100) / 100} MiB`;
+}
+
+// The homeserver media URL a tool-result attachment is downloaded from. The
+// download carries the bot's Matrix access token, and a tool result's file
+// URL can come from a tool's own output, so the URL is never fetched as
+// given: it must name a Matrix media item, and the item is fetched from the
+// homeserver's own media endpoint. Undefined when the URL names no media
+// item.
+function toolResultMediaDownloadUrl(
+  client: MatrixClient,
+  url: string,
+): string | undefined {
+  let key = canonicalizeMatrixMediaKey(url);
+  if (!key?.startsWith('mxc://')) {
+    return undefined;
+  }
+  return (
+    client.mxcUrlToHttp(
+      key,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    ) ?? undefined
+  );
+}
+
+// Downloads the current turn's media attachments (images, PDFs, audio,
 // video) and renders them as native content parts for the volatile trailing
-// message. Media bodies never ride in history: embedding them there would
-// grow the request by every media file ever attached — re-downloaded and
-// re-encoded on each turn, with nothing bounding it — while gating on "is
-// this the newest message" would rewrite an older message's bytes as
-// history grows and reset the cache prefix. The trailing message is rebuilt
-// every turn anyway (it carries the current time), so the current media can
-// ride there without touching a single history byte; history lists the same
-// files as stable metadata (see buildAttachmentsMessagePart).
+// message: the media attached to the current human message, then the media
+// attached to the current turn's tool results (see
+// currentTurnToolResultMedia), each of the latter preceded by a text part
+// naming the file so the model can tell which result an image came from.
+// Tool-result media the limits left out are named in the returned note, as
+// are files the model's input modalities exclude.
+// Media bodies never ride in history: embedding them there would grow the
+// request by every media file ever attached — re-downloaded and re-encoded
+// on each turn, with nothing bounding it — while gating on "is this the
+// newest message" would rewrite an older message's bytes as history grows
+// and reset the cache prefix. The trailing message is rebuilt every turn
+// anyway (it carries the current time), so the current media can ride there
+// without touching a single history byte; history lists the same files as
+// stable metadata (see buildAttachmentsMessagePart).
 export const buildCurrentTurnMediaParts = async (
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext | undefined,
   inputModalities?: string[],
+  toolResultMedia: CurrentTurnToolResultMedia = { included: [], omitted: [] },
 ): Promise<{ mediaParts: ContentPart[]; unsupportedNote?: string }> => {
   let mediaParts: ContentPart[] = [];
-  if (!matrixEvent) {
-    return { mediaParts };
-  }
-  let attachedFiles = await getAttachedFiles(client, matrixEvent);
+  let messageFiles = matrixEvent
+    ? await getAttachedFiles(client, matrixEvent)
+    : [];
   let unsupportedFiles: { name: string; contentType: string }[] = [];
-  for (let f of attachedFiles) {
+  let files = [
+    ...messageFiles.map((file) => ({ file, fromToolResult: false })),
+    // Newest first, so the per-turn byte budget keeps the newest media;
+    // their parts are put back in chronological order below.
+    ...[...toolResultMedia.included].reverse().map((file) => ({
+      file,
+      fromToolResult: true,
+    })),
+  ];
+  let toolResultPartGroups: ContentPart[][] = [];
+  let omittedAtDownload: CurrentTurnToolResultMedia['omitted'] = [];
+  // The bytes tool-result media actually downloaded this turn; declared
+  // sizes chose the files, but the budget holds on what arrives.
+  let toolResultBytes = 0;
+  for (let { file: f, fromToolResult } of files) {
     if (!f.url) {
       continue;
+    }
+    let downloadUrl = f.url;
+    if (fromToolResult) {
+      let mediaUrl = toolResultMediaDownloadUrl(client, f.url);
+      if (!mediaUrl) {
+        omittedAtDownload.push({
+          file: f,
+          reason: 'it is not a file stored in this conversation',
+        });
+        continue;
+      }
+      downloadUrl = mediaUrl;
     }
     // Check model capability before downloading
     let modality = requiredModality(f.contentType);
@@ -2254,23 +2950,43 @@ export const buildCurrentTurnMediaParts = async (
       });
       continue;
     }
+    let partCountBefore = mediaParts.length;
+    // A tool result's declared size is the tool's word for it, so the bytes
+    // actually downloaded are held to the per-file limit too.
+    let download = async () => {
+      let dataUrl = await downloadFileAsBase64DataUrl(
+        client,
+        downloadUrl,
+        f.contentType!,
+      );
+      if (fromToolResult) {
+        let bytes = base64DataUrlByteLength(dataUrl);
+        if (bytes > MAX_TOOL_RESULT_MEDIA_FILE_BYTES) {
+          throw new OversizedToolResultMediaError(
+            `it is larger than ${formatMiB(MAX_TOOL_RESULT_MEDIA_FILE_BYTES)}`,
+          );
+        }
+        if (
+          toolResultBytes + bytes >
+          MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES
+        ) {
+          throw new OversizedToolResultMediaError(
+            `newer tool-result media already fill the ${formatMiB(MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES)} sent per turn`,
+          );
+        }
+        toolResultBytes += bytes;
+      }
+      return dataUrl;
+    };
     try {
       if (isImageContentType(f.contentType)) {
-        let dataUrl = await downloadFileAsBase64DataUrl(
-          client,
-          f.url,
-          f.contentType!,
-        );
+        let dataUrl = await download();
         mediaParts.push({
           type: 'image_url',
           image_url: { url: dataUrl },
         });
       } else if (isPdfContentType(f.contentType)) {
-        let dataUrl = await downloadFileAsBase64DataUrl(
-          client,
-          f.url,
-          f.contentType!,
-        );
+        let dataUrl = await download();
         mediaParts.push({
           type: 'file',
           file: {
@@ -2284,11 +3000,7 @@ export const buildCurrentTurnMediaParts = async (
           getLog().error(`Unsupported audio format: ${f.contentType}`);
           continue;
         }
-        let dataUrl = await downloadFileAsBase64DataUrl(
-          client,
-          f.url,
-          f.contentType!,
-        );
+        let dataUrl = await download();
         // Strip data URL prefix — OpenRouter expects raw base64 for audio
         let base64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
         mediaParts.push({
@@ -2296,31 +3008,68 @@ export const buildCurrentTurnMediaParts = async (
           input_audio: { data: base64, format },
         });
       } else if (isVideoContentType(f.contentType)) {
-        let dataUrl = await downloadFileAsBase64DataUrl(
-          client,
-          f.url,
-          f.contentType!,
-        );
+        let dataUrl = await download();
         mediaParts.push({
           type: 'video_url',
           video_url: { url: dataUrl },
         });
       }
     } catch (e) {
+      if (e instanceof OversizedToolResultMediaError) {
+        omittedAtDownload.push({ file: f, reason: e.message });
+        continue;
+      }
       // A failed download only affects this turn's volatile message; the
       // file's metadata is still in history, so nothing byte-stable drifts.
       getLog().error(`Failed to download media file ${f.url}:`, e);
     }
+    if (fromToolResult && mediaParts.length > partCountBefore) {
+      mediaParts.splice(partCountBefore, 0, {
+        type: 'text',
+        text: `Attached to a tool result: ${mediaFileLabel(f)}`,
+      });
+    }
+    if (fromToolResult) {
+      toolResultPartGroups.unshift(mediaParts.splice(partCountBefore));
+    }
   }
-  let unsupportedNote: string | undefined;
+  mediaParts.push(...toolResultPartGroups.flat());
+  omittedAtDownload.reverse();
+  let notes: string[] = [];
   if (unsupportedFiles.length > 0) {
     let fileList = unsupportedFiles
       .map((f) => `${f.name} (${f.contentType})`)
       .join(', ');
-    unsupportedNote = `Note: The following files were not sent to the model because it does not support their input type: ${fileList}`;
+    notes.push(
+      `Note: The following files were not sent to the model because it does not support their input type, so you cannot see them: ${fileList}. Do not guess at their contents; tell the user you cannot view them with the current model.`,
+    );
   }
+  let omitted = [...toolResultMedia.omitted, ...omittedAtDownload];
+  if (omitted.length > 0) {
+    let fileList = omitted
+      .map(({ file, reason }) => `${mediaFileLabel(file)}: ${reason}`)
+      .join('; ');
+    notes.push(
+      `Note: The following files attached to tool results were not sent to the model, so you cannot see them: ${fileList}. Do not guess at their contents; tell the user you cannot view them.`,
+    );
+  }
+  let unsupportedNote = notes.length ? notes.join('\n\n') : undefined;
   return { mediaParts, unsupportedNote };
 };
+
+class OversizedToolResultMediaError extends Error {}
+
+// The number of bytes a base64 data URL encodes.
+function base64DataUrlByteLength(dataUrl: string): number {
+  let base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  let padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return (base64.length * 3) / 4 - padding;
+}
+
+function mediaFileLabel(file: SerializedFileDef): string {
+  let name = file.name ?? 'unnamed file';
+  return file.sourceUrl ? `${name} (${file.sourceUrl})` : name;
+}
 
 export const buildContextMessage = async (
   history: DiscreteMatrixEvent[],
@@ -2336,10 +3085,9 @@ export const buildContextMessage = async (
     return (
       (ev.type === 'm.room.message' &&
         ev.content.msgtype == APP_BOXEL_MESSAGE_MSGTYPE) ||
-      isToolResultEventType(ev.type) ||
-      ev.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
+      isToolResultEventType(ev.type)
     );
-  }) as CardMessageEvent | ToolResultEvent | CodePatchResultEvent | undefined;
+  }) as CardMessageEvent | ToolResultEvent | undefined;
   let context = lastEventWithContext?.content.data?.context;
 
   // Extract room ID from any event in history
@@ -2365,6 +3113,13 @@ export const buildContextMessage = async (
         result += ` - ${workspace.name} (${workspace.url})${workspace.type === 'catalog-workspace' ? ' - Catalog' : ''}\n`;
       });
       result += `\n`;
+    }
+    let realmPrefixes = Object.entries(context?.realmPrefixes ?? {});
+    if (realmPrefixes.length > 0) {
+      result += `Realm prefixes (an identifier that starts with one names a file in that realm; replace the prefix with the realm's URL to get the file's URL):\n`;
+      for (let [prefix, url] of realmPrefixes) {
+        result += ` - ${prefix} = ${url}\n`;
+      }
     }
     if (context?.openCardIds && context.openCardIds.length > 0) {
       result += `Open cards:\n${context.openCardIds.map((id) => ` - ${id}\n`)}`;
@@ -2514,7 +3269,33 @@ function isRelativeLink(target: string): boolean {
   );
 }
 
-export const skillCardsToMessages = (cards: EnabledSkill[]) => {
+// A skill body can mark a section as belonging to a feature that is off by
+// default:
+//
+//   <!-- feature:catalog-reuse -->
+//   ...text the model only sees when the feature is enabled...
+//   <!-- /feature:catalog-reuse -->
+//
+// The markers are HTML comments, so the same file renders unchanged anywhere
+// else (the coding harness reads it from disk and sees every section). Here, a
+// section whose feature is not in `enabledFeatures` is removed together with
+// its markers; an enabled section keeps its text and loses only the markers.
+const FEATURE_SECTION_RE =
+  /[ \t]*<!--\s*feature:([\w-]+)\s*-->[ \t]*\n?([\s\S]*?)[ \t]*<!--\s*\/feature:\1\s*-->[ \t]*\n?/g;
+
+export function applySkillFeatureFlags(
+  markdown: string,
+  enabledFeatures: string[],
+): string {
+  return markdown.replace(FEATURE_SECTION_RE, (_whole, feature, body) =>
+    enabledFeatures.includes(feature) ? body : '',
+  );
+}
+
+export const skillCardsToMessages = (
+  cards: EnabledSkill[],
+  enabledFeatures: string[] = [],
+) => {
   return cards.map((card) => {
     let headerParts = [`id: ${card.id}`];
     if (card.attributes?.title) {
@@ -2524,6 +3305,7 @@ export const skillCardsToMessages = (cards: EnabledSkill[]) => {
     let header = `Skill (${headerParts.join(', ')}):`;
     let instructions =
       card.attributes?.instructions?.trim() ?? 'No instructions provided.';
+    instructions = applySkillFeatureFlags(instructions, enabledFeatures).trim();
 
     return `${header}\n${absolutizeSkillLinks(instructions, card.id)}`;
   });
@@ -2543,16 +3325,6 @@ export const isToolResultStatusApplied = (event?: MatrixEvent) => {
   }
   return (
     isToolResultEvent(event.event as DiscreteMatrixEvent) &&
-    event.getContent()['m.relates_to']?.key === 'applied'
-  );
-};
-
-export const isCodePatchResultStatusApplied = (event?: MatrixEvent) => {
-  if (event === undefined) {
-    return false;
-  }
-  return (
-    isCodePatchResultEvent(event.event as DiscreteMatrixEvent) &&
     event.getContent()['m.relates_to']?.key === 'applied'
   );
 };
@@ -2625,28 +3397,7 @@ function normalizeReasoningEffort(
 export function isToolResultEvent(
   event?: DiscreteMatrixEvent,
 ): event is ToolResultEvent {
-  if (event === undefined) {
-    return false;
-  }
-  return (
-    isToolResultEventType(event.type) &&
-    isToolResultRelType(
-      (event as ToolResultEvent).content['m.relates_to']?.rel_type,
-    )
-  );
-}
-
-export function isCodePatchResultEvent(
-  event?: DiscreteMatrixEvent,
-): event is CodePatchResultEvent {
-  if (event === undefined) {
-    return false;
-  }
-  return (
-    event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
-    event.content['m.relates_to']?.rel_type ===
-      APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE
-  );
+  return event !== undefined && isToolResult(event);
 }
 
 export function mxcUrlToHttp(mxc: string, baseUrl: string): string {

@@ -306,3 +306,82 @@ export function isMarkdownFile(id: string): boolean {
   }
   return MARKDOWN_FILE_EXTENSION.test(pathname);
 }
+
+// The subtree capture serving claims. A realm's GET dispatch answers every
+// path under it from the capture ledger, so a realm file stored there could
+// never be read back: it would index and list, and every GET of it would come
+// back an uncaptured miss. Every surface that writes into a realm refuses it
+// for that reason — direct writes, `/_atomic` operations, and batch entries —
+// and each one reads the reservation from here so a change to it reaches all
+// of them. Removals stay admitted everywhere, being the recovery path for
+// anything already stored under it.
+export const CAPTURE_SERVING_PREFIX = '_capture/';
+
+// The legacy spelling of `CAPTURE_SERVING_PREFIX`. Still answered, because a
+// durable capture URL is meant to be stored: a card may hold one minted under
+// this spelling. Every surface that recognizes a capture URL — serving,
+// signing, the shell's document negotiation, the auth service worker's 503
+// absorption — matches it alongside the current spelling. Reserved against
+// writes for as long as it is served, so nothing can be stored where a GET
+// would never read it back.
+export const LEGACY_CAPTURE_SERVING_PREFIX = '_screenshot/';
+
+export const CAPTURE_SERVING_PREFIXES = [
+  CAPTURE_SERVING_PREFIX,
+  LEGACY_CAPTURE_SERVING_PREFIX,
+] as const;
+
+export function isCaptureServingPath(localPath: LocalPath): boolean {
+  return captureServingPrefixOf(localPath) !== undefined;
+}
+
+// Which prefix a capture-serving path came in under, or undefined when it is
+// not one. Callers that need the addressed instance path use
+// `withoutCaptureServingPrefix` rather than slicing a fixed width.
+export function captureServingPrefixOf(
+  localPath: LocalPath,
+): string | undefined {
+  return CAPTURE_SERVING_PREFIXES.find((prefix) =>
+    localPath.startsWith(prefix),
+  );
+}
+
+export function withoutCaptureServingPrefix(localPath: LocalPath): LocalPath {
+  let prefix = captureServingPrefixOf(localPath);
+  return prefix ? localPath.slice(prefix.length) : localPath;
+}
+
+// The name a file's content is assembled under while it is being written from
+// a description of itself. The write's source is its own destination, so the
+// result is built beside the file and moved onto it — a rename, so the file is
+// only ever the content it held before or the content it holds after.
+//
+// Beside it rather than elsewhere on the machine because a rename is atomic
+// only within one filesystem, and a realm's storage is not the filesystem the
+// operating system's temporary directory is on. That puts the half-written
+// file inside the realm's own tree, so the realm holds it to being no part of
+// the realm: it is never indexed, never served, and never written to
+// deliberately. A process that dies mid-write leaves one behind, and the same
+// rule is what keeps it inert until the next write replaces it.
+export const PARTIAL_WRITE_SUFFIX = '.boxel-partial';
+
+export function partialWritePath(localPath: LocalPath): LocalPath {
+  return `${localPath}${PARTIAL_WRITE_SUFFIX}` as LocalPath;
+}
+
+export function isPartialWritePath(localPath: LocalPath): boolean {
+  return localPath.endsWith(PARTIAL_WRITE_SUFFIX);
+}
+
+// The realm's own config document, as a change set spells it: the `.json` file
+// at the realm root. Built through `RealmPaths` so it cannot disagree with the
+// URLs the write path and the file watcher put in a change set, and so a base
+// URL without a trailing slash resolves the same way rather than silently
+// landing a directory up.
+//
+// Note the two spellings of this document are not interchangeable. This is the
+// file; the index row for the card it holds is keyed by the same URL with the
+// `.json` stripped. A caller matching a change set wants this one.
+export function realmConfigHrefFor(realmURL: URL): string {
+  return new RealmPaths(realmURL).fileURL('realm.json').href;
+}

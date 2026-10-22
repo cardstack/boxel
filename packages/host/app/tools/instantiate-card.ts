@@ -16,8 +16,12 @@
 
 import { service } from '@ember/service';
 
-import HostBaseTool from '../lib/host-base-tool';
+import { rri } from '@cardstack/runtime-common';
 
+import HostBaseTool from '../lib/host-base-tool';
+import { assertModuleInRealm } from '../utils/assert-module-in-realm';
+
+import type NetworkService from '../services/network';
 import type StoreService from '../services/store';
 import type * as BaseToolModule from '@cardstack/base/command';
 
@@ -28,6 +32,7 @@ export default class InstantiateCardTool extends HostBaseTool<
   description = 'Instantiate a card from JSON via the store in the prerenderer';
   static actionVerb = 'Instantiate';
 
+  @service declare private network: NetworkService;
   @service declare private store: StoreService;
 
   async getInputType() {
@@ -56,7 +61,7 @@ export default class InstantiateCardTool extends HostBaseTool<
       throw new Error('realmUrl is required');
     }
 
-    this.validateModuleUrl(moduleUrl, realmUrl);
+    assertModuleInRealm(moduleUrl, realmUrl, this.network.virtualNetwork);
 
     let commandModule = await this.loadToolModule();
 
@@ -119,7 +124,7 @@ export default class InstantiateCardTool extends HostBaseTool<
       await this.store.__dangerousCreateFromSerialized(
         doc.data,
         doc,
-        resolveFrom ? new URL(resolveFrom) : undefined,
+        resolveFrom ? rri(resolveFrom) : undefined,
       );
 
       return new commandModule.InstantiateCardResult({ passed: true });
@@ -133,53 +138,6 @@ export default class InstantiateCardTool extends HostBaseTool<
         stackTrace: stack,
       });
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // URL validation helpers (SSRF prevention)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Ensures moduleUrl is an http(s) URL that lives under the given realmUrl.
-   * Throws if validation fails.
-   */
-  private validateModuleUrl(moduleUrl: string, realmUrl: string): void {
-    this.assertHttpOrHttpsUrl(moduleUrl, 'moduleUrl');
-    this.assertHttpOrHttpsUrl(realmUrl, 'realmUrl');
-
-    let mod = new URL(moduleUrl);
-    let realm = new URL(realmUrl);
-
-    if (mod.origin !== realm.origin) {
-      throw new Error(
-        `moduleUrl origin (${mod.origin}) does not match realmUrl origin (${realm.origin})`,
-      );
-    }
-
-    let realmPath = this.normalizeRealmPathname(realm.pathname);
-    if (!mod.pathname.startsWith(realmPath)) {
-      throw new Error(
-        `moduleUrl path (${mod.pathname}) is not under realmUrl path (${realmPath})`,
-      );
-    }
-  }
-
-  private assertHttpOrHttpsUrl(value: string, label: string): void {
-    let url: URL;
-    try {
-      url = new URL(value);
-    } catch {
-      throw new Error(`${label} is not a valid URL: ${value}`);
-    }
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      throw new Error(
-        `${label} must use http or https scheme, got ${url.protocol}`,
-      );
-    }
-  }
-
-  private normalizeRealmPathname(pathname: string): string {
-    return pathname.endsWith('/') ? pathname : `${pathname}/`;
   }
 }
 

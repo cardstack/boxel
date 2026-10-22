@@ -260,4 +260,125 @@ module(basename(import.meta.filename), function () {
       );
     });
   });
+
+  // The third position on how much of a card's link graph a response carries.
+  // `omitIncluded` above skips the relationship pass outright; the default
+  // assembles the whole closure; this one answers the relationships and
+  // side-loads nothing, so a consumer learns which cards a field names and
+  // fetches the ones it displays.
+  module('resolveLinksOnly', function (hooks) {
+    let realm: Realm;
+
+    setupPermissionedRealmCached(hooks, {
+      mode: 'before',
+      realmURL: testRealm,
+      permissions: { '*': ['read'] },
+      fileSystem: buildFileSystem(),
+      onRealmSetup({ testRealm: r }) {
+        realm = r;
+      },
+    });
+
+    test('cardDocument answers both link kinds and side-loads neither', async function (assert) {
+      let result = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(`${testRealm}consumer-1`),
+        { loadLinks: true, resolveLinksOnly: true },
+      );
+      assert.strictEqual(result?.type, 'doc', 'doc returned');
+      let doc = result?.type === 'doc' ? result.doc : undefined;
+      assert.strictEqual(
+        (doc?.included ?? []).length,
+        0,
+        'nothing is side-loaded',
+      );
+
+      // The document is a function of a query this realm ran, so it must say
+      // so: that is what keeps it out of a response cache under a validator a
+      // write to the matching cards would not move. The signal survives only
+      // because the relationships are answered before the walk is left.
+      let queryBacked = result?.type === 'doc' ? result.queryBacked : undefined;
+      assert.true(
+        queryBacked,
+        'the document reports that a query resolved a field',
+      );
+
+      let relationships = doc?.data.relationships as
+        | Record<
+            string,
+            {
+              links?: { self?: string | null; search?: string | null };
+              data?: { id: string } | Array<{ id: string }> | null;
+            }
+          >
+        | undefined;
+
+      // The static link is left the way the pristine row carries it: a target
+      // named by `links.self` and no resource to go with it, which is what the
+      // consumer reads as a link it has not loaded yet.
+      assert.ok(
+        relationships?.directLink?.links?.self,
+        'the static link still names its target',
+      );
+
+      // The query-backed field keeps the answer a consumer cannot cheaply
+      // recompute — which cards the query matched — without the cards.
+      let queryLinks = relationships?.queryLinks;
+      assert.ok(
+        queryLinks?.links?.search,
+        'the query-backed field carries its search link',
+      );
+      assert.strictEqual(
+        Array.isArray(queryLinks?.data) ? queryLinks!.data.length : 0,
+        3,
+        'the query-backed field names all three matches',
+      );
+
+      // Per-item sub-entries would each be read as a followable link whose
+      // target is expected in included[], so they come off the wire with it.
+      let perItemKeys = Object.keys(relationships ?? {}).filter((k) =>
+        /^queryLinks\.\d+$/.test(k),
+      );
+      assert.deepEqual(perItemKeys, [], 'no query-backed per-item sub-entries');
+    });
+
+    test('searchCards answers the results relationships and side-loads nothing', async function (assert) {
+      let doc = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: { module: rri(`${testRealm}consumer`), name: 'Consumer' },
+          },
+        },
+        { loadLinks: true, resolveLinksOnly: true },
+      );
+
+      assert.strictEqual(doc.data.length, 1, 'one consumer matched');
+      assert.strictEqual(
+        (doc.included ?? []).length,
+        0,
+        'nothing is side-loaded',
+      );
+
+      let relationships = doc.data[0].relationships as
+        | Record<
+            string,
+            {
+              links?: { self?: string | null; search?: string | null };
+              data?: { id: string } | Array<{ id: string }> | null;
+            }
+          >
+        | undefined;
+      assert.ok(
+        relationships?.directLink?.links?.self,
+        'the static link still names its target',
+      );
+      assert.strictEqual(
+        Array.isArray(relationships?.queryLinks?.data)
+          ? (relationships!.queryLinks!.data as Array<{ id: string }>).length
+          : 0,
+        3,
+        'the query-backed field names all three matches',
+      );
+    });
+  });
 });

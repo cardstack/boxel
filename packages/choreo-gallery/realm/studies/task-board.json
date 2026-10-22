@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Plan a small project"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../studies/task-board",
+        "name": "TaskBoardStudy"
+      }
+    }
+  }
+}

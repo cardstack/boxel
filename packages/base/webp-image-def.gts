@@ -6,6 +6,7 @@ import {
 } from './image-file-def';
 import type { ByteStream, SerializedFile } from './file-api';
 import {
+  extractWebpAnimated,
   extractWebpColorProfile,
   extractWebpDimensions,
 } from './webp-meta-extractor';
@@ -35,7 +36,11 @@ export class WebpDef extends RasterImageDef {
       height,
       // WebP can carry EXIF in a trailing `EXIF` chunk, past the window this
       // header-only pass reads.
-      ...rasterImageAttributes(undefined, extractWebpColorProfile(bytes)),
+      ...rasterImageAttributes(
+        undefined,
+        extractWebpColorProfile(bytes),
+        extractWebpAnimated(bytes),
+      ),
     };
   }
 }

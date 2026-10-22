@@ -28,7 +28,6 @@ import {
   withCachedRealmSetup,
   realmConfigCardJSON,
 } from '../../../helpers';
-import { setupBaseRealm } from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
@@ -43,7 +42,6 @@ module(
 
     setupRenderingTest(hooks);
     setupOperatorModeStateCleanup(hooks);
-    setupBaseRealm(hooks);
 
     hooks.beforeEach(function () {
       loader = getService('loader-service').loader;
@@ -257,10 +255,10 @@ module(
       let roomResource = matrixService.roomResources.get(roomId)!;
 
       // Two previews carrying the same tool id arrive back-to-back (no settle in
-      // between) so both applies are enqueued on #previewApplyChain before
-      // either finishes. The chain runs them in sequence order, and updateMessage
-      // reuses the existing MessageTool for a known id — so the message must end
-      // with a single tool whose arguments come from the higher-sequence preview.
+      // between). Each applies synchronously in sequence order, and
+      // updateMessage reuses the existing MessageTool for a known id — so the
+      // message must end with a single tool whose arguments come from the
+      // higher-sequence preview.
       let toolRequest = (firstName: string) => [
         {
           id: 'tool-1',

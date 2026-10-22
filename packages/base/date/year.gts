@@ -1,9 +1,4 @@
-import {
-  FieldDef,
-  Component,
-  field,
-  contains,
-} from '../card-api';
+import { FieldDef, Component, field, contains } from '../card-api';
 import NumberField from '../number';
 import { action } from '@ember/object';
 import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
@@ -107,4 +102,3 @@ export default class YearField extends FieldDef {
 
   static edit = YearFieldEdit;
 }
-

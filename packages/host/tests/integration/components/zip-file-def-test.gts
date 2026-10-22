@@ -3,9 +3,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -19,7 +18,6 @@ import type * as ZipFileDefModule from '@cardstack/base/zip-file-def';
 // `extractAttributes` reads a real archive's central directory.
 module('Integration | zip file def', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let ZipDef: typeof ZipFileDefModule.ZipDef;
@@ -32,7 +30,7 @@ module('Integration | zip file def', function (hooks) {
     // statically imported ArchiveEntryField would fail validation.
     ({ ZipDef, ArchiveEntryField } = await loader.import<
       typeof ZipFileDefModule
-    >(`${baseRealm.url}zip-file-def`));
+    >(`@cardstack/base/zip-file-def`));
   });
 
   function zipFile() {

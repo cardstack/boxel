@@ -25,6 +25,7 @@ import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import EditFieldModal from '@cardstack/host/components/operator-mode/edit-field-modal';
 import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 
 import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
@@ -272,10 +273,12 @@ export default class CardSchemaEditor extends Component<Signature> {
                 data-test-card-schema-navigational-button
               >
                 <:iconLeft>
-                  <RealmIcon
-                    @realmInfo={{this.realm.info @cardType.module}}
-                    class='realm-icon'
-                  />
+                  <RealmURLTooltip @urlInRealm={{@cardType.module}}>
+                    <RealmIcon
+                      @realmInfo={{this.realm.info @cardType.module}}
+                      class='realm-icon'
+                    />
+                  </RealmURLTooltip>
                 </:iconLeft>
                 <:default>
                   {{@cardType.displayName}}
@@ -390,10 +393,12 @@ export default class CardSchemaEditor extends Component<Signature> {
                                   data-test-linked-icon
                                 />
                               {{/if}}
-                              <RealmIcon
-                                @realmInfo={{this.realm.info moduleUrl}}
-                                class='realm-icon'
-                              />
+                              <RealmURLTooltip @urlInRealm={{moduleUrl}}>
+                                <RealmIcon
+                                  @realmInfo={{this.realm.info moduleUrl}}
+                                  class='realm-icon'
+                                />
+                              </RealmURLTooltip>
                             </:iconLeft>
                             <:default>
                               {{#let
@@ -589,7 +594,7 @@ export default class CardSchemaEditor extends Component<Signature> {
   private goToField(field: FieldOfType) {
     if (
       `${this.args.cardType.module}.gts` ===
-      this.operatorModeStateService.codePathString
+      this.operatorModeStateService.state.codePath
     ) {
       // In the same file
       this.args.goToDefinition(

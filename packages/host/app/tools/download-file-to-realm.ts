@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { uint8ArrayToBase64 } from '@cardstack/runtime-common';
+
 import HostBaseTool from '../lib/host-base-tool';
 
 import WriteBinaryFileTool from './write-binary-file';
@@ -7,27 +9,6 @@ import WriteBinaryFileTool from './write-binary-file';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type * as BaseToolModule from '@cardstack/base/command';
-
-// Encode raw bytes as base64 without a text round-trip. `Buffer` when it exists
-// (Node / prerender); otherwise `btoa` over the binary string, chunked so a
-// large file doesn't blow the argument limit of `String.fromCharCode`.
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  const maybeBuffer = (globalThis as any).Buffer as
-    | { from(input: Uint8Array): { toString(encoding: string): string } }
-    | undefined;
-  if (typeof maybeBuffer !== 'undefined') {
-    return maybeBuffer.from(bytes).toString('base64');
-  }
-  if (typeof btoa === 'function') {
-    let binary = '';
-    const CHUNK = 0x8000;
-    for (let i = 0; i < bytes.length; i += CHUNK) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-    }
-    return btoa(binary);
-  }
-  throw new Error('No base64 encoder available in this environment');
-}
 
 export default class DownloadFileToRealmTool extends HostBaseTool<
   typeof BaseToolModule.DownloadFileToRealmInput,
@@ -38,7 +19,7 @@ export default class DownloadFileToRealmTool extends HostBaseTool<
 
   static actionVerb = 'Download';
   description =
-    "Download a file from a URL and write it into a realm. Give the destination a path with the right extension (e.g. 'Screenshots/card.png') — the realm infers the file type from it. `realm` selects the target realm; when omitted, the default writable realm is used.";
+    "Download a file from a URL and write it into a realm. Give the destination a path with the right extension (e.g. 'Captures/card.png') — the realm infers the file type from it. `realm` selects the target realm; when omitted, the default writable realm is used.";
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -73,7 +54,7 @@ export default class DownloadFileToRealmTool extends HostBaseTool<
     }
 
     // `authedFetch` attaches the per-realm token when the URL belongs to a
-    // known realm (so a gated realm's `_screenshot/` URL downloads), and is a
+    // known realm (so a gated realm's `_capture/` URL downloads), and is a
     // plain fetch for anything else. We read the body as bytes, not text, so a
     // binary file survives the download intact.
     let response = await this.network.authedFetch(sourceUrl, { method: 'GET' });

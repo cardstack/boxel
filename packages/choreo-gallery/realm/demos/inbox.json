@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "inbox",
+      "title": "Beacons",
+      "group": "Choreo",
+      "lede": "Out of the button. Into the bin.",
+      "apis": ["beacon", "Move @from", "Move @to"],
+      "sample": "{{! Compose and Trash live in the chrome, OUTSIDE the region. Neither is a\n    participant — a beacon is never inserted, kept or removed, and moving one\n    never starts a run. It only says where it is. }}\n<button type='button' {{beacon 'compose'}}>Compose</button>\n<span {{beacon 'trash'}}></span>\n\n<Choreo class='inbox-list' as |c|>\n  {{#each this.rows key='id' as |row|}}\n    <button {{motion id=row.id role='row'}}>{{row.from}}</button>\n  {{/each}}\n\n  <c.Parallel>\n    {{! a new row borrows Compose's box as a start it never had }}\n    <c.Move @of={{c.inserted 'row'}} @from={{c.beacon 'compose'}} @spring={{toss}} />\n\n    {{! a deleted row borrows Trash's box as an end it never reaches.\n        layoutId could not do this: it pairs two REAL elements and morphs\n        one into the other, so the bin itself would stretch. }}\n    <c.Move @of={{c.removed 'row'}} @to={{c.beacon 'trash'}} @spring={{toss}} />\n    <c.Tween @of={{c.removed 'row'}} @opacity={{0}} @duration={{0.38}} />\n\n    {{! and the tray closes up around the gap }}\n    <c.Move @of={{c.moved 'row'}} @spring={{quick}} @size={{false}} />\n  </c.Parallel>\n</Choreo>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-beacons",
+        "concept": "A destination can be a place rather than an item",
+        "why": "Compose and Trash are beacons outside the list region. A row borrows their bounds without turning the toolbar controls into participants or stretching the trash can.",
+        "experiment": "Delete a row, then change another row before the flight finishes. Compare the departing row with the neighbours closing its gap.",
+        "pitfall": "Using layoutId for the bin makes an identity morph where the intent is a flight to a location.",
+        "combine": "Combine with far matching when the destination really contains a persistent copy of the same item."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../stages/inbox",
+        "name": "InboxDemo"
+      }
+    }
+  }
+}

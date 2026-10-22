@@ -7,10 +7,6 @@ import { CopyButton } from '@cardstack/boxel-ui/components';
 
 import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 
-import ApplyCodePatchButton, {
-  type ApplyCodePatchButtonSignature,
-} from './apply-code-patch-button';
-
 import type { ComponentLike } from '@glint/template';
 
 type AsComponentLike<C> =
@@ -24,7 +20,6 @@ export interface CodeBlockActionsSignature {
     default: [
       {
         copyCode: AsComponentLike<CopyButton>;
-        applyCodePatch: ComponentLike<ApplyCodePatchButtonSignature>;
       },
     ];
   };
@@ -38,12 +33,6 @@ const CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature
         (hash
           copyCode=(component
             CopyButton textToCopy=@codeData.code variant='text-only'
-          )
-          applyCodePatch=(component
-            ApplyCodePatchButton
-            codePatch=@codeData.searchReplaceBlock
-            fileUrl=@codeData.fileUrl
-            index=@codeData.codeBlockIndex
           )
         )
       }}

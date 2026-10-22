@@ -7,6 +7,8 @@ import {
 
 import GlimmerComponent from '@glimmer/component';
 
+import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { provide } from 'ember-provide-consume-context';
 
@@ -32,14 +34,6 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  field,
-  StringField,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -117,7 +111,6 @@ module(
     let storeService: StoreService;
 
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -198,6 +191,56 @@ module(
         isCardInstance(storeService.peek(BOOK_1)),
         'the hydration GET deposited the card into the store',
       );
+    });
+
+    test('@displayContainer=false reaches the rows through the card-facing wrapper', async function (assert) {
+      // The wrapper forwards the arg explicitly; a row must carry the same
+      // container-off classes while inert as the live card renders with, so
+      // the swap causes no layout shift.
+      let query: SearchEntryWireQuery = {
+        filter: { 'item.on': bookRef },
+        realms: [testRealmURL],
+      };
+      await render(
+        <template>
+          <CardSearchContext as |context|>
+            <context.searchResultsComponent
+              @query={{query}}
+              @mode='hover'
+              @displayContainer={{false}}
+            />
+          </CardSearchContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(document.querySelector('[data-test-search-result]')),
+      );
+
+      assert
+        .dom(`[data-test-hydratable-card="${BOOK_1}"]`)
+        .doesNotHaveClass(
+          'boxel-card-container--boundaries',
+          'the inert row has no ring',
+        )
+        .hasClass(
+          'display-container-false',
+          'the inert row carries the container-off layout class',
+        )
+        .doesNotHaveClass('display-container-true');
+
+      await triggerEvent(
+        `[data-test-hydratable-card="${BOOK_1}"]`,
+        'mouseenter',
+      );
+
+      assert
+        .dom(
+          `[data-test-hydratable-card="${BOOK_1}"][data-hydration="hydrated"]`,
+        )
+        .doesNotHaveClass(
+          'boxel-card-container--boundaries',
+          'the live container renders without boundaries',
+        );
     });
 
     test('a no-realm card search scopes to the context default realm', async function (assert) {

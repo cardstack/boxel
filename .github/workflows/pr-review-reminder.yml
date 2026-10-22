@@ -44,6 +44,12 @@ jobs:
                         }
                       }
                     }
+                    reviews(first: 100) {
+                      nodes {
+                        state
+                        author { __typename login }
+                      }
+                    }
                     timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 1) {
                       nodes {
                         ... on ReviewRequestedEvent {
@@ -61,13 +67,22 @@ jobs:
             [.data.repository.pullRequests.nodes[]
              | select(.isDraft == false)
              | select((.reviewRequests.nodes | length) > 0)
+             | .author.login as $author
              | {
                  number,
                  title,
                  url,
-                 author: .author.login,
+                 author: $author,
                  waitingSince: (.timelineItems.nodes[0].createdAt // "unknown"),
-                 reviewers: [.reviewRequests.nodes[].requestedReviewer | (.login // .name // empty)] | map(select(. != ""))
+                 # Only people who have submitted a review, not those whose
+                 # review is merely requested. PENDING reviews are unsubmitted
+                 # drafts; the PR author replying in a thread also creates a
+                 # review, so exclude them, and bot reviewers are not people.
+                 reviewers: [.reviews.nodes[]
+                             | select(.state != "PENDING")
+                             | select(.author.__typename != "Bot")
+                             | (.author.login // empty)
+                             | select(. != "" and . != $author)] | unique
                }
             ] | sort_by(.waitingSince)')"
 

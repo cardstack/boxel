@@ -101,6 +101,17 @@ before their consumers, and wire `blockedBy` so the consuming card's issue
 cannot start until the dependency card's issue is done. (`blockedBy` means
 "depends on the DONE-ness of" — normal sequencing, not blockage.)
 
+**Name each field as a need, not as a type.** An issue that says
+`email: StringField` has already decided the schema, and the design turn —
+which is the step that knows what the catalog and the base-realm standard
+library actually offer — will read that text as binding and honour it over a
+better type. So describe what the field *is* and what it must support
+("an email address; validated, with a mail-capable editor"), and leave the
+concrete type to the design turn. Where a type genuinely is load-bearing —
+a downstream card or command depends on that exact type — mark it
+`type-fixed: <Type>` so the design turn can tell a real constraint from a
+default it should improve on.
+
 **Scope each issue as an MVP pass — breadth and depth are budgets, not
 defaults.** The coding agent does NOT know the big picture; if an issue
 reads open-ended it will gold-plate every surface and burn hours doing a
@@ -134,7 +145,7 @@ maintained: the reviewer updates it as the build's reality evolves.
 
 - `issueId` — `"<projectCode>-<N>"` (sequential, dependency-first ordering)
 - `summary` — `"Implement <card name> card"` (named after the entry-point card, e.g., "Implement Sticky Note card")
-- `description` — describe the card to create, its fields, any interior/support cards, the design-first flow (mockup → critique → code), and what the catalog spec should contain. Do NOT ask for tests.
+- `description` — describe the card to create, its fields **as needs rather than types** (see above), any interior/support cards, the design-first flow (mockup → critique → code), and what the catalog spec should contain. Do NOT ask for tests.
 - `issueType` — `"feature"`
 - `status` — `"backlog"`
 - `priority` — `"high"` for the first, `"medium"` for subsequent

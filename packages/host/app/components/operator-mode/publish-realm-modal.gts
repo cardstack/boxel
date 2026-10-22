@@ -36,6 +36,7 @@ import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/cons
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
@@ -1147,7 +1148,9 @@ export default class PublishRealmModal extends Component<Signature> {
 
             <div class='domain-details'>
               <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
-                <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
+                  <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                </RealmURLTooltip>
               </WithLoadedRealm>
               <div class='domain-url-container'>
                 <span class='domain-url'>
@@ -1235,7 +1238,9 @@ export default class PublishRealmModal extends Component<Signature> {
 
             <div class='domain-details'>
               <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
-                <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
+                  <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                </RealmURLTooltip>
               </WithLoadedRealm>
               {{#if this.unlistedRealmUrl}}
                 <div class='domain-url-container'>
@@ -1419,7 +1424,9 @@ export default class PublishRealmModal extends Component<Signature> {
                 </div>
               {{else if this.claimedDomain}}
                 <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
-                  <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                  <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
+                    <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                  </RealmURLTooltip>
                 </WithLoadedRealm>
                 <div class='domain-url-container'>
                   <span class='domain-url'>
@@ -1569,7 +1576,12 @@ export default class PublishRealmModal extends Component<Signature> {
                       @realmURL={{this.currentRealmURL}}
                       as |realm|
                     >
-                      <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                      <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
+                        <RealmIcon
+                          @realmInfo={{realm.info}}
+                          class='realm-icon'
+                        />
+                      </RealmURLTooltip>
                     </WithLoadedRealm>
                     <div class='domain-url-container'>
                       <span class='domain-url'>{{overrideUrl}}</span>
@@ -1749,6 +1761,8 @@ export default class PublishRealmModal extends Component<Signature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
+        min-width: 0;
+        overflow-wrap: anywhere;
       }
 
       .publish-warning-icon {
@@ -1791,7 +1805,7 @@ export default class PublishRealmModal extends Component<Signature> {
           '.        . details action'
           '.        . error   error';
 
-        grid-template-columns: auto var(--boxel-sp-sm) 1fr auto;
+        grid-template-columns: auto var(--boxel-sp-sm) minmax(0, 1fr) auto;
 
         align-items: center;
         padding-top: var(--boxel-sp-lg);
@@ -1826,6 +1840,7 @@ export default class PublishRealmModal extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
+        min-width: 0;
         margin-top: var(--boxel-sp);
       }
 
@@ -1841,11 +1856,13 @@ export default class PublishRealmModal extends Component<Signature> {
       .domain-url-container {
         display: flex;
         flex-direction: column;
+        min-width: 0;
       }
 
       .domain-url {
         flex: 1;
         font-size: var(--boxel-font-size-sm);
+        overflow-wrap: anywhere;
       }
 
       .url-part {
@@ -1859,8 +1876,9 @@ export default class PublishRealmModal extends Component<Signature> {
 
       .domain-info {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: var(--boxel-sp-sm);
+        column-gap: var(--boxel-sp-sm);
       }
 
       .last-published-at,
@@ -1889,8 +1907,6 @@ export default class PublishRealmModal extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
-        background-color: transparent;
-        border: none;
         --boxel-button-min-height: 0;
       }
 
@@ -1986,12 +2002,14 @@ export default class PublishRealmModal extends Component<Signature> {
 
       .custom-subdomain-row {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xs);
       }
 
       .custom-subdomain-row :deep(.container) {
-        flex: 1;
+        flex: 1 1 12rem;
+        min-width: 0;
       }
 
       .custom-subdomain-row .claim-custom-subdomain-button {
@@ -2032,6 +2050,25 @@ export default class PublishRealmModal extends Component<Signature> {
         color: var(--boxel-error-200);
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
+      }
+
+      @container dialog-box (width <= 28rem) {
+        .domain-option {
+          grid-template-areas:
+            'checkbox . title   cancel'
+            'details  details details details'
+            'action   action  action  action'
+            'error    error   error   error';
+        }
+
+        .domain-details.full-width {
+          grid-column: 1 / -1;
+        }
+
+        .action {
+          justify-self: start;
+          margin: var(--boxel-sp-sm) 0 0;
+        }
       }
     </style>
   </template>

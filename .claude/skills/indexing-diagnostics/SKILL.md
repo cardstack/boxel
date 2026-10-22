@@ -1,6 +1,6 @@
 ---
 name: indexing-diagnostics
-description: Investigate slow or failing indexing using the per-row diagnostics persisted split by visit — the index visit's breakdown on `boxel_index.diagnostics`, the prerender-html visit's render breakdown (launch/wait/render timings, per-format render timings) on `prerendered_html.diagnostics`, each mirrored onto its table's `error_doc.diagnostics` for error rows, joinable per row via url + the two request ids — plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id, and (6) capturing full CPU profiles / CDP traces / heap-allocation profiles to the prerender S3 artifact bucket (`boxel-prerender-artifacts-<env>`) when the summary signals name a hot function but you need the whole call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — the streaming trace is the only capture that survives a fully-wedged renderer; gated behind `PRERENDER_PROFILE_AFFINITY` + per-mode SSM flags and pulled with the `boxel-claude-readonly` S3 read grant, and (7) attributing a slow search-doc build to specific fields and link loads — the settle loop's per-target load timings (`searchDocSettleMs` / `searchDocLinkLoads`) vs the field walk's per-dotted-path evaluation timings (`searchDocMs` / `searchDocFieldsMs`), both on `boxel_index.diagnostics`, and (8) decomposing the between-visit / non-render slice of an index job's wall — the once-per-job phases (invalidation discovery, dependency ordering, module pre-warm, aggregate row writes, the final swap) on `jobs.result.phaseTimings` plus the per-row client overhead (file read / render round-trip transport / post-render bookkeeping) on `boxel_index.diagnostics.indexVisitClientMs` — the wall that runs serially between the server renders and is invisible in the per-row `totalElapsedMs`, and (9) decomposing a trivial card's fixed per-visit floor — the route machinery (the meta / icon / file-extract route transitions, instantiation, and per-visit request plumbing) around the search-doc work — into per-route wall-clock buckets on `boxel_index.diagnostics.indexRoutesMs` (the index-half sibling of the render channel's `renderFormatsMs`), so a floor that isn't the search doc reads as measured route steps rather than an inference from `renderElapsedMs`, and (10) recognizing a batch-level setup-phase failure of an incremental job — N error docs sharing one `error_doc.message` and `job_id`, carrying no visit diagnostics, from a rejected job whose whole batch failed before its visit loop — vs per-row render failures, and the re-push recovery those error docs enable, and (11) explaining a missing declared screenshot / thumbnail via `prerendered_html.diagnostics.screenshotErrors` (the row publishes normally — this is the only indexed signal, with per-slot `consecutiveFailures` reporting and the row-level `screenshotCaptureFailureRenders` counter the reconcile sweep's retry cap is enforced against) and attributing slow captures per slot via `screenshotTimingsMs`, the per-name decomposition of `renderFormatsMs.card.screenshots`. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating prerender-saturation incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, when a row's index visit is slow and you need to know which field or link load inside the search doc ate the time, when a trivial-search-doc card still costs far more per visit than its doc justifies and you need to attribute the per-visit floor to a route step, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
+description: Investigate slow or failing indexing using the per-row diagnostics persisted split by visit — the index visit's breakdown on `boxel_index.diagnostics`, the prerender-html visit's render breakdown (launch/wait/render timings, per-format render timings) on `prerendered_html.diagnostics`, each mirrored onto its table's `error_doc.diagnostics` for error rows, joinable per row via url + the two request ids — plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id, and (6) capturing full CPU profiles / CDP traces / heap-allocation profiles to the prerender S3 artifact bucket (`boxel-prerender-artifacts-<env>`) when the summary signals name a hot function but you need the whole call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — the streaming trace is the only capture that survives a fully-wedged renderer; gated behind `PRERENDER_PROFILE_AFFINITY` + per-mode SSM flags and pulled with the `boxel-claude-readonly` S3 read grant, and (7) attributing a slow search-doc build to specific fields and link loads — the settle loop's per-target load timings (`searchDocSettleMs` / `searchDocLinkLoads`) vs the field walk's per-dotted-path evaluation timings (`searchDocMs` / `searchDocFieldsMs`), both on `boxel_index.diagnostics`, and (8) decomposing the between-visit / non-render slice of an index job's wall — the once-per-job phases (invalidation discovery, dependency ordering, module pre-warm, aggregate row writes, the final swap) on `jobs.result.phaseTimings` plus the per-row client overhead (file read / render round-trip transport / post-render bookkeeping) on `boxel_index.diagnostics.indexVisitClientMs` — the wall that runs serially between the server renders and is invisible in the per-row `totalElapsedMs`, and (9) decomposing a trivial card's fixed per-visit floor — the route machinery (the meta / icon / file-extract route transitions, instantiation, and per-visit request plumbing) around the search-doc work — into per-route wall-clock buckets on `boxel_index.diagnostics.indexRoutesMs` (the index-half sibling of the render channel's `renderFormatsMs`), so a floor that isn't the search doc reads as measured route steps rather than an inference from `renderElapsedMs`, and (10) recognizing a batch-level setup-phase failure of an incremental job — N error docs sharing one `error_doc.message` and `job_id`, carrying no visit diagnostics, from a rejected job whose whole batch failed before its visit loop — vs per-row render failures, and the re-push recovery those error docs enable, and (11) explaining a missing declared capture / thumbnail via `prerendered_html.diagnostics.captureErrors` (the row publishes normally — this is the only indexed signal, with per-slot `consecutiveFailures` reporting and the row-level `captureFailureRenders` counter the reconcile sweep's retry cap is enforced against) and attributing slow captures per slot via `captureTimingsMs`, the per-name decomposition of `renderFormatsMs.card.captures`, and (12) attributing a card-instance visit's dominant cost — the parent `render` route's model build, which runs inside whichever route step triggered the parent transition and so sits unbroken-down inside `indexRoutesMs.card.meta` — across `diagnostics.buildModelMs` (`fetchSource` / `deriveType` / `hydrate` / `storeSettle`) with per-module (`moduleEvaluationsMs`), per-field (`hydrateFieldsMs`) and per-load (`storeSettleWaits`) detail under the dominant stage, plus the explicitly measured plumbing residual `unattributedMs`, and (13) reconstructing the order a pass wrote its rows in — `diagnostics.writeSeq` (a per-batch 0-based write counter on both channels; `indexedAt` is millisecond-resolution and a buffered multi-row upsert stamps a whole flush identically, so it cannot order rows within a pass), which separates the URLs a write actually named from the dependents its fan-out discovered (an incremental index pass writes its targets first) and says how far into its plan a stalled job got, and (14) explaining why an index pass re-visited cards at commit because a peer pass of the same realm committed while it ran — the commit-time validation against the `realm_index_commits` ledger, read from `phaseTimings.validationMs` / `validationRounds` / `revisitCount` / `extendCount` / `followUpJobId` and `boxel_index.diagnostics.validationRound` — and finding the follow-up `incremental-index` job a commit enqueues when its peers kept leaving rows stale. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating prerender-saturation incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, when a row's index visit is slow and you need to know which field or link load inside the search doc ate the time, when a trivial-search-doc card still costs far more per visit than its doc justifies and you need to attribute the per-visit floor to a route step, when a card-instance visit's `meta` route bucket dwarfs the search-doc work inside it and you need to know whether the module graph, the hydration, or the link loads carry it, when you need to know what order a pass indexed its rows in or which of them the triggering write actually named, when a pass re-visited cards at commit or an `incremental-index` job appeared that no write published, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -16,20 +16,23 @@ Every indexer write (`IndexWriter.updateEntry`) persists a diagnostic blob on th
 - **A search doc that was slow to build** — attribute a slow index visit inside the search-doc build itself: the settle loop's link loads (`searchDocSettleMs`, per target in `searchDocLinkLoads`) vs the field walk (`searchDocMs`, per dotted field path in `searchDocFieldsMs`). See [Mode J](#mode-j--a-search-doc-was-slow-to-build-per-field--per-link-attribution).
 - **The index job's wall didn't add up to its visits** — decompose the between-visit / non-render slice of an index job's wall (invalidation discovery, dependency ordering, module pre-warm, the serial per-visit client overhead, aggregate row writes, the final swap) into measured buckets: the once-per-job phases on `jobs.result.phaseTimings`, and the per-row client overhead on `boxel_index.diagnostics.indexVisitClientMs`. This is the wall that runs _between_ the server renders, so it's invisible in the per-row `totalElapsedMs` the other modes read. See [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead).
 - **A trivial card still costs a fixed per-visit floor** — a card whose search doc is near-free (`searchDocMs`/`searchDocSettleMs` ~0) still pays a per-visit amount for the route machinery around the work (route transitions, instantiation, per-visit request plumbing). `indexRoutesMs` decomposes that floor into the wall-clock of each index-visit route step — `meta` / `icon` for a card, `fileExtract` / `icon` for a file — so the floor reads as measured buckets rather than being inferred from `renderElapsedMs`. See [Mode L](#mode-l--the-index-visits-per-route-floor-meta--icon--file-extract).
+- **A save waited in the queue** — split a save's index wait into the time its pass sat in the queue and the pass's own run, and tell whether it was held behind its own writer's earlier pass or behind someone else's, using the claim every index job records on `jobs.result.queueClaim` and on each row it writes. See [Mode P](#mode-p--a-save-waited-in-the-queue).
+- **A card-instance visit's `meta` bucket dwarfs its search doc** — the usual case, and normally where a card's indexing time actually goes. Transitioning into `render.meta` runs the parent `render` route's model build inside the same timer, so `indexRoutesMs.card.meta` contains it. `buildModelMs` splits that build into `fetchSource` / `deriveType` / `hydrate` / `storeSettle`, with per-module (`moduleEvaluationsMs`), per-field (`hydrateFieldsMs`) and per-load (`storeSettleWaits`) detail under the stage that dominates. See [Mode N](#mode-n--the-model-build-inside-a-visit-source--type--hydrate--settle).
 
 The first three read from the same `diagnostics` column; the difference is the query you start with. Modes F and G are log-based.
 
 ## Where the diagnostics live
 
-Seven places, all correlated:
+Eight places, all correlated:
 
-1. **`boxel_index.diagnostics` (and `boxel_index_working.diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for the **index visit** of a card/file: the `RenderTimeoutDiagnostics` server timings of that visit plus the host-side `PrerenderMetaDiagnostics` block (`serializeMs`, `searchDocMs`, `searchDocSettleMs`/`searchDocSettlePasses`, `searchDocFieldsMs`, `searchDocLinkLoads`, `computedCalls`/`computedCacheHits`), the per-route `indexRoutesMs` breakdown (the index-half sibling of the render channel's `renderFormatsMs` — the wall-clock of each index-visit route step, so the per-visit floor decomposes into `meta` / `icon` / `fileExtract` buckets; see [Mode L](#mode-l--the-index-visits-per-route-floor-meta--icon--file-extract)), and three write-side stamps: `invalidationId`, `indexedAt`, `requestId`. It also carries an `indexVisitClientMs` block (`read` / `renderRpc` / `bookkeeping`) — the indexer's per-row client-side overhead _outside_ the server render, i.e. this row's slice of the between-visit wall (see [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead)) — and a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note `brokenLinks` is the one block that isn't about _timing_: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so it's the only indexed signal that the row has a broken reference. Rows written by a fused single-visit pass (the SQLite in-browser path) carry one **combined** blob covering both visits here instead.
-2. **`prerendered_html.diagnostics` (and `prerendered_html_working.diagnostics`)** — JSONB column, populated for every row the `prerender_html` job writes, success and render-error alike. Source of truth for the **prerender-html visit**: launch/wait timings, `renderElapsedMs`/`totalElapsedMs`, the per-format `renderFormatsMs` breakdown, and the visit's HTTP correlation id under `prerenderHtmlRequestId` (never `requestId` — that name always means an index visit). On instance rows it also carries the declared-screenshot channel: `screenshotTimingsMs` (per-slot capture wall-clock) and `screenshotErrors` (per-slot capture failures with their `consecutiveFailures` retry bookkeeping) — see [Mode M](#mode-m--declared-screenshot-capture-failures-and-per-slot-timings). See [Two visits, two tables](#two-visits-two-tables--which-timings-live-where).
-3. **`modules.diagnostics`** — JSONB column, populated for every row `persistModuleCacheEntry` writes (success and error paths). Source of truth for **module** renders (`prerenderModule` → definition extraction). Same `RenderTimeoutDiagnostics` shape with `requestId` flattened in; no `invalidationId` (modules don't go through `Batch.invalidate`). The row's existing `created_at` column is the wall-clock stamp for cross-table joins. See [Mode D](#mode-d--a-module-render-was-slow-or-hung) below.
+1. **`boxel_index.diagnostics` (and `boxel_index_pending.diagnostics`, for rows a pass has staged but not yet committed)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for the **index visit** of a card/file: the `RenderTimeoutDiagnostics` server timings of that visit plus the host-side `PrerenderMetaDiagnostics` block (`serializeMs`, `searchDocMs`, `searchDocSettleMs`/`searchDocSettlePasses`, `searchDocFieldsMs`, `searchDocLinkLoads`, `computedCalls`/`computedCacheHits`), the per-route `indexRoutesMs` breakdown (the index-half sibling of the render channel's `renderFormatsMs` — the wall-clock of each index-visit route step, so the per-visit floor decomposes into `meta` / `icon` / `fileExtract` buckets; see [Mode L](#mode-l--the-index-visits-per-route-floor-meta--icon--file-extract)), and the write-side stamps: `invalidationId`, `passId` (the batch that wrote the row — the id its commit's `realm_index_commits.pass_id` carries, so a committed row joins to the commit that published it), `indexedAt`, `writeSeq` (this row's position in its pass's write order — the only field that orders two rows of the same pass; see [Reconstructing a pass's write order](#reconstructing-a-passs-write-order)), and `requestId`, plus `queueClaim` — how the queue claimed the job that wrote the row (see [Mode P](#mode-p--a-save-waited-in-the-queue)). It also carries an `indexVisitClientMs` block (`read` / `renderRpc` / `bookkeeping`) — the indexer's per-row client-side overhead _outside_ the server render, i.e. this row's slice of the between-visit wall (see [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead)) — and a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note `brokenLinks` is the one block that isn't about _timing_: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so it's the only indexed signal that the row has a broken reference. Rows written by a fused single-visit pass (the SQLite in-browser path) carry one **combined** blob covering both visits here instead.
+2. **`prerendered_html.diagnostics` (and `prerendered_html_pending.diagnostics`)** — JSONB column, populated for every row the `prerender_html` job writes, success and render-error alike. Source of truth for the **prerender-html visit**: launch/wait timings, `renderElapsedMs`/`totalElapsedMs`, the per-format `renderFormatsMs` breakdown, and the visit's HTTP correlation id under `prerenderHtmlRequestId` (never `requestId` — that name always means an index visit). On instance rows it also carries the declared-capture channel: `captureTimingsMs` (per-slot capture wall-clock) and `captureErrors` (per-slot capture failures with their `consecutiveFailures` retry bookkeeping) — see [Mode M](#mode-m--declared-capture-capture-failures-and-per-slot-timings). It carries the same write-side stamps as the index channel — `invalidationId`, `passId`, `indexedAt`, `writeSeq`, and the `prerender_html` job's own `queueClaim` — on **every** live row, whether or not the render reported timings of its own, so a `prerender_html` job's fan-out groups and orders exactly like an index pass's. **The two channels' `invalidationId`s are different**: the id is scoped to a `Batch`, and an index pass and the `prerender_html` job it spawns are separate batches. Each id groups its own channel; join the channels on `url` (plus `generation`), never on `invalidationId`. See [Two visits, two tables](#two-visits-two-tables--which-timings-live-where).
+3. **`modules.diagnostics`** — JSONB column, populated for every row `persistModuleCacheEntry` writes (success and error paths). Source of truth for **module** renders (`prerenderModule` → definition extraction). Same `RenderTimeoutDiagnostics` shape with `requestId` flattened in; none of the write-side stamps — no `invalidationId` and no `writeSeq` (module rows aren't written by a `Batch` at all). The row's existing `created_at` column is the wall-clock stamp for cross-table joins. See [Mode D](#mode-d--a-module-render-was-slow-or-hung) below.
 4. **`error_doc.diagnostics`** — derived copy of the same table's `diagnostics`, written only for error rows: an index error's copy rides `boxel_index.error_doc`, a render error's rides `prerendered_html.error_doc` (an instance's effective error is the union of the two). Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `diagnostics` directly.
 5. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. The same id lands on `boxel_index.diagnostics->>'requestId'` and `modules.diagnostics->>'requestId'` — and, for the render channel, on `prerendered_html.diagnostics->>'prerenderHtmlRequestId'` — so a hung card render and the module renders it triggered (via `getDefinition`) can be joined back to one investigation. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
 6. **Realm-server search-timing logs** — separate from the prerender `requestId` chain above. The realm-server emits, per instrumented `_federated-search`, a `realm:search-timing` line (request→response stage breakdown) and a `realm:requests` `-->` line with `dur=` (total) — both keyed by `corr=<id>`, the `x-boxel-logging-correlation-id` the prerendered host stamps. A periodic `realm:health` line reports event-loop lag + in-flight `_search` count during saturation windows. These are the _server's_ view of the search the card is blocked on; the card's `boxel_index.diagnostics` only has the _client's_ view (`queryLoadsInFlight`). See [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing).
-7. **`jobs.result.phaseTimings`** — JSONB, one object per completed index job (on the `from-scratch-index` / `incremental-index` row's `result` column). The **job-level** phase decomposition: the once-per-job phases that surround and interleave the serial visit loop (`setupMs`, `discoverMs`, `orderMs`, `preWarmMs`, `swapMs`, and the from-scratch-only `mtimesMs`), plus `visitLoopMs` (the whole serial loop), `writeMs` (the aggregate row-write time — tracked here, not per row, because a row can't time its own INSERT), and `totalMs`. This is the only place the _between-visit_ wall is attributed; the per-row server render lives on `boxel_index.diagnostics.totalElapsedMs` and the per-row client overhead on `boxel_index.diagnostics.indexVisitClientMs`. See [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead).
+7. **`jobs.result.phaseTimings`** (and `jobs.result.queueClaim`, see [Mode P](#mode-p--a-save-waited-in-the-queue)) — JSONB, one object per completed index job (on the `from-scratch-index` / `incremental-index` row's `result` column). The **job-level** phase decomposition: the once-per-job phases that surround and interleave the serial visit loop (`setupMs`, `discoverMs`, `orderMs`, `preWarmMs`, `swapMs` with its transaction's `swapAttempts` / `swapRetryMs` and the post-commit `pendingCleanupMs` with the janitor's `janitorRowsCleared` / `janitorStagingsCleared`, and the from-scratch-only `mtimesMs`), plus `visitLoopMs` (the whole serial loop), `writeMs` (the aggregate row-write time — tracked here, not per row, because a row can't time its own INSERT), and `totalMs`. This is the only place the _between-visit_ wall is attributed; the per-row server render lives on `boxel_index.diagnostics.totalElapsedMs` and the per-row client overhead on `boxel_index.diagnostics.indexVisitClientMs`. See [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead).
+8. **`realm_index_commits`** — one row per committed index swap: the ledger of which pass took each generation of a realm, the URLs its commit promoted, and the committed generation it started from (`base_generation`). `realm_generations` holds only the newest generation; this holds the recent ones, in commit order, kept for seven days. See [Reading the commit ledger](#reading-the-commit-ledger).
 
 For UI triage you'll typically read the JSON error response (which surfaces `error_doc.diagnostics` as `meta.diagnostics`). For operator / SQL triage — especially slow non-failing reindexes — query the `diagnostics` column directly.
 
@@ -46,14 +49,16 @@ When wrapping a query below into the staging/prod form, run it through the `psql
 
 A URL is produced by two prerender visits on two channels, and each visit's diagnostics follow its writes:
 
-| where                          | visit                | what's in it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `boxel_index.diagnostics`      | index visit          | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`), the per-route floor split (`indexRoutesMs` — one number per index-visit route step, split into a `card` block `meta` / `icon` and a `file` block `fileExtract` / `icon`; see [Mode L](#mode-l--the-index-visits-per-route-floor-meta--icon--file-extract)), the search-doc build (`serializeMs`, `searchDocMs`, `searchDocSettleMs`/`searchDocSettlePasses`, the per-field `searchDocFieldsMs` and per-link-load `searchDocLinkLoads` detail, `computedCalls`/`computedCacheHits`), the indexer's own per-row client overhead outside the render (`indexVisitClientMs`: `read` / `renderRpc` / `bookkeeping` — see [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead)), `brokenLinks`, and the write-side stamps (`invalidationId`, `indexedAt`). HTTP id: `requestId`. |
-| `prerendered_html.diagnostics` | prerender-html visit | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`) plus `renderFormatsMs` — per-format wall-clock, split into a `card` and a `file` block with one number per html-route step (`isolated`, `head`, `atom`, `markdown`, `fitted`, `embedded`; the ancestor-driven `fitted`/`embedded` numbers each cover the whole ancestor chain; `card.screenshots` is the declared-screenshot capture step's aggregate, decomposed per slot by `screenshotTimingsMs`). Instance rows also carry `screenshotErrors` — per-slot declared-capture failures, the only indexed signal a declared screenshot is missing (see [Mode M](#mode-m--declared-screenshot-capture-failures-and-per-slot-timings)). HTTP id: `prerenderHtmlRequestId`.                                                                                                                        |
+| where                          | visit                | what's in it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `boxel_index.diagnostics`      | index visit          | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`), the per-route floor split (`indexRoutesMs` — one number per index-visit route step, split into a `card` block `meta` / `icon` and a `file` block `fileExtract` / `icon`; see [Mode L](#mode-l--the-index-visits-per-route-floor-meta--icon--file-extract)), the search-doc build (`serializeMs`, `searchDocMs`, `searchDocSettleMs`/`searchDocSettlePasses`, the per-field `searchDocFieldsMs` and per-link-load `searchDocLinkLoads` detail, `computedCalls`/`computedCacheHits`), the indexer's own per-row client overhead outside the render (`indexVisitClientMs`: `read` / `renderRpc` / `bookkeeping` — see [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead)), `brokenLinks`, and the write-side stamps (`invalidationId`, `indexedAt`, `writeSeq`). HTTP id: `requestId`.                                                                                                                                                                                                      |
+| `prerendered_html.diagnostics` | prerender-html visit | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`) plus `renderFormatsMs` — per-format wall-clock, split into a `card` and a `file` block with one number per html-route step (`isolated`, `head`, `atom`, `markdown`, `fitted`, `embedded`; the ancestor-driven `fitted`/`embedded` numbers each cover the whole ancestor chain; `card.captures` is the declared capture step's aggregate, decomposed per slot by `captureTimingsMs`). Instance rows also carry `captureErrors` — per-slot declared-capture failures, the only indexed signal a declared capture is missing (see [Mode M](#mode-m--declared-capture-capture-failures-and-per-slot-timings)). Same write-side stamps as the index channel (`invalidationId`, `indexedAt`, `writeSeq`), scoped to the `prerender_html` job's own batch, plus `stampedFromIndexGeneration` — the live index row generation the row's own generation was read from (see [A prerender_html job's wait on its spawning passes](#a-prerender_html-jobs-wait-on-its-spawning-passes)). HTTP id: `prerenderHtmlRequestId`. |
 
 So "why was indexing this card slow?" and "why was rendering this card slow?" are separately answerable per row: the index cost is `boxel_index.diagnostics`, the render cost is `prerendered_html.diagnostics`. Each side names the sub-step that dominated its channel: on the index side `indexRoutesMs` names the route (a slow `meta` build vs an `icon` render vs `fileExtract`), on the render side `renderFormatsMs` names the format (a slow `isolated` template vs a `fitted` render fanning out across many ancestors).
 
-The field-name → visit mapping is constant across both tables: `requestId` always names an index visit's HTTP request, `prerenderHtmlRequestId` always names a prerender-html visit's. Join a row's two halves on url (each table keys on `(url, realm_url, type)`), then carry each side's id into the log search:
+The field-name → visit mapping is constant across both tables: `requestId` always names an index visit's HTTP request, `prerenderHtmlRequestId` always names a prerender-html visit's. The write-side stamps follow the same rule — they describe the batch that wrote **that** row, so `invalidationId` and `writeSeq` are only comparable within one table's fan-out. A split pipeline's two channels are two batches, and each numbers its own writes from 0; a fused pass (the SQLite in-browser path) is one batch, and a visit's two halves share one `writeSeq` because they are one position, not two.
+
+Join a row's two halves on url (each table keys on `(url, realm_url, type)`), then carry each side's id into the log search:
 
 ```sql
 SELECT b.url,
@@ -111,6 +116,8 @@ Why this matters for triage:
 
 4. **Sharpening the deadlock fingerprint**: `affinitySnapshot.sameAffinityActivity[*].priority` lets you tell a self-referential prerender deadlock apart from priority-driven queuing. Same-priority queued module sub-render on a stuck same-priority file render → deadlock. Higher-priority queued sibling → priority routing working as intended.
 
+5. **Telling batches apart**: several indexing batches on one realm affinity at once is normal — index passes run one per writer lane, and each pass's `prerender_html` job runs beside it — so a stalled render's siblings can belong to other batches. Each `sameAffinityActivity` entry carries the `batchId` of the call that produced it (absent on a module sub-render or an on-demand render, which belong to no batch). A `file` sibling with a different `batchId` is a concurrent batch competing for the affinity's tabs, not part of the stalled render's own work.
+
 The priority value lives on the `diagnostics.priority` field and on every `sameAffinityActivity` entry. The periodic `prerender-queue-snapshot` log line carries per-affinity priority breakdowns. See [Classify in one pass](#classify-in-one-pass) and the field-by-field section below for the exact triage rules.
 
 ## Mode A — a render timed out
@@ -133,7 +140,9 @@ Walk the fields per [Classify in one pass](#classify-in-one-pass). The _first_ p
 
 ## Mode B — an incremental reindex was slow
 
-Every `Batch.invalidate(urls)` call mints a UUID stashed into `diagnostics.invalidationId` for every row written during that fan-out. If a `.gts` edit invalidates 8 rows (one file + seven card instances), all eight carry the same `invalidationId` — so you can look at the whole reindex as a group.
+Every `Batch.invalidate(urls)` call mints a UUID stashed into `diagnostics.invalidationId` for every row written during that fan-out. If a `.gts` edit invalidates 8 rows (one file + seven card instances), all eight carry the same `invalidationId` — so you can look at the whole reindex as a group. `diagnostics.writeSeq` then orders that group; see [Reconstructing a pass's write order](#reconstructing-a-passs-write-order) below.
+
+The same pair works on the render channel, where the `prerender_html` job's own batch id groups its renderings and its own `writeSeq` orders them. The two ids differ — see [Where the diagnostics live](#where-the-diagnostics-live) item 2.
 
 **Step 1 — find the invalidation you care about.** If you don't already have the ID, discover recent big ones:
 
@@ -182,11 +191,40 @@ WHERE realm_url = 'https://localhost:4201/user/your-realm/'
 ORDER BY render_ms DESC NULLS LAST;
 ```
 
+### Reconstructing a pass's write order
+
+`writeSeq` is the pass's own write order — a 0-based counter advanced as each row enters the writer, so it survives the write-behind buffer that gives a whole flush of rows one identical `indexedAt`. **`indexedAt` cannot order rows within a pass** (it resolves to the millisecond and a buffered multi-row upsert stamps them all the same); `writeSeq` is the only field that can. Order by it, not by `indexedAt`:
+
+```sql
+SELECT
+  (diagnostics->>'writeSeq')::int          AS seq,
+  url,
+  type,
+  has_error,
+  (diagnostics->>'renderElapsedMs')::int   AS render_ms
+FROM boxel_index
+WHERE realm_url = 'https://localhost:4201/user/your-realm/'
+  AND diagnostics->>'invalidationId' = '<uuid>'
+ORDER BY seq;
+```
+
+Two things this tells you:
+
+- **Which URLs the write actually named.** An incremental pass writes its **targets** — the URLs the triggering write named — before the dependents its fan-out discovered, so the lowest sequences in a fan-out are the targets and everything after them is dep closure. This is a guarantee, not a coincidence: `prioritizeWrittenURLs` in `index-runner.ts` ranks the written URLs ahead of the discovered ones and the topological ordering treats that rank as a priority. Exactly two things outrank being a target:
+  - **Visit class.** `realm.json` first, then non-`.json` files, then `.json` files — so every module in the fan-out is written before every instance, target or not. An instance whose module has no file entry yet cannot render at all, which is why this is not negotiable.
+  - **A recorded dependency.** A URL whose `deps` row names another URL in the same set is written after it. The exception is a dependency **cycle**: no order satisfies one, so the edges inside it are dropped and its members compete on priority like everything else — a target stranded in a cycle still leads.
+
+  So a target appearing after a _module_, or after a URL it declares a dependency on, is expected; a target appearing after an unrelated _instance_ is not, and is worth a second look.
+
+- **Where a stalled pass got to.** See [step 6](#6-reading-partial-progress-from-boxel_index_pending).
+
+A card instance contributes two rows buffered back to back — its `file` row and its `instance` row — so reduce to one position per URL with `min((diagnostics->>'writeSeq')::int) … GROUP BY url` when you want a per-URL order. (A module has only a `file` row, so the reduction is a no-op for it.) A row written twice in one pass keeps the position of its first write and its second consumes none, so a pass's sequences are gapless — a missing position means a row you are not looking at, not a rewrite.
+
 **Step 3 — classify each slow row.** For the top offenders, pull the full `diagnostics` and apply the [Classify in one pass](#classify-in-one-pass) table to each. Common patterns:
 
 - One row dominates (e.g. a dashboard card) and the rest are cheap. The big row is the real target — investigate its `queryLoadsInFlight` / `recentModuleEvaluations` / `cardDocLoadsInFlight`.
 - All rows share a large `launchMs`. Capacity contention during the reindex, not the cards' fault.
-- The first row in the batch (min `indexedAt`) has a large `renderElapsedMs` but the rest are cheap — this is the cold-loader tax paid by whichever card was rendered first after `clearCache: true` fired. Expected on any executable invalidation; only worth chasing if the cold cost is disproportionate to the dep closure.
+- The first row written (`writeSeq = 0`) has a large `renderElapsedMs` but the rest are cheap — this is the cold-loader tax paid by whichever card was rendered first after `clearCache: true` fired. Expected on any executable invalidation; only worth chasing if the cold cost is disproportionate to the dep closure.
 - The `deps` / `types` columns on the same rows tell you _why_ each row was invalidated — useful for discovering unintentionally-heavy transitive deps (e.g. a dashboard re-renders because one of its metrics modules has a runtime reference to the changed module).
 
 **Other useful queries:**
@@ -244,21 +282,21 @@ For any row this surfaces, [Mode J](#mode-j--a-search-doc-was-slow-to-build-per-
 
 ## Mode C — a worker job is stuck or got rejected
 
-Mode A and Mode B both assume `boxel_index` has up-to-date `diagnostics` for the rows you're investigating. That assumption breaks when an indexing job is _in progress_ or got rejected mid-flight: with one exception (next paragraph), nothing has been committed to `boxel_index` yet (the indexer writes to a staging table and only swaps on success — see [Reading partial progress from `boxel_index_working`](#5-reading-partial-progress-from-boxel_index_working) below), so the diagnostics column there is stale or null for the affected rows.
+Mode A and Mode B both assume `boxel_index` has up-to-date `diagnostics` for the rows you're investigating. That assumption breaks when an indexing job is _in progress_ or got rejected mid-flight: with one exception (next paragraph), nothing has been committed to `boxel_index` yet (the indexer writes to a staging table and only swaps on success — see [Reading partial progress from `boxel_index_pending`](#6-reading-partial-progress-from-boxel_index_pending) below), so the diagnostics column there is stale or null for the affected rows.
 
 **The exception — a batch-level setup-phase failure.** An `incremental-index` job that throws during its setup phase (the invalidation fan-out, dependency ordering, or file-meta prefetch — everything before the per-URL visit loop) still rejects, but a recovery pass first commits a `has_error = TRUE` error row for every URL the job was handed with an `update` operation (`delete` operations are left untouched so a failed delete is never half-applied; see `IndexRunner.#recordSetupPhaseError` in `packages/runtime-common/index-runner.ts`). The signature that distinguishes this from per-row render failures:
 
 - N error rows sharing **one identical `error_doc.message`** and one `job_id`, at one generation — matching the rejected job's `result` error and its `args.changes` URL set.
 - The error docs carry **no visit diagnostics** (no render or index visit ever ran for these URLs) — a render failure's error doc carries the visit's timing blocks.
-- `realm_meta` at that generation is a carry-forward of the prior generation's summary, not a recompute, so type counts do not move.
+- `realm_meta` at that generation is recomputed from `boxel_index` after the error rows land. An error row keeps the adoption chain of the card it replaces, so type counts do not move for the errored URLs themselves.
 - An incremental invalidation event is broadcast for the attempted URLs even though the job rejected, so subscribers re-fetch and see the error state.
 
 Recovery for the errored URLs is any later write touching them (error rows are excluded from job resume and invalidate like any other row — a re-push replaces them with clean content) or the next full reindex.
 
 For everything else in this mode the diagnostic stance flips from "what timed out" (Mode A) or "what was slow" (Mode B) to **"what hasn't happened yet"**. You're reconstructing the work the job _would have done_ from three sources together:
 
-1. **`boxel_index_working`** — the staging table the indexer writes to as it makes progress. On success its rows for the touched URLs are copied into `boxel_index` (`Batch.applyBatchUpdates` in `packages/runtime-common/index-writer.ts`). On failure (worker crash, job timeout, manual cancel) the working rows are left behind, which is exactly the bisection signal you want: any row in `boxel_index_working` that is _not yet_ in `boxel_index` (or has a higher `realm_version`) was already processed by the stuck job.
-2. **EFS file mtimes** — reachable via the `aws-access` skill's "Browsing the EFS filesystem" path (the `boxel-claude-fs-readonly-<env>` Fargate task). Combined with `boxel_index.last_modified` (the indexer's view of when each file was last processed) this lets you reconstruct what _would_ have been invalidated by a from-scratch run, _before_ any `boxel_index_working` rows existed.
+1. **`boxel_index_pending`** — the staging table the indexer writes to as it makes progress, under each attempt's `staging_id` (`job:<job-id>.<reservation-id>`), with the job's `job_id` beside it. On success the pass's rows are copied into `boxel_index` (`Batch.applyBatchUpdates` in `packages/runtime-common/index-writer.ts`) and then deleted. On failure (worker crash, job timeout, manual cancel) they are left behind for the job's retry, which is exactly the bisection signal you want: every row under the job's staging id was already processed by the stuck job.
+2. **EFS file mtimes** — reachable via the `aws-access` skill's "Browsing the EFS filesystem" path (the `boxel-claude-fs-readonly-<env>` Fargate task). Combined with `boxel_index.last_modified` (the indexer's view of when each file was last processed) this lets you reconstruct what _would_ have been invalidated by a from-scratch run, _before_ the job staged any rows.
 3. **Worker logs** in CloudWatch (`ecs-boxel-worker-<env>`) — confirms the job's start, the file it was on at the freeze point, and any partial completion lines.
 
 ### 1. Recognising the situation
@@ -285,7 +323,7 @@ SELECT
   j.concurrency_group
 FROM jobs j
 WHERE j.args->>'realmURL' = '<realm-url>'
-  AND j.job_type IN ('from-scratch-index', 'incremental-index', 'copy-index')
+  AND j.job_type IN ('from-scratch-index', 'incremental-index')
 ORDER BY j.created_at DESC
 LIMIT 20;
 
@@ -329,7 +367,7 @@ The from-scratch path lives in `IndexRunner.fromScratch` (`packages/runtime-comm
    WHERE i.realm_url = '<realm-url>';
    ```
 
-2. Walks the realm's filesystem via the `_mtimes` endpoint (`Realm.realmMtimes` in `realm.ts` line 4307) — for the deployed environments you reproduce this walk by browsing EFS via the fs-explorer task in `aws-access`. The endpoint walks `realmsRootPath` recursively, calls `lastModified()` per file, and returns `{ <fileURL>: <epoch-seconds> }`. Skips anything matched by `.gitignore` or the realm's hard-coded ignore list (`.git`, `.template-lintrc.js`).
+2. Walks the realm's filesystem via the `_mtimes` endpoint (`Realm.realmMtimes` in `realm.ts` line 4307) — for the deployed environments you reproduce this walk by browsing EFS via the fs-explorer task in `aws-access`. The endpoint walks `realmsRootPath` recursively, calls `lastModified()` per file, and returns `{ <fileURL>: <epoch-seconds> }`. Skips anything matched by the realm-root `.gitignore` and `.boxelignore` or the realm's hard-coded ignore list (`.git`, `.template-lintrc.js`). The from-scratch pass then applies the same rules again to what it gets back (see below).
 
 3. Builds the seed set in `discoverInvalidations` (`packages/runtime-common/index-runner/discover-invalidations.ts`). A file is in the seed if **any** of:
    - it's not in the index (`!indexEntry`),
@@ -384,7 +422,7 @@ The from-scratch path lives in `IndexRunner.fromScratch` (`packages/runtime-comm
 
 4. Once the seed is known, the runner immediately calls `Batch.invalidate(seed)` to grow the seed by consumer fan-out (step 5). The visit loop then iterates over the resulting invalidation list.
 
-If the worker froze before any seed-driven visit ran (no rows in `boxel_index_working` for this batch — see step 6), it's stuck either in the mtime-walk on the realm-server side (slow EFS / many files) or in `Batch.invalidate`'s consumer fan-out. The CloudWatch line that proves we got past mtime-collection is `[job: …] discovering invalidations in dir <realm-url>` — emitted on both `index-runner` and `index-perf` from `discoverInvalidations.ts` line 34/37. Absence of that line on a `*=debug` worker means we're still in the fetch.
+If the worker froze before any seed-driven visit ran (no rows in `boxel_index_pending` for the job — see step 6), it's stuck either in the mtime-walk on the realm-server side (slow EFS / many files) or in `Batch.invalidate`'s consumer fan-out. The CloudWatch line that proves we got past mtime-collection is `[job: …] discovering invalidations in dir <realm-url>` — emitted on both `index-runner` and `index-perf` from `discoverInvalidations.ts` line 34/37. Absence of that line on a `*=debug` worker means we're still in the fetch.
 
 ### 4. Reconstructing the invalidation graph for an incremental job
 
@@ -407,9 +445,9 @@ Each entry is `{ url: string, operation: 'update' | 'delete' }`. The runner conv
 
 The fan-out is **iterative**, not a single recursive CTE. `Batch.invalidate(urls)` (`packages/runtime-common/index-writer.ts` line 826) drives the loop:
 
-1. For each seed URL, collect concrete-URL matches across `boxel_index_working` (current batch) and `boxel_index` (production) — `urlsMatchingSeed` (lines 776-819).
+1. For each seed URL, collect concrete-URL matches across the pass's own `boxel_index_pending` rows and `boxel_index` (production) — `urlsMatchingSeed`.
 2. For each matched URL, call `calculateInvalidations(alias)` (line 1066) which finds rows that reference the alias in their `deps` jsonb array, then recurses into those rows' aliases. Recursion is bounded by a `visited` set per `invalidate()` call — there are no fixed iteration counts, the walk continues until `visited` saturates.
-3. The single SQL building block is `itemsThatReference(resolvedPath)` (line 978), which on Postgres uses jsonb containment. **Where to read from depends on the question**: at runtime the indexer queries `boxel_index_working` so mid-batch tombstones and rewrites are visible to subsequent fan-out iterations. For _post-mortem_ reconstruction of a stuck job, prefer `boxel_index` (committed state) — that gives you the state the runner _started_ with, before its own writes confused the picture. If the job partially advanced, probe both tables side-by-side to see what was already redrawn vs. what was still untouched.
+3. The single SQL building block is `itemsThatReference(resolvedPath)`, which on Postgres uses jsonb containment. At runtime it scans `boxel_index` and `prerendered_html` (committed state) plus the pass's **own** staged rows in `boxel_index_pending` (`staging_id` = the pass's), so its own mid-batch writes are visible to later fan-out iterations. It never scans another pass's staging: until that pass commits, its edges are not part of the index this pass works from. For _post-mortem_ reconstruction of a stuck job, prefer `boxel_index` — that gives you the state the runner _started_ with, before its own writes confused the picture. If the job partially advanced, probe its staged rows side-by-side to see what was already redrawn vs. what was still untouched.
 
    ```sql
    -- One iteration of consumer fan-out, against the committed state
@@ -423,14 +461,15 @@ The fan-out is **iterative**, not a single recursive CTE. `Batch.invalidate(urls
      AND i.realm_url = '<realm-url>'
    LIMIT 1000;
 
-   -- Same iteration against the live in-batch view (matches what the
-   -- runner is actually walking right now). For a stuck job, run BOTH
-   -- and diff the URL sets — the difference is what the batch has
+   -- The same iteration over the job's staged rows (the part of what the
+   -- runner is walking that is not committed yet). For a stuck job, run
+   -- BOTH and diff the URL sets — the difference is what the batch has
    -- already tombstoned or rewritten.
    SELECT i.url, i.file_alias, i.type
-   FROM boxel_index_working AS i
+   FROM boxel_index_pending AS i
    WHERE i.deps @> '["<seed-url>"]'::jsonb
      AND i.realm_url = '<realm-url>'
+     AND i.job_id = <job-id>
    LIMIT 1000;
    ```
 
@@ -441,7 +480,7 @@ The fan-out is **iterative**, not a single recursive CTE. `Batch.invalidate(urls
    - For executable file rows (`.gts` / `.ts` / `.js` / `.gjs`) with a `file_alias`: the `file_alias` (path with extension trimmed). Executable consumers see the _aliased_ URL in `deps`, not the source file with extension.
    - Otherwise (non-executable file rows): the row's `url`.
 
-5. After the loop converges (no new URLs added to `visited`), `tombstoneEntries(invalidations)` (line 684) inserts a `is_deleted = true` row for every invalidated URL into `boxel_index_working` with `realm_version = <next-version>`, stamped with the batch's current `invalidationId`. **This is the first DB-side write of the batch.** If the worker died before this, `boxel_index_working` will not yet contain partial-progress rows for the new realm version (step 6 will be empty).
+5. After the loop converges (no new URLs added to `visited`), `tombstoneEntries(invalidations)` stages an `is_deleted = true` row for every invalidated URL that production holds, under the pass's `staging_id` with `generation = <provisional generation>`, stamped with the batch's current `invalidationId` and `passId`. A staged tombstone carries only the columns a deletion sets (`file_alias`, `generation`, `is_deleted`, `has_error`, `error_doc`, `diagnostics`); the rest of its columns are NULL. The commit applies it to the production row in place, so the deleted row keeps its last content, hidden by `is_deleted`. A visit that re-renders the URL overwrites the tombstone with a full row. **This is the first DB-side write of the batch.** If the worker died before this, the job has no staged rows yet (step 6 will be empty).
 
 To reconstruct the consumer set against the live DB, run the iteration manually:
 
@@ -474,27 +513,70 @@ WHERE i.realm_url = '<realm-url>'
 
 Two-hop fan-out: rerun with the first hop's `(url, file_alias, type)` plugged in via `invalidationTraversalAlias` (instance → use `url`; executable file → use `file_alias`; non-executable file → use `url`). In practice the runtime walk converges in 2-4 hops for typical realms; if you're still discovering new URLs after 5-6 hops, you've hit a tightly-cycled module graph and reconstruction by hand isn't going to be cheap.
 
-### 6. Reading partial progress from `boxel_index_working`
+### 6. Reading partial progress from `boxel_index_pending`
 
-`boxel_index_working` carries the batch's in-progress writes, keyed by `(url, realm_url)`. The indexer writes here continuously via `Batch.updateEntry` (line 310). On `Batch.done()` (line 476), rows are copied into `boxel_index` with the new `realm_version` and the working table is **left in place** — it's not truncated (each invalidation is keyed by realm version inside the table). For a stuck job, the rows already written carry the same `invalidationId` and bracket the freeze point.
+`boxel_index_pending` holds the rows index passes have staged but not committed, keyed by `(realm_url, staging_id, url, type)`. Every staging read and write a pass makes is scoped to its own `staging_id`, so a pass sees committed state plus its own rows and never another pass's:
+
+- **`job:<job-id>.<reservation-id>`** for a pass that runs as a queue job: one staging per attempt. Two attempts that overlap (a lease that lapsed while its worker was stalled, so the job was claimed again) never read or clear each other's rows. A retry resumes by **copying** its job's earlier attempts' resumable rows (the newest live, unerrored row per URL and type) into its own staging at setup; the earlier attempt's rows stay where they were.
+- **`adhoc:<pass id>`** for a batch that runs outside a job (the worker-manager's error-marking batch, in-browser SQLite passes, tests). Nothing else shares it.
+
+The indexer writes there continuously (`Batch.bufferEntry` / `updateEntry`). `Batch.done()` copies the pass's rows into `boxel_index`, restamped with the generation it commits under, and then deletes them (`pendingCleanupMs` on the job result). So a row here is always uncommitted work: a live pass's progress, what a failed attempt left for its job's retry, or an earlier attempt's rows a retry copied from. `prerendered_html_pending` is the render channel's twin — the `prerender_html` job's staged HTML rows (and the fused path's), under the same staging-id scheme.
+
+The next commit to a realm clears what no pass can commit any more (`janitorRowsCleared` / `janitorStagingsCleared` on its job result):
+
+- every staging of a job that has resolved or rejected — an attempt of it still running can't commit either, see below;
+- an `adhoc:` staging with no write for 24 hours, a batch that died before its commit.
+
+Rows whose job has no `jobs` row are never removed that way — see [step 9](#9-what-this-mode-cant-tell-you).
+
+**An attempt that has lost its job cannot commit.** The queue can let a handler run on after it lost the job: a deadline that expires marks the job rejected without cancelling it, and a lease that lapses lets another worker claim the job. The first statement of every commit checks that the attempt still holds its job — the job `unfulfilled`, its reservation open, and a lapsed lease not taken by a live one, the same test `attemptJobFinalize` applies to a verdict — and otherwise throws `[job: <id>.<rid>] no longer holds its job (…), so its index pass of <realm> does not commit`. That line in a worker log is a zombie handler being stopped, not a failure of the job; its staged rows are cleared once the job ends.
+
+What is staged in a realm right now, one row per pass:
 
 ```sql
--- Partial progress for a stuck batch: rows the in-progress job has
--- already written, ordered by indexedAt so the bottom row is the file
--- that was being worked on when things froze.
+SELECT p.staging_id,
+       p.job_id,
+       j.status                                        AS job_status,
+       count(*)                                        AS rows_staged,
+       count(*) FILTER (WHERE p.is_deleted)             AS tombstones,
+       max((p.diagnostics->>'writeSeq')::int)           AS rows_deep,
+       to_timestamp(max((p.diagnostics->>'indexedAt')::bigint) / 1000)
+                                                        AS last_write
+FROM boxel_index_pending p
+LEFT JOIN jobs j ON j.id = p.job_id
+WHERE p.realm_url = '<realm-url>'
+GROUP BY 1, 2, 3
+ORDER BY last_write DESC;
+```
+
+A `job_status` of `unfulfilled` is a pass in flight or awaiting its retry. `resolved` / `rejected` means the job ended without its rows being cleared — its commit's cleanup failed, or it died and was not retried — and the next commit to the realm will clear them.
+
+Partial progress for one stuck job:
+
+```sql
+-- Rows the in-progress job has already staged, ordered by writeSeq so the
+-- bottom row is the file that was being worked on when things froze.
+--
+-- Order by writeSeq, NOT indexedAt: rows drain through a write-behind
+-- buffer that stamps a whole flush with one identical millisecond, so
+-- indexedAt cannot separate them and an indexedAt sort silently returns
+-- an arbitrary order within each flush.
 --
 -- The diagnostic projection mirrors Mode B's fan-out query — use
 -- diagnostics->>'renderStage' / 'currentlyEvaluatingModule' /
 -- 'recentModuleEvaluations[0].url' to identify the specific module the
 -- worker stalled on.
 SELECT
+  (diagnostics->>'writeSeq')::int               AS seq,
   url,
   type,
   has_error,
-  realm_version,
+  is_deleted,
+  generation,
   to_timestamp((diagnostics->>'indexedAt')::bigint / 1000)
                                                        AS indexed_at,
   diagnostics->>'invalidationId'                AS invalidation_id,
+  diagnostics->>'passId'                        AS pass_id,
   diagnostics->>'renderStage'                   AS render_stage,
   diagnostics->>'currentlyEvaluatingModule'     AS evaluating_module,
   diagnostics->'recentModuleEvaluations'->0->>'url'
@@ -505,55 +587,45 @@ SELECT
   jsonb_array_length(
     COALESCE(diagnostics->'queryLoadsInFlight', '[]'::jsonb)
   )                                                    AS queries_in_flight
-FROM boxel_index_working
+FROM boxel_index_pending
 WHERE realm_url = '<realm-url>'
-  AND diagnostics->>'invalidationId' = '<invalidation-id>'
-ORDER BY (diagnostics->>'indexedAt')::bigint ASC;
+  AND job_id = <job-id>
+  AND diagnostics->>'writeSeq' IS NOT NULL
+ORDER BY pass_id, seq ASC;
 ```
 
-If you don't already have an `invalidationId`, find the most recent batch's ID against the working table (the last `updateEntry` for the realm wins):
+`rows_deep` / the bottom `seq` is how far into its write order the pass got. A URL contributes two rows, so it is roughly twice the number of files visited; for the planned total and a files-completed count, read the job's `job_progress` row (`total_files` / `files_completed` — an UNLOGGED table the manager's `IndexingEventSink` upserts from the worker's progress events, debounced, so it can lag the last write by a tick).
 
-```sql
-SELECT
-  diagnostics->>'invalidationId'                AS invalidation_id,
-  realm_version,
-  count(*)                                             AS rows_written,
-  to_timestamp(
-    min((diagnostics->>'indexedAt')::bigint) / 1000
-  )                                                    AS first_write,
-  to_timestamp(
-    max((diagnostics->>'indexedAt')::bigint) / 1000
-  )                                                    AS last_write
-FROM boxel_index_working
-WHERE realm_url = '<realm-url>'
-  AND diagnostics->>'invalidationId' IS NOT NULL
-GROUP BY 1, 2
-ORDER BY last_write DESC
-LIMIT 10;
-```
+**A retried job's rows span its attempts.** Each attempt is its own pass, with its own staging, `passId` and `invalidationId`, each numbered from 0, and a retry's copy of an earlier attempt's row keeps that row's diagnostics — so a retry's staging holds rows naming two passes, and the earlier attempt's staging still holds its originals. Group by `pass_id` (the query above sorts by it) and order each attempt's rows separately — sequences are only comparable within one pass, and `indexedAt` is what puts the attempts in order relative to each other. The resumed rows keep naming the earlier attempt after the retry commits them, so a committed row whose `diagnostics.passId` has no `realm_index_commits` row is one a retry promoted; the ledger row with the same `job_id` is the commit that did.
 
-The bottom row of the per-`invalidationId` query (max `indexedAt`) is **the most recently completed file**; the file the worker stalled on is most likely the _next_ one in the planned visit order (which is sorted in `index-runner.ts::sortInvalidations` — `.json` files visited after their non-`.json` counterparts; otherwise lexical by href). Combine three signals to pin it down:
+The bottom row of an attempt (max `writeSeq`) is **the most recently completed file**; the file the worker stalled on is most likely the _next_ one in the planned visit order. That order is: `index-runner.ts::sortInvalidations` (realm config first, then non-`.json` files before the `.json` ones that depend on them, otherwise lexical by href), then `prioritizeWrittenURLs` hoists the URLs the triggering write named ahead of the dependents the fan-out found, then `orderInvalidationsByDependencies` topologically orders the result — treating the position it was handed as a priority, so a dependency edge wins and everything else keeps the order above. Combine three signals to pin it down:
 
-1. The bottom row's `url` is the last-completed file.
-2. The worker log's last `begin fused visit of file <url>` line for the job (visit-file.ts line 108, `index-runner` logger, debug level) names the file the visit _started_ on. If there's no matching `completed fused visit of file <url>` line, that's where the worker froze.
+1. The bottom row's `url` (max `writeSeq`) is the last-completed file.
+2. The worker log's last `begin fused visit of file <url>` line for the job (visit-file.ts, `index-runner` logger, debug level) names the file the visit _started_ on. If there's no matching `completed fused visit of file <url>` line, that's where the worker froze.
 3. The bottom row's `currentlyEvaluatingModule` / `recentModuleEvaluations[0].url` / `inFlightModuleImports[]` say _which_ module inside that visit was the stall point — same field semantics as Mode A.
 
-To read which row would have been visited next from the working table (rows already invalidated but not yet written-with-content — these are the tombstones inserted by `Batch.invalidate`):
+To read which rows would have been visited next (rows already invalidated but not yet written with content — the tombstones `Batch.invalidate` staged):
 
 ```sql
--- Tombstones the batch inserted but hasn't yet rewritten with content.
--- Filtered to the batch's realm_version so older tombstones don't leak
--- in. Sort lexically (close to the actual visit order — see
--- sortInvalidations).
+-- Tombstones the job staged but hasn't yet rewritten with content. A
+-- tombstone is staged by `invalidate()` before the pass visits anything,
+-- so it carries that pass's invalidationId, passId and indexedAt but no
+-- writeSeq — it took no position in the write order, and a visited URL's
+-- row overwrites it. So a NULL writeSeq is exactly what identifies an
+-- un-visited URL here. Sort lexically: it is only an approximation of the
+-- planned order (see the three ordering steps above), but the URLs the
+-- write named are the ones already gone from this list, so what remains
+-- is dep closure.
 SELECT url, type, file_alias, is_deleted
-FROM boxel_index_working
+FROM boxel_index_pending
 WHERE realm_url = '<realm-url>'
-  AND realm_version = <realm-version>
+  AND staging_id = 'job:<job-id>.<reservation-id>'
   AND is_deleted = TRUE
+  AND diagnostics->>'writeSeq' IS NULL
 ORDER BY url ASC;
 ```
 
-If `boxel_index_working` has **zero rows** for this batch's `invalidationId`, the worker died before any DB write — see [step 9](#9-what-this-mode-cant-tell-you).
+If the job has **zero rows** staged, either the worker died before any DB write — see [step 9](#9-what-this-mode-cant-tell-you) — or the job's pass already committed and cleared them: check `realm_index_commits` for a row with the job's `job_id` before concluding it stalled.
 
 ### 7. Cross-referencing with worker logs
 
@@ -620,9 +692,9 @@ cw --profile claude-staging --region us-east-1 tail -b 2h \
 
 A short rubric for the most common shapes:
 
-- **High confidence the stall is at file X**: the bottom row of `boxel_index_working` (max `indexedAt` for the batch's `invalidationId`) is X **AND** the worker's last `begin fused visit of file X` line has no matching `completed fused visit of file X` line **AND** the bottom row's `recentModuleEvaluations[0].url` (or `currentlyEvaluatingModule` / `inFlightModuleImports[0]`) is a module under X. Treat the row's `diagnostics` as a Mode A capture and walk the [Classify in one pass](#classify-in-one-pass) table.
+- **High confidence the stall is at file X**: the bottom row the job staged in `boxel_index_pending` (max `writeSeq` for the attempt's `passId` — not max `indexedAt`, which a single buffered upsert gives a whole flush of rows identically) is X **AND** the worker's last `begin fused visit of file X` line has no matching `completed fused visit of file X` line **AND** the bottom row's `recentModuleEvaluations[0].url` (or `currentlyEvaluatingModule` / `inFlightModuleImports[0]`) is a module under X. Treat the row's `diagnostics` as a Mode A capture and walk the [Classify in one pass](#classify-in-one-pass) table.
 - **Medium confidence**: only two of the three signals agree. Most often the worker log is the dropout — debug-level logging wasn't on. Promote `index-runner` to debug and trigger a follow-up reindex to validate.
-- **Low confidence — the runner stalled before any per-file work**: `boxel_index_working` has no rows for this batch's `invalidationId` (no row stamped with the batch UUID, no `is_deleted = TRUE` tombstones at the batch's `realm_version`). The worker is still in **invalidation discovery** — either the mtime walk (no `discovering invalidations in dir` line yet) or the consumer fan-out (the `discovering` line is there but no per-file visit-start lines). Look at the worker's `index-perf` `time to get file system mtimes` / `time to invalidate` lines — if those are missing too, you're stuck in the realm-server fetch (`reader.mtimes()` → `_mtimes` HTTP call) or in `Batch.invalidate`'s own jsonb-containment SQL (`itemsThatReference`). Then go look at what _should_ have been in the seed but wasn't — cross-check the EFS file listing against the realm's `boxel_index.last_modified` per step 3.
+- **Low confidence — the runner stalled before any per-file work**: `boxel_index_pending` has no rows for the job (no row stamped with the attempt's `passId`, no `is_deleted = TRUE` tombstones), and `realm_index_commits` has no row for the job either. The worker is still in **invalidation discovery** — either the mtime walk (no `discovering invalidations in dir` line yet) or the consumer fan-out (the `discovering` line is there but no per-file visit-start lines). Look at the worker's `index-perf` `time to get file system mtimes` / `time to invalidate` lines — if those are missing too, you're stuck in the realm-server fetch (`reader.mtimes()` → `_mtimes` HTTP call) or in `Batch.invalidate`'s own jsonb-containment SQL (`itemsThatReference`). Then go look at what _should_ have been in the seed but wasn't — cross-check the EFS file listing against the realm's `boxel_index.last_modified` per step 3.
 - **Confirm a "rejected" job actually failed cleanly**: `jobs.status = 'rejected'` should pair with the matching reservation's `completed_at IS NOT NULL`. If `completed_at IS NULL`, the worker bailed before its finalize transaction (see `attemptJobFinalize` in `packages/postgres/job-finalize.ts`); the reservation's `locked_until` will eventually expire and another worker can claim it.
 
   The actual error is in **`jobs.result`** (jsonb). When the worker's `await job.run(...)` throws, `pg-queue.ts` does `result = flattenErrorForJsonb(err); newStatus = 'rejected';` and the finalize UPDATE writes both into the row. Read it directly:
@@ -641,9 +713,10 @@ A short rubric for the most common shapes:
 
 ### 9. What this mode can't tell you
 
-- If the worker died _before_ any DB write — crashed during `discoverInvalidations`, OOM-killed during the mtime walk, or threw inside `Batch.invalidate`'s own SQL — `boxel_index_working` will have no rows for this batch's `invalidationId`. The `Batch` object mints the `invalidationId` in its constructor, but it only lands on disk when the first `updateEntry` or `tombstoneEntries` call runs. Until then the only diagnostic signals are the worker log and the EFS state. Mode C cannot reconstruct _which_ file the worker was processing in that case — you need either `index-runner=debug` log output or a Sentry trace.
-- The `diagnostics` for partial-progress rows is the **per-render** capture for that row's prerender call. It won't tell you why the _next_ render froze. If the bottom-row's diagnostic is clean (low `renderElapsedMs`, no in-flight loads), the stall is between renders — usually `Batch.invalidate` recursion against a tightly-cycled module graph, or DB contention on the `boxel_index_working` upsert. The `index-perf` `time to determine items that reference …` lines are the only fingerprints of that loop.
-- A `boxel_index` row's `diagnostics` reflects the **last successful** indexing pass, not the in-flight one. Don't confuse a stale `boxel_index` `indexedAt` with the stuck job — always cross-reference against the matching `boxel_index_working` row (same `(url, realm_url)`) before drawing conclusions.
+- If the worker died _before_ any DB write — crashed during `discoverInvalidations`, OOM-killed during the mtime walk, or threw inside `Batch.invalidate`'s own SQL — `boxel_index_pending` will have no rows for the job. The `Batch` object mints its `invalidationId` and `passId` in its constructor, but they only land on disk when the first `updateEntry` or `tombstoneEntries` call runs. Until then the only diagnostic signals are the worker log and the EFS state. Mode C cannot reconstruct _which_ file the worker was processing in that case — you need either `index-runner=debug` log output or a Sentry trace.
+- The `diagnostics` for partial-progress rows is the **per-render** capture for that row's prerender call. It won't tell you why the _next_ render froze. If the bottom-row's diagnostic is clean (low `renderElapsedMs`, no in-flight loads), the stall is between renders — usually `Batch.invalidate` recursion against a tightly-cycled module graph, or DB contention on the `boxel_index_pending` upsert. The `index-perf` `time to determine items that reference …` lines are the only fingerprints of that loop.
+- A `boxel_index` row's `diagnostics` reflects the **last successful** indexing pass, not the in-flight one. Don't confuse a stale `boxel_index` `indexedAt` with the stuck job — always cross-reference against the row the job staged in `boxel_index_pending` (same `(url, type)` and `job_id`) before drawing conclusions.
+- Rows staged by a job whose `jobs` row is gone are never removed by the janitor: nothing says that job has stopped. `adhoc:` rows are removed only once they have gone 24 hours without a write, so a batch outside a job that died mid-pass leaves its rows for that long. Neither is read by any other pass, so they cost only space; delete them by `staging_id` if they accumulate.
 
 ## Mode D — a module render was slow or hung
 
@@ -703,7 +776,7 @@ WHERE diagnostics->>'requestId' = '<request-id>';
 
 ### What Mode D can't tell you
 
-- **No partial-progress equivalent.** `modules` has no working-table sibling; the row only lands on `persistModuleCacheEntry` after the prerender returns. If a `prerenderModule` call hangs forever and the worker is killed, no row is written and Mode D has nothing to query. Cross-reference against the prerender server logs for `requestId=…` directly, same as a hung card render before the host's withTimeout fires.
+- **No partial-progress equivalent.** `modules` has no staging-table sibling; the row only lands on `persistModuleCacheEntry` after the prerender returns. If a `prerenderModule` call hangs forever and the worker is killed, no row is written and Mode D has nothing to query. Cross-reference against the prerender server logs for `requestId=…` directly, same as a hung card render before the host's withTimeout fires.
 - **No invalidationId, so no Mode B fan-out.** Module renders are independent units; they don't belong to a "batch" that you can group by. If you need to attribute a slow `getDefinition` storm across many concurrent searches, you're stuck doing it via `created_at` time windows + the `#inFlight` dedupe behavior in `CachingDefinitionLookup` — i.e. one slow row may have been the bottleneck for many in-flight callers, but the `modules` table doesn't record those waiters.
 
 ## Mode E — enumerate cards with broken links
@@ -758,7 +831,7 @@ WHERE bl->>'reference' = 'https://realm.example/people/ringo';
 Caveats:
 
 - **Older rows predate the scan.** A row last indexed before this capability shipped has no `brokenLinks` key even if its links are broken — it'll only appear after the next reindex. Don't read "absent" as "no broken links" for stale rows; check `indexedAt` if in doubt.
-- **`boxel_index_working` carries it too**, so you can watch broken-link findings accrue mid-reindex the same way as the timing fields (see [Reading partial progress](#5-reading-partial-progress-from-boxel_index_working)).
+- **`boxel_index_pending` carries it too**, so you can watch broken-link findings accrue mid-reindex the same way as the timing fields (see [Reading partial progress](#6-reading-partial-progress-from-boxel_index_pending)).
 - This is the cheap enumeration path the rendered-HTML / `getRelationship` runtime surfaces were too expensive for — querying the column avoids parsing HTML or re-running `getBrokenLinks` per read.
 
 ## Mode F — module pre-warm and definition-cache hit/miss
@@ -873,7 +946,7 @@ It is **not** persisted in `boxel_index.diagnostics` (that's the client side). S
 ```
 corr=<id> job=<jobId> handler=Nms parse=… resolveRealms=… sql=… stringify=… coalescedWait=… | results=…    (realm:search-timing)
 --> QUERY <accept> <url>: 200 [job: <jobId>] corr=<id> dur=Nms                                                                                            (realm:requests)
-eventLoopLagMs(mean/p99/max)=…/…/… inFlightSearch=… heapMB=…                                                                                              (realm:health)
+eventLoopLagMs(mean/p99/max)=…/…/… inFlightSearch=… searchRequests=… searchLoad=… realmSearchLoadMax=… heapMB=…                                                                                              (realm:health)
 ```
 
 The `|`-section is the **sequential wall-clock timeline** (these sum to ≈ `handler`).
@@ -979,14 +1052,30 @@ Different procedure, because this one is not per-render and not affinity-gated.
 3. **Wait.** Each task captures itself once, on an idle tick after its heap crosses the threshold, and logs `heap snapshot starting …`, `heap snapshot written bytes=… writeMs=…`, `heap snapshot uploaded …`. Nothing else is needed — if it never fires, check `heapUsedMB` on the dashboard against the threshold.
 4. **Pull it** from the artifacts bucket like any other artifact, and read it per _Reading each artifact_.
 
-To choose the moment instead — a particular heap size, or a task that has already spent its one automatic capture — `POST /heap-snapshot` on the task. The service has no load balancer, so reach it by SSM port-forward; the log line carries everything the target needs (`ecs:<cluster>_<taskId>_<container_id>`, where `container_id` is both the runtime id and prefixed by the task id):
+To choose the moment instead — a particular heap size, or a task that has already spent its one automatic capture — `POST /heap-snapshot` on the task. The service has no load balancer, so reach it by SSM port-forward; the log line carries everything the target needs (`ecs:<cluster>_<taskId>_<container_id>`, where `container_id` is both the runtime id and prefixed by the task id). The forward's `host` must be the task's private IP, not `localhost`: the SSM agent refuses to forward to loopback addresses, and the prerender server listens on all interfaces. Check the port is free first and tear the tunnel down with both kills, as the `aws-access` skill's "A squatted port is a wrong-environment bug" and "Tearing the tunnel down actually requires two kills" explain:
 
 ```
-aws --profile <profile> ssm start-session \
-  --target "ecs:<cluster>_<taskId>_<container_id>" \
-  --document-name AWS-StartPortForwardingSessionToRemoteHost \
-  --parameters '{"portNumber":["4221"],"localPortNumber":["54221"],"host":["localhost"]}' &
-curl -X POST localhost:54221/heap-snapshot
+TASK_IP=$(aws --profile <profile> ecs describe-tasks --cluster <cluster> --tasks <taskId> \
+  --query 'tasks[0].containers[?name==`boxel-prerender-server`] | [0].networkInterfaces[0].privateIpv4Address' \
+  --output text)
+if lsof -nP -iTCP:54221 -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "port 54221 is already bound — pick another, and find out what is holding it"
+else
+  aws --profile <profile> ssm start-session \
+    --target "ecs:<cluster>_<taskId>_<container_id>" \
+    --document-name AWS-StartPortForwardingSessionToRemoteHost \
+    --parameters "{\"portNumber\":[\"4221\"],\"localPortNumber\":[\"54221\"],\"host\":[\"$TASK_IP\"]}" &
+  TUNNEL_PID=$!
+  for _ in $(seq 30); do
+    lsof -nP -iTCP:54221 -sTCP:LISTEN >/dev/null 2>&1 && break
+    sleep 1
+  done
+  curl -sS -X POST localhost:54221/heap-snapshot
+  kill $TUNNEL_PID
+  pkill -f "session-manager-plugin.*localPortNumber.*54221" 2>/dev/null
+  unset TUNNEL_PID
+  lsof -nP -iTCP:54221 -sTCP:LISTEN && echo "TUNNEL LEAKED — kill the pid above"
+fi
 ```
 
 **What it costs.** The write stops the event loop: measured at 6.9–15.9 s for heaps of 1559–1588 MB on a staging task, producing 198–512 MB files. Cost follows object count rather than bytes, so a heap of the same size with many more, smaller objects is far slower. Two consequences worth knowing before raising the threshold: a pause beyond the manager's **30 s heartbeat** gets the instance swept as stale until it re-registers, and one file can spend a large share of the 5 GiB `PRERENDER_PROFILE_MAX_SESSION_BYTES` budget shared with the profiler artifacts. Capture at 1–2 GB; the retention reads the same and every cost is smaller.
@@ -1021,6 +1110,14 @@ The key schema is `env/realm/jobId/card/step/<timestamp>-<seq>.<suffix>` — eve
 **When to use this mode.** Mode A classified a render as a hard CPU peg (`mainThreadResponsive=false`, `scriptBusy≈1`), or a from-scratch index rejected mid-run on a card that never wrote a row (Mode C), and Mode H's heavyweight captures came back empty / `(idle)`. The renderer's main thread is spinning in a synchronous JS (or native) loop — the worst case for inspection, because a fully-pegged thread can't service the CDP protocol message that _arms_ a debugger or profiler (`Debugger.enable` / `Profiler.enable` time out), so the CDP captures are starved. Two timeout-path signals read it anyway, because neither needs the pegged thread to cooperate. They ride on the same render-timeout log line as `cpuTopFrames`, in the **prerender-server** log.
 
 A healthy render finishes well under 30s; the render-level timeout (`RENDER_TIMEOUT_MS`, default 60s) fires before the request-level abort (render + 60s overhead), so these are captured and logged before the worker gives up on the visit. (If a wedge ever rejects with no timeout line at all, the diagnostic block itself was starved — that is itself the `<debugger-enable-timeout>` signal below.)
+
+The captures behind the timeout line run under a Node-side budget (`RENDER_TIMEOUT_DIAGNOSTICS_BUDGET_MS`, default 20s), because each one asks Chrome for something and the render holds its tab until they finish. A tab that failed the responsiveness probe gets the debugger pause first, then the CPU captures; `--prof` uploads alongside them. Three fields on the line say how the budget went:
+
+- **`diagnosticsMs=`** — how long the captures held the tab past the render timeout. At most the budget.
+- **`diagnosticsBudgetExceeded=true`** — the budget ran out with a capture still waiting on Chrome. Fields that capture would have filled are `<unknown>` or missing, and a `v8ProfLog:` of `still uploading at the diagnostics budget` means the upload finishes in the background.
+- **`cdpSessionAttachTimedOut=true`** — attaching a CDP session to the tab timed out (`pausedStack: <cdp-session-timeout>`). Also persisted in `diagnostics` as `cdpSessionAttachTimedOut`.
+
+Timeouts on unresponsive tabs also feed the browser-recycle decision. Timed-out attaches in two distinct realms within five minutes, or unresponsive tabs in three distinct realms within five minutes, kill and restart the prerender server's Chrome, at most once every fifteen minutes. Reports count by realm, so one card wedging the indexer's, a user's and an anonymous render of its realm counts once. A recycle also fails any command in flight on the server, and commands are not retried. Look for `Recycling prerender browser (recycle N): <reason>` in the **prerender-server** log. A climbing `N` on one task means the recycles aren't fixing anything: look for a definition shared across realms that pegs every renderer it touches, or for host CPU saturation.
 
 ### `pausedStack` — a one-shot debugger pause (always on, can't mask)
 
@@ -1203,7 +1300,7 @@ The `≈` covers small un-bucketed residue (loop control, progress events, resum
 
 **Per-VISIT vs per-ROW — the sum has to respect this.** A card-instance `.json` produces **two** rows (`type='instance'` + `type='file'`) from one visit, and they **share** the visit's blob: the same `totalElapsedMs`, `read`, and `renderRpc` land on both. So those three are per-VISIT — sum them over **one row per URL** (filter to `type='file'`, which exists exactly once per visited file) or you double-count every card `.json`. `bookkeeping` is the exception: the card indexer and the file indexer each stamp their **own** value (card dependency resolution vs file-row construction — distinct work in the same visit), so `bookkeeping` is per-ROW and is summed across **all** rows. Step 2's query does both.
 
-`swapMs` is the `batch.done()` transaction (realm-meta update + working→main promotion + obsolete-row prune), and `discoverMs` is the pre-loop invalidation fan-out; both are serial bookends around the visit loop, so they're the _irreducible_ part — the pipelining lever (overlap the write of row N with the visit of N+1, batch row writes) attacks `writeMs` and `bookkeeping`, not these.
+`swapMs` is the `batch.done()` transaction (realm-meta update + pending→main promotion + obsolete-row prune + type-watermark stamps, committed together or not at all) plus the pending-row cleanup after it (`pendingCleanupMs`), and `discoverMs` is the pre-loop invalidation fan-out; both are serial bookends around the visit loop, so they're the _irreducible_ part — the pipelining lever (overlap the write of row N with the visit of N+1, batch row writes) attacks `writeMs` and `bookkeeping`, not these.
 
 ### Step 1 — pull the job's phase breakdown
 
@@ -1213,15 +1310,17 @@ SELECT id,
        status,
        extract(epoch FROM (finished_at - started_at)) * 1000 AS wall_ms,
        result->>'generation'      AS generation,
+       result->>'baseGeneration'  AS base_generation,
        result->'phaseTimings'     AS phase_timings
 FROM jobs
-WHERE concurrency_group = 'indexing:<realm-url>'   -- e.g. indexing:https://app.example/team/realm/
+WHERE (concurrency_group = 'indexing:<realm-url>'   -- e.g. indexing:https://app.example/team/realm/
+       OR lane_family = 'indexing:<realm-url>')     -- every lane of the realm's family, see Mode P
   AND status = 'resolved'
 ORDER BY id DESC
 LIMIT 5;
 ```
 
-`phase_timings` is `{ totalMs, setupMs, mtimesMs, discoverMs, orderMs, preWarmMs, visitLoopMs, writeMs, swapMs }` (ms). Read it against `wall_ms`: `totalMs` should land close to the job's wall; the gap between `visitLoopMs` and the visit render sum (step 2) is the per-visit client overhead + `writeMs`.
+`phase_timings` is `{ totalMs, setupMs, mtimesMs, discoverMs, orderMs, preWarmMs, visitLoopMs, writeMs, swapMs, swapAttempts, swapRetryMs, commitLockWaitMs, pendingCleanupMs, janitorRowsCleared, janitorStagingsCleared }` (ms, except `swapAttempts` and the two janitor fields, which are counts). A pass whose commit checked peer commits adds `validationMs`, `validationRounds`, `revisitCount`, `extendCount` and, when its rounds ran out, `followUpJobId`. `swapMs` excludes `validationMs`, which also counts toward `totalMs` (see [Mode O](#mode-o--a-pass-re-visited-cards-because-a-peer-committed)). `generation` is the generation the job's swap committed; `base_generation` is the committed generation the job was set up against, so a gap wider than one means another pass of the realm committed while this one ran. Read it against `wall_ms`: `totalMs` should land close to the job's wall; the gap between `visitLoopMs` and the visit render sum (step 2) is the per-visit client overhead + `writeMs`.
 
 ### Step 2 — sum the per-row halves for the same job
 
@@ -1267,9 +1366,81 @@ LIMIT 20;
 - **`read`** — file read + the file-metadata lookups (`ensureFileCreatedAt`, content hash/size). Usually small; a large `read` fleet-wide points at slow EFS / reader, not the render.
 - **`renderRpc`** — the client-observed prerender round-trip minus the server's own `totalElapsedMs`: serialization + the wire hop to the prerender server + any wait the server doesn't count. Large `renderRpc` with small server render means the transport/queue is the cost, not the render. ~0 on the fused / in-browser path (no wire hop).
 - **`bookkeeping`** — dependency resolution + index-entry construction between the render finishing and the write. The per-row cost that varies with a card's dependency shape; the top of step 3 names the heavy cards.
-- **`writeMs`** (job-level) — the Σ of the working-table upserts. This is I/O the render tab doesn't need, so it's the leading pipelining candidate (overlap it with the next visit).
-- **`setupMs`** (job-level) — `createBatch`: the generation bump and the resumable working-row scan, before any visit. Normally small; large `setupMs` is a retry job re-scanning a big working table, or DB slowness.
+- **`writeMs`** (job-level) — the Σ of the pending-table upserts. This is I/O the render tab doesn't need, so it's the leading pipelining candidate (overlap it with the next visit).
+- **`setupMs`** (job-level) — `createBatch`: reading the committed generation the pass starts from, and the scan for rows an earlier attempt of the job staged (the resume), before any visit. Normally small; large `setupMs` is a retry job resuming a large staged set, or DB slowness.
 - **`discoverMs` / `swapMs`** (job-level) — the serial bookends. `discoverMs` runs before the first visit, `swapMs` after the last, so neither can overlap a visit; they're the floor the pipelining can't remove.
+- **`swapAttempts` / `swapRetryMs`** (job-level) — the swap is one database transaction on one pinned connection. It publishes all of the pass or none of it: a failure part-way through rolls back, and the realm stays exactly as the previous pass left it. On Postgres, a deadlock (`40P01`) or serialization failure (`40001`) against a concurrent commit rolls the swap back and runs it again. `swapAttempts` counts the runs, and `swapRetryMs` is the part of `swapMs` spent on runs that rolled back.
+  - Normal value: `swapAttempts` is 1 and `swapRetryMs` is 0.
+  - More than 1 means a concurrent transaction deadlocked with the swap on the same rows. The usual one is a `prerender_html` job of the same realm stamping `realm_type_generations`: it runs in its own lane, so it can commit alongside an index swap. Each retry also writes a `pg-adapter` `warn` line naming the SQLSTATE and the realm (`transaction for the index swap of <realm> rolled back on SQLSTATE …`).
+  - A value of 1 does not rule out contention. Every commit stamps the type watermarks in the same sorted order, so a concurrent commit on those rows usually makes the swap wait rather than deadlock, and a wait is not a retry. That time shows up in `swapMs` alone. To tell a contended swap from a slow one, look for a `prerender_html` job of the same realm whose swap overlapped this one (compare the two jobs' `finished_at` and `swapMs`).
+- **`pendingCleanupMs`, `janitorRowsCleared`, `janitorStagingsCleared`** (job-level) — after the swap commits, the pass deletes the rows it staged in the pending tables, then the janitor removes this realm's pending rows no pass can commit any more: those of jobs that are no longer `unfulfilled`, and `adhoc:` stagings idle for 24 hours. It runs outside the swap's transaction, so it never extends the commit lock; it is part of `swapMs`.
+  - Normal value: the janitor counts are 0 on a realm whose jobs run their first attempt through. A retried job's earlier attempt always leaves its staging for the janitor (the retry copied from it rather than taking it over), so expect one per retry. Beyond that, a nonzero count means some pass ended with staged rows still on the table — it died before its commit and was not retried, its commit was refused because it no longer held its job, or its own cleanup failed (a warning on the `index-writer` logger names it). The rows were never read by another pass either way; this is housekeeping, not a correctness signal.
+  - `pendingCleanupMs` is absent when the swap never committed, and the janitor counts are absent when the cleanup itself failed.
+  - `prerender_html` job results carry the same three swap fields (`swapMs`, `swapAttempts`, `swapRetryMs`) and these three cleanup fields on their `phaseTimings`, alongside `preWarmMs` and `spawnGateMs` (see [A prerender_html job's wait on its spawning passes](#a-prerender_html-jobs-wait-on-its-spawning-passes)).
+- **`commitLockWaitMs`** (job-level) — the part of `swapMs` the committing attempt spent waiting for the realm's commit lock. A pass allocates its generation at commit, one past the realm's `current_generation`, while holding a per-realm lock that serializes commits (not passes); the wait is the time another pass of the same realm spent finishing its own commit. Index passes of one realm run side by side, one per writer lane (see [Mode P](#mode-p--a-save-waited-in-the-queue)), but their commits still take turns, so this is the one place on the index path where one writer's pass can still wait on another's. Expect it near 0 on a realm with one active writer, and up to one peer's commit (its swap plus any validation rounds) when two writers' passes finish close together. `prerender_html` jobs take no commit lock and carry no such field.
+
+### Reading the commit ledger
+
+`realm_index_commits` has one row per committed index swap, written inside the swap's transaction, so a row exists exactly when its commit landed. Columns: `generation` (the one the commit took), `base_generation` (the `current_generation` the pass was set up against), `pass_id` (minted per batch, so the attempts of a retried job are distinct), `job_id`, `urls` (the sorted URLs the commit promoted), `render_only_urls` (the sorted render-only dependents it restamped without promoting — together with `urls`, every row the commit moved to its generation), `full_realm`, and `committed_at` (epoch ms). Both URL columns are `NULL` for a full-realm pass (a from-scratch index or a copy) and for a pass that moved more than 2,000 rows; read `NULL` as "every URL in the realm". `full_realm = false` with `NULL` lists is the too-many-to-list case. Each commit prunes its own realm's rows older than seven days.
+
+```sql
+-- A realm's recent commits, newest first, with the passes that overlapped a
+-- peer's commit flagged.
+SELECT generation,
+       base_generation,
+       generation - base_generation > 1          AS overlapped_a_peer,
+       job_id,
+       full_realm,
+       jsonb_array_length(urls)                  AS url_count,
+       jsonb_array_length(render_only_urls)      AS render_only_count,
+       to_timestamp(committed_at / 1000.0)       AS committed_at
+FROM realm_index_commits
+WHERE realm_url = '<realm-url>'
+ORDER BY generation DESC
+LIMIT 20;
+```
+
+- **Which pass published a row.** A row's `boxel_index.generation` is the generation of the commit that last promoted or restamped it; join it to the ledger on `(realm_url, generation)` to get the job, and find the row in `urls` (visited) or `render_only_urls` (restamped only).
+- **What committed while a pass ran.** The rows with `generation` above a pass's `base_generation` and below its own `generation` are the peers that committed between its setup and its commit. Their `urls` and `render_only_urls` are what that pass's fan-out could not have seen. When such a peer wrote a URL this pass also wrote, the commit re-reads that URL's adoption chain under the commit lock, so the type the peer moved it into is recomputed in the summary and its watermark moves. An index pass also checks those peers before committing and re-visits what they made stale (see [Mode O](#mode-o--a-pass-re-visited-cards-because-a-peer-committed)).
+- **Gaps.** Generations are contiguous per realm, so a missing number inside the retention window means a ledger row was deleted, not a commit skipped.
+
+### A prerender_html job's wait on its spawning passes
+
+An index pass enqueues its `prerender_html` job as soon as its invalidation set is fixed, mid-pass, but it takes its generation only when it commits. So the job's args name each spawning pass as `spawningIndexPasses: [{ jobId, passId }]`, where `passId` is the id its batch minted. The job's visits wait until each `passId` has a `realm_index_commits` row, or until that pass's job has stopped running without one (a failed commit, a deleted realm). In that case the job renders against the committed index and logs a `warn` naming the job and pass.
+
+The wait is keyed on the pass rather than the job because one job id can commit twice: a job whose reservation expires, or whose worker dies between its commit and its resolve, runs again under the same id with a new pass. A peer pass's commit never releases the wait either, even though it advances `current_generation`.
+
+A reconcile repair has no spawning passes, and waits on the committed `generation` it was spawned from, which its first probe passes. A job enqueued by a worker predating `spawningIndexPasses` waits for `current_generation` to reach its `generation`. Spawned jobs carry the generation their pass anticipated in `generation` too, but only an older worker reads it.
+
+Once released, the job reads each URL's live `boxel_index.generation` and stamps that onto the URL's `prerendered_html` row (and its declared-capture ledger rows' `source_generation`), recording it as `prerendered_html.diagnostics.stampedFromIndexGeneration`. A URL with no index row of that type takes the realm's committed generation and carries no such field. The job result's `generation` is that committed generation.
+
+The job result records the wait: `spawningIndexJobIds` (the jobs of the passes it waited on, after any coalescing) and `phaseTimings.spawnGateMs`. The pass ids themselves are on the job's `args`.
+
+```sql
+-- Recent prerender_html jobs of a realm: how long each waited, and on which
+-- commits.
+SELECT j.id,
+       (j.result->'phaseTimings'->>'spawnGateMs')::int AS spawn_gate_ms,
+       j.args->'spawningIndexPasses'                   AS spawning_passes,
+       (j.result->>'generation')::int                  AS rendered_against,
+       (SELECT jsonb_agg(c.generation ORDER BY c.generation)
+          FROM realm_index_commits c
+         WHERE c.realm_url = '<realm-url>'
+           AND c.pass_id IN (SELECT p->>'passId'
+                               FROM jsonb_array_elements(j.args->'spawningIndexPasses') p)
+       )                                               AS spawner_commits
+FROM jobs j
+WHERE j.job_type = 'prerender_html'
+  AND (j.concurrency_group = 'prerender-html:<realm-url>'
+       OR j.lane_family = 'prerender-html:<realm-url>')
+  AND j.status = 'resolved'
+ORDER BY j.id DESC
+LIMIT 20;
+```
+
+- **A long `spawn_gate_ms`** is the job waiting out its spawning pass's remaining runtime, not a slow render. On a from-scratch spawn it can cover most of the index pass.
+- **`spawner_commits` shorter than `spawning_passes`** means a pass never committed. The job rendered against whatever production held, and its log has a `rendering against the committed index: spawning index job <id> stopped running without committing pass <passId>` warning.
+- **A row whose `generation` differs from `stampedFromIndexGeneration`** should not exist; the two are written together.
 
 ### What Mode K can't tell you
 
@@ -1285,7 +1456,7 @@ LIMIT 20;
 The index visit runs at most three route steps, and `indexRoutesMs` records each one's wall-clock, split by the card indexing and the FileDef file indexing (the index-half sibling of the render channel's `renderFormatsMs`):
 
 - **`card.meta`** — the `render.meta` route: instantiate the card, run computeds, build the search doc, and resolve `types` / `displayNames` / `deps`. The types chain is a prototype-chain walk inside this route, not a step of its own — its cost is inside this number. On a card-instance index visit this is the **fused** transition: it also performs the file row's extract, whose share is itemized as `diagnostics.fileExtractMs`. `serializeMs` / `searchDocMs` / `searchDocSettleMs` break the _doc build_ out of it (Mode J); the remainder of `card.meta` net of `fileExtractMs` is the route's own transition + settle.
-- **`card.icon`** — the `render.icon` route. Present only when the icon route actually ran; **absent when the per-type icon memo served the icon**, since a memo hit renders nothing and costs ~0 this visit. So across one job's cards of a given type, expect `card.icon` on the first card of the type and none on the rest.
+- **`card.icon`** — the `render.icon` route. Present only when the icon route actually ran; **absent when the per-type icon memo served the icon**, since a memo hit renders nothing and costs ~0 this visit. So across one job's cards of a given type, expect `card.icon` on the first card of the type and none on the rest. The memo belongs to one job: two index passes of a realm running at once (different writers' lanes) each keep their own, so each renders a type's icon once.
 - **`file.fileExtract`** — a standalone `render.file-extract` route transition: the file's resource, types, and deps. Present on non-card files (they have no card side to fuse into), on the fallback extract a card render error triggers, and on a prerender-html visit that self-resolves its file resource. **Absent on a card-instance visit's happy path** — there the extract runs inside the fused `card.meta` transition and shows up as `fileExtractMs` instead.
 - **`file.icon`** — the file's `render.icon` route, same memo behavior as `card.icon`.
 
@@ -1356,29 +1527,29 @@ WHERE realm_url = 'https://localhost:4201/user/your-realm/'
 
 - **The plumbing residual isn't itemized.** `renderElapsedMs − Σ indexRoutesMs` is one number; it lumps every transition and settle handoff together. Which specific transition dominates it isn't captured per row.
 - **A memo-hit icon reads as absent, not zero.** An absent `icon` key means either the per-type memo served it (the common case) or the icon route genuinely didn't run; the row alone doesn't distinguish them. The `card icon memo hit` debug log line does.
-- **Inside `meta` stops at the doc build.** `card.meta` minus (`searchDocMs` + `searchDocSettleMs` + `serializeMs`) is "the meta route's own transition + settle", but that remainder isn't broken down further — profiling inside it is Mode H territory.
+- **Inside `meta`, the doc build is only part of the story.** `card.meta` minus (`searchDocMs` + `searchDocSettleMs` + `serializeMs`) is mostly the **model build** the parent `render` route runs inside that transition — normally the dominant part of the bucket. [Mode N](#mode-n--the-model-build-inside-a-visit-source--type--hydrate--settle) breaks it into `fetchSource` / `deriveType` / `hydrate` / `storeSettle`, with per-module, per-field and per-load detail under each. What survives both is the meta route's own transition plus its types / displayNames / deps resolution; profiling inside that is Mode H territory.
 - **The fused (SQLite in-browser) path carries a combined blob.** A fused single-visit pass records the index routes on the same `boxel_index.diagnostics` as the render formats; the split-pipeline separation of index-vs-render doesn't apply there.
 
-## Mode M — declared-screenshot capture failures and per-slot timings
+## Mode M — declared capture failures and per-slot timings
 
-**When to use this mode.** A card's declared screenshot (`static screenshots`) is missing, `screenshotURLs.<name>` / `meta.screenshots.<name>` comes back undefined, a thumbnail unexpectedly fell through its fallback chain, or the prerender-html visit's `renderFormatsMs.card.screenshots` bucket is large and you need to know which slot ate the time.
+**When to use this mode.** A card's declared capture (`static captures`) is missing, `captureURLs.<name>` / `meta.captures.<name>` comes back undefined, a thumbnail unexpectedly fell through its fallback chain, or the prerender-html visit's `renderFormatsMs.card.captures` bucket is large and you need to know which slot ate the time.
 
-**The failure model (the broken-links model).** A declared-capture failure never errors its row: the `prerendered_html` instance row publishes normally (no `error_doc`), the manifest (`prerendered_html.screenshots`) simply omits the failed name, and `diagnostics.screenshotErrors` records why — the only indexed signal that a declared screenshot is missing. The card stays fully served and searchable throughout; thumbnail consumers fall through their chain.
+**The failure model (the broken-links model).** A declared-capture failure never errors its row: the `prerendered_html` instance row publishes normally (no `error_doc`), the manifest (`prerendered_html.captures`) simply omits the failed name, and `diagnostics.captureErrors` records why — the only indexed signal that a declared capture is missing. The card stays fully served and searchable throughout; thumbnail consumers fall through their chain.
 
 ```jsonc
-"screenshotErrors": [
+"captureErrors": [
   { "name": "hero",                       // slot name; '*' = the whole capture step failed (roster read error or step timeout)
     "message": "render never painted",
     "captureMs": 15310,                   // wall-clock of the failed render attempt; on '*' the whole step's elapsed;
                                           // absent when nothing rendered (capture-cap overflow, persist-step failure)
     "consecutiveFailures": 2 }            // this slot's run of consecutive failing renders (a name change resets it)
 ],
-"screenshotCaptureFailureRenders": 2      // consecutive renders recording ANY capture failure — the retry cap's term
+"captureFailureRenders": 2      // consecutive renders recording ANY capture failure — the retry cap's term
 ```
 
-**The retry lane.** The `prerender-html-reconcile` sweep re-renders rows with recorded capture failures the same way it retries `visitRequestFailure` error rows: eligible while the row's `screenshotCaptureFailureRenders` AND some recorded slot's `consecutiveFailures` are below `DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP` (3), and the row's `rendered_at` is at least `DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS` (45 min) old; a value missing from a legacy row reads as one. The row counter is the convergence bound — a per-slot run resets whenever the failing name changes (a `'*'` step failure alternating with a per-name one, format groups failing on alternating renders), so per-slot runs alone can sit at 1 forever on a struggling row — while the per-slot term stops retrying a stable failure set once every name in it is capped. Once capped, the absence is terminal until the URL's next invalidation. So: `screenshotCaptureFailureRenders` at the cap plus an old `rendered_at` means "the platform has given up on this row's captures — fix the card (or the underlying media) and edit/reindex"; below the cap means a retry is still coming.
+**The retry lane.** The `prerender-html-reconcile` sweep re-renders rows with recorded capture failures the same way it retries `visitRequestFailure` error rows: eligible while the row's `captureFailureRenders` AND some recorded slot's `consecutiveFailures` are below `DECLARED_CAPTURE_RETRY_CAP` (3), and the row's `rendered_at` is at least `DECLARED_CAPTURE_RETRY_MIN_AGE_MS` (45 min) old; a value missing from a legacy row reads as one. The row counter is the convergence bound — a per-slot run resets whenever the failing name changes (a `'*'` step failure alternating with a per-name one, format groups failing on alternating renders), so per-slot runs alone can sit at 1 forever on a struggling row — while the per-slot term stops retrying a stable failure set once every name in it is capped. Once capped, the absence is terminal until the URL's next invalidation. So: `captureFailureRenders` at the cap plus an old `rendered_at` means "the platform has given up on this row's captures — fix the card (or the underlying media) and edit/reindex"; below the cap means a retry is still coming.
 
-**Per-slot timings.** `diagnostics.screenshotTimingsMs` (`{name → ms}`) decomposes the `renderFormatsMs.card.screenshots` aggregate per slot, failed attempts included. Two caveats: slots captured from one shared format render (same `format`, no `render` component) each record that render's whole elapsed time, so the entries can sum past the aggregate; carry-forwards (`keyBy: 'file-content'`, unchanged source) record nothing — nothing rendered.
+**Per-slot timings.** `diagnostics.captureTimingsMs` (`{name → ms}`) decomposes the `renderFormatsMs.card.captures` aggregate per slot, failed attempts included. Two caveats: slots captured from one shared format render (same `format`, no `render` component) each record that render's whole elapsed time, so the entries can sum past the aggregate; carry-forwards (`keyBy: 'file-content'`, unchanged source) record nothing — nothing rendered.
 
 **Enumerate cards with missing captures** (same shape as the Mode E brokenLinks queries; the jsonb operators are Postgres-only):
 
@@ -1387,9 +1558,9 @@ SELECT p.url, se->>'name' AS slot, se->>'message' AS why,
        (se->>'consecutiveFailures')::int AS run,
        to_timestamp(p.rendered_at / 1000) AS rendered_at
 FROM prerendered_html p
-CROSS JOIN LATERAL jsonb_array_elements(p.diagnostics->'screenshotErrors') AS se
+CROSS JOIN LATERAL jsonb_array_elements(p.diagnostics->'captureErrors') AS se
 WHERE p.realm_url = '<realm-url>'
-  AND jsonb_typeof(p.diagnostics->'screenshotErrors') = 'array'
+  AND jsonb_typeof(p.diagnostics->'captureErrors') = 'array'
 ORDER BY run DESC, p.url;
 ```
 
@@ -1398,7 +1569,7 @@ ORDER BY run DESC, p.url;
 ```sql
 SELECT p.url, t.key AS slot, t.value::int AS capture_ms
 FROM prerendered_html p
-CROSS JOIN LATERAL jsonb_each_text(p.diagnostics->'screenshotTimingsMs') AS t
+CROSS JOIN LATERAL jsonb_each_text(p.diagnostics->'captureTimingsMs') AS t
 WHERE p.realm_url = '<realm-url>'
 ORDER BY t.value::int DESC
 LIMIT 20;
@@ -1406,19 +1577,532 @@ LIMIT 20;
 
 ### What Mode M can't tell you
 
-- **Why the render failed, beyond the message.** A capture failure records the engine's error text (`render never painted`, an image-paint timeout, a persist failure); for the render-level why, reproduce with the `_screenshot/` DSL on a dev realm or profile via Mode H.
-- **Older rows predate the bookkeeping.** Rows written before `consecutiveFailures` / `screenshotCaptureFailureRenders` shipped carry neither; the sweep and the persist path both read a missing value as one, so those rows get (nearly) the full retry allowance again.
-- **A slot that was never declared.** `screenshotErrors` covers declared slots whose capture failed; a name that was never in the card's merged `static screenshots` simply doesn't exist anywhere. Check the declaration (and its prototype-chain merge) first.
+- **Why the render failed, beyond the message.** A capture failure records the engine's error text (`render never painted`, an image-paint timeout, a persist failure); for the render-level why, reproduce with the `_capture/` DSL on a dev realm or profile via Mode H.
+- **Older rows predate the bookkeeping.** Rows written before `consecutiveFailures` / `captureFailureRenders` shipped carry neither; the sweep and the persist path both read a missing value as one, so those rows get (nearly) the full retry allowance again.
+- **A slot that was never declared.** `captureErrors` covers declared slots whose capture failed; a name that was never in the card's merged `static captures` simply doesn't exist anywhere. Check the declaration (and its prototype-chain merge) first.
+
+## Mode N — the model build inside a visit (source / type / hydrate / settle)
+
+**When to use this mode.** A card-instance index visit's `card.meta` bucket is far larger than the search-doc work inside it (`searchDocMs + searchDocSettleMs + serializeMs`), and Mode J has already said the doc isn't the cost. That difference is the **model build** — the four phases the parent `render` route runs before `render.meta` does anything of its own — and `buildModelMs` names them. This is normally where a card-instance visit's time actually goes.
+
+**Why the model build lands inside a route step.** `render.meta` is a child of `render`, so transitioning into it runs the parent's `model()` hook first, and the meta route opens by awaiting the model it produces. The runner's timer brackets the whole transition, so `indexRoutesMs.card.meta` contains the model build on top of the meta route's own work.
+
+**Which bucket to reconcile against depends on the visit shape**, because a model is built once per visit and charged to whichever step triggered the parent transition:
+
+- **Index visit** (no html steps) — `render.meta` is the entry, so everything below is in `indexRoutesMs.card.meta`. Against a fused-capable host that step also performs the file row's extract, so `fileExtractMs` is part of the same bucket and belongs in the reconciliation.
+- **Fused visit** (html + index in one pass) — the isolated render triggers the parent transition, so `buildModelMs` and the ready settle it drives land in `renderFormatsMs.card.isolated`. Everything the meta route does itself still runs in the later `meta` step: `cardApiLoadMs`, `searchableLoadMs`, the search-doc timings, `serializeMs`, `fileExtractMs` — and `readySettleMs` reads ~0 there, because the isolated render already paid it. Reconcile the two buckets separately or you will look for the model build in the step that doesn't hold it.
+
+The four stages, in the order they run:
+
+| Stage         | What runs                                                                                                                 | The reading when it dominates                                                                                                               |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fetchSource` | GET the card's source doc from the realm                                                                                  | The realm-server is slow to serve source — not a card problem. Correlate with `realm:requests` for the same correlation id (Mode G's join). |
+| `deriveType`  | Resolve `adoptsFrom`: **load** and **evaluate** the card's module graph, then the realm-meta and declared-capture lookups | The module graph — but split it first: `moduleEvaluationTotalMs` is the evaluate half, and the rest is the load half. See step 3.           |
+| `hydrate`     | `store.add` — instantiate the card by deserializing its fields                                                            | Deserialization. `hydrateFieldsMs` names the fields; see step 4.                                                                            |
+| `storeSettle` | `store.loaded()` — drain the loads hydration fired                                                                        | Link loads / query fields. `storeSettleWaits` names the targets; see step 5.                                                                |
+
+Each detail block is bounded the same way `searchDocFieldsMs` is — the slowest 20 entries at ≥ 1 ms — so a cheap build persists none of them, and their absence on an expensive stage is itself a reading (step 6).
+
+**Three more serial phases sit around the model build**, all inside the same `meta` bucket and none of them part of `buildModelMs`:
+
+- **`cardApiLoadMs`** — loading the `card-api` base module, the route's first await. Per-loader cached, so the first card a tab renders pays it and the rest read ~0.
+- **`readySettleMs`** — the meta route awaiting the parent's ready settle (the load-stability loop the parent kicks off and returns from). Near-zero on a card whose graph hydration already resolved, and the phase a link-heavy card pays in. It is a _wait_, so read a large one with `storeSettleWaits` and the card's link graph, not with the module list. On a visit whose html render already drove the settle this is ~0 and the cost is in that render's format bucket instead.
+- **`searchableLoadMs`** — loading the `searchable` base module the search-doc generator lives in. Cached the same way, and usually paid by the same first card as `cardApiLoadMs`. A single outlier row with a large value in either and nothing else remarkable is a first-in-tab card and needs no further chasing; large values on _many_ rows mean the loader is being reset between cards (same lead as a flat `deriveType`, step 6).
+
+**Step 1 — find the rows whose model build dominates the visit.**
+
+```sql
+SELECT
+  url,
+  (diagnostics->'indexRoutesMs'->'card'->>'meta')::numeric AS meta_ms,
+  (diagnostics->'buildModelMs'->>'fetchSource')::numeric   AS fetch_ms,
+  (diagnostics->'buildModelMs'->>'deriveType')::numeric    AS derive_ms,
+  (diagnostics->>'moduleEvaluationCount')::int             AS n_modules,
+  (diagnostics->>'moduleEvaluationTotalMs')::numeric       AS module_eval_ms,
+  (diagnostics->'buildModelMs'->>'hydrate')::numeric       AS hydrate_ms,
+  (diagnostics->'buildModelMs'->>'storeSettle')::numeric   AS settle_ms,
+  (diagnostics->>'cardApiLoadMs')::numeric                 AS card_api_ms,
+  (diagnostics->>'readySettleMs')::numeric                 AS ready_ms,
+  (diagnostics->>'searchableLoadMs')::numeric              AS searchable_ms,
+  (diagnostics->>'fileExtractMs')::numeric                 AS extract_ms,
+  COALESCE((diagnostics->>'searchDocMs')::numeric, 0)
+    + COALESCE((diagnostics->>'searchDocSettleMs')::numeric, 0)
+    + COALESCE((diagnostics->>'serializeMs')::numeric, 0)  AS doc_ms,
+  (diagnostics->>'renderElapsedMs')::int                   AS render_ms
+FROM boxel_index
+WHERE realm_url = '<realm-url>'
+  AND type = 'instance'
+  AND diagnostics->'buildModelMs' IS NOT NULL
+ORDER BY (
+    COALESCE((diagnostics->'buildModelMs'->>'fetchSource')::numeric, 0)
+  + COALESCE((diagnostics->'buildModelMs'->>'deriveType')::numeric, 0)
+  + COALESCE((diagnostics->'buildModelMs'->>'hydrate')::numeric, 0)
+  + COALESCE((diagnostics->'buildModelMs'->>'storeSettle')::numeric, 0)
+) DESC NULLS LAST
+LIMIT 20;
+```
+
+`Σ buildModelMs + card_api_ms + ready_ms + searchable_ms + extract_ms + doc_ms` should account for nearly all of `meta_ms` — remember `extract_ms` (`fileExtractMs`), because a card-instance visit's `meta` is the **fused** transition and performs the file row's extract inside it. What is left is the route transition itself plus the types / displayNames / deps resolution, a cheap prototype-chain walk. The largest phase picks the next step.
+
+**Step 2 — attribute a realm's average visit across the stages.**
+
+```sql
+-- Where does this realm's per-instance time go? Run this first when the
+-- question is "why is indexing this realm slow" rather than "why is this
+-- card slow" — it says which stage to chase before you pick a row.
+SELECT
+  count(*)                                                            AS rows,
+  round(avg((diagnostics->'buildModelMs'->>'fetchSource')::numeric))  AS avg_fetch_ms,
+  round(avg((diagnostics->'buildModelMs'->>'deriveType')::numeric))   AS avg_derive_ms,
+  round(avg((diagnostics->'buildModelMs'->>'hydrate')::numeric))      AS avg_hydrate_ms,
+  round(avg((diagnostics->'buildModelMs'->>'storeSettle')::numeric))  AS avg_settle_ms,
+  round(avg((diagnostics->>'cardApiLoadMs')::numeric))                AS avg_card_api_ms,
+  round(avg((diagnostics->>'readySettleMs')::numeric))                AS avg_ready_ms,
+  round(avg((diagnostics->>'searchableLoadMs')::numeric))             AS avg_searchable_ms,
+  round(avg((diagnostics->>'searchDocMs')::numeric
+          + (diagnostics->>'searchDocSettleMs')::numeric))            AS avg_doc_ms,
+  round(avg((diagnostics->>'unattributedMs')::numeric))               AS avg_plumbing_ms,
+  round(avg((diagnostics->>'renderElapsedMs')::numeric))              AS avg_render_ms
+FROM boxel_index
+WHERE realm_url = '<realm-url>'
+  AND type = 'instance'
+  AND diagnostics->'buildModelMs' IS NOT NULL;
+```
+
+**Step 3 — `deriveType` dominant: split loading from evaluating first.**
+
+`deriveType` covers two different costs, and they have different fixes. `moduleEvaluationTotalMs` is the **evaluate** half — the synchronous body of each module, where Glimmer template compilation lives. Everything left over is the **load** half: fetching and transpiling the modules over the wire.
+
+```sql
+SELECT
+  url,
+  (diagnostics->'buildModelMs'->>'deriveType')::numeric   AS derive_ms,
+  (diagnostics->>'moduleEvaluationCount')::int            AS n_modules,
+  (diagnostics->>'moduleEvaluationTotalMs')::numeric      AS evaluate_ms,
+  round((diagnostics->'buildModelMs'->>'deriveType')::numeric
+      - COALESCE((diagnostics->>'moduleEvaluationTotalMs')::numeric, 0)) AS load_ms
+FROM boxel_index
+WHERE realm_url = '<realm-url>' AND type = 'instance'
+  AND (diagnostics->>'moduleEvaluationCount')::int > 0
+ORDER BY derive_ms DESC NULLS LAST
+LIMIT 20;
+```
+
+The split is frequently lopsided toward loading, and the itemized list will not tell you that — a realm card measured locally spent 1365 ms in `deriveType` while evaluating 131 modules in a combined 5 ms. Reading `moduleEvaluationsMs` there would have sent someone after five trivial modules while the whole cost sat in fetching the graph.
+
+- **`load_ms` dominant** — the graph is wide, not slow. The lever is the module pre-warm and the definition cache ([Mode F](#mode-f--module-pre-warm-and-definition-cache-hitmiss)) and the realm-server's module-serving path, not any one `.gts`. `n_modules` is the size of the graph the card pulls; a card type whose ancestry drags in a hundred modules pays this on every cold tab.
+- **`evaluate_ms` dominant** — a module's synchronous body is expensive (Glimmer compile, top-level side effects). Now the per-module list is the right next read.
+
+**Step 3a — which modules were evaluated.**
+
+`moduleEvaluationsMs` is the per-module wall-clock of `Loader.evaluate()` — the synchronous body of each module, which is where Glimmer template compilation lives. It is attributed to the visit by diffing the Loader's rolling history across the build, so it names the modules **this** visit paid for. That history is the slowest N for the loader's whole life, so the list is a sample, not a census — `moduleEvaluationCount` and `moduleEvaluationTotalMs` are the complete figures, from monotonic counters that cannot be evicted. Always read the count alongside the list.
+
+```sql
+-- One row's module evaluations, slowest first. Check the row's
+-- moduleEvaluationCount first — if this returns fewer rows than that count,
+-- the rest lost the slowest-N race to an earlier card in the same job.
+SELECT me->>'url' AS module_url, (me->>'ms')::numeric AS ms
+FROM boxel_index i
+CROSS JOIN LATERAL jsonb_array_elements(i.diagnostics->'moduleEvaluationsMs') AS me
+WHERE i.url = '<card-url>' AND i.type = 'instance'
+ORDER BY ms DESC;
+
+-- Realm-wide: which modules cost the most across all the visits that had
+-- to evaluate them. `visits` is the count of rows that paid for the module
+-- — a module evaluated once per job and reused shows up on one row.
+SELECT
+  me->>'url'                AS module_url,
+  count(*)                  AS visits,
+  max((me->>'ms')::numeric)  AS worst_ms,
+  sum((me->>'ms')::numeric)  AS total_ms
+FROM boxel_index i
+CROSS JOIN LATERAL jsonb_array_elements(i.diagnostics->'moduleEvaluationsMs') AS me
+WHERE i.realm_url = '<realm-url>'
+GROUP BY 1
+ORDER BY total_ms DESC
+LIMIT 20;
+```
+
+Read the shape:
+
+- **A high `deriveType` with entries, on the first few rows of a job only** — a cold module graph. The tab warms and later cards of the same type pay nothing; the lever is pre-warm (Mode F), not the card.
+- **A high `deriveType` with entries on _every_ row** — the graph is being re-evaluated per visit. That means the loader keeps resetting: check `clearCache` retries and the loader-epoch reset (an instance-only pass shouldn't change the epoch), and read Mode F's cache-key hit/miss channel.
+- **A high `deriveType` with _no_ entries** — check `moduleEvaluationCount` and the load/evaluate split above before concluding anything. The itemized list comes from diffing the Loader's slowest-N history, which is kept for the loader's whole life and **saturates**: one cold card can fill every slot, after which a later card's modest evaluations are dropped on insert and never appear in the diff. So an empty list on a row with a non-zero `moduleEvaluationCount` means the evaluations happened and lost the slowest-N race to an earlier card in the same job — read `moduleEvaluationTotalMs` for their summed cost and go find them on the job's first rows. Only `moduleEvaluationCount = 0` means the stage genuinely isn't evaluation, in which case it is the fetch/resolve half: many small modules loading over the wire (correlate with the realm-server's request log), or the realm-meta / declared-capture lookups that close the stage.
+- **One module dominating everywhere** — a heavy `.gts` in the realm's common ancestry. That single module is the whole realm's tax; it is also the same module a live-app card load pays for (see the cross-reference below).
+
+**Step 4 — `hydrate` dominant: which fields were expensive to deserialize.**
+
+`hydrateFieldsMs` is keyed by dotted field path from the card's root. The path names the field; it is **not** a tree you can add up or drill down. Sibling fields deserialize concurrently, so their spans overlap and don't sum to `hydrate`. And a plural field's items all report under the owning field's path, so a nested key accumulates across items while the owning field's own key is one span over those concurrent items — a child key can exceed its parent's, and the floor can keep a child while pruning the parent out entirely. Read each value as that key's own measured cost.
+
+```sql
+SELECT key AS field_path, value::numeric AS ms
+FROM boxel_index i
+CROSS JOIN LATERAL jsonb_each_text(i.diagnostics->'hydrateFieldsMs')
+WHERE i.url = '<card-url>' AND i.type = 'instance'
+ORDER BY value::numeric DESC;
+```
+
+A hot path here is a field whose deserializer is doing real work: a field whose serializer parses something expensive, or a field override whose `adoptsFrom` pulled another module (that module also shows in `moduleEvaluationsMs`). A hot key under a plural field's path is the per-item cost **summed over the items**, so it reads high on a wide `containsMany` of cheap items as readily as on a few expensive ones — divide by the item count before calling it a slow deserializer. A large `hydrate` with **no** entries is a wide-but-cheap card, which is a card-shape problem, not a single-field bug.
+
+**Step 5 — `storeSettle` dominant: what the settle waited on.**
+
+```sql
+SELECT sw->>'kind' AS kind, sw->>'target' AS target, (sw->>'ms')::numeric AS ms
+FROM boxel_index i
+CROSS JOIN LATERAL jsonb_array_elements(i.diagnostics->'storeSettleWaits') AS sw
+WHERE i.url = '<card-url>' AND i.type = 'instance'
+ORDER BY ms DESC;
+```
+
+`kind` picks the follow-up: `card` / `file` are link-target document loads — one slow entry is one slow target (the target's own realm, or Mode G if it resolves through a `_search`); many moderate entries are a wide fan-out that loads concurrently, so the wall cost is nearer the worst entry than the sum. `kind: 'query'` is a query-backed field resolving during hydration, and `target` names it as `<cardId>#<fieldName>` — those go through `_search`, so Mode G's server-side stage breakdown applies. An **eager** query field is the usual reason a card with no slow links still has a large `storeSettle`.
+
+Loads run concurrently, so entries overlap in time; read each `ms` as that load's own span.
+
+**Step 6 — separate a cold graph from an expensive card.** The same card indexed twice tells you which it is. Within one job, the first card of a type pays `deriveType` for the whole graph and every later card of that type pays almost none; a realm whose _every_ instance carries a large `deriveType` is not paying a cold-start cost. Order a realm's rows by `writeSeq` within one `invalidationId` and read `deriveType` down the list:
+
+```sql
+SELECT
+  (diagnostics->>'writeSeq')::int                        AS seq,
+  url,
+  (diagnostics->'buildModelMs'->>'deriveType')::numeric  AS derive_ms
+FROM boxel_index
+WHERE diagnostics->>'invalidationId' = '<id>'
+  AND type = 'instance'
+ORDER BY seq;
+```
+
+A few large values at the top decaying to near-zero is a warming graph (healthy). A flat line is a graph being rebuilt per visit (Mode F).
+
+### What Mode N can't tell you
+
+- **Nothing below the module or field grain.** A hot module's evaluation is one number; what inside it is slow (template compile vs. top-level side effects) is Mode H territory.
+- **The stage a stall is IN is absent, not zero.** A stage's bucket is stamped when the stage closes, so a render that timed out mid-build reports the stages it finished and nothing for the one it was in — `renderStage` and `stageAgeMs` name that one. The two together still account for the whole build.
+- **A fused visit's build isn't in the `meta` bucket.** On a fused pass the isolated render triggered the model build, so `buildModelMs` explains `renderFormatsMs.card.isolated`, not `indexRoutesMs.card.meta`. The stage numbers themselves are per-visit and read the same way.
+- **A successful split-pipeline html visit reports none of this.** These fields ride out on the `render.meta` payload, and a `prerender-html` visit never runs that route — so a successful one leaves its model build inside `renderFormatsMs.card.isolated` unattributed. Read the same card's `boxel_index` row instead: same module graph, same tab. A **timed-out** html visit is the exception — the timeout capture reads the stages out of the page, so `prerendered_html.diagnostics` does carry `buildModelMs` (and `hydrateFieldsMs`) there.
+- **A non-timeout error row carries no build breakdown.** The stages are assembled when the build completes and the timeout capture is the only other producer, so a row that errored some other way has neither.
+- **The bounded lists drop the tail.** Entries below the floor (or beyond the slowest 20) aren't persisted; the stage totals still carry it, so the un-itemized remainder is the difference.
+- **A row can predate the instrumentation.** Absence means "not measured", not "fast" — check `indexedAt` against when the realm was last reindexed.
+
+### The same module cost shows up in the live app
+
+`deriveType` is the module graph load, and an interactive card load pays for the same graph in the browser. When a realm is slow to index **and** its cards are slow to open, that is one cause with two symptoms, not two problems: the `client-perf-diagnosis` skill reads the browser half (`card-load` settle time and the `server-request` / `deserialize` events under it) from the same modules. Chase the module once — a fix to a heavy `.gts` in the realm's common ancestry moves both numbers.
+
+## Mode O — a pass re-visited cards because a peer committed
+
+**When to use this mode.** An index job's `phaseTimings` carry `validationRounds`, its rows carry `diagnostics.validationRound`, an `incremental-index` job appeared that no write published, or you want to know what two overlapping index passes of one realm did about each other.
+
+**What happens at commit.** A pass computes its fan-out from the committed state it was set up against. A peer pass of the same realm that commits while it runs can leave it stale, so every from-scratch and incremental pass checks its peers before it commits. Under the realm's commit lock, when `realm_generations.current_generation` is past the generation the pass last validated against (its base, at first), it reads the peers' `realm_index_commits` rows since then. Their `urls` are the set the check compares against. A `NULL` list, or a generation with no ledger row inside the range, reads as every URL in the realm.
+
+- **Revisit** is the pass's own URLs that a peer committed, plus the ones whose staged `deps` name something a peer committed. The pass read those against what the peer has since replaced.
+- **Extend** is the peer-committed URLs outside the pass whose production `boxel_index.deps` name one of the pass's URLs. The peer rendered them against the pass's pre-commit state. A row that already depended on the pass when it began is in its fan-out already, so what this finds is a dependency the peer's commit introduced.
+
+If either set is non-empty and fewer than 3 rounds have run, the transaction rolls back having written nothing, and the round does four things:
+
+1. It extends the pass to Extend and their dependents, through the same fan-out `invalidate()` runs.
+2. It puts every URL it will re-visit back to a tombstone over the row production holds now, so a file a peer deleted stays deleted if the re-visit reads nothing.
+3. It picks up any loader epoch minted since the pass read one. A pass that minted its own takes a fresh one instead.
+4. It re-visits, then re-announces to the pass's `prerender_html` job every URL it re-visited, as an update, plus the render-only dependents the round added. When the loader epoch moved it re-announces every URL of the pass. A URL the pass deleted and a peer wrote back is re-announced as an update, so the job does not tombstone the live card's HTML.
+
+Each round re-visits under a render scope of its own (`<realm-url>@<job-id>~<round>`). A prerender tab reuses what it read under one scope without reading it again (link documents, resident instances, in-render search results), so a new scope is what makes every tab the round lands on read the peer's commit rather than what the pass cached before it.
+
+Then the commit runs again and checks the peers that committed during the round. After 3 rounds that still find something stale, the commit goes ahead anyway. In the same transaction it inserts a follow-up `incremental-index` job for the URLs still stale, taking the lane (`concurrency_group` and `lane_family`), `priority` and `initiated_by` of the pass's own job row. The follow-up carries no `coalescedCallers`, so no write waits on it, and it announces its own pass when it lands: an incremental index event through the worker's event bridge, and `NOTIFY realm_index_updated`.
+
+Batches that cannot re-visit never check: the setup-phase error recording, the worker's failed-entry marking, a copy, and `prerender_html` jobs. A peer commits during a pass when another writer's pass of the realm, in its own writer lane, finishes first; a pass that no peer committed beside skips the check, and the validation fields are absent from its `phaseTimings`. One writer's own passes share a lane and run in order, so they never validate against each other.
+
+**Where it is recorded.**
+
+- `jobs.result.phaseTimings`, present only when a check ran:
+  - `validationMs`: the checks plus every round's extension and re-visit. `swapMs` excludes it.
+  - `validationRounds`: how many times the commit rolled back. `0` means peers committed during the pass but touched nothing it read.
+  - `revisitCount`: URLs re-visited, summed across rounds.
+  - `extendCount`: peer-committed URLs extended to, summed across rounds.
+  - `followUpJobId`: present when the rounds ran out.
+- `boxel_index.diagnostics.validationRound` on every row a round wrote, tombstones included, alongside the pass's `passId`.
+- The ledger row the pass commits lists the extended URLs in `urls`. `base_generation` stays the generation it was set up against.
+- The `index-writer` logger writes one `info` line per round (`commit of <realm> rolled back for N peer commit(s) through generation G: re-visiting …`) and a `warn` when the rounds run out (`… enqueued follow-up job <id> to re-index them`, or `… no follow-up job to re-index them` under SQLite).
+
+```sql
+-- Index jobs whose commit checked peer commits, newest first.
+SELECT id,
+       job_type,
+       (result->>'baseGeneration')::int                      AS base_generation,
+       (result->>'generation')::int                          AS generation,
+       (result->'phaseTimings'->>'validationRounds')::int    AS rounds,
+       (result->'phaseTimings'->>'revisitCount')::int        AS revisits,
+       (result->'phaseTimings'->>'extendCount')::int         AS extends,
+       (result->'phaseTimings'->>'validationMs')::int        AS validation_ms,
+       (result->'phaseTimings'->>'followUpJobId')::int       AS follow_up_job
+FROM jobs
+WHERE (concurrency_group = 'indexing:<realm-url>' OR lane_family = 'indexing:<realm-url>')
+  AND job_type IN ('incremental-index', 'from-scratch-index')
+  AND result->'phaseTimings' ? 'validationRounds'
+ORDER BY id DESC
+LIMIT 20;
+
+-- The peers one pass checked against: every commit between its base and its
+-- own generation.
+SELECT c.generation, c.job_id, c.full_realm, c.urls
+FROM realm_index_commits me
+JOIN realm_index_commits c
+  ON c.realm_url = me.realm_url
+ AND c.generation > me.base_generation
+ AND c.generation < me.generation
+WHERE me.realm_url = '<realm-url>'
+  AND me.job_id = <job-id>
+ORDER BY c.generation;
+
+-- The rows that pass re-visited, by round. The pass id is on its ledger row.
+SELECT url, type, (diagnostics->>'validationRound')::int AS round, is_deleted
+FROM boxel_index
+WHERE realm_url = '<realm-url>'
+  AND diagnostics->>'passId' = '<pass-id>'
+  AND diagnostics ? 'validationRound'
+ORDER BY round, url;
+
+-- Follow-up jobs: incremental passes that no write published.
+SELECT id, status, concurrency_group, lane_family, args->'changes' AS changes, created_at
+FROM jobs
+WHERE job_type = 'incremental-index'
+  AND (concurrency_group = 'indexing:<realm-url>' OR lane_family = 'indexing:<realm-url>')
+  AND jsonb_array_length(args->'coalescedCallers') = 0
+ORDER BY id DESC
+LIMIT 20;
+```
+
+**Reading it.**
+
+- **`rounds = 0` with a `validation_ms`**: peers committed during the pass but nothing they committed was read by it. The cost is the check alone, a few queries under the commit lock.
+- **`rounds ≥ 1`**: compare `revisits` against the pass's size. A round re-visits only what the peers touched, so a round as large as the pass means a peer's commit listed no URLs (a full-realm pass, or one too wide to list), and the pass read that as touching everything.
+- **`rounds = 3` with a follow-up job**: peers kept committing over the same cards for the whole pass. If a follow-up itself reaches the cap and enqueues another, something is rewriting those cards faster than a pass completes.
+- **Two `prerender_html` jobs naming the same pass id in `spawningIndexPasses`**: the pass re-announced after a round, and its first job had already been claimed, so the two did not merge. A round re-announces the URLs it re-visited, and every URL of the pass when the loader epoch moved.
+
+### What Mode O can't tell you
+
+- **Query-backed fields.** A query's matches are not recorded in `deps`, so a row whose query results a peer's commit moved is neither re-visited nor extended to. The next pass that reaches the row corrects it. A row a round does re-visit can still read a query's results from before the peer's commit, because the job-scoped search cache keys an in-render `_search` on the job, not on the index state it read.
+- **Render-only edges.** Extend reads `boxel_index.deps`, not `prerendered_html.deps`, so a peer row whose HTML, but not its index row, came to depend on the pass is not extended to. The peer's `prerender_html` job waits only on the peer's own pass, so it can render that row against this pass's cards before this pass commits, and the row's HTML stays stale. Neither the check nor the reconcile sweep, which compares the HTML row's generation with the index row's, catches it. The next pass that reaches the row corrects it.
+- **Which peer caused which re-visit.** A check reads every peer commit since the last one together. Join the re-visited URLs against the peers' `urls` (the second query) to attribute them.
+- **The wall of one round.** `validationMs` is the total across checks and rounds, and the per-round `info` line carries the round's size, not its duration.
+
+## Mode P — a save waited in the queue
+
+**When to use this mode.** A save was slow, and its index wait (`awaitIndex` on the write path) is most of the time. That wait has two parts: how long the save's index pass sat in the queue before a worker claimed it, and how long the pass then ran. They need different fixes. A long run is Mode B / Mode K territory. A long queue wait means something else in the realm's lanes held the pass back, and the question becomes whose work that was: the same writer's earlier pass (self-contention, which coalescing and per-writer lanes do not remove) or another writer's (the case per-writer lanes exist for).
+
+### How a realm's lanes are claimed
+
+A job runs in a lane, its `concurrency_group`. Lanes group into **lane families** (`jobs.lane_family`), and a realm's index lanes are one family named `indexing:<realm-url>`; its prerender-html lanes are another, `prerender-html:<realm-url>`.
+
+- **Exclusive work** runs in the group named for the family. So does every job published without a family (`lane_family IS NULL`), which is how from-scratch and scoped-css-gc are published.
+- **Writer lanes** are groups of their own inside the family, and record the family in `lane_family`. Every incremental pass runs in one: `indexing:<realm-url>#user:<matrix-id>` for a write someone made, `indexing:<realm-url>#owner` for work nobody initiated (a file-watcher echo, system work). One writer's passes share a lane, so they coalesce and run in order; different writers' passes run side by side and are never coalesced.
+- **A `prerender_html` job follows the lane of the index pass that spawned it** into the `prerender-html:<realm-url>` family: an incremental pass's render runs in the same writer's `#user:` / `#owner` lane there, and a from-scratch pass's render, like a reconcile repair, is that family's exclusive work. The bulk-write render hold names the writing user's render lane and ends when that writer's own indexing settles, so it delays that writer's renders only.
+- **Two render jobs of one realm can render the same card at once.** The swap keeps the higher stamp (the live index generation the job adopted once its spawning passes committed), and a job reuses its spawning pass's render scope only when the ledger shows nothing else committed around that pass. Otherwise it renders under its own scope and reads everything afresh; the `index-perf` debug line `renders under its own scope: the realm moved around spawning job <id> (read <base>, committed <gen>, adopted <gen>)` says which.
+
+The claim query applies these rules (`PgQueueRunner.processJobs`):
+
+1. One job at a time per lane.
+2. Exclusive work runs alone: it waits for every running member of its family, and every member waits for it.
+3. Writer lanes of one family run side by side, at most two at once. While an older exclusive job of the family is pending, they run one at a time (the one-lane cap).
+4. A writer job does not start ahead of an older pending exclusive job of its family at the writer's priority tier or above (the barrier). The tiers are user-initiated (priority 9 and up) and system (below 9).
+5. Below the writer's tier there is no barrier. A high-priority worker never claims a system-tier job, so a user save queued after its realm's system-tier from-scratch pass (or after that pass's own render, in the `prerender-html:` family) is claimed straight past it. The one-lane cap makes the family empty between passes, but the pass starts only if an all-priority worker scans during one of those gaps. A writer's completion wakes idle workers for that. The worker that ran the finished pass, though, is claiming again the moment it commits, and it takes the realm's next queued save. So nothing bounds the pass's wait while the realm keeps saving, and a pause in the realm's saves is what lets it in. A save waits behind an exclusive job only at its own tier; a system-tier from-scratch pass can wait behind a busy realm's saves.
+
+A claim hold (`job_claim_holds`) naming a family holds every lane in it. A hold naming a writer lane holds that lane alone.
+
+Every lane query here selects the family with `concurrency_group = F OR lane_family = F`. Selecting the group alone reads one writer's lane, so the other writers' passes drop out of "who held it" and the realm reads as uncontended.
+
+### Where the numbers live
+
+- **`jobs.result.queueClaim`**: `{ queueWaitMs, concurrencyGroup, laneFamily }` on every index job (`from-scratch-index`, `incremental-index`) and `prerender_html` job the queue claimed. `queueWaitMs` runs from the job's `created_at` to the claim of the attempt that ran, on the database clock. Absent on a job from a worker predating it.
+- **`jobs.result.phaseTimings.totalMs`**: the pass's own run.
+- **`diagnostics.queueClaim`** on every row the pass wrote, in `boxel_index` and `prerendered_html`: the same object, so a card's row names the wait of the pass that last wrote it without a join to `jobs`. It is on the `diagnostics` column only. An error row's `error_doc.diagnostics` copy leaves it out, because that copy is served to whoever reads the broken card, and a writer lane's group names the user whose pass wrote the row.
+- **The worker's `queue` log line** at `info`: `starting job <id> (type=… priority=… group=… family=…) after <n>ms in queue`.
+- **The `[indexing-progress]` log lines** at `info`: `event=started` and `event=finished` carry `lane=<concurrency_group>`, so a job's progress lines say whose pass it is without a join to `jobs`.
+
+`queueWaitMs` is measured from the job's creation. A publish that coalesced into a pending job later waited less than that. Read a coalesced caller's own wait from its request log (the `enqueue` / `awaitIndex` split on the write path) instead.
+
+### Step 1: split one save's wait
+
+Start from the card the save wrote:
+
+```sql
+SELECT url,
+       diagnostics->'queueClaim'                      AS queue_claim,
+       (diagnostics->>'indexedAt')::bigint           AS indexed_at,
+       diagnostics->>'passId'                        AS pass_id
+FROM boxel_index
+WHERE url = '<card-url>.json' AND type = 'instance';
+```
+
+Then the pass's job, through its ledger row:
+
+```sql
+SELECT j.id,
+       j.job_type,
+       j.initiated_by,
+       (j.result->'queueClaim'->>'queueWaitMs')::bigint   AS queue_wait_ms,
+       (j.result->'phaseTimings'->>'totalMs')::bigint     AS own_run_ms,
+       j.result->'queueClaim'->>'concurrencyGroup'        AS lane,
+       j.result->'queueClaim'->>'laneFamily'              AS lane_family
+FROM realm_index_commits c
+JOIN jobs j ON j.id = c.job_id
+WHERE c.realm_url = '<realm-url>' AND c.pass_id = '<pass-id>';
+```
+
+A `queue_wait_ms` far above `own_run_ms` says the save paid for the queue, not for its own pass.
+
+### Step 2: who held it — blocked by self or by another writer
+
+For each pass in a window, the jobs of the same family that held a worker while it waited, and whether each shares a writer with it. `initiated_by` is a set, since a pass carries every writer that coalesced into it; a blocker counts as **self** when the two sets share a writer, or when neither names one (both read as the realm owner).
+
+```sql
+WITH family_jobs AS (
+  SELECT j.id, j.job_type, j.concurrency_group, j.initiated_by, j.created_at,
+         COALESCE(j.lane_family, j.concurrency_group)                      AS family,
+         (j.lane_family IS NULL OR j.lane_family = j.concurrency_group)  AS exclusive,
+         r.created_at                                                     AS claimed_at,
+         r.completed_at                                                   AS finished_at
+  FROM jobs j
+  JOIN LATERAL (
+    SELECT created_at, completed_at FROM job_reservations
+     WHERE job_id = j.id AND completion_reason = 'completed'
+     ORDER BY id DESC LIMIT 1
+  ) r ON true
+  WHERE (j.concurrency_group = 'indexing:<realm-url>' OR j.lane_family = 'indexing:<realm-url>')
+    AND j.created_at > NOW() - INTERVAL '1 day'
+),
+waits AS (
+  SELECT p.id, p.initiated_by, p.concurrency_group,
+         EXTRACT(EPOCH FROM (p.claimed_at - p.created_at)) * 1000  AS wait_ms,
+         EXTRACT(EPOCH FROM (p.finished_at - p.claimed_at)) * 1000 AS own_run_ms,
+         b.id AS blocker_id,
+         b.job_type AS blocker_type,
+         CASE
+           WHEN b.exclusive THEN 'exclusive work'
+           WHEN b.concurrency_group = p.concurrency_group THEN 'own lane'
+           ELSE 'another writer lane'
+         END AS held_by,
+         (b.initiated_by IS NULL AND p.initiated_by IS NULL)
+           OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(p.initiated_by) u
+                       WHERE b.initiated_by ? u.value)                AS same_writer
+  FROM family_jobs p
+  JOIN family_jobs b
+    ON b.family = p.family
+   AND b.id <> p.id
+   AND b.claimed_at < p.claimed_at      -- the blocker had a worker first
+   AND b.finished_at > p.created_at     -- and still held it after this pass was enqueued
+  WHERE p.job_type = 'incremental-index'
+)
+SELECT id,
+       round(wait_ms)                                  AS wait_ms,
+       round(own_run_ms)                               AS own_run_ms,
+       round((wait_ms / NULLIF(own_run_ms, 0))::numeric, 1) AS tax_ratio,
+       bool_or(same_writer)                            AS blocked_by_self,
+       bool_or(NOT same_writer)                        AS blocked_by_other,
+       array_agg(DISTINCT held_by)                     AS held_by,
+       array_agg(blocker_id ORDER BY blocker_id)       AS blockers
+FROM waits
+GROUP BY id, wait_ms, own_run_ms
+ORDER BY wait_ms DESC
+LIMIT 50;
+```
+
+Passes that never waited behind anything have no blocker and drop out of the join. Count them separately (the same `family_jobs` rows with no overlapping blocker) to score what share of passes waited at all.
+
+### Reading it
+
+- **`held_by = {exclusive work}`**: a job in the family's exclusive lane held the pass: a from-scratch, copy or GC job, or the follow-up a from-scratch pass left behind. Exclusive work runs alone, so every writer lane waits for it.
+- **`held_by` includes `own lane`**: the same writer's earlier pass, in its own writer lane. A writer's own passes stay serial by design, so read-your-writes holds. Coalescing is what shortens these.
+- **`held_by = {another writer lane}`** with two writer lanes running: the family was at its cap of two concurrent writer lanes. With one writer lane running and an exclusive job of the family queued (not running) since before the pass was enqueued: the one-lane cap. The writers took turns so the family could empty for the exclusive job.
+- **A long wait with an exclusive job queued, not running, between the pass's enqueue and its claim, and no other writer lane running**: the barrier. The pass was a writer job and waited for an older exclusive job of its family, at the pass's own tier or above, to run first. A user save behind a system-tier from-scratch pass is not held this way. If one waited long with such a pass queued, look for the one-lane cap instead.
+- **`tax_ratio`** is the wait as a multiple of the pass's own run. A cheap save with a high ratio is the one a user notices.
+
+### Step 3: score fairness per writer
+
+Fairness asks how much of a writer's index time went to waiting on someone else's pass. A pass is **blocked** when another pass of the family was claimed and unfinished when it was enqueued, and the block is **cross-writer** when that pass shares no writer with it. Fairness = 1 − Σ cross-writer wait ÷ Σ (wait + run), per writer and for the family. 1.0 means no writer's time went to another writer's work.
+
+```sql
+WITH family_jobs AS (
+  SELECT j.id, j.job_type, j.initiated_by, j.created_at,
+         r.created_at   AS claimed_at,
+         r.completed_at AS finished_at
+  FROM jobs j
+  JOIN LATERAL (
+    SELECT created_at, completed_at FROM job_reservations
+     WHERE job_id = j.id AND completion_reason = 'completed'
+     ORDER BY id DESC LIMIT 1
+  ) r ON true
+  WHERE (j.concurrency_group = 'indexing:<realm-url>' OR j.lane_family = 'indexing:<realm-url>')
+    AND j.created_at BETWEEN '<window-start>' AND '<window-end>'
+),
+passes AS (
+  SELECT p.id,
+         COALESCE(p.initiated_by::text, '(owner)')                  AS writer,
+         EXTRACT(EPOCH FROM (p.claimed_at - p.created_at)) * 1000  AS wait_ms,
+         EXTRACT(EPOCH FROM (p.finished_at - p.claimed_at)) * 1000 AS own_run_ms,
+         EXISTS (
+           SELECT 1 FROM family_jobs b
+            WHERE b.id <> p.id
+              AND b.claimed_at <= p.created_at   -- claimed at enqueue
+              AND b.finished_at > p.created_at   -- and unfinished
+              AND NOT ((b.initiated_by IS NULL AND p.initiated_by IS NULL)
+                       OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(p.initiated_by) u
+                                   WHERE b.initiated_by ? u.value))
+         ) AS blocked_by_other
+  FROM family_jobs p
+  WHERE p.job_type = 'incremental-index'
+)
+SELECT writer,
+       count(*)                                   AS passes,
+       count(*) FILTER (WHERE blocked_by_other)   AS blocked_by_other,
+       round(percentile_cont(0.5) WITHIN GROUP (ORDER BY wait_ms)
+               FILTER (WHERE blocked_by_other)::numeric)     AS blocked_wait_p50_ms,
+       round((1 - COALESCE(sum(wait_ms) FILTER (WHERE blocked_by_other), 0)
+                  / NULLIF(sum(wait_ms + own_run_ms), 0))::numeric, 3) AS fairness
+FROM passes
+GROUP BY ROLLUP (writer)
+ORDER BY writer NULLS LAST;
+```
+
+The `NULL` writer row is the family as a whole. With writer lanes, a pass enqueued during another writer's pass still counts as blocked, but it is claimed at once, so its wait, and its weight in the score, stay near zero; what remains is its share of the commit lock (see `commitLockWaitMs` in [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead)). A cheap writer scoring well below 1 while another writer's long passes run means those passes are holding it: check `held_by` in Step 2 for exclusive work, the two-writer-lane cap, or the one-lane cap a queued exclusive job imposes. Score the `prerender-html:<realm-url>` family the same way to see the render side.
+
+### What Mode P can't tell you
+
+- **A coalesced caller's own wait.** `queueWaitMs` is the job's wait from its creation, and a later publish that merged into it waited less. The request log's `enqueue` / `awaitIndex` split has the caller's.
+- **Waits behind other realms.** The query reads one family. A pass whose family was idle but which still waited was held by worker capacity: every worker busy with other realms' work. The `queue` log's starting-job lines across all groups show that.
+- **Holds.** A claim hold leaves no row once it is released. A pass held by one waited with no blocker in this query. `job_claim_holds` shows live holds only.
 
 ## Field-by-field reading
 
-`diagnostics` carries `RenderTimeoutDiagnostics` (defined in `packages/runtime-common/index.ts`) plus `invalidationId` / `indexedAt` / `requestId`. Every render-side field is optional — absent means the hook wasn't available in that build or the page died before the capture could read it.
+`diagnostics` carries `RenderTimeoutDiagnostics` (defined in `packages/runtime-common/index.ts`) plus the write-side stamps `invalidationId` / `indexedAt` / `writeSeq` and the HTTP id `requestId`. The three write-side stamps are on every live row of either channel; every render-side field is optional — absent means the hook wasn't available in that build or the page died before the capture could read it.
 
 ```jsonc
 {
   "requestId": "b14e…",          // single ID across client/manager/prerender-server
-  "invalidationId": "a3e1…",     // single ID across every row written by the same Batch.invalidate()
-  "indexedAt": 1776964391615,    // wall-clock ms when IndexWriter.updateEntry ran
+  "invalidationId": "a3e1…",     // single ID across every row of one invalidation fan-out.
+                                 // Minted when the Batch is created and refreshed by each
+                                 // invalidate() call, and an index pass invalidates once, so
+                                 // in practice it covers the batch too. The prerender_html
+                                 // job an index pass spawns is its own batch with its own id
+                                 // — join the channels on url, not on this.
+  "indexedAt": 1776964391615,    // wall-clock ms when the row was written. Millisecond
+                                 // resolution, and a buffered multi-row upsert stamps a
+                                 // whole flush identically — so this CANNOT order two rows
+                                 // of the same pass. Use writeSeq for that.
+  "writeSeq": 0,                 // 0-based position of this row in its batch's write order.
+                                 // An incremental index pass writes the URLs the triggering
+                                 // write named before the dependents its fan-out found, so
+                                 // the lowest sequences in a fan-out are its targets —
+                                 // except that modules are always written before instances
+                                 // and a recorded dependency still comes before what
+                                 // depends on it. A card instance contributes two rows
+                                 // (file, instance) written back to back; a module has only
+                                 // a file row. Absent on a tombstone — a tombstone lands
+                                 // before the pass visits anything and a visited URL's row
+                                 // overwrites it, so a NULL here on an is_deleted row is
+                                 // what identifies a URL the pass never reached.
+  "queueClaim": {                // how the queue claimed the job that wrote this row; the
+    "queueWaitMs": 412,          // same object as that job's jobs.result.queueClaim.
+    "concurrencyGroup": "indexing:https://…/realm/",   // the lane it was claimed in
+    "laneFamily": null           // the lane's family; null = published without one, which
+  },                             // is exclusive work. Absent on a row no queue claimed.
   "priority": 10,                // worker-job priority that produced this render. Index
                                  // visits carry 10 (userInitiatedPriority) or 1
                                  // (systemInitiatedPriority); the prerender-html render
@@ -1479,6 +2163,69 @@ LIMIT 20;
     "card": { "meta": 210, "icon": 34 },
     "file": { "fileExtract": 47, "icon": 31 }
   },
+  "unattributedMs": 38,          // renderElapsedMs minus every step bucket above
+                                 // (indexRoutesMs + renderFormatsMs) — the render
+                                 // plumbing between the steps: tab setup, the per-step
+                                 // CDP round trips, terminal-error probes, response
+                                 // assembly. Clamped at 0; absent on a visit that
+                                 // recorded no step buckets (a capture,
+                                 // whose components are the capture* fields).
+  "buildModelMs": {              // the parent `render` route's model build, which runs
+                                 // inside whichever route step triggered the parent
+                                 // transition — `indexRoutesMs.card.meta` on an index
+                                 // visit, `renderFormatsMs.card.isolated` on a fused
+                                 // one. Per-visit, not per-step: a model is built once
+                                 // and shared. A stage that didn't finish is absent
+                                 // (a timed-out build reports what it completed and
+                                 // `renderStage` names the stage it was in). See Mode N.
+    "fetchSource": 12,           // GET the card's source doc from the realm
+    "deriveType": 340,           // resolve adoptsFrom: load + evaluate the module
+                                 // graph, then the realm-meta / declared-capture
+                                 // lookups. Itemized by `moduleEvaluationsMs`.
+    "hydrate": 88,               // store.add — deserialize the card's fields.
+                                 // Itemized by `hydrateFieldsMs`.
+    "storeSettle": 26            // store.loaded() — drain what hydration fired.
+                                 // Itemized by `storeSettleWaits`.
+  },
+  "moduleEvaluationsMs": [       // slowest modules THIS visit evaluated (the Loader's
+                                 // rolling slowest-N history, diffed across the model
+                                 // build). Each `ms` is the synchronous body of the
+                                 // module: Glimmer template compile + top-level init.
+                                 // Same bounding as `searchDocFieldsMs`. A SAMPLE, not
+                                 // a census: that history is kept for the loader's
+                                 // whole life and saturates, so a later card in a job
+                                 // can evaluate modules that never enter it. Never
+                                 // read an empty list as "evaluated nothing" — read
+                                 // moduleEvaluationCount.
+    { "url": "https://realm.example/product.gts", "ms": 210.5 }
+  ],
+  "moduleEvaluationCount": 9,    // how many modules the build evaluated, and their
+  "moduleEvaluationTotalMs": 640,// summed wall-clock, from monotonic Loader counters
+                                 // that cannot be evicted. These are complete where
+                                 // the list above is bounded: 0 is the only value that
+                                 // means the module graph was already warm.
+  "hydrateFieldsMs": {           // per-field deserialization timings from the hydrate
+                                 // stage, keyed by dotted field path from the card's
+                                 // root. The path NAMES the field; it is not a tree.
+                                 // Siblings deserialize concurrently so spans overlap
+                                 // and don't sum to `buildModelMs.hydrate`, and a
+                                 // plural field's items all report under the owning
+                                 // field's path — so a nested key accumulates across
+                                 // items while the owning key is one span over them,
+                                 // and a child can exceed (or outlive the pruning of)
+                                 // its parent. Same bounding; a large `hydrate` with
+                                 // NO entries is a wide-but-cheap card.
+    "lineItems.sku": 61.4
+  },
+  "storeSettleWaits": [          // what store.loaded() drained during the settle stage.
+                                 // `kind` picks the follow-up: card/file are link-target
+                                 // document loads; `query` is a query-backed field
+                                 // resolving through _search (Mode G), targeted as
+                                 // `<cardId>#<fieldName>`. Concurrent, so entries
+                                 // overlap. Same bounding.
+    { "kind": "card", "target": "https://realm.example/Author/1", "ms": 18.2 },
+    { "kind": "query", "target": "https://realm.example/Report/3#rows", "ms": 7.9 }
+  ],
   "renderStage": "waiting-stability", // last breadcrumb set by the host route
   "stageAgeMs": 62110,           // ms since `renderStage` was last set
   "cardDocsInFlight": ["…/CardA.json", …], // URLs the store was still loading (legacy, strings only)
@@ -1526,8 +2273,13 @@ LIMIT 20;
                                  // "Classify in one pass" table row
                                  // below.
       { "url": "…/customer.gts", "kind": "module", "queue": "module", "state": "running", "ageMs": 68000, "priority": 0 },
-      { "url": "…/order.gts",    "kind": "module", "queue": "module", "state": "running", "ageMs": 66500, "priority": 10 }
+      { "url": "…/order.gts",    "kind": "module", "queue": "module", "state": "running", "ageMs": 66500, "priority": 10 },
+      { "url": "…/order-7.json", "kind": "visit",  "queue": "file",   "state": "queued",  "ageMs": 1200,  "priority": 10, "batchId": "4812-9c1e0f3a" }
     ]
+    // A visit entry carries the `batchId` of the indexing batch it belongs
+    // to. Entries from a batch other than the stalled render's own are a
+    // concurrent batch on the same affinity — another writer's index pass,
+    // or a pass's `prerender_html` job — which is normal.
     // Each `sameAffinityActivity` entry carries the worker-job
     // `priority` of the call that produced it. On a stuck-render
     // post-mortem this disambiguates two regression shapes that look
@@ -1568,6 +2320,19 @@ LIMIT 20;
                                  // count relative to `calls` is normal for cards that
                                  // serialize + searchDoc the same field (every contains /
                                  // contains-many / links-to field does this).
+  "cardApiLoadMs": 0.2,          // wall-clock loading the `card-api` base module, the
+                                 // render.meta route's first await. Per-loader cached,
+                                 // so the first card a tab renders pays the module load
+                                 // and the rest read ~0.
+  "readySettleMs": 6482,         // wall-clock the render.meta route spent awaiting the
+                                 // parent route's ready settle (its load-stability
+                                 // loop). A serial phase of the `meta` route step,
+                                 // often the largest after the model build. ~0 on a
+                                 // visit whose html render already drove the settle —
+                                 // there the cost is in that render's format bucket.
+  "searchableLoadMs": 0.1,       // wall-clock loading the `searchable` base module the
+                                 // search-doc generator lives in. Per-loader cached, so
+                                 // one card per job pays it and the rest read ~0.
   "serializeMs": 42.1,           // host-side wall-clock of `serializeCard(instance, {
                                  // includeComputeds: true })` for this card.
   "searchDocMs": 18.3,           // host-side wall-clock of the walk that produced this
@@ -1640,6 +2405,9 @@ All ms values are server-observed walltime.
 - `waits.semaphoreMs` + `waits.admissionMs` + `waits.tabQueueMs` + `waits.tabStartupMs` + `waits.tabProbeMs` ≤ `launchMs`. `launchMs` is measured around the full `PagePool.getPage` call; the sub-waits cover its awaits (semaphore acquire, file admission, affinity-entry selection, standby warmup, warm-tab liveness probe) but not the synchronous bookkeeping between them (affinity reassignment, LRU touch, standby top-up kickoff). For a healthy fleet the residual is < 5 ms; a large residual is unusual and worth inspecting `PagePool` directly.
 - `renderElapsedMs` is wall time _inside_ `withTimeout()` — includes host fetches, store settle, and the actual render pass. It hits the configured `RENDER_TIMEOUT_MS` on a timeout.
 - `indexRoutesMs.{card,file}.*` sum to **less** than `renderElapsedMs`: each is one index-visit route step's wall-clock, and the gap between their sum and `renderElapsedMs` is the inter-route plumbing (route transitions, instantiation, settle handoffs) — the part of the per-visit floor that isn't a route step. A route step's own transition + settle is inside its number, so `meta` on a near-zero-search-doc card is mostly route machinery, not the doc build (`searchDocMs` / `searchDocSettleMs` break the doc build out of the `meta` number). An `icon` leg served by the per-type memo contributes nothing this visit and isn't recorded.
+- `Σ buildModelMs` + `cardApiLoadMs` + `readySettleMs` + `searchableLoadMs` + `fileExtractMs` + (`searchDocSettleMs` + `searchDocMs` + `serializeMs`) accounts for nearly all of `indexRoutesMs.card.meta` on an index visit — `fileExtractMs` included, because a card-instance visit's `meta` is the fused transition and does the file row's extract inside it. The remainder is the route transition plus the types / displayNames / deps resolution, a cheap prototype-chain walk. The model build is normally the larger half — a `meta` bucket that dwarfs the doc build is a Mode N question, not a Mode J one. On a fused visit the same identity holds against `renderFormatsMs.card.isolated` instead, because that render triggered the parent transition.
+- `unattributedMs` = `renderElapsedMs` − Σ(`indexRoutesMs` + `renderFormatsMs`), computed server-side rather than left to the reader. On a row produced by two visits it is the sum of both visits' residuals, matching how `renderElapsedMs` itself merges.
+- `moduleEvaluationsMs` is a subset of `recentModuleEvaluations` scoped to this visit's model build. `recentModuleEvaluations` is the Loader's whole rolling window (every render this tab served, timeout path only); `moduleEvaluationsMs` is the part this row paid for, and rides every successful row. Both are drawn from the same slowest-N history, so both under-report once it saturates — `moduleEvaluationCount` / `moduleEvaluationTotalMs` are the uncapped totals for this row's build and are what a "did it evaluate anything" question must read.
 - `stageAgeMs` is host-observed — it's computed as `Date.now() - stageSetAt` at the moment the post-timeout capture ran, so there can be a small read-delay offset vs. `renderElapsedMs`. For triage, `stageAgeMs` represents "how long the render has been stuck in its current stage".
 - `recentModuleEvaluations[*].ms` are per-module evaluation times measured inside `Loader.evaluate()` via `performance.now()`; they're wall time for the synchronous body of the module (Glimmer compile + top-level init). Sum them to estimate the sync-compile budget eaten by module evaluation on this page.
 - `queryLoadsInFlight[*].ageMs` is the wall time since that specific search/query-field load started — i.e. how long it's been hanging.
@@ -1659,7 +2427,7 @@ Walk the fields top-down. The _first_ positive signal wins; stop there.
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `waits.semaphoreMs` ≈ `totalElapsedMs`                                                                                                                                                                                                                | **Launch stall (capacity)**                                                  | Fleet-wide: `prerender-queue-snapshot` lines on every prerender server around that timestamp. Is `totalPending` piled up? Add capacity, don't touch host.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `waits.admissionMs` ≈ `totalElapsedMs` (and semaphoreMs small)                                                                                                                                                                                        | **Per-affinity admission stall**                                             | This realm hit its own file-admission cap — the server had capacity but wasn't letting this realm use it. The signal means ≥ cap concurrent file renders on one affinity. Default cap = `affinityTabMax − 1` (4 on the standard 5-tab deployment), so a single realm fanning out to ≥ 4 concurrent renders (typical catalog-sized reindex) already produces this. Grep the queue-snapshot log for `admission=pending=N/cap=N` on the same affinity to confirm waiters were piling up. If the cap looks too tight for the workload and cross-realm fairness isn't the concern, `PRERENDER_AFFINITY_FILE_CONCURRENCY` is the knob (see the tuning-knobs section).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs / admissionMs small)                                                                                                                                                                           | **Same-affinity contention**                                                 | Same realm's batch is serialized on one tab. Check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs / admissionMs small)                                                                                                                                                                           | **Same-affinity contention**                                                 | The realm's renders queued for the affinity's tabs. Count the distinct `batchId`s in `affinitySnapshot.sameAffinityActivity`: several batches on one affinity is normal (one index pass per writer lane, plus each pass's `prerender_html` job), and each extra batch competes for the same tabs. Then check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `launchMs` small **and** `renderStage` is `null`/`model:start`                                                                                                                                                                                        | **Very early render stall**                                                  | Transition hadn't yet rendered anything. Usually means the route threw before setting a real stage. Look at `capturedDom` (`<data-prerender-error>` is common) and console errors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `renderStage` ∈ `buildModel:fetching-source` / `buildModel:deriving-type` / `buildModel:hydrating`                                                                                                                                                    | **Backend stall during model build**                                         | Usually a slow realm server or cross-realm fetch. Check realm-server logs for the same requestId; check the fetch target from `capturedDom` / `cardDocsInFlight`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `inFlightModuleImports.length > 0`                                                                                                                                                                                                                    | **Loader stall**                                                             | Each URL is a `.gts` / `.ts` we'd already started a `fetchModule(...)` for. Confirm the realm serves those URLs and that there's no import cycle. Often resolves with `clearCache: true` on retry (already in place) — if that's failing check for 500s on the module URL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -1734,6 +2502,16 @@ Read with `priority` on the per-render `diagnostics`: a priority-10 row stuck on
 
 Read this alongside a timeout when `waits.semaphoreMs` is large. A snapshot with `totalPending >> totalTabs` near the timestamp confirms saturation.
 
+### Batch ownership lines (`prerenderer` channel)
+
+An indexing batch holds its realm's affinity while it visits, so an on-demand render landing on the same tabs cannot wipe the batch's warm loader with `clearCache`. Several batches holding one affinity is normal: index passes run one per writer lane, and each pass's `prerender_html` job runs beside it. Each batch holds its own entry and its release removes only that entry. The gate names what it saw:
+
+- `batch <B> joins concurrent batch(es) on realm:<realm>: <A>, …` (`debug`) — B started visiting while A was still at work. Routine.
+- `batch <B> succeeds finished batch(es) on realm:<realm>: <A> (idle <n>s), …` (`info`) — A never released (its job died or was cancelled mid-pass). It had nothing in flight on the affinity and had started no visit for one visit's whole request budget, so B dropped it. A steady stream of these means batches are ending without `releaseBatch` reaching the prerender server.
+- `stripping clearCache from non-batch request for realm:<realm> (held by <A>, …)` (`warn`) — an on-demand `clearCache` render was denied the clear because live batches hold the affinity.
+
+The same batch's icon memo goes with its entry: released with the batch, dropped with a finished batch, or cleared when the affinity is disposed.
+
 ## Quick triage rubric (Mode A — timeout)
 
 1. **Is `waits.semaphoreMs` > 50% of totalElapsedMs?** If yes, this is capacity. Go look at fleet snapshots, not host code.
@@ -1772,165 +2550,136 @@ Sometimes the written diagnostics aren't enough — you want to replay the exact
 
 There are two paths, depending on what you have access to:
 
-- **Path A — direct token mint via `mise run claude-prerender-token`** (preferred for staging/prod when you have the realm secret seed). Skip the Matrix login and reindex steps; the script mints the same shape of token the indexer mints, then you drive Chrome MCP straight at the `/render` route. Works for any card on a server you have the seed for, without changing server config or triggering a reindex.
+- **Path A — a diagnostic session from `boxel realm-server render-token`** (the common case, on staging, production or local). The operator asks the realm server for a short-lived, read-only session that reads the card as the indexer does, then you drive Chrome MCP straight at the `/render` route. Works for any card, without changing server config or triggering a reindex.
 - **Path B — the `prerenderer-reproduce` log channel** (local dev, or when you need the indexer's exact historical session). Turn on a debug log level on the realm server, trigger a reindex, and copy the URL + session value verbatim from the log line.
 
 Path A is faster, doesn't require server config changes, and works against staging/prod without touching the running fleet. Path B captures the indexer's exact multi-realm session at a point in time — the right choice when you suspect cross-realm fetch auth or want to replay a render that already happened. The "Visiting a render page" / Chrome MCP / `__boxelRenderDiagnostics()` recipe below is shared between the two paths.
 
-### Path A — direct token mint (the common case)
+### Path A — a diagnostic session (the common case)
 
-The user runs `mise run claude-prerender-token <realm-url> [<seed>]`. The script (`packages/realm-server/scripts/claude-prerender-token.ts`, executed via `node` from inside `packages/realm-server`) mints a `boxel-session` JWT the same way the indexer does — same claims, same HS256/1d, same `JSON.stringify({ <realmUrl>: <jwt> })` map shape that lands in `localStorage['boxel-session']`. Faithful CLI port of `buildCreatePrerenderAuth` (`packages/realm-server/prerender/auth.ts`).
+The operator runs, in their own shell:
 
-**The CLI is intentionally minimal: just `<realm-url>` and an optional `<seed>` positional.** If `<seed>` is omitted the script reads from `process.stdin` — interactively that's a masked TTY paste prompt (each char echoes as `*`, paste-friendly, no shell history); piped/redirected stdin is read in full and trimmed. Optional flags: `--user <matrix-id>` (required only for system realms), `--permissions <list>`, `--output <path>`, `--no-output`. That's it. The token is realm-scoped, not card-scoped — Claude builds the `/render` URL itself for whichever card it's investigating.
+```sh
+export BOXEL_REALM_SECRET_SEED=…   # this environment's seed; or let the command prompt for it
+boxel realm-server render-token <card-url> --note '<who is asking, and why>'
+```
+
+The command signs an **operator token** for `diagnostic-render` with the seed on the operator's machine — the seed itself is never sent — and posts the card to the realm server's `/_diagnostic-render-token` endpoint. The server issues one **diagnostic session** per realm the card's render reads and answers with the `boxel-session` map the render tab reads, plus the host app the render route is served from. The command builds the render URL and writes both to `/tmp/boxel-diagnostic-render.json` (mode 0600). It prints the render URL, who the session reads as, the realms it covers and its expiry. It never prints the session unless `--json` is given.
+
+Options:
+
+- `--note <text>` (required, at most 300 characters): who is asking and why. The server logs it with the mint and with every request the session is used on. A name in it is recorded as given; nothing verifies it.
+- `--realm-server <url>`: the realm server that holds the card. It defaults to the card URL's origin, which is right for a card on the environment's own realm server (`https://realms-staging.stack.cards`, `https://localhost:4201`). Pass it for a card on a published realm's domain. Its origin must be the one the server knows itself by (its `--serverURL`), because the operator token is signed for that origin alone.
+- `--realm-only`: cover only the card's own realm. Without it, the mint covers every realm the realm owner may read — the same set the indexer's render carries — so private cross-realm `linksTo` and query fields resolve as they do in indexing.
+- `--format isolated|embedded|fitted|atom` (default `isolated`) and `--clear-cache` (drop the loader cache before the render) shape the render URL.
+- `--output <path>` / `--no-output`, and `--json` to print everything the file holds, the session included.
+
+`boxel realm-server` is hidden from the CLI's general help; `boxel realm-server render-token --help` shows the options. When asked for "the steps to make a render token", give the operator the two commands above, filled in with the card URL, and ask them to tell you once the file is written.
 
 #### Hard rule: Claude never sees the seed
 
 - Do NOT ask the user for the seed.
-- Do NOT propose pasting the seed into the conversation, into a file Claude can read, or via any other channel.
+- Do NOT propose pasting the seed into the conversation, into a file Claude can read, or via any other channel. Do NOT run `render-token` yourself with a seed in the environment, and do NOT suggest the `!` prefix for it — that runs in this session.
 - Do NOT call `aws ssm get-parameter` against `REALM_SECRET_SEED` — Claude's `boxel-claude-readonly` role rejects it anyway, but don't try.
 
-The user fetches the seed however they like (SSM, dev-env, prompt) and runs the script in their own shell. Claude consumes only the artifact below.
+The operator fetches the seed however they like (SSM, dev-env, prompt) and runs the command in their own shell. Claude consumes only the file below.
 
-Why: the seed mints arbitrary user-impersonating tokens with arbitrary permissions. A 1-day JWT for one user is a bounded leak; the seed is unbounded.
+Why: the seed signs anything — any user, any permissions, any realm, and the operator endpoints. A diagnostic session is read-only, bound to the card's realm or to the realms its owner may read, and gone in fifteen minutes; the seed is unbounded.
 
-#### The artifact Claude reads
+#### The file Claude reads
 
-`/tmp/claude-prerender.json` (chmod 600), written by the script:
+`/tmp/boxel-diagnostic-render.json` (chmod 600):
 
 ```json
 {
+  "id": "<uuid shared by every session of this mint>",
+  "card": "https://realms-staging.stack.cards/example-user/example-realm/ExampleCard/1",
+  "realm": "https://realms-staging.stack.cards/example-user/example-realm/",
+  "user": "@example-user:stack.cards",
+  "scope": "owner-read-set", // or "realm" with --realm-only
+  "realms": [
+    "https://realms-staging.stack.cards/example-user/example-realm/",
+    "…"
+  ],
+  "hostURL": "https://boxel-host-staging.stack.cards/",
   "mintedAt": "<iso>",
-  "expiresAt": "<iso>", // 1d from mintedAt
-  "user": "@ctse:stack.cards",
-  "realmUrl": "https://realms-staging.stack.cards/ctse/concrete-mockingbird/",
-  "jwt": "eyJ...",
-  "session": "{\"<realmUrl>\":\"eyJ...\"}"
+  "expiresAt": "<iso>", // 15 minutes after mintedAt
+  "session": "{\"<realm>\":\"eyJ…\", …}",
+  "renderURL": "https://boxel-host-staging.stack.cards/render/…/html/isolated/0"
 }
 ```
 
-The host URL isn't in the artifact — Claude derives it from the realm URL when building the `/render` URL (recipe below). Matrix isn't involved in this flow at all; the realm-server's `checkPermission` just verifies the HS256 signature against the seed and looks up the user's row in `realm_user_permissions`.
+Before using it, check:
 
-Before using it, Claude must check:
+- `expiresAt` is in the future. Fifteen minutes is short; a long profiling session needs a fresh mint, which is one more run of the command.
+- `card` is the card you're rendering — a different card means a different `renderURL`. Another card in one of the covered `realms` can reuse the session with a render URL you build yourself (below).
+- `mintedAt` is from this investigation, not a leftover file.
 
-- `expiresAt` is in the future
-- `mintedAt` is recent enough that this is for the _current_ investigation (not a leftover artifact)
-- `realmUrl` matches the realm of the card you're rendering — different realm = ask for re-mint
+If a check fails, ask the operator to re-run the command. Don't reuse stale files.
 
-If any check fails, ask the user to re-run. Do not reuse stale artifacts.
+#### The `/render` URL
 
-#### Building the `/render` URL (Claude's responsibility)
-
-Once Claude has the artifact, it constructs the URL the prerender uses, mirroring `packages/realm-server/prerender/render-runner.ts:832`:
+`renderURL` in the file is ready to use. To render another card under the same session, or with other options, build it the way the prerender does (`packages/realm-server/prerender/render-runner.ts`, and `buildRenderURL` in `packages/boxel-cli/src/commands/realm-server/render-token.ts`):
 
 ```
-<hostUrl>/render/<encodeURIComponent(cardUrl)>/<nonce>/<encodeURIComponent(JSON.stringify(options))>/html/<format>/0
+<hostURL>render/<encodeURIComponent(cardUrl + '.json')>/<nonce>/<encodeURIComponent(JSON.stringify(options))>/html/<format>/0
 ```
 
-Slot-by-slot:
+- **`<hostURL>`** — from the file. It is the realm server's `--distURL`, the host app the prerenderer renders against (`https://boxel-host-staging.stack.cards/` on staging, `https://localhost:4200/` locally).
+- **card URL** — the card's file URL **including `.json`** (the indexer renders the `.json` file, not the bare card id). Omitting `.json` lands you on the host's login page because the route doesn't match.
+- **`<nonce>`** — any string; `1` is fine.
+- **options** — the render-route options (`packages/runtime-common/render-route-options.ts`): `{"cardRender":true}` for the indexer's card-render pass, `{"cardRender":true,"clearCache":true}` to drop the loader cache first, `{}` for no special pass.
+- **`<format>`** — `isolated` (matches the indexer), `embedded`, `fitted` or `atom`.
+- **`/0`** — recursion depth; always `0` for a card render.
 
-- **`<hostUrl>`** — derive from the artifact's `realmUrl` host. The boxel-host-app URL (NOT matrix — matrix isn't involved in this flow). Recognised patterns, mirroring the deployed-env Caddy config + local dev / env-mode Traefik labels in `mise-tasks/lib/env-vars.sh`:
-
-  | Realm host                              | Host-app URL                                            |
-  | --------------------------------------- | ------------------------------------------------------- |
-  | `realms-staging.stack.cards`            | `https://boxel-host-staging.stack.cards`                |
-  | `realms.stack.cards`                    | `https://boxel-host.stack.cards`                        |
-  | `realm-server.<slug>.localhost`         | `http://host.<slug>.localhost` (BOXEL_ENVIRONMENT mode) |
-  | `localhost` or `*.localhost` (standard) | `https://localhost:4200`                                |
-
-  If the realm host doesn't match any of these patterns, ask the user — don't guess. Constrain `realms-` matching to `*.stack.cards` so any future deployment using a `realms-` prefix on a different domain isn't silently mapped to a wrong (and possibly non-existent) host.
-
-- **`<encodeURIComponent(cardUrl)>`** — the card's full file URL **including `.json`** (the indexer renders against the .json file, not the bare card-id). `https://realms-staging.stack.cards/ctse/concrete-mockingbird/Environment/demo.json` → `https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo.json`. Omitting `.json` lands you on the host's login page because the route doesn't match.
-- **`<nonce>`** — any string. The indexer uses a monotonic counter; for manual replays `1` is fine.
-- **`<encodeURIComponent(JSON.stringify(options))>`** — the render-route options object, JSON-encoded then URL-encoded. The shape lives in `packages/runtime-common/render-route-options.ts`. Common values:
-  - `{"cardRender":true}` → `%7B%22cardRender%22%3Atrue%7D` (the indexer's card-render pass — what you want for a card desync repro)
-  - `{}` → `%7B%7D` (no special pass)
-  - `{"cardRender":true,"clearCache":true}` (drops the loader cache before the render — helpful when stale modules might be the cause)
-- **`<format>`** — `isolated` (matches the indexer for card-render), `embedded`, `fitted`, or `atom`. Default to `isolated`.
-- **`/0`** — recursion-depth segment. Always `0` for card render.
-
-All six dynamic segments must be present and correctly encoded. If any is missing or malformed, the route doesn't match and the host falls through to its login page — easy to diagnose because you'll see a login form instead of a prerender container.
-
-Worked example for the demo card:
-
-```
-https://boxel-host-staging.stack.cards/render/https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo.json/1/%7B%22cardRender%22%3Atrue%7D/html/isolated/0
-```
+All six dynamic segments must be present and correctly encoded, or the route doesn't match and the host falls through to its login page.
 
 #### Chrome MCP recipe (Path A specific — order matters)
 
 `localStorage['boxel-session']` must be set BEFORE navigating to `/render`. The render route reads it on initial load; if the session isn't there yet, the auth resolves as anonymous and the route 401s before any of the diagnostic surface is reachable.
 
 ```
-1. mcp__chrome-devtools__new_page → <hostUrl>/   (lands on the login page or homepage —
-                                                  doesn't matter, we just need a same-origin
-                                                  document to set localStorage on)
-2. mcp__chrome-devtools__evaluate_script → localStorage.setItem('boxel-session', <session-from-artifact>)
-                                           where <session-from-artifact> is the artifact's
-                                           `session` field verbatim — a JSON-stringified map,
-                                           NOT a bare JWT.
-3. mcp__chrome-devtools__navigate_page → <render-url built above>
+1. mcp__chrome-devtools__new_page → <hostURL>   (any same-origin document to set localStorage on)
+2. mcp__chrome-devtools__evaluate_script → localStorage.setItem('boxel-session', <session from the file>)
+                                           — the file's `session` field verbatim: a JSON-stringified
+                                           map, NOT a bare JWT.
+3. mcp__chrome-devtools__navigate_page → <renderURL>
 4. mcp__chrome-devtools__evaluate_script → document.querySelector('[data-prerender]')?.dataset.prerenderStatus
                                            polls 'loading' → 'ready' / 'error' / 'unusable'.
 5. Once stable, evaluate __boxelRenderDiagnostics?.() to grab the live diagnostic blob,
    and inspect the console / DOM for the unminified throw.
 ```
 
-If step 4 returns `null` (no `[data-prerender]` element at all) and the body shows a JSON `instance-error`, the request reached the host but failed auth — usually one of:
+If step 4 returns `null` (no `[data-prerender]` element) and the body shows a JSON `instance-error`, the request reached the host but failed auth — usually one of:
 
-- The `permissions` array in the JWT doesn't match the user's DB row exactly (see "How auth actually clears" below — re-mint with `--permissions` matching the DB).
+- The session expired (`expiresAt`); re-mint.
+- The card is in a realm the mint didn't cover — `--realm-only` was given, or the realm isn't one the owner reads. The file's `realms` lists what the mint covered.
 - The card URL in the render URL is missing `.json`.
-- localStorage wasn't set before navigation (set it, then reload — don't expect the host to pick it up mid-request).
+- localStorage wasn't set before navigation (set it, then reload).
 
-#### How auth actually clears the realm-server
+#### What the session can and can't do
 
-The realm-server's `checkPermission` (`packages/runtime-common/realm.ts:2249`) does two things in order:
+Each session reads as the realm owner with realm authority, exactly as the indexer's render does, so searches find what the realm ACL grants the owner and policy doesn't scope them. Beyond that it is narrow (`packages/runtime-common/diagnostic-session.ts`; the `realm-auth` skill has the verification detail):
 
-1. **Verify the JWT signature** against `REALM_SECRET_SEED`. Anyone with the seed can mint a valid signature — that's the diagnostic gate.
-2. **Look up the token's `user` claim in the realm's permission table** via `RealmPermissionChecker.for(username)` (`packages/runtime-common/realm-permission-checker.ts`).
-3. **Compare the JWT's `permissions` array against the DB's permissions array, sorted, byte-for-byte equal** (`packages/runtime-common/realm.ts:2306-2316`). This is the gotcha. The check is `JSON.stringify(token.permissions.sort()) === JSON.stringify(userPermissions.sort())`. So a JWT claiming `['read','realm-owner']` for a user whose DB row is `read=t,write=t,realm_owner=t` (which translates to `['read','write','realm-owner']`) is rejected with `PermissionMismatch` (401). Sub-set isn't enough; the arrays must be equal.
+- **Read-only.** A realm refuses any request needing write or realm-owner (403), including on a world-writable realm, where a write presented with an expired diagnostic session is refused too.
+- **Captures are drawn as no one.** A `_capture/` request with the session is served what an anonymous reader would be, and `_sign-capture-urls` hands its URLs back unsigned, so nothing outlives the session carrying the owner's identity.
+- **Only its realms.** A session minted with `--realm-only` is accepted by the card's realm alone, and by the federated read endpoints (`_federated-search`, `_federated-info`, `_federated-types`, `_federated-index-counts`) only for a request naming that realm alone. A default session is accepted wherever the owner may read at the time it is used. The file's `scope` says which.
+- **Nowhere else.** It is signed under its own key, so every other realm-server route (`_user`, `_user-keys`, `_request-forward`, `_realm-auth`, the operator endpoints, …) refuses it on its signature.
+- **Fifteen minutes**, with the lifetime checked by every verifier against its own clock.
 
-Practical implications:
+#### Who rendered what: the `diagnostic-render` log channel
 
-- The `user` claim has to be a real Matrix ID — a made-up user passes signature verification but fails the lookup → 401. The script's default derivation (`realms-staging.stack.cards/ctse/realm/` → `@ctse:stack.cards`) hits the realm owner's row.
-- The `permissions` claim has to mirror the DB exactly. The script defaults to `['read','write','realm-owner']` because that's the standard realm-owner shape, but if the user has a non-default permission set on this realm (read-only collaborator, write-without-owner, etc.) you'll hit `PermissionMismatch`. The fix is `--permissions <list>` matching the DB row.
-- For system realms (`/catalog/`, `/experiments/`), the script errors and asks for `--user @realm_server:<matrix-domain>` (the realm-server bot — `REALM_SERVER_MATRIX_USERNAME=realm_server` in `packages/realm-server/scripts/start-staging.sh`/`start-production.sh`).
+The realm server logs every mint and every request a session is used on, on the `diagnostic-render` channel at `info`:
 
-When the `instance-error` body says `User permissions in the JWT payload do not match the server's permissions`, it's specifically this check failing. Query the DB to see what the row actually is:
-
-```sql
-SELECT username, read, write, realm_owner
-FROM realm_user_permissions
-WHERE realm_url = '<realm-url>' AND username = '<user-from-artifact>';
+```
+diagnostic session <id> minted for card <card> as <owner>, reading <realms> until <iso>; operator note: "<note>"; from <client address>, operator token signed <iso>
+diagnostic session <id> read GET <url> as <owner>; minted for card <card>, operator note: "<note>"
+diagnostic session <id> read POST /_federated-search for realms <realms> as <owner>; …
 ```
 
-Then re-mint with `--permissions read,write,realm-owner` (or whatever the columns are). Booleans translate one-to-one to array entries; column `realm_owner` becomes `realm-owner` (note the dash).
+To answer "was this card rendered for diagnosis, and by whom?", search CloudWatch for `diagnostic session` on the realm server's log group and join on the id. The operator token carries no identity, so the note is the account of who asked, recorded as given; the client address and the token's signing time are what the server observed itself.
 
-For local dev: matrix `server_name` is `localhost` (`packages/matrix/support/synapse/dev/homeserver.yaml:1`), so user IDs are `@<username>:localhost`. Two local-dev modes are supported:
-
-- **Standard mode** (no `BOXEL_ENVIRONMENT` set) — realm at `https://localhost:4201/...`, host-app at `https://localhost:4200`.
-- **Environment mode** (`BOXEL_ENVIRONMENT=<name>` set) — realm at `http://realm-server.<slug>.localhost/...`, host-app at `http://host.<slug>.localhost` (Traefik routing per `mise-tasks/lib/env-vars.sh`).
-
-Both modes share `@<user>:localhost` for the matrix-domain part of user IDs. The host-app URL Claude needs to build the `/render` URL is derived from the realm URL per the table in the URL recipe section above. If you've configured a non-default matrix `server_name`, pass `--user` to the script explicitly.
-
-**Public realms (`'*': ['read']` in the permissions table) don't need a JWT.** Published realms always get this set (`packages/realm-server/handlers/handle-publish-realm.ts:326`). If you're rendering a published card, no token is needed — though minting still works, the request just doesn't depend on it.
-
-#### Cross-realm linksTo (when the simple flow isn't enough)
-
-The default session map has only the target realm. If the card pulls private cross-realm `linksTo`, the host's loader will 401 those fetches.
-
-For now this isn't auto-handled; if you hit a cross-realm 401, the user can extend the session map themselves by minting tokens for the additional realms (same secret signs them all) and merging the maps. The DB has the answer for which realms a user owns — query `realm_user_permissions` excluding published realms:
-
-```sql
-SELECT rup.realm_url
-FROM realm_user_permissions rup
-LEFT JOIN published_realms pr ON pr.published_realm_url = rup.realm_url
-WHERE rup.username = '@ctse:stack.cards'
-  AND rup.read = TRUE
-  AND pr.published_realm_url IS NULL
-ORDER BY rup.realm_url;
-```
-
-This matches the indexer's `fetchUserPermissions` (`packages/runtime-common/db-queries/realm-permission-queries.ts:127`) → `buildCreatePrerenderAuth` chain. Auto-discovery is a follow-up — for now, ask the user if cross-realm support is needed for a specific repro.
+**Public realms (`'*': ['read']`) don't need a session.** Published realms always have this. Rendering a published card works without one. A covering session is still accepted there and logged, and the read is made as the owner it names, as on any other realm.
 
 #### When this is the right path
 
@@ -1989,7 +2738,7 @@ The per-realm reindex endpoints (`POST <realm>_reindex`, `POST <realm>_full-rein
      -d '{ "user": "@user:server", "realms": ["<realm-url>/"] }'
    ```
 
-   The response carries a map of `{ <realm-url>: <realm-JWT> }`. **That** is the token you pass on `Authorization` when calling the reindex endpoint in the next section. It's _not_ the token the prerender tab uses — that one comes from the `prerenderer-reproduce` log.
+   The response carries a map of `{ <realm-url>: <realm-JWT> }`, covering the realms the user has a permission row of their own for. Add `?include-public=true` to the URL to also get tokens for realms only world-readable to them. **That** is the token you pass on `Authorization` when calling the reindex endpoint in the next section. It's _not_ the token the prerender tab uses — that one comes from the `prerenderer-reproduce` log.
 
 Three different JWTs float around in this area, so always be explicit about which one you mean:
 
@@ -2145,6 +2894,10 @@ Grep for `file-queue admission: cap=` in prerender-server logs to confirm the ef
 
 ## Extending the diagnostics
 
-If you find you want a signal that isn't here, add it to `RenderTimeoutDiagnostics` in `packages/runtime-common/index.ts` (optional field), populate it in `packages/realm-server/prerender/utils.ts` (the `withTimeout` capture block) by evaluating a new globalThis hook on the page, and expose that hook from `packages/host/app/routes/render.ts::__boxelRenderDiagnostics`. The Prerenderer decorator lifts it onto `response.meta.diagnostics` and the indexer persists it into `diagnostics` unchanged.
+Which path a new signal takes depends on when it can be read, and most useful signals want both.
 
-Remember to also surface it on the error log line in `withTimeout` so operators see it without opening the JSON.
+**A signal only a stalled render can produce** (what is in flight, what the thread is doing) goes on the timeout path: add it to `RenderTimeoutDiagnostics` in `packages/runtime-common/index.ts` (optional field), populate it in `packages/realm-server/prerender/utils.ts` (the `withTimeout` capture block) by evaluating a new globalThis hook on the page, and expose that hook from `packages/host/app/routes/render.ts::__boxelRenderDiagnostics`. Remember to also surface it on the error log line in `withTimeout` so operators see it without opening the JSON.
+
+**A signal every visit can produce** — a timing, a count, an attribution — belongs on the success path, or it only exists for the renders that failed, which are not the ones a throughput question is about. Add it to `PrerenderMetaDiagnostics` (or to `BuildModelDiagnostics`, which both shapes extend, when the timeout path should carry it too) and emit it from the host route that measures it: `packages/host/app/routes/render/meta.ts` for the meta route's own work, or the `render` route's model via `Model.buildModelDiagnostics` for anything the model build does. Bound anything unbounded with the shared floor/cap helpers in `packages/host/app/utils/render-diagnostics.ts` — a per-item breakdown that a wide card can grow without limit will bloat every row's blob.
+
+Either way the Prerenderer decorator lifts it onto `response.meta.diagnostics` and the indexer persists it into `diagnostics` unchanged.

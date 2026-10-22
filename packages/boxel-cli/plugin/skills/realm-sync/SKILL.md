@@ -47,7 +47,7 @@ A profile must be active. If `boxel profile list` shows none, the user has to ru
 
 ## Realm skills reach Claude Code automatically
 
-A workspace's user-authored skills live in the realm as `skills/<name>/SKILL.md` (see `/boxel-cli:boxel-skill-authoring`). `pull`, `sync`, and `watch` expose them to Claude Code with no extra step: each one is copied into `<local-dir>/.claude/skills/<realm>-<name>/`, where `<realm>` is the last segment of the realm URL. So a skill named `trip-planner` in `…/alice/experiments/` becomes `/experiments-trip-planner` in the next session.
+A workspace's user-authored skills live in the realm as `skills/<name>/SKILL.md` (see `/boxel-skills:boxel-skill-authoring`). `pull`, `sync`, and `watch` expose them to Claude Code with no extra step: each one is copied into `<local-dir>/.claude/skills/<realm>-<name>/`, where `<realm>` is the last segment of the realm URL. So a skill named `trip-planner` in `…/alice/experiments/` becomes `/experiments-trip-planner` in the next session.
 
 - The mirror always goes into the realm's own local directory — nothing is searched for up the tree. Claude Code loads nested `.claude/skills/` directories below the working directory, so a realm pulled into a subdirectory still surfaces its skills (under a directory-qualified name when two skills share one). Pulling a realm into the home directory itself is refused, since `~/.claude/skills` is Claude Code's personal scope.
 - Entries are generated copies, rewritten on every run. **Edit a skill in the realm checkout's `skills/<name>/`, never in `.claude/skills/`** — the checkout is what `push` and `sync` carry back to the realm, and an edit made to a copy is overwritten without warning by the next pull, sync, or watch tick.
@@ -117,6 +117,7 @@ Push local files to a Boxel realm
 - `--delete` — Delete remote files that do not exist locally
 - `--dry-run` — Show what would be done without making changes
 - `--force` — Upload all files, even if unchanged
+- `--changed-since <revision>` — Upload only files that differ from this git revision (one the realm already holds), plus files git does not track and files missing from the realm, instead of comparing against the sync manifest. Repeat it to name every revision the realm may hold part of, such as one a failed sync stopped partway through; a file is skipped only when it matches all of them. A file edited directly on the realm stays as it is until it changes in git. The local directory must be a git checkout whose history reaches each revision
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 
 ### `boxel realm pull <realm-url> <local-dir>`

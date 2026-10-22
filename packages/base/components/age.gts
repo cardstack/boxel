@@ -191,7 +191,7 @@ export class Age extends GlimmerComponent<AgeSignature> {
 
       .age-error {
         font-size: 0.875rem;
-        color: var(--destructive, #ef4444);
+        color: var(--destructive-ink);
         font-style: italic;
       }
     </style>

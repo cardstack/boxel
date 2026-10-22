@@ -9,13 +9,19 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
+import {
+  collectCardInstanceWarnings,
+  type LinkTargetStatus,
+} from '../lib/card-instance-warnings';
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
+import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
@@ -29,6 +35,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   @service declare private toolService: ToolService;
   @service declare private cardService: CardService;
   @service declare private realmServer: RealmServerService;
+  @service declare private network: NetworkService;
 
   description =
     'Run post-change correctness checks for a specific file or card instance.';
@@ -56,17 +63,17 @@ export default class CheckCorrectnessTool extends HostBaseTool<
 
     let targetType = input.targetType;
     let cardId = targetType === 'card' ? input.targetRef : undefined;
-    // Sometimes AI will patch cards directly as files (with search/replace blocks) so we need to check
+    // Sometimes AI will write cards directly as files so we need to check
     // whether the file is actually a card instance
 
     let nonCardJsonError: string | undefined;
+    let cardSource: string | undefined;
     if (targetType !== 'card' && input.targetRef.endsWith('.json')) {
-      let inferredCardId = await this.checkIfFileIsACardInstance(
-        input.targetRef,
-      );
-      if (inferredCardId) {
+      let inferred = await this.checkIfFileIsACardInstance(input.targetRef);
+      if (inferred) {
         targetType = 'card';
-        cardId = inferredCardId;
+        cardId = inferred.cardId;
+        cardSource = inferred.content;
       } else {
         nonCardJsonError = await this.describeNonCardJson(input.targetRef);
       }
@@ -75,6 +82,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     let commandModule = await this.loadToolModule();
     const { CorrectnessResultCard } = commandModule;
     let errors: string[] = [];
+    let warnings: string[] = [];
     let lintIssues: string[] = input.lintIssues ?? [];
 
     let sizeLimitError = this.cardService.getSizeLimitError(input.targetRef);
@@ -105,7 +113,11 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       if (!cardId) {
         throw new Error('Card correctness checks require a targetRef.');
       }
-      errors = await this.collectCardErrors(cardId, roomId);
+      ({ errors, warnings } = await this.collectCardErrors(
+        cardId,
+        roomId,
+        cardSource,
+      ));
     }
 
     if (lintIssues.length) {
@@ -115,41 +127,98 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     return new CorrectnessResultCard({
       correct: errors.length === 0,
       errors,
-      warnings: [],
+      warnings,
     });
   }
 
   private async collectCardErrors(
     cardId: string,
     roomId: string,
-  ): Promise<string[]> {
+    cardSource?: string,
+  ): Promise<{ errors: string[]; warnings: string[] }> {
     await this.toolService.waitForInvalidationAfterAIAssistantRequest(
       roomId,
       cardId,
       cardIndexingTimeout,
     );
 
-    let error = await this.refreshCard(cardId);
+    let { error, instance } = await this.refreshCard(cardId);
 
     if (!error) {
       error = this.store.peekError(cardId);
     }
 
-    if (!error) {
+    if (error) {
+      return { errors: [this.describeCardError(cardId, error)], warnings: [] };
+    }
+    // The instance loaded cleanly, so the document can still carry mistakes
+    // that indexing accepts silently — undeclared fields, out-of-range enum
+    // values, dangling links. Report those as warnings: they never fail the
+    // check or trigger the automated fix loop.
+    let warnings = instance
+      ? await this.collectCardWarnings(cardId, instance, cardSource)
+      : [];
+    return { errors: [], warnings };
+  }
+
+  private async collectCardWarnings(
+    cardId: string,
+    instance: CardDef,
+    cardSource?: string,
+  ): Promise<string[]> {
+    // A `.json` write already had its source fetched to recognize it as a
+    // card; a card-targeted write (patchCardInstance) fetches it here.
+    let rawSource =
+      cardSource ??
+      (await this.cardService
+        .getSource(rri(`${cardId}.json`))
+        .then(({ status, content }) => (status === 200 ? content : undefined))
+        .catch(() => undefined));
+    if (rawSource === undefined) {
       return [];
     }
-    return [this.describeCardError(cardId, error)];
+    let warnings = await collectCardInstanceWarnings({
+      cardId,
+      rawSource,
+      instance,
+      loader: this.loaderService.loader,
+      checkLinkTarget: (targetId, opts) => this.checkLinkTarget(targetId, opts),
+    });
+    return warnings.map((warning) => `${cardId}: ${warning}`);
+  }
+
+  // Asks the realm only whether the target's source exists — it doesn't load
+  // the target, and so leaves the store untouched. Only a 404 counts as a
+  // dangling link; auth, server and network failures say nothing about the
+  // target and are treated as found.
+  private async checkLinkTarget(
+    targetId: string,
+    { isFile }: { isFile: boolean },
+  ): Promise<LinkTargetStatus> {
+    try {
+      let sourceId =
+        isFile || targetId.endsWith('.json') ? targetId : `${targetId}.json`;
+      let response = await this.network.authedFetch(rri(sourceId), {
+        headers: { Accept: 'application/vnd.card+source' },
+      });
+      // the status is all we need; don't download the body
+      await response.body?.cancel().catch(() => undefined);
+      return response.status === 404 ? 'not-found' : 'found';
+    } catch {
+      return 'found';
+    }
   }
 
   private async refreshCard(
     cardId: string,
-  ): Promise<CardErrorJSONAPI | undefined> {
+  ): Promise<{ error?: CardErrorJSONAPI; instance?: CardDef }> {
     await this.store.waitForCardLoad(cardId);
     try {
       let result = await this.store.getWithoutCache(cardId);
       if (isCardErrorJSONAPI(result)) {
-        return result;
+        return { error: result };
       }
+      return { instance: result };
     } catch (error) {
       console.warn(
         `CheckCorrectnessTool: failed to refresh card ${cardId}`,
@@ -158,7 +227,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     } finally {
       await this.store.waitForCardLoad(cardId);
     }
-    return undefined;
+    return {};
   }
 
   private async collectModuleErrors(
@@ -193,18 +262,22 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     return [errorMessage];
   }
 
+  // The prerender request and the indexing wait both speak URLs: the
+  // realm-server endpoint parses the realm as a URL, and writes register their
+  // invalidation waits by file URL. So the file is resolved to its URL before
+  // anything else, and the realm is looked up from that URL.
   private moduleInfoFromFile(
     targetRef: string,
   ): { moduleURL: URL; realmURL: string; fileURL: URL } | undefined {
     try {
-      let fileURL = new URL(targetRef);
+      let { virtualNetwork } = this.network;
+      let fileURL = virtualNetwork.toURL(targetRef);
       let realmURL = this.realm.realmOf(fileURL);
       if (!realmURL) {
         return undefined;
       }
 
-      let moduleHref = fileURL.href.replace(/\.gts$/, '');
-      let moduleURL = new URL(moduleHref);
+      let moduleURL = virtualNetwork.toURL(fileURL.href.replace(/\.gts$/, ''));
       return { moduleURL, realmURL, fileURL };
     } catch {
       return undefined;
@@ -292,7 +365,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
 
   // A .json that was meant to be a card instance but is not a card document
   // used to pass this check clean: the indexer stores it as a plain file, and
-  // the model only learns two turns later, from show-card's "Could not find".
+  // the model only learns two turns later, when the card cannot be shown.
   // Models get this wrong in a handful of ways (no "data" wrapper, "type" set
   // to the card's name instead of "card", no meta.adoptsFrom, a made-up
   // "cardDef" link), so name what a card document needs. Only inspect files
@@ -359,12 +432,12 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     if (problems.length === 0) {
       return undefined;
     }
-    return `${fileUrl} is not a card document, so it will not be indexed as a card and show-card cannot find it: ${problems.join('; ')}.`;
+    return `${fileUrl} is not a card document, so it will not be indexed as a card and cannot be shown: ${problems.join('; ')}.`;
   }
 
   private async checkIfFileIsACardInstance(
     fileUrl: string,
-  ): Promise<string | undefined> {
+  ): Promise<{ cardId: string; content: string } | undefined> {
     try {
       let { status, content } = await this.cardService.getSource(rri(fileUrl));
       if (status !== 200) {
@@ -373,7 +446,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       if (!isCardDocumentString(content)) {
         return undefined;
       }
-      return fileUrl.replace(/\.json$/, '');
+      return { cardId: fileUrl.replace(/\.json$/, ''), content };
     } catch (error) {
       console.warn(
         `CheckCorrectnessTool: unable to inspect file ${fileUrl} for card content`,

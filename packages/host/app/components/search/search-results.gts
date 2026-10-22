@@ -65,6 +65,10 @@ export default class SearchResults extends Component<HostSearchResultsSignature>
     return this.args.overlays ?? true;
   }
 
+  private get displayContainer(): boolean {
+    return this.args.displayContainer ?? true;
+  }
+
   // Created once per component: the view-model layer memoizes render-stable
   // entries on top of a search resource. With `@resource` it wraps the
   // caller-owned resource (whose subscriptions and re-runs outlive this
@@ -77,12 +81,14 @@ export default class SearchResults extends Component<HostSearchResultsSignature>
         this.args.resource,
         () => this.mode,
         () => this.overlays,
+        () => this.displayContainer,
       )
     : getRenderableSearchEntries(
         this,
         () => this.args.query,
         () => this.mode,
         () => this.overlays,
+        () => this.displayContainer,
         {
           cardInitiated: this.args.cardInitiated,
           getDefaultRealm: this.args.getDefaultRealm,
@@ -93,16 +99,18 @@ export default class SearchResults extends Component<HostSearchResultsSignature>
     return {
       entries: this.renderables.entries,
       isLoading: this.renderables.isLoading,
+      entriesQuery: this.renderables.entriesQuery,
       meta: this.renderables.meta,
       errors: this.renderables.errors,
     };
   }
 
-  // Selective Store inflate: deposit only full `item` serializations so a
-  // by-URL read (or the hydration GET) resolves without a round-trip. Sparse
-  // items and `entry`s are never deposited (the store method no-ops on a
-  // sparse item); an item carrying an error doc is skipped here too — it stands
-  // in for a card that failed to render and must not enter the Store. A
+  // Selective Store inflate: hand each row's `item` to the store so a by-URL
+  // read (or the hydration GET) resolves without a round-trip. Which items the
+  // store deposits is `inflateSearchEntryItem`'s rule, which no-ops on the ones
+  // that must not become the card's instance; `entry`s carry no serialization
+  // at all. An item carrying an error doc is skipped here too — it stands in
+  // for a card that failed to render and must not enter the Store. A
   // render-side effect keyed on the live entry set, so it deposits an
   // item-bearing row whenever one lands on a re-run.
   private inflateFullItems = modifier(

@@ -319,67 +319,69 @@ export default class BoxelSelect<ItemT = any> extends Component<
     </PowerSelect>
 
     <style scoped>
-      .boxel-select {
-        --select-background-color: var(
-          --boxel-select-background-color,
-          var(--background, var(--boxel-light))
-        );
-        --select-border-color: var(
-          --boxel-select-border-color,
-          var(--border, var(--boxel-border-color))
-        );
-        --select-text-color: var(
-          --boxel-select-text-color,
-          var(--foreground, var(--boxel-dark))
-        );
-        --select-placeholder-color: var(
-          --boxel-select-placeholder-color,
-          var(--muted-foreground, var(--boxel-450))
-        );
-        /* "--boxel-select-focus-border-color" refers to the hover color, NOT focus color */
-        --select-hover-border-color: var(
-          --boxel-select-focus-border-color,
-          currentColor
-        );
+      @layer boxelComponentL2 {
+        .boxel-select {
+          --select-background-color: var(
+            --boxel-select-background-color,
+            var(--background, var(--boxel-light))
+          );
+          --select-border-color: var(
+            --boxel-select-border-color,
+            var(--border, var(--boxel-border-color))
+          );
+          --select-text-color: var(
+            --boxel-select-text-color,
+            var(--foreground, var(--boxel-dark))
+          );
+          --select-placeholder-color: var(
+            --boxel-select-placeholder-color,
+            var(--muted-foreground, var(--boxel-450))
+          );
+          /* "--boxel-select-focus-border-color" refers to the hover color, NOT focus color */
+          --select-hover-border-color: var(
+            --boxel-select-focus-border-color,
+            currentColor
+          );
 
-        position: relative;
-        display: flex;
-        align-items: stretch;
-        padding: 0;
-        overflow: hidden;
-        border: 1px solid var(--select-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
-        max-width: 100%;
-        width: 100%;
-        background-color: var(--select-background-color);
-        color: var(--select-text-color);
-        transition: border-color var(--boxel-transition);
-      }
-      .boxel-select[aria-expanded='true'] {
-        border-radius: var(--boxel-form-control-border-radius);
-      }
+          position: relative;
+          display: flex;
+          align-items: stretch;
+          padding: 0;
+          overflow: hidden;
+          border: 1px solid var(--select-border-color);
+          border-radius: var(--boxel-form-control-border-radius);
+          max-width: 100%;
+          width: 100%;
+          background-color: var(--select-background-color);
+          color: var(--select-text-color);
+          transition: border-color var(--boxel-transition);
+        }
+        .boxel-select[aria-expanded='true'] {
+          border-radius: var(--boxel-form-control-border-radius);
+        }
 
-      .boxel-select:not([aria-disabled='true']):hover {
-        cursor: pointer;
-        border-color: var(--select-hover-border-color);
-      }
+        .boxel-select:not([aria-disabled='true']):hover {
+          cursor: pointer;
+          border-color: var(--select-hover-border-color);
+        }
 
-      .boxel-select:focus-visible {
-        outline: 2px solid var(--ring);
-      }
+        .boxel-select:focus-visible {
+          outline: 2px solid var(--ring);
+        }
 
-      .boxel-select :deep(.boxel-trigger) {
-        padding: var(
-          --boxel-select-trigger-padding,
-          var(--boxel-sp-xs) calc(var(--boxel-sp-xxxs) + var(--boxel-sp-xxs))
-        );
-      }
+        .boxel-select :deep(.boxel-trigger) {
+          padding: var(
+            --boxel-select-trigger-padding,
+            var(--boxel-sp-xs) calc(var(--boxel-sp-xxxs) + var(--boxel-sp-xxs))
+          );
+        }
 
-      .boxel-select[aria-disabled='true'] {
-        background-color: var(--muted, var(--boxel-100));
-        color: var(--select-placeholder-color);
-        cursor: not-allowed;
-        pointer-events: none;
+        .boxel-select[aria-disabled='true'] {
+          background-color: var(--muted, var(--boxel-100));
+          color: var(--select-placeholder-color);
+          cursor: not-allowed;
+          pointer-events: none;
+        }
       }
     </style>
     {{! template-lint-disable require-scoped-style }}
@@ -606,12 +608,10 @@ export class BoxelSelectOptions extends PowerSelectOptions {
   @action
   handleSelect(option: any, select: any) {
     select.actions.select(option);
+    // Focus stays on the trigger, where ember-power-select returns it on
+    // close: blurring it would drop a keyboard user's place and read as
+    // leaving to any focus-out handler around the select.
     select.actions.close();
-    // Blur the target element after selection
-    const activeElement = document.activeElement as HTMLElement;
-    if (activeElement) {
-      activeElement.blur();
-    }
   }
 
   <template>
@@ -664,108 +664,110 @@ export class BoxelSelectOptions extends PowerSelectOptions {
     </ul>
 
     <style scoped>
-      .boxel-select-options-list {
-        list-style: none;
-        padding: var(--boxel-sp-xxxs);
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 1px;
-        overflow-y: auto;
-        max-width: 100%;
-        max-height: var(--boxel-select-options-list-max-height, 12.25rem);
-        position: relative;
-        box-sizing: border-box;
-      }
+      @layer boxelComponentL2 {
+        .boxel-select-options-list {
+          list-style: none;
+          padding: var(--boxel-sp-xxxs);
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+          overflow-y: auto;
+          max-width: 100%;
+          max-height: var(--boxel-select-options-list-max-height, 12.25rem);
+          position: relative;
+          box-sizing: border-box;
+        }
 
-      .boxel-select-option-item {
-        margin: 0;
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-        max-width: 100%;
-        padding: var(--boxel-sp-xxs);
-        margin-bottom: 1px;
-        font-family: inherit;
-        font-size: var(--boxel-font-size-sm);
-        letter-spacing: var(--boxel-lsp-sm);
-        text-align: left;
-        background-color: var(--dropdown-background-color);
-        color: var(--dropdown-text-color);
-        border: none;
-        transition:
-          background-color var(--boxel-transition),
-          color var(--boxel-transition);
-        box-sizing: border-box;
-      }
+        .boxel-select-option-item {
+          margin: 0;
+          display: grid;
+          grid-template-columns: 1fr auto;
+          align-items: center;
+          gap: var(--boxel-sp-xxs);
+          max-width: 100%;
+          padding: var(--boxel-sp-xxs);
+          margin-bottom: 1px;
+          font-family: inherit;
+          font-size: var(--boxel-font-size-sm);
+          letter-spacing: var(--boxel-lsp-sm);
+          text-align: left;
+          background-color: var(--dropdown-background-color);
+          color: var(--dropdown-text-color);
+          border: none;
+          transition:
+            background-color var(--boxel-transition),
+            color var(--boxel-transition);
+          box-sizing: border-box;
+        }
 
-      .boxel-select-option-item:not([aria-disabled='true']):hover {
-        background-color: var(--dropdown-hover-color);
-        color: var(--dropdown-hover-text-color);
-        cursor: pointer;
-      }
+        .boxel-select-option-item:not([aria-disabled='true']):hover {
+          background-color: var(--dropdown-hover-color);
+          color: var(--dropdown-hover-text-color);
+          cursor: pointer;
+        }
 
-      .boxel-select-option-item.is-highlighted {
-        background-color: var(--dropdown-hover-color);
-        color: var(--dropdown-hover-text-color);
-      }
+        .boxel-select-option-item.is-highlighted {
+          background-color: var(--dropdown-hover-color);
+          color: var(--dropdown-hover-text-color);
+        }
 
-      .boxel-select-option-item.is-selected {
-        background-color: var(--dropdown-highlight-color);
-        color: var(--dropdown-selected-text-color);
-      }
+        .boxel-select-option-item.is-selected {
+          background-color: var(--dropdown-highlight-color);
+          color: var(--dropdown-selected-text-color);
+        }
 
-      .boxel-select-option-item.is-selected.is-highlighted {
-        background-color: var(--dropdown-selected-highlighted-color);
-      }
+        .boxel-select-option-item.is-selected.is-highlighted {
+          background-color: var(--dropdown-selected-highlighted-color);
+        }
 
-      /* Pointer state is declared after the keyboard state so it wins when both
-         apply — hovering an option also highlights it. */
-      .boxel-select-option-item.is-selected:hover {
-        background-color: var(--dropdown-selected-hover-color);
-        color: var(--dropdown-selected-text-color);
-      }
+        /* Pointer state is declared after the keyboard state so it wins when both
+           apply — hovering an option also highlights it. */
+        .boxel-select-option-item.is-selected:hover {
+          background-color: var(--dropdown-selected-hover-color);
+          color: var(--dropdown-selected-text-color);
+        }
 
-      .boxel-select-option-item[aria-disabled='true'] {
-        opacity: 0.5;
-        cursor: not-allowed;
-        pointer-events: none;
-      }
+        .boxel-select-option-item[aria-disabled='true'] {
+          opacity: 0.5;
+          cursor: not-allowed;
+          pointer-events: none;
+        }
 
-      .boxel-select-option-icon {
-        width: var(--boxel-icon-xs);
-        height: var(--boxel-icon-xs);
-        flex-shrink: 0;
-        margin-right: var(--boxel-sp-xxs);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
+        .boxel-select-option-icon {
+          width: var(--boxel-icon-xs);
+          height: var(--boxel-icon-xs);
+          flex-shrink: 0;
+          margin-right: var(--boxel-sp-xxs);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
 
-      .boxel-select-option-text {
-        padding: 1px; /* spacing for 1px card box-shadow border */
-        overflow: hidden;
-        display: var(--boxel-select-option-text-display, flex);
-        align-items: var(--boxel-select-option-text-align, center);
-        gap: var(--boxel-select-option-text-gap, var(--boxel-sp-2xs));
-      }
+        .boxel-select-option-text {
+          padding: 1px; /* spacing for 1px card box-shadow border */
+          overflow: hidden;
+          display: var(--boxel-select-option-text-display, flex);
+          align-items: var(--boxel-select-option-text-align, center);
+          gap: var(--boxel-select-option-text-gap, var(--boxel-sp-2xs));
+        }
 
-      .boxel-select-option-checkmark-container {
-        /* maintain space for icon and keep content widths the same */
-        width: var(--boxel-icon-med);
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
+        .boxel-select-option-checkmark-container {
+          /* maintain space for icon and keep content widths the same */
+          width: var(--boxel-icon-med);
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
 
-      .boxel-select-option-checkmark {
-        height: var(--boxel-icon-xs);
-        max-width: 100%;
-        aspect-ratio: 1;
-        flex-shrink: 0;
-        --icon-color: currentColor;
+        .boxel-select-option-checkmark {
+          height: var(--boxel-icon-xs);
+          max-width: 100%;
+          aspect-ratio: 1;
+          flex-shrink: 0;
+          --icon-color: currentColor;
+        }
       }
     </style>
   </template>

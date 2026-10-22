@@ -22,7 +22,7 @@ import {
   type IndexWriter,
   type QueuePublisher,
   type DBAdapter,
-  type RealmPermissions,
+  type CreatePrerenderAuth,
   CachingDefinitionLookup,
 } from './index.ts';
 import { MatrixClient } from './matrix-client.ts';
@@ -30,6 +30,7 @@ import type { MediaCacheAdapter } from './media-cache.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import { heartbeatJob } from './queue.ts';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -53,7 +54,7 @@ export interface IndexPhaseTimings {
   // Whole-job wall, kickoff to return.
   totalMs?: number;
   // Batch setup before any phase below: `IndexWriter.createBatch` (generation
-  // bump + resumable working-row scan). Non-trivial on a retry job or under DB
+  // read + resumable pending-row scan). Non-trivial on a retry job or under DB
   // slowness, so it's bucketed rather than left as residue in `totalMs`.
   setupMs?: number;
   // Reading the index's per-file modified times up front (from-scratch only).
@@ -73,9 +74,45 @@ export interface IndexPhaseTimings {
   // cannot time its own write. This is the I/O the visit's tab does not need,
   // so it is the primary candidate to overlap with the next visit.
   writeMs?: number;
-  // The final atomic swap: `batch.done()` (realm-meta update, working → main
-  // promotion, obsolete-row prune) in one transaction.
+  // The final atomic swap: `batch.done()` (realm-meta update, pending → main
+  // promotion, obsolete-row prune) in one transaction, then the cleanup of
+  // the pending rows it promoted. Excludes `validationMs`.
   swapMs?: number;
+  // How many times the swap's transaction ran. More than 1 means a deadlock
+  // or serialization failure against a concurrent commit to the same rows
+  // rolled it back and it ran again.
+  swapAttempts?: number;
+  // The part of `swapMs` spent on attempts that rolled back.
+  swapRetryMs?: number;
+  // The part of `swapMs` the committing attempt spent waiting for the realm's
+  // commit lock — for another pass of the same realm to finish committing.
+  commitLockWaitMs?: number;
+  // The part of `swapMs` after the commit spent deleting the pending rows it
+  // promoted and running the janitor. Absent when the swap never committed.
+  pendingCleanupMs?: number;
+  // What the janitor removed: this realm's pending rows no pass can commit any
+  // more — those of jobs that have finished, and ad-hoc stagings idle past
+  // the abandonment window — and how many stagings they belonged to. Nonzero
+  // means some pass left rows behind: it died before its commit, or its own
+  // cleanup failed. Absent when the cleanup failed before the janitor ran.
+  janitorRowsCleared?: number;
+  janitorStagingsCleared?: number;
+  // Present only when a peer pass of the realm committed while this one ran,
+  // so its commit checked what the peer's commit made stale. `validationMs`
+  // is the wall of those checks plus every round that rolled the commit back
+  // to re-visit. `validationRounds` counts the rounds: 0 means the peers
+  // touched nothing this pass read. `revisitCount` is the URLs the rounds
+  // re-visited, and `extendCount` the peer-committed URLs the pass extended
+  // to because they depend on it, both summed across rounds. Each re-visited
+  // row carries its round as `boxel_index.diagnostics.validationRound`.
+  validationMs?: number;
+  validationRounds?: number;
+  revisitCount?: number;
+  extendCount?: number;
+  // The `incremental-index` job the commit enqueued in its own transaction,
+  // when the rounds ran out and peers still left rows stale. It re-indexes
+  // what was left, in the pass's lane.
+  followUpJobId?: number;
 }
 
 export interface StreamFileRef {
@@ -111,6 +148,13 @@ export interface JobInfo extends JSONTypes.Object {
   // index-signature reason as `priority`; null means the queue couldn't
   // compute it (or the JobInfo is synthetic).
   queueWaitMs: number | null;
+  // The lane the job was claimed in, and the lane family it belongs to, as the
+  // queue row records them. Together with `queueWaitMs` they say what a job
+  // waited behind: another job of its own lane, or the family's exclusive work
+  // (see `QueuePublishRequest.laneFamily`). Null on a synthetic JobInfo, and
+  // `laneFamily` is null on any job published without a family.
+  concurrencyGroup: string | null;
+  laneFamily: string | null;
 }
 
 export interface StatusArgs {
@@ -125,12 +169,22 @@ export interface IndexingProgressEvent {
   type: 'indexing-started' | 'file-visited' | 'indexing-finished';
   realmURL: string;
   jobId: number;
+  // The reservation the reporting job holds. Carried so a progress report can
+  // double as the job's heartbeat: the queue keys heartbeats by reservation,
+  // because a job id can have more than one over its life. Optional for
+  // callers that mint a synthetic event without a reservation behind it.
+  reservationId?: number;
   jobType?: string;
   totalFiles?: number;
   filesCompleted?: number;
   files?: string[];
   url?: string;
   stats?: Stats;
+  // The lane the job was claimed in (its `concurrency_group`), on
+  // `indexing-started` and `indexing-finished`, so a job's progress log lines
+  // say whose pass it is: a writer's lane, the owner's, or the family's
+  // exclusive lane. Absent when no queue claimed the job.
+  lane?: string;
 }
 
 // The job types an `indexJobsOnly` worker registers. The queue's claim
@@ -141,7 +195,6 @@ export interface IndexingProgressEvent {
 export const INDEX_JOB_TYPES = [
   'from-scratch-index',
   'incremental-index',
-  'copy-index',
 ] as const;
 
 export class Worker {
@@ -163,10 +216,7 @@ export class Worker {
   #indexJobsOnly: boolean;
   #skipPrerenderHtmlRealms: string[];
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
-  #createPrerenderAuth: (
-    userId: string,
-    permissions: RealmPermissions,
-  ) => string;
+  #createPrerenderAuth: CreatePrerenderAuth;
 
   constructor({
     indexWriter,
@@ -205,10 +255,7 @@ export class Worker {
     // The MediaCache object store, absent when the process has none
     // configured (media-cache tasks then no-op).
     mediaCacheAdapter?: MediaCacheAdapter;
-    createPrerenderAuth: (
-      userId: string,
-      permissions: RealmPermissions,
-    ) => string;
+    createPrerenderAuth: CreatePrerenderAuth;
   }) {
     this.#queue = queue;
     this.#indexWriter = indexWriter;
@@ -277,8 +324,8 @@ export class Worker {
         ),
       'media-cache-gc': () =>
         this.#queue.register(`media-cache-gc`, Tasks['mediaCacheGc'](taskArgs)),
-      'copy-index': () =>
-        this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
+      'scoped-css-gc': () =>
+        this.#queue.register(`scoped-css-gc`, Tasks['scopedCssGc'](taskArgs)),
       'lint-source': () =>
         this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
       'full-reindex': () =>
@@ -290,11 +337,15 @@ export class Worker {
         ),
       'run-command': () =>
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
+      capture: () =>
+        this.#queue.register(`capture`, Tasks['capture'](taskArgs)),
+      // The job type's former names. Workers roll before realm servers, and a
+      // realm server still on a previous revision publishes captures under
+      // them; the args are wire-identical, so the same task claims them.
+      'capture-card': () =>
+        this.#queue.register(`capture-card`, Tasks['capture'](taskArgs)),
       'screenshot-card': () =>
-        this.#queue.register(
-          `screenshot-card`,
-          Tasks['screenshotCard'](taskArgs),
-        ),
+        this.#queue.register(`screenshot-card`, Tasks['capture'](taskArgs)),
     };
     let jobTypes = this.#indexJobsOnly
       ? (INDEX_JOB_TYPES as readonly string[])
@@ -370,6 +421,11 @@ export class Worker {
   }
 
   private reportProgress(event: IndexingProgressEvent) {
+    // Progress is also the job's proof of life. Telling the queue here — at
+    // the one place every progress report already passes through — is what
+    // lets a long pass keep its worker: its deadline measures silence, and
+    // this is the job breaking it.
+    heartbeatJob(event.reservationId);
     this.#reportProgress?.(event);
   }
 
@@ -378,27 +434,170 @@ export class Worker {
   }
 }
 
+// How long a reader request may go without progress — no response yet, or no
+// further bytes of its body — before it is abandoned. Progress resets the
+// clock, so a large file that keeps arriving is never cut off; what this ends
+// is a request that has stopped moving. The HTTP client's own limits are five
+// minutes per phase, which is the time one stuck request would otherwise hold
+// an index job's whole visit loop.
+export const READER_STALL_TIMEOUT_MS = 60_000;
+
+// A stalled or dropped request is retried once, on a request of its own. A
+// failure that a fresh request does not fix is reported to the caller.
+const READER_ATTEMPTS = 2;
+
+interface AttemptProgress {
+  phase: 'headers' | 'body';
+  declaredLength: string | null;
+  received: number;
+  // The attempt failed in the request or its body read, rather than in what
+  // was done with the bytes once they arrived.
+  failedInTransfer: boolean;
+}
+
+export class ReaderStallError extends Error {
+  readonly phase: 'headers' | 'body';
+  readonly stallTimeoutMs: number;
+
+  constructor(phase: 'headers' | 'body', stallTimeoutMs: number) {
+    super(`no progress for ${stallTimeoutMs}ms while awaiting the ${phase}`);
+    this.name = 'ReaderStallError';
+    this.phase = phase;
+    this.stallTimeoutMs = stallTimeoutMs;
+  }
+}
+
+interface StallWatchdog {
+  signal: AbortSignal;
+  // Rejects with a `ReaderStallError` once the watchdog fires; raced against
+  // each await so a fetch that does not honor `signal` still lets go.
+  stalled: Promise<never>;
+  // Starts or restarts the clock for the given phase.
+  progress(phase: 'headers' | 'body'): void;
+  stop(): void;
+}
+
+function stallWatchdog(stallTimeoutMs: number): StallWatchdog {
+  let controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let fire!: (error: ReaderStallError) => void;
+  let stalled = new Promise<never>((_resolve, reject) => {
+    fire = reject;
+  });
+  // Nothing awaits `stalled` once its request has finished.
+  stalled.catch(() => undefined);
+  return {
+    signal: controller.signal,
+    stalled,
+    progress(phase) {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        let error = new ReaderStallError(phase, stallTimeoutMs);
+        controller.abort(error);
+        fire(error);
+      }, stallTimeoutMs);
+    },
+    stop() {
+      clearTimeout(timer);
+    },
+  };
+}
+
+// The error and every `cause` behind it, which is where the HTTP client puts
+// what actually happened (a body timeout, a reset socket) beneath a generic
+// "terminated" or "fetch failed".
+function describeErrorChain(error: unknown): string {
+  let parts: string[] = [];
+  let current: any = error;
+  for (let depth = 0; current != null && depth < 5; depth++) {
+    let code = current.code ? ` [${current.code}]` : '';
+    parts.push(
+      `${current.name ?? 'Error'}${code}: ${current.message ?? current}`,
+    );
+    current = current.cause;
+  }
+  return parts.join(' <- ');
+}
+
+async function readBodyBytes(
+  body: ReadableStream<Uint8Array>,
+  watchdog: StallWatchdog,
+  onBytes: (count: number) => void,
+): Promise<Uint8Array> {
+  let reader = body.getReader();
+  let chunks: Uint8Array[] = [];
+  let total = 0;
+  watchdog.progress('body');
+  try {
+    for (;;) {
+      let result = await Promise.race([reader.read(), watchdog.stalled]);
+      if (result.done) {
+        break;
+      }
+      let value = result.value;
+      chunks.push(value);
+      total += value.byteLength;
+      onBytes(value.byteLength);
+      watchdog.progress('body');
+    }
+  } catch (error) {
+    reader.cancel(error).catch(() => undefined);
+    throw error;
+  }
+  let bytes = new Uint8Array(total);
+  let offset = 0;
+  for (let chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 export function getReader(
   _fetch: typeof globalThis.fetch,
   realmURL: string,
+  {
+    stallTimeoutMs = READER_STALL_TIMEOUT_MS,
+  }: { stallTimeoutMs?: number } = {},
 ): Reader {
   let readerLog = logger('worker');
-  let parseResponseMetadata = (
+  // The realm's own record of every file's modification time, fetched at most
+  // once per reader and only when a response does not date its content.
+  let realmMtimes: Promise<{ [url: string]: number }> | undefined;
+  let parseResponseMetadata = async (
     response: Response,
     url: URL,
-  ): { lastModified: number; created: number; path: string } => {
+  ): Promise<{ lastModified: number; created: number; path: string }> => {
     let lastModifiedRfc7321 = response.headers.get('last-modified');
-    if (!lastModifiedRfc7321) {
-      throw new Error(`Response for ${url.href} has no 'last-modified' header`);
+    let lastModified: number;
+    if (lastModifiedRfc7321) {
+      // This is RFC-7321 format which is the last modified date format used in HTTP headers
+      lastModified = unixTime(
+        parse(
+          lastModifiedRfc7321.replace(/ GMT$/, 'Z'),
+          'EEE, dd MMM yyyy HH:mm:ssX',
+          new Date(),
+        ).getTime(),
+      );
+    } else {
+      // The body is the file's content whether or not the response dates it,
+      // so a missing date costs only precision, never the read. The date is
+      // taken from the realm's own modification times instead: that is the
+      // value a from-scratch index compares the indexed row against, so a
+      // file read this way is not invalidated again while it is unchanged. A
+      // file the realm does not list is dated by when it was read, which is
+      // no earlier than its content.
+      realmMtimes ??= reader.mtimes().catch(() => ({}));
+      let mtime = (await realmMtimes)[url.href];
+      readerLog.warn(
+        `Response for ${url.href} has no 'last-modified' header; using ${
+          mtime != null
+            ? "the realm's modification time"
+            : 'the time it was read'
+        }`,
+      );
+      lastModified = mtime ?? unixTime(Date.now());
     }
-    // This is RFC-7321 format which is the last modified date format used in HTTP headers
-    let lastModified = unixTime(
-      parse(
-        lastModifiedRfc7321.replace(/ GMT$/, 'Z'),
-        'EEE, dd MMM yyyy HH:mm:ssX',
-        new Date(),
-      ).getTime(),
-    );
 
     let createdRfc7321 = response.headers.get('x-created');
     let created: number;
@@ -417,104 +616,218 @@ export function getReader(
     return { lastModified, created, path };
   };
 
-  return {
-    readFile: async (url: URL) => {
-      let response: ResponseWithNodeStream = await _fetch(url, {
-        headers: {
-          Accept: SupportedMimeType.CardSource,
-        },
-      });
-      if (!response.ok) {
-        return undefined;
-      }
-      let content: string;
+  // Runs one read up to `READER_ATTEMPTS` times. Each attempt gets its own
+  // request and its own stall clock; `attempt` reports where it got to, so a
+  // failure is logged with what the next occurrence needs to explain itself:
+  // the phase it stopped in, how long it ran, and how much of the declared
+  // body had arrived — a body that stops short of its `Content-Length` points
+  // at the server, a response that never starts points at the path to it.
+  let withRetries = async <T>(
+    operation: string,
+    url: URL,
+    attempt: (watchdog: StallWatchdog, progress: AttemptProgress) => Promise<T>,
+  ): Promise<T> => {
+    for (let attemptNumber = 1; ; attemptNumber++) {
+      let progress: AttemptProgress = {
+        phase: 'headers',
+        declaredLength: null,
+        received: 0,
+        failedInTransfer: false,
+      };
+      let started = Date.now();
+      let watchdog = stallWatchdog(stallTimeoutMs);
+      watchdog.progress('headers');
       try {
-        if ('nodeStream' in response && response.nodeStream) {
-          content = await fileContentToText({
-            content: response.nodeStream,
-          });
-        } else {
-          content = await response.text();
+        return await attempt(watchdog, progress);
+      } catch (error: unknown) {
+        // A fresh request can get past a stalled or dropped one; it cannot
+        // get past a failure in handling bytes that arrived intact.
+        let retrying =
+          attemptNumber < READER_ATTEMPTS &&
+          (error instanceof ReaderStallError || progress.failedInTransfer);
+        readerLog.warn(
+          `${operation} of ${url.href} failed in ${progress.phase} after ${Date.now() - started}ms ` +
+            `(attempt ${attemptNumber}/${READER_ATTEMPTS}, declared Content-Length ${progress.declaredLength ?? 'none'}, ` +
+            `received ${progress.received} bytes): ${describeErrorChain(error)}` +
+            (retrying ? '; retrying' : ''),
+        );
+        if (!retrying) {
+          throw error;
         }
-      } catch (err: any) {
-        // An in-process realm serves file bodies as lazy node streams: the
-        // realm checks existence when it builds the response, but the
-        // underlying open() happens only when we consume the body here. A
-        // file deleted in that window surfaces as an ENOENT on the body
-        // read even though the response itself was ok. That is a
-        // not-found, same as the !response.ok branch above — callers
-        // already treat undefined as "file no longer exists".
-        if (err?.code === 'ENOENT') {
-          readerLog.info(
-            `file ${url.href} disappeared while reading its body (ENOENT); treating as not found`,
-          );
+      } finally {
+        watchdog.stop();
+      }
+    }
+  };
+
+  let fetchSource = async (
+    url: URL,
+    watchdog: StallWatchdog,
+    progress: AttemptProgress,
+  ): Promise<ResponseWithNodeStream> => {
+    let response: ResponseWithNodeStream;
+    try {
+      response = await Promise.race([
+        _fetch(url, {
+          headers: {
+            Accept: SupportedMimeType.CardSource,
+          },
+          signal: watchdog.signal,
+        }),
+        watchdog.stalled,
+      ]);
+    } catch (error) {
+      progress.failedInTransfer = true;
+      throw error;
+    }
+    progress.declaredLength = response.headers.get('content-length');
+    return response;
+  };
+
+  // Whether the response serves the file at the requested path. The realm
+  // answers a source request for a path with no file of its own by redirecting
+  // to the file it stands for, such as a card's id to the card's `.json`.
+  // Following that redirect would read another file's bytes under this path,
+  // so the indexer would record a file at a URL where none exists, one that
+  // shares its id with the card. A response redirected to a different path
+  // therefore reads as no file, like a 404. A redirect that keeps the path,
+  // such as a scheme upgrade in front of the realm, still serves this file.
+  let servesFileAt = (url: URL, response: Response): boolean => {
+    if (!response.ok) {
+      return false;
+    }
+    if (!response.redirected || !response.url) {
+      return true;
+    }
+    return new URL(response.url).pathname === url.pathname;
+  };
+
+  // Release the body of a response the reader won't read, so a native fetch
+  // gives its connection back instead of holding it until the body is
+  // consumed.
+  let releaseBody = async (response: ResponseWithNodeStream): Promise<void> => {
+    if (response.nodeStream) {
+      response.nodeStream.destroy();
+      return;
+    }
+    await response.body?.cancel().catch(() => undefined);
+  };
+
+  let reader: Reader = {
+    readFile: (url: URL) =>
+      withRetries('readFile', url, async (watchdog, progress) => {
+        let response = await fetchSource(url, watchdog, progress);
+        if (!servesFileAt(url, response)) {
+          await releaseBody(response);
           return undefined;
         }
-        throw err;
-      }
-      let { lastModified, created, path } = parseResponseMetadata(
-        response,
-        url,
-      );
-      return {
-        content,
-        lastModified,
-        created,
-        path,
-        ...(Symbol.for('shimmed-module') in response ||
-        response.headers.get('X-Boxel-Shimmed-Module')
-          ? { isShimmed: true }
-          : {}),
-      };
-    },
-
-    readStream: async (url: URL) => {
-      let response: ResponseWithNodeStream = await _fetch(url, {
-        headers: {
-          Accept: SupportedMimeType.CardSource,
-        },
-      });
-      if (!response.ok) {
-        return undefined;
-      }
-
-      let stream: ByteStream;
-      if ('nodeStream' in response && response.nodeStream) {
-        // Lazy-load node stream in the node worker path; browsers never hit
-        // this branch (no response.nodeStream) and don't need the module.
-        let { Readable } = (await import('stream')) as {
-          Readable: typeof NodeReadable;
-        };
-        if (Readable.toWeb) {
-          stream = Readable.toWeb(
-            response.nodeStream,
-          ) as ReadableStream<Uint8Array>;
-        } else {
-          stream = await fileContentToBytes({
-            content: response.nodeStream,
-          });
+        let content: string;
+        try {
+          if ('nodeStream' in response && response.nodeStream) {
+            // An in-process realm's body is a local file stream with no
+            // network beneath it to stall.
+            watchdog.stop();
+            content = await fileContentToText({
+              content: response.nodeStream,
+            });
+          } else if (response.body) {
+            progress.phase = 'body';
+            let bytes: Uint8Array;
+            try {
+              bytes = await readBodyBytes(
+                response.body,
+                watchdog,
+                (count) => (progress.received += count),
+              );
+            } catch (error) {
+              progress.failedInTransfer = true;
+              throw error;
+            }
+            content = new TextDecoder().decode(bytes);
+          } else {
+            content = '';
+          }
+        } catch (err: any) {
+          // An in-process realm serves file bodies as lazy node streams: the
+          // realm checks existence when it builds the response, but the
+          // underlying open() happens only when we consume the body here. A
+          // file deleted in that window surfaces as an ENOENT on the body
+          // read even though the response itself was ok. That is a
+          // not-found, same as the !response.ok branch above — callers
+          // already treat undefined as "file no longer exists".
+          if (err?.code === 'ENOENT') {
+            readerLog.info(
+              `file ${url.href} disappeared while reading its body (ENOENT); treating as not found`,
+            );
+            return undefined;
+          }
+          throw err;
         }
-      } else if (response.body) {
-        stream = response.body;
-      } else {
-        stream = new Uint8Array();
-      }
+        let { lastModified, created, path } = await parseResponseMetadata(
+          response,
+          url,
+        );
+        return {
+          content,
+          lastModified,
+          created,
+          path,
+          ...(Symbol.for('shimmed-module') in response ||
+          response.headers.get('X-Boxel-Shimmed-Module')
+            ? { isShimmed: true }
+            : {}),
+        };
+      }),
 
-      let { lastModified, created, path } = parseResponseMetadata(
-        response,
-        url,
-      );
-      return {
-        stream,
-        lastModified,
-        created,
-        path,
-        ...(Symbol.for('shimmed-module') in response ||
-        response.headers.get('X-Boxel-Shimmed-Module')
-          ? { isShimmed: true }
-          : {}),
-      };
-    },
+    // The body is handed to the caller to consume at its own pace, so only
+    // the wait for the response is guarded here: a stall clock on the body
+    // would fire whenever the caller paused.
+    readStream: (url: URL) =>
+      withRetries('readStream', url, async (watchdog, progress) => {
+        let response = await fetchSource(url, watchdog, progress);
+        watchdog.stop();
+        if (!servesFileAt(url, response)) {
+          await releaseBody(response);
+          return undefined;
+        }
+
+        let stream: ByteStream;
+        if ('nodeStream' in response && response.nodeStream) {
+          // Lazy-load node stream in the node worker path; browsers never hit
+          // this branch (no response.nodeStream) and don't need the module.
+          let { Readable } = (await import('stream')) as {
+            Readable: typeof NodeReadable;
+          };
+          if (Readable.toWeb) {
+            stream = Readable.toWeb(
+              response.nodeStream,
+            ) as ReadableStream<Uint8Array>;
+          } else {
+            stream = await fileContentToBytes({
+              content: response.nodeStream,
+            });
+          }
+        } else if (response.body) {
+          stream = response.body;
+        } else {
+          stream = new Uint8Array();
+        }
+
+        let { lastModified, created, path } = await parseResponseMetadata(
+          response,
+          url,
+        );
+        return {
+          stream,
+          lastModified,
+          created,
+          path,
+          ...(Symbol.for('shimmed-module') in response ||
+          response.headers.get('X-Boxel-Shimmed-Module')
+            ? { isShimmed: true }
+            : {}),
+        };
+      }),
 
     mtimes: async () => {
       // Env-mode boot race: the realm-server writes its Traefik dynamic
@@ -580,4 +893,5 @@ export function getReader(
       return mtimes;
     },
   };
+  return reader;
 }

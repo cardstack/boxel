@@ -6,6 +6,7 @@ import type {
   Realm,
   VirtualNetwork,
   Prerenderer,
+  LinkShapePolicy,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
@@ -15,7 +16,20 @@ import handleCreateRealmRequest, {
   type CreateRealmDeps,
 } from './handlers/create-realm.ts';
 import handleDeleteRealm from './handlers/handle-delete-realm.ts';
+import {
+  handleDataKeyReseal,
+  handleDataKeyStatus,
+} from './handlers/handle-data-keys.ts';
+import {
+  handleAddSystemKey,
+  handleDeleteSystemKey,
+  handleListSystemKeys,
+  handleReplaceSystemKey,
+  handleShowSystemKey,
+} from './handlers/handle-system-keys.ts';
+import { handleDiagnosticRenderToken } from './handlers/handle-diagnostic-render-token.ts';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
+import handleFetchPublicRealmsRequest from './handlers/handle-fetch-public-realms.ts';
 import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
 import handlePublishRealm from './handlers/handle-publish-realm.ts';
@@ -28,6 +42,7 @@ import {
   healthCheck,
   jwtMiddleware,
   grafanaAuthorization,
+  operatorAuthorization,
 } from './middleware/index.ts';
 import type Koa from 'koa';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
@@ -46,6 +61,7 @@ import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthroug
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
 import handleRealmAuth from './handlers/handle-realm-auth.ts';
+import handleSetRealmCatalog from './handlers/handle-set-realm-catalog.ts';
 import handleDelegateSession from './handlers/handle-delegate-session.ts';
 import handleWorkerRequest from './handlers/handle-worker-request.ts';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain.ts';
@@ -75,6 +91,7 @@ import {
   handleCreateIncomingWebhookRequest,
   handleListIncomingWebhooksRequest,
   handleDeleteIncomingWebhookRequest,
+  handleRotateIncomingWebhookSecretRequest,
 } from './handlers/handle-incoming-webhook.ts';
 import {
   handleCreateWebhookCommandRequest,
@@ -83,21 +100,61 @@ import {
 } from './handlers/handle-webhook-commands.ts';
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver.ts';
 import handleRunCommand from './handlers/handle-run-command.ts';
-import handleScreenshotCard from './handlers/handle-screenshot-card.ts';
+import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import {
+  KEY_SHARE_NOTICES_PATH,
+  KEY_SHARES_PATH,
+  KEY_WRITE_TICKETS_PATH,
+  OPENROUTER_PASSTHROUGH_PATH,
+  REQUEST_FORWARD_PATH,
+  SECURE_SESSION_PATH,
+  SECURE_SESSIONS_PATH,
+  USER_KEYS_PATH,
+} from './lib/request-telemetry.ts';
+import {
+  handleCheckSecureSession,
+  handleEndSecureSession,
+  handleEndWindowSessions,
+  handleGoogleSignIn,
+  handleGoogleSignInStart,
+  handlePasswordChange,
+  handlePasswordSignIn,
+  handleSecureOriginInfo,
+} from './handlers/handle-secure-session.ts';
+import { SignInLimiter } from './lib/sign-in-limiter.ts';
+import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
+import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
+import {
+  handleAddUserKey,
+  handleDeleteUserKey,
+  handleListUserKeys,
+  handleMintKeyWriteTicket,
+  handleReplaceUserKey,
+  handleShowUserKey,
+} from './handlers/handle-user-keys.ts';
+import {
+  handleListKeyShareNotices,
+  handleListKeyShares,
+  handleResumeKeyShare,
+  handleShareKey,
+  handleSuspendKeyShare,
+  handleSwapKeyIntoShare,
+  handleUnshareKey,
+} from './handlers/handle-key-shares.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
-  // MediaCache object store; absent means the POST screenshot endpoint
+  // MediaCache object store; absent means the POST capture endpoint
   // captures without persisting (and returns no served URL).
   mediaCacheAdapter?: MediaCacheAdapter;
-  // Bounded sync-wait budget for the POST screenshot endpoint. Defaults to
-  // SCREENSHOT_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the
+  // Bounded sync-wait budget for the POST capture endpoint. Defaults to
+  // CAPTURE_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the
   // 503 + Retry-After path without holding real time.
-  screenshotSyncWaitMs?: number;
+  captureSyncWaitMs?: number;
   matrixClient: MatrixClient;
   realmServerSecretSeed: string;
   grafanaSecret: string;
@@ -132,6 +189,8 @@ export type CreateRoutesArgs = {
     boxelSite?: string;
   };
   assetsURL: URL;
+  // The host app's origin, where the render route is served.
+  hostURL: URL;
   prerenderer?: Prerenderer;
   // Reports the current host-shell token to the prerender manager. The
   // post-deployment hook calls it so the fleet's recycle signal is refreshed
@@ -143,6 +202,15 @@ export type CreateRoutesArgs = {
   // (coalescing on, retention off) to force each caller to compute; when
   // unset the handler constructs its own with production defaults.
   liveSearchCache?: LiveSearchCache;
+  // Decides how much of each result's link graph a live search carries.
+  linkShapePolicy?: LinkShapePolicy;
+  // The secure origin's shell URL, when this server serves one. Signing in on
+  // the secure origin is answered only for requests from its origin, and key
+  // write tickets are minted for requests from its origin and for the CLI.
+  secureOriginURL?: URL;
+  // The Google client the secure window signs in with. Unset, the secure
+  // window offers only a password.
+  googleSignIn?: GoogleSignInConfig;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -187,6 +255,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleDeleteRealm(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
+  router.get(
+    '/_public-realms',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleFetchPublicRealmsRequest(args),
+  );
   router.get('/_queue-status', handleQueueStatusRequest(args));
   // Monitoring endpoint validating that every skill's command codeRefs
   // resolve in the deployed host. Self-authenticated with the monitoring
@@ -218,8 +291,110 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateUserRequest(args),
   );
+  router.get('/_secure-origin', handleSecureOriginInfo(args));
+  // Every route that checks a password counts failures against one limit.
+  let passwordLimiter = new SignInLimiter();
   router.post(
-    '/_request-forward',
+    SECURE_SESSION_PATH,
+    handlePasswordSignIn(args, createRealmDeps, passwordLimiter),
+  );
+  router.get(`${SECURE_SESSION_PATH}/google`, handleGoogleSignInStart(args));
+  router.post(
+    `${SECURE_SESSION_PATH}/google`,
+    handleGoogleSignIn(args, createRealmDeps),
+  );
+  router.get(
+    SECURE_SESSION_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleCheckSecureSession(args),
+  );
+  router.delete(
+    SECURE_SESSION_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleEndSecureSession(args),
+  );
+  router.delete(
+    SECURE_SESSIONS_PATH,
+    // The app asks for this as it signs out, with whatever session it holds,
+    // which may have expired while a refresh was due (a slept laptop). A
+    // session that expired no longer ago than a secure session lasts is still
+    // the user's, and all this route can do is sign them out.
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter, {
+      expiredWithinSeconds: SECURE_SESSION_TTL_SECONDS,
+    }),
+    handleEndWindowSessions(args),
+  );
+  router.post(
+    `${SECURE_SESSIONS_PATH}/password-change`,
+    handlePasswordChange(args, passwordLimiter),
+  );
+  router.post(
+    KEY_WRITE_TICKETS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMintKeyWriteTicket(args),
+  );
+  router.get(
+    USER_KEYS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListUserKeys(args),
+  );
+  router.post(
+    USER_KEYS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleAddUserKey(args),
+  );
+  router.get(
+    `${USER_KEYS_PATH}/:keyId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleShowUserKey(args),
+  );
+  router.patch(
+    `${USER_KEYS_PATH}/:keyId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleReplaceUserKey(args),
+  );
+  router.delete(
+    `${USER_KEYS_PATH}/:keyId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleDeleteUserKey(args),
+  );
+  router.get(
+    KEY_SHARES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyShares(args),
+  );
+  router.post(
+    KEY_SHARES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleShareKey(args),
+  );
+  router.delete(
+    `${KEY_SHARES_PATH}/:shareId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleUnshareKey(args),
+  );
+  router.post(
+    `${KEY_SHARES_PATH}/:shareId/suspend`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSuspendKeyShare(args),
+  );
+  router.post(
+    `${KEY_SHARES_PATH}/:shareId/resume`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleResumeKeyShare(args),
+  );
+  router.post(
+    `${KEY_SHARES_PATH}/:shareId/swap`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSwapKeyIntoShare(args),
+  );
+  router.get(
+    KEY_SHARE_NOTICES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyShareNotices(args),
+  );
+  router.post(
+    REQUEST_FORWARD_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
@@ -235,7 +410,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleClientTelemetry(),
   );
   router.post(
-    '/_openrouter/chat/completions',
+    OPENROUTER_PASSTHROUGH_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleOpenRouterPassthrough({
       dbAdapter: args.dbAdapter,
@@ -243,12 +418,15 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.all(
     '/_federated-search',
-    multiRealmAuthorization(args),
+    multiRealmAuthorization(args, { unreadableRealms: 'carry' }),
     handleSearch({
       reconciler: args.reconciler,
+      realmsRootPath: args.realmsRootPath,
       searchCache,
       dbAdapter: args.dbAdapter,
+      virtualNetwork: args.virtualNetwork,
       liveSearchCache: args.liveSearchCache,
+      linkShapePolicy: args.linkShapePolicy,
     }),
   );
   router.all(
@@ -308,11 +486,18 @@ export function createRoutes(args: CreateRoutesArgs) {
       createPrerenderAuth,
     }),
   );
-  router.post(
-    '/_screenshot-card',
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleScreenshotCard(args),
-  );
+  // Captures a card or a file in a realm (see handle-capture). The
+  // endpoint's former names answer through the same handler: `boxel-cli` is
+  // installed and pinned independently of this server, and a host tab can run
+  // an older build than the server it talks to, so released clients post
+  // there for as long as those versions are in use.
+  for (let path of ['/_capture', '/_capture-card', '/_screenshot-card']) {
+    router.post(
+      path,
+      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+      handleCapture(args),
+    );
+  }
   router.post(
     '/_publish-realm',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -344,6 +529,66 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleArchivedRealms(args),
   );
 
+  // Rotating the data key that seals stored secrets. Only an operator token
+  // signed with the realm secret seed reaches these.
+  router.get(
+    '/_data-keys',
+    operatorAuthorization(args.realmSecretSeed, 'data-keys', args.serverURL),
+    handleDataKeyStatus(args),
+  );
+  router.post(
+    '/_data-keys/reseal',
+    operatorAuthorization(args.realmSecretSeed, 'data-keys', args.serverURL),
+    handleDataKeyReseal(args),
+  );
+
+  // System keys: the platform's own vendor keys that `_request-forward`
+  // attaches. Only an operator token for `system-keys` reaches these, and
+  // none of them answers with a value.
+  let systemKeysAuthorization = operatorAuthorization(
+    args.realmSecretSeed,
+    'system-keys',
+    args.serverURL,
+  );
+  router.get(
+    '/_system-keys',
+    systemKeysAuthorization,
+    handleListSystemKeys(args),
+  );
+  router.post(
+    '/_system-keys',
+    systemKeysAuthorization,
+    handleAddSystemKey(args),
+  );
+  router.get(
+    '/_system-keys/:id',
+    systemKeysAuthorization,
+    handleShowSystemKey(args),
+  );
+  router.patch(
+    '/_system-keys/:id',
+    systemKeysAuthorization,
+    handleReplaceSystemKey(args),
+  );
+  router.delete(
+    '/_system-keys/:id',
+    systemKeysAuthorization,
+    handleDeleteSystemKey(args),
+  );
+
+  // Diagnostic sessions: what an operator renders a live card under to see it
+  // as the indexer does. Only an operator token for `diagnostic-render`
+  // reaches this.
+  router.post(
+    '/_diagnostic-render-token',
+    operatorAuthorization(
+      args.realmSecretSeed,
+      'diagnostic-render',
+      args.serverURL,
+    ),
+    handleDiagnosticRenderToken(args),
+  );
+
   // Grafana operator-action endpoints. All POST-only with
   // `Authorization: Bearer <token>` against the shared `grafanaSecret`.
   // Handlers read params from `ctxt.URL.searchParams` (Grafana button
@@ -362,6 +607,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   registerGrafanaEndpoint(
     '/_grafana-revoke-user-sessions',
     handleRevokeUserSessions(args),
+  );
+  registerGrafanaEndpoint(
+    '/_grafana-set-realm-catalog',
+    handleSetRealmCatalog(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(
@@ -455,6 +704,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_incoming-webhooks',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteIncomingWebhookRequest(args),
+  );
+  router.post(
+    '/_incoming-webhooks/rotate-signing-secret',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleRotateIncomingWebhookSecretRequest(args),
   );
   router.post(
     '/_webhook-commands',

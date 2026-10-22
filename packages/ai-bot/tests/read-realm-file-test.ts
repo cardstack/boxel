@@ -6,11 +6,20 @@ import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-d
 import {
   executeReadRealmFile,
   readRealmFileTool,
-  classifyToolCalls,
   fileLabelFromUrl,
   readFilesLabel,
+  READ_REALM_FILE_MAX_URLS,
   READ_REALM_FILE_TOOL_NAME,
-} from '../lib/read-realm-file.ts';
+  selectReadRealmFileUrls,
+  urlsFromReadRealmFileArguments,
+} from '../lib/bot-tools/read-realm-file/read.ts';
+import { READ_URL_TOOL_NAME } from '../lib/bot-tools/read-url/read.ts';
+import { classifyToolCalls } from '../lib/bot-tools/index.ts';
+import {
+  realmPrefixesFromHistory,
+  resolveRealmPrefix,
+} from '../lib/bot-tools/realm-prefixes.ts';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 
 const ON_BEHALF_OF = '@user:localhost';
 const REALM = 'https://localhost:4201/user/jane/';
@@ -135,6 +144,104 @@ module('readRealmFile tool definition', () => {
       readRealmFileTool.function.description.includes('next turn'),
       'description tells the model that reading a skill file unlocks its ' +
         'tools on the next turn — without this the mechanism goes unused',
+    );
+  });
+
+  test('caps the url list and asks for each url once', () => {
+    let urls = (readRealmFileTool.function.parameters as any).properties.urls;
+    assert.strictEqual(
+      urls.maxItems,
+      READ_REALM_FILE_MAX_URLS,
+      'an uncapped list invites a small model to repeat urls until it hits ' +
+        'its output limit',
+    );
+    assert.true(urls.uniqueItems, 'each url is listed once');
+    assert.true(
+      urls.description.includes(`at most ${READ_REALM_FILE_MAX_URLS}`),
+      'the cap is spelled out for models that ignore schema constraints',
+    );
+    assert.false(
+      readRealmFileTool.function.description.includes(
+        'request them all in a single call',
+      ),
+      'the description no longer pushes the model to list everything at once',
+    );
+  });
+});
+
+module('urlsFromReadRealmFileArguments', () => {
+  test('parses a complete call and drops duplicates and non-strings', () => {
+    assert.deepEqual(
+      urlsFromReadRealmFileArguments(
+        JSON.stringify({ urls: [FILE_URL, RAW_FILE_URL, FILE_URL, 42, ''] }),
+      ),
+      [FILE_URL, RAW_FILE_URL],
+    );
+  });
+
+  test('recovers the complete urls from arguments cut off mid-list', () => {
+    // What a generation stopped at the output-token limit leaves behind: the
+    // list never closes and the last entry may be partial.
+    let truncated = `{"urls":["${FILE_URL}","${RAW_FILE_URL}","${FILE_URL}","https://localhost:4201/user/jane/skills/trip-pl`;
+    assert.deepEqual(urlsFromReadRealmFileArguments(truncated), [
+      FILE_URL,
+      RAW_FILE_URL,
+    ]);
+  });
+
+  test('malformed arguments without a url list yield nothing', () => {
+    assert.deepEqual(urlsFromReadRealmFileArguments('{not json'), []);
+    assert.deepEqual(
+      urlsFromReadRealmFileArguments('{"description":"https://x.test/a"'),
+      [],
+    );
+  });
+});
+
+module('selectReadRealmFileUrls', () => {
+  // More unique urls than one call may read, in the order the model listed
+  // them. The schema's maxItems is only a hint the model can ignore.
+  const MANY_URLS = Array.from(
+    { length: READ_REALM_FILE_MAX_URLS + 3 },
+    (_, i) => `${REALM}skills/trip-planner/reference/file-${i}.md`,
+  );
+
+  test('a well-formed call past the cap reads the first urls and reports the rest', () => {
+    let selection = selectReadRealmFileUrls(
+      JSON.stringify({ urls: [...MANY_URLS, MANY_URLS[0]] }),
+    );
+    assert.deepEqual(
+      selection.urls,
+      MANY_URLS.slice(0, READ_REALM_FILE_MAX_URLS),
+      'the first unique urls are read, in order',
+    );
+    assert.deepEqual(
+      selection.dropped,
+      MANY_URLS.slice(READ_REALM_FILE_MAX_URLS),
+      'the urls past the cap are reported, without the duplicate',
+    );
+  });
+
+  test('a cut-off call past the cap is capped the same way', () => {
+    // The motivating shape: the same files repeated until the output limit
+    // cut the list mid-url.
+    let repeated = [...MANY_URLS, ...MANY_URLS, ...MANY_URLS];
+    let truncated = `{"urls":${JSON.stringify(repeated).slice(0, -2)}`;
+    let selection = selectReadRealmFileUrls(truncated);
+    assert.deepEqual(
+      selection.urls,
+      MANY_URLS.slice(0, READ_REALM_FILE_MAX_URLS),
+    );
+    assert.deepEqual(
+      selection.dropped,
+      MANY_URLS.slice(READ_REALM_FILE_MAX_URLS),
+    );
+  });
+
+  test('a call within the cap drops nothing', () => {
+    assert.deepEqual(
+      selectReadRealmFileUrls(JSON.stringify({ urls: [FILE_URL] })),
+      { urls: [FILE_URL], dropped: [] },
     );
   });
 });
@@ -637,6 +744,24 @@ module('classifyToolCalls', () => {
     );
   });
 
+  test('readUrl is a bot tool too', () => {
+    let { botToolCalls, hostToolCalls } = classifyToolCalls(
+      assistantMessage([
+        fnCall('c1', READ_URL_TOOL_NAME, { url: 'https://example.com' }),
+        fnCall('c2', READ_REALM_FILE_TOOL_NAME, { urls: [FILE_URL] }),
+        fnCall('c3', 'SomeHostCommand'),
+      ]),
+    );
+    assert.deepEqual(
+      botToolCalls.map((c) => c.id),
+      ['c1', 'c2'],
+    );
+    assert.deepEqual(
+      hostToolCalls.map((c) => c.id),
+      ['c3'],
+    );
+  });
+
   test('no tool calls → both sets empty', () => {
     let { botToolCalls, hostToolCalls } = classifyToolCalls(
       assistantMessage([]),
@@ -710,6 +835,57 @@ module('readFilesLabel', () => {
         { url: 'x' },
       ]),
       'Read file: a.md',
+    );
+  });
+});
+
+module('realm prefixes', () => {
+  test('a later message maps a prefix in place of an earlier one', () => {
+    let context = (realmPrefixes: Record<string, string>) => ({
+      type: 'm.room.message',
+      sender: '@user:localhost',
+      content: { data: JSON.stringify({ context: { realmPrefixes } }) },
+    });
+    let history = [
+      context({ '@cardstack/base/': 'https://old.example/base/' }),
+      context({ '@cardstack/base/': 'https://new.example/base/' }),
+      {
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          data: {
+            context: {
+              realmPrefixes: { '@cardstack/base/': 'https://bot.example/' },
+            },
+          },
+        },
+      },
+    ] as unknown as DiscreteMatrixEvent[];
+
+    assert.deepEqual(
+      [...realmPrefixesFromHistory(history, '@aibot:localhost')],
+      [['@cardstack/base/', 'https://new.example/base/']],
+    );
+  });
+
+  test('a prefix-form identifier resolves through its longest prefix', () => {
+    let prefixes = new Map([
+      ['@cardstack/', 'https://packages.example/'],
+      ['@cardstack/base/', 'https://localhost:4201/base/'],
+    ]);
+    assert.strictEqual(
+      resolveRealmPrefix('@cardstack/base/card-api.gts', prefixes),
+      'https://localhost:4201/base/card-api.gts',
+    );
+    assert.strictEqual(
+      resolveRealmPrefix('https://localhost:4201/user/x.gts', prefixes),
+      'https://localhost:4201/user/x.gts',
+      'a URL is unchanged',
+    );
+    assert.strictEqual(
+      resolveRealmPrefix('@other/realm/x.gts', prefixes),
+      '@other/realm/x.gts',
+      'an unregistered prefix is unchanged',
     );
   });
 });

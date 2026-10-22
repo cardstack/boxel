@@ -1,23 +1,28 @@
 import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
+import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
 import { writeSync } from 'node:fs';
 import {
+  CardDocumentCache,
   Realm,
   VirtualNetwork,
   isUrlLike,
   logger,
   Deferred,
   CachingDefinitionLookup,
+  claimHostShellGeneration,
+  reportableHostShellGeneration,
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+  parseRateLimitSpec,
+  markRealmPublishable,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
 import { RealmServer } from './server.ts';
-import { join } from 'path';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -39,6 +44,8 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler.ts';
+import { realmDiskPath } from './lib/realm-disk-path.ts';
+import { findRealm } from './lib/realm-routing.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener.ts';
@@ -46,11 +53,24 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
+import { realmEventDispatcher } from './realm-event-dispatcher.ts';
+import { healthCheckUserAgents } from './middleware/index.ts';
+import {
+  isDeployedServerURL,
+  startOutboundGuard,
+} from './lib/outbound/client.ts';
+import { callApiSender } from './lib/outbound/call-api-sender.ts';
+import {
+  reportPlaintextCensus,
+  reportSealedCensus,
+  secretsKeyring,
+  startSecretsAtRest,
+} from './lib/secrets-at-rest/index.ts';
+import { buildLinkShapePolicy } from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
-import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -133,6 +153,24 @@ const AI_BOT_DELEGATION_SECRET = process.env.AI_BOT_DELEGATION_SECRET;
 const MATRIX_ADMIN_USERNAME = process.env.MATRIX_ADMIN_USERNAME;
 const MATRIX_ADMIN_PASSWORD = process.env.MATRIX_ADMIN_PASSWORD;
 
+// How long shutdown waits for queued realm events to go out. Kept well inside
+// the grace period a deploy gives a stopping task before it is killed.
+const REALM_EVENT_DRAIN_MS = 10_000;
+
+// The Google client the secure window signs in with: the Matrix server's own,
+// so a user sees no new consent. Both unset, the secure window offers only a
+// password. GOOGLE_OAUTH_ISSUER points it at a stand-in provider in tests.
+const GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID;
+const GOOGLE_OAUTH_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+const googleSignIn =
+  GOOGLE_OAUTH_CLIENT_ID && GOOGLE_OAUTH_CLIENT_SECRET
+    ? {
+        clientId: GOOGLE_OAUTH_CLIENT_ID,
+        clientSecret: GOOGLE_OAUTH_CLIENT_SECRET,
+        issuer: process.env.GOOGLE_OAUTH_ISSUER || DEFAULT_GOOGLE_ISSUER,
+      }
+    : undefined;
+
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
     `module caching has been disabled, module executables will be served directly from the filesystem`,
@@ -183,6 +221,25 @@ const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
 const PRERENDER_COALESCE_ACROSS_PROCESSES =
   process.env.PRERENDER_COALESCE_ACROSS_PROCESSES === 'true';
 
+// How much of a card's link graph each live read carries, chosen per realm
+// from the load this process is under. The construction, and why it is not an
+// operator setting, live beside the gate it reads in `search-inflight.ts`.
+const linkShapePolicy = buildLinkShapePolicy();
+
+// The rate limit callers a realm's policy admits without a session get, as
+// `requests/windowSeconds`, through every policy grant that sets none of its
+// own. Unset, `DEFAULT_ANONYMOUS_RATE_LIMIT`. Every realm reports it in its
+// info, so a policy's editor can show it. A value that is not a limit stops
+// the server rather than leaving every realm on a limit nobody chose.
+const anonymousRateLimit = process.env.BOXEL_ANONYMOUS_RATE_LIMIT
+  ? parseRateLimitSpec(process.env.BOXEL_ANONYMOUS_RATE_LIMIT)
+  : undefined;
+if (process.env.BOXEL_ANONYMOUS_RATE_LIMIT && !anonymousRateLimit) {
+  throw new Error(
+    `BOXEL_ANONYMOUS_RATE_LIMIT must be a limit as requests/windowSeconds, for example 300/60, not "${process.env.BOXEL_ANONYMOUS_RATE_LIMIT}"`,
+  );
+}
+
 let {
   port,
   matrixURL,
@@ -198,12 +255,16 @@ let {
   fromUrl: fromUrls,
   toUrl: toUrls,
   username: usernames,
+  publishable: publishableRealmURLs = [],
   useRegistrationSecretFunction,
   migrateDB,
   workerManagerPort,
   workerManagerUrl,
   livenessPort,
   prerendererUrl,
+  secureOriginURL: secureOriginURLArg,
+  securePort,
+  secureOriginAppOrigin,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -251,6 +312,11 @@ let {
       demandOption: true,
       type: 'array',
     },
+    publishable: {
+      description:
+        'The URL of a mounted realm to mark publishable at startup, matching one of the --fromUrl values. Repeat for each realm.',
+      type: 'array',
+    },
     migrateDB: {
       description:
         'When this flag is set the database will automatically migrate when server is started',
@@ -285,6 +351,22 @@ let {
       description:
         'Traefik service name for registration in branch mode (default: realm-server)',
       type: 'string',
+    },
+    secureOriginURL: {
+      description:
+        'Where the secure origin serves its page shell. Requests to its host are answered by the secure origin alone. Defaults, when --securePort is given, to https://localhost:<securePort>/secure (its Traefik hostname in branch mode).',
+      type: 'string',
+    },
+    securePort: {
+      description:
+        'Port for a listener that serves the secure origin and nothing else, for local development. Omit where the secure origin is a hostname routed to --port.',
+      type: 'number',
+    },
+    secureOriginAppOrigin: {
+      description:
+        "An origin, besides --serverURL's, whose app pages may frame the secure origin's credential fields. Repeatable. A host starting with `*.` stands for every subdomain of the rest, and a port of `*` for every port of the host. For the host's dev server and test runner in development, the host PR previews on staging, and a host app served from the developer's own machine (`https://localhost:*`, `http://localhost:*` and the same for `127.0.0.1`) on staging and production.",
+      type: 'array',
+      string: true,
     },
   })
   .parseSync();
@@ -341,16 +423,52 @@ for (let i = 0; i < fromUrls.length; i++) {
     urlMappings.push([to, to]); // use toUrl for both in hrefs
   }
 }
+// The secure origin (see lib/secure-origin.ts). Guarded on a real port for the
+// same reason as `livenessPort` below; 0 is allowed in branch mode, where
+// Traefik finds the listener by the port it is given.
+const secureServiceName = `${serviceName}-secure`;
+const secureListenerPort =
+  typeof securePort === 'number' &&
+  Number.isInteger(securePort) &&
+  (securePort > 0 || (securePort === 0 && isEnvironmentMode()))
+    ? securePort
+    : undefined;
+const secureOriginURL =
+  secureOriginURLArg ??
+  (secureListenerPort === undefined
+    ? undefined
+    : isEnvironmentMode()
+      ? `${serviceURL(secureServiceName)}/secure`
+      : `https://localhost:${secureListenerPort}/secure`);
+
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
+let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
+for (let realmURL of publishableRealms) {
+  if (!hrefs.some(([from]) => from === realmURL.href)) {
+    console.error(
+      `--publishable=${realmURL.href} doesn't match the --fromUrl of any mounted realm`,
+    );
+    process.exit(-1);
+  }
+}
 let dist: URL = new URL(distURL);
 let autoMigrate = migrateDB || undefined;
 
 log.info(
   `Realm server boot config: port=${port} serverURL=${serverURL} distURL=${distURL} matrixURL=${matrixURL} realmsRootPath=${realmsRootPath} migrateDB=${Boolean(
     migrateDB,
-  )} workerManagerPort=${workerManagerPort ?? 'none'} livenessPort=${livenessPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
+  )} secureOriginURL=${secureOriginURL ?? 'none'} securePort=${secureListenerPort ?? 'none'} workerManagerPort=${workerManagerPort ?? 'none'} livenessPort=${livenessPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
 );
 log.info(`Realm paths: ${paths.map(String).join(', ')}`);
+
+// Refuse to boot with an outbound guard a deployed server must not run with,
+// and report the guard's effective settings.
+try {
+  startOutboundGuard({ serverURL: String(serverURL) });
+} catch (e: any) {
+  console.error(`Outbound guard self-check failed: ${e.message}`);
+  process.exit(-1);
+}
 
 // Start beating before anything else, so the shared buffer reflects a turning
 // event loop for the whole of boot rather than only from the point the server is
@@ -417,11 +535,33 @@ const smokeTestHostApp = async () => {
 // reachable): a deploy restarts this process, so a new bundle is reported
 // here and picked up by the prerender fleet. Best-effort — a missing or
 // unreachable manager must never block realm-server boot.
-const reportHostShellToManager = async () => {
+const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   try {
     let html = await getIndexHTML();
     let { createHash } = await import('crypto');
     let hash = createHash('md5').update(html).digest('hex').slice(0, 8);
+    // The generation this shell occupies in the ordering, claimed here because
+    // this is the only place that knows the token — the host is static files
+    // in S3, so there is no artifact to carry a number of its own. Every task
+    // claiming the same token reads back the same generation, so a rolling
+    // deploy reports one number rather than one per task.
+    //
+    // Guarded separately from the report: a database that cannot answer must
+    // not cost the fleet its recycle, which is what the token alone drives.
+    // Reporting the token with no generation is the degraded state this is
+    // designed for — rows then carry no generation and stay out of a repair,
+    // rather than carrying a wrong one.
+    let generation: number | undefined;
+    try {
+      generation = reportableHostShellGeneration(
+        await claimHostShellGeneration(dbAdapter, hash, Date.now()),
+        hash,
+      );
+    } catch (e: any) {
+      console.warn(
+        `Failed to claim a generation for host shell token ${hash}: ${e?.message ?? e}`,
+      );
+    }
     // Report to the manager URL the realm server already uses (prerendererUrl);
     // PRERENDER_MANAGER_URL is only set on the prerender-server tasks.
     let managerURL = prerendererUrl.replace(/\/$/, '');
@@ -431,11 +571,20 @@ const reportHostShellToManager = async () => {
         'Content-Type': 'application/vnd.api+json',
         Accept: 'application/vnd.api+json',
       },
-      body: JSON.stringify({ data: { attributes: { hash } } }),
+      body: JSON.stringify({
+        data: {
+          attributes: {
+            hash,
+            ...(generation === undefined ? {} : { generation }),
+          },
+        },
+      }),
     });
     if (response.ok) {
       console.log(
-        `Reported host shell token ${hash} to prerender manager at ${managerURL}`,
+        `Reported host shell token ${hash}${
+          generation === undefined ? '' : ` (generation ${generation})`
+        } to prerender manager at ${managerURL}`,
       );
     } else {
       console.warn(
@@ -450,6 +599,26 @@ const reportHostShellToManager = async () => {
 };
 
 (async () => {
+  // Refuse to boot a deployed server without its KMS-wrapped data key, and
+  // report which provider and data keys are in effect.
+  try {
+    await startSecretsAtRest({
+      deployed: isDeployedServerURL(String(serverURL)),
+    });
+  } catch (e: any) {
+    console.error(`Secrets-at-rest self-check failed: ${e.message}`);
+    process.exit(-1);
+  }
+  // Without it, the load balancer's probe on `/` falls through to the host app,
+  // which is slower and can fail the probe under load or during boot.
+  if (
+    isDeployedServerURL(String(serverURL)) &&
+    healthCheckUserAgents().length === 0
+  ) {
+    console.warn(
+      `HEALTH_CHECK_USER_AGENTS is not set, so no health check is answered from memory. Set it to your load balancer's health-check user-agent prefix (see docs/realm-server-health-signals.md).`,
+    );
+  }
   try {
     await smokeTestHostApp();
   } catch (e: any) {
@@ -464,17 +633,22 @@ const reportHostShellToManager = async () => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
+  await reportPlaintextCensus(dbAdapter);
+  await reportSealedCensus(dbAdapter, secretsKeyring());
   // DB-backed job-scoped search cache, shared across replicas via Postgres.
   // One instance per process, shared between the request handlers (via
   // RealmServer → createRoutes) and the JobsFinishedListener so a
   // `jobs_finished` NOTIFY evicts the same entries the handlers populate.
   let searchCache = new JobScopedSearchCache(dbAdapter);
   searchCache.startJanitor();
-  // Periodic event-loop-lag + in-flight-search sampler. Emits a
-  // `realm:health` line only during saturation windows, so a stalled
-  // `_search` can be checked against whether the process's event loop was
-  // starved at the time.
-  let stopHealthSampler = startHealthSampler();
+  // Periodic event-loop-lag + in-flight-search + heap sampler. Emits a
+  // `realm:health` line every interval, so a stalled `_search` can be checked
+  // against whether the process's event loop was starved at the time, and heap
+  // growth toward the OOM limit is visible (and alertable) on a calm process
+  // before a search storm — not only inside saturation windows.
+  let stopHealthSampler = startHealthSampler({
+    connectionStats: () => dbAdapter.connectionStats,
+  });
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
@@ -520,9 +694,15 @@ const reportHostShellToManager = async () => {
     moduleCacheCoordinator,
   );
 
-  // One store shared by every realm this server mounts; the `_screenshot/`
+  // One store shared by every realm this server mounts; the `_capture/`
   // route serves every request as an uncaptured miss when none is configured.
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
+
+  // One card+json response cache for the whole process, shared across every
+  // realm it mounts: entries are keyed on absolute card URLs, and the byte
+  // cap is meant to bound this process's heap rather than each realm's share
+  // of it.
+  let cardDocumentCache = new CardDocumentCache();
 
   if (SKIP_MODULES_CACHE_CLEAR_ON_STARTUP) {
     log.info('Skipping modules cache clear on startup (opted out via env)');
@@ -546,6 +726,19 @@ const reportHostShellToManager = async () => {
       url: hrefs[i][0],
     })),
   });
+
+  // A realm the server mounts never goes through create-realm, which is what
+  // seeds realm_metadata.publishable for a realm made in the app. Without the
+  // flag the host doesn't offer the Host submode and _publish-realm refuses
+  // the realm, so set it for each mount the start script names.
+  for (let realmURL of publishableRealms) {
+    await markRealmPublishable(dbAdapter, realmURL);
+  }
+  if (publishableRealms.length > 0) {
+    log.info(
+      `Marked publishable: ${publishableRealms.map((url) => url.href).join(', ')}`,
+    );
+  }
 
   // Validate per-CLI-path username invariant. Phase 3 no longer constructs
   // realms here — the reconciler does it via mountFromRow once registry
@@ -588,14 +781,16 @@ const reportHostShellToManager = async () => {
   // has finished its first reconcile pass.
   reconciler = new RealmRegistryReconciler({
     dbAdapter,
+    bootstrapOrder: hrefs.map(([url]) => url),
     prepareRealmFromRow: (row: RealmRegistryRow) => {
-      let diskPath: string;
-      if (row.kind === 'bootstrap') {
-        diskPath = row.disk_id;
-      } else if (row.kind === 'source') {
-        diskPath = join(realmsRootPath, row.disk_id);
-      } else {
-        diskPath = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, row.disk_id);
+      // The directory `mayNameRealmPolicy` reads a realm's `realm.json` from
+      // to decide whether to mount it, so the file it reads is the one the
+      // mounted realm reads its policy pointer from.
+      let diskPath = realmDiskPath(row, realmsRootPath);
+      if (!diskPath) {
+        throw new Error(
+          `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
+        );
       }
       const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
       let fullIndexOnStartup = resolveFullIndexOnStartup(
@@ -636,9 +831,16 @@ const reportHostShellToManager = async () => {
               DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
           ),
           mediaCacheAdapter,
+          cardDocumentCache,
+          realmFor: (url: URL) =>
+            reconciler
+              ? findRealm(url, { realms, reconciler, dbAdapter })
+              : Promise.resolve(undefined),
+          callApi: callApiSender,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+          ...(row.kind === 'published' ? { published: true as const } : {}),
           // The boot index is system-initiated work, so it inherits the same
           // per-realm tier the post-deploy sweep uses: the base realm above
           // the system tier, every other realm at it. Without this the base
@@ -649,6 +851,8 @@ const reportHostShellToManager = async () => {
           ...(process.env.DISABLE_MODULE_CACHING === 'true'
             ? { disableModuleCaching: true }
             : {}),
+          linkShapePolicy,
+          ...(anonymousRateLimit ? { anonymousRateLimit } : {}),
         },
       );
       // Publish synchronously into realms[] + virtualNetwork. The
@@ -690,6 +894,7 @@ const reportHostShellToManager = async () => {
     assetsURL: process.env.ASSETS_URL_OVERRIDE
       ? new URL(process.env.ASSETS_URL_OVERRIDE)
       : dist,
+    hostURL: dist,
     getIndexHTML,
     serverURL: new URL(serverURL),
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
@@ -701,7 +906,21 @@ const reportHostShellToManager = async () => {
       ? getRegistrationSecret
       : undefined,
     prerenderer,
-    reportHostShell: reportHostShellToManager,
+    reportHostShell: () => reportHostShellToManager(dbAdapter),
+    linkShapePolicy,
+    ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
+    secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
+    ...(googleSignIn ? { googleSignIn } : {}),
+  });
+
+  const secureHttpServer =
+    secureListenerPort === undefined
+      ? undefined
+      : server.listenSecureOrigin(secureListenerPort);
+  secureHttpServer?.on('listening', () => {
+    if (isEnvironmentMode()) {
+      registerService(secureHttpServer, secureServiceName, { http2: true });
+    }
   });
 
   let httpServer = server.listen(port);
@@ -749,9 +968,12 @@ const reportHostShellToManager = async () => {
     // keep-alive sessions instead of waiting for peers to release them —
     // without it `close()` can hang for a tab-keep-alive (or Traefik
     // backend session) lifetime.
-    if (typeof (httpServer as any).closeAllConnections === 'function') {
-      (httpServer as any).closeAllConnections();
+    for (let listener of [httpServer, secureHttpServer]) {
+      if (typeof (listener as any)?.closeAllConnections === 'function') {
+        (listener as any).closeAllConnections();
+      }
     }
+    secureHttpServer?.close();
     searchCache.stopJanitor();
     stopHealthSampler();
     httpServer.close(() => {
@@ -769,6 +991,16 @@ const reportHostShellToManager = async () => {
         // still turning while the shutdown above runs, and a check arriving in
         // that window should read a beating heartbeat rather than a frozen one.
         heartbeat.stop();
+        // Queued realm events still need the database to resolve their rooms,
+        // so they get a bounded chance to go out before it closes. Losing one
+        // can leave open tabs showing a realm as still indexing.
+        if (!(await realmEventDispatcher().drain(REALM_EVENT_DRAIN_MS))) {
+          let { queuedEvents, sendsInFlight } =
+            realmEventDispatcher().takeStats();
+          console.warn(
+            `realm events still undelivered at shutdown: ${queuedEvents} queued, ${sendsInFlight} sends in flight`,
+          );
+        }
         queue.destroy(); // warning this is async
         dbAdapter.close(); // warning this is async
         console.log(`realm server on port ${stopPort} has stopped`);
@@ -856,7 +1088,7 @@ const reportHostShellToManager = async () => {
   // recycle against the old shell, record the new token, and stop retrying.
   // The post-deployment hook reports again once the service is fully stable.
   // Fire-and-forget — a missing/unreachable manager must never affect serving.
-  void reportHostShellToManager();
+  void reportHostShellToManager(dbAdapter);
 
   // Begin the reconciler's background poll loop (LISTEN realm_registry +
   // 30s safety poll). It picks up changes from peer instances (publish,
@@ -912,10 +1144,9 @@ const reportHostShellToManager = async () => {
   let actualPort =
     (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
   log.info(`Realm server listening on port ${actualPort} is serving realms:`);
-  // Phase 3: realms[] is populated by the reconciler in realm_registry
-  // row order, not in CLI --path order, so hrefs[index] / paths[index]
-  // no longer correspond. Log just the realm URLs; URL mappings are
-  // logged separately below.
+  // realms[] is populated by the reconciler from realm_registry rows, so
+  // hrefs[index] / paths[index] do not correspond. Log just the realm URLs;
+  // URL mappings are logged separately below.
   for (let { url } of realms) {
     log.info(`    ${url}`);
   }

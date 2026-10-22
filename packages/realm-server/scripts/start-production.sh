@@ -13,9 +13,16 @@ pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
 pnpm setup:skills-in-deployment
+pnpm setup:pretui-in-deployment
 pnpm setup:software-factory-in-deployment
 pnpm setup:boxel-homepage-in-deployment
 pnpm setup:openrouter-in-deployment
+pnpm setup:choreo-gallery-in-deployment
+# The secure origin's pages are served from their build, which the realm
+# server reads once, at startup, and refuses to start without. The image
+# builds them as well; building here keeps the start from depending on how
+# the image was made.
+pnpm build:secure-origin || exit 1
 
 SUBMISSION_REALM_PATH='/persistent/submissions'
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-https://app.boxel.ai/submissions/}"
@@ -28,9 +35,18 @@ SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFT
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL='https://app.boxel.ai/boxel-homepage/'
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
 
+# The app origins that may frame the secure origin's credential fields,
+# besides --serverURL's: a host app served from the developer's own machine,
+# over https or http and on any port. No remote page can have a loopback
+# origin, so these admit only pages served from the user's own machine: any
+# such page, on any port, not only the host app. Nothing else is listed here:
+# a password manager fills a saved production password into the fields
+# wherever they are framed, so a preview or any other remote origin belongs on
+# staging's list, never this one.
 echo "[start-production] pid=$$ ppid=$PPID about to exec node at $(date -Iseconds)" >&2
 
 NODE_NO_WARNINGS=1 \
+  HEALTH_CHECK_USER_AGENTS='ELB-HealthChecker' \
   LOW_CREDIT_THRESHOLD=2000 \
   MATRIX_URL=https://matrix.boxel.ai \
   MATRIX_SERVER_NAME=boxel.ai \
@@ -45,6 +61,11 @@ NODE_NO_WARNINGS=1 \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://app.boxel.ai' \
   --prerendererUrl='http://boxel-prerender-manager.boxel-production-internal:4222' \
+  --secureOriginURL='https://secure.boxel.ai/' \
+  --secureOriginAppOrigin='https://localhost:*' \
+  --secureOriginAppOrigin='https://127.0.0.1:*' \
+  --secureOriginAppOrigin='http://localhost:*' \
+  --secureOriginAppOrigin='http://127.0.0.1:*' \
   \
   --path='/persistent/base' \
   --username='base_realm' \
@@ -67,6 +88,11 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='@cardstack/skills/' \
   --toUrl='https://app.boxel.ai/skills/' \
   \
+  --path='/persistent/pretui' \
+  --username='pretui_realm' \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl='https://app.boxel.ai/pretui/' \
+  \
   --path='/persistent/boxel-homepage' \
   --username='boxel_homepage_realm' \
   --fromUrl="${BOXEL_HOMEPAGE_REALM_URL}" \
@@ -81,6 +107,12 @@ NODE_NO_WARNINGS=1 \
   --username='openrouter_realm' \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl='https://app.boxel.ai/openrouter/' \
+  \
+  --path='/persistent/choreo-gallery' \
+  --username='choreo_gallery_realm' \
+  --fromUrl='https://app.boxel.ai/choreo-gallery/' \
+  --toUrl='https://app.boxel.ai/choreo-gallery/' \
+  --publishable='https://app.boxel.ai/choreo-gallery/' \
   \
   --path='/persistent/software-factory' \
   --username='software_factory_realm' \

@@ -7,9 +7,8 @@ import GlimmerComponent from '@glimmer/component';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -28,7 +27,6 @@ const ReportIcon: TemplateOnlyComponent<{ Element: SVGSVGElement }> = <template>
 
 module('Integration | FileDef format templates', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let FileDef: typeof CardApiModule.FileDef;
@@ -37,7 +35,7 @@ module('Integration | FileDef format templates', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     let cardApiModule = await loader.import<typeof CardApiModule>(
-      `${baseRealm.url}card-api`,
+      `@cardstack/base/card-api`,
     );
     FileDef = cardApiModule.FileDef;
     ImageDef = cardApiModule.ImageDef;
@@ -288,11 +286,11 @@ module('Integration | FileDef format templates', function (hooks) {
 
   test('the audio waveform shades the played span as playback advances', async function (assert) {
     let { AudioDef } = await loader.import<typeof AudioDefModule>(
-      `${baseRealm.url}audio-file-def`,
+      `@cardstack/base/audio-file-def`,
     );
     let { WaveformMetadataField } = await loader.import<
       typeof MetadataFieldsModule
-    >(`${baseRealm.url}file-formats/metadata-fields`);
+    >(`@cardstack/base/file-formats/metadata-fields`);
 
     let audio = new AudioDef({
       id: 'http://example.com/audio/take.wav',
@@ -340,11 +338,11 @@ module('Integration | FileDef format templates', function (hooks) {
 
   test('the audio waveform tears down the played span when playback resets to rest', async function (assert) {
     let { AudioDef } = await loader.import<typeof AudioDefModule>(
-      `${baseRealm.url}audio-file-def`,
+      `@cardstack/base/audio-file-def`,
     );
     let { WaveformMetadataField } = await loader.import<
       typeof MetadataFieldsModule
-    >(`${baseRealm.url}file-formats/metadata-fields`);
+    >(`@cardstack/base/file-formats/metadata-fields`);
 
     let audio = new AudioDef({
       id: 'http://example.com/audio/take.wav',
@@ -389,11 +387,11 @@ module('Integration | FileDef format templates', function (hooks) {
 
   test('the audio waveform prefers the media element duration once metadata loads', async function (assert) {
     let { AudioDef } = await loader.import<typeof AudioDefModule>(
-      `${baseRealm.url}audio-file-def`,
+      `@cardstack/base/audio-file-def`,
     );
     let { WaveformMetadataField } = await loader.import<
       typeof MetadataFieldsModule
-    >(`${baseRealm.url}file-formats/metadata-fields`);
+    >(`@cardstack/base/file-formats/metadata-fields`);
 
     let audio = new AudioDef({
       id: 'http://example.com/audio/take.wav',

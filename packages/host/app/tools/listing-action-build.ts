@@ -1,8 +1,7 @@
 import type { Listing } from '@cardstack/runtime-common';
-import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import HostBaseTool from '../lib/host-base-tool';
-import { devSkillId, skillCardURL } from '../lib/utils';
+import { skillFileURL } from '../lib/utils';
 
 import CreateAiAssistantRoomTool from './create-ai-assistant-room';
 import OpenAiAssistantRoomTool from './open-ai-assistant-room';
@@ -42,15 +41,14 @@ export default class ListingActionBuildTool extends HostBaseTool<
     });
 
     const defaultSkills = [
-      devSkillId,
-      skillCardURL('catalog-listing'),
-      skillCardURL('source-code-editing'),
+      skillFileURL('boxel'),
+      skillFileURL('catalog-listing'),
+      skillFileURL('source-code-editing'),
     ];
 
     if (roomId) {
       await new SetActiveLLMTool(this.toolContext).execute({
         roomId,
-        model: DEFAULT_CODING_LLM,
         mode: 'act',
       });
 

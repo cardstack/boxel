@@ -12,6 +12,7 @@
 //      with its tools intact.
 //   4. Plain markdown (no frontmatter) is unaffected.
 
+import { createFromSerialized } from '@cardstack/base/card-api';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -24,7 +25,6 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import { buildFileResource } from '@cardstack/host/utils/file-def-attributes-extractor';
 
 import { setupLocalIndexing, testRealmURL } from '../../helpers';
-import { setupBaseRealm, createFromSerialized } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -59,7 +59,6 @@ const LEGACY_SKILL_MD = SKILL_MD.replace('  tools:', '  commands:');
 
 module('Integration | markdown skill frontmatter', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupMockMatrix(hooks);
 

@@ -6,7 +6,9 @@
     "@babel/plugin-proposal-decorators": "catalog:",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/bxl": "workspace:*",
     "@cardstack/local-types": "workspace:*",
+    "@cardstack/pretui": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@glint/template": "catalog:",
     "@ember/test-helpers": "catalog:",
@@ -39,12 +41,15 @@
     "@floating-ui/dom": "catalog:",
     "css-what": "^8.0.0",
     "ember-modify-based-class-resource": "catalog:",
-    "ember-provide-consume-context": "^0.8.0"
+    "ember-provide-consume-context": "catalog:"
   },
   "scripts": {
     "catalog:setup": "[ -d contents ] || git clone git@github.com:cardstack/boxel-catalog.git contents || git clone https://github.com/cardstack/boxel-catalog.git contents || { echo 'both ssh and https clone failed; check GitHub auth and network'; exit 1; }",
     "catalog:update": "sh scripts/catalog-update.sh",
     "catalog:reset": "rm -rf contents && pnpm catalog:setup",
+    "catalog:test-subset": "node scripts/sync-test-subset.ts",
+    "test:deploy-check": "node --test scripts/catalog-deploy-check.test.ts",
+    "test:pairing": "node --test scripts/pairing.test.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:hbs": "ember-template-lint contents --no-error-on-unmatched-pattern",

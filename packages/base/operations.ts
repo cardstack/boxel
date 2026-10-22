@@ -1,14 +1,46 @@
-import { assertQuery, InvalidQueryError } from '@cardstack/runtime-common';
+import {
+  assertQuery,
+  buildOperations,
+  codeRefForDef,
+  type CallApiResponse,
+  getOperationsTransport,
+  identifyCard,
+  InvalidQueryError,
+  localId,
+  operationLabelProblem,
+  PRERENDERED_HTML_FORMATS,
+  realmURL,
+  type CarriedOperationInfo,
+  type CarriedQueryDeclaration,
+  type CodeRef,
+  type InvokeOptions,
+  type OperationsOptions,
+  type OperationDocument,
+  type OperationHandle,
+  type OperationResultTree,
+  type OperationWriteResult,
+  type OperationsSubject,
+  type PolicyExplanation,
+  type PolicyExplanationListing,
+  type PolicyValidation,
+  type PrerenderedHtmlFormat,
+  type QueryTargetHandle,
+  type SearchEntries,
+  type SearchEntryWireQuery,
+  type SearchInvokeOptions,
+} from '@cardstack/runtime-common';
 
 import {
   BaseDef,
   CardDef,
   FieldDef,
   FileDef,
+  serializeCard,
   type BaseDefConstructor,
   type BaseInstanceType,
   type CardDefConstructor,
   type FieldDefConstructor,
+  type FileDefConstructor,
   type LinkableDefConstructor,
 } from './card-api';
 
@@ -21,8 +53,9 @@ import {
 // the built-in behavior it builds on (`base`), the payload it accepts
 // (`params`), and what it does to the target. Values that are only known at
 // invocation time are written as typed references: `params('body')` for a
-// member of the request payload, `actor()` for the invoking actor,
-// `instance()` for the target's stored source document, `card(…)` for a link
+// member of the request payload, `actor()` for the caller's user id,
+// `instance()` for the target's stored source document, `realmConfig('key')`
+// for a setting of the realm the operation runs in, `card(…)` for a link
 // identity, and the `bxl` tag for a raw program.
 //
 //   class ExternalReport extends CardDef {
@@ -31,7 +64,7 @@ import {
 //       params: { body: StringField },
 //       append: {
 //         to: 'comments',
-//         value: { body: params('body'), author: actor() },
+//         value: { body: params('body'), postedBy: actor() },
 //       },
 //     } satisfies OperationDeclaration;
 //   }
@@ -61,25 +94,152 @@ import {
 // ============================================================================
 
 // The behaviors every declaration builds on. Which of them a def carries is
-// implied by the def type rather than written in author code — a `CardDef`
-// has all six, a `FileDef` only `read`, a `FieldDef` none — so
-// `getOperations` synthesizes them. A declaration *named* after a base op
-// takes its place: it specializes that behavior when it names the same
-// `base`, and rebinds the verb when it names another — a `delete` declared
-// on `transform` is a soft delete, so asking such a card to delete itself
-// archives it rather than removing it. The name is what a caller invokes and
-// `base` is the behavior that carries it out, so the two are read separately
-// and neither is inferred from the other.
+// implied by the def type rather than written in author code (see
+// `CARRIED_BY`), so `getOperations` synthesizes them. A declaration *named*
+// after a base op takes its place: it specializes that behavior when it names
+// the same `base`, and rebinds the verb when it names another — a `delete`
+// declared on `transform` is a soft delete, so asking such a card to delete
+// itself archives it rather than removing it. The name is what a caller
+// invokes and `base` is the behavior that carries it out, so the two are read
+// separately and neither is inferred from the other.
 export const BASE_OPERATIONS = [
   'read',
+  'readSource',
   'create',
   'update',
   'delete',
   'query',
   'transform',
+  'appendContainsMany',
+  'appendLine',
+  'explain',
+  'validate',
+  'callApi',
 ] as const;
 
 export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
+
+// The def families a base operation belongs to. `base` is every addressable
+// def that is neither a card nor a file — `BaseDef` itself and a direct
+// subclass of one — which carries the two reads and nothing else; a field is
+// not addressable at all, so it appears here nowhere.
+type DefFamily = 'card' | 'file' | 'base';
+
+// Which families carry which behavior. The table is keyed by base operation
+// rather than by family so it is exhaustive over `BASE_OPERATIONS`: a tenth
+// base operation has to say where it belongs instead of defaulting into the
+// families that already exist.
+//
+// The two writes on a file work on its bytes, which are the representation a
+// file is for — `update` replaces the content wholesale, `appendLine` adds one
+// newline-terminated line without reading what is already there. Everything
+// else a card carries reaches its JSON:API document, which a file has no
+// equivalent of: its `file-meta` fields are content-derived and read-only.
+// `appendLine` goes the other way for the same reason — a line appended to a
+// card's stored file leaves behind bytes that are no longer a card.
+const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
+  read: ['card', 'file', 'base'],
+  readSource: ['card', 'file', 'base'],
+  create: ['card'],
+  update: ['card', 'file'],
+  delete: ['card'],
+  query: ['card'],
+  transform: ['card'],
+  appendContainsMany: ['card'],
+  appendLine: ['file'],
+  // Carried by nothing on its own. See `DECLARATION_ONLY`.
+  explain: [],
+  validate: [],
+  callApi: [],
+};
+
+// The behaviors a def reaches only by declaring an operation built on them.
+// Nothing implies one, so a def that declares none has no member for it, and
+// a name nothing declared is not an operation at all.
+//
+// `explain` reports what a realm's policy decides for a caller, a target and
+// an operation, and `validate` reports what a policy compiles to. Each only
+// means something on a policy card, or for `validate` on the realm's config
+// card that names one. Implied on every card, either would be a member on
+// every card whose every invocation is refused.
+//
+// A `callApi` is a request to a service outside the realm, and only a card
+// that declares one has a request to send.
+const DECLARATION_ONLY: Partial<
+  Record<BaseOperationName, readonly DefFamily[]>
+> = {
+  explain: ['card'],
+  validate: ['card'],
+  callApi: ['card'],
+};
+
+function operationsCarriedBy(family: DefFamily): readonly BaseOperationName[] {
+  return BASE_OPERATIONS.filter((base) => CARRIED_BY[base].includes(family));
+}
+
+function declarationOnlyBases(family: DefFamily): readonly BaseOperationName[] {
+  return BASE_OPERATIONS.filter((base) =>
+    DECLARATION_ONLY[base]?.includes(family),
+  );
+}
+
+const CARD_OPERATIONS = operationsCarriedBy('card');
+const FILE_OPERATIONS = operationsCarriedBy('file');
+const BASE_DEF_OPERATIONS = operationsCarriedBy('base');
+
+// The base operations a declaration may neither build on nor be named after.
+// A stored-bytes read serves what is on disk: there is no payload to reshape,
+// no program stage to run, and no result to project, so a declaration built on
+// it would describe work nothing carries out.
+//
+// Both halves of that refusal matter, because a name and a base are
+// independent. The realm answers one of these by name without reading a
+// definition at all, so a declaration under the name — whatever base it
+// builds on — would be dispatched straight past: the built-in would run and
+// the author's operation would never be reached. Refusing the name here is
+// what keeps a new declaration out of that state, and refusing the base is
+// what stops the behavior being reached under some other name. Lowering
+// refuses the name too, so no stored definition can carry one either.
+const NOT_DECLARABLE: readonly BaseOperationName[] = ['readSource'];
+
+function isNotDeclarable(name: string): boolean {
+  return NOT_DECLARABLE.includes(name as BaseOperationName);
+}
+
+// Names the invocation surface owns. `operations(x)` answers a bucket keyed by
+// operation name, and `atomic` sits in that namespace beside them; inside a
+// batch the builder adds the members that say what an entry runs against. A
+// declaration under one of these names could never be reached — the surface's
+// own member is what a caller gets — so it is refused where it is written
+// rather than shadowed where it is invoked.
+//
+// `create` is deliberately absent: it is a base operation an author may
+// specialize, so the collision with the builder's `create(Type, …)` is settled
+// where the batch is built, not here.
+const RESERVED_BY_INVOCATION: readonly string[] = [
+  'atomic',
+  'on',
+  'find',
+  'parallel',
+  'serial',
+];
+
+function isReservedByInvocation(name: string): boolean {
+  return RESERVED_BY_INVOCATION.includes(name);
+}
+
+// A name the search surface owns. An ad-hoc search, a filter a caller writes
+// with no operation named, is invoked as `query` on the type it targets, and a
+// realm's policy grants it by that name. A saved search declared under the
+// same name would be granted by the same grant, so a caller granted that saved
+// search could drop its filter and write any other over the type. The base is
+// declarable, since it is what every saved search builds on; only the name is
+// taken.
+const RESERVED_BY_SEARCH: readonly string[] = ['query'];
+
+function isReservedBySearch(name: string): boolean {
+  return RESERVED_BY_SEARCH.includes(name);
+}
 
 // ============================================================================
 // Typed references
@@ -96,9 +256,12 @@ export interface ParamsReference<Key extends string = string> {
   readonly key: Key;
 }
 
+// The caller's identity, which is a user id and nothing else — so the marker
+// carries no key, and is not a card. It is stored in text fields and compared
+// in filters; a link to the person acting is a `params` member declared with
+// `linkTo(…)`.
 export interface ActorReference {
   readonly $ref: 'actor';
-  readonly key?: string;
 }
 
 export interface InstanceReference {
@@ -106,15 +269,27 @@ export interface InstanceReference {
   readonly key?: string;
 }
 
+export interface RealmConfigReference<Key extends string = string> {
+  readonly $ref: 'realmConfig';
+  readonly key?: Key;
+}
+
 export interface CardReference {
   readonly $ref: 'card';
-  readonly value: string | ParamsReference | ActorReference | InstanceReference;
+  // No `ActorReference`: the caller is a user id, and no card represents a
+  // user, so an actor here would name a link that cannot resolve.
+  readonly value:
+    | string
+    | ParamsReference
+    | InstanceReference
+    | RealmConfigReference;
 }
 
 export type OperationReference =
   | ParamsReference
   | ActorReference
   | InstanceReference
+  | RealmConfigReference
   | CardReference;
 
 export interface BxlProgram {
@@ -132,10 +307,21 @@ export function params<Key extends string>(key: Key): ParamsReference<Key> {
   return { $ref: 'params', key };
 }
 
-// The invoking actor — the whole actor, or one of its members: `actor('id')`.
-export function actor(key?: string): ActorReference {
-  assertOptionalReferenceKey('actor', key);
-  return key === undefined ? { $ref: 'actor' } : { $ref: 'actor', key };
+// The caller's user id, as the realm authenticated them. The rest parameter
+// takes `never` so an argument is a type error, and is checked at run time
+// for a declaration assembled outside TypeScript.
+export function actor(...args: never[]): ActorReference {
+  if (args.length > 0) {
+    throw new Error(`actor() takes no argument; it is the caller's user id`);
+  }
+  return { $ref: 'actor' };
+}
+
+// Why the caller cannot stand in for a card, wherever one is asked for. The
+// realm authenticates a caller as a user id, and no card represents a user,
+// so a link built from one names a card that does not exist.
+function actorIsNotACard(what: string): string {
+  return `${what} takes a card identity, and \`actor()\` is the caller's user id rather than a card — declare the person as a \`params\` member typed \`linkTo(…)\` and link that`;
 }
 
 // The invocation target's stored source document — never a live card
@@ -145,8 +331,30 @@ export function instance(key?: string): InstanceReference {
   return key === undefined ? { $ref: 'instance' } : { $ref: 'instance', key };
 }
 
+// A setting of the realm the operation runs in, or the whole map of them when
+// no name is given. It is what lets one card type read a value that differs
+// per realm — an approver, a threshold, a default — without the type
+// hard-coding it.
+//
+// The name is not checked against anything here, and cannot be: a type is
+// declared once and its cards live in whatever realms hold them, so which
+// settings exist is only known where the operation runs.
+//
+// The realm keeps them on its RealmConfig card at `realm.json`, under
+// `config`; a program reads one with the `realmConfig("key")` builtin, and a
+// declaration reads one through this marker. A realm that configures no such
+// setting refuses the invocation rather than resolving the marker to nothing.
+export function realmConfig<Key extends string>(
+  key?: Key,
+): RealmConfigReference<Key> {
+  assertOptionalReferenceKey('realmConfig', key);
+  return key === undefined
+    ? { $ref: 'realmConfig' }
+    : { $ref: 'realmConfig', key };
+}
+
 // A link identity: the URL of a saved card, or the reference that resolves to
-// one — `card(params('activity'))`, `card(actor('id'))`.
+// one — `card(params('activity'))`, `card(instance('id'))`.
 export function card(reference: CardReference['value']): CardReference {
   if (typeof reference === 'string') {
     if (reference.length === 0) {
@@ -156,6 +364,9 @@ export function card(reference: CardReference['value']): CardReference {
   }
   if (!isReferenceMarker(reference)) {
     throw new Error(`card() takes a card URL or a typed reference to one`);
+  }
+  if ((reference as { $ref?: unknown }).$ref === 'actor') {
+    throw new Error(actorIsNotACard('card()'));
   }
   return { $ref: 'card', value: reference };
 }
@@ -176,7 +387,7 @@ export function bxl(
   }
   if (substitutions.length > 0) {
     throw new Error(
-      `the bxl tag does not interpolate values; read the payload, the actor and the target inside the program with the params(), actor() and instance() builtins`,
+      `the bxl tag does not interpolate values; read the payload, the actor, the target and the realm's configuration inside the program with the params(), actor(), instance() and realmConfig() builtins`,
     );
   }
   return { $bxl: program.raw.join('') };
@@ -248,7 +459,7 @@ export interface AssertClause {
   readonly unique: string;
   // What decides whether an item is already there. On a collection of links
   // this is compared against the linked card's `id`, so it must be an
-  // identity — a card URL, a param declared with `linkTo(…)`, or `actor()` /
+  // identity — a card URL, a param declared with `linkTo(…)`, or
   // `instance()`. On a collection of contained values the item is compared
   // whole, so a partial object never matches an item that has any other field
   // set: key such a check on the value the collection actually holds.
@@ -266,7 +477,20 @@ export type SetClause = { readonly [fieldName: string]: OperationValue };
 export type FillClause = { readonly [fieldName: string]: OperationValue };
 
 // Projects or reshapes the result. May reference the actor, which makes the
-// operation's response per-actor.
+// operation's response per-actor — and on a `read`, makes the card's plain
+// `GET` uncacheable, since a per-caller body cannot be held in a shared cache
+// or answered with a 304.
+//
+// **It is not an access boundary.** An `output` decides the shape of this
+// operation's answer and nothing more: the realm checks its own read/write
+// permission and nothing else, so a field left out here is still reachable by
+// any caller permitted to read the realm — through the card's plain `read`,
+// through its stored source, through a search. Leave a value out because a
+// consumer does not need it, never because a caller may not have it.
+//
+// A projection of a `read` stays a JSON:API document: the response it is
+// served in carries a `data` member and every client reads it. What the
+// projection puts below `data` is the author's.
 export type OperationOutput =
   | BxlProgram
   | { readonly [key: string]: OperationValue };
@@ -304,12 +528,30 @@ export type OperationQueryValue =
   | { readonly [key: string]: OperationQueryValue };
 
 interface OperationCommon {
+  // A short, plain-text phrase for people, written as what a person is
+  // agreeing to or about to do: "List your open pull requests". It is shown
+  // beside the operation's request wherever the operation is presented, never
+  // in place of it, and takes no part in what the operation does. At most
+  // `OPERATION_LABEL_MAX_LENGTH` characters on one line, without markup.
+  // Without one, the operation is shown under its name split into words.
+  readonly label?: string;
   readonly params?: ParamsSchema;
   // The author's override of the automatically-detected eligibility for the
   // client's optimistic path.
   readonly optimistic?: boolean;
+  // Keeps the operation out of every realm policy's reach: only a caller the
+  // realm's own ACL allows may invoke it, whatever a policy grants. For the
+  // operations that edit or disclose authorization itself, where one grant
+  // could be made into every grant. It holds on every subclass, including one
+  // that redeclares the operation without it.
+  readonly nonGrantable?: boolean;
   // The raw escape hatch: author-supplied BXL in place of the declarative
   // clauses, for anything they don't express.
+  //
+  // `input` runs first, over the payload the caller sent, and produces the
+  // payload the operation uses — so a value it supplies satisfies a declared
+  // param the caller left out. It reads `.` (that payload), `params()` and
+  // `actor()`, and it produces an object.
   readonly input?: BxlProgram;
   readonly transformations?: BxlProgram;
   readonly output?: OperationOutput;
@@ -338,14 +580,264 @@ export interface DeleteOperationDeclaration extends OperationCommon {
   readonly base: 'delete';
 }
 
+// How much of the target's link graph a read carries, or how much of each
+// result's link graph a query's results carry.
+//
+//   * `full` — the transitive closure of the card's links is assembled into
+//     `included[]`. The default.
+//   * `ids`  — the card's relationships name their targets and nothing is
+//     assembled. A consumer fetches each target on its own request.
+//   * `none` — no relationship data is assembled or named. A `query` only; a
+//     `read` may not declare it (see `ReadLinkStrategy`).
+//
+// On a `read` it governs reads of this card — the document a read rooted here
+// serves. When the card turns up inside another card's closure, that read's
+// own strategy decides what it carries, and a `full` one carries this card
+// whole, with its relationships and what they link to.
+//
+// On a `query` it governs every row the query answers with, alike, whatever
+// type each row is and whatever that type's own `read` declares: the query's
+// results are its representation, as a read's document is the read's. It
+// narrows each row's card, never the entry the row is delivered in — a row
+// still names its card, and still carries the renderings it asked for.
+//
+// The narrowing is uniform: the same request answers a realm writer and a
+// caller reached by a policy grant with the same document, because the shape
+// is a property of the operation rather than of how the caller was
+// authorized.
+//
+// It governs **assembly, not derivation**. A computed value deriving from a
+// card the caller could not fetch on its own still carries its value under
+// every strategy — the value is computed when the card is indexed, under the
+// realm's own authority, and lives in the card's own attributes.
+export type LinkStrategy = 'full' | 'ids' | 'none';
+
+// A total map over the union, so a strategy added to `LinkStrategy` without an
+// entry here is a type error rather than a value the decorator refuses while
+// lowering and the serving path accept it.
+const LINK_STRATEGY_SET: Record<LinkStrategy, true> = {
+  full: true,
+  ids: true,
+  none: true,
+};
+const LINK_STRATEGIES = Object.keys(LINK_STRATEGY_SET) as LinkStrategy[];
+
+// The strategies a `read` may declare. A read's strategy governs the card's
+// plain `GET`, which is what the host loads a card with to render and edit it
+// live, so under `none` the host is never told what the card links to and
+// shows its link fields empty. Editing one then saves what the editor showed
+// over the stored links: a `linksToMany` edit replaces the whole list, and a
+// `linksTo` edit overwrites a target the writer never saw. `ids` narrows a read
+// without that cost — it names each link's target, so the host shows and edits
+// the links and fetches each target on its own request. A query's `none` rows
+// carry no such risk, because the host never adopts them as live cards.
+export type ReadLinkStrategy = Exclude<LinkStrategy, 'none'>;
+
+const READ_LINK_STRATEGIES = LINK_STRATEGIES.filter(
+  (strategy): strategy is ReadLinkStrategy => strategy !== 'none',
+);
+
+// Whether a format's prerendered HTML may be served alongside the data a read
+// or a query answers with.
+//
+//   * `shareable`   — the format's prerendered HTML is served. The default.
+//   * `unshareable` — the format is served data-only: no caller receives its
+//     prerendered HTML, and a consumer renders the card from its data instead.
+//
+// Prerendered HTML is rendered once per card and format, under the realm's own
+// authority, and shared by every viewer — so nothing in it can differ by
+// caller. A format whose template draws linked cards bakes their content into
+// that one shared markup, and a caller who receives the markup receives the
+// linked content whole, whatever they could fetch on their own. Declaring the
+// format unshareable is the author's statement that its markup reaches further
+// than this representation should. Nothing is rendered a second time and
+// nothing is rendered per caller: the format's markup is withheld and its data
+// is not.
+//
+// It is a claim about what the format draws, not a mechanism. An edit that
+// starts embedding a linked card in a format left shareable falsifies it
+// silently, which is what the policy's reach diagnostics are for.
+//
+// On a `read` it governs reads rooted at this card: the card's single-card
+// HTML read, the last-known-good markup an errored read carries in place of
+// the card, and the markup a host-mode page for the card is served with.
+//
+// On a `query` it governs every row the query answers with, alike, whatever
+// type each row is and whatever that type's own `read` declares — the same
+// rule `links` follows on a query. An ad-hoc search declares nothing, so it
+// serves every format's markup, and so does a policy's ad-hoc `query` grant: an
+// author who wants a grant-reached caller to see a format data-only grants a
+// named query that declares it unshareable rather than the ad-hoc one. A
+// search a render runs is exempt, and keeps every format's markup: the markup
+// it draws becomes part of the embedding card's own prerendered HTML, which
+// that card's own declarations govern.
+//
+// The narrowing is uniform: the same request answers a realm reader and a
+// caller reached by a policy grant with the same document, because the shape
+// is a property of the operation rather than of how the caller was
+// authorized.
+export type HtmlSharing = 'shareable' | 'unshareable';
+
+// A total map over the union, for the same reason `LINK_STRATEGY_SET` is one.
+const HTML_SHARING_SET: Record<HtmlSharing, true> = {
+  shareable: true,
+  unshareable: true,
+};
+const HTML_SHARINGS = Object.keys(HTML_SHARING_SET) as HtmlSharing[];
+
+// Whether each prerendered format may be served, by format. A format left out
+// is shareable.
+export type HtmlDeclaration = {
+  readonly [format in PrerenderedHtmlFormat]?: HtmlSharing;
+};
+
 export interface ReadOperationDeclaration extends OperationCommon {
   readonly base: 'read';
+  // How much of the card's link graph this read carries. Absent is `full`.
+  readonly links?: ReadLinkStrategy;
+  // Which of the card's prerendered formats reads rooted here serve
+  // data-only. Absent, every format is shareable.
+  readonly html?: HtmlDeclaration;
 }
 
 export interface QueryOperationDeclaration extends OperationCommon {
   readonly base: 'query';
   // Required unless the declaration supplies a raw program instead.
   readonly query?: QueryDeclaration;
+  // How much of each result's link graph the results carry. Absent is `full`.
+  readonly links?: LinkStrategy;
+  // Which prerendered formats every result row is served data-only for.
+  // Absent, every format is shareable.
+  readonly html?: HtmlDeclaration;
+}
+
+// Appends one newline-terminated line to a text file. There is no clause: the
+// line is the payload, which the base operation reads under `line`, so a
+// declaration says which param carries it and nothing more. An `input`
+// program is the other way to produce one, for a payload the author would
+// rather shape — several members joined into a line, say.
+export interface AppendLineOperationDeclaration extends OperationCommon {
+  readonly base: 'appendLine';
+}
+
+// Appends an item to a card's `containsMany` field by editing the card's
+// stored JSON as text, without loading the document — the base operation for a
+// collection large enough that loading it is the cost.
+//
+// One field is named with `field` and its item with `item`; several are named
+// together under `fields`, each mapped to its own item. The item is written
+// with the same typed references an `append` value is, and is carried to
+// invocation as a template rather than a program: an append substitutes values
+// into a document, and no BXL runs on its path.
+export interface AppendContainsManyOperationDeclaration extends OperationCommon {
+  readonly base: 'appendContainsMany';
+  readonly field?: string;
+  readonly item?: OperationValue;
+  readonly fields?: { readonly [fieldName: string]: OperationValue };
+}
+
+// Reports what the realm's policy would decide for one caller, target and
+// operation, and invokes nothing. It belongs on a policy card: the realm
+// answers it only for the card a target's realm names as its policy.
+//
+// There is no clause. The question is the payload, which the base operation
+// reads under `actor`, `target` and `operation`. The answer is exactly what a
+// refusal is written to withhold, so no policy may grant it, and the
+// declaration says so with `nonGrantable: true`.
+export interface ExplainOperationDeclaration extends OperationCommon {
+  readonly base: 'explain';
+  readonly nonGrantable: true;
+}
+
+// Reports what the policy card it is invoked on compiles to: every issue
+// compiling records, and the rules and grants that compile, which are what a
+// realm naming the card puts in force. It invokes nothing and activates
+// nothing. It belongs on a policy card, where it lets the card show its author
+// which of its grants are live, and on the realm's config card, where it
+// reports what the card the realm's pointer names compiles to there, including
+// a pointer to a card that is missing or is not a policy.
+//
+// There is no clause and no payload: the card is the question. A policy card
+// is open only to a caller the realm's own permissions let read it, and what
+// compiling it reports also turns on the definitions of the types its rules
+// name, wherever those live. So no policy may grant it, and the declaration
+// says so with `nonGrantable: true`.
+export interface ValidateOperationDeclaration extends OperationCommon {
+  readonly base: 'validate';
+  readonly nonGrantable: true;
+}
+
+// The HTTP methods a declared request may use.
+export const CALL_API_METHODS = [
+  'GET',
+  'POST',
+  'PUT',
+  'PATCH',
+  'DELETE',
+] as const;
+export type CallApiMethod = (typeof CALL_API_METHODS)[number];
+
+// A request to a service outside the realm, declared as data and sent by the
+// realm server. Nothing of the card runs when it is invoked: the realm builds
+// the request from this declaration as it was lowered when the card's module
+// was indexed, fills in the invocation's values, and sends it through the
+// server's guarded outbound client.
+//
+//   @operation static openIssues = {
+//     base: 'callApi',
+//     label: 'List the open issues in a repository',
+//     params: { owner: StringField, repo: StringField },
+//     url: 'https://api.github.com/repos/{owner}/{repo}/issues',
+//     path: { owner: params('owner'), repo: params('repo') },
+//     query: { state: 'open' },
+//     headers: { authorization: 'Bearer {{userKey}}' },
+//   } satisfies OperationDeclaration;
+//
+// Invoked on an instance, a value may read the card's indexed fields with
+// `instance('field')`; invoked on the type, it reads only the payload, and the
+// realm the request is made for is the one the invocation names. Either way
+// the answer is the vendor's response — its status, the headers that are safe
+// to carry, and its body with every credential removed — whatever the status
+// is. A 404 from the vendor is an answer, not a refusal. An `output` maps that
+// response to an object of the card's choosing.
+//
+// A credential is written as a slot in a string where it goes:
+//
+//   * `{{userKey}}` — the invoking user's own key for the service;
+//   * `{{apiKey}}` — a key the realm holds for the service;
+//   * `{{apiKey:token}}` — a slot with a name, for a request that carries more
+//     than one credential;
+//   * `{{apiKey|basic}}` — the value transformed before it is sent; `basic`
+//     is the base64 of `user:password` that HTTP Basic authentication takes.
+//
+// A slot may appear in a header value, a query value, a path value or a string
+// in the JSON body, and once in the request. It is filled at send time, after
+// the destination has been checked against the request as declared, and it is
+// never carried across a redirect to another destination. Nothing that
+// records the request — logs, errors, telemetry — ever sees a filled one.
+export interface CallApiOperationDeclaration extends OperationCommon {
+  readonly base: 'callApi';
+  // Absent, `GET` for a request with no body and `POST` for one with a body.
+  readonly method?: CallApiMethod;
+  // An absolute URL. A path segment written `{name}` is filled from `path`,
+  // and nothing else in the URL is filled at all — its host, port and query
+  // string are what the declaration says.
+  readonly url: string;
+  // The value for each `{name}` segment in `url`. Each value fills exactly one
+  // segment: it is percent-encoded whole, so a `/` or a `..` in it stays
+  // inside the segment.
+  readonly path?: { readonly [name: string]: OperationValue };
+  readonly headers?: { readonly [name: string]: OperationValue };
+  // Query-string parameters, appended to `url` and encoded.
+  readonly query?: { readonly [name: string]: OperationValue };
+  // A JSON body, sent as `application/json`.
+  readonly json?: OperationValue;
+  // A GraphQL request, sent as a JSON body. The document is a fixed string,
+  // and every value it takes is passed as a variable, never written into it.
+  readonly graphql?: {
+    readonly document: string;
+    readonly variables?: { readonly [name: string]: OperationValue };
+  };
 }
 
 export type OperationDeclaration =
@@ -354,7 +846,25 @@ export type OperationDeclaration =
   | UpdateOperationDeclaration
   | DeleteOperationDeclaration
   | ReadOperationDeclaration
-  | QueryOperationDeclaration;
+  | QueryOperationDeclaration
+  | AppendLineOperationDeclaration
+  | AppendContainsManyOperationDeclaration
+  | ExplainOperationDeclaration
+  | ValidateOperationDeclaration
+  | CallApiOperationDeclaration;
+
+// A base operation a def carries with nothing declared on it. It is not a
+// declaration and the union above deliberately cannot express one: an author
+// writes no clauses for a base operation, and a `NOT_DECLARABLE` name cannot
+// be written at all, so a declaration type that admitted one would invite
+// exactly what the decorator refuses. `getOperations` returns both
+// shapes, so a consumer reading `base` to dispatch gets every operation a def
+// carries — including the ones no `OperationDeclaration` could name.
+export interface ImpliedOperation {
+  readonly base: BaseOperationName;
+}
+
+export type CarriedOperation = OperationDeclaration | ImpliedOperation;
 
 // The operations declared on a def, read off the class type. Keyed by
 // operation name, so an invocation surface can be typed from the class alone.
@@ -404,8 +914,10 @@ const operationDeclarations = Symbol.for('cardstack-operation-declarations');
 // `transformations` and `output` are the raw program's stages.
 const COMMON_DECLARATION_KEYS = [
   'base',
+  'label',
   'params',
   'optimistic',
+  'nonGrantable',
   'input',
   'transformations',
   'output',
@@ -420,7 +932,33 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   update: [],
   delete: [],
   read: [],
+  // A stored-bytes read takes no clauses because it takes no declaration at
+  // all; the entry is here because this table is exhaustive over the base
+  // operations, so a new one has to say what it accepts.
+  readSource: [],
   query: ['query'],
+  // One field with its item, or several fields each with their own.
+  appendContainsMany: ['field', 'item', 'fields'],
+  // Appending a line takes no clause: the line is the payload, and the base
+  // operation reads it under `line`.
+  appendLine: [],
+  // Neither does an explain: the question it answers is the payload.
+  explain: [],
+  // Nor a validate: the card it is invoked on is the whole question.
+  validate: [],
+  // The parts of the request it sends.
+  callApi: ['method', 'url', 'path', 'headers', 'query', 'json', 'graphql'],
+};
+
+// Keys that shape how a base operation answers rather than describing work for
+// it to do. They are legal only on the base named here — a `links` on a
+// `create` would be read by nothing, and a key that is quietly ignored is
+// worse than one that is refused — and they are not clauses, so a declaration
+// carrying one may still express its work with a raw `transformations`
+// program.
+const MODIFIER_KEYS: Partial<Record<BaseOperationName, readonly string[]>> = {
+  read: ['links', 'html'],
+  query: ['links', 'html'],
 };
 
 // Clauses without which an authored declaration names no work at all: a
@@ -437,6 +975,7 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
 const REQUIRED_CLAUSE: Partial<Record<BaseOperationName, string>> = {
   create: 'of',
   query: 'query',
+  callApi: 'url',
 };
 
 // Clauses that name a type rather than describe work. A raw program replaces
@@ -459,6 +998,21 @@ export const operation = function (
     );
   }
   let owner = assertOperationTarget(target, key);
+  if (isNotDeclarable(key)) {
+    throw new Error(
+      `${declarationLabel(owner, key)}: "${key}" is a reserved operation name — a "${key}" serves the bytes stored at the def's URL, which the realm answers without reading a definition, so a declaration under this name would never be reached`,
+    );
+  }
+  if (isReservedByInvocation(key)) {
+    throw new Error(
+      `${declarationLabel(owner, key)}: "${key}" is a member of the invocation surface — operations(instance).${key} and a batch builder's ${key} are that, so a declaration under this name would never be reached`,
+    );
+  }
+  if (isReservedBySearch(key)) {
+    throw new Error(
+      `${declarationLabel(owner, key)}: "${key}" is a reserved operation name — it is the name a search the caller writes by hand is invoked and granted under, so a saved search needs a name of its own`,
+    );
+  }
   assertNameAvailable(owner, key);
   if (typeof descriptor?.initializer !== 'function') {
     throw new Error(
@@ -497,14 +1051,11 @@ export const operation = function (
 // relied on to carry one, so lower from `getDeclaredOperations`.
 export function getOperations(
   classOrInstance: BaseDef | typeof BaseDef,
-): Record<string, OperationDeclaration> {
+): Record<string, CarriedOperation> {
   let owner = defConstructorFor(classOrInstance, 'getOperations');
-  let operations = emptyOperationRecord();
+  let operations = emptyOperationRecord() as Record<string, CarriedOperation>;
   for (let base of impliedOperations(owner)) {
-    // A base operation with nothing declared on it is the declaration
-    // `{ base }`; the cast is only because a union does not narrow from a
-    // computed discriminant.
-    operations[base] = { base } as OperationDeclaration;
+    operations[base] = { base };
   }
   return Object.assign(operations, declaredOperations(owner));
 }
@@ -537,24 +1088,49 @@ export function getDeclaredOperations(
 function impliedOperations(
   owner: typeof BaseDef,
 ): readonly BaseOperationName[] {
-  if (isSubclassOf(owner, FieldDef)) {
-    // A field's instances have no URL, so nothing is invocable on one; field
-    // data is reached through the operations of the card that contains it.
-    return [];
+  let family = defFamily(owner);
+  if (family === 'card') {
+    return CARD_OPERATIONS;
   }
-  if (isSubclassOf(owner, CardDef)) {
-    return BASE_OPERATIONS;
+  if (family === 'file') {
+    return FILE_OPERATIONS;
   }
-  if (isSubclassOf(owner, FileDef)) {
-    // A file's metadata is content-derived and read-only: there is no
-    // JSON:API mutation surface for anything else to reach.
-    return READ_ONLY;
+  if (family === 'base') {
+    // The operations every addressable def shares: a `read` serves the def's
+    // indexed document, and a `readSource` serves the bytes stored at the
+    // instance's URL — a representation every addressable def has whether or
+    // not its document is the interesting one.
+    return BASE_DEF_OPERATIONS;
   }
-  // The one operation every addressable def shares.
-  return READ_ONLY;
+  return [];
 }
 
-const READ_ONLY = ['read'] as const;
+// Which base operations a def type may declare an operation on: the ones it
+// implies, and the ones it reaches only through a declaration.
+function declarableOperations(
+  owner: typeof BaseDef,
+): readonly BaseOperationName[] {
+  let family = defFamily(owner);
+  return family
+    ? [...impliedOperations(owner), ...declarationOnlyBases(family)]
+    : [];
+}
+
+// A field's instances have no URL, so nothing is invocable on one, and it
+// belongs to no family: field data is reached through the operations of the
+// card that contains it.
+function defFamily(owner: typeof BaseDef): DefFamily | undefined {
+  if (isSubclassOf(owner, FieldDef)) {
+    return undefined;
+  }
+  if (isSubclassOf(owner, CardDef)) {
+    return 'card';
+  }
+  if (isSubclassOf(owner, FileDef)) {
+    return 'file';
+  }
+  return 'base';
+}
 
 function declaredOperations(
   owner: typeof BaseDef,
@@ -590,8 +1166,11 @@ function defConstructorFor(
       ? classOrInstance
       : classOrInstance?.constructor;
   if (typeof owner !== 'function' || !isDefConstructor(owner)) {
+    // Names what arrived, because the commonest way to reach this is a def
+    // built by a different copy of the card API — a value that is a def by
+    // every appearance and is not an instance of *this* module's `BaseDef`.
     throw new Error(
-      `${reader}() takes a class that extends BaseDef, or an instance of one`,
+      `${reader}() takes a class that extends BaseDef, or an instance of one; got ${describeTarget(classOrInstance)}`,
     );
   }
   return owner;
@@ -629,6 +1208,25 @@ function recordDeclaration(
   declarations[key] = declaration;
 }
 
+// What arrived, in the terms a reader can act on: the class's own name when
+// there is one, and otherwise enough of the value to tell a plain object from
+// a def from nothing at all.
+function describeTarget(value: unknown): string {
+  if (value === null || value === undefined) {
+    return String(value);
+  }
+  if (typeof value === 'function') {
+    return `the class ${value.name || '(anonymous)'}, which does not extend BaseDef`;
+  }
+  if (typeof value !== 'object') {
+    return typeof value;
+  }
+  let owner = (value as { constructor?: { name?: string } }).constructor;
+  return owner
+    ? `an instance of ${owner.name || '(anonymous)'}`
+    : 'an object with no constructor';
+}
+
 function hasOwn(target: object, key: string | symbol): boolean {
   return Object.prototype.hasOwnProperty.call(target, key);
 }
@@ -642,6 +1240,40 @@ function isDefConstructor(target: unknown): target is typeof BaseDef {
 
 function isSubclassOf(target: typeof BaseDef, def: typeof BaseDef): boolean {
   return target === def || target.prototype instanceof def;
+}
+
+// Why this operation runs no BXL program over the target's document, or
+// undefined when it runs one. A raw `transformations` program declared on one
+// of these would be stored and never reached, which is the one outcome worse
+// than refusing it.
+//
+// The two appends edit the stored file — a line onto the end of a text file,
+// an item into a card's JSON — and never build the document a program would
+// run against. A file's `update` joins them, because it replaces the content
+// wholesale rather than transforming a document; the same base on a card is
+// the declarative merge, which does run one. This keys on the base rather than
+// on the def family, so a file def's `read` keeps the `output` projection it
+// lowers to a program of its own.
+function noProgramReason(
+  owner: typeof BaseDef,
+  base: BaseOperationName,
+): string | undefined {
+  if (base === 'appendLine' || base === 'appendContainsMany') {
+    return `an "${base}" operation appends to the stored file rather than running a program over a document`;
+  }
+  if (base === 'update' && isSubclassOf(owner, FileDef)) {
+    return `an "update" on a file def replaces the file's content wholesale rather than transforming a document`;
+  }
+  if (base === 'explain') {
+    return `an "explain" operation reports what the realm's policy decides rather than running a program over a document`;
+  }
+  if (base === 'validate') {
+    return `a "validate" operation reports what the policy card compiles to rather than running a program over a document`;
+  }
+  if (base === 'callApi') {
+    return `a "callApi" operation sends the request it declares rather than running a program over a document`;
+  }
+  return undefined;
 }
 
 function assertOperationTarget(target: unknown, key: string): typeof BaseDef {
@@ -678,6 +1310,42 @@ function assertNameAvailable(owner: typeof BaseDef, key: string) {
   );
 }
 
+// An `html` declaration names prerendered formats, each shareable or not. A
+// key naming anything else would be read by nothing — the realm prerenders
+// only these formats — and a misspelled one would leave the format it meant
+// to withhold served, so both are refused where they are written.
+function assertValidHtmlDeclaration(
+  label: string,
+  base: BaseOperationName,
+  value: unknown,
+) {
+  let subject =
+    base === 'query'
+      ? "which prerendered formats this query's results are served data-only for"
+      : 'which prerendered formats reads of this card serve data-only';
+  if (!isPlainObject(value)) {
+    throw new Error(
+      `${label}: \`html\` must be an object naming ${subject}, by format`,
+    );
+  }
+  for (let [format, sharing] of Object.entries(value)) {
+    if (!PRERENDERED_HTML_FORMATS.includes(format as PrerenderedHtmlFormat)) {
+      throw new Error(
+        `${label}: \`html\` names "${format}", which is not a prerendered format — one of ${quoteList(
+          PRERENDERED_HTML_FORMATS,
+        )}`,
+      );
+    }
+    if (!HTML_SHARINGS.includes(sharing as HtmlSharing)) {
+      throw new Error(
+        `${label}: \`html.${format}\` must say whether the format's prerendered HTML is served — one of ${quoteList(
+          HTML_SHARINGS,
+        )}`,
+      );
+    }
+  }
+}
+
 function assertValidDeclaration(
   owner: typeof BaseDef,
   key: string,
@@ -694,20 +1362,48 @@ function assertValidDeclaration(
       `${label}: \`base\` must name the built-in behavior this operation builds on — one of ${quoteList(BASE_OPERATIONS)}`,
     );
   }
+  if (isNotDeclarable(base)) {
+    throw new Error(
+      `${label}: a "${base}" operation serves the bytes stored at the def's URL, so there is nothing for a declaration to specialize or rebind`,
+    );
+  }
   // An author may only specialize a base operation the def type actually
   // carries. Read from the same list `getOperations` synthesizes: only a card
   // has a mutation surface, and a file's metadata is content-derived and
-  // read-only.
-  let implied = impliedOperations(owner);
-  if (!implied.includes(base)) {
+  // read-only. A behavior nothing implies is carried once it is declared.
+  let declarable = declarableOperations(owner);
+  if (!declarable.includes(base)) {
     throw new Error(
       `${label}: this def type carries only ${quoteList(
-        implied,
+        declarable,
       )}, so it cannot declare a "${base}" operation`,
     );
   }
+  if (base === 'explain' && declaration.nonGrantable !== true) {
+    throw new Error(
+      `${label}: an "explain" operation reports what the realm's policy decides, which is what a refusal withholds, so no policy may grant it; declare it with \`nonGrantable: true\``,
+    );
+  }
+  if (base === 'validate' && declaration.nonGrantable !== true) {
+    throw new Error(
+      `${label}: a "validate" operation reports what a policy card compiles to, which only a caller the realm's own permissions let read the card may learn, so no policy may grant it; declare it with \`nonGrantable: true\``,
+    );
+  }
+  if (base === 'validate') {
+    for (let key of ['params', 'input'] as const) {
+      if (declaration[key] !== undefined) {
+        throw new Error(
+          `${label}: a "validate" operation takes no payload, since the card it is invoked on is the whole question, so it carries no \`${key}\``,
+        );
+      }
+    }
+  }
   let clauseKeys = CLAUSE_KEYS[base];
-  let legalKeys = new Set<string>([...COMMON_DECLARATION_KEYS, ...clauseKeys]);
+  let legalKeys = new Set<string>([
+    ...COMMON_DECLARATION_KEYS,
+    ...clauseKeys,
+    ...(MODIFIER_KEYS[base] ?? []),
+  ]);
   for (let declaredKey of Object.keys(declaration)) {
     if (!legalKeys.has(declaredKey)) {
       throw new Error(
@@ -724,8 +1420,48 @@ function assertValidDeclaration(
   ) {
     throw new Error(`${label}: \`optimistic\` must be a boolean`);
   }
+  if (
+    declaration.nonGrantable !== undefined &&
+    typeof declaration.nonGrantable !== 'boolean'
+  ) {
+    throw new Error(`${label}: \`nonGrantable\` must be a boolean`);
+  }
+  if (declaration.label !== undefined) {
+    let problem = operationLabelProblem(declaration.label);
+    if (problem) {
+      throw new Error(`${label}: ${problem}`);
+    }
+  }
+  if (declaration.links !== undefined) {
+    let strategies: readonly string[] =
+      base === 'query' ? LINK_STRATEGIES : READ_LINK_STRATEGIES;
+    if (!strategies.includes(declaration.links as string)) {
+      throw new Error(
+        `${label}: \`links\` must name how much of the card's link graph ${
+          base === 'query'
+            ? "each of this query's results carries"
+            : 'this read carries'
+        } — one of ${quoteList(strategies)}${
+          base === 'read' && declaration.links === 'none'
+            ? `. A read's strategy governs the card's plain GET, which the host loads the card with to render and edit it, so under "none" an edit to a link field would replace the stored links the editor was never shown; "ids" narrows a read without hiding them`
+            : ''
+        }`,
+      );
+    }
+  }
+  if (declaration.html !== undefined) {
+    assertValidHtmlDeclaration(label, base, declaration.html);
+  }
   if (declaration.input !== undefined) {
     assertBxlProgram(label, 'input', declaration.input);
+  }
+  // The question an explain answers is its payload as sent. An `input` stage
+  // would answer a question other than the one asked, and would change how
+  // many questions the request asks after they were counted against the cap.
+  if (base === 'explain' && declaration.input !== undefined) {
+    throw new Error(
+      `${label}: an "explain" operation answers the question its payload asks, so it carries no \`input\` to rewrite it`,
+    );
   }
   let usedClauses = clauseKeys.filter(
     (clause) =>
@@ -734,6 +1470,12 @@ function assertValidDeclaration(
   let hasProgram = declaration.transformations !== undefined;
   if (hasProgram) {
     assertBxlProgram(label, 'transformations', declaration.transformations);
+    let noProgram = noProgramReason(owner, base);
+    if (noProgram) {
+      throw new Error(
+        `${label}: ${noProgram}, so it carries no \`transformations\``,
+      );
+    }
     if (usedClauses.length > 0) {
       throw new Error(
         `${label}: a declaration expresses its work either with clauses (${quoteList(
@@ -758,10 +1500,20 @@ function assertValidDeclaration(
       );
     }
   }
-  assertValidClauses(label, base, declaration);
+  assertValidClauses(label, base, declaration, key);
   if (declaration.output !== undefined && !isPlainObject(declaration.output)) {
     throw new Error(
       `${label}: \`output\` must be a projection object or a bxl program`,
+    );
+  }
+  if (base === 'explain' && declaration.output !== undefined) {
+    throw new Error(
+      `${label}: an "explain" operation answers with the policy's explanation as the gate reports it, so it carries no \`output\` to reshape it`,
+    );
+  }
+  if (base === 'validate' && declaration.output !== undefined) {
+    throw new Error(
+      `${label}: a "validate" operation answers with what the policy card compiles to, as compiling reports it, so it carries no \`output\` to reshape it`,
     );
   }
   assertReferencesResolve(label, declaration, paramNames);
@@ -844,6 +1596,7 @@ function assertValidClauses(
   label: string,
   base: BaseOperationName,
   declaration: Record<string, unknown>,
+  name: string,
 ) {
   if (declaration.append !== undefined) {
     let append = declaration.append;
@@ -926,6 +1679,15 @@ function assertValidClauses(
       );
     }
   }
+  if (base === 'callApi') {
+    assertDeclaresARequest(label, declaration);
+  }
+  if (base === 'appendLine') {
+    assertAppendsALine(label, declaration);
+  }
+  if (base === 'appendContainsMany' && !isBuiltInAppend(name, declaration)) {
+    assertNamesItemsToAppend(label, declaration);
+  }
   if (base === 'query' && declaration.query !== undefined) {
     let query = declaration.query;
     if (!isPlainObject(query) || Object.keys(query).length === 0) {
@@ -990,6 +1752,156 @@ function assertValidClauses(
         );
       }
     }
+  }
+}
+
+// The shape of a declared request. What its values may hold — where a slot
+// may stand, how a path segment is filled, what a GraphQL document may be
+// built from — is lowering's to judge, since a stored entry outlives the
+// module that declared it and is judged there either way.
+function assertDeclaresARequest(
+  label: string,
+  declaration: Record<string, unknown>,
+) {
+  let { method, url, json, graphql } = declaration;
+  if (typeof url !== 'string' || url.length === 0) {
+    throw new Error(
+      `${label}: \`url\` must be the absolute URL the request is sent to, with each path segment the payload fills written \`{name}\``,
+    );
+  }
+  if (
+    method !== undefined &&
+    !CALL_API_METHODS.includes(method as CallApiMethod)
+  ) {
+    throw new Error(
+      `${label}: \`method\` must be one of ${quoteList(CALL_API_METHODS)}`,
+    );
+  }
+  for (let part of ['path', 'headers', 'query'] as const) {
+    let value = declaration[part];
+    if (value !== undefined && !isPlainObject(value)) {
+      throw new Error(
+        `${label}: \`${part}\` must be an object mapping each name to its value`,
+      );
+    }
+  }
+  if (json !== undefined && graphql !== undefined) {
+    throw new Error(
+      `${label}: a request carries one body — \`json\` or \`graphql\`, not both`,
+    );
+  }
+  if (graphql !== undefined) {
+    if (!isPlainObject(graphql)) {
+      throw new Error(
+        `${label}: \`graphql\` must be an object with the \`document\` to send and its \`variables\``,
+      );
+    }
+    assertOnlyKeys(label, 'graphql', graphql, ['document', 'variables']);
+    if (graphql.variables !== undefined && !isPlainObject(graphql.variables)) {
+      throw new Error(
+        `${label}: \`graphql.variables\` must be an object mapping each variable to its value`,
+      );
+    }
+  }
+  if (method === 'GET' && (json !== undefined || graphql !== undefined)) {
+    throw new Error(
+      `${label}: a GET request carries no body, so it takes no \`${json !== undefined ? 'json' : 'graphql'}\``,
+    );
+  }
+}
+
+// An `appendLine` names no clause, so the only thing it can get wrong is
+// where the line comes from. The base operation appends what the payload
+// carries under `line`, so a declaration that neither declares that param nor
+// shapes one with an `input` program describes an append with nothing to
+// append — every invocation of it would be refused at the endpoint.
+//
+// A `linkTo(…)` there is refused for the same reason it would be refused at
+// the endpoint: a link is a card's identity, and what goes into a text file is
+// text.
+function assertAppendsALine(
+  label: string,
+  declaration: Record<string, unknown>,
+) {
+  if (declaration.input !== undefined) {
+    return;
+  }
+  let line = (declaration.params as Record<string, unknown> | undefined)?.line;
+  if (line === undefined) {
+    throw new Error(
+      `${label}: an "appendLine" operation appends the line its payload carries, so it declares a \`line\` param — or an \`input\` program that produces one`,
+    );
+  }
+  if (isPlainObject(line)) {
+    throw new Error(
+      `${label}: \`params.line\` is the text a line holds, so it is a field class rather than a linkTo(…)`,
+    );
+  }
+}
+
+// An `appendContainsMany` declared under its own name that names nothing to
+// append is the built-in append, which takes its field and items from each
+// invocation. It is how a def marks the built-in, `nonGrantable` say, without
+// changing what it does. Under any other name an append that names nothing
+// describes no work, so it is refused below.
+function isBuiltInAppend(
+  name: string,
+  declaration: Record<string, unknown>,
+): boolean {
+  return (
+    name === 'appendContainsMany' &&
+    declaration.field === undefined &&
+    declaration.item === undefined &&
+    declaration.fields === undefined
+  );
+}
+
+// An `appendContainsMany` names what it appends and where, in one of two
+// spellings: `field` with its `item`, or `fields` mapping each field name to
+// its own item. Mixing them would leave two answers for a field named in both,
+// so a declaration picks one.
+function assertNamesItemsToAppend(
+  label: string,
+  declaration: Record<string, unknown>,
+) {
+  let singular =
+    declaration.field !== undefined || declaration.item !== undefined;
+  let plural = declaration.fields !== undefined;
+  if (singular && plural) {
+    throw new Error(
+      `${label}: an "appendContainsMany" operation names one field with its \`item\`, or several under \`fields\` — not both`,
+    );
+  }
+  if (!singular && !plural) {
+    throw new Error(
+      `${label}: an "appendContainsMany" operation needs \`field\` and \`item\`, or \`fields\` mapping each field to the item to append to it`,
+    );
+  }
+  if (plural) {
+    let fields = declaration.fields;
+    if (!isPlainObject(fields) || Object.keys(fields).length === 0) {
+      throw new Error(
+        `${label}: \`fields\` must be an object mapping each \`containsMany\` field to the item to append to it`,
+      );
+    }
+    for (let [name, item] of Object.entries(fields)) {
+      if (item === undefined) {
+        throw new Error(
+          `${label}: \`fields.${name}\` must carry the item to append to "${name}"`,
+        );
+      }
+    }
+    return;
+  }
+  if (typeof declaration.field !== 'string' || declaration.field.length === 0) {
+    throw new Error(
+      `${label}: \`field\` must name the \`containsMany\` field to append to`,
+    );
+  }
+  if (declaration.item === undefined) {
+    throw new Error(
+      `${label}: an "appendContainsMany" operation needs an \`item\` to append to "${declaration.field}"`,
+    );
   }
 }
 
@@ -1082,7 +1994,7 @@ function assertReferencesResolve(
     if (typeof node === 'function') {
       if (position !== 'type') {
         throw new Error(
-          `${label}: \`${path}\` is a function; a declaration is data — name a run-time value with params(), actor(), instance() or card(), or a program with the bxl tag`,
+          `${label}: \`${path}\` is a function; a declaration is data — name a run-time value with params(), actor(), instance(), realmConfig() or card(), or a program with the bxl tag`,
         );
       }
       // A thunk defers its class past this point; one named directly is held
@@ -1153,7 +2065,13 @@ function assertReferencesResolve(
         walk(
           value,
           path === '' ? key : `${path}.${key}`,
-          positionUnder(position, key),
+          // A request's `query` is its query string, which is data; only a
+          // saved search's is the realm's query grammar.
+          position === 'declaration' &&
+            key === 'query' &&
+            declaration.base !== 'query'
+            ? 'value'
+            : positionUnder(position, key),
         );
       }
     }
@@ -1268,7 +2186,17 @@ function assertValidReference(
       }
       return;
     }
-    case 'actor':
+    case 'actor': {
+      // Named before the generic key check, so a key gets the reason rather
+      // than a list of the one key that is allowed.
+      if (reference.key !== undefined) {
+        throw new Error(
+          `${label}: the actor reference at \`${path}\` carries a key; actor() is the caller's user id and has no members to read`,
+        );
+      }
+      assertOnlyKeys(label, path, reference, ['$ref']);
+      return;
+    }
     case 'instance': {
       assertOnlyKeys(label, path, reference, ['$ref', 'key']);
       if (
@@ -1276,7 +2204,22 @@ function assertValidReference(
         (typeof reference.key !== 'string' || reference.key.length === 0)
       ) {
         throw new Error(
-          `${label}: the ${reference.$ref} reference at \`${path}\` must name a member, or none at all`,
+          `${label}: the instance reference at \`${path}\` must name a member, or none at all`,
+        );
+      }
+      return;
+    }
+    case 'realmConfig': {
+      // The name is not held to anything a declaration knows: which settings a
+      // realm carries is the realm's, and a type is declared once for every
+      // realm that holds a card of it.
+      assertOnlyKeys(label, path, reference, ['$ref', 'key']);
+      if (
+        reference.key !== undefined &&
+        (typeof reference.key !== 'string' || reference.key.length === 0)
+      ) {
+        throw new Error(
+          `${label}: the realmConfig reference at \`${path}\` must name a setting, or none at all`,
         );
       }
       return;
@@ -1297,6 +2240,11 @@ function assertValidReference(
           `${label}: the card reference at \`${path}\` must carry a card URL or a reference to one`,
         );
       }
+      if ((value as { $ref?: unknown }).$ref === 'actor') {
+        throw new Error(
+          `${label}: ${actorIsNotACard(`the card reference at \`${path}\``)}`,
+        );
+      }
       ancestors.add(node);
       assertValidReference(
         label,
@@ -1310,7 +2258,7 @@ function assertValidReference(
     }
     default:
       throw new Error(
-        `${label}: \`${path}\` is not a typed reference; build one with params(), actor(), instance() or card()`,
+        `${label}: \`${path}\` is not a typed reference; build one with params(), actor(), instance(), realmConfig() or card()`,
       );
   }
 }
@@ -1390,4 +2338,705 @@ function declarationLabel(owner: typeof BaseDef, key: string): string {
 
 function quoteList(values: readonly string[]): string {
   return values.map((value) => `"${value}"`).join(', ');
+}
+
+// ============================================================================
+// Invoking operations
+// ============================================================================
+//
+// `operations(x)` answers the callable form of everything `x` carries: a card
+// instance's own operations, a class's type-scoped ones, and — for a card
+// instance — `atomic`, which sends several as one all-or-nothing batch.
+//
+//   let result = await operations(report).addComment({ body: 'Reviewed.' });
+//   let [activity] = await operations(classroom).atomic((b) => {
+//     let created = b.create(ClassroomActivity, { headline: 'Lab safety' });
+//     b.addActivity({ activity: created });
+//     return [created];
+//   });
+//
+// Nothing hangs off the instance itself: a card's property namespace belongs to
+// its author's fields, so an instance is passed to a function the way it is to
+// `isSaved(instance)`. That also keeps the transport explicit — the host
+// registers the one that carries the caller's session, and this module reads it
+// back through a bridge rather than holding a service it could not reach from
+// inside a card module.
+//
+// What a bucket carries is what can be invoked on what it was built for. A
+// file's bucket has its reads and the two writes that work on its bytes and
+// nothing else; a class's has the creates and the saved searches its author
+// declared. `readSource` has no member at all — the card source and byte routes
+// serve stored bytes.
+//
+// **A saved search is as fresh as the index.** A declared `query` is carried
+// out by the search engine rather than by the realm's operation endpoint, so it
+// reads the search index — which lags a write until that write is indexed. To
+// read a card you just wrote, read the card (`operations(card).read()`, or the
+// store); a query is for collections, and its resource refreshes itself as the
+// realms it covers index. It is also the one member that is not awaited: it
+// answers the live entries resource, so make the call once and keep what it
+// answers rather than calling it again per render.
+//
+// **Typing an instance call.** A def's operations are declared as statics, and
+// TypeScript cannot read a class's statics through an instance type, so an
+// instance call is typed from the class only when the call names it:
+// `operations<typeof Report>(report)` types the declared operations and makes
+// the names the def does not carry visible as absent. A call that does not name
+// the class types the base operations and `atomic` exactly and leaves a
+// declared name callable without checking its payload — which is what keeps the
+// ordinary spelling, `operations(report).addComment(…)`, from needing a type
+// argument it would carry only to satisfy the compiler. The run-time bucket is
+// the same either way: it carries what the def carries.
+
+// The values an operation answers with, re-exported so a card declares,
+// invokes and reads a result through one import. Their definitions live with
+// the client core, which is isomorphic — a realm reads the same shapes off the
+// wire that a caller reads back.
+export type {
+  InvokeOptions,
+  OperationsOptions,
+  OperationDocument,
+  OperationResultTree,
+  OperationValueResult,
+  OperationWriteResult,
+  PolicyExplanation,
+  PolicyExplanationListing,
+  PolicyValidation,
+  SearchEntries,
+  SearchInvokeOptions,
+} from '@cardstack/runtime-common';
+export { OperationsError } from '@cardstack/runtime-common';
+
+// The payload an operation takes, as an argument list. A declaration's own
+// `params` schema is the single source for it, so an operation that declares
+// none takes none — and one whose schema survived inference takes exactly what
+// it declared.
+type PayloadArgs<Declaration> = Declaration extends {
+  params: infer Schema extends object;
+}
+  ? [payload: { [Key in keyof Schema]: ParamValueOf<Schema[Key]> }]
+  : [payload?: Record<string, unknown>];
+
+// What an operation resolves to, by the behavior it is built on: a write
+// reports the identity and version of what it wrote, a delete reports that
+// there is nothing left to describe, a read reports its document, an explain
+// reports what the policy decided and why — or, for one whose params ask for a
+// `list`, one page of explanations — a validate reports what the policy
+// compiles to, and a callApi reports the vendor's response, or what its
+// `output` maps that response to.
+type ResultOf<Declaration> = Declaration extends { base: 'delete' }
+  ? null
+  : Declaration extends { base: 'read' }
+    ? OperationDocument
+    : Declaration extends { base: 'explain'; params: { list: unknown } }
+      ? PolicyExplanationListing
+      : Declaration extends { base: 'explain' }
+        ? PolicyExplanation
+        : Declaration extends { base: 'validate' }
+          ? PolicyValidation
+          : Declaration extends { base: 'callApi'; output: unknown }
+            ? unknown
+            : Declaration extends { base: 'callApi' }
+              ? CallApiResponse
+              : OperationWriteResult;
+
+// The behaviors invocable on an instance, and the one invocable on a class.
+// A declared `create` appears in both: invoked on the class it mints a card
+// outright, and invoked on an instance that instance is the context its
+// declaration reads.
+type InstanceScopedBase =
+  | 'read'
+  | 'update'
+  | 'delete'
+  | 'transform'
+  | 'appendLine'
+  | 'appendContainsMany'
+  | 'explain'
+  | 'validate'
+  | 'create'
+  | 'callApi';
+type TypeScopedBase = 'create' | 'query' | 'callApi';
+
+type ScopedBase<Scope extends 'instance' | 'type'> = Scope extends 'instance'
+  ? InstanceScopedBase
+  : TypeScopedBase;
+
+// The names a def declares that are invocable in this scope, read off the
+// class the declarations are statics of.
+type DeclaredNames<Type, Scope extends 'instance' | 'type'> = {
+  [Name in keyof OperationsOf<Type>]: OperationsOf<Type>[Name] extends {
+    base: infer Base extends BaseOperationName;
+  }
+    ? Base extends ScopedBase<Scope>
+      ? Name
+      : never
+    : never;
+}[keyof OperationsOf<Type>];
+
+// A type-scoped call takes the same options the base `create` does: it has no
+// instance to read a realm from, so the realm is the caller's to name — and a
+// declared create is reached that way as readily as the base one.
+type ScopedArgs<
+  Declaration,
+  Scope extends 'instance' | 'type',
+> = Scope extends 'type'
+  ? [...PayloadArgs<Declaration>, opts?: InvokeOptions]
+  : PayloadArgs<Declaration>;
+
+type DeclaredOperationMembers<Type, Scope extends 'instance' | 'type'> = {
+  [Name in DeclaredNames<Type, Scope>]: OperationsOf<Type>[Name] extends {
+    base: 'query';
+  }
+    ? QueryOperation<OperationsOf<Type>[Name]>
+    : (
+        ...args: ScopedArgs<OperationsOf<Type>[Name], Scope>
+      ) => Promise<ResultOf<OperationsOf<Type>[Name]>>;
+};
+
+// A saved search, as the two ways one is reached.
+//
+// Called, it answers the live entries resource a search runs as — the one
+// return shape in this API that is not an awaited result, because a query is
+// carried out by the search engine rather than by the realm's operation
+// endpoint: results are a collection that re-runs as realms index, not a
+// document a request returns once. Make the call once and keep what it
+// answers — a field, a one-time assignment, never in a getter or during a
+// render — since every call builds an independent search.
+//
+// `.query()` answers the wire query the same invocation resolves to, which is
+// what a card hands to `@context.searchResultsComponent` to render the rows
+// itself.
+export interface QueryOperation<Declaration> {
+  (
+    ...args: [...PayloadArgs<Declaration>, opts?: SearchInvokeOptions]
+  ): SearchEntries;
+  // Answers no query when the session cannot say who the caller is — nobody
+  // signed in, or a realm's render of its own cards, which authenticates as
+  // the realm rather than as a viewer. The search component reads that as an
+  // idle search, so a card hands the result over either way and an
+  // actor-scoped search renders its rows when a viewer is there to have them.
+  // A render a user asks for, such as a capture, has that user as its caller.
+  query(
+    ...args: [...PayloadArgs<Declaration>, opts?: SearchInvokeOptions]
+  ): SearchEntryWireQuery | undefined;
+}
+
+// Whether the call named the class its operations are declared on. It did not
+// when the type parameter is still its own constraint, which is every call
+// that passes an instance without a type argument — `InstanceType<Type>` is
+// not an inference site, so nothing there narrows `Type`.
+//
+// The constraint travels in rather than being assumed: each overload
+// constrains `Type` differently, and comparing against `BaseDefConstructor`
+// answers "no" for every one of them, because a card constructor's instances
+// carry members a base def's do not. That made this fallback dead and the
+// ordinary spelling — `operations(report).addComment(…)` — uncallable.
+type NamesNoClass<Type, Constraint> = [Constraint] extends [Type]
+  ? true
+  : false;
+
+// The operations a call could not read off the class: callable by name, with a
+// payload nothing here can check. Present only on a call that named no class,
+// so the exact surface — and the names a def does not carry — stays visible to
+// the calls that did.
+export interface UncheckedOperations {
+  [name: string]: (payload?: any, opts?: any) => Promise<any>;
+}
+
+type Bucket<Type, Constraint, Members> =
+  NamesNoClass<Type, Constraint> extends true
+    ? Members & UncheckedOperations
+    : Members;
+
+// A card's declarative update: the field values to merge, and the links to
+// replace. It is the same document a `PATCH` of the card carries, which is the
+// behavior this is the other front door onto — minus the type, which the call
+// fills from the class of the card being patched.
+export interface CardPatch {
+  attributes?: Record<string, unknown>;
+  relationships?: Record<string, unknown>;
+}
+
+// Items to add to a card's `containsMany` fields — one field with its items,
+// or several fields each with their own. The card's stored JSON is edited in
+// place, so the cost does not grow with a collection that is already large.
+export type AppendContainsManyPayload =
+  | { field: string; items: unknown[] }
+  | { fields: Record<string, unknown[]> };
+
+// The base operations every card instance carries, whatever its author
+// declared. A bare `transform` is not among them: a transform runs a program
+// over the card's document and a batch entry has no member to carry one, so the
+// behavior is reached under the name a declaration gives it.
+export interface CardInstanceBaseOperations {
+  // No payload: the read executor reads none, and a declaration that would
+  // give one meaning — an `input`, an `output`, a program — is refused as a
+  // stage a batch does not run. A parameterized read is a declared operation,
+  // and arrives under its own name with its own payload type.
+  read(): Promise<OperationDocument>;
+  update(patch: CardPatch): Promise<OperationWriteResult>;
+  delete(): Promise<null>;
+  appendContainsMany(
+    payload: AppendContainsManyPayload,
+  ): Promise<OperationWriteResult>;
+}
+
+// A file's, whose writes work on its bytes: `update` replaces the content and
+// `appendLine` adds one newline-terminated line without reading what is
+// already there. A file's metadata is derived from its bytes, so there is no
+// document to merge into and no collection to append to.
+export interface FileInstanceBaseOperations {
+  read(): Promise<OperationDocument>;
+  update(payload: { content: string }): Promise<OperationWriteResult>;
+  appendLine(payload: { line: string }): Promise<OperationWriteResult>;
+}
+
+// Everything else addressable: the document read every def has.
+export interface BaseInstanceOperations {
+  read(): Promise<OperationDocument>;
+}
+
+// What a class carries: the create that mints one of its cards. The field
+// values are the new card's own, and the realm is where it lands — the
+// session's default writable realm when the caller names none, which is the
+// realm a card created through the store lands in.
+export interface CardTypeBaseOperations {
+  create(
+    attributes?: Record<string, unknown>,
+    opts?: InvokeOptions,
+  ): Promise<OperationWriteResult>;
+}
+
+// A declaration takes the place of the base operation it names, so a card that
+// declares `delete` on `transform` has the declared member and not the base
+// one.
+type WithDeclared<BaseMembers, Declared> = Omit<BaseMembers, keyof Declared> &
+  Declared;
+
+export type CardInstanceOperations<Type> = Bucket<
+  Type,
+  CardDefConstructor,
+  WithDeclared<
+    CardInstanceBaseOperations,
+    DeclaredOperationMembers<Type, 'instance'>
+  > &
+    AtomicOperations<Type>
+>;
+
+export type FileInstanceOperations<Type> = Bucket<
+  Type,
+  FileDefConstructor,
+  WithDeclared<
+    FileInstanceBaseOperations,
+    DeclaredOperationMembers<Type, 'instance'>
+  >
+>;
+
+export type CardTypeOperations<Type> = WithDeclared<
+  CardTypeBaseOperations,
+  DeclaredOperationMembers<Type, 'type'>
+>;
+
+// ---------------------------------------------------------------------------
+// Batches
+// ---------------------------------------------------------------------------
+
+declare const resultOfHandle: unique symbol;
+declare const targetExpects: unique symbol;
+
+// What a call on the batch builder answers with: a stand-in for the result the
+// entry will produce, and — for a create — the local id a later entry links
+// the new card by.
+export interface BatchHandle<Result> extends OperationHandle {
+  readonly [resultOfHandle]: Result;
+}
+
+// A target found by search rather than named by reference, for entries that run
+// against whatever the realm matches.
+export interface QueryTarget<
+  Expect extends 'one' | 'many',
+> extends QueryTargetHandle {
+  readonly [targetExpects]: Expect;
+}
+
+type HandleResult<Handle> =
+  Handle extends BatchHandle<infer Result> ? Result : never;
+
+// The results of a batch.
+//
+// A builder that returns nothing is answered positionally: every entry's
+// result, in the order the entries were registered, with a group's members
+// nested where the group sat. A builder that returns handles is answered with
+// those handles' results, in the order it listed them — which is what types
+// each one, since a handle knows the behavior its entry is built on.
+export type BatchResults<Returned> = Returned extends void
+  ? OperationResultTree
+  : Returned extends readonly unknown[]
+    ? { -readonly [Index in keyof Returned]: HandleResult<Returned[Index]> }
+    : never;
+
+export interface AtomicOperations<Type> {
+  atomic<const Returned extends readonly unknown[] | void>(
+    build: (builder: BatchBuilder<Type>) => Returned,
+  ): Promise<BatchResults<Returned>>;
+}
+
+// A batch's payloads take one value a single call's cannot: the handle of a
+// card the same batch mints, wherever a link is expected. The card has no URL
+// until the batch commits, and the handle is the local id the entry links it
+// by — so this is the one spelling of a link to a card that does not exist yet.
+type BatchParamValue<Param> =
+  Param extends LinkToParam<LinkableDefConstructor>
+    ? LinkParamValue | BatchHandle<unknown>
+    : ParamValueOf<Param>;
+
+type BatchPayloadArgs<Declaration> = Declaration extends {
+  params: infer Schema extends object;
+}
+  ? [payload: { [Key in keyof Schema]: BatchParamValue<Schema[Key]> }]
+  : [payload?: Record<string, unknown>];
+
+type BatchMembers<Type> = {
+  [Name in DeclaredNames<Type, 'instance'>]: (
+    ...args: BatchPayloadArgs<OperationsOf<Type>[Name]>
+  ) => BatchHandle<ResultOf<OperationsOf<Type>[Name]>>;
+};
+
+// The base operations of a card in the batch, registering an entry rather than
+// sending one.
+export interface CardBatchBaseOperations {
+  read(): BatchHandle<OperationDocument>;
+  update(patch: CardPatch): BatchHandle<OperationWriteResult>;
+  delete(): BatchHandle<null>;
+  appendContainsMany(
+    payload: AppendContainsManyPayload,
+  ): BatchHandle<OperationWriteResult>;
+}
+
+// Operations a batch registers, for a card whose class the call named — and,
+// when it did not, the same unchecked callables a single call falls back to.
+export interface UncheckedBatchOperations {
+  [name: string]: (payload?: any) => BatchHandle<any>;
+}
+
+export type BatchOperations<Type> =
+  NamesNoClass<Type, CardDefConstructor> extends true
+    ? WithDeclared<CardBatchBaseOperations, BatchMembers<Type>> &
+        UncheckedBatchOperations
+    : WithDeclared<CardBatchBaseOperations, BatchMembers<Type>>;
+
+// A file's, in the batch. Its writes work on the file's bytes, which is what
+// puts a log line and the card change that produced it in one commit.
+export interface FileBatchBaseOperations {
+  read(): BatchHandle<OperationDocument>;
+  update(payload: { content: string }): BatchHandle<OperationWriteResult>;
+  appendLine(payload: { line: string }): BatchHandle<OperationWriteResult>;
+}
+
+export type FileBatchOperations<Type> =
+  NamesNoClass<Type, FileDefConstructor> extends true
+    ? WithDeclared<FileBatchBaseOperations, BatchMembers<Type>> &
+        UncheckedBatchOperations
+    : WithDeclared<FileBatchBaseOperations, BatchMembers<Type>>;
+
+// A file named by its path, whose type nothing here knows. A path says where
+// the bytes are and not what they are, so what it carries is what every file
+// carries and nothing more — a name a `FileDef` subclass declares is not
+// reachable this way.
+//
+// Deliberately not the unchecked fallback a call that named no class gets.
+// That fallback is honest where a `Proxy` passes every name to the realm to
+// resolve, as a query target's does; the bucket behind a path is a plain
+// object built from the operations above, so a name outside them would type-
+// check and then arrive as a bare `TypeError` rather than as a sentence. And
+// the realm could not resolve one anyway: it types a file by its *registered*
+// extension, so the unregistered ones a log tends to use resolve as a card and
+// carry no declared file operation at all.
+export type PathBatchOperations = FileBatchBaseOperations;
+
+// The operations of whatever a search reached. Which ones those cards carry is
+// their own types' to say and the realm resolves each name against the card it
+// reached, so a name is not knowable here — and for the same reason the result
+// is the realm's answer as it reported it: whether an identity or a document
+// comes back is that card's to decide. Under `expect: 'many'` the array holds
+// one result per card the search reached — one per match when the target names
+// no `field`, and one per distinct card the hop reached when it does, which is
+// fewer when several matches link to the same card.
+export type QueriedOperations<Expect extends 'one' | 'many'> = Record<
+  string,
+  (
+    payload?: Record<string, unknown>,
+  ) => BatchHandle<
+    Expect extends 'many' ? OperationDocument[] : OperationDocument
+  >
+>;
+
+export type BatchBuilder<Type> = BatchOperations<Type> & {
+  // Another card in this batch's realm, or a target found with `find`. A card
+  // in another realm is refused: a batch commits under one realm's write lock.
+  on<Other extends CardDefConstructor>(
+    instance: InstanceType<Other>,
+  ): BatchOperations<Other>;
+  // A file in this batch's realm. It is reached the same way a card is, and
+  // for the same reason: an entry that appends to a log has to commit with the
+  // card change it records, or the two can disagree.
+  //
+  // `Other` is never inferred here — `InstanceType<Other>` is not an inference
+  // site — so each overload's parameter is its constraint's instance type, and
+  // which one a value selects is decided by assignability to that. A card and
+  // a file are assignable to neither the other's, so their order carries
+  // nothing.
+  on<Other extends FileDefConstructor>(
+    instance: InstanceType<Other>,
+  ): FileBatchOperations<Other>;
+  // A file named by its path in this batch's realm, for the file no instance
+  // can stand for: one the realm does not hold yet. A `FileDef` is hydrated
+  // from a stored file, so a log that has never been written has nothing to
+  // pass here — and an `appendLine` creates the file it appends to, which is
+  // the whole reason a card needs to be able to name one.
+  //
+  // Written the way the realm addresses it: `'logs/lot-114.txt'`, or with a
+  // leading slash for the realm's root. An absolute URL works too, and one
+  // outside this batch's realm is refused — a batch commits under one realm's
+  // write lock. A realm addressed by a registered prefix is refused rather
+  // than resolved: resolving a prefix means reading the virtual network, which
+  // is no part of what a card module can see.
+  on(path: string): PathBatchOperations;
+  on<Expect extends 'one' | 'many'>(
+    target: QueryTarget<Expect>,
+  ): QueriedOperations<Expect>;
+  // A card this batch mints. The handle is the local id a later entry links it
+  // by, so a link to a card that has no URL yet is a value rather than a token
+  // to keep consistent by hand.
+  create<NewCard extends CardDefConstructor>(
+    type: NewCard,
+    attributes?: Record<string, unknown>,
+    opts?: { relationships?: Record<string, unknown> },
+  ): BatchHandle<OperationWriteResult>;
+  // A card the caller is already holding, minted under the name they hold it
+  // by. The instance is the whole of what the entry says, so there are no
+  // attributes to pass beside it.
+  create<NewCard extends CardDefConstructor>(
+    instance: InstanceType<NewCard>,
+  ): BatchHandle<OperationWriteResult>;
+  find(
+    filter: OperationFilter,
+    opts?: { field?: string; expect?: 'one' },
+  ): QueryTarget<'one'>;
+  find(
+    filter: OperationFilter,
+    opts: { field?: string; expect: 'many' },
+  ): QueryTarget<'many'>;
+  // Members that may be staged at the same time, and members that must be
+  // staged one after another. The top level of a batch is serial, and the two
+  // nest to any depth; results mirror the nesting.
+  parallel<const Returned extends readonly unknown[] | void>(
+    build: (builder: BatchBuilder<Type>) => Returned,
+  ): BatchHandle<BatchResults<Returned>>;
+  serial<const Returned extends readonly unknown[] | void>(
+    build: (builder: BatchBuilder<Type>) => Returned,
+  ): BatchHandle<BatchResults<Returned>>;
+};
+
+// A filter as an author writes it: the realm's own query filter, with the card
+// classes themselves naming types. The classes are read as the code refs that
+// name them on the way to the wire, the same reading a declaration's type
+// clauses get when they are lowered.
+export type OperationFilter = Record<string, unknown>;
+
+// ---------------------------------------------------------------------------
+// The entry point
+// ---------------------------------------------------------------------------
+
+// The second argument says how the bucket's writes are sent, and covers every
+// write it makes — a single call and an `atomic` batch alike. Its one member,
+// `skipIndexWait`, trades reading a write back through the index for an
+// answer that does not wait on indexing: `operations(card, { skipIndexWait:
+// true }).delete()` answers once the removal is durable. See
+// `OperationsOptions` for what a caller gives up.
+export function operations<Type extends CardDefConstructor>(
+  instance: InstanceType<Type>,
+  opts?: OperationsOptions,
+): CardInstanceOperations<Type>;
+export function operations<Type extends FileDefConstructor>(
+  instance: InstanceType<Type>,
+  opts?: OperationsOptions,
+): FileInstanceOperations<Type>;
+export function operations<Type extends BaseDefConstructor>(
+  instance: InstanceType<Type>,
+  opts?: OperationsOptions,
+): BaseInstanceOperations;
+export function operations<Type extends CardDefConstructor>(
+  type: Type,
+  opts?: OperationsOptions,
+): CardTypeOperations<Type>;
+// The implementation answers a bucket whose shape the overloads above pin: the
+// members it carries are decided at run time from what the def carries, so
+// there is no one return type the four scopes share.
+export function operations(target: unknown, opts?: OperationsOptions): any {
+  return buildOperations(subjectFor(target), {
+    transport: getOperationsTransport(),
+    ...(opts ? { options: opts } : {}),
+    subject: (other: unknown) => subjectFor(other),
+    codeRef: (value: unknown) => identifyDef(value),
+    resourceFor: (instance: unknown) => adoptedResource(instance),
+  });
+}
+
+// The resource a card the caller is already holding would be minted from.
+//
+// The same document the card's own save sends, minus the parts a batch entry
+// has nowhere to put: no linked graph rides along, because an entry carries a
+// resource rather than a document, so a card the batch is to co-create is
+// registered as its own `create` entry and linked by the handle that answers.
+function adoptedResource(instance: unknown): Record<string, unknown> {
+  let { id: _id, ...resource } = serializeCard(instance as CardDef, {
+    useAbsoluteURL: true,
+    omitQueryFields: true,
+    includedScope: 'none',
+  }).data;
+  return resource as unknown as Record<string, unknown>;
+}
+
+// What `operations()` was handed, in the terms the client core works in. The
+// core resolves no name against a class and reads no instance: a def's
+// declarations and an instance's identity are only readable from inside a card
+// module, which is where this runs.
+function subjectFor(target: unknown): OperationsSubject {
+  if (typeof target === 'string') {
+    // A file named by its path. Which operations it carries is the file
+    // family's to say and is answered here, where `FileDef` is in scope; where
+    // the path points is the batch's to say, since a path alone names no
+    // realm. So the path travels as the id and the batch resolves it.
+    return {
+      scope: 'instance',
+      family: 'file',
+      displayName: `file ${target}`,
+      operations: carriedOperations(FileDef),
+      id: target,
+    };
+  }
+  if (isDefConstructor(target)) {
+    let codeRef = identifyCard(target);
+    if (!codeRef) {
+      // A type-scoped call names no resource, so the class is the only thing
+      // it can say it runs against — and a class no module exports cannot be
+      // named on the wire at all. Refused here, where the caller can see which
+      // class they passed, rather than at the entry that would have to invent
+      // a type for it.
+      throw new Error(
+        `operations() takes a class some module exports, and no module exports ${defName(
+          target,
+        )} — an operation on a type names it by its module and export`,
+      );
+    }
+    return {
+      scope: 'type',
+      family: familyOf(target, 'operations'),
+      displayName: defName(target),
+      operations: carriedOperations(target),
+      codeRef,
+    };
+  }
+  let owner = defConstructorFor(target as BaseDef, 'operations');
+  let instance = target as CardDef;
+  let realm = instance[realmURL];
+  // The instance's own type travels with it: a patch of a card's document is a
+  // card resource, which names the type it patches, and the caller is naming
+  // field values rather than restating what the card already is.
+  let codeRef = identifyCard(owner);
+  return {
+    scope: 'instance',
+    family: familyOf(owner, 'operations'),
+    displayName: defName(owner),
+    operations: carriedOperations(owner),
+    ...(instance.id ? { id: instance.id } : {}),
+    ...(instance[localId] ? { localId: instance[localId] } : {}),
+    ...(realm ? { realmURL: realm.href } : {}),
+    ...(codeRef ? { codeRef } : {}),
+  };
+}
+
+// Every operation the def carries, and for each one whether an author declared
+// it. The client core reads the distinction for one behavior: a declared create
+// is anchored on an instance for context, while the base create it builds on
+// has no instance to read.
+//
+// `optimistic` travels for a different reason than the rest: it is the one
+// term of the client's eligibility that is already plain data on the
+// declaration. Every other term — whether the program is deterministic, what
+// the program even is — needs the declaration lowered, which needs a
+// definition graph. Carrying the author's own answer here lets a call respect
+// an opt-out without building one.
+function carriedOperations(
+  owner: typeof BaseDef,
+): Record<string, CarriedOperationInfo> {
+  let carried = Object.create(null) as Record<string, CarriedOperationInfo>;
+  for (let base of impliedOperations(owner)) {
+    carried[base] = { base, declared: false };
+  }
+  for (let [name, declaration] of Object.entries(declaredOperations(owner))) {
+    carried[name] = {
+      base: declaration.base,
+      declared: true,
+      ...(declaration.optimistic === undefined
+        ? {}
+        : { optimistic: declaration.optimistic }),
+      ...(declaration.base === 'query'
+        ? { query: queryDeclaration(declaration) }
+        : {}),
+    };
+  }
+  return carried;
+}
+
+// A declared query travels whole rather than resolved, because a saved search
+// is resolved when it is invoked: the query still names its types with the
+// classes themselves and still holds the markers an invocation fills, and what
+// fills them — the caller's identity, the payload — is known only then.
+function queryDeclaration(
+  declaration: OperationDeclaration,
+): CarriedQueryDeclaration {
+  let { query, params } = declaration as QueryOperationDeclaration;
+  return {
+    ...(query === undefined
+      ? {}
+      : { query: query as unknown as Record<string, unknown> }),
+    ...(params === undefined
+      ? {}
+      : { params: params as unknown as Record<string, unknown> }),
+  };
+}
+
+// Which def family the target belongs to, which is what decides the shape of
+// its bucket. A field is not addressable at all, so it carries nothing to
+// invoke — its data is reached through the operations of the card that contains
+// it.
+function familyOf(
+  owner: typeof BaseDef,
+  reader: string,
+): 'card' | 'file' | 'base' {
+  if (isSubclassOf(owner, FieldDef)) {
+    throw new Error(
+      `${reader}() takes a card, a file or a class of one; a field has no URL of its own, so nothing is invocable on it — reach a field's data through the operations of the card that contains it`,
+    );
+  }
+  if (isSubclassOf(owner, CardDef)) {
+    return 'card';
+  }
+  if (isSubclassOf(owner, FileDef)) {
+    return 'file';
+  }
+  return 'base';
+}
+
+// A def class, or a thunk deferring one past its own class body, as the code
+// ref that names it — the same reading the realm gives a declaration it
+// lowers, so a class written in a query means one type on both sides.
+function identifyDef(value: unknown): CodeRef | undefined {
+  return codeRefForDef(value, identifyCard);
+}
+
+function defName(owner: typeof BaseDef): string {
+  return owner.displayName || owner.name || 'card';
 }

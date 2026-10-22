@@ -1,5 +1,32 @@
 import type { InputStream } from './InputStream.ts';
 
+// jq's reserved words. The tokenizer classifies identifiers with this set,
+// and the readable compiler respells a field named by one of them as
+// `."name"`; the two decisions must agree, so there is one set.
+export const JQ_TOKENIZER_KEYWORDS: ReadonlySet<string> = new Set([
+  '__loc__',
+  'and',
+  'as',
+  'break',
+  'catch',
+  'def',
+  'elif',
+  'else',
+  'end',
+  'foreach',
+  'if',
+  'import',
+  'include',
+  'label',
+  'module',
+  'modulemeta',
+  'not',
+  'or',
+  'reduce',
+  'then',
+  'try',
+]);
+
 export interface PuncToken {
   type: 'punc';
   value: string;
@@ -94,31 +121,10 @@ export class Tokenizer {
     v: '\v',
     "'": "'",
     '"': '"',
+    '/': '/',
     '\\': '\\',
   };
-  private static keywords = new Set([
-    '__loc__',
-    'and',
-    'as',
-    'break',
-    'catch',
-    'def',
-    'elif',
-    'else',
-    'end',
-    'foreach',
-    'if',
-    'import',
-    'include',
-    'label',
-    'module',
-    'modulemeta',
-    'not',
-    'or',
-    'reduce',
-    'then',
-    'try',
-  ]);
+  private static keywords = JQ_TOKENIZER_KEYWORDS;
 
   private static operators = new Set([
     '!=',
@@ -150,6 +156,11 @@ export class Tokenizer {
   ]);
 
   private interpolationContexts: number[] = [];
+  // jq 1.7 accepts a keyword as a field name when it follows the dot with no
+  // space between (`.label`, `.if`), so `. as $x` stays a binding while
+  // `.as` is a field. The tokenizer decides it: it alone knows the spacing.
+  private lastToken: Token | null = null;
+  private whitespaceBefore = false;
   private input: InputStream;
   private readonly recordConsumedTokens: boolean;
 
@@ -195,13 +206,19 @@ export class Tokenizer {
   }
 
   private readNext(): Token | null {
+    const token = this.readToken();
+    this.lastToken = token;
+    return token;
+  }
+
+  private readToken(): Token | null {
     if (this.interpolationContextJustExited()) {
       this.input.snapshot();
       this.interpolationContexts.pop();
       return this.readString();
     }
 
-    this.readWhile(Tokenizer.isWhitespace);
+    this.whitespaceBefore = this.readWhile(Tokenizer.isWhitespace).length > 0;
     this.input.snapshot();
     if (this.input.eof()) return null;
     const c = this.input.peek();
@@ -253,14 +270,19 @@ export class Tokenizer {
     if (ident === 'true') return { type: 'bool', value: true };
     if (ident === 'false') return { type: 'bool', value: false };
 
+    const fieldAfterDot =
+      !this.whitespaceBefore &&
+      this.lastToken?.type === 'op' &&
+      this.lastToken.value === '.';
     return {
-      type: Tokenizer.keywords.has(ident)
-        ? 'kw'
-        : ident.charAt(0) === '@'
-          ? 'format'
-          : ident.charAt(0) === '$'
-            ? 'var'
-            : 'ident',
+      type:
+        Tokenizer.keywords.has(ident) && !fieldAfterDot
+          ? 'kw'
+          : ident.charAt(0) === '@'
+            ? 'format'
+            : ident.charAt(0) === '$'
+              ? 'var'
+              : 'ident',
       value: ident,
     };
   }
@@ -319,13 +341,15 @@ export class Tokenizer {
     let escaped = false;
     let str = '';
     while (!this.input.eof()) {
-      if (this.input.peek() == '\\' && this.input.peek(1) === '(') {
+      // `\(` opens interpolation only when the backslash is not itself
+      // escaped: "\\(" is a literal backslash and parenthesis.
+      if (!escaped && this.input.peek() == '\\' && this.input.peek(1) === '(') {
         break;
       }
 
       const c = this.input.next();
       if (escaped) {
-        str += this.getEscaped(c);
+        str += c === 'u' ? this.readUnicodeEscape() : this.getEscaped(c);
         escaped = false;
       } else if (c == '\\') {
         escaped = true;
@@ -393,6 +417,22 @@ export class Tokenizer {
 
   private static isIdentChar(c: string) {
     return Tokenizer.isIdentStart(c) || /[0-9]/.test(c);
+  }
+
+  // \uXXXX, four hex digits; a surrogate pair arrives as two escapes and
+  // combines naturally in the UTF-16 string.
+  private readUnicodeEscape(): string {
+    let hex = '';
+    for (let i = 0; i < 4; i++) {
+      const c = this.input.eof() ? '' : this.input.next();
+      if (!/^[0-9a-fA-F]$/.test(c))
+        throw this.croak(
+          `Invalid \\u escape: expected four hex digits, got "${hex + c}"`,
+          'tokenize',
+        );
+      hex += c;
+    }
+    return String.fromCharCode(parseInt(hex, 16));
   }
 
   private getEscaped(c: string) {

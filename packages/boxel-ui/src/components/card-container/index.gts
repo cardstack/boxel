@@ -19,7 +19,8 @@ interface Signature {
     // `--boxel-color-scheme` signal — no inline styles, no JS. The scope
     // attribute is only stamped when theme CSS is present: it also triggers the
     // theme.css boundary reset that stops ambient/outer-theme token values from
-    // inheriting in, which unthemed cards rely on to follow the chrome scheme.
+    // inheriting in, which unthemed cards (those on the default theme) rely
+    // on to follow the chrome scheme.
     themeCss?: string | null;
     themeScope?: string;
   };
@@ -73,7 +74,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
     :global(.boxel-card-container) {
       position: relative;
       background-color: var(--background, var(--boxel-light));
-      border-radius: var(--_boxel-radius);
+      border-radius: var(--boxel-radius);
       color: var(--foreground, var(--boxel-dark));
       transition:
         max-width var(--boxel-transition),
@@ -100,7 +101,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-radius: var(--radius, var(--_boxel-radius, 0.625rem));
       --_boxel-ff: var(--font-sans, var(--boxel-font-family));
 
-      /*** code below this line is from "variables.css". values will be recalculated based on theming variable values ***/
+      /*** code below this line mirrors the scales in "variables.css" and the typography roles in "theme.css". values will be recalculated based on theming variable values ***/
       /* font-sizes */
       --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.25);
       --boxel-font-size-xl: calc(var(--boxel-font-size) * 2);
@@ -109,6 +110,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.875);
       --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.75);
       --boxel-font-size-2xs: calc(var(--boxel-font-size) * 0.6875);
+      --boxel-form-control-touch-font-size: max(1rem, var(--boxel-font-size));
 
       /* font-size options based on font-scale */
       --boxel-fs-2xl: calc(var(--boxel-fs-xl) * var(--_boxel-scale)); /* h1 */

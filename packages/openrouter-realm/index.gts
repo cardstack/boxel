@@ -165,9 +165,9 @@ class Isolated extends Component<typeof OpenRouterIndex> {
       }
       .model-list {
         --boxel-card-list-gap: var(--boxel-sp-xxxs);
+        --boxel-card-list-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
         flex: 1;
         overflow-y: auto;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
       }
     </style>
   </template>

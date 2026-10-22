@@ -4,6 +4,7 @@ import type { Filter } from '@cardstack/runtime-common';
 import { assertQuery } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
+import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
 
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
@@ -14,7 +15,11 @@ export class SearchCardsByTypeAndTitleTool extends HostBaseTool<
   typeof BaseToolModule.SearchCardsByTypeAndTitleInput,
   typeof BaseToolModule.SearchCardsResult
 > {
-  description = 'Search for card instances by type and/or title';
+  description =
+    'Search for live card instances by type and/or title when you need the ' +
+    'instances themselves — to attach, open, copy, or patch. For discovery ' +
+    '(finding what exists — card types, specs, listings, files), use the ' +
+    'search-entries tool instead.';
 
   static actionVerb = 'Search';
 
@@ -32,13 +37,18 @@ export class SearchCardsByTypeAndTitleTool extends HostBaseTool<
         'At least one of cardTitle, cardType, or type must be provided',
       );
     }
-    let filter = {} as any;
+    // A filter holds at most one operator, so a title and a card type
+    // together are nested under `every`.
+    let conditions: Filter[] = [];
     if (input.cardTitle) {
-      filter.contains = { cardTitle: input.cardTitle };
+      conditions.push({ contains: { cardTitle: input.cardTitle } });
     }
     if (input.cardType) {
-      filter.eq = { _cardType: input.cardType };
+      conditions.push({ eq: { _cardType: input.cardType } });
     }
+    let filter = (
+      conditions.length > 1 ? { every: conditions } : (conditions[0] ?? {})
+    ) as any;
     if (input.type) {
       filter.type = input.type;
     }
@@ -58,9 +68,11 @@ export class SearchCardsByQueryTool extends HostBaseTool<
   @service declare private realmServer: RealmServerService;
 
   description =
-    'Propose a query to search for a card instance filtered by type. \
-  If a card was shared with you, always prioritize search based upon the card that was last shared. \
-  If you do not have information on card module and name, do the search using the `_cardType` attribute.';
+    'Search for live card instances by query when you need the instances ' +
+    'themselves — to attach, open, copy, or patch. If a card was shared with ' +
+    'you, always prioritize search based upon the card that was last shared. ' +
+    'For discovery (finding what exists — card types, specs, listings, ' +
+    'files, or anything reusable), use the search-entries tool instead.';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -73,15 +85,16 @@ export class SearchCardsByQueryTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.SearchCardsByQueryInput,
   ): Promise<BaseToolModule.SearchCardsResult> {
-    assertQuery(input.query);
+    let query = pruneEmptyQueryParts(input.query);
+    assertQuery(query);
     let realmUrls = this.realmServer.availableRealmIdentifiers;
     let instances: CardDef[] = [];
     try {
       // store.search pins `scope: 'cards'`, so the raw query already resolves
       // to card instances only.
-      instances = await this.store.search(input.query, realmUrls);
+      instances = await this.store.search(query, realmUrls);
     } catch (e) {
-      console.error(`Error searching in realms:`, e, input.query);
+      console.error(`Error searching in realms:`, e, query);
     }
 
     let commandModule = await this.loadToolModule();
@@ -96,7 +109,7 @@ export class SearchCardsByQueryTool extends HostBaseTool<
             cardTitle: c.cardTitle,
           }),
       ),
-      cardDescription: `Query: ${JSON.stringify(input.query.filter, null, 2)}`,
+      cardDescription: `Query: ${JSON.stringify(query.filter, null, 2)}`,
     });
     return resultCard;
   }

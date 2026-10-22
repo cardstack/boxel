@@ -3,7 +3,8 @@
 #
 # CI's `cache-index` job (.github/workflows/ci.yaml) indexes every realm and
 # uploads a `pg_dump --data-only` of boxel_index / prerendered_html /
-# realm_generations / realm_meta as the `boxel-index-cache` artifact. Importing
+# realm_generations / realm_meta / scoped_css as the `boxel-index-cache`
+# artifact. Importing
 # it turns the multi-minute prerender indexing into a seconds-long SQL restore.
 #
 # This is the gh-free sibling of scripts/import-cached-index.sh: this cloud
@@ -37,8 +38,24 @@ fi
 
 # Fall back to `gh` when a local cache file isn't present and the CLI exists.
 if [ ! -f "$CACHE_FILE" ] && command -v gh >/dev/null 2>&1; then
-  RUN_ID=$(gh run list -w ci.yaml -b main -s success -L 1 \
-    --json databaseId -q '.[0].databaseId' -R "$REPO" 2>/dev/null) || RUN_ID=""
+  # The newest main run that uploaded the artifact, found through the
+  # artifacts list: the workflow runs list filtered by branch can answer with
+  # runs weeks old. See cache_run_ids in scripts/import-cached-index.sh, whose
+  # retry this matches: a lost lookup costs a live index.
+  RUN_ID=""
+  for attempt in 1 2 3; do
+    if RUN_ID=$(gh api "repos/$REPO/actions/artifacts?name=boxel-index-cache&per_page=30" --jq '
+      [.artifacts[]
+        | select(.expired | not)
+        | select(.workflow_run.head_branch == "main")
+        | select(.workflow_run.head_repository_id == .workflow_run.repository_id)
+        | .workflow_run.id]
+      | max // empty' 2>/dev/null); then
+      break
+    fi
+    RUN_ID=""
+    sleep "$attempt"
+  done
   if [ -n "$RUN_ID" ]; then
     echo "[index-cache] Downloading cache from CI run $RUN_ID via gh…"
     mkdir -p "$(dirname "$CACHE_FILE")"
@@ -50,7 +67,7 @@ fi
 if [ ! -f "$CACHE_FILE" ]; then
   echo "[index-cache] No cache file at $CACHE_FILE (and no gh download); will index live."
   echo "[index-cache] To use a cache, fetch the boxel-index-cache artifact from a"
-  echo "[index-cache] successful main CI run into that path (a Claude session can do"
+  echo "[index-cache] main CI run into that path (a Claude session can do"
   echo "[index-cache] this via the GitHub Actions API; raw api.github.com is blocked here)."
   exit 1
 fi
@@ -64,7 +81,7 @@ fi
 
 echo "[index-cache] Restoring index from $CACHE_FILE …"
 docker exec boxel-pg psql -U postgres -d "$DB_NAME" --quiet --no-psqlrc -c \
-  "TRUNCATE boxel_index, realm_generations, realm_meta, prerendered_html" || { echo "[index-cache] truncate failed" >&2; exit 1; }
+  "TRUNCATE boxel_index, realm_generations, realm_meta, prerendered_html, scoped_css" || { echo "[index-cache] truncate failed" >&2; exit 1; }
 
 # The cache stores https://localhost:4201/... URLs, which is exactly the
 # standard-dev runtime origin — no remapping needed (unlike env mode).
@@ -94,5 +111,5 @@ fi
 
 echo "[index-cache] Import failed; truncating partial data and indexing live." >&2
 docker exec boxel-pg psql -U postgres -d "$DB_NAME" --quiet --no-psqlrc -c \
-  "TRUNCATE boxel_index, realm_generations, realm_meta, prerendered_html" >/dev/null 2>&1 || true
+  "TRUNCATE boxel_index, realm_generations, realm_meta, prerendered_html, scoped_css" >/dev/null 2>&1 || true
 exit 1

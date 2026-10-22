@@ -11,9 +11,6 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
   DEFAULT_FALLBACK_MODELS,
@@ -21,6 +18,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  CAPTURE_SOURCE_URL_PREFIX,
   LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
   LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -43,22 +41,28 @@ import {
   ensureTrailingSlash,
   skillCardRef,
   rri,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-  REPLACE_MARKER,
 } from '@cardstack/runtime-common';
 import {
   absolutizeSkillLinks,
   buildPromptForModel,
+  CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
   constructHistory,
+  currentTurnToolResultMedia,
+  MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
+  MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES,
+  MAX_TOOL_RESULT_MEDIA_FILE_BYTES,
   getPromptParts,
   getRelevantCards,
   getTools,
+  toolSourceEventIdsToCarry,
   isMarkdownSkillFile,
   parseMarkdownSkill,
+  sessionSkillFeatures,
   skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
+  TRAILING_CONTEXT_PREAMBLE,
 } from '@cardstack/runtime-common/ai';
+import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 import type { TextContent } from '@cardstack/runtime-common/ai/types';
 
 const DEFAULT_CATALOG_REALM_URL = 'http://localhost:4201/catalog/';
@@ -235,7 +239,9 @@ module('buildPromptForModel', (hooks) => {
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
       result[2].content,
-      `The user is currently viewing the following user interface:
+      `${TRAILING_CONTEXT_PREAMBLE}
+
+The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
 Workspace: http://localhost:4201/experiments
@@ -251,6 +257,57 @@ Errors display:
 
 Current date and time: 2025-06-11T11:43:00.533Z
 `,
+    );
+  });
+
+  test('the context states the realm prefixes its identifiers use', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hey',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'code',
+              realmPrefixes: {
+                '@cardstack/base/': 'http://localhost:4201/base/',
+              },
+              codeMode: { currentFile: '@cardstack/base/card-api.gts' },
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let contextText = result[2].content as string;
+    assert.true(
+      contextText.includes(
+        ' - @cardstack/base/ = http://localhost:4201/base/\n',
+      ),
+      'the prefix is mapped to its realm URL',
+    );
+    assert.true(
+      contextText.includes(
+        'File open in code editor: @cardstack/base/card-api.gts\n',
+      ),
+      'the open file keeps its prefix form',
     );
   });
 
@@ -333,7 +390,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
       result[2].content,
-      `The user is currently viewing the following user interface:
+      `${TRAILING_CONTEXT_PREAMBLE}
+
+The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
 Workspace: http://localhost:4201/experiments
@@ -417,7 +476,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
       result[2].content,
-      `The user is currently viewing the following user interface:
+      `${TRAILING_CONTEXT_PREAMBLE}
+
+The user is currently viewing the following user interface:
 Room ID: room1
 Submode: workspace-chooser
 Workspace: http://localhost:4201/experiments
@@ -488,7 +549,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
       result[2].content,
-      `The user is currently viewing the following user interface:
+      `${TRAILING_CONTEXT_PREAMBLE}
+
+The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
 Workspace: http://localhost:4201/experiments
@@ -1808,13 +1871,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
 
-    // The edit path is SEARCH/REPLACE blocks parsed out of the assistant's
-    // own text (extractCodePatchBlocks). No tool in the request grants it and
-    // none can withhold it, and SYSTEM_MESSAGE, present in every prompt, says
-    // all code and data changes are applied immediately. A sentence telling
-    // the model it cannot edit was therefore false, not merely stale, so
-    // nothing in the request (attached cards, open cards, absent patch tools)
-    // may produce one.
+    // SYSTEM_MESSAGE, present in every prompt, says all code and data
+    // changes are applied immediately. A sentence telling the model it
+    // cannot edit would contradict it, so nothing in the request (attached
+    // cards, open cards, absent patch tools) may produce one.
     let contextMessage = messageText(messages?.[messages.length - 1]);
     assert.notOk(
       contextMessage.includes('unable to edit'),
@@ -3491,7 +3551,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messageText(messages![1]), 'Command Definitions');
     assert.equal(
       messages![2].content,
-      `The user is currently viewing the following user interface:
+      `${TRAILING_CONTEXT_PREAMBLE}
+
+The user is currently viewing the following user interface:
 Room ID: !XuZQzeYAGZzFQFYUzQ:localhost
 Submode: interact
 The user has no open cards.
@@ -3639,49 +3701,78 @@ Current date and time: 2025-06-11T11:43:00.533Z
   });
 
   test('Keeps past code blocks verbatim in the prompt', async () => {
-    // Eliding old code blocks rewrote already-sent history (the placeholder
-    // text even changed once the patch result arrived), which broke the
-    // cache prefix — and models imitated the "[Omitting …]" placeholder in
-    // place of a real patch, stalling the session. The blocks stay verbatim.
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/two-code-blocks-two-results.json',
-        ),
-        'utf-8',
-      ),
-    );
+    // Rewriting or eliding an already-sent assistant message breaks the
+    // prompt-cache prefix, and models imitate an elision placeholder in place
+    // of real code. Past code blocks stay verbatim.
+    const longCode = Array.from(
+      { length: 200 },
+      (_, i) => `  let value${i} = ${i};`,
+    ).join('\n');
+    const botBody = `Here is the component:\n\n\`\`\`gts\n${longCode}\n\`\`\`\n`;
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1000,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Write me a component',
+          isStreamingFinished: true,
+          data: {},
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 2000,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: botBody,
+          isStreamingFinished: true,
+          data: {},
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '2' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '3',
+        origin_server_ts: 3000,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Thanks',
+          isStreamingFinished: true,
+          data: {},
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '3' },
+        status: EventStatus.SENT,
+      },
+    ];
 
-    const { messages } = await getPromptParts(
-      eventList,
+    const result = await buildPromptForModel(
+      history,
       '@aibot:localhost',
+      undefined,
+      [],
       fakeMatrixClient,
     );
-    assert.deepEqual(
-      messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'user'],
-    );
-    assert.equal(
-      messageText(messages![2]),
-      'Updating the file...\n' +
-        'http://test.com/spaghetti-recipe.gts\n' +
-        `${SEARCH_MARKER}\n` +
-        'this is the riveting content of the spaghetti-recipe.gts file\n' +
-        `${SEPARATOR_MARKER}\n` +
-        'this is the engaging content of the spaghetti-recipe.gts file\n' +
-        `${REPLACE_MARKER}\n` +
-        '\n' +
-        'I will also create a file for rigatoni:\n' +
-        '\n' +
-        'http://test.com/rigatoni-recipe.gts\n' +
-        `${SEARCH_MARKER}\n` +
-        `${SEPARATOR_MARKER}\n` +
-        'this is the holy content of the rigatoni-recipe.gts file\n' +
-        `${REPLACE_MARKER}\n`,
-    );
+
+    let assistantMessage = result.find((m) => m.role === 'assistant');
+    assert.ok(assistantMessage, 'the past bot message is in the prompt');
+    assert.equal(messageText(assistantMessage!), botBody);
     assert.false(
-      messageText(messages![2]).includes('[Omitting'),
+      messageText(assistantMessage!).includes('[Omitting'),
       'no elision placeholder appears in the prompt',
     );
   });
@@ -3794,299 +3885,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.true(messageText(messages![6]).includes('Business Card V2'));
   });
 
-  test('Responds to successful completion of lone code patch', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/one-code-block-one-success.json',
-        ),
-        'utf-8',
-      ),
-    );
-    const { shouldRespond, messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.ok(userMessages.length >= 1, 'Should have user messages');
-    assert.false(
-      userMessages.some((message) =>
-        messageText(message).includes(
-          '(The user has successfully applied code patch',
-        ),
-      ),
-      'Code patch result messages should be omitted',
-    );
-  });
-
-  test('Does not respond to first code patch result when two patches were proposed', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/two-code-blocks-one-result.json',
-        ),
-        'utf-8',
-      ),
-    );
-    const { shouldRespond } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(
-      shouldRespond,
-      false,
-      'AiBot does not solicit a response before all tool calls are made',
-    );
-  });
-
-  test('patch results reported with host-style block indexes still complete the turn', async () => {
-    // The host numbers a patch result by its position among all fenced code
-    // blocks in the message, so a message with example fences before its
-    // patches reports indexes like 4 and 5 for its two patches. The bot must
-    // not wait for indexes 0 and 1 that will never come.
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/two-code-blocks-offset-indexes.json',
-        ),
-        'utf-8',
-      ),
-    );
-    const { shouldRespond } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(
-      shouldRespond,
-      true,
-      'both patches have a result, so the bot should respond',
-    );
-  });
-
-  test('Responds to second code patch result when two patches were proposed', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/two-code-blocks-two-results.json',
-        ),
-        'utf-8',
-      ),
-    );
-
-    const { shouldRespond, messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.ok(userMessages.length >= 1, 'Should have user messages');
-    assert.false(
-      userMessages.some((message) =>
-        messageText(message).includes('(The user has successfully'),
-      ),
-      'Code patch result messages should be omitted',
-    );
-  });
-
-  test('Does not respond to code patch result when a command is also proposed', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/code-block-and-command-one-result.json',
-        ),
-        'utf-8',
-      ),
-    );
-    const { shouldRespond } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(
-      shouldRespond,
-      false,
-      'AiBot does not solicit a response before all tool calls are made',
-    );
-  });
-
-  test('Responds to command result when patch and command proposed and patch already succeeded', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/code-block-and-command-two-results-a.json',
-        ),
-        'utf-8',
-      ),
-    );
-
-    mockResponses.set('mxc://mock-server/weather-report-1', {
-      ok: true,
-      text: JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            temperature: '22°C',
-            conditions: 'Cloudy',
-            title: null,
-            description: null,
-            thumbnailURL: null,
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4201/admin/onnx/commandexample',
-              name: 'WeatherReport',
-            },
-          },
-        },
-      }),
-    });
-
-    const { shouldRespond, messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    assert.deepEqual(
-      messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'user'],
-    );
-    const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(
-      userMessages.length,
-      2,
-      'The question plus the trailing context message',
-    );
-    assert.false(
-      userMessages.some((message) =>
-        messageText(message).includes(
-          '(The user has successfully applied code patch',
-        ),
-      ),
-      'Code patch result messages should be omitted',
-    );
-    const toolResultMessages = messages!.filter(
-      (message) => message.role === 'tool',
-    );
-    assert.strictEqual(
-      toolResultMessages.length,
-      1,
-      'Should have one tool result message',
-    );
-    assert.ok(
-      messageText(toolResultMessages[0]).includes('Cloudy'),
-      'Tool call result should include "Cloudy"',
-    );
-  });
-
-  test('Responds to command result when patch and command proposed and patch already succeeded with command succeeding first', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/code-block-and-command-two-results-b.json',
-        ),
-        'utf-8',
-      ),
-    );
-
-    mockResponses.set('mxc://mock-server/weather-report-1', {
-      ok: true,
-      text: JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            temperature: '22°C',
-            conditions: 'Cloudy',
-            title: null,
-            description: null,
-            thumbnailURL: null,
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4201/admin/onnx/commandexample',
-              name: 'WeatherReport',
-            },
-          },
-        },
-      }),
-    });
-
-    const { shouldRespond, messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    assert.deepEqual(
-      messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'user'],
-    );
-    const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(
-      userMessages.length,
-      2,
-      'The question plus the trailing context message',
-    );
-    assert.false(
-      userMessages.some((message) =>
-        messageText(message).includes(
-          '(The user has successfully applied code patch',
-        ),
-      ),
-      'Code patch result messages should be omitted',
-    );
-    const toolResultMessages = messages!.filter(
-      (message) => message.role === 'tool',
-    );
-    assert.strictEqual(
-      toolResultMessages.length,
-      1,
-      'Should have one tool result message',
-    );
-    assert.ok(
-      messageText(toolResultMessages[0]).includes('Cloudy'),
-      'Tool call result should include "Cloudy"',
-    );
-  });
-
-  test('Responds to failure of lone code patch', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/one-code-block-one-failure.json',
-        ),
-        'utf-8',
-      ),
-    );
-    const { shouldRespond, messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.ok(userMessages.length >= 1, 'Should have user messages');
-    assert.false(
-      userMessages.some((message) =>
-        messageText(message).includes('The user tried to apply code patch'),
-      ),
-      'Code patch result messages should be omitted',
-    );
-  });
-
   test('context trails as its own user message when there is just one user message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
@@ -4107,7 +3905,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![1].role, 'user');
     assert.equal(messages![2].role, 'user');
     assert.ok(
-      messageText(messages![2]).startsWith('The user is currently viewing'),
+      messageText(messages![2]).startsWith(TRAILING_CONTEXT_PREAMBLE),
       'the context trails the conversation as its own message',
     );
     assert.notOk(
@@ -4138,7 +3936,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![3].role, 'user');
     assert.equal(messages![4].role, 'user');
     assert.ok(
-      messageText(messages![4]).startsWith('The user is currently viewing'),
+      messageText(messages![4]).startsWith(TRAILING_CONTEXT_PREAMBLE),
       'the context trails the conversation as its own message',
     );
     assert.notOk(
@@ -4192,7 +3990,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![2].role, 'assistant');
     assert.equal(messages![3].role, 'user');
     assert.ok(
-      messageText(messages![3]).startsWith('The user is currently viewing'),
+      messageText(messages![3]).startsWith(TRAILING_CONTEXT_PREAMBLE),
       'the context trails the conversation as its own message',
     );
   });
@@ -4344,47 +4142,7 @@ Attached Cards (each shows its content as of this message; a later attachment of
     );
   });
 
-  test('getPromptParts collects patched files from code patch result attachments', async () => {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(import.meta.dirname, 'resources/chats/patched-gts.json'),
-        'utf-8',
-      ),
-    );
-
-    mockResponses.set('mxc://mock-server/postcard-before-patch.gts', {
-      ok: true,
-      text: `export default Postcard extends CardDef { /* before *}
-      `,
-    });
-    mockResponses.set('mxc://mock-server/postcard-after-patch.gts', {
-      ok: true,
-      text: `export default Postcard extends CardDef { /* after */ }
-      `,
-    });
-
-    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.ok(
-      pendingCodePatchCorrectnessChecks,
-      'Should collect pending code patch correctness info',
-    );
-    assert.deepEqual(
-      pendingCodePatchCorrectnessChecks?.files,
-      [
-        {
-          sourceUrl: 'http://test-realm-server/user/test-realm/postcard.gts',
-          displayName: 'user/test-realm/postcard.gts',
-        },
-      ],
-      'Pending checks should include files from attached patch results',
-    );
-  });
-
-  test('getPromptParts surfaces pending code patch correctness summary after patches', async function () {
+  test('getPromptParts surfaces a pending correctness check after source and card edits', async function () {
     const roomId = 'room-checks';
     const aiMessageId = 'ai-message';
     const cardId = 'http://localhost/cards/Profile/1';
@@ -4426,11 +4184,6 @@ Attached Cards (each shows its content as of this message; a later attachment of
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           body: `Updating the file...
 ${patchedFileSource}
-╔═══ SEARCH ════╗
-old content
-╠═══════════════╣
-new content
-╚═══ REPLACE ═══╝
 `,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
@@ -4442,6 +4195,14 @@ new content
             },
           },
           [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'edit-file',
+              name: 'run-realm-code_6b92',
+              arguments: JSON.stringify({
+                description: 'Update the file',
+                attributes: { code: 'await realm.fs.replace(...)' },
+              }),
+            },
             {
               id: 'patch-card',
               name: 'patchCardInstance',
@@ -4462,19 +4223,19 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        event_id: 'patch-result',
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: 'edit-file-result',
         origin_server_ts: 3,
         room_id: roomId,
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
-          codeBlockIndex: 0,
+          commandRequestId: 'edit-file',
           data: {
             context: {
               tools: [],
@@ -4487,12 +4248,18 @@ new content
                 name: 'button.gts',
                 contentType: 'text/plain',
               },
+              {
+                sourceUrl: 'http://localhost:4201/test/images/logo.png',
+                url: 'mxc://mock-server/logo',
+                name: 'logo.png',
+                contentType: 'image/png',
+              },
             ],
           },
         },
         unsigned: {
           age: 0,
-          transaction_id: 'patch-result',
+          transaction_id: 'edit-file-result',
         },
         status: EventStatus.SENT,
       },
@@ -4540,7 +4307,7 @@ new content
 
     assert.ok(
       pendingCodePatchCorrectnessChecks,
-      'Should collect pending code patch correctness info',
+      'Should collect a pending correctness check',
     );
     assert.strictEqual(
       pendingCodePatchCorrectnessChecks?.targetEventId,
@@ -4560,7 +4327,7 @@ new content
           displayName: 'files/src/components/button.gts',
         },
       ],
-      'Patched files should be surfaced',
+      'Patched source files are surfaced, and a saved image is not',
     );
     assert.deepEqual(
       pendingCodePatchCorrectnessChecks?.cards,
@@ -4569,7 +4336,116 @@ new content
     );
   });
 
-  test('getPromptParts ignores cancelled patch commands when collecting pending code patch correctness checks', async function () {
+  test('getPromptParts does not check the captures a run-realm-code result attaches', async function () {
+    const roomId = 'room-checks-captures';
+    const aiMessageId = 'ai-message';
+    const savedFile = 'http://localhost:4201/test/reading-list/dune.json';
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        origin_server_ts: 1,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Saving the book and looking at it.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'save-and-capture',
+              name: 'run-realm-code_6b92',
+              arguments: JSON.stringify({
+                description: 'Save the book and capture it',
+                attributes: {
+                  code: "await realm.fs.write(...); await realm.capture('reading-list/dune')",
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: 'save-and-capture-result',
+        origin_server_ts: 2,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          },
+          commandRequestId: 'save-and-capture',
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: savedFile,
+                url: 'mxc://mock-server/dune-json',
+                name: 'dune.json',
+                contentType: 'application/vnd.card+json',
+              },
+              {
+                sourceUrl: `${CAPTURE_SOURCE_URL_PREFIX}3f9a1c/dune%20(isolated).png`,
+                url: 'mxc://mock-server/dune-isolated',
+                name: 'dune (isolated).png',
+                contentType: 'image/png',
+              },
+              // The host always uploads a capture as an image, so it never
+              // sends one without a content type. This entry checks that the
+              // source URL alone keeps a capture out, which the content-type
+              // filter would not.
+              {
+                sourceUrl: `${CAPTURE_SOURCE_URL_PREFIX}b27e44/dune%20(embedded).png`,
+                url: 'mxc://mock-server/dune-embedded',
+                name: 'dune (embedded).png',
+                contentType: '',
+              },
+            ],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'save-and-capture-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.deepEqual(
+      pendingCodePatchCorrectnessChecks?.files.map((file) => file.sourceUrl),
+      [savedFile],
+      'Only the saved file is checked, whether or not a capture names its content type',
+    );
+  });
+
+  test('getPromptParts ignores cancelled patch commands when collecting pending correctness checks', async function () {
     const roomId = 'room-checks-cancelled';
     const aiMessageId = 'ai-message';
     const cancelledAiMessageId = 'cancelled-ai-message';
@@ -4649,11 +4525,6 @@ new content
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           body: `Updating the file...
 ${patchedFileSource}
-╔═══ SEARCH ════╗
-old content
-╠═══════════════╣
-new content
-╚═══ REPLACE ═══╝
 `,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
@@ -4665,6 +4536,14 @@ new content
             },
           },
           [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'edit-file',
+              name: 'run-realm-code_6b92',
+              arguments: JSON.stringify({
+                description: 'Update the file',
+                attributes: { code: 'await realm.fs.replace(...)' },
+              }),
+            },
             {
               id: 'patch-card',
               name: 'patchCardInstance',
@@ -4685,19 +4564,19 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        event_id: 'patch-result',
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: 'edit-file-result',
         origin_server_ts: 3,
         room_id: roomId,
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
-          codeBlockIndex: 0,
+          commandRequestId: 'edit-file',
           data: {
             context: {
               tools: [],
@@ -4715,7 +4594,7 @@ new content
         },
         unsigned: {
           age: 0,
-          transaction_id: 'patch-result',
+          transaction_id: 'edit-file-result',
         },
         status: EventStatus.SENT,
       },
@@ -4763,7 +4642,7 @@ new content
 
     assert.ok(
       pendingCodePatchCorrectnessChecks,
-      'Should collect pending code patch correctness info even after a cancelled command',
+      'Should collect a pending correctness check even after a cancelled command',
     );
     assert.strictEqual(
       pendingCodePatchCorrectnessChecks?.targetEventId,
@@ -4772,7 +4651,7 @@ new content
     );
   });
 
-  test('getPromptParts ignores older unresolved commands when a newer code patch is applied', async function () {
+  test('getPromptParts ignores older unresolved commands when a newer source edit is applied', async function () {
     const roomId = 'room-checks-older-unresolved';
     const aiMessageId = 'ai-message';
     const olderAiMessageId = 'older-ai-message';
@@ -4850,11 +4729,6 @@ new content
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           body: `Updating the file...
 ${patchedFileSource}
-╔═══ SEARCH ════╗
-old content
-╠═══════════════╣
-new content
-╚═══ REPLACE ═══╝
 `,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
@@ -4865,6 +4739,16 @@ new content
               functions: [],
             },
           },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'edit-file',
+              name: 'run-realm-code_6b92',
+              arguments: JSON.stringify({
+                description: 'Update the file',
+                attributes: { code: 'await realm.fs.replace(...)' },
+              }),
+            },
+          ],
         },
         unsigned: {
           age: 0,
@@ -4873,19 +4757,19 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        event_id: 'patch-result',
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: 'edit-file-result',
         origin_server_ts: 4,
         room_id: roomId,
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
-          codeBlockIndex: 0,
+          commandRequestId: 'edit-file',
           data: {
             context: {
               tools: [],
@@ -4903,7 +4787,7 @@ new content
         },
         unsigned: {
           age: 0,
-          transaction_id: 'patch-result',
+          transaction_id: 'edit-file-result',
         },
         status: EventStatus.SENT,
       },
@@ -4917,7 +4801,7 @@ new content
 
     assert.ok(
       pendingCodePatchCorrectnessChecks,
-      'Should collect pending code patch correctness despite older unresolved commands',
+      'Should collect a pending correctness check despite older unresolved commands',
     );
     assert.strictEqual(
       pendingCodePatchCorrectnessChecks?.targetEventId,
@@ -5081,7 +4965,7 @@ new content
     assert.strictEqual(
       retryMessages.length,
       2,
-      'Only the first two failures should request more SEARCH/REPLACE fixes',
+      'Only the first two failures should request more fixes',
     );
 
     let failureLimitMessages = userMessages.filter((message) =>
@@ -5098,6 +4982,375 @@ new content
     assert.notOk(
       messageText(failureLimitMessage).includes('Fix the errors above'),
       'The failure limit prompt should not ask for another round of fixes',
+    );
+    assert.notOk(
+      messages?.some((message) =>
+        messageText(message).includes(
+          'The automated correctness checks have finished',
+        ),
+      ),
+      'The limit instruction is the last one the model reads: no trailing summary follows it',
+    );
+    assert.notOk(
+      messages?.some((message) =>
+        messageText(message).includes('one short sentence'),
+      ),
+      'Nothing sizes the reply at one sentence',
+    );
+  });
+
+  test('warning-only passes ask for fixes and count toward the attempt cap', async function () {
+    const roomId = '!room:localhost';
+    const targetRef = 'http://localhost/cards/Ticket/1';
+
+    function buildAiMessage(index: number, requestId: string) {
+      return {
+        type: 'm.room.message',
+        event_id: `ai-message-${index}`,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: index * 10 + 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Attempt ${index}`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: `check-${requestId}`,
+              name: 'checkCorrectness',
+              arguments: JSON.stringify({
+                description: `Check attempt ${index}`,
+                attributes: {
+                  targetType: 'card',
+                  targetRef,
+                  roomId,
+                  correctnessCheckAttempt: index,
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: `ai-message-${index}`,
+        },
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent;
+    }
+
+    function buildCommandResult(
+      index: number,
+      requestId: string,
+      relatesToId: string,
+      warningText: string,
+    ): DiscreteMatrixEvent {
+      return {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: `command-result-${index}`,
+        room_id: roomId,
+        sender: '@command:localhost',
+        origin_server_ts: index * 10 + 3,
+        content: {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: requestId,
+          'm.relates_to': {
+            event_id: relatesToId,
+            key: 'applied',
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          },
+          data: {
+            card: {
+              sourceUrl: `http://localhost/correctness/${index}.json`,
+              url: `http://localhost/correctness/${index}.json`,
+              name: `correctness-${index}.json`,
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: {
+                    correct: true,
+                    errors: [],
+                    warnings: [warningText],
+                  },
+                },
+              }),
+            },
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: `command-result-${index}`,
+        },
+        status: EventStatus.SENT,
+      };
+    }
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please fix the file and run correctness checks.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'user-message',
+        },
+        status: EventStatus.SENT,
+      },
+      buildAiMessage(1, '1'),
+      buildCommandResult(1, 'check-1', 'ai-message-1', 'first warning'),
+      buildAiMessage(2, '2'),
+      buildCommandResult(2, 'check-2', 'ai-message-2', 'second warning'),
+      buildAiMessage(3, '3'),
+      buildCommandResult(3, 'check-3', 'ai-message-3', 'still warning'),
+    ];
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.ok(messages, 'Expected prompt messages to be constructed');
+
+    let userMessages =
+      messages?.filter((message) => message.role === 'user') ?? [];
+    let fixRequests = userMessages.filter((message) =>
+      messageText(message).includes('Fix the ones that are mistakes now'),
+    );
+    assert.strictEqual(
+      fixRequests.length,
+      2,
+      'The first two warning-only passes ask for fixes',
+    );
+    let successNotes = userMessages.filter((message) =>
+      messageText(message).includes('Note that in at most one line'),
+    );
+    assert.strictEqual(
+      successNotes.length,
+      1,
+      'The third warning-only pass stops asking for fixes and gets the success note, which mentions the warnings',
+    );
+    assert.notOk(
+      userMessages.some((message) =>
+        messageText(message).includes('Fix the errors above'),
+      ),
+      'Warnings never trigger the error-fix instruction',
+    );
+  });
+
+  test('attempt counts carry across fix messages until the user speaks', async function () {
+    const roomId = '!room:localhost';
+    const cardId = 'http://localhost/cards/Ticket/1';
+    let ts = 0;
+    let events: DiscreteMatrixEvent[] = [];
+
+    function addPatch(index: number) {
+      let eventId = `ai-patch-${index}`;
+      events.push(
+        {
+          type: 'm.room.message',
+          event_id: eventId,
+          room_id: roomId,
+          sender: '@aibot:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+            body: `Patch ${index}`,
+            format: 'org.matrix.custom.html',
+            isStreamingFinished: true,
+            data: { context: { tools: [], functions: [] } },
+            [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+              {
+                id: `patch-${index}`,
+                name: 'patchCardInstance',
+                arguments: JSON.stringify({
+                  description: 'Update the ticket',
+                  attributes: {
+                    cardId,
+                    patch: { attributes: { status: 'Open' } },
+                  },
+                }),
+              },
+            ],
+          },
+          unsigned: { age: 0, transaction_id: eventId },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+        {
+          type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+          event_id: `patch-result-${index}`,
+          room_id: roomId,
+          sender: '@user:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+            commandRequestId: `patch-${index}`,
+            'm.relates_to': {
+              event_id: eventId,
+              key: 'applied',
+              rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            },
+            data: { context: { tools: [], functions: [] } },
+          },
+          unsigned: { age: 0, transaction_id: `patch-result-${index}` },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+      );
+      return eventId;
+    }
+
+    // records the check the ai-bot would publish for the patch, answered by
+    // a pass that still carries a warning
+    function addWarningCheck(
+      index: number,
+      patchEventId: string,
+      attempt: number,
+    ) {
+      let correctnessEventId = `correctness-${index}`;
+      events.push(
+        {
+          type: 'm.room.message',
+          event_id: correctnessEventId,
+          room_id: roomId,
+          sender: '@aibot:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+            body: '',
+            format: 'org.matrix.custom.html',
+            isStreamingFinished: true,
+            'm.relates_to': {
+              rel_type: APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
+              event_id: patchEventId,
+            },
+            [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+              {
+                id: `check-${index}`,
+                name: 'checkCorrectness',
+                arguments: JSON.stringify({
+                  description: `Check correctness of ${cardId}`,
+                  attributes: {
+                    targetType: 'card',
+                    targetRef: cardId,
+                    roomId,
+                    targetEventId: patchEventId,
+                    correctnessCheckAttempt: attempt,
+                  },
+                }),
+              },
+            ],
+          },
+          unsigned: { age: 0, transaction_id: correctnessEventId },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+        {
+          type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+          event_id: `check-result-${index}`,
+          room_id: roomId,
+          sender: '@user:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+            commandRequestId: `check-${index}`,
+            'm.relates_to': {
+              event_id: correctnessEventId,
+              key: 'applied',
+              rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            },
+            data: {
+              card: {
+                sourceUrl: `${cardId}-check-${index}.json`,
+                url: `${cardId}-check-${index}.json`,
+                name: `correctness-${index}.json`,
+                contentType: 'application/json',
+                content: JSON.stringify({
+                  data: {
+                    attributes: {
+                      correct: true,
+                      errors: [],
+                      warnings: [
+                        `${cardId}: "requester" is not a field of Ticket`,
+                      ],
+                    },
+                  },
+                }),
+              },
+            },
+          },
+          unsigned: { age: 0, transaction_id: `check-result-${index}` },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+      );
+    }
+
+    async function nextAttempt(patchEventId: string) {
+      let { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+        events,
+        '@aibot:localhost',
+        fakeMatrixClient,
+      );
+      return pendingCodePatchCorrectnessChecks?.attemptsByTargetKey?.[
+        `card:${cardId}|event:${patchEventId}`
+      ];
+    }
+
+    let attempts: (number | undefined)[] = [];
+    for (let index = 1; index <= 4; index++) {
+      let patchEventId = addPatch(index);
+      let attempt = await nextAttempt(patchEventId);
+      attempts.push(attempt);
+      addWarningCheck(index, patchEventId, attempt ?? 1);
+    }
+    assert.deepEqual(
+      attempts,
+      [1, 2, 3, 4],
+      'each fix message continues the count, so the fourth round is past the cap',
+    );
+
+    events.push({
+      type: 'm.room.message',
+      event_id: 'user-message',
+      room_id: roomId,
+      sender: '@user:localhost',
+      origin_server_ts: ++ts,
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: 'Try a different approach',
+        format: 'org.matrix.custom.html',
+        data: { context: { tools: [], functions: [] } },
+      },
+      unsigned: { age: 0, transaction_id: 'user-message' },
+      status: EventStatus.SENT,
+    } as DiscreteMatrixEvent);
+    let afterUser = addPatch(5);
+    assert.strictEqual(
+      await nextAttempt(afterUser),
+      1,
+      'a user message starts a fresh run of attempts',
     );
   });
 
@@ -5274,7 +5527,7 @@ new content
     );
   });
 
-  test('getPromptParts includes correctness summary and omits patch result messages', async function () {
+  test('a failed check ends with the fix instruction, not a trailing summary', async function () {
     const roomId = '!room:localhost';
     const aiMessageId = '$ai-msg';
     const eventList: DiscreteMatrixEvent[] = [
@@ -5310,14 +5563,7 @@ new content
         origin_server_ts: 2,
         content: {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          body: `Applying patch...
-http://localhost/example.gts
-╔═══ SEARCH ════╗
-old
-╠═══════════════╣
-new
-╚═══ REPLACE ═══╝
-`,
+          body: `Fixed the file.`,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: {
@@ -5348,42 +5594,13 @@ new
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        event_id: '$patch-result',
-        room_id: roomId,
-        sender: '@user:localhost',
-        origin_server_ts: 3,
-        content: {
-          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-          codeBlockIndex: 0,
-          'm.relates_to': {
-            event_id: aiMessageId,
-            key: 'applied',
-            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-          },
-          data: {
-            context: {
-              tools: [],
-              functions: [],
-              submode: 'code',
-            },
-            attachedFiles: [],
-          },
-        },
-        unsigned: {
-          age: 0,
-          transaction_id: '$patch-result',
-        },
-        status: EventStatus.SENT,
-      },
-      {
         type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: '$command-result',
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: 4,
         content: {
-          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'check-1',
           'm.relates_to': {
             event_id: aiMessageId,
@@ -5391,6 +5608,21 @@ new
             rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
+            card: {
+              sourceUrl: 'http://localhost/correctness/1.json',
+              url: 'http://localhost/correctness/1.json',
+              name: 'correctness-1.json',
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: {
+                    correct: false,
+                    errors: ['example.gts: unknown field type'],
+                    warnings: [],
+                  },
+                },
+              }),
+            },
             context: {
               tools: [],
               functions: [],
@@ -5406,38 +5638,543 @@ new
       },
     ];
 
-    const summaryMessage =
-      'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
-
     const promptParts = await getPromptParts(
       eventList,
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    let enabledUserMessages =
-      promptParts.messages?.filter((message) => message.role === 'user') ?? [];
-    // The instruction exists for this one request only, so it rides the
-    // volatile trailing context message rather than the history — a history
-    // entry that vanishes on the next request would defeat the prompt cache.
     let trailingMessage = promptParts.messages?.at(-1);
     assert.equal(trailingMessage?.role, 'user');
-    assert.true(
-      messageText(trailingMessage).endsWith(summaryMessage),
-      'Summary should be appended to the trailing context message',
-    );
     assert.false(
-      promptParts.messages
-        ?.slice(0, -1)
-        .some((message) => messageText(message).includes(summaryMessage)),
-      'Summary must not be a history entry — it vanishes on the next request',
-    );
-    assert.false(
-      enabledUserMessages.some((message) =>
-        messageText(message).includes(
-          'The user has successfully applied code patch 1.',
-        ),
+      messageText(trailingMessage).includes(
+        'The automated correctness checks have finished',
       ),
-      'Code patch result message should be omitted',
+      'The trailing message carries no summary to compete with the fix instruction',
+    );
+    assert.false(
+      promptParts.messages?.some((message) =>
+        messageText(message).includes('one short sentence'),
+      ),
+      'Nothing sizes the reply at one sentence',
+    );
+    assert.true(
+      promptParts.messages?.some(
+        (message) =>
+          message.role === 'user' &&
+          messageText(message).includes('Fix the errors above'),
+      ),
+      'A failed check still asks for a fix',
+    );
+  });
+
+  test('a passing correctness batch asks the model, once, to finish its answer', async function () {
+    const roomId = '!room:localhost';
+    const aiMessageId = 'ai-message-1';
+    const targets = ['timetable.gts', 'Timetable/main.json'];
+
+    function checkResult(
+      index: number,
+      warnings: string[],
+    ): DiscreteMatrixEvent {
+      return {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: `command-result-${index}`,
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 3 + index,
+        content: {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: `check-${index}`,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          },
+          data: {
+            card: {
+              sourceUrl: `http://localhost/correctness/${index}.json`,
+              url: `http://localhost/correctness/${index}.json`,
+              name: `correctness-${index}.json`,
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: { correct: true, errors: [], warnings },
+                },
+              }),
+            },
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: `command-result-${index}`,
+        },
+        status: EventStatus.SENT,
+      };
+    }
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Save the timetable, then tell me which lessons are still unplaced and why.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'user-message',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Saving the timetable.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: targets.map((target, index) => ({
+            id: `check-${index}`,
+            name: 'checkCorrectness',
+            arguments: JSON.stringify({
+              description: `Check ${target}`,
+              attributes: {
+                targetType: 'file',
+                targetRef: `http://localhost/${target}`,
+                roomId,
+                correctnessCheckAttempt: 1,
+              },
+            }),
+          })),
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      checkResult(0, ['22 lessons are still unplaced']),
+      checkResult(1, []),
+    ];
+
+    const successNote =
+      'The write above passed its checks. Note that in at most one line of your reply, including any warnings listed above. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.ok(messages, 'Expected prompt messages to be constructed');
+
+    let lastToolIndex = messages!.findLastIndex(
+      (message) => message.role === 'tool',
+    );
+    assert.deepEqual(
+      messages!
+        .filter((message) => message.role === 'tool')
+        .map((message) => (message as any).tool_call_id),
+      ['check-0', 'check-1'],
+      'Each check result is a tool message',
+    );
+    assert.true(
+      messageText(messages![lastToolIndex - 1]).includes(
+        'Warnings:\n- 22 lessons are still unplaced',
+      ),
+      'The tool message carries the warning',
+    );
+
+    // One note for the batch, right after the results. It sends the model
+    // back to the user's own message rather than asking for a summary.
+    let userMessagesAfterResults = messages!
+      .slice(lastToolIndex + 1)
+      .filter((message) => message.role === 'user');
+    assert.strictEqual(
+      messageText(userMessagesAfterResults[0]),
+      successNote,
+      'The success note follows the results',
+    );
+    assert.strictEqual(
+      messages!.filter((message) => messageText(message) === successNote)
+        .length,
+      1,
+      'The batch gets the success note once, not once per check',
+    );
+
+    // Nothing after a clean batch sizes the reply at one sentence, so the
+    // success note is the last instruction the model reads.
+    for (let message of messages!.filter((m) => m.role === 'user')) {
+      assert.false(
+        messageText(message).includes('one short sentence'),
+        'A clean batch never asks for a one-sentence reply',
+      );
+      assert.false(
+        messageText(message).includes('Fix the errors above'),
+        'A clean batch never asks for fixes',
+      );
+    }
+  });
+
+  // A user message, a bot message asking for one check per result, and the
+  // results in order. Each result is a card's attributes, `'no-output'` for a
+  // result with no card, `'unreadable'` for a card whose download failed, or
+  // `'canceled'` for a check that never ran.
+  // A result with warnings checks a card instance (a .json file), the only
+  // target whose warnings ask for a fix; every other result checks a module.
+  function correctnessBatchHistory(
+    results: (
+      | 'no-output'
+      | 'unreadable'
+      | 'canceled'
+      | { correct: boolean; errors: string[]; warnings?: string[] }
+    )[],
+  ): DiscreteMatrixEvent[] {
+    const roomId = '!room:localhost';
+    const aiMessageId = 'ai-message-1';
+    return [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Build the card, then tell me how to use it.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: { context: { tools: [], functions: [] } },
+        },
+        unsigned: { age: 0, transaction_id: 'user-message' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Saving the card.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: { context: { tools: [], functions: [] } },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: results.map((result, index) => ({
+            id: `check-${index}`,
+            name: 'checkCorrectness',
+            arguments: JSON.stringify({
+              description: `Check file ${index}`,
+              attributes: {
+                targetType: 'file',
+                targetRef:
+                  typeof result === 'object' && result.warnings?.length
+                    ? `http://localhost/Card/${index}.json`
+                    : `http://localhost/file-${index}.gts`,
+                roomId,
+                correctnessCheckAttempt: 1,
+              },
+            }),
+          })),
+        },
+        unsigned: { age: 0, transaction_id: aiMessageId },
+        status: EventStatus.SENT,
+      },
+      ...results.map(
+        (result, index) =>
+          ({
+            type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+            event_id: `command-result-${index}`,
+            room_id: roomId,
+            sender: '@user:localhost',
+            origin_server_ts: 3 + index,
+            content: {
+              msgtype:
+                result === 'no-output' || result === 'canceled'
+                  ? APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE
+                  : APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+              commandRequestId: `check-${index}`,
+              'm.relates_to': {
+                event_id: aiMessageId,
+                key: result === 'canceled' ? 'canceled' : 'applied',
+                rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+              },
+              ...(result === 'canceled'
+                ? { failureReason: STOPPED_TOOL_CALL_REASON }
+                : {}),
+              data: {
+                ...(result === 'no-output' || result === 'canceled'
+                  ? {}
+                  : {
+                      card: {
+                        sourceUrl: `http://localhost/correctness/${index}.json`,
+                        url: `http://localhost/correctness/${index}.json`,
+                        name: `correctness-${index}.json`,
+                        contentType: 'application/json',
+                        ...(result === 'unreadable'
+                          ? { error: 'Error loading attached card: 404' }
+                          : {
+                              content: JSON.stringify({
+                                data: {
+                                  attributes: { warnings: [], ...result },
+                                },
+                              }),
+                            }),
+                      },
+                    }),
+                context: { tools: [], functions: [] },
+                attachedFiles: [],
+              },
+            },
+            unsigned: { age: 0, transaction_id: `command-result-${index}` },
+            status: EventStatus.SENT,
+          }) as DiscreteMatrixEvent,
+      ),
+    ];
+  }
+
+  const SUCCESS_NOTE_START = 'The write above passed its checks.';
+  // The note's stable opening: absence checks match on it, so a reworded
+  // note that is still sent would fail them.
+  const TRAILING_SUMMARY_START =
+    'The automated correctness checks have finished';
+
+  function userMessagesWith(
+    messages: Parameters<typeof messageText>[0][] | undefined,
+    text: string,
+  ) {
+    return (messages ?? []).filter(
+      (message) =>
+        (message as { role?: string } | undefined)?.role === 'user' &&
+        messageText(message).includes(text),
+    );
+  }
+
+  test('a passing batch with no result cards still gets the success note, and no trailing summary', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory(['no-output', 'no-output']),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      1,
+      'An applied check with no result card passed, so the batch gets the note once',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      0,
+      'The trailing one-sentence summary is left out',
+    );
+  });
+
+  test('a batch with a failed check gets only the fix instruction', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory([
+        { correct: true, errors: [] },
+        { correct: false, errors: ['file-1.gts: unknown field type'] },
+      ]),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      0,
+      'The success note would claim the write passed, so it is left out',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, 'Fix the errors above').length,
+      1,
+      'The failing check asks for a fix',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      0,
+      'The fix instruction is the last one the model reads: no trailing summary follows it',
+    );
+  });
+
+  test('a failed check with no error listed gets the trailing note, which asks to finish the answer', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory([{ correct: false, errors: [] }]),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      0,
+      'The check did not pass, so there is no success note',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, 'Fix the errors above').length,
+      0,
+      'There is no listed error to fix',
+    );
+    // The note exists for this one request only, so it rides the volatile
+    // trailing context message rather than the history: a history entry that
+    // vanishes on the next request would defeat the prompt cache.
+    let trailingMessage = messages?.at(-1);
+    assert.equal(trailingMessage?.role, 'user');
+    assert.true(
+      messageText(trailingMessage).endsWith(
+        CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
+      ),
+      'The trailing message ends with the note',
+    );
+    let note = CHECK_CORRECTNESS_SUMMARY_INSTRUCTION;
+    assert.true(
+      note.includes('finish your answer to the user'),
+      'The note sends the model back to the user',
+    );
+    assert.true(
+      note.includes('carry straight on'),
+      'The note does not read as a request to stop',
+    );
+    assert.false(
+      note.includes('one short sentence'),
+      'The note does not size the reply at one sentence',
+    );
+    assert.false(
+      messages
+        ?.slice(0, -1)
+        .some((message) =>
+          messageText(message).includes(TRAILING_SUMMARY_START),
+        ),
+      'The note is not a history entry',
+    );
+  });
+
+  test('a check whose result card could not be read is not reported as passed', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory(['unreadable']),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    let toolMessage = messages?.find((message) => message.role === 'tool');
+    assert.true(
+      messageText(toolMessage).includes('could not be read'),
+      'The tool message says the result could not be read',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      0,
+      'Nobody knows whether the write passed, so there is no success note',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      1,
+      'The trailing note is the only instruction, so it fires',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, 'one short sentence').length,
+      0,
+      'Nothing sizes the reply at one sentence',
+    );
+  });
+
+  test('a warnings fix next to an unreadable check is the only instruction', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory([
+        { correct: true, errors: [], warnings: ['title: undeclared field'] },
+        'unreadable',
+      ]),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, 'the warnings above may point at mistakes')
+        .length,
+      1,
+      'The card with warnings asks for them to be fixed',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      0,
+      'A note to finish the answer, read last, would compete with the request for another write',
+    );
+  });
+
+  test('a canceled check gets no trailing note', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory(['canceled']),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.true(
+      messageText(
+        messages?.find((message) => message.role === 'tool'),
+      ).includes('marked as canceled'),
+      'The tool message says the check never ran',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      0,
+      'A check that never ran did not pass',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      0,
+      'Nothing ran, so there is nothing to note and no reason to tell the model to carry on',
+    );
+  });
+
+  test('an unreadable check next to a canceled one still gets the trailing note', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory(['unreadable', 'canceled']),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.true(
+      messageText(messages?.at(-1)).endsWith(
+        CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
+      ),
+      'The unreadable check has no instruction of its own',
+    );
+  });
+
+  test('a fix instruction next to an unreadable check is the only instruction', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory([
+        { correct: false, errors: ['file-0.gts: unknown field type'] },
+        'unreadable',
+      ]),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, 'Fix the errors above').length,
+      1,
+      'The failing check asks for a fix',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      0,
+      'The fix instruction is the last one the model reads, and the next round re-checks',
     );
   });
 
@@ -5640,7 +6377,7 @@ new
       readFileSync(
         path.join(
           import.meta.dirname,
-          'resources/chats/code-block-and-command-two-results-a.json',
+          'resources/chats/one-command-one-result.json',
         ),
         'utf-8',
       ),
@@ -7163,6 +7900,806 @@ new
     );
   });
 
+  module('tool-result media', () => {
+    type AttachedFile = {
+      sourceUrl?: string;
+      url: string;
+      name: string;
+      contentType: string;
+      contentSize?: number;
+    };
+
+    let humanMessage = (eventId: string, ts: number, body: string) =>
+      ({
+        type: 'm.room.message',
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body,
+          data: { context: { tools: [], submode: 'code', functions: [] } },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    let botToolRequest = (eventId: string, ts: number, requestIds: string[]) =>
+      ({
+        type: 'm.room.message',
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: '',
+          isStreamingFinished: true,
+          data: { context: { tools: [], functions: [] } },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: requestIds.map((id) => ({
+            id,
+            name: 'someTool_ab12',
+            arguments: JSON.stringify({ description: `run ${id}` }),
+          })),
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    let toolResult = (
+      eventId: string,
+      ts: number,
+      {
+        requestId,
+        requestEventId,
+        sender = '@user:localhost',
+        status = 'applied',
+        attachedFiles = [],
+      }: {
+        requestId: string;
+        requestEventId: string;
+        sender?: string;
+        status?: string;
+        attachedFiles?: AttachedFile[];
+      },
+    ) =>
+      ({
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: requestId,
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: status,
+            event_id: requestEventId,
+          },
+          data: { attachedFiles },
+        },
+        sender,
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    let png = (name: string): AttachedFile => ({
+      sourceUrl: `https://example.com/${name}`,
+      // Matrix media ids are [A-Za-z0-9_-] only.
+      url: `mxc://localhost/${name.replace(/[^A-Za-z0-9_-]/g, '_')}`,
+      name,
+      contentType: 'image/png',
+      contentSize: 2048,
+    });
+
+    // The homeserver media endpoint a tool-result file is downloaded from.
+    let mediaDownloadUrl = (file: AttachedFile) =>
+      fakeMatrixClient.mxcUrlToHttp(
+        file.url,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      )!;
+
+    let mockImage = (file: AttachedFile, text = `bytes-of-${file.name}`) => {
+      mockResponses.set(file.url, { ok: true, text });
+      mockResponses.set(mediaDownloadUrl(file), { ok: true, text });
+    };
+
+    let dataUrlOf = (file: AttachedFile) =>
+      `data:image/png;base64,${Buffer.from(`bytes-of-${file.name}`).toString('base64')}`;
+
+    let trailingParts = (prompt: { content?: unknown }[]) => {
+      let content = prompt[prompt.length - 1]?.content;
+      return Array.isArray(content) ? (content as any[]) : [];
+    };
+
+    let toolMessageText = (prompt: { role?: string; content?: unknown }[]) => {
+      let content = prompt.find((m) => m.role === 'tool')?.content;
+      return Array.isArray(content)
+        ? (content as any[]).map((p) => p.text ?? '').join('\n')
+        : (content as string);
+    };
+
+    let trailingText = (prompt: { content?: unknown }[]) => {
+      let content = prompt[prompt.length - 1]?.content;
+      return Array.isArray(content)
+        ? (content as any[])
+            .filter((p) => p.type === 'text')
+            .map((p) => p.text)
+            .join('\n')
+        : String(content ?? '');
+    };
+
+    let imageUrls = (prompt: { content?: unknown }[]) =>
+      trailingParts(prompt)
+        .filter((p) => p.type === 'image_url')
+        .map((p) => p.image_url.url);
+
+    test('an image attached to a client-sent tool result reaches the model on the trailing message', async () => {
+      let screenshot = png('capture.png');
+      mockImage(screenshot);
+      let history = [
+        humanMessage('1', 1, 'Look at my brand guide'),
+        botToolRequest('2', 2, ['capture-1']),
+        toolResult('3', 3, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          attachedFiles: [screenshot],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(screenshot)]);
+      let parts = trailingParts(prompt);
+      let imageIndex = parts.findIndex((p) => p.type === 'image_url');
+      assert.strictEqual(
+        parts[imageIndex - 1]?.text,
+        'Attached to a tool result: capture.png (https://example.com/capture.png)',
+        'a label naming the file precedes the image',
+      );
+
+      let toolMessage = prompt.find((m) => m.role === 'tool');
+      assert.ok(
+        !Array.isArray(toolMessage?.content) ||
+          (toolMessage?.content as any[]).every((p) => p.type === 'text'),
+        'the tool message carries no media parts',
+      );
+      assert.ok(
+        toolMessageText(prompt).includes('[image/png, 2048 bytes]'),
+        'the tool message lists the image as metadata',
+      );
+    });
+
+    test('a multi-step tool loop keeps the images it collected earlier in the turn', async () => {
+      let first = png('first.png');
+      let second = png('second.png');
+      mockImage(first);
+      mockImage(second);
+      let history = [
+        humanMessage('1', 1, 'Compare these'),
+        botToolRequest('2', 2, ['read-1']),
+        toolResult('3', 3, {
+          requestId: 'read-1',
+          requestEventId: '2',
+          sender: '@aibot:localhost',
+          attachedFiles: [first],
+        }),
+        botToolRequest('4', 4, ['capture-1']),
+        toolResult('5', 5, {
+          requestId: 'capture-1',
+          requestEventId: '4',
+          attachedFiles: [second],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [
+        dataUrlOf(first),
+        dataUrlOf(second),
+      ]);
+    });
+
+    test('tool-result images from an earlier turn stay metadata only', async () => {
+      let old = png('old.png');
+      mockImage(old);
+      let history = [
+        humanMessage('1', 1, 'Capture it'),
+        botToolRequest('2', 2, ['capture-1']),
+        toolResult('3', 3, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          attachedFiles: [old],
+        }),
+        humanMessage('4', 4, 'Thanks, now something else'),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), []);
+      assert.ok(
+        toolMessageText(prompt).includes('[image/png, 2048 bytes]'),
+        'the earlier result still lists the image as metadata',
+      );
+    });
+
+    test('a model without image input is told by name which tool-result image it cannot see', async () => {
+      let screenshot = png('capture.png');
+      let history = [
+        humanMessage('1', 1, 'What does it look like?'),
+        botToolRequest('2', 2, ['capture-1']),
+        toolResult('3', 3, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          attachedFiles: [screenshot],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+        ['text'],
+      );
+
+      assert.deepEqual(imageUrls(prompt), []);
+      let trailing = prompt[prompt.length - 1]?.content;
+      let text = Array.isArray(trailing)
+        ? (trailing as any[]).map((p) => p.text ?? '').join('\n')
+        : (trailing as string);
+      assert.ok(
+        text.includes(
+          'capture.png (https://example.com/capture.png): the active model does not accept image files',
+        ),
+        'the note names the image and why it was not sent',
+      );
+      assert.ok(
+        text.includes('you cannot see them'),
+        'the note says the model cannot see it',
+      );
+    });
+
+    test('a result mixing text files and images embeds only the images', async () => {
+      let screenshot = png('view.png');
+      mockImage(screenshot);
+      mockResponses.set('http://test.com/card.gts-uploaded', {
+        ok: true,
+        text: 'export class Card {}',
+      });
+      let history = [
+        humanMessage('1', 1, 'Build and show me the card'),
+        botToolRequest('2', 2, ['run-1']),
+        toolResult('3', 3, {
+          requestId: 'run-1',
+          requestEventId: '2',
+          attachedFiles: [
+            {
+              sourceUrl: 'http://localhost:4201/user/realm/card.gts',
+              url: 'http://test.com/card.gts-uploaded',
+              name: 'card.gts',
+              contentType: 'text/plain',
+            },
+            screenshot,
+          ],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(screenshot)]);
+      assert.notOk(
+        trailingParts(prompt).some(
+          (p) => p.type === 'text' && p.text.includes('card.gts'),
+        ),
+        'the text file is not labelled as media',
+      );
+      assert.ok(
+        toolMessageText(prompt).includes('export class Card {}'),
+        'the text file content rides in the tool message',
+      );
+    });
+
+    test('currentTurnToolResultMedia keeps the newest files up to the cap', () => {
+      let count = MAX_CURRENT_TURN_TOOL_RESULT_MEDIA + 3;
+      let history: DiscreteMatrixEvent[] = [humanMessage('1', 1, 'Go')];
+      for (let i = 0; i < count; i++) {
+        history.push(botToolRequest(`req-${i}`, 10 + i * 2, [`call-${i}`]));
+        history.push(
+          toolResult(`res-${i}`, 11 + i * 2, {
+            requestId: `call-${i}`,
+            requestEventId: `req-${i}`,
+            attachedFiles: [png(`image-${i}.png`)],
+          }),
+        );
+      }
+
+      let { included: media } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+      );
+
+      assert.deepEqual(
+        media.map((f) => f.name),
+        Array.from(
+          { length: MAX_CURRENT_TURN_TOOL_RESULT_MEDIA },
+          (_, i) => `image-${i + 3}.png`,
+        ),
+      );
+    });
+
+    test('currentTurnToolResultMedia counts only the latest result of a retried call', () => {
+      let history = [
+        humanMessage('1', 1, 'Go'),
+        botToolRequest('2', 2, ['capture-1']),
+        toolResult('3', 3, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          status: 'failed',
+          attachedFiles: [png('partial.png')],
+        }),
+        toolResult('4', 4, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          attachedFiles: [png('final.png')],
+        }),
+      ];
+
+      assert.deepEqual(
+        currentTurnToolResultMedia(history, '@aibot:localhost').included.map(
+          (f) => f.name,
+        ),
+        ['final.png'],
+      );
+    });
+
+    test('a retried call takes the position of its latest result', () => {
+      let history = [
+        humanMessage('1', 1, 'Go'),
+        botToolRequest('2', 2, ['call-a', 'call-b']),
+        toolResult('3', 3, {
+          requestId: 'call-a',
+          requestEventId: '2',
+          status: 'failed',
+          attachedFiles: [png('a-first-attempt.png')],
+        }),
+        toolResult('4', 4, {
+          requestId: 'call-b',
+          requestEventId: '2',
+          attachedFiles: [png('b.png')],
+        }),
+        toolResult('5', 5, {
+          requestId: 'call-a',
+          requestEventId: '2',
+          attachedFiles: [png('a-retry.png')],
+        }),
+      ];
+
+      assert.deepEqual(
+        currentTurnToolResultMedia(history, '@aibot:localhost').included.map(
+          (f) => f.name,
+        ),
+        ['b.png', 'a-retry.png'],
+        'the retried call is newer than the call that finished before its retry',
+      );
+    });
+
+    test('files the model cannot take do not use up the media slots', () => {
+      let history: DiscreteMatrixEvent[] = [humanMessage('1', 1, 'Go')];
+      for (let i = 0; i < MAX_CURRENT_TURN_TOOL_RESULT_MEDIA; i++) {
+        history.push(botToolRequest(`req-${i}`, 10 + i * 2, [`call-${i}`]));
+        history.push(
+          toolResult(`res-${i}`, 11 + i * 2, {
+            requestId: `call-${i}`,
+            requestEventId: `req-${i}`,
+            attachedFiles: [png(`image-${i}.png`)],
+          }),
+        );
+      }
+      history.push(botToolRequest('req-pdf', 100, ['call-pdf']));
+      history.push(
+        toolResult('res-pdf', 101, {
+          requestId: 'call-pdf',
+          requestEventId: 'req-pdf',
+          attachedFiles: [
+            {
+              sourceUrl: 'https://example.com/report.pdf',
+              url: 'http://test.com/report.pdf-uploaded',
+              name: 'report.pdf',
+              contentType: 'application/pdf',
+              contentSize: 4096,
+            },
+          ],
+        }),
+      );
+
+      let { included, omitted } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+        ['text', 'image'],
+      );
+
+      assert.strictEqual(
+        included.length,
+        MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
+        'every image still fits',
+      );
+      assert.deepEqual(
+        omitted.map(({ file, reason }) => [file.name, reason]),
+        [['report.pdf', 'the active model does not accept PDF files']],
+      );
+    });
+
+    test('currentTurnToolResultMedia leaves out files over the per-file limit or of unknown size', () => {
+      let tooLarge = {
+        ...png('huge.png'),
+        contentSize: MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1,
+      };
+      let { contentSize: _omit, ...unsized } = png('unsized.png');
+      let history = [
+        humanMessage('1', 1, 'Go'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [png('small.png'), tooLarge, unsized],
+        }),
+      ];
+
+      let { included, omitted } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+      );
+
+      assert.deepEqual(
+        included.map((f) => f.name),
+        ['small.png'],
+      );
+      assert.deepEqual(
+        omitted.map(({ file, reason }) => [file.name, reason]),
+        [
+          ['huge.png', 'it is larger than 3.75 MiB'],
+          ['unsized.png', 'its size is unknown'],
+        ],
+      );
+    });
+
+    test('currentTurnToolResultMedia keeps the newest files within the byte budget', () => {
+      let fileSize = MAX_TOOL_RESULT_MEDIA_FILE_BYTES;
+      let fitting = Math.floor(
+        MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES / fileSize,
+      );
+      let history: DiscreteMatrixEvent[] = [humanMessage('1', 1, 'Go')];
+      for (let i = 0; i <= fitting; i++) {
+        history.push(botToolRequest(`req-${i}`, 10 + i * 2, [`call-${i}`]));
+        history.push(
+          toolResult(`res-${i}`, 11 + i * 2, {
+            requestId: `call-${i}`,
+            requestEventId: `req-${i}`,
+            attachedFiles: [
+              { ...png(`image-${i}.png`), contentSize: fileSize },
+            ],
+          }),
+        );
+      }
+
+      let { included, omitted } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+      );
+
+      assert.deepEqual(
+        included.map((f) => f.name),
+        Array.from({ length: fitting }, (_, i) => `image-${i + 1}.png`),
+        'the newest files that fit the budget are kept',
+      );
+      assert.deepEqual(
+        omitted.map(({ file }) => file.name),
+        ['image-0.png'],
+        'the oldest file is left out once the budget is spent',
+      );
+    });
+
+    test('the trailing note names tool-result media the limits left out', async () => {
+      let small = png('small.png');
+      mockImage(small);
+      let tooLarge = {
+        ...png('huge.png'),
+        contentSize: MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1,
+      };
+      let history = [
+        humanMessage('1', 1, 'Show me'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [small, tooLarge],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(small)]);
+      let text = trailingParts(prompt)
+        .filter((p) => p.type === 'text')
+        .map((p) => p.text)
+        .join('\n');
+      assert.ok(
+        text.includes(
+          'huge.png (https://example.com/huge.png): it is larger than 3.75 MiB',
+        ),
+        'the note names the left-out file and why',
+      );
+      assert.ok(
+        text.includes('you cannot see them'),
+        'the note says the model cannot see it',
+      );
+    });
+
+    test('a tool-result file that is not a Matrix media item is never fetched', async () => {
+      let elsewhere: AttachedFile = {
+        sourceUrl: 'https://example.com/elsewhere.png',
+        url: 'https://attacker.example/collect.png',
+        name: 'elsewhere.png',
+        contentType: 'image/png',
+        contentSize: 2048,
+      };
+      let fetched: string[] = [];
+      let fetchBefore = (globalThis as any).fetch;
+      (globalThis as any).fetch = async (url: string, init: unknown) => {
+        fetched.push(url);
+        return fetchBefore(url, init);
+      };
+      let history = [
+        humanMessage('1', 1, 'Show me'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [elsewhere],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), []);
+      assert.notOk(
+        fetched.some((url) => url.includes('attacker.example')),
+        'the bot token is never sent to the named host',
+      );
+      let text = trailingText(prompt);
+      assert.ok(
+        text.includes(
+          'elsewhere.png (https://example.com/elsewhere.png): it is not a file stored in this conversation',
+        ),
+      );
+    });
+
+    test('a downloaded tool-result file over the per-file limit is left out whatever its declared size', async () => {
+      let understated = png('understated.png');
+      mockImage(understated, 'x'.repeat(MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1));
+      let history = [
+        humanMessage('1', 1, 'Show me'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [understated],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), []);
+      assert.ok(
+        trailingText(prompt).includes(
+          'understated.png (https://example.com/understated.png): it is larger than 3.75 MiB',
+        ),
+      );
+    });
+
+    test('the per-turn budget holds on downloaded bytes, keeping the newest', async () => {
+      let perFile = MAX_TOOL_RESULT_MEDIA_FILE_BYTES;
+      let fitting = Math.floor(
+        MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES / perFile,
+      );
+      let history: DiscreteMatrixEvent[] = [humanMessage('1', 1, 'Go')];
+      let files: AttachedFile[] = [];
+      for (let i = 0; i <= fitting; i++) {
+        // Each declares 2 KiB but downloads the full per-file limit.
+        let file = png(`under${i}.png`);
+        mockImage(file, 'x'.repeat(perFile));
+        files.push(file);
+        history.push(botToolRequest(`req-${i}`, 10 + i * 2, [`call-${i}`]));
+        history.push(
+          toolResult(`res-${i}`, 11 + i * 2, {
+            requestId: `call-${i}`,
+            requestEventId: `req-${i}`,
+            attachedFiles: [file],
+          }),
+        );
+      }
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.strictEqual(imageUrls(prompt).length, fitting);
+      assert.ok(
+        trailingText(prompt).includes(
+          'under0.png (https://example.com/under0.png): newer tool-result media already fill',
+        ),
+        'the oldest is left out once downloads fill the budget',
+      );
+      let labels = trailingParts(prompt)
+        .filter((p) => p.type === 'text' && p.text.startsWith('Attached to'))
+        .map((p) => p.text);
+      assert.deepEqual(
+        labels,
+        files
+          .slice(1)
+          .map(
+            (f) =>
+              `Attached to a tool result: ${f.name} (https://example.com/${f.name})`,
+          ),
+        'kept media stay in chronological order',
+      );
+    });
+
+    test('an image just under 5 MiB raw is over the limit, since its base64 is not', () => {
+      let { omitted } = currentTurnToolResultMedia(
+        [
+          humanMessage('1', 1, 'Go'),
+          botToolRequest('2', 2, ['call-1']),
+          toolResult('3', 3, {
+            requestId: 'call-1',
+            requestEventId: '2',
+            attachedFiles: [
+              { ...png('big.png'), contentSize: 5 * 1024 * 1024 - 1 },
+            ],
+          }),
+        ],
+        '@aibot:localhost',
+      );
+      assert.deepEqual(
+        omitted.map(({ file }) => file.name),
+        ['big.png'],
+      );
+    });
+
+    test("the human message's own media precede the tool-result media", async () => {
+      let attached = png('attached.png');
+      let captured = png('captured.png');
+      mockImage(attached);
+      mockImage(captured);
+      let message = humanMessage('1', 1, 'Compare mine with the capture');
+      (message.content as any).data.attachedFiles = [attached];
+      let history = [
+        message,
+        botToolRequest('2', 2, ['capture-1']),
+        toolResult('3', 3, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          attachedFiles: [captured],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [
+        dataUrlOf(attached),
+        dataUrlOf(captured),
+      ]);
+      let labels = trailingParts(prompt)
+        .filter(
+          (p) =>
+            p.type === 'text' && p.text.startsWith('Attached to a tool result'),
+        )
+        .map((p) => p.text);
+      assert.deepEqual(
+        labels,
+        [
+          'Attached to a tool result: captured.png (https://example.com/captured.png)',
+        ],
+        "only the tool result's image is labelled",
+      );
+    });
+
+    test('currentTurnToolResultMedia ignores non-media attachments and earlier turns', () => {
+      let history = [
+        humanMessage('1', 1, 'First'),
+        botToolRequest('2', 2, ['a']),
+        toolResult('3', 3, {
+          requestId: 'a',
+          requestEventId: '2',
+          attachedFiles: [png('earlier.png')],
+        }),
+        humanMessage('4', 4, 'Second'),
+        botToolRequest('5', 5, ['b']),
+        toolResult('6', 6, {
+          requestId: 'b',
+          requestEventId: '5',
+          attachedFiles: [
+            {
+              url: 'http://test.com/notes-uploaded',
+              name: 'notes.md',
+              contentType: 'text/markdown',
+            },
+            png('current.png'),
+          ],
+        }),
+      ];
+
+      assert.deepEqual(
+        currentTurnToolResultMedia(history, '@aibot:localhost').included.map(
+          (f) => f.name,
+        ),
+        ['current.png'],
+      );
+    });
+  });
+
   test('read-file tool call is rejected for files not previously attached in the room', async () => {
     // Policy: the AI should only be able to read files that were
     // previously attached by the user in the same room.
@@ -7945,14 +9482,14 @@ module('markdown skills', () => {
 
   test('parseMarkdownSkill strips frontmatter and takes title from name', (assert) => {
     let content =
-      '---\nname: "Source Code Editing"\ndescription: edits\nboxel:\n  kind: skill\n---\n\n# Source Code Editing\n\nUse SEARCH/REPLACE blocks.\n';
+      '---\nname: "Source Code Editing"\ndescription: edits\nboxel:\n  kind: skill\n---\n\n# Source Code Editing\n\nEdit source with run-realm-code.\n';
     let { title, body, kind } = parseMarkdownSkill(content, {
       sourceUrl: 'https://r/skills/source-code-editing/SKILL.md',
     } as any);
     assert.strictEqual(title, 'Source Code Editing');
     assert.strictEqual(
       body,
-      '# Source Code Editing\n\nUse SEARCH/REPLACE blocks.',
+      '# Source Code Editing\n\nEdit source with run-realm-code.',
     );
     assert.strictEqual(kind, 'skill');
     assert.notOk(body.includes('kind: skill'), 'frontmatter is stripped');
@@ -8259,6 +9796,69 @@ module('markdown skill tools', (hooks) => {
     assert.strictEqual(tools.length, 1);
     assert.strictEqual(tools[0].function.name, 'plan-trip_ab12');
     assert.strictEqual(tools[0].function.description, 'Plans a trip');
+  });
+
+  test('a compaction carries each event that contributes a new tool, in order', async () => {
+    const userContextMessage = {
+      type: 'm.room.message',
+      event_id: 'user-1',
+      origin_server_ts: 1500,
+      sender: '@user:localhost',
+      room_id: 'room1',
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: 'hi',
+        data: {
+          context: {
+            tools: [
+              {
+                type: 'function',
+                function: { name: 'context-tool', parameters: {} },
+              },
+            ],
+          },
+        },
+      },
+    } as unknown as DiscreteMatrixEvent;
+    const forgedRead = {
+      ...readResultEvent('forged', 1800, [discoveredDef('forged-tool')]),
+      sender: '@user:localhost',
+    } as DiscreteMatrixEvent;
+
+    assert.deepEqual(
+      toolSourceEventIdsToCarry(
+        [
+          readResultEvent('read-1', 1000, [discoveredDef('plan-trip_ab12')]),
+          userContextMessage,
+          // Adds nothing new.
+          readResultEvent('read-2', 2000, [discoveredDef('plan-trip_ab12')]),
+          forgedRead,
+          readResultEvent('read-3', 3000, [
+            discoveredDef('plan-trip_ab12'),
+            discoveredDef('book-hotel_cd34'),
+          ]),
+        ],
+        '@aibot:localhost',
+      ),
+      ['read-1', 'user-1', 'read-3'],
+    );
+  });
+
+  test('a compaction carries the same tool from each skill that declares it', async () => {
+    const otherSkillUrl = 'http://test-realm/other-skill/SKILL.md';
+    assert.deepEqual(
+      toolSourceEventIdsToCarry(
+        [
+          readResultEvent('read-1', 1000, [discoveredDef('plan-trip_ab12')]),
+          readResultEvent('read-2', 2000, [
+            discoveredDef('plan-trip_ab12', { skillUrl: otherSkillUrl }),
+          ]),
+        ],
+        '@aibot:localhost',
+      ),
+      ['read-1', 'read-2'],
+      'disabling the first skill leaves the tool from the second',
+    );
   });
 
   test('a re-read of a skill cannot mutate or remove earlier definitions', async () => {
@@ -8644,6 +10244,74 @@ module('absolutizeSkillLinks', () => {
         '[boxel](https://localhost:4201/skills/skills/boxel/SKILL.md)',
       ),
       'the prompt carries a copy-ready absolute url',
+    );
+  });
+});
+
+module('skill feature sections', () => {
+  const INDEX = 'https://localhost:4201/skills/index.md';
+  const instructions = [
+    'Before.',
+    '',
+    '<!-- feature:catalog-reuse -->',
+    'Search the catalog first.',
+    '<!-- /feature:catalog-reuse -->',
+    '',
+    'After.',
+  ].join('\n');
+  const skill = {
+    id: INDEX,
+    attributes: { title: 'Index', instructions },
+  };
+
+  test('leaves out a feature section when its feature is disabled', () => {
+    let [message] = skillCardsToMessages([skill]);
+    assert.false(message.includes('Search the catalog first.'));
+    assert.false(message.includes('feature:'), 'the markers are removed too');
+    assert.true(message.includes('Before.'));
+    assert.true(message.includes('After.'));
+  });
+
+  test('keeps a feature section, without its markers, when its feature is enabled', () => {
+    let [message] = skillCardsToMessages([skill], ['catalog-reuse']);
+    assert.true(message.includes('Search the catalog first.'));
+    assert.false(message.includes('feature:'), 'the markers are removed');
+  });
+
+  test('a room enables and disables a feature with boxel-debug:feature messages', () => {
+    const message = (sender: string, body: string) => ({
+      type: 'm.room.message',
+      sender,
+      content: { body },
+    });
+    const bot = '@aibot:localhost';
+    const user = '@user:localhost';
+    assert.deepEqual(sessionSkillFeatures([], bot), []);
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [message(user, 'boxel-debug:feature:enable:catalog-reuse')],
+        bot,
+      ),
+      ['catalog-reuse'],
+    );
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [
+          message(user, 'boxel-debug:feature:enable:catalog-reuse'),
+          message(user, 'boxel-debug:feature:disable:catalog-reuse'),
+        ],
+        bot,
+      ),
+      [],
+      'a later disable wins',
+    );
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [message(bot, 'boxel-debug:feature:enable:catalog-reuse')],
+        bot,
+      ),
+      [],
+      'the bot cannot enable a feature',
     );
   });
 });

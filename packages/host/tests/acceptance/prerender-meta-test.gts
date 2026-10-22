@@ -290,6 +290,9 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   hooks.afterEach(function () {
     delete (globalThis as any).__boxelRenderContext;
+    // No test leaves a card-source stash behind for the next one: the render
+    // route honors it whenever it names the card being rendered.
+    delete (globalThis as any).__boxelCardRenderData;
   });
 
   test('can generate serialized instance', async function (assert) {
@@ -343,6 +346,54 @@ module('Acceptance | prerender | meta', function (hooks) {
         },
       },
       'serialized instance is correct',
+    );
+  });
+
+  test('a serialized instance stops at its own resource, however deep the resident graph', async function (assert) {
+    // Jade links to Hassan, who links to three pets. The searchable settle
+    // leaves that whole graph resident, so this is the case where walking it
+    // would cost the most and contribute the least: a link target is a
+    // reference here, and its own links are not the card's to carry.
+    let url = `${testRealmURL}Person/jade.json`;
+    await visit(renderPath(url, '/meta'));
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+    assert.deepEqual(
+      meta.serialized,
+      {
+        data: {
+          type: 'card',
+          id: testRRI('Person/jade'),
+          attributes: {
+            name: 'Jade',
+            cardTitle: 'Jade',
+            cardInfo: {
+              name: null,
+              summary: null,
+              cardThumbnailURL: null,
+              notes: null,
+            },
+            cardDescription: null,
+            cardThumbnailURL: null,
+            numOfPets: '0',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: './hassan',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('../person'),
+              name: 'Person',
+            },
+            realmURL: testRealmURL,
+          },
+        },
+      },
+      'the link target is a reference, and neither it nor its own links ride along',
     );
   });
 
@@ -582,6 +633,104 @@ module('Acceptance | prerender | meta', function (hooks) {
     );
   });
 
+  test("the meta payload carries the parent route's model-build breakdown", async function (assert) {
+    // The model build runs in the parent `render` route, inside the same
+    // transition the prerender runner times as this visit's `meta` route
+    // step — so without these stages on the payload, the dominant part of
+    // that step's wall-clock has no breakdown at all. `clearCache` forces a
+    // cold build so `deriveType` covers a real module-graph load rather
+    // than a warm-tab no-op.
+    let url = `${testRealmURL}Person/hassan.json`;
+    await visit(customRenderPath(url, { clearCache: true }, 1) + '/meta');
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+
+    let buildModelMs = meta.diagnostics?.buildModelMs;
+    assert.ok(buildModelMs, 'the model build breakdown rides the payload');
+    for (let stage of [
+      'fetchSource',
+      'deriveType',
+      'hydrate',
+      'storeSettle',
+    ] as const) {
+      let ms = buildModelMs?.[stage];
+      assert.strictEqual(
+        typeof ms,
+        'number',
+        `buildModelMs.${stage} is measured, got: ${JSON.stringify(ms)}`,
+      );
+      assert.ok(
+        (ms as number) >= 0,
+        `buildModelMs.${stage} is a non-negative span`,
+      );
+    }
+
+    // The three waits the meta route itself performs before any of its own
+    // work: the two per-loader-cached base-module loads and the parent's
+    // ready settle. All are serial phases of the `meta` route step, so
+    // leaving them out would put the gap back in the bucket this breakdown
+    // exists to close.
+    for (let phase of [
+      'cardApiLoadMs',
+      'readySettleMs',
+      'searchableLoadMs',
+    ] as const) {
+      assert.strictEqual(
+        typeof meta.diagnostics?.[phase],
+        'number',
+        `${phase} is measured, got: ${JSON.stringify(meta.diagnostics?.[phase])}`,
+      );
+    }
+
+    // The uncapped module-evaluation totals. These are what distinguishes
+    // "the graph was already warm" from "the itemized list lost the
+    // slowest-N race", so a reader must always be able to get them — the
+    // bounded list below can legitimately be empty either way.
+    //
+    // Only their presence is asserted, not a non-zero count: this realm's
+    // modules are registered as objects, which the test adapter installs
+    // via `shimModule`, and a shimmed module is evaluated by definition
+    // rather than through `Loader.evaluate()`. A count of zero here is the
+    // harness, not the card.
+    for (let field of [
+      'moduleEvaluationCount',
+      'moduleEvaluationTotalMs',
+    ] as const) {
+      assert.strictEqual(
+        typeof meta.diagnostics?.[field],
+        'number',
+        `${field} is measured, got: ${JSON.stringify(meta.diagnostics?.[field])}`,
+      );
+    }
+
+    // The per-stage detail blocks are bounded to the slowest entries at or
+    // over a floor, so a small fixture card legitimately records none of
+    // them. What must hold is that anything recorded is well-formed —
+    // a malformed entry would only surface in production otherwise.
+    for (let evaluation of meta.diagnostics?.moduleEvaluationsMs ?? []) {
+      assert.strictEqual(
+        typeof evaluation.url,
+        'string',
+        'a module evaluation entry names its module',
+      );
+      assert.strictEqual(typeof evaluation.ms, 'number');
+    }
+    for (let wait of meta.diagnostics?.storeSettleWaits ?? []) {
+      assert.ok(
+        ['card', 'file', 'query'].includes(wait.kind),
+        `a settle wait carries a known kind, got: ${wait.kind}`,
+      );
+      assert.strictEqual(typeof wait.target, 'string');
+      assert.strictEqual(typeof wait.ms, 'number');
+    }
+    for (let [path, ms] of Object.entries(
+      meta.diagnostics?.hydrateFieldsMs ?? {},
+    )) {
+      assert.ok(path.length > 0, 'a hydration entry is keyed by field path');
+      assert.strictEqual(typeof ms, 'number');
+    }
+  });
+
   test('a render carrying both cardRender and fileExtract returns the file extract alongside the meta payload', async function (assert) {
     let url = `${testRealmURL}Pet/paper.json`;
 
@@ -643,6 +792,144 @@ module('Acceptance | prerender | meta', function (hooks) {
       [...(fusedDeps ?? [])].sort(),
       [...(standaloneDeps ?? [])].sort(),
       'fused extract deps are set-equal to the standalone extract deps',
+    );
+  });
+
+  // The card branch of the render route builds its model from a caller-supplied
+  // stash when there is one, instead of fetching the instance's source for
+  // itself. Each of these stashes bytes that differ from the realm's copy, so
+  // the rendered card names which read it was built from — 'Stashed Hassan'
+  // could only have come from the stash, and 'Hassan' only from a fetch.
+  const STASHED_HASSAN = JSON.stringify({
+    data: {
+      attributes: { name: 'Stashed Hassan' },
+      meta: { adoptsFrom: { module: '../person', name: 'Person' } },
+    },
+  });
+
+  test('a card render builds its model from the stashed source rather than fetching', async function (assert) {
+    let url = `${testRealmURL}Person/hassan.json`;
+    (globalThis as any).__boxelCardRenderData = {
+      url,
+      source: STASHED_HASSAN,
+      realmURL: testRealmURL,
+      lastModified: Date.parse('2026-01-02T03:04:05Z'),
+    };
+
+    await visit(renderPath(url, '/meta'));
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+
+    assert.strictEqual(
+      (meta.serialized as any)?.data?.attributes?.name,
+      'Stashed Hassan',
+      'the model was built from the stashed source',
+    );
+    // The serialized name proves the bytes came from the stash; this proves
+    // the render knows it, which is what a production row can be read for.
+    assert.strictEqual(
+      meta.diagnostics?.cardSourceFrom,
+      'stash',
+      'the build reports that it took the stashed path',
+    );
+    // The realm URL and the card's own identity still come out right: the
+    // stash supplies what the card branch otherwise reads off the response
+    // headers, and the route keys the model on the route's id either way.
+    assert.strictEqual(
+      (meta.serialized as any)?.data?.meta?.realmURL,
+      testRealmURL,
+      'the realm the stash names is the realm the instance is serialized into',
+    );
+    assert.strictEqual(
+      (meta.serialized as any)?.data?.id,
+      testRRI('Person/hassan'),
+      'the rendered card is the one the route names',
+    );
+  });
+
+  test('a stash naming a different card is ignored and the render fetches', async function (assert) {
+    let url = `${testRealmURL}Person/hassan.json`;
+    // A prerender tab serves many cards. A stash left over from another card's
+    // visit must never become this card's document.
+    (globalThis as any).__boxelCardRenderData = {
+      url: `${testRealmURL}Person/jade.json`,
+      source: STASHED_HASSAN,
+      realmURL: testRealmURL,
+      lastModified: Date.parse('2026-01-02T03:04:05Z'),
+    };
+
+    await visit(renderPath(url, '/meta'));
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+
+    assert.strictEqual(
+      (meta.serialized as any)?.data?.attributes?.name,
+      'Hassan',
+      "the realm's bytes were used, not the stash's",
+    );
+    assert.strictEqual(
+      meta.diagnostics?.cardSourceFrom,
+      'fetch',
+      'the build reports that it fell back to fetching',
+    );
+  });
+
+  test('a stash that parses to something other than a card document is ignored', async function (assert) {
+    // `JSON.parse` succeeds for `null`, a number and an array, and the build
+    // goes on to test `'errors' in doc` — which throws for the first two and
+    // would latch a render error on the card. Falling back to the fetch is the
+    // whole point of validating the stash, so it has to cover what the source
+    // parses TO, not merely that it parsed.
+    let url = `${testRealmURL}Person/hassan.json`;
+    for (let source of ['null', '42', '[]', '{"notData":true}']) {
+      (globalThis as any).__boxelCardRenderData = {
+        url,
+        source,
+        realmURL: testRealmURL,
+        lastModified: Date.parse('2026-01-02T03:04:05Z'),
+      };
+
+      await visit(renderPath(url, '/meta'));
+      let { value } = await capturePrerenderResult('textContent');
+      let meta: PrerenderMeta = JSON.parse(value);
+
+      assert.strictEqual(
+        (meta.serialized as any)?.data?.attributes?.name,
+        'Hassan',
+        `source ${source} fell back to the realm's bytes`,
+      );
+      assert.strictEqual(
+        meta.diagnostics?.cardSourceFrom,
+        'fetch',
+        `source ${source} is reported as a fetch`,
+      );
+    }
+  });
+
+  test('a stash missing the values the card branch reads off the response is ignored', async function (assert) {
+    let url = `${testRealmURL}Person/hassan.json`;
+    // Without a realm URL there is nothing to serialize the instance into, and
+    // the fetch the stash replaces is the only other source for it. Falling
+    // back costs a round-trip; trusting a partial stash would cost correctness.
+    (globalThis as any).__boxelCardRenderData = {
+      url,
+      source: STASHED_HASSAN,
+      lastModified: Date.parse('2026-01-02T03:04:05Z'),
+    };
+
+    await visit(renderPath(url, '/meta'));
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+
+    assert.strictEqual(
+      (meta.serialized as any)?.data?.attributes?.name,
+      'Hassan',
+      "the realm's bytes were used, not the incomplete stash's",
+    );
+    assert.strictEqual(
+      meta.diagnostics?.cardSourceFrom,
+      'fetch',
+      'the build reports that it fell back to fetching',
     );
   });
 });

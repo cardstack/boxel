@@ -5,7 +5,6 @@ import type {
   ResponseWithNodeStream,
 } from '@cardstack/runtime-common';
 import {
-  isSessionRevoked,
   logger as getLogger,
   webStreamToText,
   sanitizeLoggingCorrelationId,
@@ -13,8 +12,24 @@ import {
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
+import {
+  withConnectionOrdering,
+  withConnectionTenant,
+} from '@cardstack/postgres';
 import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
-import { retrieveTokenClaim } from '../utils/jwt.ts';
+import { guardDeclaredLength } from '../lib/declared-length-guard.ts';
+import { retrieveUserSessionClaim } from '../utils/jwt.ts';
+import { getPublicInstanceId, INSTANCE_ID_HEADER } from '../lib/instance-id.ts';
+import {
+  verifyOperatorToken,
+  type OperatorScope,
+} from '../utils/operator-token.ts';
+import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
+import {
+  isKeyRoutePath,
+  keepsMethodAndPathOnly,
+  withCredentialHeadersMasked,
+} from '../lib/request-telemetry.ts';
 import {
   AuthenticationError,
   AuthenticationErrorMessages,
@@ -28,9 +43,11 @@ import {
 import {
   admitSearch,
   admitSearchUnconditionally,
+  beginSearchRequest,
   getSearchAdmissionLimit,
   getSearchInFlight,
   getSearchShedCount,
+  type SearchRequest,
 } from '../search-inflight.ts';
 
 // Matches the realm-server's search endpoints (`/_search`,
@@ -174,13 +191,80 @@ export function livenessCheck(ctxt: Koa.Context, _next: Koa.Next) {
   ctxt.set('server', '@cardstack/host');
 }
 
-// Respond to AWS ELB health check
+let parsedHealthCheckUserAgents:
+  | { raw: string; prefixes: string[] }
+  | undefined;
+
+// The user-agent prefixes the deployment names in HEALTH_CHECK_USER_AGENTS
+// (comma-separated), so the code carries no provider's name (ADR 003 §1.6).
+// The parse is kept until the setting changes, so tests and operators can
+// change it without a restart.
+export function healthCheckUserAgents(): string[] {
+  let raw = process.env.HEALTH_CHECK_USER_AGENTS ?? '';
+  if (parsedHealthCheckUserAgents?.raw !== raw) {
+    parsedHealthCheckUserAgents = {
+      raw,
+      prefixes: raw
+        .split(',')
+        .map((prefix) => prefix.trim())
+        .filter(Boolean),
+    };
+  }
+  return parsedHealthCheckUserAgents.prefixes;
+}
+
+// Answers the load balancer's health check from memory, ahead of the host-app
+// and realm-serving middleware.
 export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
-  if (ctxt.req.headers['user-agent']?.startsWith('ELB-HealthChecker')) {
+  let userAgent = ctxt.req.headers['user-agent'];
+  if (
+    userAgent &&
+    healthCheckUserAgents().some((prefix) => userAgent.startsWith(prefix))
+  ) {
     ctxt.body = 'OK';
     return;
   }
   return next();
+}
+
+// The request URL as the log lines print it: any `token` query param is
+// masked, because two token-bearing families travel there — capture-URL
+// tokens on `_capture/` GETs and full session JWTs on `_download-realm`
+// links — and these lines ship to Loki. (ALB access logs still record the
+// raw request line; the capture token's single-URL scope and short TTL are
+// the mitigation there.)
+function loggableRequestURL(ctxt: Koa.Context): string {
+  let url = fullRequestURL(ctxt);
+  // A key route takes nothing in its query string, so whatever a client put
+  // there (a misplaced ticket or value) is left out.
+  if (url.search && isKeyRoutePath(url.pathname)) {
+    return `${url.origin}${url.pathname}`;
+  }
+  if (!url.searchParams.has('token')) {
+    return url.href;
+  }
+  let masked = new URL(url.href);
+  masked.searchParams.set('token', 'REDACTED');
+  return masked.href;
+}
+
+// The request's headers as the debug line prints them. The line goes to Loki,
+// and Sentry's console integration keeps it as a breadcrumb on any event raised
+// during the request, so it carries no more than that event may:
+// - On the secure origin, the proxy routes, the system-key routes and the key
+//   routes, where an event keeps only the method and path, the line lists the
+//   header names alone.
+// - Elsewhere, a credential header (the session token, cookies, a signature)
+//   keeps its name with its value masked, and every other header is printed as
+//   sent, so the line still shows what the caller sent for diagnosis.
+function loggableRequestHeaders(
+  ctxt: Koa.Context,
+): Record<string, string | string[] | undefined> | string[] {
+  let headers = ctxt.req.headers;
+  if (keepsMethodAndPathOnly({ url: fullRequestURL(ctxt).href, headers })) {
+    return Object.keys(headers);
+  }
+  return withCredentialHeadersMasked(headers);
 }
 
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
@@ -206,28 +290,125 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   let startedAt = Date.now();
 
   logger.info(
-    `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
-      fullRequestURL(ctxt).href
-    }${jobTag}${corrTag}`,
+    `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${loggableRequestURL(
+      ctxt,
+    )}${jobTag}${corrTag}`,
   );
 
   ctxt.res.on('finish', () => {
     logger.info(
-      `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
-        fullRequestURL(ctxt).href
-      }: ${ctxt.status}${jobTag}${corrTag} dur=${Date.now() - startedAt}ms`,
+      `--> ${ctxt.method} ${ctxt.req.headers.accept} ${loggableRequestURL(
+        ctxt,
+      )}: ${ctxt.status}${jobTag}${corrTag} dur=${Date.now() - startedAt}ms`,
     );
-    logger.debug(JSON.stringify(ctxt.req.headers));
+    logger.debug(JSON.stringify(loggableRequestHeaders(ctxt)));
   });
   return next();
 }
 
-// Puts a search through the admission gate (`search-inflight.ts`) and holds
-// its slot for the request's full lifecycle (parse → SQL → serialize → send),
-// which is the window in which it holds heap and in which a saturated event
-// loop would leave it unserviced. Mounted after CORS so that a shed response
-// carries the headers a cross-origin client needs to read its status and
-// Retry-After; before the body is parsed so that a shed costs nothing.
+// Where `searchAdmission` leaves the release for the slot it granted, so a
+// handler can hand the slot back before the response ends.
+const SEARCH_ADMISSION_RELEASE = 'searchAdmissionRelease';
+
+// Hand back the admission slot a search request holds, if it holds one. A
+// request that the live-search cache satisfies from another request's
+// computation — a `join` or a `hit` — builds no result document of its own, so
+// it calls this the moment the cache says so and stops counting toward the
+// ceiling; only the request doing the computing keeps its slot until its
+// response ends. That holds for an indexing-lane admission too: an in-render
+// search served from another request's computation holds no document either,
+// and the count is of computations, whichever lane admitted them. Only the slot
+// is handed back: the request goes on counting toward the link-shape policy's
+// reading until its response ends, since it is still waiting on the
+// computation it joined. Idempotent, and a no-op for requests the gate never
+// saw.
+export function releaseSearchAdmission(ctxt: Koa.Context): void {
+  let release = ctxt.state[SEARCH_ADMISSION_RELEASE];
+  if (typeof release === 'function') {
+    release();
+  }
+}
+
+// Where `searchAdmission` leaves the request it is counting, so the handler
+// that learns which realms the search names can attribute it to them.
+const SEARCH_REQUEST = 'searchRequest';
+
+// Count a search request toward the realms it names, from now until its
+// response ends — the reading each realm's link-shape level follows. Called by
+// whichever handler first knows the realms: the gate runs before the body is
+// parsed, and a federated search names its realms in the body. Idempotent per
+// realm, and a no-op for requests the gate did not count.
+export function attributeSearchRequest(
+  ctxt: Koa.Context,
+  realms: Iterable<string>,
+): void {
+  let searchRequest = ctxt.state[SEARCH_REQUEST] as SearchRequest | undefined;
+  searchRequest?.attribute(realms);
+}
+
+// Run the rest of a search request with the database connections it draws on
+// shared out as the realms it names, so that while another realm is searching
+// on this replica its queries wait for their share of the pool rather than
+// behind everything the other realm has queued (see the connection scheduler
+// in `@cardstack/postgres`). The tenant is the set of realms the request
+// names — for most searches, one realm. A request naming several is a tenant
+// of its own rather than a share of each realm's, so two searches whose sets
+// overlap without matching count as different tenants: a realm searched under
+// two sets at once holds up to a share under each while the pool is
+// oversubscribed. Keying by the whole set rather than treating overlapping
+// sets as one keeps realms apart that each federate with a common system
+// realm. Called by whichever handler first knows the realms, beside
+// `attributeSearchRequest`; requests the admission gate did not count run
+// untagged.
+export async function withSearchConnectionTenant<T>(
+  ctxt: Koa.Context,
+  realms: readonly string[],
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!ctxt.state[SEARCH_REQUEST] || realms.length === 0) {
+    return await fn();
+  }
+  return await withConnectionTenant([...new Set(realms)].sort().join(' '), fn);
+}
+
+// Order the database work of every request that names a realm as that realm,
+// so a quiet realm's request is not queued behind a busy realm's non-search
+// work, which would otherwise share one arrival-order queue with it (see the
+// connection scheduler in `@cardstack/postgres`). A published site's page
+// load is the case that matters: its queries run before any handler knows
+// which realm it is, so the realm is resolved here, from memory only, ahead
+// of every handler. The tenant is the realm's URL, the same key a search of
+// that realm alone is charged to, so the two are ordered as one. A search
+// the request turns out to be still opens its own tenant scope inside this
+// one and is held to its share as before.
+export function orderConnectionsByRealm(
+  deps: Pick<RealmRoutingDeps, 'reconciler'>,
+) {
+  return async function (ctxt: Koa.Context, next: Koa.Next) {
+    let realmURL: string | undefined;
+    try {
+      realmURL = knownRealmURL(fullRequestURL(ctxt), deps);
+    } catch {
+      // A request whose URL cannot be built is left to the handlers to
+      // reject; its work runs untagged.
+    }
+    if (!realmURL) {
+      return next();
+    }
+    await withConnectionOrdering(realmURL, () => next());
+  };
+}
+
+// Puts a search through the admission gate (`search-inflight.ts`). A search
+// that computes its own result holds its slot for the request's full lifecycle
+// (parse → SQL → serialize → send), which is the window in which it holds heap
+// and in which a saturated event loop would leave it unserviced; one that the
+// live-search cache serves from another's computation hands the slot back
+// early via `releaseSearchAdmission`. Every admitted request, whichever it
+// is, is also counted as a request in flight until its response ends, which is
+// the reading the link-shape policy decides on. Mounted after CORS so that a shed
+// response carries the headers a cross-origin client needs to read its status
+// and Retry-After; before the body is parsed so that a shed costs nothing.
 export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
   if (
     !SEARCH_PATH_PATTERN.test(ctxt.path) ||
@@ -245,16 +426,27 @@ export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
   let arrivedAt = Date.now();
   let closed = false;
   let release: (() => void) | undefined;
+  let searchRequest: SearchRequest | undefined;
   let releaseSlot = () => {
     release?.();
     release = undefined;
   };
+  // The slot and the request end separately: a request the live-search cache
+  // serves from another's computation hands its slot back early, but it is
+  // still a request in flight — waiting on that computation — until its
+  // response ends, and that is the count the link-shape policy reads.
+  let end = () => {
+    releaseSlot();
+    searchRequest?.end();
+    searchRequest = undefined;
+  };
+  ctxt.state[SEARCH_ADMISSION_RELEASE] = releaseSlot;
   // `finish` fires on a fully-sent response; `close` covers a connection
-  // torn down before that, so a slot can't leak on an abort.
-  ctxt.res.on('finish', releaseSlot);
+  // torn down before that, so neither count can leak on an abort.
+  ctxt.res.on('finish', end);
   ctxt.res.on('close', () => {
     closed = true;
-    releaseSlot();
+    end();
   });
 
   if (isIndexing) {
@@ -273,6 +465,14 @@ export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
       return;
     }
     release = admitted;
+  }
+  // Only a request whose connection is still open starts counting. The
+  // `close` listener is what ends the count, so a request that began after
+  // its close had already fired would never be ended — and a leaked request,
+  // unlike a leaked slot, holds the replica's load reading up until restart.
+  if (!closed) {
+    searchRequest = beginSearchRequest();
+    ctxt.state[SEARCH_REQUEST] = searchRequest;
   }
   return next();
 }
@@ -317,13 +517,10 @@ async function shedSearch(ctxt: Koa.Context, waitedMs: number) {
   );
 }
 
-export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
-  if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
-    ctxt.set(
-      'X-ECS-Container-Metadata-URI-v4',
-      process.env['ECS_CONTAINER_METADATA_URI_V4'],
-    );
-  }
+// Names the replica that answered, by a digest of its instance id, so a client
+// behind a load balancer can tell replicas apart and see when one is replaced.
+export function instanceIdHeader(ctxt: Koa.Context, next: Koa.Next) {
+  ctxt.set(INSTANCE_ID_HEADER, getPublicInstanceId());
   return next();
 }
 
@@ -423,9 +620,12 @@ export async function fetchRequestFromContext(
   });
 }
 
+// `expiredWithinSeconds` is for a route whose only effect is to end something
+// (see `retrieveTokenClaim`); every other route takes only an unexpired token.
 export function jwtMiddleware(
   secretSeed: string,
   dbAdapter: DBAdapter,
+  opts: { expiredWithinSeconds?: number } = {},
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
@@ -445,13 +645,12 @@ export function jwtMiddleware(
       // the server. If we introduce another type of realm-server permission,
       // then we will need to compare the token with what is configured on the
       // server.
-      let token = retrieveTokenClaim(authorization, secretSeed);
-      if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
-        throw new AuthenticationError(
-          AuthenticationErrorMessages.SessionRevoked,
-        );
-      }
-      ctxt.state.token = token;
+      ctxt.state.token = await retrieveUserSessionClaim(
+        authorization,
+        secretSeed,
+        dbAdapter,
+        opts,
+      );
     } catch (e) {
       if (e instanceof AuthenticationError) {
         await sendResponseForUnauthorizedRequest(ctxt, e.message);
@@ -520,6 +719,42 @@ export async function sendResponseForForbiddenRequest(
   await sendResponseForError(ctxt, 403, 'Forbidden Request', message);
 }
 
+// Admits only an operator token for `scope`, signed with the realm secret
+// seed for this server's origin (see utils/operator-token.ts). The verified
+// claims are left on `ctxt.state.operatorToken` for the handler.
+export function operatorAuthorization(
+  secretSeed: string,
+  scope: OperatorScope,
+  serverURL: string | URL,
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let audience = new URL(serverURL).origin;
+  return async function (ctxt: Koa.Context, next: Koa.Next) {
+    let authorization = ctxt.req.headers['authorization'];
+    if (!authorization) {
+      await sendResponseForUnauthorizedRequest(
+        ctxt,
+        AuthenticationErrorMessages.MissingAuthHeader,
+      );
+      return;
+    }
+    try {
+      ctxt.state.operatorToken = verifyOperatorToken(
+        authorization,
+        secretSeed,
+        scope,
+        audience,
+      );
+    } catch (e) {
+      if (e instanceof AuthenticationError) {
+        await sendResponseForUnauthorizedRequest(ctxt, e.message);
+        return;
+      }
+      throw e;
+    }
+    await next();
+  };
+}
+
 export async function sendResponseForUnauthorizedRequest(
   ctxt: Koa.Context,
   message: string,
@@ -574,7 +809,16 @@ export async function setContextResponse(
   }
 
   if (nodeStream) {
-    ctxt.body = nodeStream;
+    let declaredLength = headers.get('content-length');
+    ctxt.body =
+      declaredLength != null && ctxt.method !== 'HEAD'
+        ? guardDeclaredLength({
+            body: nodeStream,
+            declaredLength: Number(declaredLength),
+            url,
+            response: ctxt.res,
+          })
+        : nodeStream;
   } else if (body instanceof ReadableStream) {
     // A quirk with native fetch Response in node is that it will be clever
     // and convert strings or buffers in the response.body into web-streams

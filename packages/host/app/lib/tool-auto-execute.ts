@@ -19,7 +19,8 @@ export const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 // agents (e.g. unit tests) can pass `true` to focus on the other
 // conditions.
 export function isAutoExecutableTool(
-  command: Pick<MessageTool, 'name' | 'requiresApproval' | 'executedBy'>,
+  command: Pick<MessageTool, 'name' | 'requiresApproval' | 'executedBy'> &
+    Partial<Pick<MessageTool, 'neverAutoExecutes'>>,
   activeLLMMode: LLMMode | undefined,
   isOwnedByCurrentAgent: boolean,
 ): boolean {
@@ -29,6 +30,11 @@ export function isAutoExecutableTool(
   // ai-bot ran this one itself (e.g. readRealmFile); the host only records it
   // in the timeline and never executes it.
   if (command.executedBy === AI_BOT_EXECUTOR) {
+    return false;
+  }
+  // The tool class itself insists on the user's click (e.g. deleting a
+  // workspace): no mode or approval flag overrides that.
+  if (command.neverAutoExecutes) {
     return false;
   }
   if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {

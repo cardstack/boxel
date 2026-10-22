@@ -1,10 +1,13 @@
 import Card from '@cardstack/boxel-icons/card-credit';
 import File from '@cardstack/boxel-icons/file';
+import Plus from '@cardstack/boxel-icons/plus';
 import Star from '@cardstack/boxel-icons/star';
+import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
+import IconButton from '../icon-button/index.gts';
 import FilterList, { type Filter } from './index.gts';
 
 export default class FilterListUsage extends Component {
@@ -37,6 +40,7 @@ export default class FilterListUsage extends Component {
     {
       displayName: 'Recent',
       icon: File,
+      count: 12,
     },
     {
       displayName: 'All Cards',
@@ -47,8 +51,10 @@ export default class FilterListUsage extends Component {
     {
       displayName: 'Starred',
       icon: Star,
+      count: 3,
     },
   ];
+  @tracked private added: string | undefined;
   @tracked private activeFilter: Filter | undefined = this.filters?.[0];
 
   private get filters(): Filter[] {
@@ -63,6 +69,7 @@ export default class FilterListUsage extends Component {
   }
 
   private onChange = (filter: Filter) => (this.activeFilter = filter);
+  private onAdd = (filter: Filter) => () => (this.added = filter.displayName);
 
   <template>
     <FreestyleUsage
@@ -75,8 +82,23 @@ export default class FilterListUsage extends Component {
             @filters={{this.filters}}
             @activeFilter={{this.activeFilter}}
             @onChanged={{this.onChange}}
-          />
-          <h2>{{this.activeFilter.displayName}}</h2>
+          >
+            <:action as |filter|>
+              <IconButton
+                @icon={{Plus}}
+                @variant='text-only'
+                @size='extra-small'
+                @width='12'
+                @height='12'
+                aria-label='New {{filter.displayName}}'
+                {{on 'click' (this.onAdd filter)}}
+              />
+            </:action>
+          </FilterList>
+          <div>
+            <h2>{{this.activeFilter.displayName}}</h2>
+            {{#if this.added}}<p>Add clicked on {{this.added}}</p>{{/if}}
+          </div>
         </div>
       </:example>
 
@@ -98,8 +120,17 @@ export default class FilterListUsage extends Component {
           @description='A callback function that is triggered when a filter is selected.'
           @defaultValue='undefined'
         />
+        <Args.Yield
+          @name='action'
+          @description='Named block rendered after each item, receiving the item; for a per-item control such as an add button.'
+        />
       </:api>
       <:cssVars as |Css|>
+        <Css.Basic
+          @name='--boxel-filter-count-foreground'
+          @type='color'
+          @description='font color for an item count'
+        />
         <Css.Basic
           @name='--boxel-filter-expanded-background'
           @type='background-color'

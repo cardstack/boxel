@@ -1,10 +1,31 @@
 /**
- * The request-context builtins: `params`, `actor` and `instance`.
+ * The request-context builtins: `params`, `actor`, `instance`, `realmConfig`
+ * and `policy`.
  *
  * A mutation program can see the document it is editing through `.`. These
- * three add the rest of what a card operation needs — what the caller sent,
- * who the caller is, and the stored document behind the edit — each supplied
- * by the host and scoped to one evaluation by `withRequestContext`.
+ * four add the rest of what a card operation needs — what the caller sent,
+ * who the caller is, the stored document behind the edit, and the settings of
+ * the realm the edit lands in — each supplied by the host and scoped to one
+ * evaluation by `withRequestContext`.
+ *
+ * `params`, `instance` and `realmConfig` are keyed objects a program reads a
+ * member out of. `actor` is not: it is the caller's user id as a string and
+ * nothing else, so it has one form, `actor()`. A host authenticates a caller
+ * as a user id and knows nothing further about them, so any other member would
+ * be whatever request detail the host happened to post — and a program reading
+ * one is a commitment to keep posting it.
+ *
+ * `realmConfig` is the one slot that is not about the request: it is the realm
+ * the program runs in, which is why a type shared across realms can name a
+ * setting — an approver, a threshold, a default assignee — without hard-coding
+ * whichever realm's answer it was authored against. It reaches a program the
+ * same way the other three do because it varies per invocation for the same
+ * reason they do: the realm is decided by the target, not by the type.
+ *
+ * `policy` is the policy card a realm's permissions are judged against, read
+ * the way `realmConfig` is: a keyed object of the card's fields. Only a policy
+ * host supplies it, so that a grant can keep a setting it uses — an address
+ * list, a limit — on the policy card itself.
  *
  * They are functions rather than `$`-prefixed variables, matching the form
  * card operations are authored in, and named `params` rather than the more
@@ -47,20 +68,28 @@ const SLOT_DESCRIPTIONS: Record<ContextSlot, string> = {
   params: 'the payload the caller sent',
   actor: 'the caller identity',
   instance: 'the stored document being edited',
+  realmConfig: 'the realm configuration',
+  policy: 'the policy card',
 };
 
 /**
- * How to ask for a key that may legitimately be absent. `actor` and
- * `instance` hand back the whole object with no argument, so a program that
- * wants a default rather than a failure has somewhere to go; a missing
+ * How to ask for a key that may legitimately be absent. `instance()`,
+ * `realmConfig()` and `policy()` hand back the whole object with no argument, so a program
+ * that wants a default rather than a failure has somewhere to go; a missing
  * payload key has no such reading, since the operation declares its keys.
+ *
+ * A realm setting is absent for the ordinary reason a stored field is: the
+ * program was authored against every realm that holds the type, and only some
+ * of them set it.
  */
 const OPTIONAL_KEY_HINTS: Partial<Record<ContextSlot, string>> = {
-  actor: 'Use `actor()` and index it if the key may be absent.',
   instance: 'Use `instance()` and index it if the key may be absent.',
+  realmConfig: 'Use `realmConfig()` and index it if the setting may be absent.',
+  policy: 'Use `policy()` and index it if the field may be absent.',
 };
 
-function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
+/** The slot's value, once the host is known to have supplied one. */
+function slotValue(slot: ContextSlot, call: string): unknown {
   const context = currentRequestContext();
   if (!context) {
     throw new JqEvaluateError(
@@ -76,6 +105,11 @@ function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
         `supply in this request's context.`,
     );
   }
+  return value;
+}
+
+function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
+  const value = slotValue(slot, call);
   if (typeof value !== 'object' || Array.isArray(value)) {
     throw new JqEvaluateError(
       `${call} needs ${SLOT_DESCRIPTIONS[slot]} to be an object, but the ` +
@@ -83,6 +117,25 @@ function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
     );
   }
   return value as Record<string, unknown>;
+}
+
+/**
+ * The caller's user id, which is the whole of what `actor()` answers.
+ *
+ * A host that supplies anything else has a defect in it, and is told so here
+ * rather than having the value reach a document: a record where an id belongs
+ * lands in a text field as an object and in a filter as a value that matches
+ * nothing.
+ */
+function actorString(call: string): string {
+  const value = slotValue('actor', call);
+  if (typeof value !== 'string') {
+    throw new JqEvaluateError(
+      `${call} needs ${SLOT_DESCRIPTIONS.actor} to be a string, but the ` +
+        `host supplied ${Array.isArray(value) ? 'an array' : typeof value}.`,
+    );
+  }
+  return value;
 }
 
 /**
@@ -185,16 +238,25 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield requireKey('params', 'params(key)', key);
   },
   'actor/0': function* () {
-    yield readable(slotObject('actor', 'actor()'));
-  },
-  'actor/1': function* (_input, key) {
-    yield requireKey('actor', 'actor(key)', key);
+    yield actorString('actor()');
   },
   'instance/0': function* () {
     yield readable(slotObject('instance', 'instance()'));
   },
   'instance/1': function* (_input, key) {
     yield requireKey('instance', 'instance(key)', key);
+  },
+  'realmConfig/0': function* () {
+    yield readable(slotObject('realmConfig', 'realmConfig()'));
+  },
+  'realmConfig/1': function* (_input, key) {
+    yield requireKey('realmConfig', 'realmConfig(key)', key);
+  },
+  'policy/0': function* () {
+    yield readable(slotObject('policy', 'policy()'));
+  },
+  'policy/1': function* (_input, key) {
+    yield requireKey('policy', 'policy(key)', key);
   },
 };
 

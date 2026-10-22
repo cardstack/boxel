@@ -1,25 +1,11 @@
 import { service } from '@ember/service';
 
+import { uint8ArrayToBase64 } from '@cardstack/runtime-common';
+
 import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
 import type * as BaseToolModule from '@cardstack/base/command';
-
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  const maybeBuffer = (globalThis as any).Buffer as
-    | { from(input: Uint8Array): { toString(encoding: string): string } }
-    | undefined;
-
-  if (typeof maybeBuffer !== 'undefined') {
-    return maybeBuffer.from(bytes).toString('base64');
-  }
-
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
 
 export default class ReadBinaryFileTool extends HostBaseTool<
   typeof BaseToolModule.ReadBinaryFileInput,

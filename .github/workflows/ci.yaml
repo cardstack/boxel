@@ -9,9 +9,20 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Pull requests: a new push cancels the run in progress for the same branch.
+# Pushes to main share one group but never cancel a run in progress: GitHub
+# keeps at most one running and one pending run per group, and a newer pending
+# run replaces the older one. A burst of merges therefore runs the commit in
+# progress and then the newest, rather than every commit in between. Every run
+# that starts still finishes, so the index-cache artifact and the realm-server
+# test weights always come from complete main runs. ci-bisect pushes, whose
+# every commit must be tested, and hand-run builds keep a group of their own.
+# The main group is `push:main` because `:` cannot appear in a branch name, so
+# no pull request's head_ref (a fork's `main`, say) can land in it and cancel a
+# main run.
 concurrency:
-  group: ci-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ci-${{ github.head_ref || (github.event_name == 'push' && github.ref == 'refs/heads/main' && 'push:main') || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   checks: write
@@ -35,6 +46,10 @@ jobs:
       postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
       boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
       boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
+      pretui: ${{ steps.filter.outputs.pretui }}
+      choreo: ${{ steps.filter.outputs.choreo }}
+      choreo-addon: ${{ steps.filter.outputs.choreo-addon }}
+      glimmer-motion: ${{ steps.filter.outputs.glimmer-motion }}
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
@@ -42,6 +57,7 @@ jobs:
       bxl: ${{ steps.filter.outputs.bxl }}
       bench-amd: ${{ steps.filter.outputs.bench-amd }}
       bench-realm: ${{ steps.filter.outputs.bench-realm }}
+      deployed-realms: ${{ steps.filter.outputs.deployed-realms }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
@@ -69,6 +85,9 @@ jobs:
               - 'packages/observability/scripts/**'
             boxel:
               - *shared
+              # The host compiles this package's source as a workspace dependency,
+              # so a change here is a host change.
+              - 'packages/pretui/**'
               - '.github/workflows/build-host.yml'
               - '.github/workflows/deploy-host.yml'
               - '.github/workflows/deploy-release.yml'
@@ -82,6 +101,7 @@ jobs:
               - 'packages/bxl/**'
               - 'packages/host/**'
               - 'packages/realm-server/**'
+              - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
             ai-bot:
               - *shared
@@ -101,6 +121,7 @@ jobs:
               - 'packages/eslint-plugin-cardstack-host/**'
             postgres-migrations:
               - 'packages/postgres/migrations/**'
+              - 'packages/postgres/migrations-removal/**'
               - 'packages/postgres/scripts/determine-changed-migrations.sh'
             boxel-icons:
               - *shared
@@ -110,6 +131,35 @@ jobs:
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
               - 'packages/boxel-ui/docs-app/**'
+            pretui:
+              - *shared
+              - 'packages/pretui/**'
+            choreo:
+              - *shared
+              - 'packages/choreo/**'
+              - 'packages/choreo-film-app/**'
+              - 'packages/choreo-gallery/**'
+              - 'packages/choreo-player/**'
+              - 'packages/glimmer-motion/**'
+            # choreo builds on glimmer-motion's extension point, so a
+            # glimmer-motion change runs choreo's suite too.
+            choreo-addon:
+              - *shared
+              - 'packages/choreo/**'
+              - 'packages/glimmer-motion/**'
+            glimmer-motion:
+              - *shared
+              - 'packages/glimmer-motion/**'
+            # Realm content the realm-server image carries and each deploy
+            # copies onto the realm's disk, so a change to it needs a staging
+            # deploy even when it touches no other boxel package. The gallery
+            # realm's film app is built from choreo-film-app, which compiles
+            # choreo and glimmer-motion from source.
+            deployed-realms:
+              - 'packages/choreo-gallery/realm/**'
+              - 'packages/choreo-film-app/**'
+              - 'packages/choreo/**'
+              - 'packages/glimmer-motion/**'
             matrix:
               - *shared
               - 'packages/base/**'
@@ -118,6 +168,7 @@ jobs:
               - 'packages/host/**'
               - 'packages/matrix/**'
               - 'packages/realm-server/**'
+              - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
             realm-server:
               - *shared
@@ -129,6 +180,7 @@ jobs:
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
               - 'packages/realm-server/**'
+              - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
             vscode-boxel-tools:
               - *shared
@@ -136,6 +188,14 @@ jobs:
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
+              # The boxel-skills pin lives in the marketplaces, and the
+              # boxel-cli suite checks it (both refs agree, the pinned release
+              # is installable), so a pin-only change has to run that suite.
+              - '.claude-plugin/marketplace.json'
+              - '.agents/plugins/marketplace.json'
+              # boxel-cli bundles these packages' source for `boxel parse`.
+              - 'packages/glimmer-motion/**'
+              - 'packages/choreo/**'
             bxl:
               # The suite is self-contained — plain objects under Node, no
               # stack and no browser — so it stays cheap even when the
@@ -143,9 +203,10 @@ jobs:
               - *shared
               - 'packages/bxl/**'
               # The card-authoring skill's claims are pinned by a BXL suite
-              # that reads the skill file, so an edit to the skill has to run
-              # that suite too.
-              - 'packages/boxel-cli/plugin/skills/bxl-authoring/**'
+              # that reads the skill from the pinned boxel-skills release, so
+              # moving the pin has to run that suite too.
+              - '.claude-plugin/marketplace.json'
+              - 'packages/boxel-cli/scripts/boxel-skills.mts'
               # That suite also asserts the host suites the skill cites still
               # exist. `bxl-test` runs unconditionally on main, so without
               # these a host-only rename would merge green and redden main on
@@ -186,7 +247,9 @@ jobs:
   test-web-assets:
     name: Build test web assets
     needs: change-check
-    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    # choreo: the gallery's tests run against this host, which bundles
+    # glimmer-motion and Choreo from the same commit
+    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.boxel-cli == 'true' || needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci
@@ -268,6 +331,26 @@ jobs:
       - name: BXL published package check
         run: pnpm run verify:package
         working-directory: packages/bxl
+
+  host-deploy-cache-control-test:
+    name: Host Deploy Cache-Control Tests
+    needs: change-check
+    if: needs.change-check.outputs.boxel == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: host-deploy-cache-control-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # Which `Cache-Control` each deployed file carries is decided entirely by
+      # config/deploy.js, and the deploy itself is the first place a mistake
+      # shows up — by which point a wrong directive is already in browsers that
+      # will not ask again. Needs nothing running.
+      - name: Host deploy cache-control suite
+        run: pnpm test:deploy-cache-control
+        working-directory: packages/host
 
   eslint-plugin-boxel-test:
     name: ESLint Plugin Boxel Tests
@@ -400,6 +483,242 @@ jobs:
         run: pnpm test
         working-directory: packages/boxel-ui/docs-app
 
+  pretui-test:
+    name: Pret UI Tests (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
+    needs: [change-check]
+    if: needs.change-check.outputs.pretui == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    concurrency:
+      group: pretui-test-${{ matrix.shard }}-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+      # Linting lives in ci-lint.yaml, which runs on every change to this
+      # package. This job only runs the package's *.test.gts files, through
+      # the boxel-cli test engine: it mounts the directory as an in-memory
+      # realm and drives the host test harness bundled with that CLI release,
+      # so no workspace install or realm-server is needed. The pin decides
+      # which host harness the tests run against; bump it deliberately.
+      - name: Install Boxel CLI
+        run: npm install -g @cardstack/boxel-cli@0.5.0
+      # The browser revision must match the CLI's own @playwright/test pin,
+      # so install through the CLI's nested playwright binary.
+      - name: Install Chromium
+        run: |
+          "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium
+      # `boxel test` caps a whole QUnit run at 300 s, so each job keeps a
+      # deterministic slice of the test files, balanced by the per-file run
+      # times in scripts/test-timings.json (refresh them with
+      # `node scripts/test-shards.mjs --record`). The shard count follows the
+      # matrix length, so resizing the matrix resizes the split.
+      - name: Select this shard's test files
+        run: node scripts/test-shards.mjs ${{ matrix.shard }} ${{ strategy.job-total }}
+        working-directory: packages/pretui
+      - name: Run tests
+        run: boxel test .
+        working-directory: packages/pretui
+
+  choreo-test:
+    name: Choreo Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: choreo-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # The gallery resolves these packages through their built output
+      # (package.json#exports maps into dist/ and declarations/). glimmer-motion
+      # builds first: choreo's declarations build resolves it the same way.
+      - name: Build Glimmer Motion, Choreo and Choreo Player
+        id: build-libs
+        if: ${{ !cancelled() }}
+        run: |
+          (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo && pnpm run build)
+          (cd packages/choreo-player && pnpm run build)
+      # npm consumers resolve every subpath to the built output. For
+      # glimmer-motion and choreo that means without the `developing:choreo`
+      # condition the workspace builds from source with. Each check packs its
+      # package and resolves every module's subpath against the tarball, so a
+      # `files` / `exports` mismatch fails here instead of on install.
+      - name: Check the packed glimmer-motion, Choreo and Choreo Player exports
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: |
+          (cd packages/glimmer-motion && pnpm run check:packed-exports)
+          (cd packages/choreo && pnpm run check:packed-exports)
+          (cd packages/choreo-player && pnpm run check:packed-exports)
+      - name: Choreo Player unit tests
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm run test:unit
+        working-directory: packages/choreo-player
+      # The release decisions choreo-player-publish.yml runs on, as pure
+      # functions under Node.
+      - name: Choreo Player release script tests
+        if: ${{ !cancelled() }}
+        run: pnpm run test:release
+        working-directory: packages/choreo-player
+
+  # The gallery realm's *.test.gts files. The realm's lint and its content
+  # check run in ci-lint.yaml.
+  choreo-gallery-test:
+    name: Choreo Gallery Tests
+    needs: [change-check, test-web-assets]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: choreo-gallery-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+      # The boxel-cli test engine mounts realm/ as an in-memory realm and
+      # drives a host test harness, so no workspace install or realm-server
+      # is needed. The harness is this commit's host, from test-web-assets,
+      # not the one bundled with the CLI release: the gallery uses
+      # glimmer-motion and Choreo as they are in this commit, which a
+      # published CLI's host predates. The pin decides only the test engine.
+      - name: Download test web assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+      - name: Install Boxel CLI
+        run: npm install -g @cardstack/boxel-cli@0.9.0-unstable.1
+      # The browser revision must match the CLI's own @playwright/test pin,
+      # so install through the CLI's nested playwright binary.
+      - name: Install Chromium
+        run: |
+          "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Run tests
+        run: boxel test realm
+        working-directory: packages/choreo-gallery
+        env:
+          # the host package directory; the CLI reads its dist/
+          TEST_HARNESS_HOST_DIST_PACKAGE_DIR: ${{ github.workspace }}/packages/host
+
+  # glimmer-motion's own QUnit suite, which compiles the package from source.
+  glimmer-motion-test:
+    name: Glimmer Motion Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.glimmer-motion == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: glimmer-motion-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # The lockstep release decisions glimmer-motion-choreo-publish.yml runs
+      # on, as pure functions under Node.
+      - name: Release script tests
+        run: pnpm test:release
+        working-directory: packages/glimmer-motion
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/glimmer-motion
+
+  # choreo's own QUnit suite (Choreo and film), which compiles choreo and
+  # glimmer-motion from source through the `developing:choreo` export
+  # condition.
+  choreo-addon-test:
+    name: Choreo Addon Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo-addon == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: choreo-addon-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/choreo
+
+  # The film app's QUnit suite: the reference films' scores against their
+  # golden fixtures. It compiles glimmer-motion and Choreo from source through
+  # the `developing:choreo` export condition. Then the realm build `pnpm push`
+  # makes, so a change that breaks it fails here rather than at deploy.
+  choreo-film-app-test:
+    name: Choreo Film App Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: choreo-film-app-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/choreo-film-app
+      - name: Build the film app into the gallery realm
+        if: ${{ !cancelled() }}
+        run: pnpm build:realm
+        working-directory: packages/choreo-film-app
+
+  # glimmer-motion's and choreo's suites against the packages' built output,
+  # the code npm consumers get. Only the rollup build
+  # inlines and tree-shakes framer-motion's internals, so these are the runs
+  # that exercise it. CHOREO_LIBS=dist leaves the `developing:choreo`
+  # condition out of each suite's Vite config.
+  choreo-dist-test:
+    name: Glimmer Motion and Choreo Tests (built output)
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: choreo-dist-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # glimmer-motion builds first: choreo's declarations build resolves it
+      # through its built output.
+      - name: Build Glimmer Motion, Choreo and Choreo Player
+        id: build-libs
+        run: |
+          (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo && pnpm run build)
+          (cd packages/choreo-player && pnpm run build)
+      - name: Glimmer Motion test suite
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm test
+        working-directory: packages/glimmer-motion
+        env:
+          CHOREO_LIBS: dist
+      - name: Choreo test suite
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm test
+        working-directory: packages/choreo
+        env:
+          CHOREO_LIBS: dist
+
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only
     needs: change-check
@@ -447,6 +766,13 @@ jobs:
       matrix:
         shardIndex: [1, 2, 3]
         shardTotal: [3]
+        include:
+          # The specs under packages/matrix/tests/with-synapse/<template>/
+          # need a Synapse configured otherwise than the one the shards share,
+          # so each template's run is a job of its own, unsharded. Its
+          # `shardIndex` is a label naming the job and its artifacts.
+          - shardIndex: without-registration-token
+            synapseTemplate: test-without-registration-token
     concurrency:
       group: matrix-client-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -497,11 +823,19 @@ jobs:
           MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
           timeout 300 bash -c 'until curl -ksf https://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Run Playwright tests
-        run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        run: pnpm test:group ${{ matrix.shardTotal && format('{0}/{1}', matrix.shardIndex, matrix.shardTotal) || '' }}
         working-directory: packages/matrix
-      - name: Print realm server logs
+        env:
+          MATRIX_SYNAPSE_TEMPLATE: ${{ matrix.synapseTemplate }}
+      # The services above stream their output into this job's log as the run
+      # goes, so the file is a second copy of what is already there — and at
+      # tens of thousands of lines it pushes the Playwright run's own output
+      # past the tail the Actions logs API will serve, which is what a failed
+      # shard is read from. The tail below is for a glance; the whole file is
+      # the realm server log artifact.
+      - name: Print the tail of the realm server log
         if: ${{ !cancelled() }}
-        run: cat /tmp/server.log
+        run: tail -n 500 /tmp/server.log
       - name: Extract worker and prerender logs
         if: ${{ !cancelled() }}
         run: |
@@ -510,9 +844,17 @@ jobs:
           grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
           grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
           grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
+      # The log uploads below are for reading a shard after the fact. Nothing
+      # downstream consumes them, so losing one loses that view of this shard
+      # and nothing else, and a failed upload does not fail the shard. The
+      # blob report further down stays fatal on purpose: the merge and
+      # shard-timings jobs consume it, and a report that did not upload would
+      # publish a smaller build as a complete one rather than show as a failed
+      # shard.
       - name: Upload realm server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
@@ -520,6 +862,7 @@ jobs:
       - name: Upload worker manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-worker-manager-log-${{ matrix.shardIndex }}
           path: /tmp/worker-manager.log
@@ -527,6 +870,7 @@ jobs:
       - name: Upload prerender server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-prerender-server-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-server.log
@@ -534,6 +878,7 @@ jobs:
       - name: Upload prerender manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-manager.log
@@ -541,6 +886,7 @@ jobs:
       - name: Upload icon server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-icon-server-log-${{ matrix.shardIndex }}
           path: /tmp/icon-server.log
@@ -548,6 +894,7 @@ jobs:
       - name: Upload host-dist log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-host-dist-log-${{ matrix.shardIndex }}
           path: /tmp/host-dist.log
@@ -555,15 +902,18 @@ jobs:
 
       - name: Upload blob report to GitHub Actions Artifacts
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: blob-report-${{ matrix.shardIndex }}
           path: packages/matrix/blob-report
           retention-days: 1
 
+      # Traces are evidence for a human reading a failed spec. Nothing
+      # downstream consumes them, so a failed upload does not fail the shard.
       - name: Upload Playwright traces
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        continue-on-error: true
         with:
           name: playwright-traces-${{ matrix.shardIndex }}
           path: packages/matrix/test-results/**/trace.zip
@@ -610,7 +960,7 @@ jobs:
         run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
 
       - name: Upload HTML report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: html-report--attempt-${{ github.run_attempt }}
           path: playwright-report
@@ -804,7 +1154,7 @@ jobs:
           TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
           JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/realm-server-${{ matrix.shardIndex }}.xml
       - name: Upload junit report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-report-${{ matrix.shardIndex }}
@@ -829,9 +1179,16 @@ jobs:
           grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
           grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
           grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
+      # The log uploads below are for reading a shard after the fact. Nothing
+      # downstream consumes them, so losing one loses that view of this shard
+      # and nothing else, and a failed upload does not fail the shard. The
+      # junit report above stays fatal on purpose: the merge job consumes it,
+      # and a report that did not upload would publish a smaller build as a
+      # complete one rather than show as a failed shard.
       - name: Upload realm server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-realm-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/server.log
@@ -839,6 +1196,7 @@ jobs:
       - name: Upload worker manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-worker-manager-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/worker-manager.log
@@ -846,6 +1204,7 @@ jobs:
       - name: Upload prerender server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-prerender-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/prerender-server.log
@@ -853,6 +1212,7 @@ jobs:
       - name: Upload prerender manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-prerender-manager-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/prerender-manager.log
@@ -860,6 +1220,7 @@ jobs:
       - name: Upload start:development log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-start-development-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/start-development.log
@@ -867,6 +1228,7 @@ jobs:
       - name: Upload test-realms log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-test-realms-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/test-realms.log
@@ -874,6 +1236,7 @@ jobs:
       - name: Upload icon server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-icon-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/icon-server.log
@@ -881,6 +1244,7 @@ jobs:
       - name: Upload host-dist log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-host-dist-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/host-dist.log
@@ -907,7 +1271,7 @@ jobs:
       - name: Merge reports
         run: npx junit-report-merger realm-server.xml "./all-realm-server-reports/*.xml"
       - name: Upload merged report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-report-merged
@@ -943,7 +1307,7 @@ jobs:
 
       - name: Upload realm-tests slot
         if: ${{ !cancelled() && hashFiles('slot/slot.md') != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: pr-comment-slot-realm-tests
           path: slot/
@@ -1185,7 +1549,7 @@ jobs:
         run: pnpm vscode:package
         working-directory: packages/vscode-boxel-tools
       - name: Upload
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: vscode-boxel-tools
           path: packages/vscode-boxel-tools/boxel-tools*vsix
@@ -1307,7 +1671,7 @@ jobs:
 
   deploy:
     name: Deploy boxel to staging
-    if: needs.change-check.outputs.boxel == 'true' && github.ref == 'refs/heads/main'
+    if: (needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.deployed-realms == 'true') && github.ref == 'refs/heads/main'
     needs:
       - change-check
       - ai-bot-test
@@ -1315,7 +1679,11 @@ jobs:
       - boxel-ui-test
       - realm-server-test
     uses: ./.github/workflows/manual-deploy.yml
+    # A called workflow's jobs may ask for no more than these, so they cover
+    # every job in Manual Deploy, including the ones only production runs:
+    # actions: write is the one that starts the Choreo gallery's republish.
     permissions:
+      actions: write
       contents: read
       deployments: write
       id-token: write
@@ -1365,9 +1733,14 @@ jobs:
         # mise-tasks/ci/cache-index means raising this and the job's ceiling
         # with it.
         timeout-minutes: 60
+      # Evidence for reading this job after the fact; the index caches below
+      # are what it exists to publish and every consumer reads those. A failed
+      # log upload therefore does not fail the job, and leaves the caches to be
+      # verified and published.
       - name: Upload service logs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: cache-index-log
           path: /tmp/cache-index.log
@@ -1378,7 +1751,7 @@ jobs:
       - name: Verify index cache is complete
         run: scripts/verify-index-cache.sh /tmp/boxel-index-cache.sql.gz
       - name: Upload index cache
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: boxel-index-cache
           path: /tmp/boxel-index-cache.sql.gz
@@ -1395,7 +1768,7 @@ jobs:
             /tmp/boxel-index-cache-host.sql.gz \
             /tmp/boxel-index-cache-host.tables
       - name: Upload host-scoped index cache
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: boxel-index-cache-host
           path: /tmp/boxel-index-cache-host.sql.gz
@@ -1409,7 +1782,7 @@ jobs:
             /tmp/boxel-index-cache-test.sql.gz \
             /tmp/boxel-index-cache-test.tables
       - name: Upload test-realm index cache
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: boxel-index-cache-test
           path: /tmp/boxel-index-cache-test.sql.gz

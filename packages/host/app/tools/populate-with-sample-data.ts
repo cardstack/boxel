@@ -55,7 +55,7 @@ export default class PopulateWithSampleDataTool extends HostBaseTool<
     }
 
     await this.aiAssistantPanelService.openPanel();
-    let card = await this.store.get<CardDef>(input.cardId);
+    let card = await this.store.get(input.cardId);
     if (!isCard(card)) {
       throw new Error(`Could not load card: ${card.message}`);
     }

@@ -27,20 +27,32 @@ import {
   asExpressions,
   Deferred,
   Job,
+  registerJobHeartbeat,
+  unregisterJobHeartbeat,
+  userInitiatedPriority,
+  userInitiatedPrerenderHtmlPriority,
 } from '@cardstack/runtime-common';
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/indexer';
 // Side-effect imports: these modules call registerQueueJobDefinition() at
 // load time, so any process that constructs a PgQueuePublisher gets the
 // coalesce handlers registered before publish() is called.
-import '@cardstack/runtime-common/jobs/screenshot-card';
-import '@cardstack/runtime-common/tasks/copy';
+import '@cardstack/runtime-common/jobs/capture';
 import '@cardstack/runtime-common/tasks/full-reindex';
 import '@cardstack/runtime-common/tasks/media-cache-gc';
 import '@cardstack/runtime-common/tasks/prerender-html';
 import '@cardstack/runtime-common/tasks/prerender-html-reconcile';
+import '@cardstack/runtime-common/tasks/scoped-css-gc';
 import type { PgAdapter } from './pg-adapter.ts';
 import type { JobReservationsTable, JobsTable } from './job-tables.ts';
-import { acquireConcurrencyGroupLock } from './job-concurrency-lock.ts';
+import {
+  acquireLaneLocks,
+  NO_CONCURRENCY_GROUP_KEY,
+} from './job-concurrency-lock.ts';
+import {
+  isExclusiveLane,
+  laneFamilyOf,
+  type JobsAlias,
+} from '@cardstack/runtime-common/jobs/lane-family';
 import { flattenErrorForJsonb } from './flatten-error-for-jsonb.ts';
 import { WorkLoop } from './work-loop.ts';
 import { finalizeJobVerdict, releaseJobReservation } from './job-finalize.ts';
@@ -59,9 +71,44 @@ const log = logger('queue');
 // keeps aborts short without restating a smaller timeout at every publish site.
 const MAX_JOB_TIMEOUT_SEC = FROM_SCRATCH_JOB_TIMEOUT_SEC;
 
+// How long a lease outlives the handler deadline it protects.
+//
+// The invariant: a lease is how long a worker owns a job; the deadline is how
+// long its handler may run. The lease has to outlast the deadline, or a
+// handler has no uncontested moment in which to record what it did.
+//
+// Sharing one instant denies it that moment. The deadline fires, the handler
+// throws, and by the time it reaches `finalizeJobVerdict` the job is already
+// claimable: a peer that gets there first makes the verdict `superseded`, so
+// it is discarded and the job runs again — repeatedly, because every attempt
+// loses the same race. The cost lands twice, in duplicated work and in a job
+// whose recorded state never catches up with what actually happened.
+//
+// `findStuckReservations` already defends the same boundary from the other
+// side, with the same 30 seconds and for the same stated reason — "the lease
+// boundary is not synchronized with the finalize transaction". This is that
+// protection applied to the claim path, which had none: the instant
+// `locked_until` passed, a peer could take the job.
+//
+// The window only has to cover a `finalizeJobVerdict` transaction against a
+// database that answered the rest of the pass in milliseconds, so 30s is
+// generous. Its price is how long a genuinely dead worker delays a retry —
+// and because a progressing job extends its lease, that delay is measured
+// from the job's last heartbeat rather than from its claim: a worker lost
+// mid-pass holds its job for one deadline plus this window, however long the
+// pass had already been running.
+const LEASE_GRACE_SEC = 30;
+
 interface CoalesceCandidateRow extends Pick<
   JobsTable,
-  'id' | 'job_type' | 'concurrency_group' | 'timeout' | 'priority' | 'args'
+  | 'id'
+  | 'job_type'
+  | 'concurrency_group'
+  | 'lane_family'
+  | 'timeout'
+  | 'priority'
+  | 'args'
+  | 'initiated_by'
 > {}
 
 export class PgQueuePublisher implements QueuePublisher {
@@ -141,9 +188,13 @@ export class PgQueuePublisher implements QueuePublisher {
     }
   }
 
+  // Coalescing is per lane: a candidate shares the incoming job's group and
+  // its family. Different writer lanes of one family are never merged, pending
+  // or in flight. A job published without a family matches one that names its
+  // own group as the family, since both are that family's exclusive work.
   private async findCoalesceCandidates(
     queryFn: (expression: Expression) => Promise<unknown>,
-    concurrencyGroup: string | null,
+    lane: Pick<QueueJobSpec, 'concurrencyGroup' | 'laneFamily'>,
   ): Promise<{
     pending: QueueCoalesceCandidate[];
     inFlight: QueueCoalesceCandidate[];
@@ -151,10 +202,11 @@ export class PgQueuePublisher implements QueuePublisher {
     // Pending candidates are locked FOR UPDATE so a concurrent publisher
     // can't merge into the same row. In-flight rows are read in the same
     // snapshot but not locked: the worker is the only writer that should
-    // commit a status change on them, and our advisory lock prevents
-    // another publisher from racing us on this concurrency group.
+    // commit a status change on them, and our advisory locks prevent
+    // another publisher from racing us on this lane.
     let rows = (await queryFn([
-      `SELECT j.id, j.job_type, j.concurrency_group, j.timeout, j.priority, j.args,
+      `SELECT j.id, j.job_type, j.concurrency_group, j.lane_family, j.timeout,
+              j.priority, j.args, j.initiated_by,
               EXISTS (
                 SELECT 1 FROM job_reservations r
                 WHERE r.job_id = j.id
@@ -164,7 +216,9 @@ export class PgQueuePublisher implements QueuePublisher {
        FROM jobs j
        WHERE j.status='unfulfilled'
          AND j.concurrency_group IS NOT DISTINCT FROM`,
-      param(concurrencyGroup),
+      param(lane.concurrencyGroup),
+      `AND ${laneFamilyOf('j')} IS NOT DISTINCT FROM`,
+      param(lane.laneFamily ?? lane.concurrencyGroup),
       `ORDER BY j.created_at, j.id`,
     ])) as (CoalesceCandidateRow & { in_flight: boolean })[];
 
@@ -176,9 +230,13 @@ export class PgQueuePublisher implements QueuePublisher {
         id: row.id,
         jobType: row.job_type,
         concurrencyGroup: row.concurrency_group,
+        laneFamily: row.lane_family,
         timeout: row.timeout,
         priority: row.priority,
         args: row.args,
+        ...(Array.isArray(row.initiated_by)
+          ? { initiatedBy: row.initiated_by as string[] }
+          : {}),
       };
       if (row.in_flight) {
         inFlight.push(candidate);
@@ -207,11 +265,22 @@ export class PgQueuePublisher implements QueuePublisher {
       args: job.args,
       job_type: job.jobType,
       concurrency_group: job.concurrencyGroup,
+      lane_family: job.laneFamily ?? null,
       priority: job.priority,
       timeout: job.timeout,
+      // Left null when the publish named nobody, which is a different answer
+      // from an empty set: a row recording no user reads as the realm owner,
+      // while one recording an empty set would gate nobody at all.
+      initiated_by: job.initiatedBy?.length ? job.initiatedBy : null,
     } as Pick<
       JobsTable,
-      'args' | 'job_type' | 'concurrency_group' | 'timeout' | 'priority'
+      | 'args'
+      | 'job_type'
+      | 'concurrency_group'
+      | 'lane_family'
+      | 'timeout'
+      | 'priority'
+      | 'initiated_by'
     >);
     let [{ id: jobId }] = (await queryFn([
       'INSERT INTO JOBS',
@@ -262,6 +331,12 @@ export class PgQueuePublisher implements QueuePublisher {
     if (update.timeout !== undefined) {
       setClauses.push(['timeout=', param(update.timeout)]);
     }
+    if (update.initiatedBy !== undefined) {
+      setClauses.push([
+        'initiated_by=',
+        param(update.initiatedBy.length ? update.initiatedBy : null),
+      ]);
+    }
     if (setClauses.length === 0) {
       return true;
     }
@@ -301,11 +376,14 @@ export class PgQueuePublisher implements QueuePublisher {
         try {
           await queryFn(['BEGIN']);
           await queryFn(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
-          await acquireConcurrencyGroupLock(queryFn, incoming.concurrencyGroup);
+          await acquireLaneLocks(queryFn, {
+            concurrencyGroup: incoming.concurrencyGroup,
+            laneFamily: incoming.laneFamily ?? null,
+          });
 
           let { pending, inFlight } = await this.findCoalesceCandidates(
             queryFn,
-            incoming.concurrencyGroup,
+            incoming,
           );
           let decision = coalesce({
             incoming,
@@ -414,12 +492,102 @@ export class PgQueuePublisher implements QueuePublisher {
 // 7200s leases.
 const MAX_RESERVATION_COUNT_PER_JOB = 2;
 
+// How many of one family's writer lanes may hold a worker at once. Writer lanes
+// exist so one person's cheap save is not queued behind another person's long
+// pass, and two lanes are the fewest that give that: the long pass keeps one
+// worker and the save gets a second. Each lane past that takes another worker
+// out of a pool every realm shares, which a realm with many writers would do to
+// every other realm's user-initiated work. So a writer job whose family is at
+// the cap waits, as it would have waited behind the family's exclusive lane.
+//
+// The cap does not move for a lower-tier exclusive job of the family, pending or
+// running. Halving a family's writer concurrency to hand a lower-tier job a turn
+// is the same tier inversion the barrier and the running-exclusive rule refuse.
+//
+// It does cost that job its one reliable chance to start, and the replacement is
+// an operator's reindex rather than anything the queue arranges. A lower-tier
+// exclusive job needs the family *simultaneously* idle, and a single writer lane
+// manufactured that: the lane drained, the family was briefly empty, and the
+// oldest pending row in it — the exclusive job — was there to be claimed. Two
+// lanes make a coincident gap rarer, and on a realm that keeps saving there may
+// be none at all. So a system-tier pass is not guaranteed to run; it waits for
+// the realm to go quiet. To run one on demand, publish it at the user tier,
+// where the barrier below holds the writers off and the family drains for it.
+const MAX_CONCURRENT_WRITER_LANES_PER_FAMILY = 2;
+
+// A row's lane and family as non-null keys for the claim query. See the
+// comment on that query for why it compares keys.
+function laneKey(alias: 'j'): string {
+  return `COALESCE(${alias}.concurrency_group, '${NO_CONCURRENCY_GROUP_KEY}')`;
+}
+
+function familyKey(alias: 'j'): string {
+  return `COALESCE(${laneFamilyOf(alias)}, '${NO_CONCURRENCY_GROUP_KEY}')`;
+}
+
+// Whether a row's priority is in the user-initiated tier rather than the
+// system tier (see the tier table in runtime-common's queue.ts). The
+// high-priority worker pool floors at the bottom of the user-initiated tier, so
+// only the all-priority pool can claim a system-tier job.
+function isUserInitiatedTier(alias: JobsAlias): string {
+  return `(${alias}.priority >= ${userInitiatedPrerenderHtmlPriority})`;
+}
+
+// Wakes every runner when a writer job's completion leaves a pending exclusive
+// job in its family. A completion notifies only `jobs_finished`, which runners
+// don't listen on, and the worker that ran the writer job goes straight back
+// to claiming, which it may do without being able to claim the exclusive job
+// (see the lane rules in the claim query). Without this, an idle worker that
+// could claim the exclusive job would not scan until its next poll, by which
+// time the family is usually busy again. Best-effort: a missed wake only
+// leaves the job to that poll.
+async function wakeRunnersForPendingExclusive(
+  queryFn: (expression: Expression) => Promise<unknown>,
+  workerId: string,
+  job: JobsTable,
+) {
+  let family = job.lane_family;
+  if (!family || family === job.concurrency_group) {
+    return;
+  }
+  try {
+    await queryFn([
+      `SELECT pg_notify('jobs', '') WHERE EXISTS (
+         SELECT 1 FROM jobs p
+          WHERE p.status = 'unfulfilled'
+            AND p.concurrency_group =`,
+      param(family),
+      `AND ${isExclusiveLane('p')}
+       )`,
+    ]);
+  } catch (e: any) {
+    log.error(
+      `%s: could not wake runners for family %s after job %s: %s`,
+      workerId,
+      family,
+      job.id,
+      e?.message ?? e,
+    );
+  }
+}
+
+// The claim query's search for a pending exclusive job `p` of writer job `j`'s
+// family that was queued before `j`, for the body of an EXISTS.
+function olderPendingExclusive(): string {
+  return `SELECT 1 FROM jobs p
+           WHERE p.status = 'unfulfilled'
+             AND p.concurrency_group = j.lane_family
+             AND ${isExclusiveLane('p')}
+             AND (p.created_at, p.id) < (j.created_at, j.id)`;
+}
+
 export class PgQueueRunner implements QueueRunner {
   #isDestroyed = false;
   #pgClient: PgAdapter;
   #workerId: string;
   #maxTimeoutSec: number;
   #maxReservationCount: number;
+  #maxWriterLanesPerFamily: number;
   #pollInterval = 10000;
   #handlers: Map<string, Function> = new Map();
   #jobRunner: WorkLoop | undefined;
@@ -430,6 +598,7 @@ export class PgQueueRunner implements QueueRunner {
     workerId,
     maxTimeoutSec = MAX_JOB_TIMEOUT_SEC,
     maxReservationCount = MAX_RESERVATION_COUNT_PER_JOB,
+    maxWriterLanesPerFamily = MAX_CONCURRENT_WRITER_LANES_PER_FAMILY,
     priority = 0,
   }: {
     adapter: PgAdapter;
@@ -437,11 +606,13 @@ export class PgQueueRunner implements QueueRunner {
     priority?: number;
     maxTimeoutSec?: number;
     maxReservationCount?: number;
+    maxWriterLanesPerFamily?: number;
   }) {
     this.#pgClient = adapter;
     this.#workerId = workerId;
     this.#maxTimeoutSec = maxTimeoutSec;
     this.#maxReservationCount = maxReservationCount;
+    this.#maxWriterLanesPerFamily = maxWriterLanesPerFamily;
     this.#priority = priority;
   }
 
@@ -504,22 +675,112 @@ export class PgQueueRunner implements QueueRunner {
           await query(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
 
           let jobs = (await query([
-            // find the queue with the oldest job that isn't running and lock it.
-            // Break created_at ties on the monotonic id so the job enqueued
-            // first always wins — two jobs in the same concurrency group can
-            // share a created_at (current_timestamp is the transaction start
-            // time), and without the tiebreaker the worker could claim them
-            // out of enqueue order.
+            // Find the oldest job that isn't running and that its lane and lane
+            // family let start now, and lock it. Break created_at ties on the
+            // monotonic id so the job enqueued first always wins — two jobs in
+            // the same concurrency group can share a created_at
+            // (current_timestamp is the transaction start time), and without
+            // the tiebreaker the worker could claim them out of enqueue order.
+            //
+            // The lane rules, where a job's lane is its concurrency group and
+            // its family is `lane_family`, or its group when it names none
+            // (see `QueuePublishRequest.laneFamily`):
+            //
+            // One line runs through all of them: a job at a higher priority
+            // tier is never held back by one at a lower tier (the tiers are
+            // user-initiated and system; see `isUserInitiatedTier`). A save is
+            // on someone's critical path and a background pass is not, so the
+            // pass yields, whether it is pending or already running.
+            //
+            // - One job at a time per lane.
+            // - An exclusive job of a family waits for the family to empty, and
+            //   every member of the family waits for a running exclusive job of
+            //   its own tier or above.
+            // - A running exclusive job below a writer lane's tier does not hold
+            //   it back. This is what keeps a deploy's system-tier from-scratch
+            //   pass from stalling every save in its realm for as long as the
+            //   pass runs, which is minutes even when the pass is healthy.
+            //   Indexing tolerates the overlap: a pass re-derives its rows from
+            //   bytes already on disk and its production rows stay live until
+            //   its swap, and a commit that a peer's commit left stale is
+            //   re-visited at validation (see `Batch.#findPeerConflicts`), or
+            //   re-indexed by a follow-up job when the rounds run out.
+            // - Writer lanes of one family run alongside each other, up to
+            //   `#maxWriterLanesPerFamily` at once, whatever lower-tier
+            //   exclusive work of the family is pending or running.
+            // - A writer job does not start ahead of an older pending exclusive
+            //   job of its family at the writer's tier or above. With the pools
+            //   the worker manager starts, a worker that can claim a writer job
+            //   can also claim any exclusive job of its family at the writer's
+            //   tier. This barrier is what lets such a job reach an empty
+            //   family at all: without it a realm that keeps saving would never
+            //   leave a gap, so an operator's own reindex, published at the user
+            //   tier, could not start.
+            // - Below the writer's tier there is no barrier. The workers that
+            //   serve the higher tier never claim a lower-tier job, so a
+            //   system-tier from-scratch pass waits for an all-priority worker
+            //   to reach it behind every realm's system work, which after a
+            //   deploy that reindexes every realm takes hours. A barrier would
+            //   hold each save in the realm for all of that. Nothing bounds how
+            //   long such a pass waits, since it needs both a free all-priority
+            //   worker and an idle moment in the family. The worker that ran the
+            //   last pass cannot claim it, and takes the next queued save the
+            //   moment its completion commits. The completion wakes the other
+            //   workers (`wakeRunnersForPendingExclusive`), so an idle
+            //   all-priority worker races it for the family, but a busy one
+            //   scans only when it frees up. An operator reindex published at
+            //   the user tier is the way to run one on demand.
+            //
+            // Jobs published without a family are all exclusive, each in a
+            // family of its own group, so for them these reduce to the first
+            // rule alone.
+            //
+            // The lane and family rules compare keys rather than the columns:
+            // a missing group or family is spelled `NO_CONCURRENCY_GROUP_KEY`,
+            // the key the advisory lock uses for it, so a job with no group is
+            // a lane of its own here as it is to the lock and the coalescing
+            // lookup. That keeps both sides of every `NOT IN` non-null — a
+            // null in its subquery would make it match nothing, so one running
+            // job with no group would stall every claim — and keeps each
+            // subquery uncorrelated, so it is hashed once per claim rather
+            // than rescanned per pending job.
+            //
+            // The writer-only rules — the tier-limited reach of a running
+            // exclusive job, the barrier and the cap — apply only to a job that
+            // fails the exclusive test, which a family-less job never does.
             `WITH
               pending_jobs AS (
-                SELECT * FROM jobs WHERE status='unfulfilled' and priority >=`,
+                SELECT * FROM jobs j WHERE j.status='unfulfilled'
+                  -- A held concurrency group's jobs stay pending rather than
+                  -- being claimed, so a burst of same-group publishes has a
+                  -- pending job to coalesce into (see the add-job-claim-holds
+                  -- migration). Normally there is nothing to match, and a
+                  -- lease its holder stops refreshing expires on its own. A
+                  -- hold matches a job's group or its family, so a hold
+                  -- naming a family holds every lane in it.
+                  --
+                  -- A hold only ever delays background work. Anything at the
+                  -- user-initiated tier is on someone's critical path — a
+                  -- publish does not report its realm ready until the render
+                  -- it is waiting on lands, and that render is enqueued at
+                  -- this tier precisely to say so — so a hold must not be
+                  -- able to keep it waiting.
+                  AND (j.priority >=`,
+            param(userInitiatedPriority),
+            `OR NOT EXISTS (
+                    SELECT 1 FROM job_claim_holds h
+                     WHERE (h.concurrency_group = j.concurrency_group
+                            OR h.concurrency_group = j.lane_family)
+                       AND h.expires_at > NOW()
+                  ))
+                  and j.priority >=`,
             param(this.#priority),
             // Only claim job types this runner has a handler for: a worker
             // that claims a type it can't run would finalize the job as
             // rejected, permanently discarding work a differently-configured
             // worker (e.g. a newer version mid rolling-deploy) could have
             // completed.
-            `AND job_type IN (`,
+            `AND j.job_type IN (`,
             ...[...this.#handlers.keys()].flatMap((jobType, i) =>
               i === 0 ? [param(jobType)] : [',', param(jobType)],
             ),
@@ -527,15 +788,50 @@ export class PgQueueRunner implements QueueRunner {
               valid_reservations AS (
                 SELECT * FROM job_reservations WHERE locked_until > NOW() AND completed_at IS NULL
               ),
-              active_concurrency_groups AS (
-                SELECT DISTINCT j.concurrency_group FROM jobs j, valid_reservations v WHERE v.job_id = j.id
-            )
-            SELECT j.* FROM pending_jobs j
-              WHERE j.id NOT IN (
-                SELECT job_id FROM valid_reservations
+              active_jobs AS (
+                SELECT DISTINCT j.id,
+                       ${laneKey('j')} AS lane_key,
+                       ${familyKey('j')} AS family_key,
+                       ${isExclusiveLane('j')} AS exclusive,
+                       j.priority AS priority
+                  FROM jobs j, valid_reservations v WHERE v.job_id = j.id
               )
-              AND j.concurrency_group NOT IN (
-                SELECT concurrency_group FROM active_concurrency_groups
+            SELECT j.* FROM pending_jobs j
+              WHERE NOT EXISTS (
+                SELECT 1 FROM valid_reservations v WHERE v.job_id = j.id
+              )
+              AND ${laneKey('j')} NOT IN (SELECT lane_key FROM active_jobs)
+              AND (
+                (${isExclusiveLane('j')} AND ${familyKey('j')} NOT IN (
+                  SELECT family_key FROM active_jobs
+                ))
+                OR (NOT ${isExclusiveLane('j')}
+                  -- A running exclusive job of the family holds a writer lane
+                  -- back only from the writer's tier or above, the same line
+                  -- the barrier below draws for a pending one. Spelled as two
+                  -- uncorrelated sets rather than one correlated test of the
+                  -- writer's tier, so both stay hashed once per claim: the
+                  -- first set holds every writer back, and the second adds the
+                  -- rest of the family's exclusive work for a system-tier
+                  -- writer, which nothing outranks.
+                  AND ${familyKey('j')} NOT IN (
+                    SELECT a.family_key FROM active_jobs a
+                     WHERE a.exclusive AND ${isUserInitiatedTier('a')}
+                  )
+                  AND (${isUserInitiatedTier('j')} OR ${familyKey('j')} NOT IN (
+                    SELECT a.family_key FROM active_jobs a WHERE a.exclusive
+                  ))
+                  AND NOT EXISTS (
+                    ${olderPendingExclusive()}
+                       AND (${isUserInitiatedTier('p')}
+                            OR NOT ${isUserInitiatedTier('j')})
+                  )
+                  AND (
+                    SELECT COUNT(*) FROM active_jobs a
+                     WHERE a.family_key = j.lane_family AND NOT a.exclusive
+                  ) <`,
+            param(this.#maxWriterLanesPerFamily),
+            `)
               )
               ORDER BY j.created_at, j.id
               LIMIT 1`,
@@ -552,7 +848,10 @@ export class PgQueueRunner implements QueueRunner {
             jobToRun.id,
           );
 
-          await acquireConcurrencyGroupLock(query, jobToRun.concurrency_group);
+          await acquireLaneLocks(query, {
+            concurrencyGroup: jobToRun.concurrency_group,
+            laneFamily: jobToRun.lane_family ?? null,
+          });
 
           let jobIsStillEligible = (await query([
             // queue_wait_ms is computed against the database clock — the same
@@ -620,21 +919,19 @@ export class PgQueueRunner implements QueueRunner {
             continue;
           }
 
-          // Serves both the lease and the handler's abort timer, so a healthy
-          // handler can never outlive the reservation protecting it.
+          // The handler's deadline. The lease outlives it by
+          // LEASE_GRACE_SEC — see the constant — so the two do not expire
+          // together.
           let effectiveTimeoutSec = Math.min(
             jobToRun.timeout,
             this.#maxTimeoutSec,
           );
+          let leaseSec = effectiveTimeoutSec + LEASE_GRACE_SEC;
           let [{ id: jobReservationId }] = (await query([
             'INSERT INTO job_reservations (job_id, locked_until, worker_id) values (',
             ...separatedByCommas([
               [param(jobToRun.id)],
-              [
-                '(',
-                param(effectiveTimeoutSec),
-                ` || ' seconds')::interval + now()`,
-              ],
+              ['(', param(leaseSec), ` || ' seconds')::interval + now()`],
               [param(this.#workerId)],
             ]),
             ') RETURNING id',
@@ -649,12 +946,13 @@ export class PgQueueRunner implements QueueRunner {
           // from slow job execution.
           let queueWaitMs = Number(jobIsStillEligible[0].queue_wait_ms);
           log.info(
-            `%s: starting job %s (type=%s priority=%s group=%s) after %s in queue`,
+            `%s: starting job %s (type=%s priority=%s group=%s family=%s) after %s in queue`,
             this.#workerId,
             jobToRun.id,
             jobToRun.job_type,
             jobToRun.priority,
             jobToRun.concurrency_group,
+            jobToRun.lane_family ?? jobToRun.concurrency_group,
             Number.isFinite(queueWaitMs)
               ? `${queueWaitMs}ms`
               : 'an unknown wait',
@@ -669,33 +967,106 @@ export class PgQueueRunner implements QueueRunner {
           let result: PgPrimitive;
           try {
             log.debug(`%s: running %s`, this.#workerId, jobToRun.id);
+            // The deadline is re-armed by every heartbeat, so it measures
+            // time *without progress* rather than total runtime. A handler
+            // that never heartbeats sees one deadline from the start, exactly
+            // as before.
+            let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+            let onDeadline: (() => void) | undefined;
+            let armDeadline = () => {
+              if (deadlineTimer) {
+                clearTimeout(deadlineTimer);
+              }
+              deadlineTimer = setTimeout(() => {
+                onDeadline?.();
+              }, effectiveTimeoutSec * 1000);
+              deadlineTimer.unref();
+            };
+            // Pushing `locked_until` out is a write, and progress arrives per
+            // file — thousands of times on a large pass. Throttle it, but at a
+            // fraction of the grace window rather than the whole of it: two
+            // heartbeats can be a full deadline apart, so throttling on the
+            // grace itself would let the gap between extensions reach exactly
+            // the lease being written, leaving no margin at all. Half buys real
+            // headroom at the same negligible write rate.
+            let leaseExtensionIntervalMs = (LEASE_GRACE_SEC / 2) * 1000;
+            let lastLeaseExtension = Date.now();
+            let extendLease = () => {
+              if (Date.now() - lastLeaseExtension < leaseExtensionIntervalMs) {
+                return;
+              }
+              // Fire-and-forget on the pool rather than this loop's
+              // connection, which is mid-transaction for the next claim. A
+              // failed extension only costs the job its lease, which is the
+              // pre-existing behaviour.
+              void this.#pgClient
+                .execute(
+                  `UPDATE job_reservations
+                     SET locked_until = (($1 || ' seconds')::interval + NOW())
+                     WHERE id = $2 AND completed_at IS NULL`,
+                  { bind: [String(leaseSec), jobReservationId] },
+                )
+                .then(() => {
+                  // Stamped on completion rather than on the decision, so a
+                  // slow write does not also suppress the next attempt for a
+                  // further interval.
+                  lastLeaseExtension = Date.now();
+                })
+                .catch((e: unknown) => {
+                  log.warn(
+                    `%s: could not extend lease for job %s: %s`,
+                    this.#workerId,
+                    jobToRun.id,
+                    (e as Error)?.message ?? e,
+                  );
+                });
+            };
+            let jobStartedAt = Date.now();
+            registerJobHeartbeat(jobReservationId, () => {
+              armDeadline();
+              extendLease();
+            });
+            armDeadline();
+
             result = await Promise.race([
               this.runJob(jobToRun.job_type, jobToRun.args, {
                 jobId: jobToRun.id,
                 reservationId: jobReservationId,
                 priority: jobToRun.priority,
                 queueWaitMs: Number.isFinite(queueWaitMs) ? queueWaitMs : null,
+                concurrencyGroup: jobToRun.concurrency_group,
+                laneFamily: jobToRun.lane_family ?? null,
               }),
-              // we race the job so that it doesn't hold this worker hostage if
-              // the job's promise never resolves. The deadline is the lease,
-              // clamped by the worker's own ceiling — never the ceiling alone.
-              // A handler allowed to run past its own reservation leaves the
-              // job claimable while it is still working, so a peer can run it
-              // concurrently, and it puts a healthy worker in front of the
-              // stuck-job watchdog. Nothing renews a lease, so sharing one
-              // deadline is what makes "reservation open past its lease" mean
-              // the worker died rather than the worker is slow.
-              new Promise<'timeout'>((r) =>
-                setTimeout(() => {
-                  r('timeout');
-                }, effectiveTimeoutSec * 1000).unref(),
-              ),
-            ]);
+              // We race the job so a promise that never resolves cannot hold
+              // this worker hostage. What counts as "never resolves" is now
+              // "made no progress for a whole deadline" — a job that keeps
+              // heartbeating re-arms the timer and extends its lease, so a
+              // long pass is bounded by going quiet rather than by taking
+              // time. A job that goes quiet still loses the worker, which is
+              // what puts a genuinely wedged handler in front of the
+              // stuck-job watchdog.
+              new Promise<'timeout'>((r) => {
+                onDeadline = () => r('timeout');
+              }),
+            ]).finally(() => {
+              // On the race, not on the handler. The timeout exists precisely
+              // for a handler promise that never settles, so cleanup hung off
+              // the handler would never run in the one case it matters — the
+              // registry would retain the callback and its closures for every
+              // wedged job, and late progress from an abandoned handler would
+              // keep arming timers nobody is waiting on.
+              unregisterJobHeartbeat(jobReservationId);
+              clearTimeout(deadlineTimer);
+            });
             if (result === 'timeout') {
+              // The number is the silence window, not the elapsed time: a job
+              // that keeps reporting progress can run far past it. Say so, and
+              // carry the elapsed time, so a reader triaging this against the
+              // job's `created_at` is not misled.
               throw new Error(
-                `Timed-out after ${effectiveTimeoutSec}s waiting for job ${
+                `Timed-out after ${effectiveTimeoutSec}s without progress from job ${
                   jobToRun.id
-                } to complete`,
+                } (ran ${Math.round((Date.now() - jobStartedAt) / 1000)}s)`,
               );
             }
             newStatus = 'resolved';
@@ -763,6 +1134,7 @@ export class PgQueueRunner implements QueueRunner {
             `%s: committed job completion, notified jobs_finished`,
             this.#workerId,
           );
+          await wakeRunnersForPendingExclusive(query, this.#workerId, jobToRun);
         }
       } catch (e: any) {
         // Reachable for the claim transaction only — `finalizeJob` handles

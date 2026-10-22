@@ -1,0 +1,1352 @@
+import { test, expect, type Page } from '@playwright/test';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+import {
+  allRoomEvents,
+  loginWithPassword,
+  type MatrixEvent,
+} from './matrix-api.ts';
+import { analyzeRoom } from './room-analysis.ts';
+import { grade, type RunResult, type Verdict } from './run-result.ts';
+import { RealmClient } from './realm-api.ts';
+import { prepopulate, type EvaluationBundle } from './eval-card.ts';
+import { captureWorkspace } from './workspace-snapshot.ts';
+
+// One Playwright test per model. Each test: fresh workspace, new room, pick the
+// model, send the prompt, wait for the bot to go idle, check a card rendered,
+// then read the room's events for the numbers. Results go to eval-results/
+// (or EVAL_RESULTS_DIR, which run-eval.ts sets per session).
+//
+// Two ways to say what to send. EVAL_PROMPT is one prompt and no evaluation card (`pnpm eval:models`). With
+// EVAL_BUNDLE (a JSON file run-eval.ts writes from an EvaluationCard) the
+// prompts, the success criteria, and the cards and files the workspace starts
+// with come from the evaluation, and the result JSON carries what run-eval.ts
+// needs to write an EvaluationResultCard. The bundle holds the file bytes, so
+// the eval users need no access to the workspace the evaluation lives in.
+
+const RESULTS_DIR =
+  process.env.EVAL_RESULTS_DIR ?? join(import.meta.dirname, 'eval-results');
+const EVAL_BUNDLE = process.env.EVAL_BUNDLE;
+const SESSION_ID = process.env.EVAL_SESSION_ID;
+const EVAL_PROMPT =
+  process.env.EVAL_PROMPT ?? 'create a hello world card and show it';
+let evaluationPromise: Promise<EvaluationBundle | undefined> | undefined;
+async function loadPrompts() {
+  if (!EVAL_BUNDLE) {
+    return { evaluation: undefined, prompts: [EVAL_PROMPT] };
+  }
+  evaluationPromise ??= readFile(EVAL_BUNDLE, 'utf8').then(
+    (text) => JSON.parse(text) as EvaluationBundle,
+  );
+  let evaluation = await evaluationPromise;
+  return { evaluation, prompts: evaluation!.prompts };
+}
+// One matrix user per model, because which room the assistant panel opens on
+// is per-user state: `openRoom` lands on that account's current room and
+// starts a new session from it. Two browsers signed in as one account race
+// over that, and a prompt can land in the other model's room. The users come
+// from
+// `node ./scripts/register-test-user.ts` in packages/matrix
+// (MATRIX_USERNAME=ai-assistant-eval-user-1 MATRIX_PASSWORD=password ...); the `pnpm
+// register-test-user` script hardcodes its own username and ignores the env.
+const USERS = (
+  process.env.EVAL_USERS ??
+  process.env.EVAL_USER ??
+  'ai-assistant-eval-user-1,ai-assistant-eval-user-2,ai-assistant-eval-user-3,ai-assistant-eval-user-4,ai-assistant-eval-user-5'
+)
+  .split(',')
+  .map((u) => u.trim())
+  .filter(Boolean);
+const PASSWORD = process.env.EVAL_PASSWORD ?? 'password';
+function userForModel(index: number): string {
+  return USERS[index % USERS.length];
+}
+const BOT_USER_ID = process.env.EVAL_BOT_USER ?? '@aibot:localhost';
+// The only time-based stop, and a safety net rather than a benchmark: a run
+// that is still going after this long is not going to finish. Slow runs are
+// graded afterwards, never cut short.
+const MAX_MINUTES = Number(process.env.EVAL_MAX_MINUTES ?? 15);
+// A pill that stays in "applying" this long is a stuck host, not a slow tool:
+// the host's own tool timeout is two minutes.
+const STUCK_APPLYING_MS = 150_000;
+// A turn that shows "Generating results" with no new text for this long is a
+// stalled request between the ai-bot and the provider; the bot has no timeout
+// of its own for it.
+const STALLED_GENERATION_MS = 180_000;
+
+// One machine-readable line per state change, read by progress-reporter.ts to
+// print how far each model has got. Only changes are printed, so the list
+// reporter's output stays readable.
+function progress(model: string, fields: Record<string, unknown>) {
+  console.log(`[eval-step] ${JSON.stringify({ model, ...fields })}`);
+}
+// If the bot has not started a single reply this long after the prompt, it is
+// not slow: it never saw the message. The usual cause is an invite the ai-bot
+// missed, so it never joined the room.
+const NO_REPLY_MS = 120_000;
+// The bot starts its next message within a second or two of a tool result
+// landing; the correctness check takes a few seconds more. Idle has
+// to hold this long before it counts.
+const QUIET_WINDOW_MS = 10_000;
+
+// Models are given by the name the picker shows (substring, case-insensitive),
+// because picker options are keyed by ModelConfiguration card id, not model id.
+// The model id actually used is read back from the room and recorded.
+// Workers start this far apart. Every worker logs in as the same user, and
+// the host opens that user's most recent room; if it is empty the runner uses
+// it. Two tabs reaching that step at the same moment would share a room, so
+// the starts are staggered to keep the room steps apart.
+const STAGGER_MS = Number(process.env.EVAL_STAGGER_SECONDS ?? 40) * 1000;
+let staggered = false;
+
+const MODELS = (process.env.EVAL_MODELS ?? 'Claude Sonnet 4.6')
+  .split(',')
+  .map((m) => m.trim())
+  .filter(Boolean);
+
+// Skill sections behind a feature flag (`<!-- feature:<name> -->`) are left
+// out of the prompt unless the room enabled them. Each name here is enabled
+// in the room with `boxel-debug:feature:enable:<name>` before the first
+// prompt, in addition to the evaluation's own `skillFeatures`, so a run can
+// measure the assistant with a feature on that the evaluation leaves off. A
+// name with a leading `-` leaves out one the evaluation switches on, so the
+// two arms of an A/B run use the same card.
+const SKILL_FEATURE_NAMES = (process.env.EVAL_SKILL_FEATURES ?? '')
+  .split(',')
+  .map((f) => f.trim())
+  .filter(Boolean);
+const SKILL_FEATURES = SKILL_FEATURE_NAMES.filter((f) => !f.startsWith('-'));
+const SKILL_FEATURES_OFF = SKILL_FEATURE_NAMES.filter((f) =>
+  f.startsWith('-'),
+).map((f) => f.slice(1));
+
+function slugify(s: string) {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+async function loginViaLocalStorage(page: Page, username: string) {
+  let credentials = await loginWithPassword(username, PASSWORD);
+  await page.context().addInitScript(
+    (auth) => {
+      window.localStorage.setItem('auth', JSON.stringify(auth));
+    },
+    {
+      access_token: credentials.accessToken,
+      user_id: credentials.userId,
+      device_id: credentials.deviceId,
+      home_server: credentials.homeServer,
+    },
+  );
+  await page.goto('/');
+  let rendered = page
+    .locator(
+      '[data-test-workspace-chooser], [data-test-workspace-chooser-toggle], [data-test-login-form]',
+    )
+    .first();
+  // The first tab of a fresh browser context can lose every module load to
+  // Chromium's ERR_CERT_VERIFIER_CHANGED: the ignore-certificate-errors setting
+  // lands while the page is already loading. A reload after a short wait
+  // recovers it. A dev-server rebuild can also leave the page blank for a
+  // minute or more on the first request, hence the long second wait.
+  if (!(await rendered.isVisible({ timeout: 15_000 }).catch(() => false))) {
+    await page.reload();
+  }
+  await expect(rendered).toBeVisible({ timeout: 180_000 });
+  if ((await page.locator('[data-test-login-form]').count()) > 0) {
+    throw new Error(
+      'the stored matrix session was not accepted; the login form rendered',
+    );
+  }
+  return credentials;
+}
+
+// An endpoint the realm server has not seen before, kept short: the model
+// copies the workspace URL into tool calls, and a weaker model mangles a long
+// one (GPT-6 Luna dropped whole runs of a URL that repeated "eval"). The
+// workspace's display name carries the evaluation; the endpoint is only the
+// model, the time and the session suffix, which is what makes it unique.
+function workspaceEndpoint(modelSlug: string, now: Date) {
+  let session = (SESSION_ID ?? '').split('-').pop() ?? '';
+  let suffix = slugify(session) || Math.random().toString(36).slice(2, 6);
+  let pad = (n: number) => String(n).padStart(2, '0');
+  let time = `${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(
+    now.getHours(),
+  )}${pad(now.getMinutes())}`;
+  // A long model id is cut so the endpoint stays well inside the realm
+  // server's limit; the time and suffix keep it unique.
+  let model = modelSlug.slice(0, 40).replace(/-+$/, '');
+  return `${model}-${time}-${suffix}`;
+}
+
+async function createWorkspace(
+  page: Page,
+  displayName: string,
+  endpoint: string,
+) {
+  // A fresh login lands on the chooser; a restored session lands in the last
+  // workspace, where the chooser is behind a toggle. Wait for whichever is
+  // there before deciding.
+  let chooser = page.locator('[data-test-workspace-chooser]');
+  let toggle = page.locator('[data-test-workspace-chooser-toggle]');
+  await expect(chooser.or(toggle).first()).toBeVisible({ timeout: 60_000 });
+  if (!(await chooser.isVisible())) {
+    await toggle.click();
+    await chooser.waitFor();
+  }
+  await page.locator('[data-test-add-workspace]').click();
+  await page.locator('[data-test-display-name-field]').fill(displayName);
+  await page.locator('[data-test-endpoint-field]').fill(endpoint);
+  await page.locator('[data-test-create-workspace-submit]').click();
+  // Provisioning blocks until the new realm is indexed; the modal closes on
+  // success and shows an error otherwise.
+  // `.first()` on both: two runs of one model in one minute get the same
+  // display name, and a second tile with that name would otherwise end the run
+  // on a strict-mode violation. The endpoint is what keeps the realms apart.
+  let tile = page
+    .locator(
+      `[data-test-workspace-list] [data-test-workspace="${displayName}"]`,
+    )
+    .first();
+  let error = page
+    .locator('[data-test-create-workspace-modal] [data-test-error-message]')
+    .first();
+  await expect(tile.or(error).first()).toBeVisible({ timeout: 120_000 });
+  if (await error.isVisible()) {
+    throw new Error(`workspace creation failed: ${await error.textContent()}`);
+  }
+  await page
+    .locator(`[data-test-workspace-button="${displayName}"]`)
+    .first()
+    .click();
+  let indexCard = page
+    .locator('[data-test-operator-mode-stack="0"] [data-test-stack-card]')
+    .first();
+  await indexCard.waitFor({ timeout: 60_000 });
+  let indexId = await indexCard.getAttribute('data-test-stack-card');
+  if (!indexId?.endsWith('index')) {
+    throw new Error(
+      `expected the workspace index card to open, got ${indexId}`,
+    );
+  }
+  return indexId.slice(0, -'index'.length);
+}
+
+async function openRoom(page: Page) {
+  let panel = page.locator('[data-test-ai-assistant-panel]');
+  if (!(await panel.isVisible())) {
+    await page.locator('[data-test-open-ai-assistant]').click();
+    await panel.waitFor();
+  }
+  await page.locator('[data-test-room]').waitFor({ timeout: 60_000 });
+  await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
+  // "New session" is disabled while the current room has no messages, and an
+  // empty current room is already what we want. Otherwise start a fresh one.
+  let createButton = page.locator(
+    '[data-test-create-room-btn]:not([disabled])',
+  );
+  if ((await createButton.count()) > 0) {
+    let before = await page
+      .locator('[data-test-room]')
+      .getAttribute('data-test-room');
+    await createButton.click();
+    await expect
+      .poll(async () =>
+        page.locator('[data-test-room]').getAttribute('data-test-room'),
+      )
+      .not.toBe(before);
+    await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
+  }
+  let roomId = await page
+    .locator('[data-test-room]')
+    .getAttribute('data-test-room');
+  if (!roomId) {
+    throw new Error('no room id on the room element');
+  }
+  return roomId;
+}
+
+async function selectModel(page: Page, requested: string) {
+  await page.locator('[data-test-llm-select-selected]').click();
+  let items = page.locator('[data-test-llm-select-item]');
+  await items.first().waitFor();
+  let names = await items.locator('.llm-name').allTextContents();
+  let wanted = requested.toLowerCase();
+  let all = names.map((name, index) => ({ name: name.trim(), index }));
+  // "GPT-5.4" must not also match "GPT-5.4 Mini": prefer an option whose name
+  // is exactly the request, or ends with it as a whole word (the vendor prefix
+  // is optional), and only then fall back to a substring match.
+  let escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let exact = all.filter((o) => o.name.toLowerCase() === wanted);
+  let suffix = all.filter((o) =>
+    new RegExp(`(^|[:\\s])${escaped}$`, 'i').test(o.name),
+  );
+  let substring = all.filter((o) => o.name.toLowerCase().includes(wanted));
+  let matches = exact.length ? exact : suffix.length ? suffix : substring;
+  if (matches.length !== 1) {
+    await page.keyboard.press('Escape');
+    throw new Error(
+      `model "${requested}" matched ${matches.length} picker options: ${
+        matches.map((m) => m.name).join(' | ') || '(none)'
+      }. Available: ${names.join(' | ')}`,
+    );
+  }
+  await items.nth(matches[0].index).locator('button').click();
+  await expect(page.locator('[data-test-llm-select-selected]')).toContainText(
+    matches[0].name,
+  );
+  // The picker stays expanded after a choice and hides the mode toggle while
+  // it is open. Escape does not close it; a second click on the pill does.
+  if ((await page.locator('[data-test-llm-select-item]').count()) > 0) {
+    await page.locator('[data-test-llm-select-selected]').click();
+  }
+  await expect(page.locator('[data-test-llm-select-item]')).toHaveCount(0, {
+    timeout: 15_000,
+  });
+  return matches[0].name;
+}
+
+// Put the room in Act mode right after the model is picked. In Ask mode every
+// tool call waits for a click nobody makes. The toggle renders only once
+// the room knows its model, a moment after the pick, so wait for it rather
+// than reading "not there yet" as "not needed"; then confirm the click took.
+async function ensureActMode(page: Page, requestedModel: string) {
+  let act = page.locator('[data-test-llm-mode-option="act"]');
+  await act.waitFor({ state: 'visible', timeout: 60_000 });
+  if (!(await act.evaluate((el) => el.classList.contains('selected')))) {
+    await act.click();
+  }
+  await expect(act, `${requestedModel}: room is in Act mode`).toHaveClass(
+    /selected/,
+    { timeout: 30_000 },
+  );
+  console.log(`[eval] ${requestedModel}: mode toggle shows act`);
+}
+
+// The prompt must go out while the tab is inside the new workspace: the host
+// stamps the current realm and open cards onto the message, and a model that
+// is told "workspace chooser, no realm" picks any workspace from the list.
+// `openCards` are stacked on top of the index, so an evaluation's initial
+// cards are open cards in the message context, the way a person would have
+// the card they are talking about in front of them.
+async function ensureInsideWorkspace(
+  page: Page,
+  realmUrl: string,
+  openCards: string[] = [],
+) {
+  let chooser = page.locator('[data-test-workspace-chooser]');
+  let indexCard = page.locator(`[data-test-stack-card="${realmUrl}index"]`);
+  let missingOpenCard = false;
+  for (let id of openCards) {
+    if ((await page.locator(`[data-test-stack-card="${id}"]`).count()) === 0) {
+      missingOpenCard = true;
+    }
+  }
+  if (
+    (await chooser.count()) > 0 ||
+    (await indexCard.count()) === 0 ||
+    missingOpenCard
+  ) {
+    // Re-enter through the URL rather than the tile, so this works whatever
+    // state the chooser is in.
+    let state = encodeURIComponent(
+      JSON.stringify({
+        stacks: [
+          [
+            { id: `${realmUrl}index`, format: 'isolated' },
+            ...openCards.map((id) => ({ id, format: 'isolated' })),
+          ],
+        ],
+        submode: 'interact',
+        workspaceChooserOpened: false,
+        aiAssistantOpen: true,
+      }),
+    );
+    await page.goto(`/?operatorModeState=${state}`);
+    await indexCard.waitFor({ timeout: 60_000 });
+    for (let id of openCards) {
+      await page
+        .locator(`[data-test-stack-card="${id}"]`)
+        .waitFor({ timeout: 60_000 });
+    }
+    await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
+  }
+  await expect(chooser).toHaveCount(0);
+  await expect(indexCard).toBeVisible();
+}
+
+async function sendPrompt(
+  page: Page,
+  roomId: string,
+  prompt: string,
+  expectedUserMessages = 1,
+) {
+  // Session preparation (skills context) can take a while on a new room.
+  await expect(page.locator('[data-test-session-preparation]')).toHaveCount(0, {
+    timeout: 90_000,
+  });
+  await page.locator(`[data-test-message-field="${roomId}"]`).fill(prompt);
+  await page.locator('[data-test-can-send-msg]').waitFor();
+  await page.locator('[data-test-send-message-btn]').click();
+  await expect(
+    page.locator(`[data-test-message-field="${roomId}"]`),
+  ).toHaveValue('');
+  // With parallel workers on one account, a second tab could have landed in
+  // this same empty room. Then two prompts share it and neither result means
+  // anything; fail the run rather than grade a mixed room.
+  await expect(page.locator('[data-test-user-message]')).toHaveCount(
+    expectedUserMessages,
+  );
+}
+
+interface Activity {
+  idle: boolean;
+  // The terms of `idle` that are holding it false, so a room that never goes
+  // idle names the element that kept it busy.
+  busy: string[];
+  botMessages: number;
+  applying: number;
+  generating: boolean;
+  // Tool calls the host holds until the user approves them. Nobody approves
+  // in a run, so a turn that ends on one would wait forever.
+  awaitingApproval: number;
+  errorAlerts: number;
+  // Length of all bot text on the page: a turn that is "generating" while this
+  // stays flat for minutes is a stalled provider or ai-bot, not a slow model.
+  botTextLength: number;
+  // Signs that the run has already gone wrong and every further turn is
+  // wasted money: a failed or invalid tool pill, an error alert, or the same
+  // tool call repeated.
+  irregularities: string[];
+}
+
+// The host reloads the page whenever a write changes a module the page holds,
+// which is what a `.gts` write does. A poll that lands in that moment loses its
+// execution context. That is the app working, not the run failing, so wait for
+// the page to come back and read again.
+const LOST_CONTEXT =
+  /Execution context was destroyed|Execution context is not available|frame was detached|frame got detached/i;
+
+async function readActivity(page: Page): Promise<Activity> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await readActivityOnce(page);
+    } catch (error) {
+      let message = error instanceof Error ? error.message : String(error);
+      if (attempt >= 5 || !LOST_CONTEXT.test(message)) {
+        throw error;
+      }
+      await page
+        .waitForLoadState('domcontentloaded', { timeout: 60_000 })
+        .catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+  }
+}
+
+async function readActivityOnce(page: Page): Promise<Activity> {
+  return page.evaluate(() => {
+    let q = (sel: string) => document.querySelectorAll(sel).length;
+    let settled = q('[data-test-room-settled]') > 0;
+    // The bar's "new messages" button stays while the panel is not scrolled
+    // to the end, and it takes the place of the bar's other states, the Stop
+    // button among them. Scroll to the last message so the next read sees the
+    // bar's real state; until then the bar counts as busy.
+    let actionBar = q('[data-test-ai-assistant-action-bar]');
+    let unread = q('[data-test-unread-messages-button]') > 0;
+    if (unread) {
+      let messages = document.querySelectorAll('[data-test-message-idx]');
+      messages[messages.length - 1]?.scrollIntoView({ block: 'end' });
+    }
+    // Only a call the host is running. A call still streaming ("preparing")
+    // is the model writing, which the stall check below watches instead.
+    let applying = q('[data-test-apply-state="applying"]');
+    let preparing = q('[data-test-apply-state="preparing"]');
+    let loading = q('[data-test-session-preparation]');
+    let pending = q('[data-test-ai-assistant-message-pending="true"]');
+    let generating = q('[data-test-stop-generating]') > 0;
+    let awaitingApproval = q('[data-test-tool-call-approval]');
+    let irregularities: string[] = [];
+    let failed = q('[data-test-apply-state="failed"]');
+    let invalid = q('[data-test-apply-state="invalid"]');
+    let errorAlerts = q('[data-test-boxel-alert="error"]');
+    // A failed or rejected call is something a model can notice and correct:
+    // the host tells it what was wrong, and a normal repair takes two or three
+    // rounds, each of which can fail once more before it lands. A failure the
+    // next turn repairs is graded afterwards (too many failed calls reads
+    // ROUGH), not stopped: across a run with follow-ups, scattered slips that
+    // were each fixed added up to a stop after the last prompt's work was on
+    // screen. So the run stops on three failing turns in a row, the model not
+    // getting out of it, and on eight in all as a backstop for one that
+    // alternates. Count turns, not pills: one fix reply can carry several
+    // calls that all fail together. A finished turn shows its token usage; a
+    // turn with neither a failure nor usage (a correctness note) leaves the
+    // streak as it is.
+    let failingTurns = 0;
+    let failingStreak = 0;
+    let longestFailingStreak = 0;
+    for (let m of Array.from(
+      document.querySelectorAll('[data-test-message-idx]'),
+    )) {
+      let failing =
+        m.querySelector(
+          '[data-test-apply-state="failed"], [data-test-apply-state="invalid"]',
+        ) || m.querySelector('[data-test-boxel-alert="error"]');
+      if (failing) {
+        failingTurns++;
+        failingStreak++;
+        longestFailingStreak = Math.max(longestFailingStreak, failingStreak);
+      } else if (m.querySelector('[data-test-token-usage]')) {
+        failingStreak = 0;
+      }
+    }
+    if (longestFailingStreak >= 3) {
+      irregularities.push(
+        `${longestFailingStreak} turns in a row had a failed or rejected tool call (${failingTurns} failing turns in all; ${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
+      );
+    } else if (failingTurns >= 8) {
+      irregularities.push(
+        `${failingTurns} turns had a failed or rejected tool call (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
+      );
+    }
+    // A loop: the same tool call, with the same arguments, three times. The
+    // bot's own checkCorrectness is left out: it repeats with the same
+    // arguments on every repair round by design. So is a call rejected as
+    // invalid: it never ran, its pill shows no arguments, so several of them
+    // in one turn look identical, and the failed-turn count above already
+    // covers them.
+    let toolElements = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-tool-name]'),
+    );
+    let calls = toolElements
+      .filter((el) => el.dataset.toolName !== 'checkCorrectness')
+      .filter((el) => !el.querySelector('[data-test-apply-state="invalid"]'))
+      .map(
+        (el) =>
+          `${el.dataset.toolName}|${el.dataset.toolArgumentsLength}|${(
+            el.textContent ?? ''
+          )
+            .replace(/\s+/g, ' ')
+            .trim()}`,
+      );
+    let seen = new Map<string, number>();
+    for (let call of calls) seen.set(call, (seen.get(call) ?? 0) + 1);
+    if ([...seen.values()].some((n) => n >= 3)) {
+      irregularities.push(
+        'the same tool call was made three times with the same arguments',
+      );
+    }
+    let busy = [
+      settled ? '' : 'room not settled',
+      unread ? 'new messages button' : '',
+      actionBar && !unread ? `${actionBar} action bar` : '',
+      applying ? `${applying} applying` : '',
+      preparing ? `${preparing} preparing` : '',
+      loading ? 'session preparation' : '',
+      pending ? `${pending} pending message` : '',
+    ].filter(Boolean);
+    return {
+      idle: busy.length === 0,
+      busy,
+      // Finished bot turns, not messages: every completed turn renders its
+      // token usage, while tool results and correctness notes are messages too.
+      botMessages: q('[data-test-token-usage]'),
+      applying,
+      generating,
+      awaitingApproval,
+      errorAlerts,
+      irregularities,
+      // Streamed tool arguments count too: a long tool call grows only in its
+      // collapsed box, which shows no text.
+      botTextLength:
+        Array.from(
+          document.querySelectorAll(
+            '[data-test-ai-message-content], [data-test-reasoning]',
+          ),
+        ).reduce((sum, el) => sum + (el.textContent ?? '').length, 0) +
+        toolElements.reduce(
+          (sum, el) => sum + Number(el.dataset.toolArgumentsLength ?? 0),
+          0,
+        ),
+    };
+  });
+}
+
+async function stopGeneration(page: Page) {
+  let stop = page.locator('[data-test-stop-generating]');
+  if (await stop.isVisible()) {
+    await stop.click();
+  }
+}
+
+// Waits for the bot to finish on its own. A run is cut short only when it has
+// clearly gone sideways: a failed or invalid tool call, an error alert, a
+// repeated identical tool call, a pill stuck
+// past the host's own tool timeout, or the safety wall clock. Long, slow, or
+// expensive runs are not stopped; they are graded afterwards.
+// `botMessagesBefore` is how many finished bot turns the room already had
+// when the prompt went out; a follow-up prompt waits for a new one.
+// Some tools open a room of their own and move the assistant panel to it:
+// `listing-remix`, for one, starts a "Remixing …" session. The evaluation's
+// conversation carries on in its own room, but the panel no longer shows it,
+// so everything read from the page would describe the wrong room. When the
+// panel is on another room, reopen the evaluation's room from past sessions.
+// Returns true when it switched back. It runs on every poll, so reading the
+// current room never waits, and a switch that fails (the past-sessions button
+// disabled, the host reloading) returns false for the next poll to retry
+// rather than failing the run.
+async function returnToRoom(page: Page, roomId: string): Promise<boolean> {
+  let current = await page
+    .evaluate(
+      () =>
+        document
+          .querySelector('[data-test-room]')
+          ?.getAttribute('data-test-room') ?? null,
+    )
+    .catch(() => null);
+  if (!current || current === roomId) {
+    return false;
+  }
+  try {
+    await page.locator('[data-test-past-sessions-button]').click();
+    await page.locator(`[data-test-enter-room="${roomId}"]`).click();
+    await page
+      .locator(`[data-test-room="${roomId}"]`)
+      .waitFor({ timeout: 60_000 });
+    await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForIdle(
+  page: Page,
+  deadline: number,
+  botMessagesBefore = 0,
+  onActivity?: (activity: Activity) => void,
+  roomId?: string,
+  roomReturns: { count: number } = { count: 0 },
+): Promise<{ stoppedBy: RunResult['stoppedBy']; irregularities: string[] }> {
+  let idleSince: number | undefined;
+  let applyingSince: number | undefined;
+  let hostBusySince: number | undefined;
+  let flatSince: number | undefined;
+  let lastTextLength = -1;
+  let startedAt = Date.now();
+  for (;;) {
+    if (roomId && (await returnToRoom(page, roomId))) {
+      roomReturns.count++;
+    }
+    let now = Date.now();
+    let activity = await readActivity(page);
+    onActivity?.(activity);
+    if (
+      activity.botMessages <= botMessagesBefore &&
+      !activity.generating &&
+      now - startedAt > NO_REPLY_MS
+    ) {
+      return { stoppedBy: 'no-reply', irregularities: [] };
+    }
+    if (activity.generating && activity.botTextLength === lastTextLength) {
+      flatSince ??= now;
+      if (now - flatSince > STALLED_GENERATION_MS) {
+        await stopGeneration(page);
+        return { stoppedBy: 'stalled', irregularities: [] };
+      }
+    } else {
+      flatSince = undefined;
+    }
+    lastTextLength = activity.botTextLength;
+    if (activity.applying > 0) {
+      applyingSince ??= now;
+      if (now - applyingSince > STUCK_APPLYING_MS) {
+        return { stoppedBy: 'stuck', irregularities: [] };
+      }
+    } else {
+      applyingSince = undefined;
+    }
+    // The bot is not generating, but something on the page holds the room
+    // busy. Brief stretches of this are normal host work between turns.
+    if (activity.busy.length && !activity.generating) {
+      hostBusySince ??= now;
+    } else {
+      hostBusySince = undefined;
+    }
+    if (activity.irregularities.length > 0) {
+      // Something already went wrong. Letting the model carry on only spends
+      // more turns on a broken path; stop it and read the room instead.
+      await stopGeneration(page);
+      return {
+        stoppedBy: 'irregularity',
+        irregularities: activity.irregularities,
+      };
+    }
+    // The room looks idle while a call waits for approval, so without this
+    // the next prompt would go out over a turn that never finished.
+    if (activity.awaitingApproval > 0 && !activity.generating) {
+      return { stoppedBy: 'approval', irregularities: [] };
+    }
+    if (activity.idle && activity.botMessages > botMessagesBefore) {
+      idleSince ??= now;
+      if (now - idleSince >= QUIET_WINDOW_MS) {
+        return { stoppedBy: 'idle', irregularities: [] };
+      }
+    } else {
+      idleSince = undefined;
+    }
+    if (now > deadline) {
+      await stopGeneration(page);
+      return {
+        stoppedBy: 'wall-clock',
+        // The bot finished, but something on the page held the room busy for
+        // longer than the host may take: that is the host, not a model still
+        // working. A busy state that only began near the deadline is not.
+        irregularities:
+          hostBusySince !== undefined && now - hostBusySince > STUCK_APPLYING_MS
+            ? [`the room never went idle: ${activity.busy.join(', ')}`]
+            : [],
+      };
+    }
+    await page.waitForTimeout(2_000);
+  }
+}
+
+// A shown card can land in two places: the interact-mode stack, or the
+// code-mode preview panel when the model switched to code mode first. Both
+// render the instance through the card renderer, which stamps
+// `data-test-card="<id>"`, so look for that anywhere on the page.
+//
+// `seededCardIds` are the evaluation's `initialCards`, which the run copies in
+// and stacks before the prompt goes out. They render exactly like a card the
+// assistant produced, so they are excluded here — otherwise an evaluation that
+// seeds cards clears the "a card rendered" leg before the assistant does
+// anything.
+async function findRenderedCard(
+  page: Page,
+  realmUrl: string,
+  seededCardIds: string[] = [],
+) {
+  let seeded = new Set(seededCardIds);
+  let cardIds: string[] = [];
+  try {
+    await expect
+      .poll(
+        async () => {
+          let ids = (await page
+            .locator('[data-test-card]')
+            .evaluateAll((els) =>
+              els.map((el) => el.getAttribute('data-test-card')),
+            )) as (string | null)[];
+          cardIds = [
+            ...new Set(
+              ids.filter(
+                (id): id is string =>
+                  !!id &&
+                  id.startsWith(realmUrl) &&
+                  !id.endsWith('index') &&
+                  !seeded.has(id),
+              ),
+            ),
+          ];
+          return cardIds.length;
+        },
+        { timeout: 60_000 },
+      )
+      .toBeGreaterThan(0);
+  } catch {
+    return {
+      cardId: undefined,
+      reasons: [
+        'no card the assistant produced is rendered, in the stack or the preview panel',
+      ],
+      where: undefined,
+    };
+  }
+  let cardId = cardIds[cardIds.length - 1];
+  let reasons: string[] = [];
+  await expect(page.locator('[data-test-stack-item-loading-card]')).toHaveCount(
+    0,
+    {
+      timeout: 60_000,
+    },
+  );
+  if ((await page.locator(`[data-test-card-error="${cardId}"]`).count()) > 0) {
+    reasons.push('the card renders an error boundary');
+  }
+  if (
+    (await page
+      .locator(`[data-test-card-awaiting-index="${cardId}"]`)
+      .count()) > 0
+  ) {
+    reasons.push('the card is still awaiting indexing');
+  }
+  let inStack =
+    (await page.locator(`[data-test-stack-card="${cardId}"]`).count()) > 0;
+  return {
+    cardId,
+    reasons,
+    where: (inStack ? 'stack' : 'preview') as 'stack' | 'preview',
+  };
+}
+
+function skillsUsed(events: MatrixEvent[]): string[] {
+  let latest = [...events]
+    .filter((e) => e.type === 'app.boxel.room.skills')
+    .sort((a, b) => b.origin_server_ts - a.origin_server_ts)[0];
+  let enabled = (latest?.content?.enabledSkillCards ?? []) as {
+    sourceUrl?: string;
+    url?: string;
+  }[];
+  return [
+    ...new Set(
+      enabled
+        .map((f) => f.sourceUrl ?? f.url ?? '')
+        .filter((url) => /^https?:\/\//.test(url)),
+    ),
+  ];
+}
+
+function activeLLM(events: MatrixEvent[]) {
+  let latest = [...events]
+    .filter((e) => e.type === 'app.boxel.active-llm')
+    .sort((a, b) => b.origin_server_ts - a.origin_server_ts)[0];
+  return latest?.content as
+    | { model?: string; reasoningEffort?: string | null }
+    | undefined;
+}
+
+function classify(
+  stoppedBy: RunResult['stoppedBy'],
+  irregularities: string[],
+  cardReasons: string[],
+  cardId: string | undefined,
+  analysis: RunResult['analysis'] & object,
+  promptsSent: number,
+  promptsTotal: number,
+): { verdict: Verdict; reasons: string[] } {
+  let reasons: string[] = [];
+  // A run the runner cut short is a failure whatever is on screen when it
+  // stops: the model was looping, or still going past the safety clock. Both
+  // return here rather than falling through, because everything below judges
+  // a run that finished on its own and would otherwise read a half-finished
+  // one as a pass.
+  if (stoppedBy === 'irregularity') {
+    reasons.push(`stopped early: ${irregularities.join('; ')}`);
+    return { verdict: 'model-failure', reasons };
+  }
+  if (stoppedBy === 'wall-clock' && irregularities.length > 0) {
+    reasons.push(
+      `the bot finished but ${irregularities.join('; ')}; stopped after ${MAX_MINUTES} minutes`,
+    );
+    return { verdict: 'host-failure', reasons };
+  }
+  if (stoppedBy === 'wall-clock') {
+    reasons.push(
+      `still running after ${MAX_MINUTES} minutes, stopped as a safety measure`,
+    );
+    return { verdict: 'model-failure', reasons };
+  }
+  if (stoppedBy === 'approval') {
+    reasons.push(
+      'the assistant stopped to wait for the user to approve a tool call (for example a readUrl of a URL the model composed itself)',
+    );
+    return { verdict: 'model-failure', reasons };
+  }
+  if (stoppedBy === 'stuck') {
+    reasons.push('a tool pill stayed in "applying" past the host tool timeout');
+    return { verdict: 'host-failure', reasons };
+  }
+  if (stoppedBy === 'no-reply' && analysis.emptyBotReplies > 0) {
+    reasons.push(
+      `the bot posted an empty reply (no text, no tool call, no usage): the provider returned no content, and the ai-bot finalized it; its log for that turn shows the generation id`,
+    );
+    return { verdict: 'bot-failure', reasons };
+  }
+  if (stoppedBy === 'no-reply') {
+    reasons.push(
+      `the bot never started a reply within ${NO_REPLY_MS / 1000}s of the prompt; check whether the ai-bot joined the room (a missed invite leaves it in "invite" state forever)`,
+    );
+    return { verdict: 'bot-failure', reasons };
+  }
+  if (stoppedBy === 'stalled') {
+    reasons.push(
+      `the bot showed "Generating results" with nothing streamed for ${STALLED_GENERATION_MS / 1000}s: the provider is either hung or reasoning without streaming; the room shows whether the turn completed later`,
+    );
+    return { verdict: 'bot-failure', reasons };
+  }
+  if (analysis.unansweredToolCalls > 0) {
+    reasons.push(
+      `${analysis.unansweredToolCalls} tool call(s) never got a result`,
+    );
+    return { verdict: 'host-failure', reasons };
+  }
+  let writes = analysis.realmCodeWrites + analysis.toolWrites;
+  if (writes === 0) {
+    reasons.push(
+      'no file was written (no applied run-realm-code or other writing tool call)',
+    );
+  }
+  if (!cardId) {
+    reasons.push(...cardReasons);
+  } else if (cardReasons.length) {
+    reasons.push(...cardReasons);
+  }
+  if (promptsSent < promptsTotal) {
+    reasons.push(
+      `only ${promptsSent} of ${promptsTotal} prompts were sent before the run ended`,
+    );
+  }
+  if (
+    cardId &&
+    cardReasons.length === 0 &&
+    writes > 0 &&
+    promptsSent === promptsTotal
+  ) {
+    return { verdict: 'pass', reasons };
+  }
+  return { verdict: 'model-failure', reasons };
+}
+
+// Not `serial`: serial mode skips every remaining test after one failure, and
+// a sweep must keep going when one model fails.
+
+test.beforeAll(async () => {
+  await mkdir(RESULTS_DIR, { recursive: true });
+});
+
+async function runModel(
+  page: Page,
+  requestedModel: string,
+  username: string,
+): Promise<RunResult> {
+  let slug = slugify(requestedModel);
+  let startedAt = Date.now();
+  // When the first prompt went out: the time target covers the prompts, not
+  // logging in and creating the workspace.
+  let promptStartedAt: number | undefined;
+  let consoleErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      consoleErrors.push(message.text().slice(0, 300));
+    }
+  });
+  page.on('pageerror', (error) =>
+    consoleErrors.push(`pageerror: ${String(error).slice(0, 300)}`),
+  );
+  let result: RunResult = {
+    requestedModel,
+    modelName: undefined,
+    modelId: undefined,
+    reasoningEffort: undefined,
+    roomId: undefined,
+    realmUrl: undefined,
+    verdict: 'runner-failure',
+    reasons: [],
+    cardRendered: undefined,
+    renderedIn: undefined,
+    durationSeconds: 0,
+    startedAt: new Date(startedAt).toISOString(),
+    endedAt: undefined,
+    prompts: [],
+    promptsSent: 0,
+    evalCardUrl: undefined,
+    sessionId: SESSION_ID,
+    initialCards: [],
+    initialFiles: [],
+    skillsUsed: [],
+    skillFeatures: [],
+    roomReturns: 0,
+    username,
+    stoppedBy: 'error',
+    irregularities: [],
+    analysis: undefined,
+    screenshot: undefined,
+    consoleErrors: [],
+  };
+  let credentials: Awaited<ReturnType<typeof loginWithPassword>> | undefined;
+  // Declared out here so the snapshot in `finally` can still reach it when the
+  // run ends early.
+  let realmClient: RealmClient | undefined;
+  let step = 'start';
+  let setStep = (next: string) => {
+    step = next;
+    progress(requestedModel, { state: next });
+  };
+  try {
+    setStep('login');
+    console.log(`[eval] ${requestedModel} runs as @${username}`);
+    credentials = await loginViaLocalStorage(page, username);
+    realmClient = new RealmClient(credentials.accessToken, credentials.userId);
+    setStep('read the evaluation');
+    let { evaluation, prompts } = await loadPrompts();
+    result.prompts = prompts;
+    result.evalCardUrl = evaluation?.url;
+    result.secondsPerPrompt = evaluation?.secondsPerPrompt;
+    // Human-readable stamp so the workspace list reads "Models Claude Opus
+    // 4.8 2026-09-07 12:43"; the endpoint gets the same stamp, slug-safe.
+    let now = new Date();
+    let pad = (n: number) => String(n).padStart(2, '0');
+    let stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
+      now.getHours(),
+    )}:${pad(now.getMinutes())}`;
+    setStep('create workspace');
+    let label = evaluation ? `Eval ${slugify(evaluation.name)}` : 'Models';
+    result.realmUrl = await createWorkspace(
+      page,
+      `${label} ${requestedModel} ${stamp}`,
+      workspaceEndpoint(slug, now),
+    );
+    if (evaluation) {
+      setStep('copy the initial cards and files into the workspace');
+      let copied = await prepopulate(
+        realmClient,
+        evaluation,
+        result.realmUrl,
+        (line) => console.log(`[eval] ${requestedModel}: ${line}`),
+      );
+      result.initialCards = copied.cards;
+      result.initialFiles = copied.files;
+    }
+    setStep('open room');
+    result.roomId = await openRoom(page);
+    setStep('select model');
+    result.modelName = await selectModel(page, requestedModel);
+    setStep('set act mode');
+    await ensureActMode(page, requestedModel);
+    setStep('confirm the tab is inside the new workspace');
+    await ensureInsideWorkspace(page, result.realmUrl, result.initialCards);
+    // The evaluation's own features, plus any EVAL_SKILL_FEATURES adds, less
+    // any it turns off.
+    let skillFeatures = [
+      ...new Set([...(evaluation?.skillFeatures ?? []), ...SKILL_FEATURES]),
+    ].filter((feature) => !SKILL_FEATURES_OFF.includes(feature));
+    for (let [index, feature] of skillFeatures.entries()) {
+      setStep(`enable skill feature ${feature}`);
+      await sendPrompt(
+        page,
+        result.roomId,
+        `boxel-debug:feature:enable:${feature}`,
+        index + 1,
+      );
+      // The bot answers the command itself, without the model; its reply
+      // carries no usage, so it is not counted as a turn. A name the bot
+      // does not know gets "There is no feature named …" instead, which ends
+      // the run straight away rather than at the timeout.
+      let enabled = page.getByText(`${feature} is now enabled`).first();
+      let unknown = page.getByText('There is no feature named').first();
+      await expect(enabled.or(unknown)).toBeVisible({ timeout: NO_REPLY_MS });
+      if (await unknown.isVisible()) {
+        throw new Error(
+          `The ai-bot has no skill feature named "${feature}"; check the evaluation's skillFeatures and EVAL_SKILL_FEATURES.`,
+        );
+      }
+    }
+    result.skillFeatures = skillFeatures;
+    // One safety clock for the whole run, follow-ups included.
+    let deadline = Date.now() + MAX_MINUTES * 60_000;
+    let botMessagesBefore = 0;
+    let roomReturns = { count: 0 };
+    for (let [index, prompt] of prompts.entries()) {
+      setStep(
+        index === 0 ? 'send prompt' : `send follow-up prompt ${index + 1}`,
+      );
+      await sendPrompt(
+        page,
+        result.roomId,
+        prompt,
+        skillFeatures.length + index + 1,
+      );
+      promptStartedAt ??= Date.now();
+      result.promptsSent = index + 1;
+      setStep(
+        index === 0
+          ? 'wait for idle'
+          : `wait for idle after prompt ${index + 1}`,
+      );
+      let lastActivity = '';
+      let waited = await waitForIdle(
+        page,
+        deadline,
+        botMessagesBefore,
+        (activity) => {
+          let key = `${activity.botMessages}|${activity.generating}|${activity.applying}|${activity.busy.join(',')}`;
+          if (key !== lastActivity) {
+            lastActivity = key;
+            progress(requestedModel, {
+              state: activity.applying
+                ? 'tool running'
+                : activity.generating
+                  ? 'bot generating'
+                  : 'waiting',
+              botMessages: activity.botMessages,
+              ...(activity.busy.length ? { busy: activity.busy } : {}),
+            });
+          }
+        },
+        result.roomId,
+        roomReturns,
+      );
+      result.stoppedBy = waited.stoppedBy;
+      result.irregularities = waited.irregularities;
+      if (waited.stoppedBy !== 'idle') {
+        break;
+      }
+      botMessagesBefore = (await readActivity(page)).botMessages;
+    }
+    if (result.roomId && (await returnToRoom(page, result.roomId))) {
+      roomReturns.count++;
+    }
+    result.roomReturns = roomReturns.count;
+    setStep('check render');
+
+    let rendered = await findRenderedCard(
+      page,
+      result.realmUrl,
+      result.initialCards,
+    );
+    result.cardRendered = rendered.cardId;
+    result.renderedIn = rendered.where;
+    result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+    await page.screenshot({ path: result.screenshot, fullPage: false });
+
+    let events = await allRoomEvents(result.roomId, credentials.accessToken);
+    let llm = activeLLM(events);
+    result.modelId = llm?.model;
+    result.reasoningEffort = llm?.reasoningEffort;
+    result.skillsUsed = skillsUsed(events);
+    result.analysis = analyzeRoom(events, BOT_USER_ID);
+    let verdict = classify(
+      result.stoppedBy,
+      result.irregularities,
+      rendered.reasons,
+      rendered.cardId,
+      result.analysis,
+      result.promptsSent,
+      prompts.length,
+    );
+    result.verdict = verdict.verdict;
+    result.reasons = verdict.reasons;
+    // An enabled feature whose skill the model never opened means the run
+    // did not exercise it, whatever the verdict says. This assumes each
+    // feature's skill lives in a skills/<feature name>/SKILL.md directory.
+    for (let feature of result.skillFeatures) {
+      let read = result.analysis.filesRead.some((url) =>
+        url.endsWith(`/skills/${feature}/SKILL.md`),
+      );
+      if (!read) {
+        result.reasons.push(
+          `skill feature "${feature}" was enabled but skills/${feature}/SKILL.md was never read`,
+        );
+      }
+    }
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+    result.reasons.push(
+      `runner error during "${step}": ${result.error.split('\n').slice(0, 3).join(' ')}`,
+    );
+    try {
+      result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+      await page.screenshot({ path: result.screenshot });
+    } catch {
+      // the page may be gone
+    }
+    if (result.roomId && credentials) {
+      try {
+        let events = await allRoomEvents(
+          result.roomId,
+          credentials.accessToken,
+        );
+        result.analysis = analyzeRoom(events, BOT_USER_ID);
+        result.modelId = activeLLM(events)?.model;
+        result.skillsUsed = skillsUsed(events);
+      } catch {
+        // best effort
+      }
+    }
+  } finally {
+    result.endedAt = new Date().toISOString();
+    result.durationSeconds = Math.round((Date.now() - startedAt) / 1000);
+    if (promptStartedAt !== undefined) {
+      result.promptSeconds = Math.round((Date.now() - promptStartedAt) / 1000);
+    }
+    result.consoleErrors = consoleErrors.slice(0, 50);
+    // Read the workspace back before writing the result, so a judge scores
+    // what the assistant left behind rather than what it said it did. A run
+    // that never got as far as a workspace has nothing to read.
+    if (realmClient && result.realmUrl) {
+      try {
+        let snapshot = await captureWorkspace(realmClient, result.realmUrl);
+        let file = `${slug}.workspace.json`;
+        await writeFile(
+          join(RESULTS_DIR, file),
+          JSON.stringify(snapshot, null, 2),
+        );
+        result.workspaceSnapshot = file;
+      } catch (error) {
+        console.log(
+          `[eval] ${requestedModel}: could not read the workspace back — ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+    await writeFile(
+      join(RESULTS_DIR, `${slug}.json`),
+      JSON.stringify(result, null, 2),
+    );
+    let graded = grade(result);
+    progress(requestedModel, {
+      state: 'done',
+      grade: graded.grade,
+      verdict: result.verdict,
+      roomId: result.roomId,
+    });
+    console.log(
+      `[eval] ${graded.grade} ${requestedModel}: ${result.verdict}` +
+        (result.reasons.length ? ` — ${result.reasons.join('; ')}` : '') +
+        (graded.misses.length ? ` — ${graded.misses.join('; ')}` : '') +
+        (result.roomId ? ` (room ${result.roomId})` : ''),
+    );
+  }
+  return result;
+}
+
+// Two ways to run a sweep. Workers: one Playwright test per model, run by
+// parallel workers, each in its own browser (headless). Tabs: one test that
+// opens every model as a tab of one browser, for watching a sweep in a single
+// headed window. Same flow either way.
+const TABS_MODE = ['1', 'true'].includes(process.env.EVAL_TABS ?? '');
+const RUN_LABEL = EVAL_BUNDLE
+  ? `evaluation ${process.env.EVAL_NAME ?? EVAL_BUNDLE}`
+  : EVAL_PROMPT;
+
+// More models than users means two models share an account, and which room
+// the panel opens on is that account's own state: the two race over it and a
+// prompt can land in the other model's room. Both parallel modes put
+// same-account models on screen together — tabs starts every model at once,
+// and workers dispatch the next model as soon as any worker frees, while the
+// rest are still going. Stop here, before the first browser opens, rather
+// than spend generations on rooms whose results cannot be attributed. A run
+// that never overlaps — one worker, no tabs — can share accounts safely.
+const CONCURRENT_MODELS = TABS_MODE
+  ? MODELS.length
+  : Number(process.env.EVAL_WORKERS ?? 5);
+if (MODELS.length > USERS.length && CONCURRENT_MODELS > 1) {
+  throw new Error(
+    `[eval] ${MODELS.length} models but only ${USERS.length} users (EVAL_USERS): models sharing an account race over which room the panel opens on, and a prompt can land in the wrong room. Register more users with \`pnpm eval:users\` after naming them in EVAL_USERS, or run the models one at a time with EVAL_WORKERS=1`,
+  );
+}
+
+if (TABS_MODE) {
+  test(`${MODELS.length} models in tabs: ${RUN_LABEL}`, async ({
+    browser,
+    baseURL,
+  }) => {
+    let results = await Promise.all(
+      MODELS.map(async (model, index) => {
+        await new Promise((resolve) => setTimeout(resolve, index * STAGGER_MS));
+        // Each model gets its own context (an incognito window of the same
+        // browser): the login lives in localStorage, so one context can only
+        // be one user.
+        let context = await browser.newContext({
+          ignoreHTTPSErrors: true,
+          viewport: { width: 1600, height: 1000 },
+          baseURL: baseURL ?? undefined,
+        });
+        let page = await context.newPage();
+        return runModel(page, model, userForModel(index));
+      }),
+    );
+    let failed = results
+      .filter((r) => r.verdict !== 'pass')
+      .map((r) => `${r.requestedModel}: ${r.reasons.join('; ')}`);
+    expect(failed, 'every model passes').toEqual([]);
+  });
+} else {
+  MODELS.forEach((requestedModel, index) => {
+    test(`${requestedModel}: ${RUN_LABEL}`, async ({ page }) => {
+      if (!staggered) {
+        staggered = true;
+        await page.waitForTimeout(test.info().parallelIndex * STAGGER_MS);
+      }
+      let result = await runModel(page, requestedModel, userForModel(index));
+      expect(result.verdict, result.reasons.join('; ')).toBe('pass');
+    });
+  });
+}
+
+test.afterAll(async () => {
+  // One JSON per model; run-eval.ts keeps its own files next to them.
+  let files = (await readdir(RESULTS_DIR)).filter(
+    (f) =>
+      f.endsWith('.json') &&
+      !['playwright.json', 'evaluation.json', 'session.json'].includes(f) &&
+      !f.endsWith('.card.json') &&
+      !f.endsWith('.workspace.json'),
+  );
+  let rows: RunResult[] = [];
+  for (let file of files) {
+    let row: RunResult = JSON.parse(
+      await readFile(join(RESULTS_DIR, file), 'utf8'),
+    );
+    // Only this run's models. A plain `pnpm eval:models` writes into one
+    // directory every time, so earlier sweeps left their own rows here.
+    if (MODELS.includes(row.requestedModel)) {
+      rows.push(row);
+    }
+  }
+  rows.sort((a, b) => a.requestedModel.localeCompare(b.requestedModel));
+  let header =
+    '| Result | Model | Effort | Verdict | Turns | First write | Tool calls | Realm actions | Realm writes | Cold prompt | Cost | Cache | Time | Card | Notes |\n' +
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n';
+  let body = rows
+    .map((r) => {
+      let a = r.analysis;
+      let graded = grade(r);
+      let tools = a
+        ? Object.entries(a.toolCalls)
+            .map(
+              ([name, count]) =>
+                `${name.replace(/_[0-9a-f]{4}$/, '')}×${count}`,
+            )
+            .join(', ') +
+          (Object.keys(a.realmSearches ?? {}).length > 0
+            ? ` (realm searches: ${Object.entries(a.realmSearches)
+                .map(([realm, count]) => `${realm}×${count}`)
+                .join(', ')})`
+            : '')
+        : '';
+      let writes = a ? `${a.realmCodeWrites + a.toolWrites}` : '';
+      let actions = a
+        ? Object.entries(a.realmActions ?? {})
+            .map(([name, count]) => `${name}×${count}`)
+            .join(', ')
+        : '';
+      let firstWrite = a?.firstWriteTurn ? `turn ${a.firstWriteTurn}` : '–';
+      let coldPrompt =
+        a?.coldPromptTokens !== undefined
+          ? `${a.coldPromptTokens.toLocaleString('en-US')} tok`
+          : '–';
+      return `| ${graded.grade} | ${r.modelId ?? r.requestedModel} | ${r.reasoningEffort ?? '–'} | ${r.verdict} | ${
+        a?.turns ?? '–'
+      } | ${firstWrite} | ${tools} | ${actions} | ${writes} | ${coldPrompt} | ${a ? `$${a.costUsd.toFixed(3)}` : '–'} | ${
+        a && a.cacheWindowInputTokens > 0
+          ? `${Math.round((100 * a.cacheWindowCachedTokens) / a.cacheWindowInputTokens)}%${
+              a.cacheMisses ? ` (${a.cacheMisses} miss)` : ''
+            }`
+          : '–'
+      } | ${r.durationSeconds}s | ${
+        r.cardRendered ? `yes (${r.renderedIn})` : 'no'
+      } | ${[...r.reasons, ...graded.misses, r.roomId ? `room ${r.roomId}` : ''].filter(Boolean).join('; ')} |`;
+    })
+    .join('\n');
+  let summary = `# Model eval results\n\n${
+    EVAL_BUNDLE ? `Evaluation: ${RUN_LABEL}` : `Prompt: \`${EVAL_PROMPT}\``
+  }${SESSION_ID ? `\nSession: ${SESSION_ID}` : ''}\n\n${header}${body}\n`;
+  await writeFile(join(RESULTS_DIR, 'summary.md'), summary);
+  console.log(`\n${summary}`);
+});

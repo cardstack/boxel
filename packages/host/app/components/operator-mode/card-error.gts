@@ -8,6 +8,8 @@ import { CardHeader, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import type { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { FileAlert, ExclamationCircle } from '@cardstack/boxel-ui/icons';
 
+import { stringifyErrorForLog } from '@cardstack/runtime-common';
+
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
 
@@ -248,14 +250,25 @@ export default class CardErrorComponent extends Component<Signature> {
     return undefined;
   }
 
+  // A hashed-form URL is a network fetch that can fail (a post-sweep orphan,
+  // an unreachable realm) — a missing stylesheet renders the last-known-good
+  // markup unstyled rather than suppressing it.
   private loadScopedCSS = restartableTask(async () => {
     let scopedCssUrls = this.args.error?.meta?.scopedCssUrls;
     if (scopedCssUrls) {
-      await Promise.all(
+      let results = await Promise.allSettled(
         scopedCssUrls.map((cssModuleUrl) =>
           this.loaderService.loader.import(cssModuleUrl),
         ),
       );
+      for (let [i, result] of results.entries()) {
+        if (result.status === 'rejected') {
+          console.warn(
+            `could not load scoped stylesheet ${scopedCssUrls[i]}; last known ` +
+              `good HTML renders unstyled: ${stringifyErrorForLog(result.reason)}`,
+          );
+        }
+      }
     }
   });
 }

@@ -11,6 +11,8 @@ import {
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { provide } from 'ember-provide-consume-context';
 
@@ -36,14 +38,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import {
-  CardDef,
-  Component,
-  StringField,
-  contains,
-  field,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 
 import { setupRenderingTest } from '../../helpers/setup';
@@ -105,7 +99,6 @@ class HostContextProvider extends GlimmerComponent<{
 
 module('Integration | mini-card-chooser', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -164,7 +157,7 @@ module('Integration | mini-card-chooser', function (hooks) {
   test('mounts in isolation with a search input and no filter chips, and renders the mini visual variant', async function (assert) {
     // Seed a recent so a row actually renders — without one, the empty state
     // has nothing to click and the design assertions (no show-only, no view
-    // picker) verify the negative case but the screenshot for manual diff
+    // picker) verify the negative case but the capture for manual diff
     // would be blank.
     let recent = getService('recent-cards-service') as RecentCardsService;
     recent.add(`${testRealmURL}books/mango`);

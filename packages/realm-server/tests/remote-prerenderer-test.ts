@@ -306,6 +306,92 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
+    test('carries cardSource in the request body', async function (assert) {
+      // Same hazard as `renderScope` above, and the same reason to pin the hop
+      // this file owns: `cardSource` is destructured by name at every stage,
+      // and dropping it anywhere leaves the render fetching the card's source
+      // for itself. That still produces a correct row, so nothing downstream
+      // fails — the only visible effect is the read this exists to remove
+      // coming back.
+      let receivedBody: any;
+      let server = createServer((req, res) => {
+        let body: Buffer[] = [];
+        req.on('data', (chunk) => body.push(chunk));
+        req.on('end', () => {
+          receivedBody = JSON.parse(Buffer.concat(body).toString('utf-8'));
+          res.statusCode = 201;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ data: { attributes: { ok: true } } }));
+        });
+      }).listen(0);
+
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let prerenderer = createRemotePrerenderer(url);
+
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: 'realm-1',
+          realm: 'realm-1',
+          url: 'https://example.com/card.json',
+          auth: '{}',
+          cardSource: {
+            source: '{"data":{"attributes":{"name":"Sequoia"}}}',
+            realmURL: 'https://example.com/',
+            lastModified: 1767322445000,
+          },
+        });
+
+        assert.deepEqual(
+          receivedBody?.data?.attributes?.cardSource,
+          {
+            source: '{"data":{"attributes":{"name":"Sequoia"}}}',
+            realmURL: 'https://example.com/',
+            lastModified: 1767322445000,
+          },
+          'cardSource is sent whole in data.attributes',
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    test('omits cardSource from the body when the visit carries none', async function (assert) {
+      // Absent rather than null: `prerender-app.ts` reads the key's presence,
+      // and a visit with no read behind it legitimately has no source to send.
+      let receivedBody: any;
+      let server = createServer((req, res) => {
+        let body: Buffer[] = [];
+        req.on('data', (chunk) => body.push(chunk));
+        req.on('end', () => {
+          receivedBody = JSON.parse(Buffer.concat(body).toString('utf-8'));
+          res.statusCode = 201;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ data: { attributes: { ok: true } } }));
+        });
+      }).listen(0);
+
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let prerenderer = createRemotePrerenderer(url);
+
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: 'realm-1',
+          realm: 'realm-1',
+          url: 'https://example.com/card.json',
+          auth: '{}',
+        });
+
+        assert.notOk(
+          'cardSource' in (receivedBody?.data?.attributes ?? {}),
+          'no cardSource key when the visit carries no source',
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
     test('omits renderScope from the body when the visit has no scope', async function (assert) {
       // Absent rather than null or empty: `prerender-app.ts` treats a
       // non-string as no scope, and an interactive visit legitimately has

@@ -1,11 +1,24 @@
 import type Koa from 'koa';
-import type { DBAdapter, Realm } from '@cardstack/runtime-common';
+import type {
+  AnonymousCaller,
+  DBAdapter,
+  Realm,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 import {
+  acceptedDiagnosticClaim,
+  archivedRealmURLs,
+  DIAGNOSTIC_SESSION_LOG_CHANNEL,
+  ensureTrailingSlash,
   fetchUserPermissions,
   isSessionRevoked,
+  logger,
+  MAX_REALMS_PER_SEARCH_REQUEST,
   param,
   parseRealmsFromPayload,
+  registeredRealmURL,
   parseSearchRequestPayload,
+  presentsAsDiagnosticSession,
   query,
   SearchRequestError,
   separatedByCommas,
@@ -15,8 +28,18 @@ import {
   AuthenticationError,
   AuthenticationErrorMessages,
 } from '@cardstack/runtime-common/router';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import {
+  isNamedQueryPayload,
+  searchInvocation,
+  searchPrincipal,
+  type SearchPrincipal,
+} from '@cardstack/runtime-common/card-operations';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import { mayNameRealmPolicy } from '../lib/realm-policy-pointer.ts';
+import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
+import {
+  retrieveDiagnosticSessionClaim,
   retrieveTokenClaim,
   type RealmServerTokenClaim,
 } from '../utils/jwt.ts';
@@ -33,29 +56,79 @@ import {
 } from '../middleware/index.ts';
 
 export type MultiRealmAuthorizationState = {
+  // The realms this request named that the caller may read outright. These are
+  // searched as they always have been, and a policy is never consulted for
+  // one: a policy widens what the ACL refused and has nothing to add to what
+  // it allowed.
   realmList: string[];
+  // The realms this request named that the caller may not read, on an
+  // endpoint that carries them rather than refusing. Each is reached only
+  // through its own policy, and contributes rows only where a `query` grant
+  // admits this caller — otherwise nothing. Naming one is not an error: a
+  // federated search asks several realms a question, and a realm that has no
+  // answer for this caller is a realm with no rows, exactly as a realm
+  // holding no matching card is. Always empty on an endpoint that refuses,
+  // and for a realm-authority principal or a delegated session, neither of
+  // which any policy admits.
+  grantCandidates: string[];
+  // Who the request's token was verified for: the user it names, or a
+  // realm-authority principal — a session a realm renders its own cards
+  // under. Absent for a request that carried no token, which each realm it
+  // reaches only through its policy judges by its own admission of the caller
+  // (see `anonymousCallers`).
+  principal?: SearchPrincipal;
+  // For a request that carried no token, the caller each realm it may search
+  // only through its policy admitted (see `Realm.admitAnonymousSearch`). Each
+  // counts the search against that caller's budget. These are the request's
+  // only grant candidates.
+  anonymousCallers?: Map<string, AnonymousCaller>;
 };
 
 const MULTI_REALM_AUTH_STATE = 'multiRealmAuthorization';
+const log = logger('realm-server:multi-realm-authorization');
+const diagnosticLog = logger(DIAGNOSTIC_SESSION_LOG_CHANNEL);
 const SEARCH_REQUEST_PAYLOAD_STATE = 'searchRequestPayload';
 
-export function multiRealmAuthorization({
-  dbAdapter,
-  realmSecretSeed,
-  realms,
-  reconciler,
-}: {
-  dbAdapter: DBAdapter;
-  realmSecretSeed: string;
-  realms: Realm[];
-  reconciler: RealmRegistryReconciler;
-}): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+export function multiRealmAuthorization(
+  {
+    dbAdapter,
+    matrixClient,
+    realmSecretSeed,
+    realms,
+    reconciler,
+    realmsRootPath,
+    virtualNetwork,
+  }: {
+    dbAdapter: DBAdapter;
+    matrixClient: MatrixClient;
+    realmSecretSeed: string;
+    realms: Realm[];
+    reconciler: RealmRegistryReconciler;
+    realmsRootPath: string;
+    virtualNetwork: VirtualNetwork;
+  },
+  {
+    unreadableRealms = 'refuse',
+  }: {
+    // What becomes of a realm a verified caller may not read. `refuse`
+    // answers the whole request 403. `carry` passes the realm on as a grant
+    // candidate, for an endpoint where a realm's policy can admit a caller its
+    // ACL did not, so that each realm answers for itself rather than any one
+    // of them answering for the rest.
+    unreadableRealms?: 'refuse' | 'carry';
+  } = {},
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let request = await fetchRequestFromContext(ctxt);
     let realmList: string[];
     try {
       let payload = await parseSearchRequestPayload(request);
-      realmList = parseRealmsFromPayload(payload);
+      // A realm may be named by its registered prefix or by the URL it is
+      // served from; every check below, and every handler after it, asks in
+      // the URL the realm is registered under.
+      realmList = parseRealmsFromPayload(payload, (realm) =>
+        registeredRealmURL(virtualNetwork, realm),
+      );
       (ctxt.state as Record<string, unknown>)[SEARCH_REQUEST_PAYLOAD_STATE] =
         payload;
     } catch (e: any) {
@@ -110,7 +183,7 @@ export function multiRealmAuthorization({
     if (unknownRealms.length > 0) {
       await sendResponseForNotFound(
         ctxt,
-        `Realms not found: ${unknownRealms.join(', ')}`,
+        `Realms not found: ${unknownRealms.join(', ')}. Each entry in realms must be the URL of a realm on this server, or an identifier registered for one such as @cardstack/catalog/`,
       );
       return;
     }
@@ -118,6 +191,8 @@ export function multiRealmAuthorization({
     let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, realmList);
 
     let readableRealms = new Set<string>();
+    let principal: SearchPrincipal | undefined;
+    let anonymousCallers: Map<string, AnonymousCaller> | undefined;
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization) {
       let publicPermissions = await fetchUserPermissions(dbAdapter, {
@@ -129,20 +204,48 @@ export function multiRealmAuthorization({
         publishedRealmURLs,
       );
 
+      // Authentication comes before authorization, and a request that named
+      // nobody is told to say who it is rather than answered for nobody. A
+      // policy grants by who is asking, so such a request is judged only by
+      // the grants that opt in to callers who aren't signed in. On an endpoint
+      // that carries the realms a caller can't read, each such realm whose
+      // policy opens `query` to these callers, and that doesn't refuse the
+      // caller's address, is searched through its policy, and the rest
+      // contribute no rows, as they would for a signed-in caller. A named
+      // query is granted by its own name, which no grant opens to these
+      // callers. A request no realm admits is refused, which is why this
+      // refuses where an authenticated caller without permission does not.
       let realmsRequiringAuth = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),
       );
       if (realmsRequiringAuth.length > 0) {
-        await sendResponseForUnauthorizedRequest(
-          ctxt,
-          `Authorization required for realms: ${realmsRequiringAuth.join(', ')}`,
-        );
-        return;
+        let payload = (ctxt.state as Record<string, unknown>)[
+          SEARCH_REQUEST_PAYLOAD_STATE
+        ];
+        anonymousCallers =
+          unreadableRealms === 'carry' && opensToAnonymousSearch(payload)
+            ? await admitAnonymousSearch(
+                await notArchived(dbAdapter, realmsRequiringAuth),
+                request,
+                { reconciler, realmsRootPath, virtualNetwork },
+              )
+            : new Map();
+        if (anonymousCallers.size === 0) {
+          await sendResponseForUnauthorizedRequest(
+            ctxt,
+            `Authorization required for realms: ${realmsRequiringAuth.join(', ')}`,
+          );
+          return;
+        }
       }
     } else {
       let token: RealmServerTokenClaim & { iat: number; exp: number };
       try {
-        token = retrieveTokenClaim(authorization, realmSecretSeed);
+        token = presentsAsDiagnosticSession(
+          authorization.replace('Bearer ', ''),
+        )
+          ? retrieveDiagnosticSessionClaim(authorization, realmSecretSeed)
+          : retrieveTokenClaim(authorization, realmSecretSeed);
         if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
           throw new AuthenticationError(
             AuthenticationErrorMessages.SessionRevoked,
@@ -156,19 +259,92 @@ export function multiRealmAuthorization({
         throw e;
       }
 
+      // A delegated session reads one realm on its user's behalf, and
+      // authenticates here for that realm alone: naming any other realm refuses
+      // the request as a token that does not belong there, whatever the user
+      // may read in it. The realm refuses such a token the same way wherever
+      // it asks for one. A realm anyone may read answers the request without
+      // asking for a token, and this refuses it all the same, since a
+      // delegated session has no business outside its realm.
+      if (token.delegated) {
+        let boundRealm = token.realm ? ensureTrailingSlash(token.realm) : '';
+        if (realmList.some((realmURL) => realmURL !== boundRealm)) {
+          await sendResponseForUnauthorizedRequest(
+            ctxt,
+            AuthenticationErrorMessages.TokenInvalid,
+          );
+          return;
+        }
+      }
+
+      // A diagnostic session scoped to its card's realm authenticates here only
+      // for a request that names that realm alone. One scoped to the owner's
+      // read set authenticates as the owner, and the realms the owner can't
+      // read are judged below as they are for any of the owner's sessions.
+      // Each use is logged on the diagnostic channel with the mint it came
+      // from.
+      if (token.diagnostic) {
+        let claim = acceptedDiagnosticClaim(token, realmList);
+        if (!claim) {
+          await sendResponseForUnauthorizedRequest(
+            ctxt,
+            AuthenticationErrorMessages.TokenInvalid,
+          );
+          return;
+        }
+        diagnosticLog.info(
+          `diagnostic session ${claim.id} read ${ctxt.method} ${ctxt.path} for realms ${realmList.join(', ')} as ${token.user}; minted for card ${claim.card}, operator note: ${JSON.stringify(claim.note)}`,
+        );
+      }
+
+      // Only the session's own claim makes a request a realm-authority
+      // principal. A render tab marks every request it sends, but what it
+      // renders is not always the realm's: a capture a user asks for, or a
+      // command, renders on that user's ordinary session and is scoped as
+      // them.
+      principal = searchPrincipal(token.user, token.realmAuthority);
       let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
         userId: token.user,
         onlyOwnRealms: false,
+        includePublicRealms: true,
       });
       readableRealms = buildReadableRealms(
         permissionsForAllRealms,
         publishedRealmURLs,
       );
 
+      // The readability above is built from the caller's own rows and, for a
+      // realm they have no row of their own on, its `*` grant. A realm judges a
+      // caller by the union of their row, its `*` grant, and its `users` grant
+      // for any caller with a Matrix account, so each realm still unreadable is
+      // judged here by the grants it shares with callers, as the realm judges
+      // it.
       let unauthorizedRealms = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),
       );
-      if (unauthorizedRealms.length > 0) {
+      for (let realmURL of await realmsReadableThroughSharedGrants(
+        dbAdapter,
+        matrixClient,
+        unauthorizedRealms,
+        principal,
+      )) {
+        readableRealms.add(realmURL);
+      }
+      unauthorizedRealms = unauthorizedRealms.filter(
+        (realmURL) => !readableRealms.has(realmURL),
+      );
+      // A delegated session is never a policy's to admit. Its user reads the
+      // realm it is bound to outright, or the session is refused, as the realm
+      // refuses a delegated session whose user no longer reads it, so no realm
+      // is ever carried as a grant candidate for it.
+      if (token.delegated && unauthorizedRealms.length > 0) {
+        await sendResponseForUnauthorizedRequest(
+          ctxt,
+          AuthenticationErrorMessages.PermissionMismatch,
+        );
+        return;
+      }
+      if (unreadableRealms === 'refuse' && unauthorizedRealms.length > 0) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `Insufficient permissions to read realms: ${unauthorizedRealms.join(
@@ -179,12 +355,183 @@ export function multiRealmAuthorization({
       }
     }
 
+    // A realm the caller may not read is carried forward rather than refused.
+    // Its rows are then whatever its own policy grants this caller, which is
+    // commonly none — and a realm contributing no rows does not refuse the
+    // realms alongside it. A verified caller therefore never has one realm's
+    // permissions decide the answer for another's.
+    //
+    // An archived realm is not one of them. Archiving a realm is what takes
+    // every caller's permission on it away, so it is unreadable to everyone,
+    // and it stays sealed whatever its policy says: nothing is served from an
+    // archived realm to anyone.
+    //
+    // Nor is any realm a realm-authority principal cannot read. That
+    // principal is a render, and what a render produces is served to every
+    // viewer, so it reads what the realm ACL grants it and nothing more: no
+    // policy is asked about it, and a realm it cannot read contributes no rows
+    // to it, as an archived realm contributes none to anyone.
+    let readable = realmList.filter((realmURL) => readableRealms.has(realmURL));
+    let unreadable = realmList.filter(
+      (realmURL) => !readableRealms.has(realmURL),
+    );
+    let grantCandidates: string[] = [];
+    if (principal?.kind !== 'realm-authority') {
+      let archived = await archivedRealmURLs(dbAdapter, unreadable);
+      grantCandidates = unreadable.filter(
+        (realmURL) =>
+          !archived.has(realmURL) &&
+          (!anonymousCallers || anonymousCallers.has(realmURL)),
+      );
+    }
+
     (ctxt.state as Record<string, unknown>)[MULTI_REALM_AUTH_STATE] = {
-      realmList,
+      realmList: readable,
+      grantCandidates,
+      ...(principal === undefined ? {} : { principal }),
+      ...(anonymousCallers ? { anonymousCallers } : {}),
     } satisfies MultiRealmAuthorizationState;
 
     await next();
   };
+}
+
+// Whether a search could be opened to a request that authenticated nobody at
+// all, judged before any realm is asked: an ad-hoc search, since a named query
+// is granted by its own name, which no grant opens to such callers, that names
+// a type some grant could be on.
+function opensToAnonymousSearch(payload: unknown): boolean {
+  return (
+    !isNamedQueryPayload(payload) &&
+    (searchInvocation(payload as Parameters<typeof searchInvocation>[0])?.types
+      .length ?? 0) > 0
+  );
+}
+
+// The realms among `urls` that are not archived. An archived realm is
+// sealed and serves no rows to anyone, so it is never asked to admit anyone.
+async function notArchived(
+  dbAdapter: DBAdapter,
+  urls: string[],
+): Promise<string[]> {
+  let archived = await archivedRealmURLs(dbAdapter, urls);
+  return urls.filter((url) => !archived.has(url));
+}
+
+// The realms among `urls` that admit a request that authenticated nobody to a
+// search, each with the caller it admitted. A request naming more realms than
+// a search may fan out to admits none, so the realms a caller who isn't signed
+// in can have the server mount and ask are bounded as a client's search is. A
+// realm whose `realm.json` names no policy is not mounted to ask: with no
+// policy there is nothing that could admit the caller. A realm that won't
+// mount, or can't answer, admits nobody, and the others still answer.
+async function admitAnonymousSearch(
+  urls: string[],
+  request: Request,
+  locate: {
+    reconciler: RealmRegistryReconciler;
+    realmsRootPath: string;
+    virtualNetwork: VirtualNetwork;
+  },
+): Promise<Map<string, AnonymousCaller>> {
+  let admitted = new Map<string, AnonymousCaller>();
+  urls = [...new Set(urls)];
+  if (urls.length > MAX_REALMS_PER_SEARCH_REQUEST) {
+    return admitted;
+  }
+  let named = await Promise.all(
+    urls.map((url) => mayNameRealmPolicy(url, locate)),
+  );
+  let asked = urls.filter((_url, index) => named[index]);
+  let mounted = await resolveRealmsForFederatedRequest(
+    locate.reconciler,
+    asked,
+  );
+  await Promise.all(
+    mounted.map(async (realm, index) => {
+      let caller: AnonymousCaller | undefined;
+      try {
+        caller = await realm?.admitAnonymousSearch(request);
+      } catch (e) {
+        log.warn(
+          `${asked[index]} could not say whether it admits a search from a caller who isn't signed in, so it admits none`,
+          e,
+        );
+        return;
+      }
+      if (caller) {
+        admitted.set(asked[index], caller);
+      }
+    }),
+  );
+  return admitted;
+}
+
+// The realms among `urls` that let `principal` read them through a grant they
+// share with callers rather than through a row of the caller's own: their `*`
+// grant, which lets anyone read, or their `users` grant, which lets any caller
+// with a Matrix account read, judged as `effectiveRealmPermissions` judges it.
+//
+// The `users` grant is a user's alone. A realm-authority principal is a render,
+// and what it renders is served to every viewer, signed in or not, so it reads
+// only what the realm's ACL grants it by name or grants everyone.
+//
+// The homeserver is asked for the user's profile only when one of the realms
+// carries a `users` grant, and once however many do, so a search naming none
+// costs no round trip. A homeserver that can't answer leaves those realms
+// unread rather than failing the request, so the realms the caller reads
+// outright still answer. An archived realm is sealed, and lets no one read it.
+async function realmsReadableThroughSharedGrants(
+  dbAdapter: DBAdapter,
+  matrixClient: MatrixClient,
+  urls: string[],
+  principal: SearchPrincipal | undefined,
+): Promise<string[]> {
+  if (urls.length === 0) {
+    return [];
+  }
+  let rows = (await query(dbAdapter, [
+    `SELECT realm_url, username FROM realm_user_permissions
+     WHERE username IN ('*', 'users') AND read = true
+     AND realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)
+     AND realm_url IN (`,
+    ...separatedByCommas(urls.map((url) => [param(url)])),
+    ')',
+  ] as Expression)) as { realm_url: string; username: string }[];
+  let readable = new Set(
+    rows
+      .filter(({ username }) => username === '*')
+      .map(({ realm_url }) => ensureTrailingSlash(realm_url)),
+  );
+  let readableToUsers = rows
+    .filter(({ username }) => username === 'users')
+    .map(({ realm_url }) => ensureTrailingSlash(realm_url))
+    .filter((realmURL) => !readable.has(realmURL));
+  if (
+    readableToUsers.length > 0 &&
+    principal?.kind === 'user' &&
+    (await hasMatrixProfile(matrixClient, principal.user))
+  ) {
+    for (let realmURL of readableToUsers) {
+      readable.add(realmURL);
+    }
+  }
+  return [...readable];
+}
+
+async function hasMatrixProfile(
+  matrixClient: MatrixClient,
+  user: string,
+): Promise<boolean> {
+  try {
+    return !!(await matrixClient.getProfile(user));
+  } catch (e) {
+    log.warn(
+      `could not get the Matrix profile of ${user}, so the realms they would read through a \`users\` grant are left unread`,
+      e,
+    );
+    return false;
+  }
 }
 
 export function getMultiRealmAuthorization(

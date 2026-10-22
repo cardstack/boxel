@@ -19,6 +19,7 @@ import {
   internalKeyFor,
   SupportedMimeType,
   type CardErrorsJSONAPI,
+  type CardSourceVisitArgs,
   type LooseSingleCardDocument,
   type RenderError,
   type ModuleRenderResponse,
@@ -47,6 +48,7 @@ import {
   type ModuleTypesCache,
 } from '../routes/module';
 
+import { ISOLATED_RENDER_ELEMENT_ID } from '../services/render-service';
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import { REALM_INDEX_BOILERPLATE_HTML } from '../utils/realm-index-boilerplate';
 import {
@@ -77,6 +79,7 @@ export default class CardPrerender extends Component {
   @service declare private loaderService: LoaderService;
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
+  #shouldResetStoreForNextRender = true;
   #prerendererDelegate!: Prerenderer;
   #cardTypeTracker = new RenderCardTypeTracker();
   #currentContext: CardRenderContext | undefined;
@@ -222,6 +225,7 @@ export default class CardPrerender extends Component {
       fileData,
       types,
       cardTypes,
+      cardSource,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> => {
       this.#nonce++;
       // Clear any residual render error from a previous visit so the earliest
@@ -230,6 +234,9 @@ export default class CardPrerender extends Component {
       this.localIndexer.prerenderStatus = 'loading';
       let shouldClearCache = this.#consumeClearCacheForRender(
         Boolean(renderOptions?.clearCache),
+      );
+      let shouldResetStore = this.#consumeResetStoreForRender(
+        Boolean(renderOptions?.resetStore),
       );
       let baseOptions: RenderRouteOptions = { ...(renderOptions ?? {}) };
       let runIndexSteps = visitType !== 'prerender-html';
@@ -256,8 +263,30 @@ export default class CardPrerender extends Component {
           reason: 'card-prerender visit clearCache',
         });
         this.store.resetCache();
+      } else if (shouldResetStore) {
+        // Only when the clear above did not already do it. This is the drop
+        // that keeps one index pass from being handed the instances, cached
+        // documents and local-id pairings of the last one: nothing tags an
+        // in-browser visit with a render scope, so the store cannot observe
+        // the job boundary on its own here.
+        //
+        // The loader goes with it, which is what the out-of-process driver
+        // does NOT do. There an index pass owns its tab, so its loader holds
+        // nothing but what indexing put there, and a pass that changed no
+        // module has no reason to drop it. Here one `loader-service` is shared
+        // with the application being rendered, so the same loader backs both
+        // the pass and the app's own store — and the app drops its references
+        // in response to the loader being replaced. Separating the two would
+        // leave the app holding instances resolved against a graph the pass
+        // has moved on from.
+        this.loaderService.resetLoader({
+          clearFetchCache: true,
+          reason: 'card-prerender visit resetStore',
+        });
+        this.store.resetCache();
       }
       let clearCacheConsumed = !shouldClearCache;
+      let resetStoreConsumed = !shouldResetStore;
       let optionsForPass = (
         pass: 'fileExtract' | 'cardRender' | 'fileRender' | 'fusedIndex',
       ): RenderRouteOptions => {
@@ -277,6 +306,12 @@ export default class CardPrerender extends Component {
           clearCacheConsumed = true;
         } else {
           delete out.clearCache;
+        }
+        if (!resetStoreConsumed) {
+          out.resetStore = true;
+          resetStoreConsumed = true;
+        } else {
+          delete out.resetStore;
         }
         for (let key of Object.keys(out) as (keyof RenderRouteOptions)[]) {
           if (out[key] === undefined) {
@@ -386,8 +421,16 @@ export default class CardPrerender extends Component {
           deps: null,
           types: null,
         };
+        // The card's stored source, when the caller already read it. The render
+        // route's card branch builds its model from this instead of fetching
+        // the instance's source for itself; the URL rides along so the route
+        // can confirm the stash names the card it is rendering. Mirrors the
+        // out-of-process runner, and the fileRender pass's own stash below.
+        if (cardSource) {
+          (globalThis as any).__boxelCardRenderData = { ...cardSource, url };
+        }
         try {
-          await this.#primeCardType(url, context);
+          await this.#primeCardType(url, context, cardSource);
           let subsequentRenderOptions =
             omitOneTimeOptions(initialRenderOptions);
           if (runHtmlSteps) {
@@ -510,6 +553,7 @@ export default class CardPrerender extends Component {
           if (this.#currentContext === context) {
             this.#currentContext = undefined;
           }
+          delete (globalThis as any).__boxelCardRenderData;
         }
         if (this.localIndexer.prerenderStatus === 'loading') {
           this.localIndexer.prerenderStatus = 'ready';
@@ -789,20 +833,32 @@ export default class CardPrerender extends Component {
     },
   );
 
-  async #primeCardType(url: string, context: CardRenderContext) {
+  async #primeCardType(
+    url: string,
+    context: CardRenderContext,
+    cardSource?: CardSourceVisitArgs,
+  ) {
     try {
-      let response = await this.network.authedFetch(url, {
-        method: 'GET',
-        headers: {
-          Accept: SupportedMimeType.CardSource,
-        },
-      });
-      if (!response.ok) {
-        return;
+      let doc: LooseSingleCardDocument | CardErrorsJSONAPI;
+      if (cardSource) {
+        // The same bytes the render itself will build from — reading them
+        // twice would only give this priming step a chance to disagree with
+        // the render about what the card is.
+        doc = JSON.parse(cardSource.source) as LooseSingleCardDocument;
+      } else {
+        let response = await this.network.authedFetch(url, {
+          method: 'GET',
+          headers: {
+            Accept: SupportedMimeType.CardSource,
+          },
+        });
+        if (!response.ok) {
+          return;
+        }
+        doc = (await response.json()) as
+          | LooseSingleCardDocument
+          | CardErrorsJSONAPI;
       }
-      let doc = (await response.json()) as
-        | LooseSingleCardDocument
-        | CardErrorsJSONAPI;
       if ('errors' in doc) {
         return;
       }
@@ -891,6 +947,20 @@ export default class CardPrerender extends Component {
     return true;
   }
 
+  // The store half, consumed the same way. An index pass asks for it on every
+  // pass rather than only when it changed a module, so what the caller
+  // requests is what decides it after this component's own first visit.
+  #consumeResetStoreForRender(requestedReset = false): boolean {
+    if (requestedReset) {
+      this.#shouldResetStoreForNextRender = true;
+    }
+    if (!this.#shouldResetStoreForNextRender) {
+      return false;
+    }
+    this.#shouldResetStoreForNextRender = false;
+    return true;
+  }
+
   private processCapturedMarkup(
     markup: string,
     opts?: { isPlainText?: boolean },
@@ -910,11 +980,18 @@ export default class CardPrerender extends Component {
   }
 }
 
+// Marks the render a card makes for this tab's own index. The render context
+// is set only while that render runs, and it names the element the render
+// mounts into, so a component elsewhere in the tab, which someone is looking
+// at, can tell that it is still live (`isLiveRender` in base's
+// `render-context`). A prerender tab, which sets the context for its whole
+// page, names no element.
 async function withRenderContext<T>(cb: () => Promise<T>): Promise<T> {
   let hadContext = Boolean((globalThis as any).__boxelRenderContext);
   let restoreTimers: (() => void) | undefined;
   if (!hadContext) {
     (globalThis as any).__boxelRenderContext = true;
+    (globalThis as any).__boxelRenderContextScope = ISOLATED_RENDER_ELEMENT_ID;
     if (!isTesting()) {
       restoreTimers = enableRenderTimerStub();
     }
@@ -924,6 +1001,7 @@ async function withRenderContext<T>(cb: () => Promise<T>): Promise<T> {
   } finally {
     if (!hadContext) {
       delete (globalThis as any).__boxelRenderContext;
+      delete (globalThis as any).__boxelRenderContextScope;
       restoreTimers?.();
     }
   }

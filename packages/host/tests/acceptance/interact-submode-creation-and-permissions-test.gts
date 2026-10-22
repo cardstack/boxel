@@ -14,7 +14,7 @@ import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import type { SingleCardDocument } from '@cardstack/runtime-common';
-import { Deferred, isLocalId } from '@cardstack/runtime-common';
+import { baseRealm, Deferred, isLocalId } from '@cardstack/runtime-common';
 
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import { RecentCards } from '@cardstack/host/utils/local-storage-keys';
@@ -191,9 +191,7 @@ module(
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
         // Select a card from catalog entries
-        await click(
-          `[data-test-item-button="https://cardstack.com/base/cards/skill"]`,
-        );
+        await click(`[data-test-item-button="${baseRealm.url}cards/skill"]`);
 
         await click(`[data-test-card-chooser-go-button]`);
 
@@ -216,9 +214,7 @@ module(
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
-        await click(
-          `[data-test-item-button="https://cardstack.com/base/cards/skill"]`,
-        );
+        await click(`[data-test-item-button="${baseRealm.url}cards/skill"]`);
 
         let id: string | undefined;
         this.onSave((url) => {
@@ -300,9 +296,7 @@ module(
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
-        await click(
-          `[data-test-item-button="https://cardstack.com/base/cards/skill"]`,
-        );
+        await click(`[data-test-item-button="${baseRealm.url}cards/skill"]`);
 
         let id: string | undefined;
         this.onSave((url) => {
@@ -324,7 +318,7 @@ module(
       });
 
       test<TestContextWithSave>('new linked card is created in a different realm than its consuming reference', async function (assert) {
-        assert.expect(5);
+        assert.expect(4);
         await visitOperatorMode({
           stacks: [
             [
@@ -337,33 +331,25 @@ module(
         });
 
         let consumerSaved = new Deferred<void>();
-        let consumerSaveCount = 0;
+        let consumerLinks: (string | null | undefined)[] = [];
+        let consumerIncluded: unknown[] = [];
         let newLinkId: string | undefined;
         this.onSave((url, doc) => {
           doc = doc as SingleCardDocument;
           if (url.href === `${testRealmURL}Person/fadhlan`) {
-            consumerSaveCount++;
-            if (consumerSaveCount === 1) {
-              // the first time we save the consumer we set the relationship to null
-              // as we are still waiting for the other realm to assign an ID to the new linked card
-              assert.strictEqual(doc.included!.length, 1);
-              assert.strictEqual(
-                doc.included![0].id,
-                `${testRealmURL}Pet/mango`,
-                "the side loaded resources don't include the newly created card yet",
-              );
-            }
-            if (consumerSaveCount === 2) {
-              // as soon as the other realm assigns an id to the linked card we then
-              // save the consumer with a relationship to the linked card's id
-              assert.deepEqual(
-                doc.data?.relationships?.['friends.1'],
-                {
-                  links: { self: newLinkId! },
-                  data: { type: 'card', id: newLinkId! },
-                },
-                'the "friends.1" relationship was populated with the linked card\'s new id',
-              );
+            let link = (
+              doc.data?.relationships?.['friends.1'] as
+                | { links?: { self?: string | null } }
+                | undefined
+            )?.links?.self;
+            consumerLinks.push(link);
+            consumerIncluded.push(doc.included);
+            // A consumer save that lands while the new card's create is still
+            // unanswered waits for it and names its id; one that goes out
+            // before that create was sent names nothing, and the consumer is
+            // saved again once the other realm assigns the id. Either way the
+            // consumer ends up linking to the new card.
+            if (link && link === newLinkId) {
               consumerSaved.fulfill();
             }
           }
@@ -381,6 +367,14 @@ module(
           .containsText('Test Workspace C No results');
         await click(`[data-test-item-button-create-new="${testRealm3URL}"]`);
         await consumerSaved.promise;
+        assert.true(
+          consumerLinks.every((link) => !link || link === newLinkId),
+          `every save of the consumer names either nothing or the linked card's new id (saw ${JSON.stringify(consumerLinks)})`,
+        );
+        assert.true(
+          consumerIncluded.every((included) => !included),
+          'and each save answers with the consumer alone, side-loading none of its links',
+        );
       });
 
       test<TestContextWithSave>('open a stack item of a new card instance when the "New Card of This Type" is clicked', async function (assert) {
@@ -927,7 +921,7 @@ module(
         // Verify the NEW FEATURE section with AI App Generator
         assert
           .dom('[data-test-section-header="new-feature"]')
-          .containsText('NEW FEATURE');
+          .containsText('New feature');
         assert
           .dom('[data-test-highlights-card-container="ai-app-generator"]')
           .exists();
@@ -964,7 +958,7 @@ module(
         // Verify the GETTING STARTED section with Welcome to Boxel
         assert
           .dom('[data-test-section-header="getting-started"]')
-          .containsText('GETTING STARTED');
+          .containsText('Getting started');
         assert
           .dom('[data-test-highlights-card-container="welcome-to-boxel"]')
           .exists();
@@ -1000,12 +994,14 @@ module(
           .containsText('Reddit');
 
         // Verify the filter icon is displayed
-        assert.dom('.content-icon').exists();
+        assert.dom('[data-test-cards-grid-header-icon]').exists();
 
-        // Verify the content header has the border bottom
-        assert
-          .dom('.content-header')
-          .hasStyle({ 'border-bottom': '1px solid rgb(226, 226, 226)' });
+        // The header rules off the content below it. Its color is the theme's
+        // --border, so only the presence of the rule is asserted here.
+        assert.dom('[data-test-cards-grid-header]').hasStyle({
+          'border-bottom-width': '1px',
+          'border-bottom-style': 'solid',
+        });
 
         // Test switching to "All Cards" filter to verify highlights layout is hidden
         await click('[data-test-boxel-filter-list-button="All Cards"]');

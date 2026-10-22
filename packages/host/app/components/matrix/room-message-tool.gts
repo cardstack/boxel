@@ -1,10 +1,12 @@
 import { array, hash } from '@ember/helper';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { cached } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
+import { consume, provide } from 'ember-provide-consume-context';
 
 import { resource, use } from 'ember-resources';
 
@@ -19,9 +21,11 @@ import {
 import { bool, cn, eq, not, toMenuItems } from '@cardstack/boxel-ui/helpers';
 
 import {
+  CardContextName,
   cardTypeDisplayName,
   cardTypeIcon,
   getMenuItems,
+  hasNothingToShow,
 } from '@cardstack/runtime-common';
 
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
@@ -42,7 +46,20 @@ import CodeBlock from '../ai-assistant/code-block';
 import CardRenderer from '../card-renderer';
 
 import type { ApplyButtonState } from '../ai-assistant/apply-button';
-import type { CardDef } from '@cardstack/base/card-api';
+import type { CardContext, CardDef } from '@cardstack/base/card-api';
+
+// Whether a card's class gives it an embedded view of its own. A class that
+// leaves `embedded` alone inherits CardDef's default, which shows only a
+// placeholder thumbnail and the card's title. `isCardDef` is declared on
+// CardDef itself, so the class that declares `embedded` is CardDef exactly
+// when it also declares `isCardDef`.
+function hasOwnEmbeddedView(card: CardDef): boolean {
+  let klass: object | null = card.constructor;
+  while (klass && !Object.hasOwn(klass, 'embedded')) {
+    klass = Object.getPrototypeOf(klass);
+  }
+  return !!klass && !Object.hasOwn(klass, 'isCardDef');
+}
 
 interface Signature {
   Element: HTMLDivElement;
@@ -51,6 +68,8 @@ interface Signature {
     messageTool: MessageTool;
     roomId: string;
     runCommand: () => void;
+    // Declines a call ai-bot holds for the user's approval.
+    declineCommand?: () => void;
     isError?: boolean;
     isPending?: boolean;
     isCompact?: boolean;
@@ -66,8 +85,37 @@ export default class RoomMessageTool extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
 
+  @consume(CardContextName) declare private cardContext: CardContext;
+
+  // A tool's result card can show what the tool produced from the room's
+  // media, such as an image it captured.
+  @provide(CardContextName)
+  // @ts-ignore "context" is declared but not used
+  private get context(): CardContext {
+    return {
+      ...this.cardContext,
+      loadRoomMedia: this.matrixService.loadRoomMedia,
+    };
+  }
+
+  // How much of the call's arguments has arrived. On the element as a plain
+  // data attribute so anything watching a session (the eval runner, and later
+  // a deployed monitor) can tell a long tool call that is still streaming
+  // from a stalled one, even while the box is collapsed.
+  private get argumentsLength() {
+    return (
+      this.args.messageTool.argumentsText ??
+      JSON.stringify(this.args.messageTool.arguments ?? {})
+    ).length;
+  }
+
+  // While the arguments are still streaming they are not valid JSON yet, so
+  // show the raw text received so far as it is.
   private get previewCommandCode() {
-    let { name, arguments: payload } = this.args.messageTool;
+    let { name, arguments: payload, argumentsText } = this.args.messageTool;
+    if (argumentsText) {
+      return argumentsText;
+    }
     return JSON.stringify({ name, payload }, null, 2);
   }
 
@@ -90,6 +138,16 @@ export default class RoomMessageTool extends Component<Signature> {
     // event and the button transitions to its invalid state — no risk of
     // the spinner sticking.
     if ((status === 'ready' || status === undefined) && this.willAutoExecute) {
+      // A stop keeps a tool that has not started from ever starting; one
+      // already running finishes, and reads as applying until its result
+      // lands.
+      let { roomResource, messageTool } = this.args;
+      if (
+        roomResource.wasEverStopped(messageTool.eventId) &&
+        !this.toolService.currentlyExecutingToolRequestIds.has(messageTool.id!)
+      ) {
+        return 'canceled';
+      }
       return 'applying';
     }
     return status ?? 'ready';
@@ -114,25 +172,46 @@ export default class RoomMessageTool extends Component<Signature> {
   // to realm invalidation; otherwise a sweep could evict it mid-render and the
   // next `store.get` would mint a second instance for the same id.
   @use private toolResultCard = resource(({ on }) => {
-    let initialState = { card: undefined } as { card: CardDef | undefined };
+    let initialState = { card: undefined, isRealmCard: false } as {
+      card: CardDef | undefined;
+      isRealmCard: boolean;
+    };
     let state = new TrackedObject(initialState);
     let referencedId: string | undefined;
     let isTornDown = false;
+    let isLoading = false;
     on.cleanup(() => {
       isTornDown = true;
+      if (isLoading && isTesting()) {
+        // Every re-run of this resource starts the result card's load over,
+        // so a run torn down mid-load delays the card. Logged so a test that
+        // times out waiting for the card shows whether loads kept restarting.
+        console.log(
+          `[tool-result-card] discarded an in-flight result card load for tool call ${this.args.messageTool.toolRequest.id}`,
+        );
+      }
       if (referencedId) {
         this.store.dropReference(referencedId);
       }
     });
     if (this.args.messageTool.toolResultFileDef) {
-      this.args.messageTool.getCommandResultCard().then((card) => {
-        if (isTornDown) {
+      isLoading = true;
+      this.args.messageTool.getCommandResultCard().then((result) => {
+        isLoading = false;
+        if (!result && isTesting()) {
+          console.log(
+            `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} produced no card`,
+          );
+        }
+        if (isTornDown || !result) {
           return;
         }
-        if (card?.id) {
+        let { card, isRealmCard } = result;
+        if (card.id) {
           referencedId = card.id;
           this.store.addReference(card.id);
         }
+        state.isRealmCard = isRealmCard;
         state.card = card;
       });
     }
@@ -179,13 +258,20 @@ export default class RoomMessageTool extends Component<Signature> {
     return '';
   }
 
+  // Most result cards are data a tool hands back to the model, with nothing
+  // in them for the user to look at. The chat shows one only when it is a
+  // realm card the user may want to open, or when its type has a view of its
+  // own and this result has something in it for that view to show; the
+  // tool's status row stands for the rest.
   private get shouldDisplayResultCard() {
-    let commandName = this.args.messageTool.name ?? '';
-    return (
-      !!this.toolResultCard.card &&
-      commandName !== 'checkCorrectness' &&
-      !commandName.startsWith('switch-submode')
-    );
+    let { card, isRealmCard } = this.toolResultCard;
+    if (!card) {
+      return false;
+    }
+    if (isRealmCard) {
+      return true;
+    }
+    return hasOwnEmbeddedView(card) && !card[hasNothingToShow];
   }
 
   private get didFailCorrectnessCheck() {
@@ -251,10 +337,53 @@ export default class RoomMessageTool extends Component<Signature> {
     return this.args.messageTool.status === 'failed' && !this.failedToolState;
   }
 
+  // "Try Anyway" re-runs a host tool; a call ai-bot runs has nothing on the
+  // host to retry, so its failure reason shows without the action.
   private get invalidToolCallState() {
     return (
       this.args.messageTool.status === 'invalid' &&
-      !!this.args.messageTool.failureReason
+      !!this.args.messageTool.failureReason &&
+      !this.args.messageTool.isBotExecuted
+    );
+  }
+
+  // Why the assistant wants a call held for approval, in its own words: a
+  // bot tool that asks for approval takes a `reason` argument.
+  private get approvalReason() {
+    let reason = this.args.messageTool.toolRequest.arguments?.reason;
+    return typeof reason === 'string' && reason.trim() ? reason.trim() : '';
+  }
+
+  // Why this call waits for the user's click, shown above the code while
+  // this tab offers the click that runs it (Run, Retry or Try Anyway), so the
+  // user knows what the click allows. A call another agent sent is run from
+  // that agent's tab, not this one.
+  @cached
+  private get clickReasons() {
+    let { messageTool } = this.args;
+    if (messageTool.message.agentId !== this.matrixService.agentId) {
+      return [];
+    }
+    let offersClick =
+      this.applyButtonState === 'ready' ||
+      Boolean(this.failedToolState) ||
+      this.failedToolCallState ||
+      this.invalidToolCallState;
+    return offersClick ? messageTool.clickReasons : [];
+  }
+
+  // Until its command is resolved a call can't say how it will run (its
+  // action verb, whether it waits for approval), so it shows as preparing, the
+  // same as while its request streams in. A call already answered shows its
+  // result.
+  private get isPreparing() {
+    if (this.args.isStreaming) {
+      return true;
+    }
+    let { messageTool } = this.args;
+    return (
+      messageTool.isResolving &&
+      (messageTool.status === 'ready' || messageTool.status === undefined)
     );
   }
 
@@ -280,9 +409,11 @@ export default class RoomMessageTool extends Component<Signature> {
         compact=@isCompact
       }}
       data-test-tool-call-id={{@messageTool.toolRequest.id}}
+      data-tool-name={{@messageTool.name}}
+      data-tool-arguments-length={{this.argumentsLength}}
       ...attributes
     >
-      {{#if @isStreaming}}
+      {{#if this.isPreparing}}
         <CodeBlock
           class={{cn 'tool-code-block' compact=@isCompact}}
           @monacoSDK={{@monacoSDK}}
@@ -299,9 +430,29 @@ export default class RoomMessageTool extends Component<Signature> {
             @code={{this.previewCommandCode}}
             @isCompact={{@isCompact}}
             @toolCallState='preparing'
+            @isDisplayingCode={{this.isDisplayingCode}}
+            @toggleCode={{this.toggleViewCode}}
           />
+          {{#if this.isDisplayingCode}}
+            <codeBlock.editor />
+          {{/if}}
         </CodeBlock>
       {{else}}
+        {{#if this.clickReasons.length}}
+          <div class='click-reasons' data-test-tool-call-click-reasons>
+            <p class='click-reasons-intro'>This waits for your click because it
+              contains:</p>
+            <ul class='click-reasons-list'>
+              {{#each this.clickReasons as |clickReason|}}
+                <li data-test-tool-call-click-reason={{clickReason.call}}>
+                  <code>{{clickReason.call}}</code>
+                  —
+                  {{clickReason.reason}}
+                </li>
+              {{/each}}
+            </ul>
+          </div>
+        {{/if}}
         <CodeBlock
           class={{cn 'tool-code-block' compact=@isCompact}}
           {{this.scrollBottomIntoView}}
@@ -316,6 +467,8 @@ export default class RoomMessageTool extends Component<Signature> {
           <codeBlock.commandHeader
             @commandDescription={{@messageTool.description}}
             @action={{@runCommand}}
+            @secondaryAction={{if @messageTool.awaitsApproval @declineCommand}}
+            @secondaryActionVerb='Decline'
             @actionVerb={{@messageTool.actionVerb}}
             @code={{this.previewCommandCode}}
             @toolCallState={{this.applyButtonState}}
@@ -327,6 +480,17 @@ export default class RoomMessageTool extends Component<Signature> {
             <codeBlock.editor />
           {{/if}}
         </CodeBlock>
+        {{#if @messageTool.awaitsApproval}}
+          <p class='approval-note' data-test-tool-call-approval>
+            {{#if this.approvalReason}}
+              The assistant asks for your approval and says: “{{this.approvalReason}}”
+              Approve if that's OK with you.
+            {{else}}
+              The assistant asks for your approval to do this. Approve if that's
+              OK with you.
+            {{/if}}
+          </p>
+        {{/if}}
         {{#if this.failedToolState}}
           <Alert @type='error' as |Alert|>
             <Alert.Messages @messages={{array this.failedToolState.message}} />
@@ -352,9 +516,12 @@ export default class RoomMessageTool extends Component<Signature> {
           </Alert>
         {{/if}}
         {{#if this.shouldDisplayResultCard}}
+          {{! Light scheme island in the dark assistant panel: the header and the
+              embedded result share one light surface and foreground. }}
           <CardContainer
             @displayBoundaries={{false}}
             class='tool-result-card-preview'
+            data-theme='light'
             data-test-tool-result-container
           >
             <CardHeader
@@ -381,6 +548,28 @@ export default class RoomMessageTool extends Component<Signature> {
       }
       .tool-result-card-preview {
         margin-top: var(--boxel-sp);
+      }
+      .approval-note {
+        margin: 0;
+        padding: 0 var(--boxel-sp-xxs);
+        font: var(--boxel-font-xs);
+        color: var(--boxel-450);
+      }
+      .click-reasons {
+        padding: 0 var(--boxel-sp-xxs);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--boxel-light);
+      }
+      .click-reasons-intro {
+        margin: 0;
+      }
+      .click-reasons-list {
+        margin: var(--boxel-sp-xxxs) 0 0;
+        padding-left: var(--boxel-sp);
+      }
+      .click-reasons-list code {
+        font-family: var(--boxel-monospace-font-family);
       }
       .tool-result-card-header {
         --boxel-label-color: var(--boxel-450);

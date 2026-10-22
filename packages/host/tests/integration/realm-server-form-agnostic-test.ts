@@ -11,7 +11,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -47,8 +46,6 @@ module('Integration | realm-server | identifier forms', function (hooks) {
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
   });
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     await setupIntegrationTestRealm({ mockMatrixUtils, contents: {} });
@@ -117,5 +114,101 @@ module('Integration | realm-server | identifier forms', function (hooks) {
       [REALM_SERVER_URL],
       'both spellings are accepted as token keys',
     );
+  });
+
+  test('a realm named by its URL finds a token filed under its prefix', function (assert) {
+    // A search names its realms in URL form, while a realm resource that
+    // logged in through the prefix filed its token under the prefix.
+    getService('network').virtualNetwork.addRealmMapping(
+      PREFIX,
+      MAPPED_REALM_URL,
+    );
+    window.localStorage.setItem(
+      SessionLocalStorageKey,
+      JSON.stringify({
+        [PREFIX]: sessionToken({ realmServerURL: REALM_SERVER_URL }),
+      }),
+    );
+
+    let realmServer = getService('realm-server');
+    assert.deepEqual(
+      realmServer.getRealmServersForRealms([MAPPED_REALM_URL]),
+      [REALM_SERVER_URL],
+      'the URL form finds the token filed under the prefix',
+    );
+  });
+
+  module('the per-realm token fallback', function (hooks) {
+    // The fallback is read only without a realm-server session.
+    hooks.beforeEach(function () {
+      getService('realm-server').logout();
+      getService('network').virtualNetwork.addRealmMapping(
+        PREFIX,
+        MAPPED_REALM_URL,
+      );
+    });
+
+    let unexpired = () =>
+      sessionToken({ exp: Math.floor(Date.now() / 1000) + 3600 });
+
+    test('a realm named by its URL finds a token filed under its prefix', function (assert) {
+      let token = unexpired();
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [PREFIX]: token }),
+      );
+      assert.strictEqual(
+        getService('realm-server').tokenForRealms([MAPPED_REALM_URL]),
+        token,
+      );
+    });
+
+    test('an expired token under one spelling does not hide a live one under another', function (assert) {
+      let expired = sessionToken({ exp: Math.floor(Date.now() / 1000) - 60 });
+      let live = unexpired();
+      let realmServer = getService('realm-server');
+
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [MAPPED_REALM_URL]: expired, [PREFIX]: live }),
+      );
+      assert.strictEqual(
+        realmServer.tokenForRealms([MAPPED_REALM_URL]),
+        live,
+        'the live prefix-filed token is used when the URL-filed one expired',
+      );
+
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [MAPPED_REALM_URL]: live, [PREFIX]: expired }),
+      );
+      assert.strictEqual(
+        realmServer.tokenForRealms([PREFIX]),
+        live,
+        'the live URL-filed token is used when the prefix-filed one expired',
+      );
+
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [MAPPED_REALM_URL]: expired, [PREFIX]: expired }),
+      );
+      assert.strictEqual(
+        realmServer.tokenForRealms([PREFIX]),
+        undefined,
+        'with every spelling expired there is no token to send',
+      );
+    });
+
+    test('a realm named by its prefix finds a token filed under its URL', function (assert) {
+      let token = unexpired();
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [MAPPED_REALM_URL]: token }),
+      );
+      assert.strictEqual(
+        getService('realm-server').tokenForRealms([PREFIX]),
+        token,
+      );
+    });
   });
 });

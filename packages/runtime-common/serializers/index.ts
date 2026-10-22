@@ -9,6 +9,7 @@ import * as NumberSerializer from './number.ts';
 import * as EmailSerializer from './email.ts';
 import * as ImageSizeSerializer from './image-size.ts';
 import * as PhoneSerializer from './phone.ts';
+import * as PolicyPredicateSerializer from './policy-predicate.ts';
 import * as StringToContentSerializer from './string-to-content.ts';
 
 import type { CardDocument, RealmResourceIdentifier } from '../index.ts';
@@ -34,8 +35,14 @@ export {
   ImageSizeSerializer,
   EmailSerializer,
   PhoneSerializer,
+  PolicyPredicateSerializer,
   StringToContentSerializer,
 };
+
+export type {
+  PolicyPredicate,
+  SerializedPolicyPredicate,
+} from './policy-predicate.ts';
 
 interface Serializer {
   serialize(
@@ -67,6 +74,7 @@ const serializerMapping: { [name: string]: Serializer } = {
   'image-size': ImageSizeSerializer,
   email: EmailSerializer,
   phone: PhoneSerializer,
+  'policy-predicate': PolicyPredicateSerializer,
   'string-to-content': StringToContentSerializer,
 };
 
@@ -82,6 +90,7 @@ export type SerializerName =
   | 'image-size'
   | 'email'
   | 'phone'
+  | 'policy-predicate'
   | 'string-to-content';
 
 export function getSerializer(name: SerializerName): Serializer {

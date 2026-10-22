@@ -155,6 +155,8 @@ interface Signature {
     // subscriptions and re-runs outlive this component). When absent the
     // component owns its own resource, driven by the derived `mainSearchQuery`.
     mainSearchResource?: SearchEntriesResource;
+    // The query driving `mainSearchResource`, so a realm section can page it.
+    mainSearchQuery?: SearchEntryWireQuery;
     // The active grid/strip view id, plus a callback for changes. When both are
     // present the view is controlled by the caller; otherwise it's local.
     viewId?: string;
@@ -267,6 +269,12 @@ export default class PanelContent extends Component<Signature> {
       // never render — a large payload reduction on broad queries.
       page: { size: SECTION_DISPLAY_LIMIT_FOCUSED },
     });
+  }
+
+  get pageQuery(): SearchEntryWireQuery | undefined {
+    return this.args.mainSearchResource
+      ? this.args.mainSearchQuery
+      : this.mainSearchQuery;
   }
 
   // In the mini card chooser every result row renders as the uniform CardDef
@@ -488,6 +496,7 @@ export default class PanelContent extends Component<Signature> {
                 @realmsLocked={{@realmFilter.locked}}
                 @baseFilter={{@baseFilter}}
                 @offerToCreate={{@offerToCreate}}
+                @pageQuery={{this.pageQuery}}
                 @recentCardBareIds={{this.recentCardBareIds}}
                 @pagination={{this.pagination}}
                 @activeViewId={{this.activeViewId}}

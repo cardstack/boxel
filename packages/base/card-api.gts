@@ -1,4 +1,4 @@
-import Modifier from 'ember-modifier';
+import type Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash-es';
 import { WatchedArray, rawArrayValues } from './watched-array';
@@ -26,10 +26,6 @@ import { getLinksToManyComponent } from './links-to-many-component';
 import {
   assertIsSerializerName,
   baseRef,
-  CardContextName,
-  CardError,
-  CodeRef,
-  ToolContext,
   Deferred,
   byteStreamToUint8Array,
   fields,
@@ -39,6 +35,7 @@ import {
   getAncestor,
   getMenuItems,
   getField,
+  hasNothingToShow,
   getSerializer,
   humanReadable,
   identifyCard,
@@ -56,13 +53,12 @@ import {
   loadCardDef,
   loadCardDocument,
   Loader,
+  loaderForModule,
   localId,
-  LocalPath,
   meta,
   primitive,
   realmURL,
   relativeTo,
-  SingleCardDocument,
   uuidv4,
   NumberSerializer,
   type Format,
@@ -88,9 +84,6 @@ import {
   FileMetaResourceType,
   CardResourceType,
   loadFileMetaDocument,
-  CardResource,
-  LooseLinkableResource,
-  LooseSingleResourceDocument,
   shouldTrackRuntimeModuleGraph,
   shouldTrackRuntimeRelationship,
   trackRuntimeFileDependency,
@@ -99,39 +92,43 @@ import {
   runtimeNonQueryDependencyContext,
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
+  ri,
   rri,
   resolveRRIReference,
+  type RealmIdentifier,
   type RealmResourceIdentifier,
   type VirtualNetwork,
   isDirectIndexedFieldKey,
   cardTypeName,
   fileNameFromUrl,
   referenceNamesFile,
-  isDeclaredScreenshotFormat,
-  isValidScreenshotName,
-  DECLARED_SCREENSHOT_FORMATS,
-  SCREENSHOT_NAME_MAX_LENGTH,
-  SCREENSHOT_NAME_PATTERN,
-  SCREENSHOT_MAX_VIEWPORT_WIDTH,
-  SCREENSHOT_MAX_VIEWPORT_HEIGHT,
-  SCREENSHOT_MAX_DEVICE_SCALE_FACTOR,
-  SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
-  SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
-  type DeclaredScreenshotRoster,
-  type DeclaredScreenshotSpecPayload,
-  type DeclaredScreenshotFormat,
-  type ScreenshotsMeta,
+  isDeclaredCaptureFormat,
+  isValidCaptureName,
+  wellFormedFilename,
+  DECLARED_CAPTURE_FORMATS,
+  CAPTURE_NAME_MAX_LENGTH,
+  CAPTURE_NAME_PATTERN,
+  CAPTURE_MAX_VIEWPORT_WIDTH,
+  CAPTURE_MAX_VIEWPORT_HEIGHT,
+  CAPTURE_MAX_DEVICE_SCALE_FACTOR,
+  CAPTURE_MAX_PHYSICAL_EDGE_PX,
+  DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR,
+  type DeclaredCaptureRoster,
+  type DeclaredCaptureSpecPayload,
+  type DeclaredCaptureFormat,
+  type CapturesMeta,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
-  peekQueryFieldSearchResource,
   queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
+import { untitledCardTitle } from './untitled-card-title';
 import type { ComponentLike } from '@glint/template';
+import { dropComputedTurnMemo } from './computed-turn-memo';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
 import DefaultEmbeddedTemplate from './default-templates/embedded';
@@ -150,7 +147,7 @@ import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import type { FilePreviewComponent } from './file-formats/file-preview-stage';
 import { ImagePreview } from './file-formats/image-preview';
-import { IMAGE_THUMB_SCREENSHOTS } from './file-formats/image-captures';
+import { IMAGE_THUMB_CAPTURES } from './file-formats/image-captures';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
 import ImageIcon from '@cardstack/boxel-icons/image';
@@ -208,6 +205,7 @@ import {
   isLinkNotFound,
   isNonPresentLink,
   isNotLoadedValue,
+  isQueryTaintedField,
   markAuthoredEmptyLink,
   notifyCardTracking,
   peekAtField,
@@ -226,12 +224,23 @@ import {
 import { TextInputValidator } from './text-input-validator';
 import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
 import { getDefaultFileMenuItems } from './file-menu-items';
-import {
+import type {
   LinkableDocument,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common/document-types';
 import type { MarkdownEmbedChooser } from '@cardstack/runtime-common/bfm-card-references';
-import type { FileMetaResource } from '@cardstack/runtime-common';
+import type {
+  FileMetaResource,
+  CardContextName,
+  CardError,
+  CodeRef,
+  ToolContext,
+  LocalPath,
+  SingleCardDocument,
+  CardResource,
+  LooseLinkableResource,
+  LooseSingleResourceDocument,
+} from '@cardstack/runtime-common';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
 
@@ -252,6 +261,7 @@ export {
   getFields,
   getRelationshipMembershipState,
   isNonPresentLink,
+  isQueryTaintedField,
   peekAtField,
   isCard,
   isField,
@@ -401,11 +411,42 @@ export interface CardContext<T extends CardDef = CardDef> {
   getCard: getCard<T>;
   getCards: getCards;
   getCardCollection: getCardCollection;
+  // May this session invoke `operation` on `target`? A target is a saved card
+  // or its URL, or a card class to ask whether a card of that type may be
+  // created (in `opts.realm`, or where a create names no realm, the realm it
+  // lands in). Answers synchronously from what the session already knows, and
+  // `undefined` while the realm is being asked — so a template reads it like
+  // any other value and re-renders when the answer lands. The calls one render
+  // pass makes are coalesced into one request per realm.
+  //
+  // It sits beside `realm.canWrite`, which a card editor is already gated on,
+  // and extends it: the ACL's `canWrite` is a complete answer for a caller it
+  // allows, and this is what the realm's policy adds for one it declines.
+  //
+  // Advisory, and never authorization. The realm decides again when the
+  // operation is invoked, against the state as it is then. Hide a control on
+  // `false`; never skip the call on `true`.
+  //
+  // Absent where nothing can answer — a prerender, a freestyle — so consumers
+  // guard on it.
+  canInvoke?: (
+    operation: string,
+    target: CardDef | string | typeof CardDef,
+    opts?: { realm?: string },
+  ) => boolean | undefined;
   store: Store;
   // Host bridge for the markdown editor's embed chooser. Provided by
   // operator-mode; absent in contexts with no chooser modal (prerender,
   // freestyle), so consumers guard on it.
   markdownEmbedChooser?: MarkdownEmbedChooser;
+  // Resolves room media (an image a tool uploaded to the assistant's room)
+  // to a URL an `<img>` can load. Room media is served only to the Matrix
+  // session, which a browser request for an `<img>` does not carry, so the
+  // host downloads it and answers with an object URL the caller revokes when
+  // it is done with it; any other URL comes back unchanged. Provided where
+  // tool results render in the assistant's chat, and absent everywhere else,
+  // so consumers guard on it.
+  loadRoomMedia?: (url: string) => Promise<string>;
   // Optional runtime mode/submode hints used by cards that render differently per context.
   mode?: 'host' | 'operator';
   submode?: 'interact' | 'code' | 'host';
@@ -596,6 +637,12 @@ export type StoreSearchSeed<T extends CardDef | FileDef = CardDef> = {
 
 export type GetSearchResourceFuncOpts<T extends CardDef | FileDef = CardDef> = {
   isLive?: boolean;
+  // Queue this search behind the concurrency ceiling of the store it runs
+  // against, instead of putting it on the wire the moment the resource is
+  // created. Independent of the caps applied to card `@context` searches (page
+  // size, realms fan-out): this changes when a search runs, never what it
+  // returns.
+  throttled?: boolean;
   doWhileRefreshing?: (() => void) | undefined;
   dependencyTracking?: RuntimeDependencyTrackingContext;
   seed?: StoreSearchSeed<T>;
@@ -632,6 +679,15 @@ export interface CardStore {
   realmForId(id: string): string | undefined;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
+  // Whether an instance this store is already holding for `url` is current
+  // enough to hand to a link edge in place of a fresh load. The property a
+  // store has to make good on is that what it holds still reflects the realm:
+  // either it drops what it holds when its view of the realm moves, or it
+  // reloads what it holds when the realm says a file changed. A store that
+  // offers neither — or one asked about a target whose changes it would never
+  // hear about — answers false, and the edge loads for itself. Absent means
+  // false, so a store with no opinion never serves a held instance to a link.
+  canReuseResidentInstance?(url: string): boolean;
   setCard(url: string, instance: CardDef): void;
   setFileMeta(url: string, instance: FileDef): void;
   setCardNonTracked(id: string, instance: CardDef): void;
@@ -758,26 +814,28 @@ function cardTypeFor(
   boxedElement?: Box<BaseDef>,
   overrides?: () => Map<string, typeof BaseDef> | undefined,
 ): typeof BaseDef {
+  // Reading a box's value walks back up to the containing field, which
+  // re-evaluates it when it is computed, so it is read once.
+  let value = boxedElement?.value;
   let override: typeof BaseDef | undefined;
   if (overrides) {
     let valueKey = `${field.name}${
       boxedElement ? '.' + boxedElement.name : ''
     }`;
-    override = boxedElement?.value ? overrides()?.get(valueKey) : undefined;
+    override = value ? overrides()?.get(valueKey) : undefined;
   } else {
     override =
-      boxedElement?.value && typeof boxedElement.value === 'object'
-        ? getFieldOverrides(boxedElement.value)?.get(field.name)
+      value && typeof value === 'object'
+        ? getFieldOverrides(value)?.get(field.name)
         : undefined;
   }
   if (primitive in field.card) {
     return override ?? field.card;
   }
-  if (boxedElement === undefined || boxedElement.value == null) {
+  if (value == null) {
     return field.card;
   }
-  return Reflect.getPrototypeOf(boxedElement.value)!
-    .constructor as typeof BaseDef;
+  return Reflect.getPrototypeOf(value)!.constructor as typeof BaseDef;
 }
 
 function assertNoDeserializeOverride(cardClass: typeof BaseDef) {
@@ -1354,6 +1412,35 @@ function serializeNonPresentLink(
   };
 }
 
+// Whether the `includedScope` keeps this link target's resource out of
+// `included[]`. 'all' keeps every resident target, 'local' keeps only the
+// unsaved (`lid`-bearing) ones — the write shape, where `included` is a
+// co-creation manifest — and 'none' keeps none.
+function isExcludedByIncludedScope(
+  value: CardDef,
+  includedScope: SerializeOpts['includedScope'] = 'all',
+): boolean {
+  return value.id ? includedScope !== 'all' : includedScope === 'none';
+}
+
+// The relationship entry that stands in for a link target whose own resource
+// is not inlined: a saved target by `links.self` + `id`, an unsaved one by
+// `lid`. Every reference-only path — an already-visited target, a
+// scope-excluded one, and the tail of a full serialization — emits exactly
+// this, so the spellings cannot drift apart.
+function referenceRelationship(
+  value: CardDef,
+  relationshipType: string,
+  opts?: SerializeOpts,
+): Relationship {
+  return value.id
+    ? {
+        links: { self: makeRelativeURL(value.id, opts) },
+        data: { type: relationshipType, id: value.id },
+      }
+    : { data: { type: relationshipType, lid: value[localId] } };
+}
+
 class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
@@ -1493,6 +1580,29 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       };
     }
     if (value == null) {
+      // In the used-only serialization the indexer runs (`!includeUnrenderedFields`,
+      // the same mode `getFields` filters never-authored links out of), a computed
+      // link that resolved to nothing is the absence of a relationship, not an
+      // authored `{ self: null }`. Omit it — the shape a never-set link takes —
+      // so a card gains a relationship entry only when the computed actually
+      // resolves a target. (`isFieldUsed` can't make this call: a computed never
+      // writes the data bucket it reads.) A full serialization
+      // (`includeUnrenderedFields`) still emits `{ self: null }`, matching how it
+      // renders every declared link.
+      //
+      // Absence here is not a positive assertion of emptiness. `LinksTo.getter`
+      // collapses a not-loaded source, a link-error, and a link-not-found target
+      // all to `undefined`, so a computed link that "derives nothing", one whose
+      // source was not resident, and one over a broken target arrive here alike
+      // and are all spelled the same way in the row: no entry. Nor does the
+      // `brokenLinks` diagnostic recover the distinction — `getBrokenLinks` skips
+      // `computeVia` fields, so a broken computed link is invisible there too.
+      // In practice the render route's settle loop drains the store before this
+      // runs, so a resolvable source is resident; the residual ambiguity is a
+      // genuinely broken target, which indexes clean and silent.
+      if (this.computeVia && !opts?.includeUnrenderedFields) {
+        return { relationships: {} };
+      }
       return {
         relationships: {
           [this.name]: {
@@ -1506,24 +1616,22 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         `linksTo field '${this.name}' cannot serialize a FileDef without an id`,
       );
     }
-    if (visited.has(value.id)) {
+    // A target already serialized on this walk, or one the includedScope
+    // excludes, needs only its relationship entry — so the recursive
+    // serialization of the target, and the traversal of its own linked graph,
+    // is skipped entirely.
+    if (
+      visited.has(value.id) ||
+      visited.has((value as CardDef)[localId]) ||
+      isExcludedByIncludedScope(value as CardDef, opts?.includedScope)
+    ) {
       return {
         relationships: {
-          [this.name]: {
-            links: {
-              self: makeRelativeURL(value.id, opts),
-            },
-            data: { type: relationshipType, id: value.id },
-          },
-        },
-      };
-    }
-    if (visited.has((value as CardDef)[localId])) {
-      return {
-        relationships: {
-          [this.name]: {
-            data: { type: relationshipType, lid: (value as CardDef)[localId] },
-          },
+          [this.name]: referenceRelationship(
+            value as CardDef,
+            relationshipType,
+            opts,
+          ),
         },
       };
     }
@@ -1540,21 +1648,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (serialized) {
       let resource: JSONAPIResource = {
         relationships: {
-          [this.name]: {
-            ...(value.id
-              ? {
-                  links: {
-                    self: makeRelativeURL(value.id, opts),
-                  },
-                  data: { type: relationshipType, id: value.id },
-                }
-              : {
-                  data: {
-                    type: relationshipType,
-                    lid: (value as CardDef)[localId],
-                  },
-                }),
-          },
+          [this.name]: referenceRelationship(
+            value as CardDef,
+            relationshipType,
+            opts,
+          ),
         },
       };
       if (
@@ -2036,6 +2134,26 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     }
 
     if (values == null || values.length === 0) {
+      // In the used-only serialization the indexer runs (`!includeUnrenderedFields`,
+      // the same mode `getFields` filters never-authored links out of), a computed
+      // relationship that resolved to no members is the absence of a relationship,
+      // not an authored empty (`{ self: null }`). Omit it — the shape a never-set
+      // link takes — so a card gains `cards`-style entries only when the computed
+      // actually resolves members. (`isFieldUsed` can't make this call: a computed
+      // never writes the data bucket it reads.) A full serialization
+      // (`includeUnrenderedFields`) still emits `{ self: null }`, matching how it
+      // renders every declared link.
+      //
+      // As with the singular case, absence is not a positive assertion of
+      // emptiness: a computed that legitimately derives no members, one whose
+      // source was not resident, and one whose members surfaced as broken
+      // (`isNonPresentLink` above catches the not-loaded/sentinel forms) can all
+      // land here as an empty/absent value, and `getBrokenLinks` does not see
+      // computed fields, so a broken computed link leaves no `brokenLinks` trace
+      // either. The render route's settle loop covers residency in practice.
+      if (this.computeVia && !opts?.includeUnrenderedFields) {
+        return { relationships: {} };
+      }
       return {
         relationships: {
           [this.name]: {
@@ -2057,7 +2175,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     // through `serializeNonPresentLink` instead of collapsing to `data: null`.
     rawArrayValues(values).forEach((value, i) => {
       if (value == null) {
-        relationships[`${this.name}\.${i}`] = {
+        relationships[`${this.name}.${i}`] = {
           links: {
             self: null,
           },
@@ -2066,7 +2184,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return;
       }
       if (isNonPresentLink(value)) {
-        relationships[`${this.name}\.${i}`] = serializeNonPresentLink(
+        relationships[`${this.name}.${i}`] = serializeNonPresentLink(
           value.reference,
           relationshipType,
           opts,
@@ -2078,19 +2196,19 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           `linksToMany field '${this.name}' cannot serialize a FileDef without an id`,
         );
       }
-      if (visited.has(value.id)) {
-        relationships[`${this.name}\.${i}`] = {
-          links: {
-            self: makeRelativeURL(value.id, opts),
-          },
-          data: { type: relationshipType, id: value.id },
-        };
-        return;
-      }
-      if (visited.has((value as CardDef)[localId])) {
-        relationships[`${this.name}\.${i}`] = {
-          data: { type: relationshipType, lid: (value as CardDef)[localId] },
-        };
+      // Same reference-only rule as linksTo: a target already serialized on
+      // this walk, or one the includedScope excludes, contributes its
+      // relationship entry and nothing else.
+      if (
+        visited.has(value.id) ||
+        visited.has((value as CardDef)[localId]) ||
+        isExcludedByIncludedScope(value as CardDef, opts?.includedScope)
+      ) {
+        relationships[`${this.name}.${i}`] = referenceRelationship(
+          value as CardDef,
+          relationshipType,
+          opts,
+        );
         return;
       }
 
@@ -2118,21 +2236,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         doc.included.push(serialized);
       }
 
-      relationships[`${this.name}\.${i}`] = {
-        ...(value.id
-          ? {
-              links: {
-                self: makeRelativeURL(value.id, opts),
-              },
-              data: { type: relationshipType, id: value.id },
-            }
-          : {
-              data: {
-                type: relationshipType,
-                lid: (value as CardDef)[localId],
-              },
-            }),
-      };
+      relationships[`${this.name}.${i}`] = referenceRelationship(
+        value as CardDef,
+        relationshipType,
+        opts,
+      );
     });
 
     return { relationships };
@@ -2510,7 +2618,7 @@ interface InternalFieldInitializer {
 // userland `@field` under one of these would shadow the getter via the
 // prototype chain silently, so the decorator refuses them by name (the
 // `boxel/no-reserved-field-names` lint rule is the authoring-time backstop).
-const RESERVED_FIELD_NAMES = ['screenshotURLs', 'screenshotsMeta'];
+const RESERVED_FIELD_NAMES = ['captureURLs', 'capturesMeta'];
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
@@ -2645,6 +2753,8 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
 
 // (moved below BaseDef & FieldDef declarations)
 
+const instanceMeta = new WeakMap<BaseDef, CardResourceMeta | undefined>();
+
 // TODO: consider making this abstract
 export class BaseDef {
   // this is here because CardBase has no public instance methods, so without it
@@ -2655,7 +2765,18 @@ export class BaseDef {
   // So we need a [relativeTo] property that derives from the root document ID in order to
   // resolve relative links at the FieldDef level.
   [relativeTo]: RealmResourceIdentifier | URL | undefined = undefined;
-  [meta]: CardResourceMeta | undefined = undefined;
+  // An accessor rather than a field so that a write drops the computed turn
+  // memo: computeds read realm meta (realm URL, captures, modification times)
+  // without tracking, and meta is assigned outside `notifyCardTracking` (the
+  // store stamps the version and realm onto a held instance), so a computed
+  // read in the same turn as the write would otherwise see the old meta.
+  get [meta](): CardResourceMeta | undefined {
+    return instanceMeta.get(this);
+  }
+  set [meta](value: CardResourceMeta | undefined) {
+    instanceMeta.set(this, value);
+    dropComputedTurnMemo();
+  }
   declare ['constructor']: BaseDefConstructor;
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
@@ -2724,12 +2845,12 @@ export class BaseDef {
       ) {
         return { id: valueId };
       }
-      function makeAbsoluteURL(maybeRelativeReference: string) {
+      let makeAbsoluteURL = (maybeRelativeReference: string) => {
         if (!value[relativeTo]) {
           return maybeRelativeReference;
         }
         return resolveRef(maybeRelativeReference, value[relativeTo]);
-      }
+      };
       return Object.fromEntries(
         Object.entries(
           getFields(value, {
@@ -2757,10 +2878,6 @@ export class BaseDef {
               ];
             }
             if (isNonPresentLink(rawValue)) {
-              let normalizedId = rawValue.reference;
-              if (value[relativeTo]) {
-                normalizedId = resolveRef(normalizedId, value[relativeTo]);
-              }
               return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
             }
             // Reuse the value we already peeked above instead of re-reading
@@ -2898,12 +3015,12 @@ export type BaseDefComponent = ComponentLike<{
   };
 }>;
 
-// One declared screenshot (an entry in a CardDef/FileDef `static
-// screenshots` slot): exactly one of `render` or `format` names what to
+// One declared capture (an entry in a CardDef/FileDef `static
+// captures` slot): exactly one of `render` or `format` names what to
 // draw, and the rest parameterizes the capture box.
 //
 // `render` is a *capture-only* component: referenced only from this
-// declaration and rendered only by the screenshot render route — never
+// declaration and rendered only by the capture render route — never
 // exposed through the card's format API or `@fields`. Capture-only restricts
 // where the component renders, not what it may use: it gets the full author
 // surface (`@model`/`@fields`/`@context`) and may render linked data.
@@ -2911,14 +3028,36 @@ export type BaseDefComponent = ComponentLike<{
 // A capture-only component whose content readies asynchronously (a video
 // frame seeked onto a canvas, a PDF page paint, a WebGL first frame — work
 // invisible to image-paint waiting) signals readiness through the DOM: while
-// unready it renders a `data-screenshot-pending` attribute on any element,
+// unready it renders a `data-capture-pending` attribute on any element,
 // and removes it when painted. The capture engine waits (bounded) for no
 // such element to remain; a component that never resolves its pending
 // element fails that slot's capture rather than persisting an unready frame.
 // Components with no async work omit the attribute and capture immediately.
 //
+// A component that learns its content can never become ready — a corrupt or
+// password-protected document, an undecodable video — should not leave the
+// pending attribute standing until the engine's timeout: swap in a
+// `data-capture-failed` attribute instead (remove the pending attribute,
+// set the failed one), which fails the slot immediately. Set the attribute's
+// value to a short human-readable cause; the engine carries it into the
+// slot's failure diagnostics, so an unreadable file is distinguishable from
+// a hung component. Failing the slot is the correct outcome for unreadable
+// content — no manifest entry lands and consumers fall back — where
+// resolving readiness over an unpainted box would persist a blank frame as
+// if it were real content.
+//
+// Clear the attribute with `el.removeAttribute('data-capture-pending')`
+// from the async continuation (and set the failure signal with
+// `el.setAttribute('data-capture-failed', cause)`) — never by
+// re-rendering it off a tracked property
+// (`data-capture-pending={{if this.pending 'true'}}`). Capture
+// pages run in backgrounded tabs, where the browser throttles the timers a
+// tracked update's render flush rides, so the flip can sit unflushed past
+// the engine's whole wait; the engine watches for the DOM mutation itself,
+// which a direct attribute mutation produces immediately.
+//
 // `format` reuses one of the card's display formats instead. A format-based
-// screenshot referenced by that same format's own markup (say, a fitted
+// capture referenced by that same format's own markup (say, a fitted
 // template that embeds its own `format: 'fitted'` capture) is circular —
 // use a dedicated `render` component there.
 //
@@ -2934,17 +3073,24 @@ export type BaseDefComponent = ComponentLike<{
 // deterministically too: seek to an exact timestamp rather than "current
 // frame", position WebGL cameras explicitly, and avoid ambient animation
 // loops. Nondeterministic output doesn't break anything visibly — the row
-// publishes and the durable screenshot URLs don't change — but every
+// publishes and the durable capture URLs don't change — but every
 // reindex captures "new" bytes, wasting renders and storage churn and
 // defeating image caching (each rotation changes the image's ETag, so
 // every viewer re-downloads it).
-export type ScreenshotSpec = {
+// What the capture renders: a capture-only `render` component, or one of the
+// card's own display formats. Shared by both output kinds below.
+type CaptureSpecSource =
+  | { render: BaseDefComponent; format?: undefined }
+  | { format: DeclaredCaptureFormat; render?: undefined };
+
+// A raster capture: a pixel tile of the render, sized by a capture box.
+type RasterCaptureSpec = {
   // CSS px of the capture box (the fitted envelope).
   width: number;
   height: number;
   // Output px = size × deviceScaleFactor. Defaults to
-  // SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR (2). Each edge × the effective
-  // scale must stay within SCREENSHOT_MAX_PHYSICAL_EDGE_PX.
+  // DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR (2). Each edge × the effective
+  // scale must stay within CAPTURE_MAX_PHYSICAL_EDGE_PX.
   deviceScaleFactor?: number;
   // 'transparent' or any CSS color. Default 'white'. 'transparent' requires
   // an alpha-capable `type` ('png' or 'webp') — jpeg has no alpha channel.
@@ -2959,7 +3105,7 @@ export type ScreenshotSpec = {
   // the capture envelope, used exactly as given; for a format-based capture
   // the rendered variant is emergent from the template's own container-query
   // breakpoints, deterministic per box. Preview a candidate box with
-  // `?format=fitted&envelope=WxH` via the `_screenshot/` DSL on a dev realm,
+  // `?format=fitted&envelope=WxH` via the `_capture/` DSL on a dev realm,
   // then codify it here. A box declared near one of the template's
   // breakpoints can flip variants when those breakpoints are tuned — the
   // same fragility any responsive design has.
@@ -2974,16 +3120,65 @@ export type ScreenshotSpec = {
   // edit), or — for file-backed defs — the file's content hash, so a
   // metadata-only edit skips recapture. Default 'generation'.
   // 'file-content' is only legal on FileDef chains: a CardDef has no file
-  // bytes to key by, so getScreenshots refuses it there.
+  // bytes to key by, so getCaptures refuses it there.
   keyBy?: 'generation' | 'file-content';
   // Encoded image type. Default 'png'.
   type?: 'png' | 'jpeg' | 'webp';
-} & (
-  | { render: BaseDefComponent; format?: undefined }
-  | { format: DeclaredScreenshotFormat; render?: undefined }
-);
+} & CaptureSpecSource;
 
-const SCREENSHOT_SPEC_FIELDS = new Set([
+// A pdf capture: a paged document of the render, laid out under the card's
+// own print CSS. It has no capture box — `width`/`height` (and the raster-only
+// `deviceScaleFactor`/`background`) are refused, and paper comes from the
+// card's `@page { size }` rule (Chrome's default paper otherwise). Its source
+// is either a capture-only `render` component (which renders the full document
+// flow itself, the same slot pattern posters use) or a viewport-filling format
+// (`isolated`/`embedded`) — the box formats (`fitted`/`atom`) need an envelope
+// a pdf entry cannot give. A pdf is never a thumbnail — that fallback chain
+// wants an image — so `useAsThumbnail` is refused too.
+type PdfCaptureSpec = {
+  type: 'pdf';
+  width?: undefined;
+  height?: undefined;
+  deviceScaleFactor?: undefined;
+  background?: undefined;
+  useAsThumbnail?: undefined;
+  // What invalidates the capture; see the raster note above.
+  keyBy?: 'generation' | 'file-content';
+  // The name the document is saved under — in the browser's PDF viewer and on
+  // download — with `.pdf` appended. A string, or a function of the instance
+  // being captured, evaluated each time the capture's instance renders for
+  // capture, so it can read the instance's fields:
+  //
+  //   filename: (card: Statement) => `${card.accountName} ${card.period}`,
+  //
+  // Defaults to the card's `cardTitle` (a FileDef's `name`, minus its
+  // extension); a card whose title is still the untitled placeholder serves
+  // under its instance id. A function that throws or returns an empty value
+  // falls back to that default. The name steers serving only and is not part
+  // of the capture's identity: a change of name alone never changes the
+  // capture's URL, and a `keyBy: 'file-content'` slot whose bytes are
+  // unchanged carries its capture forward under the new name.
+  filename?: string | CaptureTextFunction;
+  // The document's title, written into the PDF's metadata — what a PDF viewer
+  // shows as the document's name. A string, or a function of the instance,
+  // like `filename`:
+  //
+  //   title: (card: Statement) => `${card.accountName} — ${card.period}`,
+  //
+  // Defaults to the card's `cardTitle` (a FileDef's `name`, minus its
+  // extension). A function that throws or returns an empty value falls back
+  // to that default. The title is part of the document's bytes, so unlike
+  // `filename` it is part of the capture's identity: a change of title
+  // recaptures.
+  title?: string | CaptureTextFunction;
+} & CaptureSpecSource;
+
+// `any` so an author can annotate the parameter as their own card class.
+type CaptureTextFunction = (instance: any) => string | null | undefined;
+
+export type CaptureSpec = RasterCaptureSpec | PdfCaptureSpec;
+
+const DECLARED_CAPTURE_SPEC_FIELDS = new Set([
   'render',
   'format',
   'width',
@@ -2993,11 +3188,13 @@ const SCREENSHOT_SPEC_FIELDS = new Set([
   'useAsThumbnail',
   'keyBy',
   'type',
+  'filename',
+  'title',
 ]);
-const SCREENSHOT_KEY_BY_VALUES = new Set(['generation', 'file-content']);
-const SCREENSHOT_IMAGE_TYPES = new Set(['png', 'jpeg', 'webp']);
+const DECLARED_CAPTURE_KEY_BY_VALUES = new Set(['generation', 'file-content']);
+const RASTER_OUTPUT_TYPES = new Set(['png', 'jpeg', 'webp']);
 
-function screenshotOwnerName(owner: typeof BaseDef): string {
+function captureOwnerName(owner: typeof BaseDef): string {
   return owner.name || owner.displayName || 'card';
 }
 
@@ -3005,15 +3202,15 @@ function screenshotOwnerName(owner: typeof BaseDef): string {
 // capture engine cannot honor is refused by name rather than ignored, so a
 // typo'd declaration fails loudly at read time instead of silently capturing
 // something other than what the author meant.
-function assertValidScreenshotSpec(
+function assertValidCaptureSpec(
   owner: typeof BaseDef,
   name: string,
   spec: unknown,
-): asserts spec is ScreenshotSpec {
-  let prefix = `screenshot "${name}" on ${screenshotOwnerName(owner)}`;
-  if (!isValidScreenshotName(name)) {
+): asserts spec is CaptureSpec {
+  let prefix = `capture "${name}" on ${captureOwnerName(owner)}`;
+  if (!isValidCaptureName(name)) {
     throw new Error(
-      `${prefix}: name must be a URL-safe path segment (${SCREENSHOT_NAME_PATTERN.source}, at most ${SCREENSHOT_NAME_MAX_LENGTH} characters)`,
+      `${prefix}: name must be a URL-safe path segment (${CAPTURE_NAME_PATTERN.source}, at most ${CAPTURE_NAME_MAX_LENGTH} characters)`,
     );
   }
   if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
@@ -3021,7 +3218,7 @@ function assertValidScreenshotSpec(
   }
   let entry = spec as Record<string, unknown>;
   for (let key of Object.keys(entry)) {
-    if (!SCREENSHOT_SPEC_FIELDS.has(key)) {
+    if (!DECLARED_CAPTURE_SPEC_FIELDS.has(key)) {
       throw new Error(`${prefix}: unknown field "${key}"`);
     }
   }
@@ -3039,16 +3236,75 @@ function assertValidScreenshotSpec(
   ) {
     throw new Error(`${prefix}: render must be a component`);
   }
-  if (hasFormat && !isDeclaredScreenshotFormat(entry.format)) {
+  if (hasFormat && !isDeclaredCaptureFormat(entry.format)) {
     throw new Error(
-      `${prefix}: format must be one of ${DECLARED_SCREENSHOT_FORMATS.map(
+      `${prefix}: format must be one of ${DECLARED_CAPTURE_FORMATS.map(
         (f) => `"${f}"`,
       ).join(', ')}`,
     );
   }
+  // A pdf entry is a paged document, not a raster tile: it takes none of the
+  // raster geometry, renders under print media, and paginates onto the card's
+  // own `@page` paper. Validate its distinct shape here and return before the
+  // raster checks below (which require a capture box a pdf entry never has).
+  if (entry.type === 'pdf') {
+    // Source is either a capture-only `render` component (which renders the
+    // full document flow itself) or a viewport-filling format. The box formats
+    // ('fitted', 'atom') need an envelope a pdf entry cannot describe, so a
+    // format-based pdf is limited to 'isolated'/'embedded'.
+    if (
+      hasFormat &&
+      entry.format !== 'isolated' &&
+      entry.format !== 'embedded'
+    ) {
+      throw new Error(
+        `${prefix}: a pdf capture's format must be 'isolated' or 'embedded' — the box formats ('fitted', 'atom') need an envelope a pdf entry cannot describe`,
+      );
+    }
+    for (let field of [
+      'width',
+      'height',
+      'deviceScaleFactor',
+      'background',
+    ] as const) {
+      if (entry[field] !== undefined) {
+        throw new Error(
+          `${prefix}: '${field}' is a raster capture field and cannot appear on a pdf capture — paper comes from the card's print CSS (@page)`,
+        );
+      }
+    }
+    if (entry.useAsThumbnail !== undefined) {
+      throw new Error(
+        `${prefix}: useAsThumbnail cannot appear on a pdf capture — a thumbnail must be an image`,
+      );
+    }
+    for (let field of ['filename', 'title'] as const) {
+      let value = entry[field];
+      if (
+        value !== undefined &&
+        typeof value !== 'function' &&
+        (typeof value !== 'string' || value.trim() === '')
+      ) {
+        throw new Error(
+          `${prefix}: ${field} must be a non-empty string or a function of the instance`,
+        );
+      }
+    }
+    if (
+      entry.keyBy !== undefined &&
+      !DECLARED_CAPTURE_KEY_BY_VALUES.has(entry.keyBy as string)
+    ) {
+      throw new Error(
+        `${prefix}: keyBy must be one of ${[...DECLARED_CAPTURE_KEY_BY_VALUES]
+          .map((v) => `"${v}"`)
+          .join(', ')}`,
+      );
+    }
+    return;
+  }
   for (let [field, max] of [
-    ['width', SCREENSHOT_MAX_VIEWPORT_WIDTH],
-    ['height', SCREENSHOT_MAX_VIEWPORT_HEIGHT],
+    ['width', CAPTURE_MAX_VIEWPORT_WIDTH],
+    ['height', CAPTURE_MAX_VIEWPORT_HEIGHT],
   ] as const) {
     let value = entry[field];
     if (
@@ -3068,10 +3324,10 @@ function assertValidScreenshotSpec(
       typeof dsf !== 'number' ||
       !Number.isFinite(dsf) ||
       dsf <= 0 ||
-      dsf > SCREENSHOT_MAX_DEVICE_SCALE_FACTOR
+      dsf > CAPTURE_MAX_DEVICE_SCALE_FACTOR
     ) {
       throw new Error(
-        `${prefix}: deviceScaleFactor must be a number between 0 (exclusive) and ${SCREENSHOT_MAX_DEVICE_SCALE_FACTOR}`,
+        `${prefix}: deviceScaleFactor must be a number between 0 (exclusive) and ${CAPTURE_MAX_DEVICE_SCALE_FACTOR}`,
       );
     }
   }
@@ -3082,14 +3338,14 @@ function assertValidScreenshotSpec(
   let effectiveScale =
     typeof entry.deviceScaleFactor === 'number'
       ? entry.deviceScaleFactor
-      : SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR;
+      : DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR;
   for (let field of ['width', 'height'] as const) {
     if (
       (entry[field] as number) * effectiveScale >
-      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+      CAPTURE_MAX_PHYSICAL_EDGE_PX
     ) {
       throw new Error(
-        `${prefix}: ${field} × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels (deviceScaleFactor defaults to ${SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR})`,
+        `${prefix}: ${field} × deviceScaleFactor must be <= ${CAPTURE_MAX_PHYSICAL_EDGE_PX} physical pixels (deviceScaleFactor defaults to ${DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR})`,
       );
     }
   }
@@ -3107,22 +3363,32 @@ function assertValidScreenshotSpec(
   ) {
     throw new Error(`${prefix}: useAsThumbnail must be a boolean`);
   }
+  if (entry.filename !== undefined) {
+    throw new Error(
+      `${prefix}: filename names a saved document and is only valid on a pdf capture (type: 'pdf')`,
+    );
+  }
+  if (entry.title !== undefined) {
+    throw new Error(
+      `${prefix}: title names a document and is only valid on a pdf capture (type: 'pdf')`,
+    );
+  }
   if (
     entry.keyBy !== undefined &&
-    !SCREENSHOT_KEY_BY_VALUES.has(entry.keyBy as string)
+    !DECLARED_CAPTURE_KEY_BY_VALUES.has(entry.keyBy as string)
   ) {
     throw new Error(
-      `${prefix}: keyBy must be one of ${[...SCREENSHOT_KEY_BY_VALUES]
+      `${prefix}: keyBy must be one of ${[...DECLARED_CAPTURE_KEY_BY_VALUES]
         .map((v) => `"${v}"`)
         .join(', ')}`,
     );
   }
   if (
     entry.type !== undefined &&
-    !SCREENSHOT_IMAGE_TYPES.has(entry.type as string)
+    !RASTER_OUTPUT_TYPES.has(entry.type as string)
   ) {
     throw new Error(
-      `${prefix}: type must be one of ${[...SCREENSHOT_IMAGE_TYPES]
+      `${prefix}: type must be one of ${[...RASTER_OUTPUT_TYPES]
         .map((v) => `"${v}"`)
         .join(', ')}`,
     );
@@ -3137,15 +3403,15 @@ function assertValidScreenshotSpec(
   }
 }
 
-// The one read path for `static screenshots`: merges declarations by name up
+// The one read path for `static captures`: merges declarations by name up
 // the prototype chain (a subclass adds new names and overrides inherited
 // ones wholesale, per name), validating each entry and the merged result's
 // at-most-one-`useAsThumbnail` constraint. Read through this rather than the
 // static directly — a plain property read sees only the nearest declaration,
 // dropping everything an ancestor declared.
-export function getScreenshots(
+export function getCaptures(
   cardOrFileClass: typeof CardDef | typeof FileDef,
-): Record<string, ScreenshotSpec> {
+): Record<string, CaptureSpec> {
   // Collect declaration levels base-most first so a subclass's entry lands
   // after (and thus overrides) its ancestor's.
   let levels: {
@@ -3154,7 +3420,18 @@ export function getScreenshots(
   }[] = [];
   let current: unknown = cardOrFileClass;
   while (typeof current === 'function') {
-    let descriptor = Object.getOwnPropertyDescriptor(current, 'screenshots');
+    // A declaration under the name these slots used to carry would otherwise
+    // be read by nothing: the card would index clean and simply have no
+    // captures, which is the one failure here that never surfaces. Refuse it
+    // by name instead, so the card's own error doc says what to rename.
+    if (Object.getOwnPropertyDescriptor(current, 'screenshots')) {
+      throw new Error(
+        `${captureOwnerName(
+          current as typeof BaseDef,
+        )} declares 'static screenshots', which is no longer read — rename it to 'static captures'`,
+      );
+    }
+    let descriptor = Object.getOwnPropertyDescriptor(current, 'captures');
     if (descriptor) {
       let declarations = descriptor.get
         ? descriptor.get.call(current)
@@ -3162,7 +3439,7 @@ export function getScreenshots(
       if (declarations != null) {
         if (typeof declarations !== 'object' || Array.isArray(declarations)) {
           throw new Error(
-            `static screenshots on ${screenshotOwnerName(
+            `static captures on ${captureOwnerName(
               current as typeof BaseDef,
             )} must be an object mapping names to specs`,
           );
@@ -3172,7 +3449,7 @@ export function getScreenshots(
     }
     current = Object.getPrototypeOf(current);
   }
-  let merged: Record<string, ScreenshotSpec> = {};
+  let merged: Record<string, CaptureSpec> = {};
   // keyBy 'file-content' needs file bytes to key by, so it is only legal
   // when the class being read is file-backed. Checked against the merge
   // target rather than the declaring owner — a FileDef chain can never feed
@@ -3182,10 +3459,10 @@ export function getScreenshots(
     cardOrFileClass === FileDef || cardOrFileClass.prototype instanceof FileDef;
   for (let { owner, declarations } of levels) {
     for (let [name, spec] of Object.entries(declarations)) {
-      assertValidScreenshotSpec(owner, name, spec);
+      assertValidCaptureSpec(owner, name, spec);
       if (spec.keyBy === 'file-content' && !isFileBacked) {
         throw new Error(
-          `screenshot "${name}" on ${screenshotOwnerName(
+          `capture "${name}" on ${captureOwnerName(
             owner,
           )}: keyBy 'file-content' requires a file-backed def (FileDef or a subclass); a card has no file content to key by — use 'generation' or omit keyBy`,
         );
@@ -3198,9 +3475,9 @@ export function getScreenshots(
   );
   if (thumbnails.length > 1) {
     throw new Error(
-      `${screenshotOwnerName(
+      `${captureOwnerName(
         cardOrFileClass,
-      )} declares more than one useAsThumbnail screenshot (${thumbnails
+      )} declares more than one useAsThumbnail capture (${thumbnails
         .map((name) => `"${name}"`)
         .join(
           ', ',
@@ -3214,16 +3491,24 @@ export function getScreenshots(
 // page boundary to the capture engine: identical to the specs except the
 // capture-only component, which cannot serialize — it is flagged
 // `render: true` and re-resolved in-page by slot name when its capture
-// renders.
-export function serializeDeclaredScreenshots(
+// renders — and a pdf entry's `filename` and `title`, which are resolved
+// against `instance` when one is given (the render being captured) and left
+// out otherwise.
+export function serializeDeclaredCaptures(
   cardOrFileClass: typeof CardDef | typeof FileDef,
-): DeclaredScreenshotRoster {
-  let roster: DeclaredScreenshotRoster = {};
-  for (let [name, spec] of Object.entries(getScreenshots(cardOrFileClass))) {
-    let payload: DeclaredScreenshotSpecPayload = {
-      width: spec.width,
-      height: spec.height,
-    };
+  instance?: CardDef | FileDef,
+): DeclaredCaptureRoster {
+  let roster: DeclaredCaptureRoster = {};
+  for (let [name, spec] of Object.entries(getCaptures(cardOrFileClass))) {
+    // A pdf entry carries none of the raster geometry (validation refuses it);
+    // its width/height/deviceScaleFactor/background are all absent here.
+    let payload: DeclaredCaptureSpecPayload = {};
+    if (spec.width !== undefined) {
+      payload.width = spec.width;
+    }
+    if (spec.height !== undefined) {
+      payload.height = spec.height;
+    }
     if (spec.deviceScaleFactor !== undefined) {
       payload.deviceScaleFactor = spec.deviceScaleFactor;
     }
@@ -3244,37 +3529,122 @@ export function serializeDeclaredScreenshots(
     } else {
       payload.format = spec.format;
     }
+    if (spec.type === 'pdf' && instance) {
+      let filename = resolveCaptureText(
+        spec,
+        'filename',
+        instance,
+        defaultCaptureFilename(instance),
+      );
+      if (filename !== undefined) {
+        payload.filename = filename;
+      }
+      let title = resolveCaptureText(
+        spec,
+        'title',
+        instance,
+        defaultCaptureTitle(instance),
+      );
+      if (title !== undefined) {
+        payload.title = title;
+      }
+    }
     roster[name] = payload;
   }
   return roster;
 }
 
-// Shared body of the `screenshotURLs` getter on CardDef and FileDef (two
-// sites, matching how `static screenshots` itself is declared — FieldDef has
+// The longest name or title a roster carries. The serving route sanitizes and
+// caps the name it puts in a header; this bound only keeps an unbounded
+// computed value out of the index's capture manifest and the PDF's metadata.
+const CAPTURE_TEXT_ROSTER_MAX_LENGTH = 255;
+
+// A pdf slot's save-as name or title for one instance: the declaration's
+// string or function result, else `fallback`, the instance's default (see
+// `PdfCaptureSpec.filename` and `PdfCaptureSpec.title`).
+function resolveCaptureText(
+  spec: PdfCaptureSpec,
+  field: 'filename' | 'title',
+  instance: CardDef | FileDef,
+  fallback: string | undefined,
+): string | undefined {
+  let declaration = spec[field];
+  let declared: unknown;
+  try {
+    declared =
+      typeof declaration === 'function' ? declaration(instance) : declaration;
+  } catch (e) {
+    console.warn(`capture ${field} function threw; using the default`, e);
+    declared = undefined;
+  }
+  return boundedCaptureText(declared) ?? boundedCaptureText(fallback);
+}
+
+// The instance's own name for itself: a FileDef's `name` minus its extension,
+// or a card's `cardTitle` — unless that is the untitled placeholder, which
+// says less than the instance id the serving route falls back to.
+function defaultCaptureFilename(
+  instance: CardDef | FileDef,
+): string | undefined {
+  if (instance instanceof FileDef) {
+    return instance.name?.replace(/\.[^.]+$/, '');
+  }
+  let title = instance.cardTitle;
+  return title === untitledCardTitle(instance.constructor as typeof CardDef)
+    ? undefined
+    : title;
+}
+
+// The document title a card or file gives itself: a FileDef's `name` minus
+// its extension, or a card's `cardTitle` — the untitled placeholder included,
+// which still names the document better than the host page's own title.
+function defaultCaptureTitle(instance: CardDef | FileDef): string | undefined {
+  if (instance instanceof FileDef) {
+    return instance.name?.replace(/\.[^.]+$/, '');
+  }
+  return instance.cardTitle;
+}
+
+function boundedCaptureText(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  let trimmed = wellFormedFilename(value)
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return [...trimmed].slice(0, CAPTURE_TEXT_ROSTER_MAX_LENGTH).join('');
+}
+
+// Shared body of the `captureURLs` getter on CardDef and FileDef (two
+// sites, matching how `static captures` itself is declared — FieldDef has
 // no addressable URL, so it gets neither). Every declared slot name appears
 // as a key; the value is the capture's durable served URL when
-// `meta.screenshots` (the serve-time join, or the prerender render context's
+// `meta.captures` (the serve-time join, or the prerender render context's
 // declaration-derived form) holds the name, and `undefined` otherwise —
 // not-yet-captured, capture-errored, or an unsaved instance. `undefined`
 // rather than a placeholder URL is deliberate: it is the absence signal
 // consumption fallback chains (e.g. a thumbnail falling through to an icon
 // default) rely on, which a placeholder would defeat.
-function composeScreenshotURLs(
+function composeCaptureURLs(
   instance: CardDef | FileDef,
 ): Record<string, string | undefined> {
   let urls: Record<string, string | undefined> = {};
   try {
     for (let name of Object.keys(
-      getScreenshots(instance.constructor as typeof CardDef | typeof FileDef),
+      getCaptures(instance.constructor as typeof CardDef | typeof FileDef),
     )) {
       urls[name] = undefined;
     }
   } catch {
     // An invalid declaration fails loudly at its authoring surfaces (the
-    // capture roster read, `getScreenshots` callers); a consuming template
+    // capture roster read, `getCaptures` callers); a consuming template
     // must stay render-safe, so here it reads as "nothing declared".
   }
-  let captured = getCardMeta(instance, 'screenshots');
+  let captured = getCardMeta(instance, 'captures');
   if (captured) {
     for (let [name, entry] of Object.entries(captured)) {
       urls[name] = entry.url;
@@ -3285,24 +3655,22 @@ function composeScreenshotURLs(
 
 // The durable URL of the capture feeding `cardThumbnailURL`: the declared
 // slot flagged `useAsThumbnail` (at most one across the merged declarations,
-// enforced by `getScreenshots`), read with `screenshotURLs`' semantics — a
-// URL exactly when `meta.screenshots` holds the slot, `undefined` otherwise.
+// enforced by `getCaptures`), read with `captureURLs`' semantics — a
+// URL exactly when `meta.captures` holds the slot, `undefined` otherwise.
 // On live loads meta joins the persisted manifest, so an uncaptured slot
 // reads `undefined` and the fallback chain's terminal rung (the icon
 // default) engages. In the prerender render context meta is
-// declaration-derived (`screenshotsMetaFromRoster`), so this rung asserts
+// declaration-derived (`capturesMetaFromRoster`), so this rung asserts
 // the durable URL before any capture exists: persisted HTML embeds a URL
 // that 404s until the capture lands, then self-heals — and a slot whose
 // capture never succeeds stays a 404 (a blank tile), not the icon default.
-// Same render-safety posture as `composeScreenshotURLs`: an invalid
+// Same render-safety posture as `composeCaptureURLs`: an invalid
 // declaration reads as "no thumbnail capture".
-function thumbnailScreenshotURL(
-  instance: CardDef | FileDef,
-): string | undefined {
+function thumbnailCaptureURL(instance: CardDef | FileDef): string | undefined {
   let name: string | undefined;
   try {
     name = Object.entries(
-      getScreenshots(instance.constructor as typeof CardDef | typeof FileDef),
+      getCaptures(instance.constructor as typeof CardDef | typeof FileDef),
     ).find(([, spec]) => spec.useAsThumbnail)?.[0];
   } catch {
     return undefined;
@@ -3310,7 +3678,7 @@ function thumbnailScreenshotURL(
   if (!name) {
     return undefined;
   }
-  return getCardMeta(instance, 'screenshots')?.[name]?.url;
+  return getCardMeta(instance, 'captures')?.[name]?.url;
 }
 
 export class FieldDef extends BaseDef {
@@ -3738,18 +4106,18 @@ export class FileDef extends BaseDef {
     return this[meta]?.resourceCreatedAt;
   }
 
-  // See CardDef.screenshotURLs — the same reserved, meta-derived getter for
+  // See CardDef.captureURLs — the same reserved, meta-derived getter for
   // file-backed defs. The prerender pass captures a URL's file rendering
   // alongside its instance rendering, so a file family's declared names
   // resolve here just as a card's do.
-  get screenshotURLs(): Record<string, string | undefined> {
-    return composeScreenshotURLs(this);
+  get captureURLs(): Record<string, string | undefined> {
+    return composeCaptureURLs(this);
   }
 
-  // See CardDef.screenshotsMeta — the same reserved, meta-derived getter for
+  // See CardDef.capturesMeta — the same reserved, meta-derived getter for
   // file-backed defs.
-  get screenshotsMeta(): ScreenshotsMeta | undefined {
-    return getCardMeta(this, 'screenshots');
+  get capturesMeta(): CapturesMeta | undefined {
+    return getCardMeta(this, 'captures');
   }
 
   // The four shared format shells own identity, facts, budgets, and state for
@@ -3785,11 +4153,11 @@ export class FileDef extends BaseDef {
   // less surprising.
   static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
 
-  // Opt-in declared screenshots (see CardDef.screenshots): merged by name up
-  // the prototype chain via `getScreenshots`. File families whose capture
+  // Opt-in declared captures (see CardDef.captures): merged by name up
+  // the prototype chain via `getCaptures`. File families whose capture
   // derives from the file's bytes (a video's poster frame, say) declare
   // `keyBy: 'file-content'` so a metadata-only edit skips recapture.
-  static screenshots?: Record<string, ScreenshotSpec>;
+  static captures?: Record<string, CaptureSpec>;
 
   static async extractAttributes(
     url: string,
@@ -3882,7 +4250,7 @@ export class ImageDef extends FileDef {
   // excludes vectors, so an SVG must not pay for captures nothing reads.
   // File-content-keyed, so a metadata-only edit never re-decodes the pixels.
   // See `image-captures` for the boxes and the capture-only components.
-  static screenshots: Record<string, ScreenshotSpec> = IMAGE_THUMB_SCREENSHOTS;
+  static captures: Record<string, CaptureSpec> = IMAGE_THUMB_CAPTURES;
 
   // CS-10787: emit a markdown image reference. If no URL is available we
   // fall back to a placeholder that names the image — useful to downstream
@@ -3943,7 +4311,7 @@ export class CardDef extends BaseDef {
     computeVia: function (this: CardDef) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
-        : `Untitled ${this.constructor.displayName}`;
+        : untitledCardTitle(this.constructor as typeof CardDef);
     },
   });
   @field cardDescription = contains(StringField, {
@@ -3957,7 +4325,7 @@ export class CardDef extends BaseDef {
     },
   });
   // The thumbnail fallback chain: an author-set URL wins, then an authored
-  // ImageDef link, then the capture the card's `static screenshots` flags
+  // ImageDef link, then the capture the card's `static captures` flags
   // `useAsThumbnail` — so every opted-in card gets a live preview with no
   // template edits (the default fitted template already renders this field).
   // Falsy past all three rungs is the absence signal consumers use to fall
@@ -3971,7 +4339,7 @@ export class CardDef extends BaseDef {
       return (
         this.cardInfo.cardThumbnailURL ||
         this.cardInfo.cardThumbnail?.url ||
-        thumbnailScreenshotURL(this)
+        thumbnailCaptureURL(this)
       );
     },
   });
@@ -4012,12 +4380,12 @@ export class CardDef extends BaseDef {
   // turndown (registered on `globalThis` by `packages/host`). Subclasses can
   // override `static markdown` to author bespoke markdown directly.
   static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
-  // Opt-in declared screenshots: captures rendered at indexing time and
-  // served from the realm's `_screenshot/…?name=` route. Names are URL path
+  // Opt-in declared captures: captures rendered at indexing time and
+  // served from the realm's `_capture/…?name=` route. Names are URL path
   // segments. Declarations merge by name up the prototype chain — read them
-  // via `getScreenshots`, never off the static directly, or ancestors'
+  // via `getCaptures`, never off the static directly, or ancestors'
   // entries are dropped. FieldDef has no addressable URL, so it has no slot.
-  static screenshots?: Record<string, ScreenshotSpec>;
+  static captures?: Record<string, CaptureSpec>;
 
   static get hasCustomEditTemplate(): boolean {
     return this.edit !== CardDef.edit;
@@ -4056,37 +4424,45 @@ export class CardDef extends BaseDef {
     return realmURLString ? new URL(realmURLString) : undefined;
   }
 
-  // The durable served URLs of this instance's declared screenshots, keyed
-  // by slot name — one key per `static screenshots` declaration, `undefined`
-  // until a capture exists (see `composeScreenshotURLs`). `undefined` is the
+  // The durable served URLs of this instance's declared captures, keyed
+  // by slot name — one key per `static captures` declaration, `undefined`
+  // until a capture exists (see `composeCaptureURLs`). `undefined` is the
   // deliberate absence signal, so a template must guard its `<img>` —
   // Glimmer omits the attribute for an undefined value, which renders a
   // broken/empty image:
   //
-  //   {{#if @model.screenshotURLs.card}}
-  //     <img src={{@model.screenshotURLs.card}} alt='preview' />
+  //   {{#if @model.captureURLs.card}}
+  //     <img src={{@model.captureURLs.card}} alt='preview' />
   //   {{/if}}
   //
   // A getter rather than a `@field` (like FileDef's timestamp getters) so it
   // never round-trips on a write; the name is reserved by the `@field`
   // decorator so a userland field can't shadow it.
-  get screenshotURLs(): Record<string, string | undefined> {
-    return composeScreenshotURLs(this);
+  get captureURLs(): Record<string, string | undefined> {
+    return composeCaptureURLs(this);
   }
 
-  // The instance's `meta.screenshots` entries verbatim — the dimensional
-  // companion to `screenshotURLs` for consumers that need more than the URL:
+  // The instance's `meta.captures` entries verbatim — the dimensional
+  // companion to `captureURLs` for consumers that need more than the URL:
   // each captured slot's width/height/deviceScaleFactor (a `srcset`
   // assembler's inputs) and its `useAsThumbnail` flag. Same absence
-  // semantics: a slot appears only once `meta.screenshots` holds it, so an
+  // semantics: a slot appears only once `meta.captures` holds it, so an
   // uncaptured live instance reads `undefined` here. Reserved like
-  // `screenshotURLs`, so a userland field can't shadow it.
-  get screenshotsMeta(): ScreenshotsMeta | undefined {
-    return getCardMeta(this, 'screenshots');
+  // `captureURLs`, so a userland field can't shadow it.
+  get capturesMeta(): CapturesMeta | undefined {
+    return getCardMeta(this, 'captures');
   }
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     return getDefaultCardMenuItems(this, params);
+  }
+
+  // Whether this card, rendered as a tool's result in the AI assistant chat,
+  // has nothing in it for the user to look at. A result type with its own
+  // embedded view answers true for a result that view would render empty, and
+  // the chat then leaves the card out.
+  get [hasNothingToShow](): boolean {
+    return false;
   }
 }
 
@@ -4344,48 +4720,50 @@ function lazilyLoadLink(
   });
   void (async () => {
     let isFileLink = isFileDef(field.card);
+    // A field getter is what calls this, and the getter runs inside a render.
+    // Everything below writes the field and notifies card tracking, which a
+    // render that has already read that field treats as a backtracking
+    // re-render and rejects. Yielding here puts every one of those writes in a
+    // later microtask, whichever branch produced the value: a branch that
+    // loads yields on its own fetch, and a branch that hands over an instance
+    // the store already holds has nothing of its own to wait for.
+    await Promise.resolve();
     try {
       let fieldValue: CardDef | FileDef;
-      // Inside an indexing render the store is scoped to the realm view being
-      // rendered: it drops every instance it holds when the render scope moves
-      // (the host store's `observeIndexingJob`, called before a render
-      // hydrates its card and from the load path — not a member of the
-      // `CardStore` interface in this file), so every instance in it was
-      // deserialized
-      // against THIS view of the realm's files. Note it is that drop which
-      // carries the guarantee, not the `clearCache` reset — that one is
-      // scheduled only when a pass invalidates an executable, and reaches only
-      // the single tab its visit lands on, so a pass that changed only
-      // instances schedules none at all.
-      // So an instance already in the store is current — reuse it directly
-      // instead of re-fetching its card+source and re-running the full field
+      // Hand over an instance the store is already holding instead of
+      // re-fetching its card+source and re-running the full field
       // deserialization on every link edge that points at it. That per-edge
-      // redundancy is what makes a densely cross-linked render quadratic (the
-      // same target reached through many parents is rebuilt once per parent).
-      // The per-consumer dependency is still recorded so invalidation tracks
-      // this edge. Gated on BOTH the render flag AND `__boxelJobId` — the same
-      // gate the store scopes itself on: outside a render (the live app) a link
-      // may be stale after invalidation and must reload, and a render carrying
-      // no job id is one whose store never scoped itself, so it offers no
-      // guarantee to reuse on.
-      let inIndexingRender =
-        typeof globalThis !== 'undefined' &&
-        Boolean((globalThis as any).__boxelRenderContext) &&
-        Boolean((globalThis as any).__boxelJobId);
-      let reusable = inIndexingRender
+      // redundancy is what makes a densely cross-linked render quadratic — the
+      // same target reached through many parents is rebuilt once per parent —
+      // and it costs the most on a search, whose results routinely share
+      // targets. The per-consumer dependency is still recorded either way, so
+      // invalidation tracks this edge.
+      //
+      // Whether what the store holds is current enough to stand in for a load
+      // is the store's own question, so the store answers it rather than this
+      // module inferring it from render globals. What this adds is reuse
+      // across time — an edge asking after an earlier one has already settled.
+      // Edges asking at the same moment are collapsed by the loads still in
+      // flight, both the per-instance map above and the store's own per-URL
+      // one, and this leaves both of those doing their job.
+      let reusable = store.canReuseResidentInstance?.(reference)
         ? isFileLink
           ? store.getFileMeta(reference)
           : store.getCard(reference)
         : undefined;
-      // Only reuse an instance that finished deserializing. The job-scoped
-      // store also holds partially-built, non-tracked instances: a failed
-      // `_updateFromSerialized` leaves its half-built instance behind (the
-      // store keeps it so cyclic deserialization can resolve), with
-      // `isSavedInstance` still false — it flips true only at the end of a
-      // successful deserialize. Reusing such a partial would skip the
-      // load/error path that plants the broken-link sentinel and index an
-      // incomplete target; falling through re-attempts the load and re-plants
-      // the sentinel.
+      // Whether the held instance finished deserializing is part of what the
+      // store answers above, and it has to be: a deserialize plants its
+      // instance before it builds any field and leaves a failed one in place
+      // so cyclic deserialization can still resolve it, and nothing on the
+      // instance records which of those it is. `isSavedInstance` reads like
+      // that record and is not one — a `FileDef` carries it true from its
+      // class body and never has it cleared, and the link deserializers stamp
+      // it true on any resident instance they hand back without checking. It
+      // stays here as a narrowing on the card branch, not as the answer.
+      //
+      // Reusing a partial would skip the load/error path that plants the
+      // broken-link sentinel and hand the reader an incomplete target;
+      // falling through re-attempts the load and re-plants the sentinel.
       if (
         reusable &&
         reusable[isSavedInstance] === true &&
@@ -4607,14 +4985,37 @@ function hasInflightLoadForField(
 
 // Supply `getRelationshipMembershipState` with the loading status and query-field membership
 // that live above field-support: in-flight link loads (here) and per-field
-// search resources (in query-field-support). Observe-only — this never starts a
-// load or a search; the template's field getter does that.
+// search resources (in query-field-support). In-flight link loads are observed
+// rather than started; a query field is resolved, for the reason below.
 registerRelationshipProbe((instance, field) => {
   // Entangle the reading render with the field's loading signal so a deferred
   // bump (load start / settle, or query resource creation) re-evaluates this.
   readFieldLoadingSignal(instance, field.name);
   if (field.queryDefinition) {
-    let resource = peekQueryFieldSearchResource(instance, field.name);
+    // Asking a query field for its state is a demand for the field. A card that
+    // renders a pending state while `isLoaded` is false, and reaches its rows
+    // only once loaded, would otherwise wait forever on a search nothing had
+    // started. Creation is idempotent — an existing resource comes back as-is
+    // without re-arming anything — so repeated reads observe rather than
+    // restart, and a field whose query is not yet resolvable still reports as
+    // unresolved until it is.
+    //
+    // This resolves on the same terms as the field getter, including how the
+    // resource's liveness is decided, because a status read and a value read
+    // are the same demand arriving by different routes. That is deliberately
+    // unlike the pass that runs at deserialization, which defers inside a
+    // render context rather than deciding liveness for a card it was not asked
+    // about: here the caller is the render that wants the field.
+    let resource = ensureQueryFieldSearchResource(
+      getStore(instance),
+      instance,
+      field,
+      runtimeQueryDependencyContext({
+        queryField: field.name,
+        consumer: (instance as CardDef).id,
+        source: 'card-api:relationship-probe',
+      }),
+    );
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
@@ -4991,11 +5392,17 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   ) as BaseInstanceType<T>;
 }
 
+// `keepField` names top-level fields whose current value this update leaves
+// in place, whatever the document carries for them. It is read at the moment
+// the values are written, after every field has been deserialized, so a field
+// that becomes one to keep while deserialization is still running is kept too.
+// It applies to this instance only, never to the fields of nested values.
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
   store = getStore(instance),
   opts?: DeserializeOpts,
+  keepField?: (fieldName: string) => boolean,
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
@@ -5020,6 +5427,7 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
     doc,
     store,
     opts,
+    keepField,
   });
 }
 
@@ -5097,12 +5505,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   doc,
   store,
   opts,
+  keepField,
 }: {
   instance: BaseInstanceType<T>;
   resource: LooseCardResource;
   doc: LooseSingleCardDocument | CardDocument;
   store: CardStore;
   opts?: DeserializeOpts;
+  keepField?: (fieldName: string) => boolean;
 }): Promise<BaseInstanceType<T>> {
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
@@ -5287,6 +5697,23 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         // and have a chance to fix it so that it adheres to the definition
         return [];
       }
+      // Inclusive per-field hydration timing, opt-in via the collector on
+      // `opts` (see DeserializeOpts.hydrateFieldsMs). The span opens before
+      // the field-override resolution — a `loadCardDef` for an override is
+      // part of what hydrating this field costs — and closes after the
+      // deserialized value is in hand, covering the nested recursion and any
+      // link load it awaited. Sibling fields deserialize concurrently under
+      // the `Promise.all` below, so spans overlap; each value is that
+      // field's own wall-clock, not a summable slice.
+      let hydrateFieldsMs = opts?.hydrateFieldsMs;
+      let hydrateFieldPath = hydrateFieldsMs
+        ? opts!.hydrateFieldPath
+          ? `${opts!.hydrateFieldPath}.${fieldName}`
+          : fieldName
+        : undefined;
+      let hydrateStart = hydrateFieldsMs ? performance.now() : 0;
+      let fieldOpts =
+        hydrateFieldPath !== undefined ? { ...opts, hydrateFieldPath } : opts;
       let resourceMetaFields = resource.meta?.fields;
       let overrideApplied = false;
       if (field.fieldType === 'containsMany') {
@@ -5356,7 +5783,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         doc,
         store,
         relativeTo: relativeToVal,
-        opts,
+        opts: fieldOpts,
       });
 
       field = applyLinkOverrideFromValue(
@@ -5364,6 +5791,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         field,
         deserializedValue,
       ) as Field<T>;
+      if (hydrateFieldsMs && hydrateFieldPath !== undefined) {
+        // Accumulate rather than assign: a plural field's items all land
+        // under the owning field's path, and a card re-entered on another
+        // branch adds to the same key.
+        hydrateFieldsMs[hydrateFieldPath] =
+          (hydrateFieldsMs[hydrateFieldPath] ?? 0) +
+          (performance.now() - hydrateStart);
+      }
       return [field, deserializedValue];
     }),
   )) as [Field<T>, any][];
@@ -5384,6 +5819,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
     for (let [field, value] of values) {
       if (!field) {
+        continue;
+      }
+      if (field.name !== 'id' && keepField?.(field.name as string)) {
         continue;
       }
       if (field.name === 'id' && wasSaved && originalId !== value) {
@@ -5438,11 +5876,24 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     // computed once and every card without one skips the walk entirely.
     if (hasQueryFields(instance)) {
       let store = getStore(instance);
+      // A document's `data` is what it is about; its `included` carries the
+      // cards its links name. `resourceFrom` hands a link's target on by
+      // identity, so comparing against `data` separates the two exactly, and a
+      // link followed on its own reaches here as the `data` of the document its
+      // own read returned.
+      //
+      // Every caller deserializes from a single-resource document — a search
+      // result is re-wrapped as its own — so the collection form is answered
+      // only because the document type admits one, not because a caller sends
+      // one. Membership of `data` is the same question either way.
+      let isDocumentSubject = Array.isArray(doc.data)
+        ? (doc.data as LooseCardResource[]).includes(resource)
+        : doc.data === resource;
       for (let field of Object.values(
         getFields(instance, { includeComputeds: true }),
       )) {
         if (field?.queryDefinition) {
-          resolveQueryFieldEagerly(store, instance, field);
+          resolveQueryFieldEagerly(store, instance, field, isDocumentSubject);
         }
       }
     }
@@ -5832,6 +6283,26 @@ export function resolveInstanceURL(
   }
 }
 
+// The instance's realm, in the same form as its id. A card id is canonical
+// RRI, so for a realm registered under a prefix it reads `@scope/name/...`
+// while the realm meta is the realm's URL. Folding the realm through the
+// instance's own store puts the two in one form, so card code can test
+// membership and in-realm paths with a same-form `RealmPaths` without holding
+// the realm mappings. An unmapped realm stays a URL, matching its URL ids.
+export function instanceRealmId(
+  instance: CardDef,
+): RealmIdentifier | undefined {
+  let realm = instance[realmURL];
+  if (!realm) {
+    return undefined;
+  }
+  try {
+    return ri(getStore(instance).canonicalizeId(realm.href));
+  } catch {
+    return ri(realm.href);
+  }
+}
+
 // Resolve a (possibly relative) reference to its absolute canonical RRI,
 // relative to `relativeTo`. Identifiers are canonical RRI by the time they
 // reach here, so this is pure form-preserving path math (see
@@ -5846,14 +6317,10 @@ export function resolveRef(
 }
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
-
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
   // @ts-ignore
-  return (import.meta as any).loader;
+  return loaderForModule(import.meta);
 }
 
 class FallbackCardStore implements CardStore {
@@ -5957,6 +6424,7 @@ class FallbackCardStore implements CardStore {
   }
   async loaded() {
     let observedGeneration = this.#loadGeneration;
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this.#inFlight.size === 0) {
         await Promise.resolve();

@@ -1375,6 +1375,82 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('removing a field removes its import when the import is relative', async function (assert) {
+      let src = `
+      import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import { Pet } from "./pet";
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+    `;
+
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
+      mod.removeField(
+        {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
+        'pet',
+      );
+
+      assert.codeEqual(
+        mod.code(),
+        `
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+
+        export class Person extends CardDef {
+          @field firstName = contains(StringField);
+        }
+      `,
+      );
+    });
+
+    test('removing a field removes its import when the import uses the base realm URL', async function (assert) {
+      let src = `
+      import { contains, field, CardDef } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import NumberField from "${baseRealm.url}number";
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field age = contains(NumberField);
+      }
+    `;
+
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
+      mod.removeField(
+        {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
+        'age',
+      );
+
+      assert.codeEqual(
+        mod.code(),
+        `
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+
+        export class Person extends CardDef {
+          @field firstName = contains(StringField);
+        }
+      `,
+      );
+    });
+
     test('can remove a linksTo field with the same type as its enclosing card', async function (assert) {
       let src = `
       import { contains, field, CardDef, linksTo } from "@cardstack/base/card-api";
@@ -1560,12 +1636,12 @@ module(basename(import.meta.filename), function () {
         await import(dynamicPath);
         import "https://example.com/not-in-realm";
       `;
-      let paths = new RealmPaths(new URL(testRealm));
+      let paths = new RealmPaths(new URL(testRealm), virtualNetwork);
       let deps = extractModuleDependencyKeys(
         source,
         'dir/main.gts',
-        testRealm,
         paths,
+        virtualNetwork,
       );
       assert.deepEqual(
         [...deps].sort(),
@@ -1574,6 +1650,79 @@ module(basename(import.meta.filename), function () {
           moduleDependencyKey('dir/beta.js'),
           moduleDependencyKey('dir/delta.ts'),
           moduleDependencyKey('dir/gamma.gjs'),
+        ].sort(),
+      );
+    });
+    test('keys prefix-form imports by the module they name, and only when it is in the realm', function (assert) {
+      let network = new VirtualNetwork();
+      network.addRealmMapping(
+        '@cardstack/base/',
+        'http://localhost:4201/base/',
+      );
+      network.addRealmMapping('@test/realm/', testRealm);
+      let source = `
+        import { CardDef } from '@cardstack/base/card-api';
+        import { Pet } from '@test/realm/pets/pet';
+        import Component from '@glimmer/component';
+        import { tracked } from 'tracked-built-ins';
+        import sibling from './sibling';
+      `;
+      let paths = new RealmPaths(new URL(testRealm), network);
+      let deps = extractModuleDependencyKeys(
+        source,
+        'dir/main.gts',
+        paths,
+        network,
+      );
+      assert.deepEqual(
+        [...deps].sort(),
+        [
+          moduleDependencyKey('dir/sibling'),
+          moduleDependencyKey('pets/pet'),
+        ].sort(),
+      );
+    });
+    test('keys a prefix-form self-import of a realm served under a virtual URL', function (assert) {
+      let network = new VirtualNetwork();
+      network.addURLMapping(
+        new URL('https://example.test/virtual-realm/'),
+        new URL(testRealm),
+      );
+      network.addRealmMapping('@test/realm/', testRealm);
+      let paths = new RealmPaths(
+        new URL('https://example.test/virtual-realm/'),
+        network,
+      );
+      let deps = extractModuleDependencyKeys(
+        `import { Pet } from '@test/realm/pets/pet';`,
+        'dir/main.gts',
+        paths,
+        network,
+      );
+      assert.deepEqual([...deps], [moduleDependencyKey('pets/pet')]);
+    });
+    test('keys imports of a realm served at the real side of a URL mapping', function (assert) {
+      let network = new VirtualNetwork();
+      network.addURLMapping(
+        new URL('https://example.test/virtual-realm/'),
+        new URL(testRealm),
+      );
+      network.addRealmMapping('@test/realm/', testRealm);
+      let paths = new RealmPaths(new URL(testRealm), network);
+      let deps = extractModuleDependencyKeys(
+        `
+          import sibling from './sibling';
+          import { Pet } from '@test/realm/pets/pet';
+        `,
+        'dir/main.gts',
+        paths,
+        network,
+      );
+      assert.deepEqual(
+        [...deps].sort(),
+        [
+          moduleDependencyKey('dir/sibling'),
+          moduleDependencyKey('pets/pet'),
         ].sort(),
       );
     });

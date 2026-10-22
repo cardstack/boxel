@@ -5,6 +5,7 @@ import { basename, join } from 'path';
 import { fileURLToPath } from 'url';
 
 import { PREFIX_REALM_PREFIXES } from '@cardstack/runtime-common';
+import { HOST_PACKAGE_NAMES } from '@cardstack/runtime-common/host-package-names';
 
 // The realm-server learns its realm-prefix mappings from `--fromUrl`/`--toUrl`
 // arguments, while the host bakes its own set in from build config. Nothing in
@@ -102,6 +103,50 @@ module(basename(import.meta.filename), function () {
         declaredPrefixes(script),
         [...PREFIX_REALM_PREFIXES].sort(),
         `${script} covers the whole declared set`,
+      );
+    }
+  });
+
+  // `boxel-cli` cannot import the declaration: `realm-prefixes.ts` reaches
+  // `@cardstack/base/*` through its type-only imports, which that package's
+  // deliberately dependency-light type-check cannot resolve. So its parse gate
+  // spells the same set out as literals, and this is what keeps the copy
+  // honest — a realm added to the declaration and not to the copy would leave
+  // that realm's modules unresolvable from `boxel parse` alone.
+  test('the boxel-cli parse gate resolves every declared prefix but base', function (assert) {
+    let source = readFileSync(
+      join(REPO_ROOT, 'packages/boxel-cli/src/commands/parse.ts'),
+      'utf8',
+    );
+    let block = /const RESOLVABLE_PREFIXES = \[([^\]]*)\]/.exec(source);
+    assert.ok(
+      block,
+      'the literal list is still shaped the way this scan reads',
+    );
+
+    let copied = [...block![1].matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
+    assert.deepEqual(
+      copied,
+      [...PREFIX_REALM_PREFIXES]
+        .filter((prefix) => !prefix.startsWith('@cardstack/base/'))
+        .sort(),
+      'boxel-cli lists the declared prefixes, minus the base realm it aliases locally',
+    );
+  });
+
+  test('no declared prefix names a Host package, except base', function (assert) {
+    // `addRealmMapping` refuses a prefix whose name is on HOST_PACKAGE_NAMES,
+    // so a realm declared under such a name would throw at host boot. `base`
+    // is the one sanctioned overlap. A realm that is also a workspace package,
+    // such as pretui, stays legal only while its name is absent from that set.
+    for (let prefix of PREFIX_REALM_PREFIXES) {
+      let name = prefix.split('/')[1];
+      if (name === 'base') {
+        continue;
+      }
+      assert.false(
+        HOST_PACKAGE_NAMES.has(name),
+        `${prefix} does not name a Host package`,
       );
     }
   });

@@ -15,7 +15,7 @@ Tail Loki logs from a laptop. The script handles auth (SSM bearer token), URL re
 - Correlating a request id, job id, or realm name across services
 - Cross-checking that something just shipped a log line you expect
 
-If the user is asking what *changed* (deploy diffs, code history) rather than what *happened*, this is the wrong tool — go to git/PR APIs instead.
+If the user is asking what _changed_ (deploy diffs, code history) rather than what _happened_, this is the wrong tool — go to git/PR APIs instead.
 
 ## How to invoke
 
@@ -39,19 +39,19 @@ Common flag patterns:
 ./scripts/tail-logs.sh --env production --service synapse --since 30m --no-follow --confirm
 ```
 
-| Flag | Default | Notes |
-|------|---------|-------|
-| `--env` | (required) | `local`, `staging`, `production` |
-| `--service` | (required) | `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` (or any local container name) |
-| `--realm` | unset | Filter to a single realm. Only set on tasks where realm is meaningful. |
-| `--worker-id` | unset | Per-Fargate-task id; only available on workers. |
-| `--filter` | unset | LogQL line-filter (`\|=` literal substring). Mutually exclusive with `--regex`. |
-| `--regex` | unset | LogQL line-regex (`\|~`). |
-| `--since` | `15m` | `30s`, `15m`, `1h`, `2d` — anything matching `^\d+[smhd]$`. |
-| `--limit` | `200` | Max lines per batch. |
-| `--no-follow` | follow on | One-shot mode for diagnostics. **Always use `--no-follow` from a skill** — follow mode is interactive. |
-| `--json` | text | Raw Loki response per batch. Use when you need to parse beyond the formatted line. |
-| `--confirm` | n/a | Required for `--env production`. |
+| Flag          | Default    | Notes                                                                                                  |
+| ------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
+| `--env`       | (required) | `local`, `staging`, `production`                                                                       |
+| `--service`   | (required) | `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` (or any local container name)    |
+| `--realm`     | unset      | Filter to a single realm. Only set on tasks where realm is meaningful.                                 |
+| `--worker-id` | unset      | One worker process, `<instance-id>-pid-<pid>`; only available on workers.                              |
+| `--filter`    | unset      | LogQL line-filter (`\|=` literal substring). Mutually exclusive with `--regex`.                        |
+| `--regex`     | unset      | LogQL line-regex (`\|~`).                                                                              |
+| `--since`     | `15m`      | `30s`, `15m`, `1h`, `2d` — anything matching `^\d+[smhd]$`.                                            |
+| `--limit`     | `200`      | Max lines per batch.                                                                                   |
+| `--no-follow` | follow on  | One-shot mode for diagnostics. **Always use `--no-follow` from a skill** — follow mode is interactive. |
+| `--json`      | text       | Raw Loki response per batch. Use when you need to parse beyond the formatted line.                     |
+| `--confirm`   | n/a        | Required for `--env production`.                                                                       |
 
 ## Auth requirements
 
@@ -69,12 +69,12 @@ Labels are sorted alphabetically inside the brackets. With `--json`, you get the
 
 ## Patterns by task family
 
-| You want to... | Suggested invocation |
-|---|---|
+| You want to...                                  | Suggested invocation                                                                                                                                                               |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Find the last 100 errors in any staging service | `--env staging --service <each one> --regex '(?i)error\|exception\|fatal' --since 1h --limit 100 --no-follow` (run per service; LogQL doesn't take an OR over labels in one query) |
-| Watch a slow indexer batch | `--env staging --service realm-server --regex 'duration_ms=[0-9]{4,}'` |
-| See what one Fargate worker is doing | `--env staging --service worker --worker-id <id> --since 30m --no-follow` |
-| Tail synapse | `--env staging --service synapse --since 15m --no-follow` |
+| Watch a slow indexer batch                      | `--env staging --service realm-server --regex 'duration_ms=[0-9]{4,}'`                                                                                                             |
+| See what one Fargate worker is doing            | `--env staging --service worker --worker-id <id> --since 30m --no-follow`                                                                                                          |
+| Tail synapse                                    | `--env staging --service synapse --since 15m --no-follow`                                                                                                                          |
 
 ## Limits and caveats
 

@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures.ts';
 import { getAccountData, updateAccountData } from '../support/synapse/index.ts';
 import {
+  credentialFields,
   createSubscribedUser,
   getMatrixTestContext,
   getUniqueUsername,
@@ -43,8 +44,12 @@ test.describe('boxel-cli browser authorization', () => {
       log: () => {},
       openBrowserFn: async (authUrl) => {
         await page.goto(authUrl);
-        await page.locator('[data-test-cli-auth-username]').fill(username);
-        await page.locator('[data-test-cli-auth-password]').fill(password);
+        await credentialFields(page)
+          .locator('[data-test-cli-auth-username]')
+          .fill(username);
+        await credentialFields(page)
+          .locator('[data-test-cli-auth-password]')
+          .fill(password);
         await page.locator('[data-test-cli-auth-submit]').click();
         return true;
       },
@@ -65,6 +70,49 @@ test.describe('boxel-cli browser authorization', () => {
       device_id: auth.deviceId,
     });
     expect(auth.deviceId).not.toBe(credentials.deviceId);
+  });
+
+  // The username field is labelled "Email Address or Username", so an email
+  // address registered to the account signs in as its username does.
+  test('a password sign-in with an email address hands the CLI a working session', async ({
+    page,
+  }) => {
+    const { matrixUrl } = getMatrixTestContext();
+    const { username, password, credentials } =
+      await createSubscribedUser('cli-pw-email');
+    const userEmail = `${username}@example.com`;
+    await updateSynapseUser(credentials.userId, {
+      emailAddresses: [userEmail],
+    });
+
+    const auth = await browserLogin({
+      matrixUrl: matrixUrl!,
+      hostUrl: HOST_URL,
+      log: () => {},
+      openBrowserFn: async (authUrl) => {
+        await page.goto(authUrl);
+        await credentialFields(page)
+          .locator('[data-test-cli-auth-username]')
+          .fill(userEmail);
+        await credentialFields(page)
+          .locator('[data-test-cli-auth-password]')
+          .fill(password);
+        await page.locator('[data-test-cli-auth-submit]').click();
+        return true;
+      },
+    });
+
+    expect(auth.userId).toBe(`@${username}:localhost`);
+
+    const whoami = await fetch(
+      `${matrixUrl}/_matrix/client/v3/account/whoami`,
+      { headers: { Authorization: `Bearer ${auth.accessToken}` } },
+    );
+    expect(whoami.status).toBe(200);
+    expect(await whoami.json()).toMatchObject({
+      user_id: auth.userId,
+      device_id: auth.deviceId,
+    });
   });
 
   test('a Google sign-in hands the CLI a working session', async ({ page }) => {

@@ -5,6 +5,7 @@ import {
   baseFileRef,
   baseRealm,
   formattedError,
+  logger,
   snapshotRuntimeDependencies,
   ToolContextStamp,
   trackRuntimeModuleDependency,
@@ -25,6 +26,8 @@ import type { AuthErrorGuard } from './auth-error-guard';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
+
+const log = logger('host:file-extract');
 
 export function buildFileExtractError(url: string, error: any): RenderError {
   let errorJSONAPI = formattedError(url, error).errors[0];
@@ -93,6 +96,16 @@ export async function runFileExtract({
     toolContext,
   });
   let fileApiURL = `${baseRealm.url}file-api`;
+  // The dependency tracker is page-global, so an import still running when
+  // the extract begins can land in its deps without the extract reading it.
+  // Named here so deps that differ between two extracts of the same file can
+  // be traced to the import that landed in one of them.
+  let inFlight = loaderService.loader.inFlightModuleImports;
+  if (inFlight.length > 0) {
+    log.debug(
+      `file extract of ${fileURL} begins with ${inFlight.length} module import(s) in flight: ${inFlight.join(', ')}`,
+    );
+  }
   let result: FileDefExtractResult;
   try {
     result = await withRuntimeDependencyTrackingContext(
@@ -132,13 +145,21 @@ export async function runFileExtract({
     };
   }
   let { deps } = snapshotRuntimeDependencies({ excludeQueryOnly: true });
-  // Belt-and-suspenders: if the tracker call above didn't land in
-  // the snapshot for any reason (session ended, URL normalization
-  // mismatch), explicitly stamp `file-api` into the merged deps.
-  // The indexer's invalidation contract requires this URL to be
-  // present for file extracts; missing it produces silent
-  // never-invalidated rows.
-  let mergedDeps = [...new Set([...(result.deps ?? []), ...deps, fileApiURL])];
+  // `file-api` is merged in as well as tracked: the indexer's invalidation
+  // contract requires it for file extracts, and missing it produces silent
+  // never-invalidated rows, even if the tracker call above didn't land in the
+  // snapshot (session ended, URL normalization mismatch). The deps are folded
+  // to the form the index stores them by, as the card half of a fused payload
+  // is. Unfolded, the tracker can hold `file-api` under two spellings: the URL
+  // stamped above, and `@cardstack/base/file-api`, which the loader records
+  // only if an import of it happens to land inside this session —
+  // matrix-service imports `file-api` in the background when it is first
+  // constructed — so the same file's deps would differ between extracts.
+  let mergedDeps = network.virtualNetwork.unresolveURLs([
+    ...(result.deps ?? []),
+    ...deps,
+    fileApiURL,
+  ]);
   return {
     ...result,
     deps: mergedDeps,

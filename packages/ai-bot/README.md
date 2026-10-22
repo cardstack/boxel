@@ -60,27 +60,31 @@ It will be able to see any cards shared in the chat and can respond using GPT4 i
 
 ### Debugging
 
-Send `debug:help` in a room the bot has joined to list the available debug commands.
+Send `boxel-debug` in a room the bot has joined to list the available debug commands. The bot answers these messages itself; they never reach the model.
 
-`debug:eventlist` attaches a JSON dump of the room's events. Streamed messages show their final content: `m.replace` edits are applied and continuation-split messages are joined, so each message body matches what the model sees when the prompt is constructed. Use `debug:eventlist:raw` for the unaggregated timeline, where streamed messages appear as their original placeholder events with edits nested under `unsigned["m.relations"]["m.replace"]`.
+`boxel-debug:feature:enable:<name>` enables a skill feature for that room, from the next message, and `boxel-debug:feature:disable:<name>` disables it again. A skill feature is a section of a skill file between `<!-- feature:<name> -->` and `<!-- /feature:<name> -->`; the bot leaves it out of the prompt unless the room enabled it. For example, `boxel-debug:feature:enable:catalog-reuse` turns on the mandatory catalog search in the skills index. `boxel-debug:feature` lists the features enabled in the room. The features a room can enable, with what each does, are listed in `SKILL_FEATURES` in `packages/runtime-common/ai/debug.ts`; a new marker name in a skill file must be added there too.
 
-`debug:prompt` attaches the prompt that would be sent to the AI for the last user message. Append a number, e.g. `debug:prompt:3`, to drop that many trailing events first.
+A message that looks like one of the old `debug:` commands gets a reply that points to `boxel-debug`, and does not reach the model.
 
-You can deliberately trigger a specific patch by sending a message that starts `debug:patch:` and has the JSON patch you want returned. For example:
+`boxel-debug:eventlist` attaches a JSON dump of the room's events. Streamed messages show their final content: `m.replace` edits are applied and continuation-split messages are joined, so each message body matches what the model sees when the prompt is constructed. Use `boxel-debug:eventlist:raw` for the unaggregated timeline, where streamed messages appear as their original placeholder events with edits nested under `unsigned["m.relations"]["m.replace"]`.
+
+`boxel-debug:prompt` attaches the prompt that would be sent to the AI for the last user message. Append a number, e.g. `boxel-debug:prompt:3`, to drop that many trailing events first.
+
+You can deliberately trigger a specific patch by sending a message that starts `boxel-debug:patch:` and has the JSON patch you want returned. For example:
 
 ```
-debug:patch:{"attributes": {"cardId":"https://localhost:4200/experiments/Author/1", "patch": { "attributes": {"firstName": "David"}}}}
+boxel-debug:patch:{"attributes": {"cardId":"https://localhost:4200/experiments/Author/1", "patch": { "attributes": {"firstName": "David"}}}}
 ```
 
 This will return a patch with the ID of the last card you uploaded. This does not hit GPT4 and is useful for testing the integration of the two components without waiting for streaming responses.
 
-You can set a room name with `debug:title:set:`
+You can set a room name with `boxel-debug:title:set:`
 
 ```
-debug:title:set:My Room
+boxel-debug:title:set:My Room
 ```
 
-And you can trigger room naming with `debug:title:create` on its own.
+And you can trigger room naming with `boxel-debug:title:create` on its own.
 
 ## Testing
 

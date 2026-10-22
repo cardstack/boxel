@@ -31,10 +31,9 @@
 
 import type { CDPSession, Page } from 'puppeteer';
 import { logger } from '@cardstack/runtime-common';
+import { raceNodeTimeout, TIMED_OUT } from './node-race.ts';
 
 const log = logger('prerenderer');
-
-const TIMED_OUT = Symbol('node-timeout');
 
 export interface PausedStackCapture {
   // Top JS frames, innermost first, formatted `fn @ url:line:col`.
@@ -48,26 +47,6 @@ export interface PausedStackCapture {
   heapUsedMB: number | null;
   // Set when no usable stack was captured, naming why.
   reason?: string;
-}
-
-// Race a Node-side promise against a real Node timer. The prerender server
-// process is not the rendered page, so `setTimeout` here is the genuine
-// one (the render-timer-stub only replaces the page's timers).
-async function raceNodeTimeout<T>(
-  p: Promise<T>,
-  ms: number,
-): Promise<T | typeof TIMED_OUT> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      p,
-      new Promise<typeof TIMED_OUT>((resolve) => {
-        timer = setTimeout(() => resolve(TIMED_OUT), ms);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 async function detachQuietly(client: CDPSession | undefined): Promise<void> {

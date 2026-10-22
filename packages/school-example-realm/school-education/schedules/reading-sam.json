@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Reading intervention \u2014 Sam",
+      "studentName": "Sam T.",
+      "meets": "Fridays 09:00",
+      "providerId": "@ben:school.example"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../school-code/service-plan-schedule",
+        "name": "ServicePlanSchedule"
+      }
+    },
+    "relationships": {
+      "provider": {
+        "links": {
+          "self": "../../school-org/StaffMember/ben"
+        }
+      }
+    }
+  }
+}

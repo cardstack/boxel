@@ -4,7 +4,12 @@ import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import sinon from 'sinon';
 import jwt from 'jsonwebtoken';
-import { SupportedMimeType, type TokenClaims } from '@cardstack/runtime-common';
+import {
+  SupportedMimeType,
+  upsertSessionRoom,
+  type TokenClaims,
+} from '@cardstack/runtime-common';
+import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -14,6 +19,7 @@ import {
   testRealmHref,
   testRealmURL,
 } from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import {
   DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER,
   DELEGATED_USER_REALM_SESSION_TIMESTAMP_HEADER,
@@ -266,6 +272,142 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     test('rejects a body missing realm', async function (assert) {
       let response = await signedPost(request, JSON.stringify({ onBehalfOf }));
       assert.strictEqual(response.status, 400, 'HTTP 400');
+    });
+  });
+
+  // A delegated session reads its realm on its user's behalf and nothing else.
+  // The realm-server routes that act as the user refuse it, while a full
+  // session for the same user is still answered by each of them. The user owns
+  // the realm, so every refusal below is the session's, never the user's.
+  module('a delegated session on the realm-server routes', function (hooks) {
+    let request: SuperTest<Test>;
+    let dbAdapter: PgAdapter;
+
+    setupPermissionedRealmCached(hooks, {
+      fixture: 'realistic',
+      permissions: {
+        [onBehalfOf]: ['read', 'write', 'realm-owner'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
+      },
+      realmURL: testRealmURL,
+      onRealmSetup: (args: {
+        request: SuperTest<Test>;
+        dbAdapter: PgAdapter;
+      }) => {
+        request = args.request;
+        dbAdapter = args.dbAdapter;
+      },
+    });
+
+    // `/_realm-auth` answers a full session with the user's session room, so
+    // the user has one already rather than the handler creating it in Matrix.
+    hooks.beforeEach(async function () {
+      await upsertSessionRoom(
+        dbAdapter,
+        onBehalfOf,
+        '!jane-session-room:localhost',
+      );
+    });
+
+    async function mintDelegatedSession(assert: Assert): Promise<string> {
+      let mint = await signedPost(
+        request,
+        JSON.stringify({ onBehalfOf, realm: testRealmHref }),
+      );
+      assert.strictEqual(mint.status, 200, 'delegated session minted');
+      return mint.body.token;
+    }
+
+    function realmAuth(token: string) {
+      return request
+        .post('/_realm-auth')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${token}`)
+        .send('{}');
+    }
+
+    function fetchUser(token: string) {
+      return request
+        .get('/_user')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set('Authorization', `Bearer ${token}`);
+    }
+
+    function downloadRealm(token: string) {
+      return request
+        .get('/_download-realm')
+        .query({ realm: testRealmHref })
+        .set('Authorization', `Bearer ${token}`);
+    }
+
+    test('`/_realm-auth` refuses a delegated session and mints no realm session', async function (assert) {
+      let delegated = await mintDelegatedSession(assert);
+
+      let refused = await realmAuth(delegated);
+      assert.strictEqual(refused.status, 401, 'HTTP 401');
+      assert.deepEqual(
+        refused.body,
+        { errors: [AuthenticationErrorMessages.TokenInvalid] },
+        'the response is the refusal alone, carrying no realm session',
+      );
+
+      let read = await request
+        .get('/friend.gts')
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', `Bearer ${delegated}`);
+      assert.strictEqual(
+        read.status,
+        200,
+        'the refused session still reads the realm it was minted for',
+      );
+    });
+
+    test('`GET /_user` refuses a delegated session', async function (assert) {
+      let delegated = await mintDelegatedSession(assert);
+
+      let refused = await fetchUser(delegated);
+      assert.strictEqual(refused.status, 401, 'HTTP 401');
+      assert.deepEqual(refused.body, {
+        errors: [AuthenticationErrorMessages.TokenInvalid],
+      });
+    });
+
+    test('`/_download-realm` refuses a delegated session, even for the realm it was minted for', async function (assert) {
+      let delegated = await mintDelegatedSession(assert);
+
+      let refused = await downloadRealm(delegated);
+      assert.strictEqual(refused.status, 401, 'HTTP 401');
+      assert.deepEqual(refused.body, {
+        errors: [AuthenticationErrorMessages.TokenInvalid],
+      });
+    });
+
+    test('a full session for the same user is answered by each of those routes', async function (assert) {
+      let full = createRealmServerJWT(
+        { user: onBehalfOf, sessionRoom: '!jane-session-room:localhost' },
+        realmSecretSeed,
+      );
+
+      let auth = await realmAuth(full);
+      assert.strictEqual(auth.status, 200, '`/_realm-auth` answers');
+      let realmSession = jwt.verify(
+        auth.body[testRealmHref],
+        realmSecretSeed,
+      ) as TokenClaims;
+      assert.deepEqual(
+        [...realmSession.permissions].sort(),
+        ['read', 'realm-owner', 'write'],
+        "the realm session carries the user's full permissions",
+      );
+
+      let user = await fetchUser(full);
+      assert.strictEqual(user.status, 200, '`GET /_user` answers');
+      assert.strictEqual(user.body.data.attributes.matrixUserId, onBehalfOf);
+
+      let download = await downloadRealm(full);
+      assert.strictEqual(download.status, 200, '`/_download-realm` answers');
+      assert.strictEqual(download.headers['content-type'], 'application/zip');
     });
   });
 

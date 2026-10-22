@@ -33,6 +33,10 @@ export interface ProfileCommandOptions {
   staging?: boolean;
   production?: boolean;
   local?: boolean;
+  // `profile list --json`: emit the full profile set as machine-readable JSON
+  // for programmatic callers, so nothing has to parse the decorated human
+  // listing.
+  json?: boolean;
 }
 
 interface EnvironmentDefaults {
@@ -252,7 +256,7 @@ export async function profileCommand(
 
   switch (subcommand) {
     case 'list':
-      await listProfiles(manager);
+      await listProfiles(manager, { json: options?.json });
       break;
 
     case 'add': {
@@ -335,9 +339,54 @@ export async function profileCommand(
   }
 }
 
-async function listProfiles(manager: ProfileManager): Promise<void> {
+// `profile list` is the discovery command: an agent or script asking "does
+// this profile exist?" needs the complete set, so it always lists every saved
+// profile \u2014 no truncation, and the human view names the total so a reader can
+// see the listing is complete rather than inferring it. `--json` gives
+// programmatic callers the same complete set without a decorated listing to
+// parse.
+//
+// When the store exists but can't be read, that is reported (a stderr message,
+// or an `error` field in `--json`) and the command exits non-zero, rather than
+// presenting an unreadable store as an empty one \u2014 an unreadable store must not
+// read as "no such profile".
+export async function listProfiles(
+  manager: ProfileManager,
+  options?: { json?: boolean },
+): Promise<void> {
   const profiles = manager.listProfiles();
   const activeId = manager.getActiveProfileId();
+  const loadError = manager.getLoadError();
+
+  if (options?.json) {
+    const output = {
+      ...(loadError ? { error: loadError } : {}),
+      activeProfile: activeId,
+      profiles: profiles.map((id) => {
+        const profile = manager.getProfile(id)!;
+        return {
+          id,
+          displayName: profile.displayName,
+          environment: getEnvironmentFromMatrixId(id),
+          domain: getDomainFromMatrixId(id),
+          matrixUrl: profile.matrixUrl,
+          realmServerUrl: profile.realmServerUrl,
+          active: id === activeId,
+        };
+      }),
+    };
+    console.log(JSON.stringify(output, null, 2));
+    if (loadError) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (loadError) {
+    console.error(`\n${FG_RED}Error:${RESET} ${loadError}`);
+    process.exitCode = 1;
+    return;
+  }
 
   if (profiles.length === 0) {
     console.log(`\n${FG_YELLOW}No profiles configured.${RESET}`);
@@ -345,7 +394,12 @@ async function listProfiles(manager: ProfileManager): Promise<void> {
     return;
   }
 
-  console.log(`\n${BOLD}Saved Profiles:${RESET}\n`);
+  const count = profiles.length;
+  console.log(
+    `\n${BOLD}Saved Profiles${RESET} ${DIM}(${count} ${
+      count === 1 ? 'profile' : 'profiles'
+    })${RESET}\n`,
+  );
 
   for (const id of profiles) {
     const profile = manager.getProfile(id)!;
@@ -368,16 +422,36 @@ async function listProfiles(manager: ProfileManager): Promise<void> {
   }
 }
 
+// What adding a profile reaches beyond this module. Tests stand in for the
+// browser and for the person at the terminal through it.
+export interface AddProfileDeps {
+  browserLogin?: typeof browserLogin;
+  ensurePersonalRealm?: typeof ensurePersonalRealm;
+  prompt?: (question: string) => Promise<string>;
+  // Whether a person is at the terminal to answer questions. A coding agent or
+  // a script runs the CLI without a TTY, and a question asked there is never
+  // answered.
+  isTty?: () => boolean;
+}
+
+interface AddProfileContext {
+  browserLogin: typeof browserLogin;
+  ensurePersonalRealm: typeof ensurePersonalRealm;
+  prompt: (question: string) => Promise<string>;
+  interactive: boolean;
+}
+
 // Returns false when the user declined to replace an existing profile.
 async function confirmOverwrite(
   manager: ProfileManager,
   matrixId: string,
+  ctx: AddProfileContext,
 ): Promise<boolean> {
   if (!manager.getProfile(matrixId)) {
     return true;
   }
   console.log(`\n${FG_YELLOW}Profile ${matrixId} already exists.${RESET}`);
-  const overwrite = await prompt('Overwrite? [y/N]: ');
+  const overwrite = await ctx.prompt('Overwrite? [y/N]: ');
   if (overwrite.toLowerCase() !== 'y') {
     console.log('Cancelled.');
     return false;
@@ -385,9 +459,12 @@ async function confirmOverwrite(
   return true;
 }
 
-async function promptDisplayName(matrixId: string): Promise<string> {
+async function promptDisplayName(
+  matrixId: string,
+  ctx: AddProfileContext,
+): Promise<string> {
   const defaultDisplayName = `${getUsernameFromMatrixId(matrixId)} \u00b7 ${getDomainFromMatrixId(matrixId)}`;
-  const displayNameInput = await prompt(
+  const displayNameInput = await ctx.prompt(
     `Display name [${defaultDisplayName}]: `,
   );
   return displayNameInput || defaultDisplayName;
@@ -404,15 +481,25 @@ type AddProfileOutcome =
 // Browser sign-in. The authorization page offers both a password form and a
 // Google button, and reports back whichever account the user signed in as — so
 // unlike the terminal password path there is nothing to ask for up front.
+//
+// Without a TTY the questions that follow the sign-in are not asked: the
+// person already chose to sign in, in the browser, and a question nobody can
+// answer leaves the profile unsaved — so whoever ran the command runs it
+// again and the person is sent through the browser again. The profile is
+// saved as the defaults would have it, and a profile already stored for the
+// account is replaced, since the browser has just proven it is that account.
+// It keeps its display name. `addProfile` leaves a different active profile
+// active.
 async function addProfileViaBrowser(
   manager: ProfileManager,
   matrixUrl: string,
   hostUrl: string,
   realmServerUrl: string,
+  ctx: AddProfileContext,
 ): Promise<AddProfileOutcome> {
   let auth;
   try {
-    auth = await browserLogin({ matrixUrl, hostUrl });
+    auth = await ctx.browserLogin({ matrixUrl, hostUrl });
   } catch (err) {
     if (err instanceof SsoTimeoutError) {
       console.log(`\n${FG_YELLOW}${err.message}${RESET}`);
@@ -428,17 +515,23 @@ async function addProfileViaBrowser(
   console.log(
     `\n${FG_GREEN}✓${RESET} Signed in as ${formatProfileBadge(auth.userId)}`,
   );
-  const proceed = await prompt('Save this profile? [Y/n]: ');
-  if (proceed.toLowerCase() === 'n') {
-    console.log('Cancelled.');
-    return { status: 'cancelled' };
-  }
+  let displayName: string | undefined;
+  if (ctx.interactive) {
+    const proceed = await ctx.prompt('Save this profile? [Y/n]: ');
+    if (proceed.toLowerCase() === 'n') {
+      console.log('Cancelled.');
+      return { status: 'cancelled' };
+    }
 
-  if (!(await confirmOverwrite(manager, auth.userId))) {
-    return { status: 'cancelled' };
-  }
+    if (!(await confirmOverwrite(manager, auth.userId, ctx))) {
+      return { status: 'cancelled' };
+    }
 
-  const displayName = await promptDisplayName(auth.userId);
+    displayName = await promptDisplayName(auth.userId, ctx);
+  } else {
+    // Undefined for a new profile, which addProfileWithAuth names by default.
+    displayName = manager.getProfile(auth.userId)?.displayName;
+  }
   await manager.addProfileWithAuth(
     auth.userId,
     auth,
@@ -454,7 +547,7 @@ async function addProfileViaBrowser(
   // and a failure only warns: the profile works without it, and signing in to
   // the web app offers workspace creation.
   try {
-    const result = await ensurePersonalRealm(auth, realmServerUrl);
+    const result = await ctx.ensurePersonalRealm(auth, realmServerUrl);
     if (result.outcome === 'created') {
       console.log(
         `${FG_GREEN}✓${RESET} Created your personal workspace: ${FG_CYAN}${result.realmUrl}${RESET}`,
@@ -483,10 +576,11 @@ async function addProfileViaPassword(
   domain: string,
   matrixUrl: string,
   realmServerUrl: string,
+  ctx: AddProfileContext,
 ): Promise<AddProfileOutcome> {
   console.log(`\nEnter your Boxel username (without @ or domain)`);
   console.log(`${DIM}Example: ctse, aallen90${RESET}`);
-  const username = await prompt('Username: ');
+  const username = await ctx.prompt('Username: ');
 
   if (!username) {
     console.error(`${FG_RED}Error:${RESET} Username is required.`);
@@ -495,7 +589,7 @@ async function addProfileViaPassword(
 
   const matrixId = `@${username}:${domain}`;
 
-  if (!(await confirmOverwrite(manager, matrixId))) {
+  if (!(await confirmOverwrite(manager, matrixId, ctx))) {
     return { status: 'cancelled' };
   }
 
@@ -506,7 +600,7 @@ async function addProfileViaPassword(
     process.exit(1);
   }
 
-  const displayName = await promptDisplayName(matrixId);
+  const displayName = await promptDisplayName(matrixId, ctx);
 
   await manager.addProfile(
     matrixId,
@@ -518,11 +612,18 @@ async function addProfileViaPassword(
   return { status: 'added', matrixId };
 }
 
-async function addProfile(
+export async function addProfile(
   manager: ProfileManager,
   environment: EnvironmentDefaults,
   useBrowser = true,
+  deps: AddProfileDeps = {},
 ): Promise<void> {
+  const ctx: AddProfileContext = {
+    browserLogin: deps.browserLogin ?? browserLogin,
+    ensurePersonalRealm: deps.ensurePersonalRealm ?? ensurePersonalRealm,
+    prompt: deps.prompt ?? prompt,
+    interactive: (deps.isTty ?? (() => Boolean(process.stdin.isTTY)))(),
+  };
   console.log(`\n${BOLD}Add New Profile${RESET}\n`);
   // The environment comes from flags rather than a prompt, so name it. The
   // realm server identifies it — that's the host every later command talks to,
@@ -541,15 +642,28 @@ async function addProfile(
         environment.matrixUrl,
         environment.appUrl ?? environment.realmServerUrl,
         environment.realmServerUrl,
+        ctx,
       )
     : { status: 'usePassword' };
 
   if (outcome.status === 'usePassword') {
+    // The terminal password sign-in is a run of questions, so without a TTY
+    // it would wait on an answer that never comes.
+    if (!ctx.interactive) {
+      console.error(
+        `${FG_RED}Error:${RESET} Signing in with a password here needs a terminal. ` +
+          `Without one, pass the Matrix ID and the password in the environment: ` +
+          `BOXEL_PASSWORD=... boxel profile add -u @<username>:${environment.domain}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
     outcome = await addProfileViaPassword(
       manager,
       environment.domain,
       environment.matrixUrl,
       environment.realmServerUrl,
+      ctx,
     );
   }
 
@@ -565,8 +679,16 @@ async function addProfile(
 
   if (manager.getActiveProfileId() === matrixId) {
     console.log(`${DIM}This profile is now active.${RESET}`);
+  } else if (!ctx.interactive) {
+    // The browser can sign in as an account nobody meant — a Google identity
+    // with no matching account gets a new one — and without a TTY nobody has
+    // confirmed this one. The profile that was active stays active until
+    // someone chooses this one.
+    console.log(
+      `${DIM}Use 'boxel profile switch ${matrixId}' to switch to this profile.${RESET}`,
+    );
   } else {
-    const switchNow = await prompt('Switch to this profile now? [Y/n]: ');
+    const switchNow = await ctx.prompt('Switch to this profile now? [Y/n]: ');
     if (switchNow.toLowerCase() !== 'n') {
       manager.switchProfile(matrixId);
       console.log(

@@ -1,0 +1,29 @@
+// The declared-capture manifest ({name → {specHash, objectKey, …}}) the
+// prerender-html visit writes for each row, under the name that covers a
+// paged PDF as well as a raster tile. Additive half of the `screenshots` →
+// `captures` rename: the column is added alongside the old one and
+// backfilled, so the previous code revision keeps reading `screenshots` until
+// the removal migration drops it post-deploy.
+//
+// Added to the production table and its pending twin, which must stay
+// column-compatible: a pass stages rows in `prerendered_html_pending` and the
+// commit copies every production column out.
+
+exports.shorthands = undefined;
+
+exports.up = (pgm) => {
+  for (let table of ['prerendered_html', 'prerendered_html_pending']) {
+    pgm.addColumns(table, { captures: 'jsonb' });
+    // Carry existing manifests across so already-indexed rows keep serving
+    // their captures until their next reindex rewrites them.
+    pgm.sql(
+      `UPDATE ${table} SET captures = screenshots WHERE screenshots IS NOT NULL`,
+    );
+  }
+};
+
+exports.down = (pgm) => {
+  for (let table of ['prerendered_html', 'prerendered_html_pending']) {
+    pgm.dropColumns(table, ['captures']);
+  }
+};

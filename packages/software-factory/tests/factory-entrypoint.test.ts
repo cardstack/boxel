@@ -77,8 +77,32 @@ module('factory-entrypoint', function (hooks) {
       realmServerUrl: 'https://realms.example.test/',
       agent: 'claude',
       retryBlocked: true,
-      enableBoxelUiDiscovery: true,
+      enableCatalogReuse: true,
     });
+  });
+
+  test('parseFactoryEntrypointArgs turns catalog reuse off on request', function (assert) {
+    let options = parseFactoryEntrypointArgs([
+      '--brief-url',
+      briefUrl,
+      '--target-realm',
+      targetRealm,
+      '--no-catalog-reuse',
+    ]);
+    assert.false(options.enableCatalogReuse);
+  });
+
+  // Superseded by the single catalog-reuse flag, but still accepted so an
+  // external caller passing it does not fail argument parsing outright.
+  test('parseFactoryEntrypointArgs still accepts the retired discovery flag', function (assert) {
+    let options = parseFactoryEntrypointArgs([
+      '--brief-url',
+      briefUrl,
+      '--target-realm',
+      targetRealm,
+      '--enable-boxel-ui-discovery',
+    ]);
+    assert.true(options.enableCatalogReuse);
   });
 
   test('parseFactoryEntrypointArgs accepts --agent claude', function (assert) {

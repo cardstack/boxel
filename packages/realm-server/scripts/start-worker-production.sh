@@ -39,8 +39,14 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='@cardstack/skills/' \
   --toUrl='https://app.boxel.ai/skills/' \
   \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl='https://app.boxel.ai/pretui/' \
+  \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl='https://app.boxel.ai/openrouter/' \
+  \
+  --fromUrl='https://app.boxel.ai/choreo-gallery/' \
+  --toUrl='https://app.boxel.ai/choreo-gallery/' \
   \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}"

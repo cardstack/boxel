@@ -2,6 +2,9 @@
 
 const MISSING_INVOKABLES_CONFIG = require('../runtime-common/etc/eslint/missing-invokables-config');
 const { DATA_TEST_SELECTORS } = require('../../eslint/data-test-selectors.cjs');
+const {
+  CLOUD_PROVIDER_SDK_RULE,
+} = require('../../eslint/cloud-provider-sdk-imports.cjs');
 
 // Applies to all of JS, TS, GJS, and GTS in the browser context.
 const sharedBrowserConfig = {
@@ -77,6 +80,14 @@ module.exports = {
   },
   overrides: [
     {
+      // Re-declared from the root config, which this `root: true` config does
+      // not inherit (ADR 003 §1.2).
+      files: ['app/**/*'],
+      rules: {
+        '@cardstack/boxel/no-cloud-provider-sdk': CLOUD_PROVIDER_SDK_RULE,
+      },
+    },
+    {
       // Disallow `data-test-*` CSS/DOM selectors in app code. ember-test-selectors
       // strips these attributes in production, so selectors like
       // `querySelector('[data-test-foo]')` silently break outside of tests.
@@ -89,7 +100,7 @@ module.exports = {
       },
     },
     {
-      files: ['**/*.{js,ts}'],
+      files: ['**/*.{js,ts,mts}'],
       parser: '@typescript-eslint/parser',
       parserOptions: {
         ecmaVersion: 'latest',
@@ -154,6 +165,15 @@ module.exports = {
       rules: {
         'n/no-process-exit': 'off',
         'n/hashbang': 'off',
+      },
+    },
+    // node ESM files — `.mts` so Node and the type-checker agree they are
+    // modules, which a `.ts` under this package's CommonJS default does not.
+    {
+      files: ['support/**/*.mts'],
+      env: {
+        browser: false,
+        node: true,
       },
     },
     {
@@ -247,8 +267,7 @@ module.exports = {
       // are outside `tsconfig.json`, where asking for a program is a parse
       // error rather than a lint result. Tests are left out for signal: they
       // build URLs by interpolating the test realm's identifier, which is
-      // always a URL there, so the rule has 342 things to say about them and
-      // 8 about the app.
+      // always a URL there, so the rule has 476 things to say about them.
       //
       // The parser for each file still comes from the overrides above —
       // `@typescript-eslint/parser` for `.ts`, `ember-eslint-parser` for
@@ -261,6 +280,37 @@ module.exports = {
       },
       rules: {
         '@cardstack/boxel/no-url-from-realm-identifier': 'error',
+      },
+    },
+    {
+      // Tests of alias tolerance, canonicalization or migration, which spell
+      // the `https://cardstack.com/base/` alias as data. It stays out of their
+      // import specifiers.
+      files: [
+        'tests/integration/tools/sanitize-module-list-test.gts',
+        'tests/unit/code-ref-test.ts',
+        'tests/unit/index-query-engine-test.ts',
+        'tests/unit/internal-key-canonicalization-test.ts',
+        'tests/unit/is-component-declaration-test.ts',
+        'tests/unit/plan-install-test.ts',
+        'tests/unit/query-canonicalization-test.ts',
+        'tests/unit/virtual-network-realm-for-reference-test.ts',
+        'tests/unit/virtual-network-retry-test.ts',
+      ],
+      rules: {
+        '@cardstack/boxel/no-url-form-base-imports': [
+          'error',
+          { allowAliasOutsideImports: true },
+        ],
+      },
+    },
+    {
+      // A prefix realm is named by its prefix rather than the URL one
+      // environment serves it at. Tests are left out: they spell those URLs on
+      // purpose, to check how they are resolved and mapped.
+      files: ['app/**/*.{js,ts,gts,gjs}'],
+      rules: {
+        '@cardstack/boxel/no-literal-realm-urls': 'error',
       },
     },
   ],

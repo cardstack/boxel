@@ -31,7 +31,7 @@ import { setupRenderingTest } from '@cardstack/host/tests/helpers/setup';
 
 import { BoardTile, PosterBoard } from './poster-board';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardContext } from '@cardstack/base/card-api';
 
 // This file is type-checked by two projects: experiments-realm's (which never
 // loads host's service-registry augmentations, so `getService` returns a bare

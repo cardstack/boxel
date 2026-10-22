@@ -742,6 +742,10 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       // do (and, like them, is stripped from the persisted source), so drop it
       // before comparing against the card's source serialization.
       delete json.data.meta.generation;
+      // `version` is the hash of the bytes the write stored, stamped on the
+      // write response the same way — and likewise kept out of the persisted
+      // source, which is what this comparison is against.
+      delete json.data.meta.version;
       assert.strictEqual(
         stringify(json),
         stringify(expected),

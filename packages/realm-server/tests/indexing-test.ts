@@ -1,7 +1,10 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import {
+  ALL_TYPES_KEY,
   internalKeyFor,
+  param,
+  query,
   rri,
   SupportedMimeType,
   Deferred,
@@ -11,11 +14,15 @@ import {
   VirtualNetwork,
   userInitiatedPriority,
   diffDoc,
+  sweepUnreferencedScopedCSS,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   DefinitionLookup,
+  ExecuteOptions,
+  Expression,
   LooseSingleCardDocument,
+  Query,
   Prerenderer,
   Realm,
   RealmPermissions,
@@ -39,8 +46,8 @@ import {
 import {
   depsForIndexEntry,
   errorDocForIndexEntry,
-  indexedAtForIndexEntry,
   maxPrerenderHtmlJobId,
+  prerenderedHtmlRowFor,
   settlePrerenderHtmlJobs,
   typeForIndexEntry,
 } from './helpers/indexing.ts';
@@ -576,7 +583,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         prerenderJob.concurrency_group,
         `prerender-html:${testRealm}`,
-        'HTML work runs in its own per-realm concurrency group',
+        "a from-scratch pass's HTML runs in the exclusive lane of the realm's prerender-html family",
       );
       assert.strictEqual(
         prerenderJob.status,
@@ -584,14 +591,29 @@ module(basename(import.meta.filename), function () {
         'the prerender_html job completed successfully',
       );
       let prerenderArgs = prerenderJob.args as {
+        spawningIndexPasses: { jobId: number; passId: string }[];
         generation: number;
         spawningJobId: number | null;
         changes: { url: string; operation: string }[];
       };
+      assert.deepEqual(
+        prerenderArgs.spawningIndexPasses.map((pass) => pass.jobId),
+        [indexJob.id],
+        'the job waits on the pass of the index job that spawned it',
+      );
+      let ledger = (await testDbAdapter.execute(
+        `SELECT job_id FROM realm_index_commits WHERE pass_id = $1`,
+        { bind: [prerenderArgs.spawningIndexPasses[0].passId] },
+      )) as { job_id: number }[];
+      assert.deepEqual(
+        ledger.map((row) => Number(row.job_id)),
+        [indexJob.id],
+        'identified by the pass id that pass committed under',
+      );
       assert.strictEqual(
         prerenderArgs.generation,
         1,
-        'the job carries the generation the index pass anticipated',
+        'and carries the generation that pass anticipated, for older workers',
       );
       assert.strictEqual(
         prerenderArgs.spawningJobId,
@@ -616,7 +638,8 @@ module(basename(import.meta.filename), function () {
       // The module pre-warm sweep's wall-clock is attributed to the job that
       // pays it: the prerender job records `preWarmMs`, the index job does not.
       let prerenderResult = prerenderJob.result as {
-        phaseTimings?: { preWarmMs?: unknown } | null;
+        spawningIndexJobIds?: unknown;
+        phaseTimings?: { preWarmMs?: unknown; spawnGateMs?: unknown } | null;
       } | null;
       assert.strictEqual(
         typeof prerenderResult?.phaseTimings?.preWarmMs,
@@ -624,6 +647,19 @@ module(basename(import.meta.filename), function () {
         `the prerender job result records the pre-warm wall-clock, got: ${JSON.stringify(
           prerenderResult,
         )}`,
+      );
+      // And the wait for its spawning pass's commit, together with which
+      // passes it waited on, so a slow render can be split into waiting and
+      // rendering from the job row alone.
+      assert.strictEqual(
+        typeof prerenderResult?.phaseTimings?.spawnGateMs,
+        'number',
+        'the prerender job result records the spawning-pass wait',
+      );
+      assert.deepEqual(
+        prerenderResult?.spawningIndexJobIds,
+        [indexJob.id],
+        'the prerender job result names the index passes it waited on',
       );
     });
 
@@ -668,79 +704,59 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('can store error doc in the index when atom view throws error', async function (assert) {
+    // A card whose format template throws is indexed, and only its render
+    // fails: its data read serves the card and reports the render's error,
+    // and the full error document — with the deps error repair fans out
+    // over — is stored on its prerendered_html row.
+    async function assertRenderFailed(
+      assert: Assert,
+      name: string,
+      message: RegExp,
+    ) {
       let entry = await realm.realmIndexQueryEngine.cardDocument(
-        new URL(`${testRealm}atom-boom`),
+        new URL(`${testRealm}${name}`),
       );
-      if (entry?.type === 'error') {
-        assert.strictEqual(
-          entry.error.errorDetail.message,
-          'intentional error',
-        );
+      if (entry?.type === 'doc') {
         assert.ok(
-          entry.error.errorDetail.deps?.includes(`${testRealm}atom-boom`),
-          'error deps include atom-boom',
+          message.test(entry.renderError?.message ?? ''),
+          `the data read reports the render error: ${entry.renderError?.message}`,
         );
       } else {
-        assert.ok(false, 'expected index entry to be an error');
+        assert.ok(
+          false,
+          `expected ${name} to read as its data, but it read as an error: ${entry?.error.errorDetail.message}`,
+        );
       }
+      let [row] = (await testDbAdapter.execute(
+        `SELECT error_doc FROM prerendered_html WHERE url = $1 AND type = 'instance'`,
+        {
+          bind: [`${testRealm}${name}.json`],
+          coerceTypes: { error_doc: 'JSON' },
+        },
+      )) as { error_doc: { deps?: string[] } | null }[];
+      assert.ok(
+        row?.error_doc?.deps?.includes(`${testRealm}${name}`),
+        `the stored render error's deps include ${name}`,
+      );
+    }
+
+    test('can store error doc in the index when atom view throws error', async function (assert) {
+      await assertRenderFailed(assert, 'atom-boom', /^intentional error$/);
     });
 
     test('can store error doc in the index when embedded view throws error', async function (assert) {
-      let entry = await realm.realmIndexQueryEngine.cardDocument(
-        new URL(`${testRealm}embedded-boom`),
-      );
-      if (entry?.type === 'error') {
-        assert.strictEqual(
-          entry.error.errorDetail.message,
-          'intentional error',
-        );
-        assert.ok(
-          entry.error.errorDetail.deps?.includes(`${testRealm}embedded-boom`),
-          'error deps include embedded-boom',
-        );
-      } else {
-        assert.ok(false, 'expected index entry to be an error');
-      }
+      await assertRenderFailed(assert, 'embedded-boom', /^intentional error$/);
     });
 
     test('can store error doc in the index when fitted view throws error', async function (assert) {
-      let entry = await realm.realmIndexQueryEngine.cardDocument(
-        new URL(`${testRealm}fitted-boom`),
-      );
-      if (entry?.type === 'error') {
-        assert.strictEqual(
-          entry.error.errorDetail.message,
-          'intentional error',
-        );
-        assert.ok(
-          entry.error.errorDetail.deps?.includes(`${testRealm}fitted-boom`),
-          'error deps include fitted-boom',
-        );
-      } else {
-        assert.ok(false, 'expected index entry to be an error');
-      }
+      await assertRenderFailed(assert, 'fitted-boom', /^intentional error$/);
     });
 
     test('rendering a card that has a template error does not affect indexing other instances', async function (assert) {
+      await assertRenderFailed(assert, 'boom', /^intentional error$/);
       {
-        let entry = await realm.realmIndexQueryEngine.cardDocument(
-          new URL(`${testRealm}boom`),
-        );
-        if (entry?.type === 'error') {
-          assert.strictEqual(
-            entry.error.errorDetail.message,
-            'intentional error',
-          );
-          assert.ok(
-            entry.error.errorDetail.deps?.includes(`${testRealm}boom`),
-            'error deps include boom',
-          );
-        } else {
-          assert.ok(false, 'expected search entry to be an error document');
-        }
-      }
-      {
+        // A template that does not compile fails the card's index visit too,
+        // so it reads as an index error rather than as a render error.
         let entry = await realm.realmIndexQueryEngine.cardDocument(
           new URL(`${testRealm}boom2`),
         );
@@ -892,6 +908,80 @@ module(basename(import.meta.filename), function () {
           `diagnostics.indexVisitClientMs.${bucket} persists on boxel_index, got: ${JSON.stringify(clientMs?.[bucket])}`,
         );
       }
+
+      // The model build's four stages ride the same channel. They are the
+      // dominant part of a card-instance visit's `indexRoutesMs.card.meta`
+      // bucket — the parent `render` route's model() runs inside the
+      // transition the runner times — so without them that bucket has no
+      // breakdown at all.
+      let buildModelMs = (
+        diagRow?.diagnostics as {
+          buildModelMs?: {
+            fetchSource?: unknown;
+            deriveType?: unknown;
+            hydrate?: unknown;
+            storeSettle?: unknown;
+          };
+        } | null
+      )?.buildModelMs;
+      for (let stage of [
+        'fetchSource',
+        'deriveType',
+        'hydrate',
+        'storeSettle',
+      ] as const) {
+        assert.strictEqual(
+          typeof buildModelMs?.[stage],
+          'number',
+          `diagnostics.buildModelMs.${stage} persists on boxel_index, got: ${JSON.stringify(buildModelMs?.[stage])}`,
+        );
+      }
+
+      // The meta route's own waits, which sit inside the same route bucket
+      // as the model build and are not part of it.
+      for (let phase of [
+        'cardApiLoadMs',
+        'readySettleMs',
+        'searchableLoadMs',
+      ] as const) {
+        let ms = (diagRow?.diagnostics as Record<string, unknown> | null)?.[
+          phase
+        ];
+        assert.strictEqual(
+          typeof ms,
+          'number',
+          `diagnostics.${phase} persists on boxel_index, got: ${JSON.stringify(ms)}`,
+        );
+      }
+
+      // The uncapped module-evaluation totals, which a reader needs in order
+      // to tell an empty `moduleEvaluationsMs` apart from a warm graph.
+      for (let field of [
+        'moduleEvaluationCount',
+        'moduleEvaluationTotalMs',
+      ] as const) {
+        let value = (diagRow?.diagnostics as Record<string, unknown> | null)?.[
+          field
+        ];
+        assert.strictEqual(
+          typeof value,
+          'number',
+          `diagnostics.${field} persists on boxel_index, got: ${JSON.stringify(value)}`,
+        );
+      }
+
+      // The residual: what the visit's wall-clock has left after every
+      // recorded step bucket. Emitted as a field so a reader accounting for
+      // a visit sees a complete set rather than doing the subtraction.
+      assert.strictEqual(
+        typeof (diagRow?.diagnostics as { unattributedMs?: unknown } | null)
+          ?.unattributedMs,
+        'number',
+        `diagnostics.unattributedMs persists on boxel_index, got: ${JSON.stringify(
+          (diagRow?.diagnostics as { unattributedMs?: unknown } | null)
+            ?.unattributedMs,
+        )}`,
+      );
     });
 
     // Note this particular test should only be a server test as the nature of
@@ -1205,8 +1295,12 @@ module(basename(import.meta.filename), function () {
         fittedHtml.includes('data-test-file-fitted'),
         'the file entry has FileDef fitted HTML',
       );
+      // The date may sit inside a wrapping element (the shell hides it from
+      // Percy with a `data-test-percy-hide` span), so skip opening tags between
+      // the `·` and the text. Closing tags are not skipped, so an empty wrapper
+      // cannot let the match run on into later markup.
       assert.ok(
-        /class="sub-mod"[^>]*>·\s*[^\s<]/.test(fittedHtml),
+        /class="sub-mod"[^>]*>·\s*(?:<[^/>][^>]*>\s*)*[^\s<]/.test(fittedHtml),
         `the fitted HTML renders a modified time, got: ${fittedHtml.slice(0, 2000)}`,
       );
     });
@@ -1335,6 +1429,68 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         deps.includes('@cardstack/base/file-api'),
         'deps include base file-api for fallback',
+      );
+    });
+
+    // `random-image.png` is not a PNG, so `PngDef`'s extractor throws and the
+    // extractor falls back up the class chain to the first ancestor whose
+    // extraction succeeds (`RasterImageDef`). The row is indexed as that
+    // ancestor: its `types` are the ancestor's full chain, so type filters on
+    // any class above it match and a filter on the failed class does not.
+    test('a file whose extraction errored is a member of the ancestor it fell back to', async function (assert) {
+      let imageURL = `${testRealm}random-image.png`;
+      let idsMatching = async (filter: Query['filter']) =>
+        (
+          await searchCardsForTest(realm.realmIndexQueryEngine, { filter })
+        ).data.map((resource) => String(resource.id));
+      let imageDef = {
+        module: rri('@cardstack/base/card-api'),
+        name: 'ImageDef',
+      };
+
+      assert.deepEqual(
+        await idsMatching({ type: imageDef }),
+        [imageURL],
+        'a type filter on an intermediate class of the fallback chain matches the file',
+      );
+      assert.deepEqual(
+        await idsMatching({
+          type: {
+            module: rri('@cardstack/base/image-file-def'),
+            name: 'RasterImageDef',
+          },
+        }),
+        [imageURL],
+        'a type filter on the class it fell back to matches the file',
+      );
+      assert.deepEqual(
+        await idsMatching({
+          type: {
+            module: rri('@cardstack/base/png-image-def'),
+            name: 'PngDef',
+          },
+        }),
+        [],
+        'a type filter on the class whose extraction failed does not match the file',
+      );
+      let nonImageFileIds = await idsMatching({
+        every: [
+          {
+            type: {
+              module: rri('@cardstack/base/card-api'),
+              name: 'FileDef',
+            },
+          },
+          { not: { type: imageDef } },
+        ],
+      });
+      assert.true(
+        nonImageFileIds.includes(`${testRealm}random-file.txt`),
+        'the exclusion keeps files outside the excluded class',
+      );
+      assert.false(
+        nonImageFileIds.includes(imageURL),
+        'excluding an intermediate class of the fallback chain drops the file',
       );
     });
 
@@ -1712,6 +1868,327 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a retry reports the adoption chain the attempt it resumes wrote', async function (assert) {
+        // A job that dies before its swap leaves real rows in the pending
+        // table, and the retry resumes them rather than re-visiting — so the
+        // write path never sees them a second time. For a card that dead
+        // attempt created there is no production row to read a chain from
+        // either, which would leave its type unreported by the pass that
+        // ultimately publishes it.
+        let jobInfo = {
+          jobId: 4242,
+          reservationId: 1,
+          priority: 0,
+          queueWaitMs: null,
+          concurrencyGroup: null,
+          laneFamily: null,
+        };
+        let url = new URL(`${testRealm}resumed-only.json`);
+        let resumedType = `${testRealm}resumed-only/ResumedOnly`;
+
+        let attempt1 = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+          jobInfo,
+        );
+        await attempt1.updateEntry(url, {
+          type: 'file',
+          deps: new Set<string>(),
+          lastModified: Date.now(),
+          resourceCreatedAt: Date.now(),
+          types: [resumedType],
+        });
+        await attempt1.flushWriteBuffer();
+        // No done() — the attempt dies before its swap.
+
+        let attempt2 = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+          jobInfo,
+        );
+        assert.true(
+          attempt2.resumedRows.has(url.href),
+          "the retry resumes the prior attempt's row",
+        );
+        assert.true(
+          attempt2.touchedTypes.includes(resumedType),
+          `the resumed row's chain is reported by the retry: ${attempt2.touchedTypes.join(', ')}`,
+        );
+      });
+
+      test('an invalidation pass records the adoption chains it touched, and only those', async function (assert) {
+        let keyFor = (module: string, name: string) =>
+          internalKeyFor(
+            { module: rri(`${testRealm}${module}`), name },
+            undefined,
+            realm.virtualNetwork,
+          );
+        let batch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+
+        // `ringo` is a Pet, and `hassan` is the PetPerson that links to it —
+        // so the fan-out reaches a second type, whose search doc genuinely can
+        // move. Nothing here is a Person or a Post.
+        await batch.invalidate([new URL(`${testRealm}ringo.json`)]);
+
+        let touched = batch.touchedTypes;
+        assert.true(
+          touched.includes(keyFor('pet', 'Pet')),
+          `the invalidated card's own type is recorded: ${touched.join(', ')}`,
+        );
+        assert.true(
+          touched.includes(keyFor('pet-person', 'PetPerson')),
+          `a dependent card's type is recorded too: ${touched.join(', ')}`,
+        );
+        assert.false(
+          touched.includes(keyFor('person', 'Person')),
+          'an untouched type is absent',
+        );
+        assert.false(
+          touched.includes(keyFor('post', 'Post')),
+          'a second untouched type is absent',
+        );
+      });
+
+      // The read side of these watermarks is the live-search cache key: a
+      // query anchored on a type reads that type's row, so a write only
+      // unreaches the cached searches whose types it could have moved.
+      test('an incremental pass stamps a watermark for the chains it touched, and only those', async function (assert) {
+        let keyFor = (module: string, name: string) =>
+          internalKeyFor(
+            { module: rri(`${testRealm}${module}`), name },
+            undefined,
+            realm.virtualNetwork,
+          );
+        let watermarks = async () => {
+          let rows = (await query(testDbAdapter, [
+            `SELECT type_key, index_generation FROM realm_type_generations WHERE realm_url =`,
+            param(realm.url),
+          ] as Expression)) as {
+            type_key: string;
+            index_generation: number;
+          }[];
+          return new Map(
+            rows.map(({ type_key, index_generation }) => [
+              type_key,
+              Number(index_generation),
+            ]),
+          );
+        };
+
+        let before = await watermarks();
+        // `ringo` is a Pet and stays one, so this pass has no departed type to
+        // stamp: the only chains it can move are Pet's and that of `hassan`,
+        // the PetPerson that links to it. A card that changes what it adopts
+        // from also stamps the type it left, which is the next test's subject
+        // rather than this one's — writing one here would move a type this
+        // test asserts is untouched.
+        await realm.write(
+          'ringo.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Ringo Starr' },
+              meta: {
+                adoptsFrom: { module: rri('./pet'), name: 'Pet' },
+              },
+            },
+          }),
+        );
+        let after = await watermarks();
+
+        let petKey = keyFor('pet', 'Pet');
+        assert.notStrictEqual(
+          after.get(petKey),
+          before.get(petKey),
+          `the written card's own type moves: ${after.get(petKey)}`,
+        );
+        assert.strictEqual(
+          after.get(keyFor('person', 'Person')),
+          before.get(keyFor('person', 'Person')),
+          'a type the pass never touched keeps its watermark, so a query anchored on it stays cached',
+        );
+        assert.strictEqual(
+          after.get(ALL_TYPES_KEY),
+          before.get(ALL_TYPES_KEY),
+          'a pass that can name its types leaves the catch-all key alone',
+        );
+      });
+
+      test('an instance-only pass leaves the prerender tab its evaluated module graph', async function (assert) {
+        // The tab a pass lands on caches every module it has evaluated, and
+        // the card the pass renders reaches most of them. Dropping that graph
+        // costs a re-fetch and re-evaluation of the whole reachable set, which
+        // a pass over one card has nothing to amortize it against — so a pass
+        // that changed no module must not ask for the drop.
+        //
+        // `loaderResetReason` is the direct reading and `moduleEvaluationCount`
+        // is its consequence, and the two are asserted over different sets of
+        // passes. The reason is the pass's own doing, so every pass is held to
+        // it. The count is only the pass's doing on a tab already synchronized
+        // to this realm's epoch series: a pass routed onto a tab that is not
+        // rebuilds the whole reachable set whatever it asks for, and says so
+        // by naming `firstEpoch`, so the count is read on the passes that
+        // named nothing. Which passes those are is not fixed — the pool
+        // chooses — hence several passes and a floor of one that named
+        // nothing, rather than a count read off whichever pass happens to be
+        // first.
+        let diagnosticsFor = async (localPath: string) => {
+          let [row] = (await testDbAdapter.execute(
+            `SELECT diagnostics FROM boxel_index WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+            { bind: [realm.url, `${testRealm}${localPath}`] },
+          )) as {
+            diagnostics: {
+              loaderResetReason?: string;
+              moduleEvaluationCount?: number;
+            } | null;
+          }[];
+          return row?.diagnostics ?? undefined;
+        };
+
+        let write = (firstName: string) =>
+          realm.write(
+            'ringo.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { firstName },
+                meta: { adoptsFrom: { module: rri('./pet'), name: 'Pet' } },
+              },
+            }),
+          );
+
+        // Each write is its own isolated pass, so a per-pass drop is paid
+        // again on every one of them rather than once.
+        let passes: Awaited<ReturnType<typeof diagnosticsFor>>[] = [];
+        for (let firstName of ['Ringo Starr', 'Richard Starkey', 'Ringo']) {
+          await write(firstName);
+          passes.push(await diagnosticsFor('ringo.json'));
+        }
+
+        // `firstEpoch` says the tab it landed on had never synchronized to
+        // this realm's epoch series, which is a fact about where the pool ran
+        // the pass. The pass is answerable for `loaderEpoch` and `clearCache`
+        // only, and an invalidation set holding no executable is the condition
+        // under which it may record neither.
+        for (let [index, pass] of passes.entries()) {
+          let reason = pass?.loaderResetReason ?? 'none';
+          assert.ok(
+            ['none', 'firstEpoch'].includes(reason),
+            `pass ${index + 1} holds no executable in its invalidation set, so nothing the pass did can have cleared the loader, got: ${reason}`,
+          );
+        }
+
+        let warmPasses = passes.filter(
+          (pass) => pass?.loaderResetReason === undefined,
+        );
+        assert.ok(
+          warmPasses.length > 0,
+          `at least one pass ran on a tab that already held a graph, so the count below measures something, got reasons: ${JSON.stringify(passes.map((pass) => pass?.loaderResetReason))}`,
+        );
+        for (let pass of warmPasses) {
+          assert.strictEqual(
+            pass?.moduleEvaluationCount,
+            0,
+            `a pass on a warm tab evaluates no module, got: ${JSON.stringify(pass?.moduleEvaluationCount)}`,
+          );
+        }
+
+        // The mirror: a pass that rewrites the module the card adopts from
+        // must still drop the graph. Without this, the assertions above would
+        // hold just as well for a version that never asks for the drop at all.
+        //
+        // Read as the re-evaluation rather than as a recorded reason: modules
+        // are visited before the instances that adopt from them, so `pet.gts`
+        // consumes the pass's one-shot and drops the graph, and by the time
+        // `ringo.json` renders there is no reset left for its own row to name.
+        // What its row can say is that the graph it rendered against had to be
+        // rebuilt, which is the thing a pass that never armed the drop could
+        // not produce.
+        await realm.write(
+          'pet.gts',
+          `
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
+
+          export class Pet extends CardDef {
+            @field firstName = contains(StringField);
+            @field nickName = contains(StringField);
+          }
+        `,
+        );
+        let afterModule = await diagnosticsFor('ringo.json');
+        assert.ok(
+          (afterModule?.moduleEvaluationCount ?? 0) > 0,
+          `a pass carrying an executable drops the graph, so the card that adopts from it re-evaluates, got: ${JSON.stringify(afterModule?.moduleEvaluationCount)}`,
+        );
+      });
+
+      test('a write that changes what a card adopts from stamps the type it left', async function (assert) {
+        // The type a row departs is the one a cached search anchored on it
+        // still holds the row as a member of, and nothing else in the pass
+        // names it — so the pass has to read the row it is overwriting, not
+        // just the chain it writes.
+        let keyFor = (module: string, name: string) =>
+          internalKeyFor(
+            { module: rri(`${testRealm}${module}`), name },
+            undefined,
+            realm.virtualNetwork,
+          );
+        let watermarks = async () => {
+          let rows = (await query(testDbAdapter, [
+            `SELECT type_key, index_generation FROM realm_type_generations WHERE realm_url =`,
+            param(realm.url),
+          ] as Expression)) as {
+            type_key: string;
+            index_generation: number;
+          }[];
+          return new Map(
+            rows.map(({ type_key, index_generation }) => [
+              type_key,
+              Number(index_generation),
+            ]),
+          );
+        };
+        let asPet = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            meta: { adoptsFrom: { module: rri('./pet'), name: 'Pet' } },
+          },
+        });
+        let asPerson = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            meta: { adoptsFrom: { module: rri('./person'), name: 'Person' } },
+          },
+        });
+
+        await realm.write('vangogh.json', asPet);
+        let afterPet = await watermarks();
+        await realm.write('vangogh.json', asPerson);
+        let afterPerson = await watermarks();
+
+        assert.notStrictEqual(
+          afterPerson.get(keyFor('pet', 'Pet')),
+          afterPet.get(keyFor('pet', 'Pet')),
+          `the departed type moves: ${afterPerson.get(keyFor('pet', 'Pet'))}`,
+        );
+        assert.notStrictEqual(
+          afterPerson.get(keyFor('person', 'Person')),
+          afterPet.get(keyFor('person', 'Person')),
+          'and so does the type it joined',
+        );
+        assert.strictEqual(
+          afterPerson.get(ALL_TYPES_KEY),
+          afterPet.get(ALL_TYPES_KEY),
+          'a pass that read the row it overwrote needs no catch-all bump',
+        );
+      });
+
       // A batch reads the realm's loader epoch when it starts, and with no
       // executable in its invalidation set its own epoch getter returns that
       // same token. Committing it unconditionally would write the read-at-start
@@ -1770,29 +2247,63 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('batch invalidation resolves alias-like seeds from staged working rows', async function (assert) {
+      test("batch invalidation resolves alias-like seeds from the pass's own staged rows, not a peer's", async function (assert) {
         let stagedOnlyURL = new URL(`${testRealm}staged-only.json`);
         let stagedAliasURL = new URL(`${testRealm}staged-only`);
+        let stagedFile = {
+          type: 'file' as const,
+          deps: new Set<string>(),
+          lastModified: Date.now(),
+          resourceCreatedAt: Date.now(),
+        };
+        // A committed row that depends on the staged file by its concrete
+        // `.json` URL. The fan-out matches a dependency string exactly, so it
+        // reaches this row only when the alias seed resolved to that URL.
+        let dependentURL = `${testRealm}staged-only-dependent.json`;
+        await testDbAdapter.execute(
+          `INSERT INTO boxel_index (url, file_alias, type, generation, realm_url, deps, is_deleted, has_error)
+           VALUES ($1, $2, 'instance', 1, $3, $4::jsonb, false, false)`,
+          {
+            bind: [
+              dependentURL,
+              dependentURL.replace(/\.json$/, ''),
+              realm.url,
+              JSON.stringify([stagedOnlyURL.href]),
+            ],
+          },
+        );
 
+        let otherBatch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
         let stagingBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
           virtualNetwork,
         );
-        await stagingBatch.updateEntry(stagedOnlyURL, {
-          type: 'file',
-          deps: new Set<string>(),
-          lastModified: Date.now(),
-          resourceCreatedAt: Date.now(),
-        });
+        // A batch's first `invalidate()` fixes the URLs it treats as already
+        // handled, and a URL it wrote before then is one of them. So the file
+        // each batch reaches through a staged row is one staged after that.
+        for (let batch of [otherBatch, stagingBatch]) {
+          await batch.invalidate([new URL(`${testRealm}unrelated-seed.json`)]);
+        }
 
-        let invalidationBatch = await new IndexWriter(
-          testDbAdapter,
-        ).createBatch(new URL(realm.url), virtualNetwork);
-        await invalidationBatch.invalidate([stagedAliasURL]);
+        let peerBatch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+        await peerBatch.updateEntry(stagedOnlyURL, stagedFile);
+        await otherBatch.invalidate([stagedAliasURL]);
+        assert.false(
+          otherBatch.invalidations.includes(dependentURL),
+          "a peer pass's staged row does not resolve the seed, so its dependents are not reached",
+        );
 
-        assert.ok(
-          invalidationBatch.invalidations.includes(stagedOnlyURL.href),
-          'instance-id style seed resolves via boxel_index_working row before production commit',
+        await stagingBatch.updateEntry(stagedOnlyURL, stagedFile);
+        await stagingBatch.invalidate([stagedAliasURL]);
+        assert.true(
+          stagingBatch.invalidations.includes(dependentURL),
+          "the pass's own staged row resolves the seed, and the fan-out reaches its dependents",
         );
       });
 
@@ -1828,11 +2339,140 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      // The sweep runs from the scheduled `scoped-css-gc` job, whose task
+      // shell adds nothing to the scan, so this direct test is what turns a
+      // broken scan or delete red.
+      test("sweepUnreferencedScopedCSS drops this realm's unreferenced rows and nothing else", async function (assert) {
+        let referencedRows = (await testDbAdapter.execute(
+          `SELECT hash FROM scoped_css WHERE realm_url = $1`,
+          { bind: [realm.url] },
+        )) as { hash: string }[];
+        assert.ok(
+          referencedRows.length > 0,
+          'precondition: indexing interned scoped CSS for the fixture realm',
+        );
+
+        let orphanHash = 'a'.repeat(32);
+        let freshOrphanHash = 'c'.repeat(32);
+        let foreignHash = 'b'.repeat(32);
+        let foreignRealmURL = 'http://example.com/other-realm/';
+        let sweepable = Date.now() - 2 * 24 * 60 * 60 * 1000;
+        await testDbAdapter.execute(
+          `INSERT INTO scoped_css (realm_url, hash, css, last_interned_at)
+           VALUES ($1, $2, $3, $4), ($5, $6, $7, $8), ($9, $10, $11, $12)`,
+          {
+            bind: [
+              realm.url,
+              orphanHash,
+              '.superseded {}',
+              sweepable,
+              realm.url,
+              freshOrphanHash,
+              '.just-interned {}',
+              Date.now(),
+              foreignRealmURL,
+              foreignHash,
+              '.foreign {}',
+              sweepable,
+            ],
+          },
+        );
+
+        let swept = await sweepUnreferencedScopedCSS(testDbAdapter, realm.url);
+
+        assert.strictEqual(swept, 1, 'exactly the stale orphan row was swept');
+        let remaining = (await testDbAdapter.execute(
+          `SELECT realm_url, hash FROM scoped_css ORDER BY realm_url, hash`,
+        )) as { realm_url: string; hash: string }[];
+        assert.false(
+          remaining.some(
+            (row) => row.realm_url === realm.url && row.hash === orphanHash,
+          ),
+          'the unreferenced row is gone',
+        );
+        assert.true(
+          remaining.some(
+            (row) =>
+              row.realm_url === realm.url && row.hash === freshOrphanHash,
+          ),
+          'an unreferenced row still inside the grace window survived',
+        );
+        assert.strictEqual(
+          remaining.filter((row) => row.realm_url === realm.url).length,
+          referencedRows.length + 1,
+          'every referenced row survived (plus the within-grace orphan)',
+        );
+        assert.true(
+          remaining.some(
+            (row) =>
+              row.realm_url === foreignRealmURL && row.hash === foreignHash,
+          ),
+          "another realm's rows are untouched, even unreferenced ones",
+        );
+      });
+
+      // The sweep's scan is a snapshot, so a hash it selected can be interned
+      // again — and referenced — before the delete reaches it. Interning
+      // refreshes `last_interned_at`, which is what the grace window reads, so
+      // the delete has to re-apply the cutoff rather than trust the scan's
+      // list. This drives that ordering by interleaving the intern on the
+      // adapter, between the scan's SELECT and the delete.
+      test('sweepUnreferencedScopedCSS keeps a row re-interned after its scan', async function (assert) {
+        let racedHash = 'd'.repeat(32);
+        let sweepable = Date.now() - 2 * 24 * 60 * 60 * 1000;
+        await testDbAdapter.execute(
+          `INSERT INTO scoped_css (realm_url, hash, css, last_interned_at)
+           VALUES ($1, $2, $3, $4)`,
+          { bind: [realm.url, racedHash, '.raced {}', sweepable] },
+        );
+
+        let interned = false;
+        let interleavingAdapter = new Proxy(testDbAdapter, {
+          get(target, prop, receiver) {
+            if (prop !== 'execute') {
+              return Reflect.get(target, prop, receiver);
+            }
+            return async (sql: string, opts?: ExecuteOptions) => {
+              let result = await target.execute(sql, opts);
+              // The scan that builds the delete list; everything before it is
+              // the reference scan over the index tables.
+              if (!interned && /SELECT hash FROM scoped_css/i.test(sql)) {
+                interned = true;
+                await target.execute(
+                  `UPDATE scoped_css SET last_interned_at = $1
+                     WHERE realm_url = $2 AND hash = $3`,
+                  { bind: [Date.now(), realm.url, racedHash] },
+                );
+              }
+              return result;
+            };
+          },
+        }) as DBAdapter;
+
+        let swept = await sweepUnreferencedScopedCSS(
+          interleavingAdapter,
+          realm.url,
+        );
+
+        assert.true(
+          interned,
+          'precondition: the intern was interleaved on the scan',
+        );
+        let survived = (await testDbAdapter.execute(
+          `SELECT hash FROM scoped_css WHERE realm_url = $1 AND hash = $2`,
+          { bind: [realm.url, racedHash] },
+        )) as { hash: string }[];
+        assert.deepEqual(
+          { swept, survived: survived.length },
+          { swept: 0, survived: 1 },
+          'the re-interned row is withheld from the delete and not counted as swept',
+        );
+      });
+
       test('batch invalidation clears has_error and error_doc when tombstoning a previously-errored row', async function (assert) {
-        // The primary key is `(url, realm_url, type)` — no `generation` —
-        // so a tombstone upsert always collides with the prior row for the
-        // same URL. Any column NOT in the tombstone upsert's SET list keeps
-        // its previous value. Before this guard, `has_error` and `error_doc`
+        // A tombstone is staged over a copy of the URL's production row, so
+        // any column NOT in the tombstone upsert's SET list keeps its
+        // production value. Before this guard, `has_error` and `error_doc`
         // were not in that list, so an errored row stayed errored across
         // every subsequent reindex even after the file was deleted —
         // producing a "has_error = true, error_doc = jsonb null" shape
@@ -1998,7 +2638,7 @@ module(basename(import.meta.filename), function () {
                 `SELECT id, priority, args
              FROM jobs
              WHERE job_type = 'incremental-index'
-               AND concurrency_group = $1
+               AND (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'`,
                 { bind: [`indexing:${realm.url}`] },
               )) as {
@@ -2069,27 +2709,51 @@ module(basename(import.meta.filename), function () {
             },
           );
 
+          // Both enqueues coalesce into a single pending job, but they land in
+          // two steps: `mixed-update` publishes the job (changes carry
+          // operation `update`), then `mixed-delete` joins and merges its
+          // delete in. Waiting for `rows.length === 1` alone races that second
+          // step — the poll can observe the update-only job before the delete
+          // has been folded in and read a spurious `update`. The job's
+          // `coalescedCallers` records one entry per joined caller, so gate on
+          // both clientRequestIds being present: that proves the delete has
+          // coalesced before we assert which operation won. Dominance stays
+          // under test — were it broken, `mixed-delete` would still merge (both
+          // callers present) yet leave the change as `update`, failing the
+          // assertion below rather than the wait.
           let row = (await waitUntil(
             async () => {
               let rows = (await testDbAdapter.execute(
                 `SELECT args
              FROM jobs
              WHERE job_type = 'incremental-index'
-               AND concurrency_group = $1
+               AND (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'`,
                 { bind: [`indexing:${realm.url}`] },
               )) as {
                 args: {
                   changes: { url: string; operation: 'update' | 'delete' }[];
+                  coalescedCallers?: { clientRequestId: string | null }[];
                 };
               }[];
-              return rows.length === 1 ? rows[0] : undefined;
+              if (rows.length !== 1) {
+                return undefined;
+              }
+              let clientRequestIds = new Set(
+                (rows[0].args.coalescedCallers ?? []).map(
+                  (caller) => caller.clientRequestId,
+                ),
+              );
+              let bothCoalesced =
+                clientRequestIds.has('mixed-update') &&
+                clientRequestIds.has('mixed-delete');
+              return bothCoalesced ? rows[0] : undefined;
             },
             {
               timeout: 3000,
               interval: 50,
               timeoutMessage:
-                'expected one pending incremental job during mixed-op burst',
+                'expected one pending incremental job carrying both the update and delete callers during mixed-op burst',
             },
           )) as {
             args: {
@@ -2127,7 +2791,7 @@ module(basename(import.meta.filename), function () {
               let rows = (await testDbAdapter.execute(
                 `SELECT job_type
              FROM jobs
-             WHERE concurrency_group = $1
+             WHERE (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'
                AND job_type IN ('incremental-index', 'from-scratch-index')`,
                 { bind: [`indexing:${realm.url}`] },
@@ -2265,7 +2929,7 @@ module(basename(import.meta.filename), function () {
               let rows = (await testDbAdapter.execute(
                 `SELECT job_type
                FROM jobs
-               WHERE concurrency_group = $1
+               WHERE (concurrency_group = $1 OR lane_family = $1)
                  AND status = 'unfulfilled'
                  AND job_type IN ('incremental-index', 'from-scratch-index')`,
                 { bind: [`indexing:${realm.url}`] },
@@ -3000,11 +3664,31 @@ module(basename(import.meta.filename), function () {
         return depsForIndexEntry(testDbAdapter, url, type);
       }
 
-      async function indexedAtFor(
-        url: string,
-        type: 'instance' | 'file' = 'instance',
-      ): Promise<string | null> {
-        return indexedAtForIndexEntry(testDbAdapter, url, type);
+      // The generation a card's HTML was last rendered at, read once the
+      // realm's prerender channel has settled. A consumer that only renders
+      // a changed card is re-rendered by the prerender-html job rather than
+      // re-indexed, so its HTML generation — not its index row — is what
+      // shows it was invalidated.
+      async function renderedGenerationFor(url: string, afterJobId?: number) {
+        await settlePrerenderHtmlJobs(
+          testDbAdapter,
+          realm.url,
+          afterJobId !== undefined ? { afterJobId } : undefined,
+        );
+        return (await prerenderedHtmlRowFor(testDbAdapter, url))?.generation;
+      }
+
+      // Writes a file and returns the consumer's rendered generation before
+      // and after the write.
+      async function renderedGenerationsAround(
+        consumerURL: string,
+        write: () => Promise<unknown>,
+      ) {
+        let before = await renderedGenerationFor(consumerURL);
+        let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
+        await write();
+        let after = await renderedGenerationFor(consumerURL, baseline);
+        return { before: before ?? -1, after: after ?? -1 };
       }
 
       setupPermissionedRealmCached(hooks, {
@@ -3371,47 +4055,43 @@ module(basename(import.meta.filename), function () {
           'instance relationship deps use concrete .json URL form',
         );
 
-        let beforeLinksToInvalidation = await indexedAtFor(
+        let linksToRender = await renderedGenerationsAround(
           `${testRealm}consumer-relationship.json`,
+          () =>
+            realm.write(
+              'friend-a.json',
+              JSON.stringify({
+                data: {
+                  attributes: { name: 'Friend A Updated' },
+                  relationships: {
+                    next: { links: { self: './deep-1' } },
+                  },
+                  meta: { adoptsFrom: personType },
+                },
+              } as LooseSingleCardDocument),
+            ),
         );
-        await realm.write(
-          'friend-a.json',
-          JSON.stringify({
-            data: {
-              attributes: { name: 'Friend A Updated' },
-              relationships: {
-                next: { links: { self: './deep-1' } },
-              },
-              meta: { adoptsFrom: personType },
-            },
-          } as LooseSingleCardDocument),
-        );
-        let afterLinksToInvalidation = await indexedAtFor(
-          `${testRealm}consumer-relationship.json`,
-        );
-        assert.notStrictEqual(
-          afterLinksToInvalidation,
-          beforeLinksToInvalidation,
-          'updating linksTo relationship target invalidates consumer instance',
+        assert.ok(
+          linksToRender.after > linksToRender.before,
+          `updating linksTo relationship target re-renders consumer instance (${JSON.stringify(linksToRender)})`,
         );
 
-        let beforeLinksToManyInvalidation = afterLinksToInvalidation;
-        await realm.write(
-          'friend-b.json',
-          JSON.stringify({
-            data: {
-              attributes: { name: 'Friend B Updated' },
-              meta: { adoptsFrom: personType },
-            },
-          } as LooseSingleCardDocument),
-        );
-        let afterLinksToManyInvalidation = await indexedAtFor(
+        let linksToManyRender = await renderedGenerationsAround(
           `${testRealm}consumer-relationship.json`,
+          () =>
+            realm.write(
+              'friend-b.json',
+              JSON.stringify({
+                data: {
+                  attributes: { name: 'Friend B Updated' },
+                  meta: { adoptsFrom: personType },
+                },
+              } as LooseSingleCardDocument),
+            ),
         );
-        assert.notStrictEqual(
-          afterLinksToManyInvalidation,
-          beforeLinksToManyInvalidation,
-          'updating linksToMany relationship target invalidates consumer instance',
+        assert.ok(
+          linksToManyRender.after > linksToManyRender.before,
+          `updating linksToMany relationship target re-renders consumer instance (${JSON.stringify(linksToManyRender)})`,
         );
       });
 
@@ -3519,17 +4199,17 @@ module(basename(import.meta.filename), function () {
           'the dotted target is recorded at its row URL rather than its bare id',
         );
 
-        let beforeInvalidation = await indexedAtFor(
+        let render = await renderedGenerationsAround(
           `${testRealm}dotted-consumer.json`,
+          () =>
+            realm.write(
+              'hello.test.json',
+              dottedTarget('Dotted Target Updated'),
+            ),
         );
-        await realm.write(
-          'hello.test.json',
-          dottedTarget('Dotted Target Updated'),
-        );
-        assert.notStrictEqual(
-          await indexedAtFor(`${testRealm}dotted-consumer.json`),
-          beforeInvalidation,
-          'writing the dotted-id instance invalidates the consumer linking to it',
+        assert.ok(
+          render.after > render.before,
+          `writing the dotted-id instance re-renders the consumer linking to it (${JSON.stringify(render)})`,
         );
       });
 
@@ -4158,33 +4838,30 @@ module(basename(import.meta.filename), function () {
           'deps include second node in relationship cycle',
         );
 
-        let beforeIndexedAt = await indexedAtFor(
+        let render = await renderedGenerationsAround(
           `${testRealm}loop-consumer.json`,
-        );
-        await realm.write(
-          'loop-b.json',
-          JSON.stringify({
-            data: {
-              attributes: { name: 'Loop B Updated' },
-              relationships: {
-                next: { links: { self: './loop-a' } },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: rri('./loop-card'),
-                  name: 'LoopCard',
+          () =>
+            realm.write(
+              'loop-b.json',
+              JSON.stringify({
+                data: {
+                  attributes: { name: 'Loop B Updated' },
+                  relationships: {
+                    next: { links: { self: './loop-a' } },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./loop-card'),
+                      name: 'LoopCard',
+                    },
+                  },
                 },
-              },
-            },
-          } as LooseSingleCardDocument),
+              } as LooseSingleCardDocument),
+            ),
         );
-        let afterIndexedAt = await indexedAtFor(
-          `${testRealm}loop-consumer.json`,
-        );
-        assert.notStrictEqual(
-          afterIndexedAt,
-          beforeIndexedAt,
-          'updating one cycle node invalidates and reindexes consumer',
+        assert.ok(
+          render.after > render.before,
+          `updating one cycle node invalidates and re-renders consumer (${JSON.stringify(render)})`,
         );
 
         let loopA = await realm.realmIndexQueryEngine.instance(
@@ -4426,11 +5103,31 @@ module(basename(import.meta.filename), function () {
         return depsForIndexEntry(testDbAdapter, url, type);
       }
 
-      async function indexedAtFor(
-        url: string,
-        type: 'instance' | 'file' = 'instance',
-      ): Promise<string | null> {
-        return indexedAtForIndexEntry(testDbAdapter, url, type);
+      // The generation a card's HTML was last rendered at, read once the
+      // realm's prerender channel has settled. A consumer that only renders
+      // a changed card is re-rendered by the prerender-html job rather than
+      // re-indexed, so its HTML generation — not its index row — is what
+      // shows it was invalidated.
+      async function renderedGenerationFor(url: string, afterJobId?: number) {
+        await settlePrerenderHtmlJobs(
+          testDbAdapter,
+          realm.url,
+          afterJobId !== undefined ? { afterJobId } : undefined,
+        );
+        return (await prerenderedHtmlRowFor(testDbAdapter, url))?.generation;
+      }
+
+      // Writes a file and returns the consumer's rendered generation before
+      // and after the write.
+      async function renderedGenerationsAround(
+        consumerURL: string,
+        write: () => Promise<unknown>,
+      ) {
+        let before = await renderedGenerationFor(consumerURL);
+        let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
+        await write();
+        let after = await renderedGenerationFor(consumerURL, baseline);
+        return { before: before ?? -1, after: after ?? -1 };
       }
 
       setupPermissionedRealmCached(hooks, {
@@ -4749,28 +5446,22 @@ module(basename(import.meta.filename), function () {
           'deps include second FileDef linksToMany relationship target URL',
         );
 
-        let beforeLinksToInvalidation = await indexedAtFor(
+        let linksToRender = await renderedGenerationsAround(
           `${testRealm}file-relationship-consumer.json`,
+          () => realm.write('primary-note.txt', 'primary note v2'),
         );
-        await realm.write('primary-note.txt', 'primary note v2');
-        let afterLinksToInvalidation = await indexedAtFor(
-          `${testRealm}file-relationship-consumer.json`,
-        );
-        assert.notStrictEqual(
-          afterLinksToInvalidation,
-          beforeLinksToInvalidation,
-          'updating FileDef linksTo target invalidates consumer instance',
+        assert.ok(
+          linksToRender.after > linksToRender.before,
+          `updating FileDef linksTo target re-renders consumer instance (${JSON.stringify(linksToRender)})`,
         );
 
-        let beforeLinksToManyInvalidation = afterLinksToInvalidation;
-        await realm.write('attachment-a.txt', 'attachment a v2');
-        let afterLinksToManyInvalidation = await indexedAtFor(
+        let linksToManyRender = await renderedGenerationsAround(
           `${testRealm}file-relationship-consumer.json`,
+          () => realm.write('attachment-a.txt', 'attachment a v2'),
         );
-        assert.notStrictEqual(
-          afterLinksToManyInvalidation,
-          beforeLinksToManyInvalidation,
-          'updating FileDef linksToMany target invalidates consumer instance',
+        assert.ok(
+          linksToManyRender.after > linksToManyRender.before,
+          `updating FileDef linksToMany target re-renders consumer instance (${JSON.stringify(linksToManyRender)})`,
         );
       });
 

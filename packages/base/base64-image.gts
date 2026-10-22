@@ -199,9 +199,7 @@ export class ImageSizeField extends FieldDef {
   static [fieldSerializer] = 'image-size';
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
+    <template>{{@model}}</template>
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
@@ -236,9 +234,7 @@ export class ImageSizeField extends FieldDef {
     }
   };
   static atom = class Atom extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
+    <template>{{@model}}</template>
   };
 }
 

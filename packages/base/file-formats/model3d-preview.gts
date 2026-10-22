@@ -7,9 +7,12 @@
 // sanctioned Boxel pattern for external libraries (the loader resolves https://
 // specifiers). Two gates keep WebGL off the paths where it can't or shouldn't
 // run:
-//   - PRERENDER: server-side rendering (indexing/prerender) never boots WebGL or
-//     fetches the CDN engine; `isLiveRender()` is the deterministic gate. The
-//     static cube is the prerender representation.
+//   - PRERENDER: this viewer never boots WebGL or fetches the CDN engine during
+//     server-side rendering (indexing/prerender); `isLiveRender()` is the
+//     deterministic gate, and the static cube is its prerender representation.
+//     The fitted poster is a separate capture-only render (`model3d-captures`)
+//     that draws one still with the host's vendored three.js — no CDN fetch
+//     on the indexing path.
 //   - VIEWPORT: the viewer boots only while on-screen and disposes its context
 //     when scrolled off, re-booting on re-entry — so a strip of embedded models
 //     keeps only the visible ones holding a context and never exhausts the
@@ -22,7 +25,10 @@ import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import CubeIcon from '@cardstack/boxel-icons/cube';
 
+import { isLiveRender } from '../render-context';
+
 import type { FilePreviewSignature } from './file-preview-stage';
+import { fileContentRevision } from './file-revision';
 
 // Static preview behind the live viewer and in fitted cells: a plain cube icon.
 // A shaded raster thumbnail (CS-12401) will later flow through the shell's own
@@ -72,16 +78,14 @@ function disposeObject(root: any) {
   });
 }
 
-// Base cards read this global to tell a server-side prerender from a live
-// client render (same signal `query-field-support` / `links-to-many` use).
-function isLiveRender(): boolean {
-  return !(globalThis as { __boxelRenderContext?: unknown })
-    .__boxelRenderContext;
-}
-
+// Reruns when the model URL or the file's revision changes: a write to the
+// file tears the viewer down and boots it again from freshly fetched bytes.
 const renderModel = modifier(
-  (element: HTMLElement, [component, url]: [Model3DPreview, string]) => {
-    if (!url || !isLiveRender()) {
+  (
+    element: HTMLElement,
+    [component, url, _revision]: [Model3DPreview, string, string],
+  ) => {
+    if (!url || !isLiveRender(element)) {
       return;
     }
     let cancelled = false;
@@ -363,6 +367,9 @@ export class Model3DPreview extends GlimmerComponent<FilePreviewSignature> {
   get url() {
     return String(this.args.model?.resourceUrl ?? this.args.model?.url ?? '');
   }
+  get revision() {
+    return fileContentRevision(this.args.model);
+  }
   get name() {
     return String(this.args.model?.name ?? 'model');
   }
@@ -410,7 +417,10 @@ export class Model3DPreview extends GlimmerComponent<FilePreviewSignature> {
     {{else}}
       <div class='model-viewer' data-test-model-preview={{@format}}>
         {{#if this.url}}
-          <div class='model-viewer__host' {{renderModel this this.url}}></div>
+          <div
+            class='model-viewer__host'
+            {{renderModel this this.url this.revision}}
+          ></div>
         {{/if}}
         {{#unless this.isReady}}
           <div class='model-viewer__placeholder'>

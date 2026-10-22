@@ -16,6 +16,7 @@ import CalendarStatsIcon from '@cardstack/boxel-icons/calendar-stats';
 import { eq, formatDateTime } from '@cardstack/boxel-ui/helpers';
 import { formatDateRangeForMarkdown } from './markdown-helpers';
 import { BusinessDays } from './components/business-days';
+import { nowDate } from './helpers/clock';
 
 interface DateRangeFieldConfiguration {
   minDate?: 'today' | Date;
@@ -28,7 +29,7 @@ function resolveConfiguredDate(
 ): Date | undefined {
   if (!value) return undefined;
   if (value === 'today') {
-    let today = new Date();
+    let today = nowDate();
     today.setHours(0, 0, 0, 0);
     return today;
   }
@@ -66,6 +67,12 @@ class Edit extends Component<typeof DateRangeField> {
 
   get maxDate(): Date | undefined {
     return resolveConfiguredDate(this.config?.maxDate);
+  }
+
+  // Read from the same clock as a `'today'` bound, so the month the
+  // calendar opens on is the month that bound falls in.
+  get today(): Date {
+    return nowDate();
   }
 
   @action onSelect(selected: any) {
@@ -115,6 +122,7 @@ class Edit extends Component<typeof DateRangeField> {
         <div class='dropdown-content'>
           <div>
             <DateRangePicker
+              @defaultCenter={{this.today}}
               @start={{this.range.start}}
               @end={{this.range.end}}
               @onSelect={{this.onSelect}}

@@ -9,6 +9,10 @@ import {
   CardURLContextName,
   fieldSerializer,
   CodeRefSerializer,
+  loaderForModule,
+  resolveRRIReference,
+  rri,
+  type Loader,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -71,11 +75,18 @@ class EditView extends Component<typeof CodeRefField> {
 
       let name = parts.pop()!;
       let module = parts.join('/');
+      // The card's id is canonical RRI (prefix form for a mapped realm), so a
+      // relative module resolves against it in RRI space and is stored that way.
       if (isUrlLike(module) && this.cardURL) {
-        module = new URL(module, new URL(this.cardURL)).href;
+        module = resolveRRIReference(module, rri(this.cardURL));
       }
       try {
-        let code = (await import(module))[name];
+        // Through the loader, not a bare `import()`: the specifier is a realm
+        // module, which only the loader can resolve. A bare dynamic import is
+        // rewritten to the loader when the realm transpiles this file, but when
+        // this module is compiled into the host bundle the bundler owns that
+        // call instead and the specifier reaches the platform unresolved.
+        let code = (await myLoader().import<Record<string, any>>(module))[name];
         if (code) {
           this.validationState = 'valid';
           if (!opts?.checkOnly) {
@@ -128,6 +139,13 @@ export default class CodeRefField extends FieldDef {
     }
     <template>{{this.text}}</template>
   };
+}
+
+function myLoader(): Loader {
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
+  // @ts-ignore
+  return loaderForModule(import.meta);
 }
 
 export class AbsoluteCodeRefField extends CodeRefField {

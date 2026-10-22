@@ -3,9 +3,15 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import { createHmac } from 'crypto';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
-import { realmSecretSeed, insertUser } from '../helpers/index.ts';
+import {
+  realmSecretSeed,
+  insertIncomingWebhookRow,
+  insertUser,
+  setupSecretsKeyring,
+} from '../helpers/index.ts';
 import { param, query, uuidv4 } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest } from './helpers.ts';
+import { logLinesDuring } from '../helpers/log-capture.ts';
 import {
   extractRealmFromPrBody,
   extractBranchNameFromPayload,
@@ -14,6 +20,7 @@ import {
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('Webhook Receiver Endpoint', function (hooks) {
     let context = setupServerEndpointsTest(hooks);
+    setupSecretsKeyring(hooks);
 
     test('returns 404 for unknown webhook path', async function (assert) {
       let response = await context.request
@@ -127,6 +134,89 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('the receiver verifies with the sealed secret', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+      let signingSecret = 'a'.repeat(64);
+      await insertIncomingWebhookRow(context.dbAdapter, {
+        username: matrixUserId,
+        webhookPath: 'whk_sealed',
+        signingSecret,
+      });
+      let payload = JSON.stringify({ event: 'push' });
+
+      let response = await context.request
+        .post('/_webhooks/whk_sealed')
+        .set('Content-Type', 'application/json')
+        .set(
+          'X-Hub-Signature-256',
+          'sha256=' +
+            createHmac('sha256', signingSecret)
+              .update(payload, 'utf8')
+              .digest('hex'),
+        )
+        .send(payload);
+
+      assert.strictEqual(response.status, 200);
+    });
+
+    test("a webhook whose sealed secret doesn't open verifies nothing, and is reported", async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+      let signingSecret = 'b'.repeat(64);
+      await insertIncomingWebhookRow(context.dbAdapter, {
+        username: matrixUserId,
+        webhookPath: 'whk_tampered',
+        signingSecret,
+      });
+      // A sealed value that no longer opens.
+      await context.dbAdapter.execute(
+        `UPDATE incoming_webhooks SET signing_secret_tag = decode(repeat('00', 16), 'hex')
+         WHERE webhook_path = 'whk_tampered'`,
+      );
+      let payload = JSON.stringify({ event: 'push' });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+
+      let status: number | undefined;
+      let lines = await logLinesDuring(
+        ['incoming-webhook-secrets'],
+        async () => {
+          let response = await context.request
+            .post('/_webhooks/whk_tampered')
+            .set('Content-Type', 'application/json')
+            .set('X-Hub-Signature-256', signature)
+            .send(payload);
+          status = response.status;
+        },
+      );
+
+      assert.strictEqual(
+        status,
+        500,
+        'a delivery signed with the secret is not accepted',
+      );
+      let errors = lines.filter(({ level }) => level === 'error');
+      assert.strictEqual(errors.length, 1, 'the receiver reports the row');
+      assert.false(
+        errors[0].message.includes(signingSecret),
+        'the report never carries the secret',
+      );
+    });
+
     test('returns 200 for valid signature with base64 encoding', async function (assert) {
       let matrixUserId = '@user:localhost';
       await insertUser(
@@ -189,26 +279,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         'user@example.com',
       );
 
-      let webhookId = uuidv4();
-      await query(context.dbAdapter, [
-        `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at) VALUES (`,
-        param(webhookId),
-        `,`,
-        param(matrixUserId),
-        `,`,
-        param('whk_noheader'),
-        `,`,
-        param('HMAC_SHA256_HEADER'),
-        `,`,
-        `'{"header": "X-Hub-Signature-256", "encoding": "hex"}'::jsonb`,
-        `,`,
-        param('testsecret123'),
-        `,`,
-        `CURRENT_TIMESTAMP`,
-        `,`,
-        `CURRENT_TIMESTAMP`,
-        `)`,
-      ]);
+      await insertIncomingWebhookRow(context.dbAdapter, {
+        username: matrixUserId,
+        webhookPath: 'whk_noheader',
+        signingSecret: 'testsecret123',
+      });
 
       let payload = JSON.stringify({ event: 'test' });
 
@@ -555,6 +630,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
   module('Origin-based filtering', function (hooks) {
     let context = setupServerEndpointsTest(hooks);
+    setupSecretsKeyring(hooks);
 
     test('rejects event when PR origin does not match filter realm', async function (assert) {
       let matrixUserId = '@user:localhost';
@@ -819,6 +895,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
   module('check_run DB lookup routing', function (hooks) {
     let context = setupServerEndpointsTest(hooks);
+    setupSecretsKeyring(hooks);
 
     test('check_run event matches via PrCard DB lookup', async function (assert) {
       let matrixUserId = '@user:localhost';

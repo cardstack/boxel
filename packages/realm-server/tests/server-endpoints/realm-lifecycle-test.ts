@@ -516,7 +516,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               ),
             );
 
-          assert.strictEqual(response.status, 403, 'HTTP 403 status');
+          // A search answers a user who may not read the realm with no rows,
+          // as a federated search does.
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.deepEqual(response.body.data, [], 'no rows');
+          assert.deepEqual(
+            response.body.meta.policyScopedRealms,
+            [realmURL],
+            'marked policy-scoped',
+          );
 
           response = await context.request
             .post(`/${owner}/${endpoint}/`)

@@ -28,7 +28,8 @@ export type BxlProfile =
   | 'authorization'
   | 'predicate'
   | 'derive'
-  | 'mutation';
+  | 'mutation'
+  | 'transform';
 
 export type BxlAttachment =
   | 'formula'
@@ -342,6 +343,10 @@ export function validateBxlAst(
     if (options.profile === 'mutation') {
       validateMutationNode(node, issues);
     }
+
+    if (options.profile === 'transform') {
+      validateTransformNode(node, issues);
+    }
   });
 
   return issues;
@@ -623,6 +628,31 @@ function validateMutationNode(
   }
 }
 
+function validateTransformNode(
+  node: BxlAstNode,
+  issues: BxlProfileIssue[],
+): void {
+  if (node.type === 'contextPath') {
+    issues.push({
+      code: 'transform-context-banned',
+      severity: 'error',
+      message: `Profile.transform shapes a payload or projects a result and cannot use mutation-plan context ${node.root}.`,
+      nodeType: node.type,
+    });
+  }
+  if (node.type === 'call') {
+    const decision = classifyBxlProfileFunction('transform', node.name);
+    if (decision.safety === 'deny') {
+      issues.push({
+        code: 'transform-call-banned',
+        severity: 'error',
+        message: `Profile.transform shapes a payload or projects a result and cannot use call ${node.name}${decision.message ? `: ${decision.message}` : ''}.`,
+        nodeType: node.type,
+      });
+    }
+  }
+}
+
 function isArrayComma(parent: BxlAstNode | undefined): boolean {
   return (
     parent?.type === 'array' ||
@@ -653,6 +683,8 @@ function profileMessagePrefix(profile: BxlProfile): string {
       return 'Profile.derive is for deterministic write/index-time computation and';
     case 'mutation':
       return 'Profile.mutation is for bounded Card/Field write planning and';
+    case 'transform':
+      return 'Profile.transform shapes a payload or projects a result and';
   }
 }
 

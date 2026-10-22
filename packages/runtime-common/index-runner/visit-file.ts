@@ -1,6 +1,7 @@
 import type { Ignore } from 'ignore';
 
 import {
+  cardSourceForVisit,
   flattenPrerenderMeta,
   hasExecutableExtension,
   isCardResource,
@@ -24,7 +25,6 @@ import {
 } from '../index.ts';
 import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
-import type { VirtualNetwork } from '../virtual-network.ts';
 
 interface RenderFileForIndexingOptions {
   url: URL;
@@ -46,9 +46,13 @@ interface RenderFileForIndexingOptions {
   // for this batch's visits and strips it from concurrent non-batch
   // traffic that happens to land on the same warm tab.
   batchId: string;
+  // Which of the pass's views this visit reads: 0 for the pass's own visit
+  // loop, and the round's number for a commit-time validation round, which
+  // re-reads after peer commits moved the realm (see `renderScopeFor`).
+  renderScopeRound: number;
   prerenderer: Prerenderer;
-  virtualNetwork: VirtualNetwork;
   consumeClearCacheForRender(): boolean;
+  consumeResetStoreForRender(): boolean;
   logDebug(message: string): void;
   logWarn(message: string): void;
 }
@@ -137,9 +141,10 @@ export async function renderFileForIndexing({
   jobPriority,
   auth,
   batchId,
+  renderScopeRound,
   prerenderer,
-  virtualNetwork,
   consumeClearCacheForRender,
+  consumeResetStoreForRender,
   logDebug,
   logWarn,
 }: RenderFileForIndexingOptions): Promise<IndexVisitRenderResult | undefined> {
@@ -211,9 +216,10 @@ export async function renderFileForIndexing({
   }
 
   let fileURL = url.href;
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
 
   let clearCache = consumeClearCacheForRender();
+  let resetStore = consumeResetStoreForRender();
 
   // The file-extract pass runs `FileDef.extractAttributes` in the prerenderer,
   // which otherwise buffers the entire file just to MD5 it and measure its
@@ -234,6 +240,17 @@ export async function renderFileForIndexing({
     }
   }
 
+  // The bytes read above, carried into the visit so the render's card branch
+  // builds its model from them instead of fetching the instance's source for
+  // itself. Both visits below get it: each one enters the render route on its
+  // own transition and would otherwise read the file again.
+  let cardSource = cardSourceForVisit({
+    source: content,
+    realmURL: realmURL.href,
+    lastModified,
+    isCardInstance: Boolean(parsedCardResource),
+  });
+
   let visitArgs = {
     affinityType: 'realm' as const,
     affinityValue: realmURL.href,
@@ -241,15 +258,23 @@ export async function renderFileForIndexing({
     url: fileURL,
     auth,
     batchId,
+    ...(cardSource ? { cardSource } : {}),
     ...(jobInfo
-      ? { renderScope: renderScopeFor(realmURL.href, jobInfo.jobId) }
+      ? {
+          renderScope: renderScopeFor(
+            realmURL.href,
+            jobInfo.jobId,
+            renderScopeRound,
+          ),
+        }
       : {}),
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
   };
 
-  // The index visit runs first and carries the one-shot clearCache. Every
-  // visit also threads the pass's loader epoch, so each prerender tab this
+  // The index visit runs first and carries both one-shots: the store reset
+  // every pass sends, and the loader drop only a pass that changed a module
+  // sends. Every visit also threads the pass's loader epoch, so each prerender tab this
   // pass touches resets its loader exactly once when the realm's module
   // surface changed — the one-shot boolean can only sanitize the single tab
   // its visit lands on.
@@ -260,6 +285,7 @@ export async function renderFileForIndexing({
     ...(needFileExtract ? { fileExtract: true } : {}),
     ...(needFileRender ? { fileRender: true } : {}),
     ...(clearCache ? { clearCache } : {}),
+    ...(resetStore ? { resetStore } : {}),
     ...(fileContentHash !== undefined ? { fileContentHash } : {}),
     ...(fileContentSize !== undefined ? { fileContentSize } : {}),
     // The timestamps this visit writes to the file's index row. The extract
@@ -518,6 +544,11 @@ function mergeCardVisitResults(
     searchDoc: index?.searchDoc ?? null,
     displayNames: index?.displayNames ?? null,
     types: index?.types ?? null,
+    // From the index visit, the visit that produced `serialized` — the two have
+    // to describe one read of the source or the pairing means nothing. The
+    // prerender-html visit builds its own model from its own source read, and
+    // that read is behind no document this row stores.
+    sourceContentHash: index?.sourceContentHash ?? null,
     deps: mergeDeps(index?.deps ?? null, html?.deps ?? null),
     ...(index?.diagnostics ? { diagnostics: index.diagnostics } : {}),
     iconHTML: index?.iconHTML ?? null,
@@ -578,7 +609,16 @@ function mergeVisitDiagnostics(
   let sum = (a?: number, b?: number) =>
     a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0);
   let merged: Diagnostics = { ...html, ...index };
-  for (let key of ['launchMs', 'renderElapsedMs', 'totalElapsedMs'] as const) {
+  for (let key of [
+    'launchMs',
+    'renderElapsedMs',
+    'totalElapsedMs',
+    // Each visit's own unclaimed render time. Summed alongside
+    // `renderElapsedMs` so the row's buckets still reconcile against it;
+    // taking one visit's value would leave the other visit's plumbing
+    // looking like measured step time.
+    'unattributedMs',
+  ] as const) {
     let total = sum(index[key], html[key]);
     if (total !== undefined) {
       merged[key] = total;

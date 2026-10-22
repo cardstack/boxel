@@ -1,5 +1,7 @@
 import {
+  hasCardExtension,
   hasExecutableExtension,
+  isIgnored,
   jobIdentity,
   SupportedMimeType,
   type DependencyIndexRow,
@@ -11,7 +13,29 @@ import {
 import type { CacheScope, DefinitionLookup } from '../definition-lookup.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import { isScopedCSSRequest } from '../scoped-css.ts';
+import { referenceNamesFile } from '../file-def-code-ref.ts';
 import { canonicalURL } from './dependency-url.ts';
+import {
+  readRealmIgnoreRules,
+  realmIgnoreMap,
+} from './discover-invalidations.ts';
+
+// The realm-wide sweep's modules: every `.gts` / `.gjs` file the realm's
+// ignore rules leave in the realm.
+export async function realmCardModulesToWarm(
+  realmURL: URL,
+  reader: Reader,
+): Promise<string[]> {
+  let filesystemMtimes = await reader.mtimes();
+  let ignoreMap = realmIgnoreMap(
+    realmURL,
+    await readRealmIgnoreRules(realmURL, reader, filesystemMtimes),
+  );
+  return Object.keys(filesystemMtimes).filter(
+    (url) =>
+      hasCardExtension(url) && !isIgnored(realmURL, ignoreMap, new URL(url)),
+  );
+}
 
 // Default module pre-warm concurrency. Serial by default: a cold/shared
 // prerender pool serves serial pre-warm by reusing a single warm tab,
@@ -118,10 +142,11 @@ export interface PreWarmModulesTableArgs {
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
   reader: Reader;
-  // Reads `boxel_index` / `boxel_index_working` deps for the invalidation set
-  // — a supplementary per-URL warm signal on top of the realm-wide sweep.
-  // When a from-scratch index pass is still in flight for this realm, these
-  // are the prior generation's deps (or a partial working set); that only
+  // Reads `boxel_index` deps, plus this pass's own staged
+  // `boxel_index_pending` rows, for the invalidation set — a supplementary
+  // per-URL warm signal on top of the realm-wide sweep. When a from-scratch
+  // index pass is still in flight for this realm, these are the prior
+  // generation's deps (or what the pass has staged so far); that only
   // affects the supplementary layer, and any module it misses falls back to
   // the safe on-demand read-through.
   getDependencyRows: (urls: string[]) => Promise<DependencyIndexRow[]>;
@@ -244,11 +269,18 @@ export async function preWarmModulesTable({
     if (row?.deps?.length) {
       for (let dep of row.deps) {
         let resolved = canonicalURL(dep, url.href, virtualNetwork);
-        // `.json` marks an instance dep and `.glimmer-scoped.css` marks an
-        // inline-styles artifact; everything else in the deps array is a
-        // module URL (stored extensionless after normalizeModuleURL /
-        // normalizeDependency).
-        if (!resolved.endsWith('.json') && !isScopedCSSRequest(resolved)) {
+        // `.json` marks an instance dep, any other registered file extension
+        // that isn't executable a file dep (a markdown file, a linked image),
+        // and `.glimmer-scoped.css` an inline-styles artifact; everything else
+        // in the deps array is a module URL (stored extensionless after
+        // normalizeModuleURL / normalizeDependency). Warming a file dep as a
+        // module makes the loader probe `<file>.gts`, `.ts`, `.gjs` and `.js`.
+        if (
+          !(
+            referenceNamesFile(resolved) && !hasExecutableExtension(resolved)
+          ) &&
+          !isScopedCSSRequest(resolved)
+        ) {
           toWarm.add(resolved);
         }
       }

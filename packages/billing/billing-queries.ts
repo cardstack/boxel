@@ -660,3 +660,60 @@ export async function getPlanByName(
 
   return planRowToPlan(results[0]);
 }
+
+// Admits one billable call for `matrixUserId` unless the user already has
+// `maxInFlight` unexpired calls in flight. Callers hold the user's cost lock
+// around this, which is what makes the count and the insert one decision
+// across replicas. Expired rows belong to calls whose replica never came back
+// to delete them, so they are cleared rather than counted.
+export async function reserveBillableCall(
+  dbAdapter: DBAdapter,
+  matrixUserId: string,
+  { maxInFlight, expiresAt }: { maxInFlight: number; expiresAt: number },
+): Promise<{ reservationId: string | undefined; inFlight: number }> {
+  await query(dbAdapter, [
+    `DELETE FROM billable_call_reservations WHERE matrix_user_id = `,
+    param(matrixUserId),
+    ` AND expires_at <= `,
+    param(Date.now()),
+  ]);
+  let [{ count }] = await query(dbAdapter, [
+    `SELECT COUNT(*) AS count FROM billable_call_reservations WHERE matrix_user_id = `,
+    param(matrixUserId),
+  ]);
+  let inFlight = Number(count);
+  if (inFlight >= maxInFlight) {
+    return { reservationId: undefined, inFlight };
+  }
+  let [{ id }] = await query(dbAdapter, [
+    `INSERT INTO billable_call_reservations (matrix_user_id, expires_at) VALUES (`,
+    param(matrixUserId),
+    `, `,
+    param(expiresAt),
+    `) RETURNING id`,
+  ]);
+  return { reservationId: id as string, inFlight: inFlight + 1 };
+}
+
+export async function renewBillableCall(
+  dbAdapter: DBAdapter,
+  reservationId: string,
+  expiresAt: number,
+) {
+  await query(dbAdapter, [
+    `UPDATE billable_call_reservations SET expires_at = `,
+    param(expiresAt),
+    ` WHERE id = `,
+    param(reservationId),
+  ]);
+}
+
+export async function releaseBillableCall(
+  dbAdapter: DBAdapter,
+  reservationId: string,
+) {
+  await query(dbAdapter, [
+    `DELETE FROM billable_call_reservations WHERE id = `,
+    param(reservationId),
+  ]);
+}

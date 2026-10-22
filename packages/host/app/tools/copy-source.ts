@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { rri } from '@cardstack/runtime-common';
+
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
@@ -27,13 +29,9 @@ export default class CopySourceTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.CopySourceInput,
   ): Promise<BaseToolModule.CopySourceResult> {
-    const originSourceIdentifier = new URL(input.originSourceIdentifier);
-    const destinationSourceIdentifier = new URL(
-      input.destinationSourceIdentifier,
-    );
     let r = await this.cardService.copySource(
-      originSourceIdentifier,
-      destinationSourceIdentifier,
+      rri(input.originSourceIdentifier),
+      rri(input.destinationSourceIdentifier),
     );
     let commandModule = await this.loadToolModule();
     const { CopySourceResult } = commandModule;

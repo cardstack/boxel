@@ -1,26 +1,19 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import BigIntegerField from '@cardstack/base/big-integer';
+import BooleanField from '@cardstack/base/boolean';
+import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+import CodeRefField from '@cardstack/base/code-ref';
+import DateField from '@cardstack/base/date';
+import DateTimeField from '@cardstack/base/datetime';
+import EmailField from '@cardstack/base/email';
+import EthereumAddressField from '@cardstack/base/ethereum-address';
+import PhoneNumberField from '@cardstack/base/phone-number';
+import { RichMarkdownField } from '@cardstack/base/rich-markdown';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
-
-import {
-  BigIntegerField,
-  BooleanField,
-  CardDef,
-  CodeRefField,
-  Component,
-  DateField,
-  DateTimeField,
-  EmailField,
-  EthereumAddressField,
-  PhoneNumberField,
-  RichMarkdownField,
-  contains,
-  field,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 
 import { renderCard } from '../../helpers/render-component';
 
@@ -49,7 +42,6 @@ function readMarkdown(root: Element | Document): string {
 
 module('Integration | field markdown specialized', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let AddressField: typeof AddressFieldModule.default;

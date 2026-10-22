@@ -6,16 +6,15 @@ import type {
   ToolResultWithOutputContent,
   ToolResultWithNoOutputContent,
   EncodedToolRequest,
-  CodePatchResultContent,
   CardMessageContent,
 } from '@cardstack/base/matrix-event';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 import {
   type OpenAIPromptMessage,
-  isCodePatchResultStatusApplied,
   isToolResultStatusApplied,
   attachedCardsToMessage,
   getRelevantCards,
+  fetchRoomEventsBackwards,
 } from '@cardstack/runtime-common/ai';
 import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 
@@ -107,8 +106,7 @@ export const getLatestResultMessage = (
   }
   let eventContent = event.getContent() as
     | ToolResultWithOutputContent
-    | ToolResultWithNoOutputContent
-    | CodePatchResultContent;
+    | ToolResultWithNoOutputContent;
   let messageRelation: IEventRelation | undefined =
     eventContent['m.relates_to'];
   let eventId = messageRelation?.event_id;
@@ -121,9 +119,7 @@ export const getLatestResultMessage = (
     aiBotUserId,
   );
 
-  let commandRequestId = (
-    eventContent as ToolResultWithOutputContent | ToolResultWithNoOutputContent
-  ).commandRequestId;
+  let commandRequestId = eventContent.commandRequestId;
   if (commandRequestId) {
     let toolRequests = getToolRequests<Partial<EncodedToolRequest>>(
       resultSourceEvent.content as CardMessageContent,
@@ -146,18 +142,6 @@ export const getLatestResultMessage = (
       ];
     }
   }
-
-  if (isCodePatchResultStatusApplied(event)) {
-    return [
-      {
-        role: 'user',
-        content: `File(s) updated via code patch. Cards shared are: ${attachedCardsToMessage(
-          mostRecentlyAttachedCard,
-          attachedCards,
-        )}`,
-      },
-    ];
-  }
   return [];
 };
 
@@ -167,6 +151,20 @@ export const roomTitleAlreadySet = (rawEventLog: IRoomEvent[]) => {
     false
   );
 };
+
+// Whether the room has its title, from the room's latest two name events
+// alone, so a room that has one needs no history fetched.
+export async function roomHasTitle(
+  roomId: string,
+  client: MatrixClient,
+): Promise<boolean> {
+  let { events } = await fetchRoomEventsBackwards(roomId, client, {
+    types: ['m.room.name'],
+    limit: 2,
+    maxPages: 1,
+  });
+  return roomTitleAlreadySet(events);
+}
 
 const userAlreadyHasSentNMessages = (
   rawEventLog: IRoomEvent[],
@@ -187,7 +185,6 @@ export function shouldSetRoomTitle(
 ) {
   return (
     (isToolResultStatusApplied(event) ||
-      isCodePatchResultStatusApplied(event) ||
       userAlreadyHasSentNMessages(rawEventLog, aiBotUserId)) &&
     !roomTitleAlreadySet(rawEventLog)
   );

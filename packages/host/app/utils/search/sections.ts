@@ -175,6 +175,8 @@ export function buildQuerySections(
     realmURLs: string[];
     offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
     realm: RealmInfoLookup;
+    // Each realm's full match count; the rows handed in are only its first page.
+    realmTotals?: Record<string, number>;
   },
 ): RealmSection[] | null {
   if (opts.isURL) {
@@ -200,7 +202,10 @@ export function buildQuerySections(
       realmUrl,
       realmInfo: resolveRealmInfo(realmUrl, opts.realm),
       cards: realmCards,
-      totalCount: realmCards.length,
+      totalCount: Math.max(
+        opts.realmTotals?.[realmUrl] ?? 0,
+        realmCards.length,
+      ),
     });
   }
 

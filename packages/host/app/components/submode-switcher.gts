@@ -120,6 +120,9 @@ interface Signature {
   Args: {
     isCollapsed?: boolean;
     submode: Submode;
+    // Whether switching to code mode would open a file the user can read in
+    // code mode (see `OperatorModeStateService#codeSubmodeOffered`).
+    codeSubmodeOffered: boolean;
     onSubmodeSelect: (submode: Submode) => void;
   };
 }
@@ -241,6 +244,9 @@ export default class SubmodeSwitcher extends Component<Signature> {
       .filter((submode) => {
         if (submode === Submodes.Host) {
           return this.operatorModeStateService.currentRealmInfo?.publishable;
+        }
+        if (submode === Submodes.Code) {
+          return this.args.codeSubmodeOffered;
         }
 
         return true;

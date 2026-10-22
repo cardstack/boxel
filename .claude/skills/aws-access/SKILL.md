@@ -1,6 +1,6 @@
 ---
 name: aws-access
-description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), (5) tailing CloudWatch logs for the four boxel ECS services, (6) tailing Loki logs via `tail-logs.sh` (the role can read the Loki auth params), and (7) reading the realm-server ALB access logs from S3 to attribute 5xx / latency spikes to specific URL paths. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
+description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), (5) tailing CloudWatch logs for the four boxel ECS services, (6) tailing Loki logs via `tail-logs.sh` (the role can read the Loki auth params), and (7) reading the realm-server ALB access logs from S3 to attribute 5xx / latency spikes to specific URL paths. It also covers finding the secure origin's (`secure.boxel.ai` / `secure.stack.cards`) access logs and app log lines. It also covers auditing the secrets-at-rest KMS key (`alias/<env>-boxel-secrets`): its metadata, key policy and rotation, and every use of it recorded in CloudTrail. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -373,7 +373,7 @@ When constructing a query, the cheapest sanity check is: does the SQL begin with
 
 ### What's actually in the database
 
-The `indexing-diagnostics` skill is the right entry point for `boxel_index` / `boxel_index_working` / `error_doc` exploration — it documents the schema, the `diagnostics` JSONB shape, and the canonical query patterns. This skill only covers _getting connected_; the queries themselves live there.
+The `indexing-diagnostics` skill is the right entry point for `boxel_index` / `boxel_index_pending` / `error_doc` exploration — it documents the schema, the `diagnostics` JSONB shape, and the canonical query patterns. This skill only covers _getting connected_; the queries themselves live there.
 
 ## Browsing the EFS filesystem (read-only)
 
@@ -407,7 +407,9 @@ Public/system realms are direct children of `/persistent`; user-owned private re
 
 ### Connecting
 
-Same SSM port-forward pattern as the RDS tunnel, just targeting the fs-explorer task on port 80 and using `localhost` as the remote host (the tunnel forwards from your local port through the SSM agent in the container to the container's localhost, which is where Caddy listens).
+Same SSM port-forward pattern as the RDS tunnel, just targeting the fs-explorer task on port 80 and using the **task's own private IP** as the remote host. Caddy listens on `:80` (all interfaces), so the task IP reaches it from the SSM agent inside the container.
+
+Do not use `localhost` (or `127.0.0.1`) as the `host` parameter. The ECS-managed SSM agent refuses to forward to loopback addresses for `AWS-StartPortForwardingSessionToRemoteHost`: the local port still binds and the session reports `Waiting for connections...`, but every request fails (curl exit `52`/`7`, HTTP code `000`), and the session output shows `Forwarding to IP address localhost is forbidden.` If you see that symptom, check the `host` parameter before suspecting the task.
 
 ```sh
 PROFILE=claude-staging                                     # or claude-prod
@@ -415,36 +417,59 @@ CLUSTER=staging                                            # or production
 SERVICE=boxel-claude-fs-readonly-staging                   # or -production
 LOCAL_PORT=58080                                           # any free local port
 
-# 1) Find the fs-explorer task and its container runtime ID. Filter by
-#    container name to be robust against any future sidecar additions —
-#    AWS doesn't guarantee containers[] order in DescribeTasks output.
+# 1) Find the fs-explorer task, its container runtime ID, and the task's
+#    private IP. Filter by container name to be robust against any future
+#    sidecar additions — AWS doesn't guarantee containers[] order in
+#    DescribeTasks output.
 TASK_ARN=$(aws --profile $PROFILE ecs list-tasks \
   --cluster $CLUSTER --service-name $SERVICE \
   --query 'taskArns[0]' --output text)
 TASK_ID=${TASK_ARN##*/}
-RUNTIME_ID=$(aws --profile $PROFILE ecs describe-tasks \
+read -r RUNTIME_ID TASK_IP < <(aws --profile $PROFILE ecs describe-tasks \
   --cluster $CLUSTER --tasks $TASK_ID \
-  --query 'tasks[0].containers[?name==`fs-explorer`].runtimeId | [0]' \
+  --query 'tasks[0].containers[?name==`fs-explorer`] | [0].[runtimeId, networkInterfaces[0].privateIpv4Address]' \
   --output text)
 
-# 2) Open the tunnel — forward localhost:58080 to localhost:80 inside
-#    the container (where Caddy listens).
-aws --profile $PROFILE ssm start-session \
-  --target "ecs:${CLUSTER}_${TASK_ID}_${RUNTIME_ID}" \
-  --document-name AWS-StartPortForwardingSessionToRemoteHost \
-  --parameters "{\"portNumber\":[\"80\"],\"localPortNumber\":[\"$LOCAL_PORT\"],\"host\":[\"localhost\"]}" &
-TUNNEL_PID=$!
-# wait for "Waiting for connections..."
+# 2) Confirm the port is free, then open the tunnel — forward
+#    localhost:$LOCAL_PORT to $TASK_IP:80, where Caddy listens. The host must
+#    be the task IP, not localhost: the SSM agent forbids forwarding to
+#    loopback addresses. The free-port guard and the two-kill teardown are
+#    the same as the RDS tunnel's, for the same reasons (see "Tearing the
+#    tunnel down actually requires two kills" and "A squatted port is a
+#    wrong-environment bug" above).
+if lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "port $LOCAL_PORT is already bound — pick another, and find out what is holding it"
+else
+  aws --profile $PROFILE ssm start-session \
+    --target "ecs:${CLUSTER}_${TASK_ID}_${RUNTIME_ID}" \
+    --document-name AWS-StartPortForwardingSessionToRemoteHost \
+    --parameters "{\"portNumber\":[\"80\"],\"localPortNumber\":[\"$LOCAL_PORT\"],\"host\":[\"$TASK_IP\"]}" &
+  TUNNEL_PID=$!
 
-# 3) Browse. Caddy's autoindex returns HTML directory listings; serving
-#    raw bytes for files. Both `curl` and a browser work.
-curl -s http://localhost:$LOCAL_PORT/                      # public-realm root listing
-curl -s http://localhost:$LOCAL_PORT/realms/               # user-realms root
-curl -s http://localhost:$LOCAL_PORT/realms/buck/mar10/    # one user realm's contents
-curl -s http://localhost:$LOCAL_PORT/base/index.json       # specific file
+  # Wait for the forward to bind before the first request.
+  for _ in $(seq 30); do
+    lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN >/dev/null 2>&1 && break
+    sleep 1
+  done
 
-# 4) Tear down.
-kill $TUNNEL_PID
+  # 3) Browse. Caddy's autoindex returns HTML directory listings; serving
+  #    raw bytes for files. While the tunnel is open, a browser pointed at
+  #    http://localhost:$LOCAL_PORT/ works as well as curl. -sS keeps
+  #    curl's connection errors visible.
+  curl -sS http://localhost:$LOCAL_PORT/                      # public-realm root listing
+  curl -sS http://localhost:$LOCAL_PORT/realms/               # user-realms root
+  curl -sS http://localhost:$LOCAL_PORT/catalog/              # one realm's contents; for a user realm, take a path from the /realms/ listing
+  curl -sS http://localhost:$LOCAL_PORT/base/index.json       # specific file
+
+  # 4) Tear down. `kill $TUNNEL_PID` alone leaves the forked
+  #    session-manager-plugin holding the port.
+  kill $TUNNEL_PID
+  pkill -f "session-manager-plugin.*localPortNumber.*$LOCAL_PORT" 2>/dev/null
+  unset TUNNEL_PID
+
+  # 5) Verify the port is released.
+  lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN && echo "TUNNEL LEAKED — kill the pid above"
+fi
 ```
 
 ### When this is useful
@@ -626,6 +651,70 @@ LB_ARN=$(aws --profile claude-staging elbv2 describe-load-balancers \
 aws --profile claude-staging elbv2 describe-load-balancer-attributes \
   --load-balancer-arn "$LB_ARN" --output table
 ```
+
+## The secure origin (`secure.boxel.ai` / `secure.stack.cards`)
+
+The secure origin, where credentials are typed, has no service of its own. It is a load balancer of its own, `boxel-secure-origin-<env>`, in front of the realm-server's tasks. The realm-server answers it ahead of all other routing (the `secure-origin` skill covers what it serves and why). So everything above reaches it, with nothing extra granted to the role:
+
+- **Its access logs** go to the same `boxel-alb-access-logs-<env>` bucket under the same `AWSLogs/<account>/elasticloadbalancing/us-east-1/<date>/` path. Each object's name, and field 3 of each record, names the load balancer that wrote it (`app.boxel-secure-origin-<env>.…` / `app/boxel-secure-origin-<env>/…`). Copy just its objects with `--exclude '*' --include '*boxel-secure-origin*'` on the `s3 cp` above, or filter records with `awk '$3 ~ /boxel-secure-origin/'`. A request line there includes the query string, which is why nothing secret may travel in one.
+- **Its configuration** shows up under `describe-load-balancers --names boxel-secure-origin-<env>`, like the realm-server's. HSTS is set as a listener attribute there.
+- **Its app logs** are the realm-server's CloudWatch and Loki streams. Its requests never reach the `realm:requests` logger. They log as one line each, with no query string, headers or body: `secure-origin GET /: 200 dur=1ms`. Shipped lines don't carry the logger's name, so filter on that prefix:
+
+  ```sh
+  AWS_PROFILE=claude-prod \
+    packages/observability/scripts/tail-logs.sh \
+    --env production --service realm-server --since 1h --no-follow --confirm \
+    --filter 'secure-origin '
+  ```
+
+- **No client telemetry.** The shell loads none of the host app, so nothing on that origin beacons to `/_client-telemetry`. Sentry events from a secure-origin request carry only the method and path, so look for those, not bodies.
+
+## Auditing the secrets-at-rest KMS key
+
+The realm server seals the secrets it stores for users (API keys, OAuth tokens, webhook signing secrets) under a data key that one customer-managed KMS key wraps, `alias/<env>-boxel-secrets`. Its key policy names the realm-server and worker task roles as the only principals that can `Decrypt`, and nobody can `Encrypt`. Key administration and minting a new wrapped data key (`GenerateDataKeyWithoutPlaintext`) are delegated to IAM through the account root, so an admin-capable operator can make those calls. The role can read that key's metadata and the account's CloudTrail event history, so those claims can be checked in a deployed environment. It can't use the key, and it can't read the wrapped data key's SSM parameter.
+
+The `secrets-at-rest` skill's **post-deploy audit** is the procedure for checking those claims: the key's metadata and policy, who used the key according to CloudTrail, and `ExecuteCommand` into the tasks, each with what it should show and what is alarming. The audit also covers the realm server's boot lines and the database grants. What follows here is what the role can and can't do with the key, and how CloudTrail event history answers.
+
+```sh
+P=claude-staging ENV=staging   # claude-prod / production for prod
+
+# GetKeyPolicy and GetKeyRotationStatus don't accept an alias, so resolve the key ARN first.
+KEY_ARN=$(aws --profile $P kms describe-key --key-id alias/$ENV-boxel-secrets \
+  --query KeyMetadata.Arn --output text)
+
+# Which alias points at a key id seen in a CloudTrail event.
+aws --profile $P kms list-aliases --query "Aliases[?TargetKeyId=='<key-id>'].AliasName"
+```
+
+Every use of the key is a CloudTrail management event, kept in event history for 90 days. Each record names the caller (a task role's session name is the task id; events KMS makes itself, such as scheduled rotation, show `kms.amazonaws.com`) and the encryption context, never key material or a plaintext. Lookups by the key's ARN and by event name both go through `cloudtrail lookup-events`:
+
+- Events take a few minutes, sometimes up to fifteen, to appear after the call.
+- The CLI follows every page. Narrow `--start-time` to limit the output rather than passing `--max-items`: that caps the number of events (newest first), and the `--query` drops the `NextToken` that would show the list was cut, so a truncated audit looks complete.
+- `lookup-events` accepts one lookup attribute per call and is throttled to two requests a second per account, so don't fan it out.
+- `date -d` is GNU. On macOS use `date -u -v-1d +%Y-%m-%dT%H:%M:%SZ`.
+- The history covers the whole account's management events, not just KMS. Use it to answer a question about the key, not to browse.
+
+`kms decrypt`, `encrypt` and `generate-data-key` are denied to the role, and so is reading `/<env>/boxel/SECRETS_WRAPPED_DATA_KEY`.
+
+A denied call on the key is a CloudTrail event too, but it carries no resource and no key id, so the lookup by the key's ARN never returns it. Look denied cryptographic calls up by event name instead, one call per action. The record's `errorCode` is `AccessDenied`, its caller is the session ARN of whoever tried (`assumed-role/boxel-claude-readonly/...` for this role), and its `errorMessage` names the key (`... not authorized to perform: kms:Encrypt on resource: arn:aws:kms:...:key/<id> because ...`). Keep the records that match both:
+
+```sh
+for action in Decrypt Encrypt ReEncrypt GenerateDataKey GenerateDataKeyWithoutPlaintext \
+              GenerateDataKeyPair GenerateDataKeyPairWithoutPlaintext; do
+  aws --profile $P cloudtrail lookup-events \
+    --lookup-attributes AttributeKey=EventName,AttributeValue=$action \
+    --start-time "$(date -u -d '-6 hours' +%Y-%m-%dT%H:%M:%SZ)" \
+    --query 'Events[].CloudTrailEvent' --output json \
+    | jq -r --arg key "$KEY_ARN" '.[] | fromjson
+        | select(.errorCode == "AccessDenied" and ((.errorMessage // "") | contains($key)))
+        | [.eventTime, .eventName, (.userIdentity.arn // .userIdentity.invokedBy), .errorCode] | @tsv'
+done
+```
+
+- Each event-name lookup covers every KMS key in the account, including the AWS-managed keys behind S3, SSM and Lambda, so the `Decrypt` one is large: a day of it can run to tens of thousands of events and many minutes of paging. Keep the window to hours and widen it only if you need to. The CLI retries when it's throttled, so the loop needs no pacing of its own.
+- The key match reads AWS's error-message wording. If a lookup that should find something returns nothing, drop the `contains` test and read the messages.
+- KMS logs a denied request from another AWS account only in that account, so these lookups see same-account denials only.
+- This covers cryptographic calls. Key-administration calls (`PutKeyPolicy`, `CreateGrant`, `DisableKey`, `ScheduleKeyDeletion`) that succeed show up in the lookup by the key's ARN, which the audit runs.
 
 ## Future skill / scripting room
 

@@ -22,7 +22,11 @@ export interface BxlBoxelSourceFieldDefinition<CodeReference = unknown> {
 
 /** Loaderless subset of Boxel's runtime-common `Definition` shape. */
 export interface BxlBoxelSourceDefinition<CodeReference = unknown> {
-  type?: 'card-def' | 'field-def';
+  // The three families a Boxel definition can describe: a card, a field that
+  // only exists inside a card, and a file whose metadata comes from uploaded
+  // bytes. Mirrored so a caller can hand over any definition it holds; nothing
+  // here branches on the kind.
+  type?: 'card-def' | 'field-def' | 'file-def';
   codeRef?: CodeReference;
   displayName?: string | null;
   fields: Record<string, string>;

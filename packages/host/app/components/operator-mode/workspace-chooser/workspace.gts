@@ -1,6 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
@@ -46,7 +47,12 @@ import {
 } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-import { skillsRealmURL } from '@cardstack/host/lib/utils';
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
+import { realmURLDisplayText } from '@cardstack/host/lib/realm-utils';
+import {
+  publishedRealmURLsFromInfo,
+  skillsRealmURL,
+} from '@cardstack/host/lib/utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -113,7 +119,15 @@ export default class Workspace extends Component<Signature> {
             </button>
           </div>
         {{/if}}
+        {{! The URL describes the tile rather than naming it, so it sits
+            outside the button: text inside a button joins its accessible
+            name, and the tile's name is the workspace's. }}
+        <span
+          id={{this.realmURLDescriptionId}}
+          class='boxel-sr-only'
+        >{{this.realmURLText}}</span>
         <ItemContainer
+          aria-describedby={{this.realmURLDescriptionId}}
           data-test-workspace-button={{this.name}}
           data-nav-index={{@navIndex}}
           {{on 'click' this.openWorkspace}}
@@ -128,13 +142,15 @@ export default class Workspace extends Component<Signature> {
             {{#if @isFavoritesSection}}
               <div class='tile-scrim'></div>
               <div class='tile-content'>
-                <div class='realm-icon-wrapper'>
-                  <RealmIcon
-                    class='workspace-realm-icon'
-                    @realmInfo={{this.realmInfo}}
-                    @canAnimate={{true}}
-                  />
-                </div>
+                <RealmURLTooltip @realmURL={{@realmIdentifier}}>
+                  <div class='realm-icon-wrapper'>
+                    <RealmIcon
+                      class='workspace-realm-icon'
+                      @realmInfo={{this.realmInfo}}
+                      @canAnimate={{true}}
+                    />
+                  </div>
+                </RealmURLTooltip>
                 <div class='tile-text'>
                   <span
                     class='tile-name'
@@ -164,13 +180,15 @@ export default class Workspace extends Component<Signature> {
                 </div>
               </div>
             {{else}}
-              <div class='realm-icon-wrapper'>
-                <RealmIcon
-                  class='workspace-realm-icon'
-                  @realmInfo={{this.realmInfo}}
-                  @canAnimate={{true}}
-                />
-              </div>
+              <RealmURLTooltip @realmURL={{@realmIdentifier}}>
+                <div class='realm-icon-wrapper'>
+                  <RealmIcon
+                    class='workspace-realm-icon'
+                    @realmInfo={{this.realmInfo}}
+                    @canAnimate={{true}}
+                  />
+                </div>
+              </RealmURLTooltip>
             {{/if}}
           </div>
         </ItemContainer>
@@ -337,6 +355,10 @@ export default class Workspace extends Component<Signature> {
               />
               <div class='delete-modal__workspace-info'>
                 <span class='delete-modal__workspace-name'>{{this.name}}</span>
+                <span
+                  class='delete-modal__workspace-url'
+                  data-test-delete-modal-workspace-url
+                >{{this.realmURLText}}</span>
                 {{#if this.loadDeleteSummaryTask.isRunning}}
                   <span class='delete-modal__workspace-meta'>
                     Checking what will be removed from this workspace…
@@ -439,6 +461,10 @@ export default class Workspace extends Component<Signature> {
               </div>
               <div class='archive-modal__workspace-info'>
                 <span class='archive-modal__workspace-name'>{{this.name}}</span>
+                <span
+                  class='archive-modal__workspace-url'
+                  data-test-archive-modal-workspace-url
+                >{{this.realmURLText}}</span>
               </div>
             </div>
 
@@ -580,7 +606,7 @@ export default class Workspace extends Component<Signature> {
       .workspace-card {
         display: flex;
         flex-direction: column;
-        width: fit-content;
+        width: var(--workspace-chooser-card-width);
         position: relative;
         cursor: pointer;
         --item-container-border-color: transparent;
@@ -591,7 +617,7 @@ export default class Workspace extends Component<Signature> {
         position: absolute;
         top: 0;
         left: 0;
-        width: var(--boxel-xxs-container);
+        width: var(--workspace-chooser-tile-width);
         height: 10.375rem;
         box-sizing: border-box;
         border-radius: var(--boxel-border-radius-xl);
@@ -602,17 +628,17 @@ export default class Workspace extends Component<Signature> {
       .workspace-card.is-enlarged :deep(.workspace) {
         width: var(
           --favorite-tile-width,
-          calc(var(--boxel-xxs-container) * 1.5)
+          var(--workspace-chooser-enlarged-tile-width)
         );
         min-width: var(
           --favorite-tile-width,
-          calc(var(--boxel-xxs-container) * 1.5)
+          var(--workspace-chooser-enlarged-tile-width)
         );
       }
       .workspace-card.is-enlarged::after {
         width: var(
           --favorite-tile-width,
-          calc(var(--boxel-xxs-container) * 1.5)
+          var(--workspace-chooser-enlarged-tile-width)
         );
       }
       .workspace-card:hover::after {
@@ -838,13 +864,13 @@ export default class Workspace extends Component<Signature> {
         align-items: center;
         padding-top: var(--boxel-sp-xs);
         gap: var(--boxel-sp-5xs);
-        max-width: var(--boxel-xxs-container);
+        max-width: var(--workspace-chooser-tile-width);
       }
       .reindex-error {
         position: absolute;
         top: 0;
         left: 0;
-        width: var(--boxel-xxs-container);
+        width: var(--workspace-chooser-tile-width);
         box-sizing: border-box;
         z-index: 21;
         display: flex;
@@ -974,19 +1000,24 @@ export default class Workspace extends Component<Signature> {
         overflow: hidden;
         overflow-wrap: anywhere;
       }
-      /* Height is reserved rather than derived from content: the counts are
+      /* Height is fixed rather than derived from content: the counts are
          fetched after the tile renders (favorites only), so a row that grew
          when they landed would shift the tile's centered name. 1lh at the
-         stats' own font-size matches a populated row exactly. */
+         stats' own font-size matches a populated row exactly. On a tile too
+         narrow for every stat, the ones that don't fit wrap onto a second
+         line that's clipped, so a stat is dropped whole, never cut off. */
       .tile-metadata-row {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: var(--boxel-sp-sm);
-        min-height: 1lh;
+        column-gap: var(--boxel-sp-sm);
+        height: 1lh;
+        overflow: hidden;
         font-size: 0.75rem;
       }
       .tile-stat {
         display: flex;
+        white-space: nowrap;
         align-items: baseline;
         gap: 0.25rem;
         font-size: 0.75rem;
@@ -1015,7 +1046,7 @@ export default class Workspace extends Component<Signature> {
         position: absolute;
         top: calc(10.375rem - 2.25rem);
         left: 0;
-        width: var(--boxel-xxs-container);
+        width: var(--workspace-chooser-tile-width);
         height: 2.25rem;
         background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
@@ -1040,7 +1071,7 @@ export default class Workspace extends Component<Signature> {
       .workspace-card.is-enlarged .host-trigger {
         width: var(
           --favorite-tile-width,
-          calc(var(--boxel-xxs-container) * 1.5)
+          var(--workspace-chooser-enlarged-tile-width)
         );
       }
       .trigger-house {
@@ -1237,6 +1268,10 @@ export default class Workspace extends Component<Signature> {
         font-weight: 600;
         color: var(--boxel-dark);
       }
+      .delete-modal__workspace-url {
+        overflow-wrap: anywhere;
+      }
+      .delete-modal__workspace-url,
       .delete-modal__workspace-meta {
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
@@ -1395,6 +1430,12 @@ export default class Workspace extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
         font-weight: 700;
         color: var(--boxel-dark);
+      }
+      .archive-modal__workspace-url {
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--boxel-450);
+        overflow-wrap: anywhere;
       }
       .archive-modal__info-box {
         background: var(--boxel-light-100);
@@ -1711,6 +1752,17 @@ export default class Workspace extends Component<Signature> {
     return this.realmInfo.name;
   }
 
+  private get realmURLDescriptionId() {
+    return `${guidFor(this)}-realm-url`;
+  }
+
+  private get realmURLText() {
+    return realmURLDisplayText(
+      this.network.virtualNetwork,
+      this.args.realmIdentifier,
+    );
+  }
+
   // The selection ring is shown only once the user has actively engaged the
   // keyboard selection. On open the tile is selected (holds focus for keyboard
   // nav) but unringed, so the chooser doesn't present a pre-picked tile.
@@ -1945,16 +1997,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   private get publishedRealmURLs() {
-    let { lastPublishedAt } = this.realmInfo;
-    if (!lastPublishedAt || typeof lastPublishedAt !== 'object') {
-      return [];
-    }
-
-    return Object.entries(lastPublishedAt)
-      .sort(([, leftPublishedAt], [, rightPublishedAt]) => {
-        return Number(rightPublishedAt) - Number(leftPublishedAt);
-      })
-      .map(([publishedRealmURL]) => publishedRealmURL);
+    return publishedRealmURLsFromInfo(this.realmInfo);
   }
 
   private get hasPublishedRealms() {
@@ -2045,7 +2088,7 @@ export default class Workspace extends Component<Signature> {
         this.operatorModeStateService
           .getOpenCardIds()
           .some((cardId) => realmPath.inRealm(cardId)) ||
-        this.operatorModeStateService.codePathString?.startsWith(
+        this.operatorModeStateService.state.codePath?.startsWith(
           this.args.realmIdentifier,
         );
 
@@ -2153,7 +2196,7 @@ export default class Workspace extends Component<Signature> {
         this.operatorModeStateService
           .getOpenCardIds()
           .some((cardId) => realmPath.inRealm(cardId)) ||
-        this.operatorModeStateService.codePathString?.startsWith(
+        this.operatorModeStateService.state.codePath?.startsWith(
           this.args.realmIdentifier,
         );
 

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "heldOn": "2026-10-05",
+      "summary": "Carryover practice with picture cards.",
+      "providerId": "@carmen:school.example"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../school-code/service-plan-session",
+        "name": "ServicePlanSession"
+      }
+    },
+    "relationships": {
+      "schedule": {
+        "links": {
+          "self": "../schedules/speech-jordan"
+        }
+      }
+    }
+  }
+}

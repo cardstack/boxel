@@ -7,7 +7,6 @@ import { module, test } from 'qunit';
 import { PermissionsContextName, type Loader } from '@cardstack/runtime-common';
 
 import { provideConsumeContext } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -15,7 +14,6 @@ import type * as CardApiModule from '@cardstack/base/card-api';
 
 module('Integration | card-info | thumbnail picker edit', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let CardDef: typeof CardApiModule.CardDef;

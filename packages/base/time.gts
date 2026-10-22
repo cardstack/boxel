@@ -5,6 +5,7 @@ import { eq, not, formatDateTime } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import ClockIcon from '@cardstack/boxel-icons/clock';
 import { TimeSlots } from './components/time-slots';
+import { nowDate } from './helpers/clock';
 
 interface TimeConfiguration {
   presentation?: 'standard' | 'timeSlots';
@@ -56,7 +57,7 @@ export default class TimeField extends FieldDef {
         const [hours, minutes] = time.split(':').map(Number);
         if (isNaN(hours) || isNaN(minutes)) return time;
 
-        const today = new Date();
+        const today = nowDate();
         today.setHours(hours, minutes, 0, 0);
 
         const hourCycle = this.config?.hourCycle;
@@ -105,7 +106,7 @@ export default class TimeField extends FieldDef {
         const [hours, minutes] = time.split(':').map(Number);
         if (isNaN(hours) || isNaN(minutes)) return time;
 
-        const today = new Date();
+        const today = nowDate();
         today.setHours(hours, minutes, 0, 0);
 
         const hourCycle = this.args?.configuration?.hourCycle;

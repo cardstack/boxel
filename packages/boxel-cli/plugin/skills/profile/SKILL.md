@@ -32,6 +32,16 @@ Profiles use the Matrix ID format: `@username:domain`.
 
 With `-u`, the Matrix ID's own domain decides — `boxel.ai`, `stack.cards`, and `localhost` are recognized, and any other domain needs `--matrix-url` and `--realm-server-url`.
 
+## Signing in through the browser
+
+`boxel profile add` opens the browser, waits for the user to sign in there (password or Google), and then saves the profile. It waits up to 30 minutes for the browser, and the browser can only hand the sign-in to the command while it is still running.
+
+- Run it once, in the background or with the longest timeout your shell tool allows, so the tool doesn't kill it while the user is signing in. Read its output when it exits.
+- Don't re-run it while it's waiting, and don't re-run it after the user reports "You're signed in" in the browser. Each run opens another sign-in. `Profile created` in its output means it is done. If it was killed before printing that, the sign-in did not complete.
+- With no terminal attached, as when an agent runs it, it asks nothing after the sign-in. It saves the account the user signed in as, and replaces a profile already stored for that account (keeping its display name). It becomes the active profile only if no other profile is active; otherwise it prints the `boxel profile switch` command to use.
+- Check the `Signed in as` line against the account the user meant. A Google sign-in whose email matches no account creates a new one. If it isn't the account they meant, tell the user before switching to it.
+- If the browser wait runs out with no terminal attached, it exits with an error rather than falling back to asking for a username and password. `--no-browser` does the same. Those sign-ins need `BOXEL_PASSWORD` and `-u`, below.
+
 ## Adding profiles non-interactively
 
 For automation, set `BOXEL_PASSWORD` in the environment instead of passing `-p`:
@@ -81,6 +91,7 @@ Manage saved profiles for different users/environments
 - `--production` — Target production — the default (for add command)
 - `--staging` — Target staging instead of production (for add command)
 - `--local` — Target a local dev server instead of production (for add command)
+- `--json` — Output the complete profile set as JSON (for list command)
 
 <!-- generated:commands:end -->
 

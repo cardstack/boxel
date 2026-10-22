@@ -1,30 +1,9 @@
 import { module, test } from 'qunit';
 
 import {
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-  REPLACE_MARKER,
-} from '@cardstack/runtime-common';
-import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
-import {
   markedSync,
   markdownToHtml,
 } from '@cardstack/runtime-common/marked-sync';
-
-import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
-
-// The render path a bot message's code patch travels before the host applies
-// it: markdown body → bodyHTML (message.ts) → parseHtmlContent →
-// codeData.searchReplaceBlock. The patch must survive this byte-identical —
-// the applier matches it against the target file.
-function roundTripSearchReplaceBlock(body: string) {
-  let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body), {
-    sanitize: false,
-    escapeHtmlInCodeBlocks: true,
-  });
-  let parts = parseHtmlContent(html, 'room-1', 'event-1');
-  return parts.find((p) => p.type === 'pre_tag')?.codeData ?? null;
-}
 
 module('Unit | marked-sync', function () {
   test('markedSync converts markdown to HTML', function (assert) {
@@ -404,41 +383,20 @@ module('Unit | marked-sync', function () {
     );
   });
 
-  test('a code patch round-trips byte-identical through render and extraction', function (assert) {
-    const search = [
-      "        <div class='marquee-wrap'>",
-      '            🚧 SITE UNDER CONSTRUCTION 🚧 &nbsp;&nbsp;&nbsp; BEST VIEWED IN',
-      '        </div>',
-    ].join('\n');
-    const block = `${SEARCH_MARKER}\n${search}\n${SEPARATOR_MARKER}\nreplaced\n${REPLACE_MARKER}`;
-    const body = `Fixing the file now.\n\n\`\`\`gts\nhttps://example.test/hello-world.gts\n${block}\n\`\`\``;
+  test('fenced code from CRLF input keeps decorative bullets verbatim', function (assert) {
+    const markdown = [
+      '```gts',
+      '            🚧 SITE UNDER CONSTRUCTION 🚧',
+      '```',
+    ].join('\r\n');
+    const result = markdownToHtml(markdown, { sanitize: false });
 
-    const codeData = roundTripSearchReplaceBlock(body);
-    assert.ok(codeData, 'a code block was extracted');
-    assert.strictEqual(
-      codeData!.searchReplaceBlock,
-      block,
-      'the extracted patch is byte-identical to what the bot authored',
-    );
-  });
-
-  test('a code patch round-trips intact from CRLF input', function (assert) {
-    const search = '            🚧 SITE UNDER CONSTRUCTION 🚧';
-    const block = `${SEARCH_MARKER}\n${search}\n${SEPARATOR_MARKER}\nreplaced\n${REPLACE_MARKER}`;
-    const body =
-      `Fixing the file now.\n\n\`\`\`gts\nhttps://example.test/hello-world.gts\n${block}\n\`\`\``.replace(
-        /\n/g,
-        '\r\n',
-      );
-
-    const codeData = roundTripSearchReplaceBlock(body);
-    assert.ok(codeData, 'a code block was extracted from CRLF input');
-    assert.ok(
-      codeData!.searchReplaceBlock?.includes(search),
-      'the emoji-led search line survives unmutated',
+    assert.true(
+      result.includes('🚧 SITE UNDER CONSTRUCTION 🚧'),
+      'the emoji-led line inside the fence survives',
     );
     assert.false(
-      (codeData!.searchReplaceBlock ?? '').includes('* 🚧'),
+      result.includes('* 🚧'),
       'no list marker was inserted into the CRLF fenced content',
     );
   });

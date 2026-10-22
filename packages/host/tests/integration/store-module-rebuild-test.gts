@@ -8,6 +8,14 @@ import {
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import {
+  CardDef,
+  contains,
+  field,
+  linksTo,
+  Component,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -29,16 +37,6 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
 } from '../helpers';
-
-import {
-  CardDef,
-  contains,
-  field,
-  linksTo,
-  StringField,
-  Component,
-  setupBaseRealm,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
@@ -47,7 +45,6 @@ import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 module('Integration | Store | module rebuild', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   let loader: Loader;
   let loaderService: LoaderService;
   let storeService: StoreService;

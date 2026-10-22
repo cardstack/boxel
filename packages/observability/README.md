@@ -38,7 +38,13 @@ grafanactl/
     dashboards/        # grafanactl push: dashboard JSON, organized by folder
 provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
   datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus)
-  alerting/            # alert rule groups, contact points, notification policies
+  alerting/            # alert rule groups for every env; routing uses
+                       # Grafana's default notification policy
+  alerting-hosted/     # NOT mounted locally. <env>/contact-points/ and
+                       # <env>/rules/ exist in that hosted env only;
+                       # apply-alerting.sh pushes contact points first, with
+                       # ${VAR} secrets from SSM. A rule here may route to
+                       # one through `notification_settings.receiver`.
   local-only/          # local-dev overrides — bind-mounted file-by-file over
                        # `datasources/`. apply-datasources.sh ignores this dir.
 collectors/
@@ -91,12 +97,16 @@ GITHUB_TOKEN=$(gh auth token) node collectors/actions-queue.ts   # loops, defaul
 
 It emits four event types, all on channel `boxel:actions-queue`:
 
-| `event_type`                             | one line per              | carries                                                                                     |
-| ---------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------- |
-| `job`                                    | queued or running job     | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step` |
-| `group`                                  | dimension × key           | `dimension` (branch / actor / workflow), `key`, `queued`, `running`                         |
-| `snapshot`                               | sample                    | `queued_jobs`, `running_jobs`, `active_runs`, `rate_limit_remaining`                        |
-| `collector-error`, `collector-throttled` | failure or skipped sample | why the series has a gap                                                                    |
+| `event_type`                             | one line per                   | carries                                                                                     |
+| ---------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `job`                                    | queued, pending or running job | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step` |
+| `group`                                  | dimension × key                | `dimension` (branch / actor / workflow), `key`, `queued`, `running`, `pending`              |
+| `snapshot`                               | sample                         | `queued_jobs`, `running_jobs`, `pending_jobs`, `active_runs`, `rate_limit_remaining`        |
+| `collector-error`, `collector-throttled` | failure or skipped sample      | why the series has a gap                                                                    |
+
+GitHub reports a job as `pending` while a concurrency group holds it, and as
+`queued` while it waits for a runner. The two are counted apart, so a
+self-imposed hold never reads as runner-pool saturation.
 
 Grouped depth is emitted as its own lines rather than nested on the snapshot
 because LogQL flattens nested JSON into one label per key, which for dynamic
@@ -108,7 +118,7 @@ Two constraints are load-bearing:
 - **It must not run as a scheduled GitHub Actions workflow.** It would queue
   behind the backlog it measures and go blind during the incident it exists
   for. Hosted, it belongs on a schedule outside Actions.
-- **A sample costs one request per active run, plus two.** The hourly spend
+- **A sample costs one request per active run, plus three.** The hourly spend
   therefore scales with how busy the repository is, against a token's 5,000
   requests an hour. At the observed peak of ~50 concurrent runs a 60-second
   interval spends around 3,200 an hour, which is comfortable; 30 seconds
@@ -141,6 +151,12 @@ sample can cost sixty. So the token needs **no permissions** while `boxel` is
 public — a fine-grained token scoped to _Public repositories (read-only)_, or
 even a classic token with no scopes ticked, is enough. Were the repository ever
 made private, it would need Actions: Read-only on it.
+
+The staging alert "Actions Collector Silent in Loki"
+(`provisioning/alerting-hosted/staging/rules/actions-collector-group.json`)
+posts to the `alarms-staging-internal` Discord channel when Loki receives no
+collector lines for ten minutes. Its summary says how to tell a stalled log
+router from a stopped collector.
 
 Build and deploy with the **Manual Deploy [actions-collector]** workflow. It is
 `workflow_dispatch` only — putting the deploy of a queue sampler on a CI
@@ -252,12 +268,12 @@ you change it, change it everywhere — `alloy/config.alloy` (local) and
 `cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`
 (staging + production).
 
-| Label       | Local source                                                                                                                                                 | Staging / production source                                                                                                                                                   | When set                                 |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `env`       | constant `local` — Alloy relabel rule (Docker source) and inline target attribute (file source)                                                              | constant `staging` / `production` (Fluent Bit static `Labels`)                                                                                                                | always                                   |
-| `service`   | Docker container name, leading `/` stripped (Docker source) — or `realm-server` / `worker` / `prerender` / `prerender-manager` (file source, mise dev tasks) | ECS task family — `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse`                                                                                       | always                                   |
-| `realm`     | opt-in via Docker label `boxel.realm=<name>`                                                                                                                 | task env when the task pins a single realm (omitted on multi-realm workloads)                                                                                                 | when meaningful                          |
-| `worker_id` | not set locally                                                                                                                                              | per-process worker id (`<runtime-id>-pid-<pid>`), parsed from `[worker <id> priority N]:` log line prefixes by a Fluent Bit Lua filter. Matches `job_reservations.worker_id`. | worker tasks only, lines with the prefix |
+| Label       | Local source                                                                                                                                                 | Staging / production source                                                                                                                                                    | When set                                 |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| `env`       | constant `local` — Alloy relabel rule (Docker source) and inline target attribute (file source)                                                              | constant `staging` / `production` (Fluent Bit static `Labels`)                                                                                                                 | always                                   |
+| `service`   | Docker container name, leading `/` stripped (Docker source) — or `realm-server` / `worker` / `prerender` / `prerender-manager` (file source, mise dev tasks) | ECS task family — `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse`                                                                                        | always                                   |
+| `realm`     | opt-in via Docker label `boxel.realm=<name>`                                                                                                                 | task env when the task pins a single realm (omitted on multi-realm workloads)                                                                                                  | when meaningful                          |
+| `worker_id` | not set locally                                                                                                                                              | per-process worker id (`<instance-id>-pid-<pid>`), parsed from `[worker <id> priority N]:` log line prefixes by a Fluent Bit Lua filter. Matches `job_reservations.worker_id`. | worker tasks only, lines with the prefix |
 
 The local Alloy scraper drops the observability stack's own Compose
 services (`grafana`, `loki`, `alloy`) so `{env="local"}` queries don't
@@ -340,7 +356,7 @@ window, not the query window.
 
 # Per-worker tail (worker_id matches job_reservations.worker_id —
 # look it up there, e.g. for the worker that ran a specific job).
-{env="<env>", service="worker", worker_id="abc123-3236013547-pid-42"}
+{env="<env>", service="worker", worker_id="ip-10-0-1-23.ec2.internal-9f3c2a1b-pid-42"}
 
 # Logs around a specific job id (LogQL line-filter, not regex)
 {env="<env>", service="worker"} |= "job_id=42"
@@ -385,7 +401,7 @@ URL from SSM.
 | `--env`                    | (required) | `local`, `staging`, `production`                                                                    |
 | `--service`                | (required) | `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` (or any local container name) |
 | `--realm`                  | unset      | Restrict to a single realm.                                                                         |
-| `--worker-id`              | unset      | Per-Fargate-task id; workers only.                                                                  |
+| `--worker-id`              | unset      | One worker process, `<instance-id>-pid-<pid>`; workers only.                                        |
 | `--filter`                 | unset      | LogQL line-filter (`\|=`); literal substring.                                                       |
 | `--regex`                  | unset      | LogQL line-regex (`\|~`). Mutually exclusive with `--filter`.                                       |
 | `--since`                  | `15m`      | `30s`, `15m`, `1h`, `2d` — pattern `^\d+[smhd]$`.                                                   |

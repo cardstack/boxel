@@ -1,8 +1,15 @@
-// Read/write helpers for the owner-controlled realm archive flag stored
-// on realm_metadata.archived_at (NULL = active, non-null = archived at
-// that timestamp).
+// Read/write helpers for realm_metadata flags: the owner-controlled archive
+// flag stored on realm_metadata.archived_at (NULL = active, non-null =
+// archived at that timestamp), and the publishable flag for realms the
+// server mounts.
 import type { DBAdapter } from '../db.ts';
-import { dbExpression, param, query } from '../expression.ts';
+import {
+  dbExpression,
+  param,
+  query,
+  separatedByCommas,
+  type Expression,
+} from '../expression.ts';
 
 // `now()` is Postgres-only; SQLite spells it `CURRENT_TIMESTAMP`. These
 // helpers are a shared runtime-common API, so render the timestamp
@@ -37,6 +44,22 @@ export async function unarchiveRealm(dbAdapter: DBAdapter, realmURL: URL) {
   ]);
 }
 
+// Mark a realm publishable, leaving its other flags alone. The realm server
+// calls this at startup for each mount it's told is publishable, since a
+// realm it mounts never goes through create-realm, which is what seeds the
+// flag for realms made in the app.
+export async function markRealmPublishable(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+) {
+  await query(dbAdapter, [
+    `INSERT INTO realm_metadata (url, publishable) VALUES (`,
+    param(realmURL.href),
+    `, true) ON CONFLICT (url) DO UPDATE SET publishable = true, updated_at =`,
+    now,
+  ]);
+}
+
 export async function isRealmArchived(
   dbAdapter: DBAdapter,
   realmURL: URL,
@@ -46,6 +69,22 @@ export async function isRealmArchived(
     param(realmURL.href),
   ])) as { archived_at: string | null }[];
   return results.length > 0 && results[0].archived_at != null;
+}
+
+// The realms among `realmURLs` that are archived, in one read.
+export async function archivedRealmURLs(
+  dbAdapter: DBAdapter,
+  realmURLs: string[],
+): Promise<Set<string>> {
+  if (realmURLs.length === 0) {
+    return new Set();
+  }
+  let results = (await query(dbAdapter, [
+    `SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL AND url IN (`,
+    ...separatedByCommas(realmURLs.map((url) => [param(url)])),
+    `)`,
+  ] as Expression)) as { url: string }[];
+  return new Set(results.map((row) => row.url));
 }
 
 export interface ArchivedRealm {

@@ -269,8 +269,12 @@ module('Acceptance | midi audio def', function (hooks) {
       }),
     );
 
-    let { status } = await capturePrerenderResult('innerHTML');
-    assert.strictEqual(status, 'ready', 'render completed');
+    let { status, value } = await capturePrerenderResult('innerHTML');
+    assert.strictEqual(
+      status,
+      'ready',
+      status === 'ready' ? 'render completed' : `render completed: ${value}`,
+    );
 
     let preview = document.querySelector(
       '[data-prerender] [data-test-midi-preview]',

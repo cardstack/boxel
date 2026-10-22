@@ -1,6 +1,48 @@
 # Boxel CLI
 
-CLI tools for Boxel workspace management.
+**Unlock the power of Boxel with your own agent harness.**
+
+`boxel` puts a Boxel workspace on your local filesystem, so the agent you
+already use — Claude Code, Cursor, your own script — can read and write the
+cards in it directly. Pull a realm down, let your agent edit it, push it back.
+
+```bash
+npx @cardstack/boxel-cli --help
+```
+
+## Why you would want this
+
+A Boxel realm is a live workspace of cards: typed, composable, schema-declared
+software you normally edit in the browser. That is great for people and awkward
+for agents, which want files.
+
+This CLI is the bridge.
+
+- **Bring your own agent.** `realm pull` gives you the realm as files, `push`
+  and `sync` carry your changes back. Whatever edits files can now edit cards —
+  no plugin, no integration, no Boxel-specific agent.
+- **Your realm's skills become your agent's skills.** `pull`, `sync` and
+  `watch` mirror each `skills/<name>/SKILL.md` into
+  `.claude/skills/<realm>-<name>/`, so the same skill Boxel's assistant loads is
+  available in a Claude Code session as `/<realm>-<name>`. One definition, both
+  harnesses.
+- **Work across your realms and profiles.** `boxel profile add` keeps a named
+  identity per account and environment — production, staging, local, or your
+  own realm server — and every command takes the realm you point it at. Move
+  between workspaces and accounts without re-authenticating or leaving the
+  terminal.
+- **Nothing to stand up.** It talks to a hosted realm. No Docker, no Matrix
+  server, no local stack — that is only needed if you are developing Boxel
+  itself.
+
+New to Boxel? Start at [boxel.ai](https://boxel.ai) — then come back here when
+you want an agent working on your cards.
+
+## Community
+
+- [Discord](https://discord.gg/boxel) — questions, help, and what people are building
+- [@boxel_ai](https://x.com/boxel_ai) on X — releases and demos
+- [cardstack/boxel](https://github.com/cardstack/boxel) — issues and source
 
 ## Installation
 
@@ -77,6 +119,13 @@ The mirror always lands in the realm's own local directory; nothing is searched 
 The copies are generated output, rewritten on every run: edit a skill in the realm checkout's `skills/` — that is what `push` and `sync` carry back to the realm — because an edit made under `.claude/skills/` is overwritten without warning. `.claude/skills/.boxel-skills-sync.json` records which entry names boxel wrote, so an entry whose realm-side skill is renamed or removed is deleted while a directory boxel did not write is left alone.
 
 Set `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`, or pass `--no-claude-skills`, to skip it.
+
+### Files a realm leaves out
+
+`.gitignore` and `.boxelignore` both name files that aren't part of the realm. Use `.boxelignore` for files git should still track, such as tests, build scripts and a package's README.
+
+- When `push` and `sync` upload local files, they skip what either file matches, and always skip `node_modules` and dotfiles. An ignore file in a subdirectory applies to the files below it. Because dotfiles are never uploaded, the ignore files themselves stay local.
+- A realm the realm-server serves from a directory on disk reads the two files at that directory's root as one gitignore-syntax list, `.gitignore` first, so a `!` line in `.boxelignore` can re-include a path `.gitignore` excludes. A matching file is not indexed, listed or served, and the row of a file that becomes ignored is removed. Neither file can ignore itself. The realm applies the rules on its next from-scratch index; an incremental index, such as the one a single file write triggers, keeps the rules it already has.
 
 ## Development
 

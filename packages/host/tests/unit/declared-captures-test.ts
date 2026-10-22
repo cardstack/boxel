@@ -1,0 +1,1045 @@
+import { getService } from '@universal-ember/test-support';
+import { module, test } from 'qunit';
+
+import type { Loader } from '@cardstack/runtime-common';
+
+import { setupRenderingTest } from '../helpers/setup';
+
+import type * as CardAPIModule from '@cardstack/base/card-api';
+import type { CaptureSpec } from '@cardstack/base/card-api';
+
+type Captures = Record<string, CaptureSpec>;
+
+module('Unit | declared captures', function (hooks) {
+  setupRenderingTest(hooks);
+
+  let cardApi: typeof CardAPIModule;
+  hooks.beforeEach(async function () {
+    let loader: Loader = getService('loader-service').loader;
+    cardApi = await loader.import<typeof CardAPIModule>(
+      '@cardstack/base/card-api',
+    );
+  });
+
+  test('a card with no declarations merges to an empty record', function (assert) {
+    class Plain extends cardApi.CardDef {}
+    assert.deepEqual(cardApi.getCaptures(Plain), {});
+    assert.deepEqual(cardApi.getCaptures(cardApi.CardDef), {});
+    assert.deepEqual(cardApi.getCaptures(cardApi.FileDef), {});
+  });
+
+  test('declarations on one class are returned by name', function (assert) {
+    class HeroShot extends cardApi.Component<typeof cardApi.CardDef> {}
+    class Product extends cardApi.CardDef {
+      static captures: Captures = {
+        hero: {
+          render: HeroShot,
+          width: 1200,
+          height: 630,
+          background: 'white',
+        },
+        thumb: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          deviceScaleFactor: 2,
+          useAsThumbnail: true,
+        },
+      };
+    }
+    let merged = cardApi.getCaptures(Product);
+    assert.deepEqual(Object.keys(merged).sort(), ['hero', 'thumb']);
+    assert.strictEqual(merged.hero.render, HeroShot);
+    assert.strictEqual(merged.thumb.format, 'fitted');
+    assert.true(merged.thumb.useAsThumbnail);
+  });
+
+  test('a subclass adds new names and inherits ancestors up the chain', function (assert) {
+    class Video extends cardApi.FileDef {
+      static captures: Captures = {
+        poster: {
+          format: 'embedded',
+          width: 640,
+          height: 360,
+          keyBy: 'file-content',
+          type: 'jpeg',
+        },
+      };
+    }
+    class Trailer extends Video {
+      static captures: Captures = {
+        banner: { format: 'embedded', width: 1024, height: 256 },
+      };
+    }
+    class TeaserTrailer extends Trailer {
+      static captures: Captures = {
+        teaser: { format: 'fitted', width: 150, height: 170 },
+      };
+    }
+    // a plain property read sees only the nearest declaration…
+    assert.deepEqual(Object.keys(TeaserTrailer.captures!), ['teaser']);
+    // …while the merge helper sees the whole chain
+    let merged = cardApi.getCaptures(TeaserTrailer);
+    assert.deepEqual(Object.keys(merged).sort(), [
+      'banner',
+      'poster',
+      'teaser',
+    ]);
+    assert.strictEqual(merged.poster.keyBy, 'file-content');
+  });
+
+  test('a subclass overrides an inherited name wholesale', function (assert) {
+    class Video extends cardApi.FileDef {
+      static captures: Captures = {
+        poster: {
+          format: 'embedded',
+          width: 640,
+          height: 360,
+          type: 'jpeg',
+        },
+      };
+    }
+    class Widescreen extends Video {
+      static captures: Captures = {
+        poster: { format: 'embedded', width: 1280, height: 720 },
+      };
+    }
+    let merged = cardApi.getCaptures(Widescreen);
+    assert.strictEqual(merged.poster.width, 1280);
+    // the override replaces the whole spec: the ancestor's `type` does not
+    // bleed through
+    assert.strictEqual(merged.poster.type, undefined);
+  });
+
+  test('a name outside the URL-safe charset is refused', function (assert) {
+    for (const name of ['og image', 'og/image', '../poster', '-leading', '']) {
+      class Bad extends cardApi.CardDef {
+        static captures: Captures = {
+          [name]: { format: 'fitted', width: 300, height: 200 },
+        };
+      }
+      assert.throws(
+        () => cardApi.getCaptures(Bad),
+        /name must be a URL-safe path segment/,
+        `"${name}" is refused`,
+      );
+    }
+    class TooLong extends cardApi.CardDef {
+      static captures: Captures = {
+        ['a'.repeat(65)]: { format: 'fitted', width: 300, height: 200 },
+      };
+    }
+    assert.throws(
+      () => cardApi.getCaptures(TooLong),
+      /name must be a URL-safe path segment/,
+    );
+  });
+
+  test('declaring both or neither of render and format is refused', function (assert) {
+    class Shot extends cardApi.Component<typeof cardApi.CardDef> {}
+    class Both extends cardApi.CardDef {
+      static captures: Record<string, any> = {
+        hero: { render: Shot, format: 'fitted', width: 300, height: 200 },
+      };
+    }
+    class Neither extends cardApi.CardDef {
+      static captures: Record<string, any> = {
+        hero: { width: 300, height: 200 },
+      };
+    }
+    assert.throws(
+      () => cardApi.getCaptures(Both),
+      /declare exactly one of render or format/,
+    );
+    assert.throws(
+      () => cardApi.getCaptures(Neither),
+      /declare exactly one of render or format/,
+    );
+  });
+
+  test('formats outside the declared-capture roster are refused', function (assert) {
+    for (const format of ['edit', 'head', 'markdown', 'bogus']) {
+      class Bad extends cardApi.CardDef {
+        static captures: Record<string, any> = {
+          shot: { format, width: 300, height: 200 },
+        };
+      }
+      assert.throws(
+        () => cardApi.getCaptures(Bad),
+        /format must be one of/,
+        `"${format}" is refused`,
+      );
+    }
+  });
+
+  test('unknown spec fields are refused by name', function (assert) {
+    class Bad extends cardApi.CardDef {
+      static captures: Record<string, any> = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          useAsThumbnal: true,
+        },
+      };
+    }
+    assert.throws(
+      () => cardApi.getCaptures(Bad),
+      /unknown field "useAsThumbnal"/,
+    );
+  });
+
+  test('capture-box dimensions must be positive integers within the engine caps', function (assert) {
+    for (let [field, value] of [
+      ['width', 0],
+      ['width', -100],
+      ['width', 12.5],
+      ['width', 5000],
+      ['height', 20000],
+      ['height', undefined],
+    ] as const) {
+      class Bad extends cardApi.CardDef {
+        static captures: Record<string, any> = {
+          shot: { format: 'fitted', width: 300, height: 200, [field]: value },
+        };
+      }
+      assert.throws(
+        () => cardApi.getCaptures(Bad),
+        new RegExp(`${field} must be an integer between`),
+        `${field}=${value} is refused`,
+      );
+    }
+    class BadDsf extends cardApi.CardDef {
+      static captures: Record<string, any> = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          deviceScaleFactor: 4,
+        },
+      };
+    }
+    assert.throws(
+      () => cardApi.getCaptures(BadDsf),
+      /deviceScaleFactor must be a number/,
+    );
+  });
+
+  test('each edge × deviceScaleFactor must fit the physical-pixel cap', function (assert) {
+    // in-cap CSS height, but the default 2× scale puts it past the
+    // 16384-physical-px texture cap
+    class ImplicitScale extends cardApi.CardDef {
+      static captures: Captures = {
+        tall: { format: 'fitted', width: 300, height: 16384 },
+      };
+    }
+    assert.throws(
+      () => cardApi.getCaptures(ImplicitScale),
+      /height × deviceScaleFactor must be <= 16384 physical pixels/,
+    );
+    class ExplicitScale extends cardApi.CardDef {
+      static captures: Captures = {
+        tall: {
+          format: 'fitted',
+          width: 300,
+          height: 8192,
+          deviceScaleFactor: 3,
+        },
+      };
+    }
+    assert.throws(
+      () => cardApi.getCaptures(ExplicitScale),
+      /height × deviceScaleFactor must be <= 16384 physical pixels/,
+    );
+    // at the cap exactly, both implicitly and explicitly scaled
+    class AtCap extends cardApi.CardDef {
+      static captures: Captures = {
+        implicit: { format: 'fitted', width: 300, height: 8192 },
+        explicit: {
+          format: 'fitted',
+          width: 300,
+          height: 16384,
+          deviceScaleFactor: 1,
+        },
+      };
+    }
+    assert.deepEqual(Object.keys(cardApi.getCaptures(AtCap)).sort(), [
+      'explicit',
+      'implicit',
+    ]);
+  });
+
+  test("keyBy 'file-content' is refused off FileDef chains", function (assert) {
+    class Bad extends cardApi.CardDef {
+      static captures: Captures = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          keyBy: 'file-content',
+        },
+      };
+    }
+    assert.throws(
+      () => cardApi.getCaptures(Bad),
+      /keyBy 'file-content' requires a file-backed def/,
+    );
+    class Doc extends cardApi.FileDef {
+      static captures: Captures = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          keyBy: 'file-content',
+        },
+      };
+    }
+    assert.strictEqual(
+      cardApi.getCaptures(Doc).shot.keyBy,
+      'file-content',
+      'legal on a FileDef subclass',
+    );
+  });
+
+  test('keyBy and type are constrained to their rosters', function (assert) {
+    class BadKeyBy extends cardApi.CardDef {
+      static captures: Record<string, any> = {
+        shot: { format: 'fitted', width: 300, height: 200, keyBy: 'mtime' },
+      };
+    }
+    class BadType extends cardApi.CardDef {
+      static captures: Record<string, any> = {
+        shot: { format: 'fitted', width: 300, height: 200, type: 'gif' },
+      };
+    }
+    assert.throws(() => cardApi.getCaptures(BadKeyBy), /keyBy must be one/);
+    assert.throws(() => cardApi.getCaptures(BadType), /type must be one/);
+  });
+
+  test('a pdf capture is a geometry-free declaration from a format or a render slot', function (assert) {
+    class InvoiceDocument extends cardApi.Component<typeof cardApi.CardDef> {}
+    class Reports extends cardApi.CardDef {
+      static captures: Captures = {
+        statement: { format: 'isolated', type: 'pdf' },
+        summary: { format: 'embedded', type: 'pdf', keyBy: 'generation' },
+        invoice: { render: InvoiceDocument, type: 'pdf' },
+      };
+    }
+    let merged = cardApi.getCaptures(Reports);
+    assert.strictEqual(merged.statement.type, 'pdf');
+    assert.strictEqual(merged.statement.format, 'isolated');
+    assert.strictEqual(
+      merged.statement.width,
+      undefined,
+      'a pdf declares no capture box',
+    );
+    assert.strictEqual(merged.summary.format, 'embedded');
+    assert.strictEqual(
+      merged.invoice.render,
+      InvoiceDocument,
+      'a pdf can source from a capture-only render component',
+    );
+  });
+
+  test('a pdf capture refuses raster fields, box formats, and thumbnails', function (assert) {
+    for (let [spec, pattern] of [
+      [{ format: 'isolated', type: 'pdf', width: 300 }, /'width' is a raster/],
+      [
+        { format: 'isolated', type: 'pdf', height: 300 },
+        /'height' is a raster/,
+      ],
+      [
+        { format: 'isolated', type: 'pdf', deviceScaleFactor: 2 },
+        /'deviceScaleFactor' is a raster/,
+      ],
+      [
+        { format: 'isolated', type: 'pdf', background: 'white' },
+        /'background' is a raster/,
+      ],
+      [
+        { format: 'fitted', type: 'pdf' },
+        /format must be 'isolated' or 'embedded'/,
+      ],
+      [
+        { format: 'atom', type: 'pdf' },
+        /format must be 'isolated' or 'embedded'/,
+      ],
+      [{ render: class {}, type: 'pdf', width: 300 }, /'width' is a raster/],
+      [
+        { format: 'isolated', type: 'pdf', useAsThumbnail: true },
+        /useAsThumbnail cannot appear on a pdf/,
+      ],
+    ] as const) {
+      class Bad extends cardApi.CardDef {
+        static captures: Record<string, any> = { shot: spec };
+      }
+      assert.throws(() => cardApi.getCaptures(Bad), pattern);
+    }
+  });
+
+  test('filename is a pdf-only field that must be a non-empty string or a function', function (assert) {
+    for (let [spec, pattern] of [
+      [
+        { format: 'isolated', width: 300, height: 200, filename: 'shot' },
+        /filename names a saved document and is only valid on a pdf capture/,
+      ],
+      [
+        { format: 'isolated', type: 'pdf', filename: '  ' },
+        /filename must be a non-empty string or a function/,
+      ],
+      [
+        { format: 'isolated', type: 'pdf', filename: 42 },
+        /filename must be a non-empty string or a function/,
+      ],
+    ] as const) {
+      class Bad extends cardApi.CardDef {
+        static captures: Record<string, any> = { shot: spec };
+      }
+      assert.throws(() => cardApi.getCaptures(Bad), pattern);
+    }
+    class Good extends cardApi.CardDef {
+      static captures: Captures = {
+        fixed: { format: 'isolated', type: 'pdf', filename: 'Statement' },
+        computed: {
+          format: 'embedded',
+          type: 'pdf',
+          filename: (card: CardAPIModule.CardDef) => card.cardTitle,
+        },
+      };
+    }
+    assert.deepEqual(Object.keys(cardApi.getCaptures(Good)).sort(), [
+      'computed',
+      'fixed',
+    ]);
+  });
+
+  test('title is a pdf-only field that must be a non-empty string or a function', function (assert) {
+    for (let [spec, pattern] of [
+      [
+        { format: 'isolated', width: 300, height: 200, title: 'Shot' },
+        /title names a document and is only valid on a pdf capture/,
+      ],
+      [
+        { format: 'isolated', type: 'pdf', title: '  ' },
+        /title must be a non-empty string or a function/,
+      ],
+      [
+        { format: 'isolated', type: 'pdf', title: 42 },
+        /title must be a non-empty string or a function/,
+      ],
+    ] as const) {
+      class Bad extends cardApi.CardDef {
+        static captures: Record<string, any> = { shot: spec };
+      }
+      assert.throws(() => cardApi.getCaptures(Bad), pattern);
+    }
+    class Good extends cardApi.CardDef {
+      static captures: Captures = {
+        fixed: { format: 'isolated', type: 'pdf', title: 'Statement' },
+        computed: {
+          format: 'embedded',
+          type: 'pdf',
+          title: (card: CardAPIModule.CardDef) => card.cardTitle,
+        },
+      };
+    }
+    assert.deepEqual(Object.keys(cardApi.getCaptures(Good)).sort(), [
+      'computed',
+      'fixed',
+    ]);
+  });
+
+  test('a transparent background on a jpeg capture is refused', function (assert) {
+    class TransparentJpeg extends cardApi.CardDef {
+      static captures: Captures = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          background: 'transparent',
+          type: 'jpeg',
+        },
+      };
+    }
+    // webp carries alpha, so the same background stays legal there.
+    class TransparentWebp extends cardApi.CardDef {
+      static captures: Captures = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          background: 'transparent',
+          type: 'webp',
+        },
+      };
+    }
+    assert.throws(
+      () => cardApi.getCaptures(TransparentJpeg),
+      /cannot be captured as jpeg/,
+    );
+    assert.strictEqual(
+      cardApi.getCaptures(TransparentWebp).shot.background,
+      'transparent',
+      'an alpha-capable type accepts a transparent background',
+    );
+  });
+
+  test('more than one useAsThumbnail across the merged chain is refused', function (assert) {
+    class Video extends cardApi.FileDef {
+      static captures: Captures = {
+        poster: {
+          format: 'embedded',
+          width: 640,
+          height: 360,
+          useAsThumbnail: true,
+        },
+      };
+    }
+    class Trailer extends Video {
+      static captures: Captures = {
+        banner: {
+          format: 'embedded',
+          width: 1024,
+          height: 256,
+          useAsThumbnail: true,
+        },
+      };
+    }
+    // the chain is fine per level…
+    assert.strictEqual(
+      Object.keys(cardApi.getCaptures(Video)).length,
+      1,
+      'base class alone is valid',
+    );
+    // …but the merged result has two thumbnail feeds
+    assert.throws(
+      () => cardApi.getCaptures(Trailer),
+      /more than one useAsThumbnail capture \("poster", "banner"\)/,
+    );
+  });
+
+  test('two useAsThumbnail entries on one class are refused', function (assert) {
+    class Bad extends cardApi.CardDef {
+      static captures: Captures = {
+        a: { format: 'fitted', width: 300, height: 200, useAsThumbnail: true },
+        b: {
+          format: 'embedded',
+          width: 300,
+          height: 200,
+          useAsThumbnail: true,
+        },
+      };
+    }
+    assert.throws(
+      () => cardApi.getCaptures(Bad),
+      /more than one useAsThumbnail/,
+    );
+  });
+
+  test('overriding an inherited entry by name can move the thumbnail', function (assert) {
+    class Video extends cardApi.FileDef {
+      static captures: Captures = {
+        poster: {
+          format: 'embedded',
+          width: 640,
+          height: 360,
+          useAsThumbnail: true,
+        },
+      };
+    }
+    class Trailer extends Video {
+      static captures: Captures = {
+        // clear the inherited flag by overriding the entry…
+        poster: { format: 'embedded', width: 640, height: 360 },
+        // …so the new entry can carry it
+        banner: {
+          format: 'embedded',
+          width: 1024,
+          height: 256,
+          useAsThumbnail: true,
+        },
+      };
+    }
+    let merged = cardApi.getCaptures(Trailer);
+    assert.strictEqual(merged.poster.useAsThumbnail, undefined);
+    assert.true(merged.banner.useAsThumbnail);
+  });
+
+  test('serializeDeclaredCaptures crosses the page boundary without the component', function (assert) {
+    class HeroShot extends cardApi.Component<typeof cardApi.CardDef> {}
+    class Product extends cardApi.CardDef {
+      static captures: Captures = {
+        card: {
+          format: 'fitted',
+          width: 400,
+          height: 300,
+          useAsThumbnail: true,
+        },
+        hero: {
+          render: HeroShot,
+          width: 320,
+          height: 180,
+          deviceScaleFactor: 1,
+          background: 'transparent',
+          type: 'webp',
+        },
+      };
+    }
+    let roster = cardApi.serializeDeclaredCaptures(Product);
+    assert.deepEqual(roster.card, {
+      width: 400,
+      height: 300,
+      useAsThumbnail: true,
+      format: 'fitted',
+    });
+    assert.deepEqual(roster.hero, {
+      width: 320,
+      height: 180,
+      deviceScaleFactor: 1,
+      background: 'transparent',
+      type: 'webp',
+      render: true,
+    });
+    assert.deepEqual(
+      cardApi.serializeDeclaredCaptures(cardApi.CardDef),
+      {},
+      'no declarations serialize to an empty roster',
+    );
+  });
+
+  test('serializeDeclaredCaptures resolves a pdf filename against the instance it is given', function (assert) {
+    class Statement extends cardApi.CardDef {
+      static displayName = 'Statement';
+      static captures: Captures = {
+        fixed: { format: 'isolated', type: 'pdf', filename: 'Annual Report' },
+        computed: {
+          format: 'isolated',
+          type: 'pdf',
+          filename: (card: Statement) => `${card.cardTitle} (copy)`,
+        },
+        throwing: {
+          format: 'isolated',
+          type: 'pdf',
+          filename: () => {
+            throw new Error('boom');
+          },
+        },
+        empty: { format: 'isolated', type: 'pdf', filename: () => '  ' },
+        sliced: {
+          format: 'isolated',
+          type: 'pdf',
+          filename: () => 'Trip \u{1F3D6} notes'.slice(0, 6),
+        },
+        titled: { format: 'isolated', type: 'pdf' },
+        tile: { format: 'fitted', width: 170, height: 250 },
+      };
+    }
+    let named = new Statement({
+      cardInfo: new cardApi.CardInfoField({ name: 'Acme Q3' }),
+    });
+    let roster = cardApi.serializeDeclaredCaptures(Statement, named);
+    assert.strictEqual(roster.fixed.filename, 'Annual Report');
+    assert.strictEqual(roster.computed.filename, 'Acme Q3 (copy)');
+    assert.strictEqual(
+      roster.throwing.filename,
+      'Acme Q3',
+      'a throwing function falls back to the title',
+    );
+    assert.strictEqual(
+      roster.empty.filename,
+      'Acme Q3',
+      'an empty result falls back to the title',
+    );
+    assert.strictEqual(roster.titled.filename, 'Acme Q3');
+    assert.strictEqual(
+      roster.sliced.filename,
+      'Trip \uFFFD',
+      'a lone surrogate from a sliced emoji becomes U+FFFD',
+    );
+    assert.false('filename' in roster.tile, 'a raster slot carries none');
+
+    let untitled = cardApi.serializeDeclaredCaptures(
+      Statement,
+      new Statement(),
+    );
+    assert.false(
+      'filename' in untitled.titled,
+      'the untitled placeholder is not a filename',
+    );
+    assert.strictEqual(untitled.computed.filename, 'Untitled Statement (copy)');
+
+    let classOnly = cardApi.serializeDeclaredCaptures(Statement);
+    assert.false(
+      'filename' in classOnly.fixed,
+      'a class-only roster resolves no filename',
+    );
+  });
+
+  test('serializeDeclaredCaptures resolves a pdf title against the instance it is given', function (assert) {
+    class Statement extends cardApi.CardDef {
+      static displayName = 'Statement';
+      static captures: Captures = {
+        fixed: { format: 'isolated', type: 'pdf', title: 'Annual Report' },
+        computed: {
+          format: 'isolated',
+          type: 'pdf',
+          title: (card: Statement) => `${card.cardTitle} — Q3`,
+        },
+        throwing: {
+          format: 'isolated',
+          type: 'pdf',
+          title: () => {
+            throw new Error('boom');
+          },
+        },
+        empty: { format: 'isolated', type: 'pdf', title: () => '  ' },
+        named: { format: 'isolated', type: 'pdf', filename: 'statement-q3' },
+        tile: { format: 'fitted', width: 170, height: 250 },
+      };
+    }
+    let titled = new Statement({
+      cardInfo: new cardApi.CardInfoField({ name: 'Acme' }),
+    });
+    let roster = cardApi.serializeDeclaredCaptures(Statement, titled);
+    assert.strictEqual(roster.fixed.title, 'Annual Report');
+    assert.strictEqual(roster.computed.title, 'Acme — Q3');
+    assert.strictEqual(
+      roster.throwing.title,
+      'Acme',
+      'a throwing function falls back to the card title',
+    );
+    assert.strictEqual(
+      roster.empty.title,
+      'Acme',
+      'an empty result falls back to the card title',
+    );
+    assert.strictEqual(
+      roster.named.title,
+      'Acme',
+      'a declared filename does not stand in for the title',
+    );
+    assert.false('title' in roster.tile, 'a raster slot carries none');
+
+    let untitled = cardApi.serializeDeclaredCaptures(
+      Statement,
+      new Statement(),
+    );
+    assert.strictEqual(
+      untitled.named.title,
+      'Untitled Statement',
+      'the untitled placeholder still titles the document',
+    );
+
+    let classOnly = cardApi.serializeDeclaredCaptures(Statement);
+    assert.false(
+      'title' in classOnly.fixed,
+      'a class-only roster resolves no title',
+    );
+  });
+
+  test("a FileDef's pdf filename defaults to its name without the extension", function (assert) {
+    class Doc extends cardApi.FileDef {
+      static captures: Captures = {
+        print: { render: class {} as any, type: 'pdf' },
+      };
+    }
+    let roster = cardApi.serializeDeclaredCaptures(
+      Doc,
+      new Doc({ name: 'quarterly.report.docx' }),
+    );
+    assert.strictEqual(roster.print.filename, 'quarterly.report');
+    assert.strictEqual(roster.print.title, 'quarterly.report');
+  });
+
+  test('a non-object declarations value is refused', function (assert) {
+    class Bad extends cardApi.CardDef {
+      static captures: any = ['nope'];
+    }
+    assert.throws(
+      () => cardApi.getCaptures(Bad),
+      /must be an object mapping names to specs/,
+    );
+  });
+
+  test("a 'static screenshots' declaration is refused by name", function (assert) {
+    class Legacy extends cardApi.CardDef {
+      static screenshots: any = {
+        hero: { format: 'isolated', width: 800, height: 600 },
+      };
+    }
+    // Read by nothing if it were allowed through: the card would index clean
+    // and simply have no captures, which is the failure that never surfaces.
+    assert.throws(
+      () => cardApi.getCaptures(Legacy),
+      /'static screenshots', which is no longer read — rename it to 'static captures'/,
+    );
+  });
+
+  test('an inherited screenshots declaration is refused too', function (assert) {
+    class Base extends cardApi.CardDef {
+      static screenshots: any = { hero: { format: 'isolated' } };
+    }
+    class Child extends Base {
+      static captures: Captures = {
+        thumb: { format: 'fitted', width: 300, height: 200 },
+      };
+    }
+    assert.throws(
+      () => cardApi.getCaptures(Child),
+      /no longer read/,
+      'a valid own declaration does not mask an ancestor that still uses the old name',
+    );
+  });
+
+  test('captureURLs maps declared names to captured URLs from meta', function (assert) {
+    class Product extends cardApi.CardDef {
+      static captures: Captures = {
+        hero: { format: 'isolated', width: 800, height: 600 },
+        thumb: { format: 'fitted', width: 300, height: 200 },
+      };
+    }
+    let instance = new Product();
+    assert.deepEqual(
+      instance.captureURLs,
+      { hero: undefined, thumb: undefined },
+      'every declared name is a key; undefined until a capture exists',
+    );
+
+    (instance as any)[cardApi.meta] = {
+      captures: {
+        hero: {
+          url: 'http://example.com/r/_capture/card-1?name=hero',
+          hash: 'abc123',
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      },
+    };
+    assert.deepEqual(
+      instance.captureURLs,
+      {
+        hero: 'http://example.com/r/_capture/card-1?name=hero',
+        thumb: undefined,
+      },
+      'a captured name reads its durable served URL; the uncaptured one stays undefined',
+    );
+  });
+
+  test('captureURLs also surfaces captured names the class no longer declares', function (assert) {
+    class Plain extends cardApi.CardDef {}
+    let instance = new Plain();
+    (instance as any)[cardApi.meta] = {
+      captures: {
+        legacy: {
+          url: 'http://example.com/r/_capture/card-1?name=legacy',
+          hash: 'abc123',
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      },
+    };
+    assert.deepEqual(
+      instance.captureURLs,
+      { legacy: 'http://example.com/r/_capture/card-1?name=legacy' },
+      'a manifest entry outliving its declaration still serves, so it still reads',
+    );
+  });
+
+  test('a FileDef reads captureURLs the same way', function (assert) {
+    class Video extends cardApi.FileDef {
+      static captures: Captures = {
+        poster: {
+          format: 'embedded',
+          width: 640,
+          height: 360,
+          keyBy: 'file-content',
+        },
+      };
+    }
+    let instance = new Video();
+    assert.deepEqual(
+      instance.captureURLs,
+      { poster: undefined },
+      'the prerender pass captures only instance rows, so a file declared name reads undefined',
+    );
+  });
+
+  test('an invalid declaration reads as nothing declared rather than throwing', function (assert) {
+    class Bad extends cardApi.CardDef {
+      static captures: any = { hero: { width: 800 } };
+    }
+    let instance = new Bad();
+    assert.deepEqual(
+      instance.captureURLs,
+      {},
+      'consumption stays render-safe; the declaration error surfaces at authoring/capture surfaces',
+    );
+  });
+
+  test('cardThumbnailURL falls back to the useAsThumbnail capture', function (assert) {
+    class Product extends cardApi.CardDef {
+      static captures: Captures = {
+        tile: {
+          format: 'fitted',
+          width: 170,
+          height: 250,
+          useAsThumbnail: true,
+        },
+        hero: { format: 'isolated', width: 800, height: 600 },
+      };
+    }
+    let instance = new Product();
+    assert.notOk(
+      instance.cardThumbnailURL,
+      'nullish until a capture exists — the absence signal the icon default engages on',
+    );
+
+    (instance as any)[cardApi.meta] = {
+      captures: {
+        hero: {
+          url: 'http://example.com/r/_capture/card-1?name=hero',
+          hash: 'aaa',
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+        tile: {
+          url: 'http://example.com/r/_capture/card-1?name=tile',
+          hash: 'bbb',
+          contentType: 'image/png',
+          width: 170,
+          height: 250,
+          deviceScaleFactor: 2,
+          useAsThumbnail: true,
+        },
+      },
+    };
+    assert.strictEqual(
+      instance.cardThumbnailURL,
+      'http://example.com/r/_capture/card-1?name=tile',
+      'the declared useAsThumbnail slot feeds the thumbnail, not other captures',
+    );
+  });
+
+  test('author-set thumbnails win over the capture', function (assert) {
+    class Product extends cardApi.CardDef {
+      static captures: Captures = {
+        tile: {
+          format: 'fitted',
+          width: 170,
+          height: 250,
+          useAsThumbnail: true,
+        },
+      };
+    }
+    let instance = new Product();
+    (instance as any)[cardApi.meta] = {
+      captures: {
+        tile: {
+          url: 'http://example.com/r/_capture/card-1?name=tile',
+          hash: 'bbb',
+          contentType: 'image/png',
+          width: 170,
+          height: 250,
+          deviceScaleFactor: 2,
+          useAsThumbnail: true,
+        },
+      },
+    };
+
+    let img = new cardApi.ImageDef({
+      id: 'http://example.com/authored.png',
+      url: 'http://example.com/authored.png',
+    });
+    instance.cardInfo.cardThumbnail = img;
+    assert.strictEqual(
+      instance.cardThumbnailURL,
+      'http://example.com/authored.png',
+      'an authored ImageDef link outranks the capture',
+    );
+
+    instance.cardInfo.cardThumbnailURL = 'http://example.com/explicit.png';
+    assert.strictEqual(
+      instance.cardThumbnailURL,
+      'http://example.com/explicit.png',
+      'an explicit URL outranks everything',
+    );
+  });
+
+  test('an empty-string authored URL falls through to the capture', function (assert) {
+    class Product extends cardApi.CardDef {
+      static captures: Captures = {
+        tile: {
+          format: 'fitted',
+          width: 170,
+          height: 250,
+          useAsThumbnail: true,
+        },
+      };
+    }
+    let instance = new Product();
+    (instance as any)[cardApi.meta] = {
+      captures: {
+        tile: {
+          url: 'http://example.com/r/_capture/card-1?name=tile',
+          hash: 'bbb',
+          contentType: 'image/png',
+          width: 170,
+          height: 250,
+          deviceScaleFactor: 2,
+          useAsThumbnail: true,
+        },
+      },
+    };
+    // A text edit can leave '' in the authored URL (only the picker's clear
+    // button writes null); '' is never a meaningful URL, so it must not mask
+    // the rungs below it.
+    instance.cardInfo.cardThumbnailURL = '';
+    assert.strictEqual(
+      instance.cardThumbnailURL,
+      'http://example.com/r/_capture/card-1?name=tile',
+      'an emptied authored URL does not mask the capture',
+    );
+  });
+
+  test('a card without a useAsThumbnail declaration ignores captured slots', function (assert) {
+    class Product extends cardApi.CardDef {
+      static captures: Captures = {
+        hero: { format: 'isolated', width: 800, height: 600 },
+      };
+    }
+    let instance = new Product();
+    (instance as any)[cardApi.meta] = {
+      captures: {
+        hero: {
+          url: 'http://example.com/r/_capture/card-1?name=hero',
+          hash: 'aaa',
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      },
+    };
+    assert.notOk(
+      instance.cardThumbnailURL,
+      'no declared thumbnail slot means no capture rung',
+    );
+  });
+
+  test('the @field decorator refuses the reserved captureURLs name', function (assert) {
+    class Bad extends cardApi.CardDef {}
+    assert.throws(
+      () =>
+        (cardApi.field as any)(Bad.prototype, 'captureURLs', {
+          initializer: () => ({}),
+        }),
+      /"captureURLs" is a reserved name/,
+    );
+  });
+});

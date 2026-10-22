@@ -19,18 +19,20 @@ import {
 
 import { not, and, bool, eq, or } from '@cardstack/boxel-ui/helpers';
 
+import CredentialFieldsFrame from '@cardstack/host/components/matrix/credential-fields';
 import ModalContainer from '@cardstack/host/components/modal-container';
 
 import { ProfileInfo } from '@cardstack/host/components/operator-mode/profile-info-popover';
 import config from '@cardstack/host/config/environment';
-import { isValidPassword } from '@cardstack/host/lib/matrix-utils';
+import {
+  CredentialFields,
+  credentialFieldsError,
+} from '@cardstack/host/lib/credential-fields';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import ProfileEmail from './profile-email';
 import ProfileSubscription from './profile-subscription';
-
-import type { IAuthData } from 'matrix-js-sdk';
 
 // Subscription sits below the fold in this fixed-height modal
 const scrollIntoViewIfRequested = modifier(
@@ -85,50 +87,11 @@ export default class ProfileSettingsModal extends Component<Signature> {
             </FieldContainer>
           {{/unless}}
           {{#if (eq this.submode 'password')}}
-            <FieldContainer
-              @label='Current Password'
-              @tag='label'
-              class='profile-field password-settings-field'
-            >
-              <BoxelInput
-                data-test-current-password-field
-                type='password'
-                @errorMessage={{this.currentPasswordError}}
-                @state={{this.currentPasswordInputState}}
-                @value={{this.currentPassword}}
-                @onInput={{this.setCurrentPassword}}
-              />
-            </FieldContainer>
-            <FieldContainer
-              @label='New Password'
-              @tag='label'
-              class='profile-field password-settings-field'
-            >
-              <BoxelInput
-                data-test-new-password-field
-                type='password'
-                @errorMessage={{this.newPasswordError}}
-                @state={{this.newPasswordInputState}}
-                @value={{this.newPassword}}
-                @onInput={{this.setNewPassword}}
-                @onBlur={{this.checkNewPassword}}
-              />
-            </FieldContainer>
-            <FieldContainer
-              @label='Confirm New Password'
-              @tag='label'
-              class='profile-field password-settings-field'
-            >
-              <BoxelInput
-                data-test-confirm-password-field
-                type='password'
-                @errorMessage={{this.confirmPasswordError}}
-                @state={{this.confirmPasswordInputState}}
-                @value={{this.confirmPassword}}
-                @onInput={{this.setConfirmPassword}}
-                @onBlur={{this.checkConfirmPassword}}
-              />
-            </FieldContainer>
+            <CredentialFieldsFrame
+              class='password-settings-fields'
+              @form='change-password'
+              @fields={{this.passwordFields}}
+            />
           {{else}}
             <ProfileEmail
               @onSetup={{this.setupProfileEmail}}
@@ -232,9 +195,17 @@ export default class ProfileSettingsModal extends Component<Signature> {
         .profile-settings-subscription {
           --settings-modal-gap: var(--boxel-sp);
         }
-        .password-settings-field {
-          grid-template-columns: 1fr;
-          gap: var(--boxel-sp-xs);
+        /* The password fields stack their labels, as profile fields do. */
+        .password-settings-fields {
+          --credential-layout: narrow;
+          --credential-fields-height: calc(
+            (
+                var(--boxel-sp-sm) + var(--boxel-body-font-size) * 1.1 +
+                  var(--boxel-sp-xs) + var(--boxel-outline-width) * 2 +
+                  var(--boxel-form-control-height)
+              ) *
+              3 + var(--settings-modal-gap) * 2
+          );
         }
         .profile-settings-change-pw-button {
           margin-right: auto;
@@ -271,12 +242,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
   @tracked private displayNameError: Error | undefined;
   @tracked private showDisplayNameValidation = false;
   @tracked private isSaveDisabledForEmail = false;
-  @tracked private currentPassword: string | undefined;
-  @tracked private currentPasswordError: string | undefined;
-  @tracked private newPassword: string | undefined;
-  @tracked private newPasswordError: string | undefined;
-  @tracked private confirmPassword: string | undefined;
-  @tracked private confirmPasswordError: string | undefined;
+  // The current, new and confirmed passwords are typed into a frame on the
+  // secure origin, which changes the password. A new one is made each time
+  // the password form opens, so it starts empty.
+  @tracked private passwordFields = new CredentialFields();
   @tracked private error: string | undefined;
   private onSaveEmail: (() => void) | undefined;
   private resetChangeEmail: (() => void) | undefined;
@@ -326,19 +295,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
   }
 
   private get isSaveButtonDisabledForPassword() {
-    return this.hasPasswordMissingFields || this.hasPasswordError;
-  }
-
-  private get hasPasswordMissingFields() {
-    return !this.currentPassword || !this.newPassword || !this.confirmPassword;
-  }
-
-  private get hasPasswordError() {
-    return Boolean(
-      this.currentPasswordError ||
-      this.newPasswordError ||
-      this.confirmPasswordError,
-    );
+    return !this.passwordFields.complete;
   }
 
   @action private setDisplayName(name: string) {
@@ -359,6 +316,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
   }
 
   @action private changePassword() {
+    this.passwordFields = new CredentialFields();
+    this.passwordFields.setContext({
+      username: this.matrixService.userId ?? undefined,
+    });
     this.submode = 'password';
   }
 
@@ -391,49 +352,6 @@ export default class ProfileSettingsModal extends Component<Signature> {
     this.isSaveDisabledForEmail = isDisabled;
   }
 
-  @action private setCurrentPassword(currentPassword: string) {
-    this.currentPassword = currentPassword;
-    this.currentPasswordError = undefined;
-  }
-
-  @action private setNewPassword(newPassword: string) {
-    this.newPassword = newPassword;
-    this.newPasswordError = undefined;
-  }
-
-  @action private setConfirmPassword(confirmPassword: string) {
-    this.confirmPassword = confirmPassword;
-    this.confirmPasswordError = undefined;
-  }
-
-  @action
-  private checkNewPassword() {
-    if (!this.newPassword) {
-      this.newPasswordError = 'Password is missing';
-    } else if (!isValidPassword(this.newPassword)) {
-      this.newPasswordError = 'Password must be at least 8 characters long';
-    }
-  }
-
-  @action
-  private checkConfirmPassword() {
-    if (this.confirmPassword !== this.newPassword) {
-      this.confirmPasswordError = 'Passwords do not match';
-    }
-  }
-
-  private get currentPasswordInputState() {
-    return this.currentPasswordError ? 'invalid' : 'initial';
-  }
-
-  private get newPasswordInputState() {
-    return this.newPasswordError ? 'invalid' : 'initial';
-  }
-
-  private get confirmPasswordInputState() {
-    return this.confirmPasswordError ? 'invalid' : 'initial';
-  }
-
   private saveTask = restartableTask(async () => {
     await this.matrixService.profile.loaded; // Prevent saving before profile is loaded
 
@@ -463,44 +381,43 @@ export default class ProfileSettingsModal extends Component<Signature> {
   });
 
   private async onSavePassword() {
-    if (!this.currentPassword) {
+    if (!(await this.passwordFields.validate())) {
+      return;
+    }
+    if (!this.passwordFields.complete) {
       throw new Error(
-        'bug: should never get here: current password is required',
+        'bug: should never get here: the current and new passwords are required',
       );
-    } else if (!this.newPassword) {
-      throw new Error('bug: should never get here: new password is required');
     }
 
     try {
       this.error = undefined;
-      let auth = {
-        type: 'm.login.password',
-        user: this.matrixService.userId,
-        password: this.currentPassword,
-        identifier: {
-          type: 'm.id.user',
-          user: this.matrixService.userId,
+      let result = await this.passwordFields.submit({
+        operation: 'set-password',
+        args: {
+          auth: {
+            type: 'm.login.password',
+            user: this.matrixService.userId,
+            identifier: {
+              type: 'm.id.user',
+              user: this.matrixService.userId,
+            },
+          },
+          accessToken: this.matrixService.accessToken,
+          account: this.matrixService.userId ?? undefined,
         },
-      } as IAuthData & { type: string };
-      await this.matrixService.setPassword(auth, this.newPassword);
-      this.resetPasswordFields();
+      });
+      if (!result.ok) {
+        throw credentialFieldsError(result);
+      }
       this.submode = undefined;
     } catch (e: any) {
       if ('errcode' in e.data && e.data.errcode === 'M_FORBIDDEN') {
-        this.currentPasswordError = 'Invalid password';
+        this.passwordFields.setFieldError('current', 'Invalid password');
       } else {
         this.error = 'Unknown error';
       }
     }
-  }
-
-  private resetPasswordFields() {
-    this.currentPassword = undefined;
-    this.newPassword = undefined;
-    this.confirmPassword = undefined;
-    this.currentPasswordError = undefined;
-    this.newPasswordError = undefined;
-    this.confirmPasswordError = undefined;
   }
 
   private afterSaveTask = restartableTask(async () => {

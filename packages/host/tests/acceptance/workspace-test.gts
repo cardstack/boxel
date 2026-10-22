@@ -1,9 +1,19 @@
-import { click, visit, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  find,
+  getSettledState,
+  settled,
+  triggerKeyEvent,
+  visit,
+  waitUntil,
+  waitFor,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Deferred, type Realm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -12,11 +22,14 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   SYSTEM_CARD_FIXTURE_CONTENTS,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 const STACK = '[data-test-operator-mode-stack="0"]';
+const WORKSPACE_NAME = 'Test Workspace';
+const WORKSPACE_BUTTON = `[data-test-workspace-button="${WORKSPACE_NAME}"]`;
 
 module('Acceptance | workspace card', function (hooks) {
   setupApplicationTest(hooks);
@@ -58,6 +71,7 @@ module('Acceptance | workspace card', function (hooks) {
       mockMatrixUtils,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'realm.json': realmConfigCardJSON({ name: WORKSPACE_NAME }),
         'note.gts': { Note },
         'index.json': new Workspace(),
         'Note/1.json': new Note({ cardTitle: 'First Note' }),
@@ -75,7 +89,7 @@ module('Acceptance | workspace card', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/remix-card',
+                module: '@cardstack/base/remix-card',
                 name: 'RemixCard',
               },
             },
@@ -88,21 +102,21 @@ module('Acceptance | workspace card', function (hooks) {
   test('a realm indexed by Workspace renders its shell and switches segments', async function (assert) {
     await visit('/');
     assert.dom('[data-test-workspace-chooser]').exists();
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
 
     await waitFor(`${STACK} nav.tabs`);
     assert
-      .dom(`${STACK} nav.tabs .tab`)
+      .dom(`${STACK} nav.tabs [data-test-workspace-tab]`)
       .exists({ count: 3 }, 'Home, Library, and Activity tabs render');
     assert
-      .dom(`${STACK} nav.tabs .tab.active`)
+      .dom(`${STACK} nav.tabs [aria-current="true"]`)
       .hasText('Home', 'Home is the default segment');
 
-    await click(`${STACK} nav.tabs .tab:nth-child(2)`);
-    assert.dom(`${STACK} .library`).exists('Library pane renders');
+    await click(`${STACK} [data-test-workspace-tab="library"]`);
+    assert.dom(`${STACK} [data-test-library]`).exists('Library pane renders');
 
-    await click(`${STACK} nav.tabs .tab:nth-child(3)`);
-    assert.dom(`${STACK} .activity-pane`).exists('Activity pane renders');
+    await click(`${STACK} [data-test-workspace-tab="activity"]`);
+    assert.dom(`${STACK} [data-test-activity]`).exists('Activity pane renders');
   });
 
   // Pills are matched by their visible label rather than by index, since the
@@ -122,13 +136,13 @@ module('Acceptance | workspace card', function (hooks) {
 
   test('the "New card" chooser searches across all available realms, not just this workspace', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
     // The empty-space welcome hero offers a "New card" affordance that opens
     // the Spec chooser. The chosen Spec may live in any realm the user can
     // reach; the new card still lands in this workspace's realm.
-    await click(`${STACK} .welcome-alt`);
+    await click(`${STACK} [data-test-welcome-new-card]`);
     await waitFor('[data-test-card-chooser-modal]');
 
     // The realm scope must not be locked to the workspace's own realm — the
@@ -151,7 +165,7 @@ module('Acceptance | workspace card', function (hooks) {
   // isolated-render integration tests.
   test('Home Browse lists a pill per card type with its instance count', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
     await waitFor(`${STACK} [data-test-browse]`);
@@ -169,27 +183,23 @@ module('Acceptance | workspace card', function (hooks) {
 
   test('clicking a Home Browse pill opens the Library filtered to that type', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} [data-test-browse]`);
 
     let noteChip = findTypeChip(assert, 'Note');
-    let noteTypeId = noteChip.getAttribute('data-test-type-chip');
-    // Without this the filter selector below interpolates to
-    // `[data-test-workspace-filter="null"]` and reports a missing element
-    // rather than a pill that carries no type id.
-    assert.ok(noteTypeId, 'the Note pill carries the type id it filters on');
+    assert.ok(
+      noteChip.getAttribute('data-test-type-chip'),
+      'the Note pill carries the type id it filters on',
+    );
 
     await click(noteChip);
 
     assert
-      .dom(`${STACK} nav.tabs .tab.active`)
+      .dom(`${STACK} nav.tabs [aria-current="true"]`)
       .hasText('Library', 'the pill switches to the Library segment');
     assert
-      .dom(`${STACK} [data-test-workspace-filter="${noteTypeId}"]`)
-      .hasClass(
-        'selected',
-        'the Library opens with the clicked type pre-selected',
-      );
+      .dom(`${STACK} [data-test-selected-filter="Note"]`)
+      .exists('the Library opens with the clicked type pre-selected');
   });
 
   // The Library rail lists a row per realm card type (sourced from the same
@@ -197,35 +207,60 @@ module('Acceptance | workspace card', function (hooks) {
   // — not just the base Everything / Cards / Files filters.
   test('the Library rail lists a row per card type with its count', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
-    await click(`${STACK} nav.tabs .tab:nth-child(2)`); // Library
-    await waitFor(`${STACK} .rail-group`);
+    await click(`${STACK} [data-test-workspace-tab="library"]`);
+    await waitFor(`${STACK} [data-test-rail-group]`);
 
-    let noteRow = [
-      ...document.querySelectorAll(`${STACK} .rail-row.type`),
-    ].find((el) => el.textContent?.includes('Note')) as HTMLElement | undefined;
-    assert.ok(noteRow, 'the Library rail lists a Note card-type row');
     assert
-      .dom(noteRow!.querySelector('.rail-count'))
+      .dom(
+        `${STACK} [data-test-boxel-filter-list-button="Note"] [data-test-filter-list-count]`,
+      )
       .hasText('1', 'the Note rail row shows its single-instance count');
+  });
+
+  // Operator mode reads Escape on anything that is not a text field as "close
+  // this card". A result is a button, so the Escape that dismisses the search
+  // from a focused result has to stop before it reaches the document, or the
+  // whole workspace closes with the list.
+  test('Escape on a focused search result dismisses the results and keeps the workspace open', async function (assert) {
+    await visit('/');
+    await click(WORKSPACE_BUTTON);
+    await waitFor(`${STACK} nav.tabs`);
+
+    await fillIn(`${STACK} [data-test-workspace-search]`, 'First');
+    await waitFor(`${STACK} [data-test-search-result]`);
+
+    let result = find(`${STACK} [data-test-search-result]`) as HTMLElement;
+    result.focus();
+    await triggerKeyEvent(result, 'keydown', 'Escape');
+
+    assert
+      .dom(`${STACK} [data-test-workspace-index]`)
+      .exists('the workspace card is still open');
+    assert
+      .dom(`${STACK} [data-test-search-result]`)
+      .doesNotExist('the results are dismissed');
+    assert
+      .dom(`${STACK} [data-test-workspace-search]`)
+      .hasValue('', 'the term is cleared');
   });
 
   test('a remix surfaces in the Activity feed as a first-class event', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
-    await click(`${STACK} nav.tabs .tab:nth-child(3)`); // Activity
-    await waitFor(`${STACK} .feed-verb.remixed`);
+    await click(`${STACK} [data-test-workspace-tab="activity"]`); // Activity
+    await waitFor(`${STACK} [data-test-feed-verb="Remixed"]`);
     assert
-      .dom(`${STACK} .feed-verb.remixed`)
+      .dom(`${STACK} [data-test-feed-verb="Remixed"]`)
       .hasText('Remixed', 'the remix reads as a Remixed event, not a save');
 
-    await waitFor(`${STACK} .feed-remix-source`);
+    await waitFor(`${STACK} [data-test-feed-remix-source]`);
     assert
-      .dom(`${STACK} .feed-remix-source`)
+      .dom(`${STACK} [data-test-feed-remix-source]`)
       .hasText(
         'from First Note',
         'the event names the source it was cloned from',
@@ -234,15 +269,15 @@ module('Acceptance | workspace card', function (hooks) {
 
   test('an uploaded file surfaces in the Activity feed alongside cards', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
-    await click(`${STACK} nav.tabs .tab:nth-child(3)`); // Activity
-    await waitFor(`${STACK} .feed-row`);
+    await click(`${STACK} [data-test-workspace-tab="activity"]`); // Activity
+    await waitFor(`${STACK} [data-test-feed-row]`);
 
-    let rows = [...document.querySelectorAll(`${STACK} .feed-row`)];
+    let rows = [...document.querySelectorAll(`${STACK} [data-test-feed-row]`)];
     let titleOf = (row: Element) =>
-      row.querySelector('.feed-title')?.textContent?.trim();
+      row.querySelector('[data-test-feed-title]')?.textContent?.trim();
     let fileRow = rows.find((row) => titleOf(row) === 'welcome-song.mp3');
     assert.ok(
       fileRow,
@@ -254,7 +289,9 @@ module('Acceptance | workspace card', function (hooks) {
     // A file row must be dated, not merely present: '—' is the placeholder
     // rendered when the file's `lastModified` meta fails to reach the client,
     // and the title alone would still render in that case.
-    let when = fileRow!.querySelector('.feed-when')?.textContent?.trim() ?? '';
+    let when =
+      fileRow!.querySelector('[data-test-feed-when]')?.textContent?.trim() ??
+      '';
     assert.notStrictEqual(
       when,
       '—',
@@ -272,11 +309,11 @@ module('Acceptance | workspace card', function (hooks) {
 
   test('opening a file feed row opens the file, not a card', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
-    await click(`${STACK} nav.tabs .tab:nth-child(3)`); // Activity
-    await waitFor(`${STACK} .feed-row`);
+    await click(`${STACK} [data-test-workspace-tab="activity"]`); // Activity
+    await waitFor(`${STACK} [data-test-feed-row]`);
 
     // A file feed row routes through the file stack-item path, keyed by the
     // file's URL — not the card path a card row takes.
@@ -285,5 +322,326 @@ module('Acceptance | workspace card', function (hooks) {
     assert
       .dom(`[data-test-stack-card="${testRealmURL}welcome-song.mp3"]`)
       .exists('the file opens as a file stack item');
+  });
+});
+
+module('Acceptance | workspace card | Library pages', function (hooks) {
+  setupApplicationTest(hooks);
+  setupLocalIndexing(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+  });
+
+  let { createAndJoinRoom } = mockMatrixUtils;
+  let realm: Realm;
+
+  // The Library pages this realm's index in steps of PAGE_SIZE, so a second,
+  // shorter page holds the notes past the first.
+  const PAGE_SIZE = 5;
+  const NOTE_COUNT = 7;
+  const LAST_NOTE = noteId(NOTE_COUNT);
+  const GRID_ITEM = `${STACK} [data-test-cards-grid-cards] [data-test-cards-grid-item]`;
+  const PAGINATION = `${STACK} [data-test-card-list-pagination]`;
+
+  hooks.beforeEach(async function () {
+    createAndJoinRoom({ sender: '@testuser:localhost', name: 'room-test' });
+    setupUserSubscription();
+    setupAuthEndpoints();
+
+    let loader = getService('loader-service').loader;
+    let { field, contains, CardDef } = await loader.import<
+      typeof import('@cardstack/base/card-api')
+    >('@cardstack/base/card-api');
+    let { default: StringField } = await loader.import<
+      typeof import('@cardstack/base/string')
+    >('@cardstack/base/string');
+    let { Workspace } = await loader.import<
+      typeof import('@cardstack/base/workspace')
+    >('@cardstack/base/workspace');
+
+    class Note extends CardDef {
+      static displayName = 'Note';
+      @field cardTitle = contains(StringField);
+    }
+    class Memo extends CardDef {
+      static displayName = 'Memo';
+      @field cardTitle = contains(StringField);
+    }
+    class PagedWorkspace extends Workspace {
+      static libraryPageSize = PAGE_SIZE;
+    }
+
+    let notes: Record<string, InstanceType<typeof Note>> = {};
+    for (let i = 1; i <= NOTE_COUNT; i++) {
+      let n = String(i).padStart(3, '0');
+      notes[`${noteId(i)}.json`] = new Note({ cardTitle: `Note ${n}` });
+    }
+
+    ({ realm } = await setupAcceptanceTestRealm({
+      mockMatrixUtils,
+      contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'realm.json': realmConfigCardJSON({ name: WORKSPACE_NAME }),
+        'note.gts': { Note, Memo, PagedWorkspace },
+        'index.json': new PagedWorkspace(),
+        'Memo/1.json': new Memo({ cardTitle: 'Only Memo' }),
+        ...notes,
+      },
+    }));
+  });
+
+  async function openLibraryFilter(name: string) {
+    await visit('/');
+    await click(WORKSPACE_BUTTON);
+    await waitFor(`${STACK} nav.tabs`);
+    await click(`${STACK} [data-test-workspace-tab="library"]`);
+    await waitFor(`${STACK} [data-test-boxel-filter-list-button="${name}"]`);
+    await click(`${STACK} [data-test-boxel-filter-list-button="${name}"]`);
+  }
+
+  function noteId(i: number) {
+    return `Note/${String(i).padStart(3, '0')}`;
+  }
+
+  function gridItemCount() {
+    return document.querySelectorAll(GRID_ITEM).length;
+  }
+
+  // The Library's state when a wait gives up, read at that moment rather than
+  // when the wait began: which rows and page it shows, whether a page is
+  // still loading, and what `settled()` still waits on.
+  function describeLibrary(): string {
+    let ids = [...document.querySelectorAll(GRID_ITEM)].map((el) =>
+      (el.getAttribute('data-test-cards-grid-item') ?? '?').replace(
+        testRealmURL,
+        '',
+      ),
+    );
+    let page =
+      document
+        .querySelector(`${PAGINATION} [aria-current="page"]`)
+        ?.textContent?.trim() ?? '<no page controls>';
+    let loading = Boolean(
+      document.querySelector(`${STACK} [data-test-card-list-loading]`),
+    );
+    let s = getSettledState();
+    return [
+      `grid items (${ids.length}): [${ids.join(', ')}]`,
+      `current page: ${page}`,
+      `loading state shown: ${loading}`,
+      `settled state: hasRunLoop=${s.hasRunLoop} hasPendingTimers=${s.hasPendingTimers} hasPendingWaiters=${s.hasPendingWaiters} hasPendingRequests=${s.hasPendingRequests} isRenderPending=${s.isRenderPending}`,
+    ].join('; ');
+  }
+
+  async function waitForGridItems(count: number) {
+    let startedAt = Date.now();
+    try {
+      await waitUntil(() => gridItemCount() === count);
+    } catch {
+      throw new Error(
+        `expected ${count} grid items, gave up after ${
+          Date.now() - startedAt
+        }ms; ${describeLibrary()}`,
+      );
+    }
+  }
+
+  test('a filter with more rows than a page steps through them page by page', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+
+    assert.dom(PAGINATION).exists('the Library offers page controls');
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
+    assert
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${LAST_NOTE}"]`,
+      )
+      .doesNotExist('the last note is past the first page');
+
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('2');
+    assert
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${LAST_NOTE}"]`,
+      )
+      .exists('the second page holds the rest');
+    assert
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${noteId(1)}"]`,
+      )
+      .doesNotExist('and not the first page again');
+  });
+
+  test('the next page shows a loading state, not the last page, until it arrives', async function (assert) {
+    // Hold the second page's search on the wire, so the page is caught
+    // between the click and its results.
+    let secondPageRequested = new Deferred<void>();
+    let releaseSecondPage = new Deferred<void>();
+    getService('network').virtualNetwork.mount(
+      async (request: Request) => {
+        if (
+          request.url.endsWith('/_federated-search') &&
+          (await request.clone().json())?.page?.number === 1
+        ) {
+          secondPageRequested.fulfill();
+          await releaseSecondPage.promise;
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+
+    // Not awaited: it settles only once the held page is released.
+    let clicked = click(`${PAGINATION} [aria-label="Next"]`);
+    try {
+      await secondPageRequested.promise;
+      await waitFor(`${STACK} [data-test-card-list-loading]`);
+      assert
+        .dom(GRID_ITEM)
+        .doesNotExist('the first page is not left up as if it were the next');
+      assert
+        .dom(`${PAGINATION} [aria-current="page"]`)
+        .hasText('2', 'the controls already point at the page being loaded');
+    } finally {
+      releaseSecondPage.fulfill();
+    }
+    await clicked;
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+    assert.dom(`${STACK} [data-test-card-list-loading]`).doesNotExist();
+  });
+
+  test('a page emptied by deletions moves back to the last page', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    // Every row on page 2, so the notes left fit on one page.
+    for (let i = PAGE_SIZE + 1; i <= NOTE_COUNT; i++) {
+      await realm.delete(`${noteId(i)}.json`);
+    }
+
+    // The deletions reach the grid through work the test did not start: each
+    // realm event is dispatched on a later macrotask, debounced into the
+    // matrix timeline, and coalesced into a live-search refresh; that refresh
+    // re-runs the page-2 query, finds it empty, moves the Library back to
+    // page 1, and runs the query again. The searches are held by test waiters
+    // and the debounce by the run loop, so wait for them to settle instead of
+    // polling against a fixed clock. Two hops are not held by a waiter: the
+    // timeline drain that the debounce starts, and the card list's move back
+    // to the last page (`followLastPage`). Here both continue only on
+    // microtasks, which settle before `settled()` checks again. If a later
+    // change makes either wait on a macrotask, the warning below fires.
+    let deletedAt = Date.now();
+    await settled();
+    let settledAfterMs = Date.now() - deletedAt;
+    if (gridItemCount() !== PAGE_SIZE) {
+      console.warn(
+        `[library-pages] settled ${settledAfterMs}ms after the deletions with the grid not yet on the last page; ${describeLibrary()}`,
+      );
+    }
+
+    await waitForGridItems(PAGE_SIZE);
+    assert
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${noteId(1)}"]`,
+      )
+      .exists('the grid shows the one page left');
+    assert
+      .dom(PAGINATION)
+      .doesNotExist('and offers no controls for a single page');
+  });
+
+  test('changing the filter starts again at page 1', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    await click(`${STACK} [data-test-boxel-filter-list-button="Memo"]`);
+    await waitForGridItems(1);
+    assert
+      .dom(PAGINATION)
+      .doesNotExist('a filter that fits on one page shows no page controls');
+
+    await click(`${STACK} [data-test-boxel-filter-list-button="Note"]`);
+    await waitForGridItems(PAGE_SIZE);
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
+  });
+
+  test('a search term that still reaches the page starts again at page 1', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    // Every note matches, so page 2 still exists under the new term.
+    await fillIn(`${STACK} [data-test-workspace-search]`, 'Note');
+    await waitForGridItems(PAGE_SIZE);
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
+    assert
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${noteId(1)}"]`,
+      )
+      .exists('the grid shows the first page of the narrowed list');
+  });
+
+  test('a search term typed past page 1 keeps the rows up while it loads', async function (assert) {
+    // Hold the Library's search for the term, so the grid is caught between
+    // the keystroke and its results.
+    let termRequested = new Deferred<void>();
+    let releaseTerm = new Deferred<void>();
+    getService('network').virtualNetwork.mount(
+      async (request: Request) => {
+        if (request.url.endsWith('/_federated-search')) {
+          let body = await request.clone().json();
+          if (
+            body?.page?.size === PAGE_SIZE &&
+            JSON.stringify(body.filter).includes('Note 00')
+          ) {
+            termRequested.fulfill();
+            await releaseTerm.promise;
+          }
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    // Not awaited: it settles only once the held search is released.
+    let typed = fillIn(`${STACK} [data-test-workspace-search]`, 'Note 00');
+    try {
+      await termRequested.promise;
+      // The controls drop to page 1 in the same render that starts the
+      // narrowed search, so the grid below has seen it load.
+      await waitUntil(
+        () =>
+          find(`${PAGINATION} [aria-current="page"]`)?.textContent?.trim() ===
+          '1',
+      );
+      assert
+        .dom(GRID_ITEM)
+        .exists(
+          { count: NOTE_COUNT - PAGE_SIZE },
+          'the rows on screen stay up until the narrowed list arrives',
+        );
+    } finally {
+      releaseTerm.fulfill();
+    }
+    await typed;
+    await waitForGridItems(PAGE_SIZE);
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
   });
 });

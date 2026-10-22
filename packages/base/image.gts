@@ -34,8 +34,6 @@ export default class ImageCard extends CardDef {
   static isolated = ImageCardView;
   static embedded = ImageCardView;
   static atom = class extends Component<typeof ImageCard> {
-    <template>
-      <@fields.url @format='atom' />
-    </template>
+    <template><@fields.url @format='atom' /></template>
   };
 }

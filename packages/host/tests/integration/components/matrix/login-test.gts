@@ -261,4 +261,41 @@ module('Integration | Component | matrix/login', function (hooks) {
       matrixService.start = originalStart;
     }
   });
+
+  test('a render settles only once the token exchange has finished', async function (assert) {
+    window.location.href = '/?loginToken=abc123';
+    let exchangeFinished = false;
+
+    // A bare timer is invisible to `settled()` on every count: it is outside
+    // the run loop, it is not a fetch the app's network layer holds a waiter
+    // for, and it runs inside an ember-concurrency task, which carries no
+    // waiter of its own. The sign-in waiter is the only thing that can carry
+    // the render's settle across it, so this asserts that waiter is held.
+    setLoginWithTokenInterceptor(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      exchangeFinished = true;
+      return {
+        access_token: 't',
+        user_id: '@u:s',
+        device_id: 'd',
+      } as any;
+    });
+
+    let matrixService = getMatrixService(this);
+    let originalStart = matrixService.start.bind(matrixService);
+    // Stubbed so the assertion rests on the exchange alone; the boot holds the
+    // same waiter and would otherwise mask a missing one here.
+    matrixService.start = (async () => {}) as typeof matrixService.start;
+
+    try {
+      await render(<template><Login @setMode={{noop}} /></template>);
+
+      assert.true(
+        exchangeFinished,
+        'the exchange completed before the render settled',
+      );
+    } finally {
+      matrixService.start = originalStart;
+    }
+  });
 });

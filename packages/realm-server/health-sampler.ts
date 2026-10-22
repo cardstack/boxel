@@ -1,10 +1,19 @@
 import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks';
-import { logger } from '@cardstack/runtime-common';
-import { getSearchInFlight } from './search-inflight.ts';
+import { logger, takeModuleCompileStats } from '@cardstack/runtime-common';
+import {
+  getBusiestRealmSearchRequestLoad,
+  getSearchInFlight,
+  getSearchRequestLoad,
+  getSearchRequestsInFlight,
+} from './search-inflight.ts';
+import {
+  heapTelemetry,
+  formatHeapTelemetry,
+} from './prerender/heap-telemetry.ts';
+import { realmEventDispatcher } from './realm-event-dispatcher.ts';
 
-// Periodically samples the realm-server process's event-loop health and
-// in-flight search count, logging a `realm:health` line whenever there's a
-// saturation signal worth capturing.
+// Periodically samples the realm-server process's event-loop health, in-flight
+// search count, and heap usage, emitting a `realm:health` line every interval.
 //
 // Why: during a from-scratch index, prerendered cards block in
 // `waiting-stability` on `_search` round-trips that the realm-server is slow
@@ -14,23 +23,36 @@ import { getSearchInFlight } from './search-inflight.ts';
 // concurrent searches) so requests sit unserviced. Event-loop lag rising in
 // lockstep with `inFlightSearch` is the fingerprint of exactly that.
 //
+// The line is emitted unconditionally rather than only inside saturation
+// windows: heap growth toward the OOM limit is exactly the thing an alert has
+// to catch *before* a storm, so the heap number has to be present on a calm,
+// idle-loop process too. A quiet-when-healthy line makes a surviving replica
+// sitting at a high retained heap indistinguishable from a healthy one — the
+// blind spot the availability alerts exist to close.
+//
 // `monitorEventLoopDelay` measures the delay between when a timer was
 // scheduled and when it actually fired — i.e. how long synchronous work kept
 // the loop from turning. Values are nanoseconds.
 export interface HealthSamplerOptions {
-  // How often to sample + maybe log. Defaults to 5s.
+  // How often to sample + log. Defaults to 5s.
   intervalMs?: number;
-  // Only log when peak loop lag in the window exceeds this (or a search is
-  // in flight). Keeps the line quiet on an idle/healthy server. Defaults to
-  // 200ms.
-  lagThresholdMs?: number;
+  // The database connection scheduler's state at the moment of the sample:
+  // connections checked out against the pool's max, acquisitions waiting for
+  // one, and how many of those are held back only by their tenant's share.
+  // Waiting alone says the pool is the bottleneck; waiting at share says the
+  // scheduler is keeping one realm's searches from crowding out another's.
+  connectionStats?: () => {
+    inUse: number;
+    limit: number;
+    waiting: number;
+    waitingAtShare: number;
+  };
 }
 
 export function startHealthSampler(
   opts: HealthSamplerOptions = {},
 ): () => void {
   let intervalMs = opts.intervalMs ?? 5000;
-  let lagThresholdMs = opts.lagThresholdMs ?? 200;
   // Created here (not at module load) to avoid racing the circular import
   // that installs the logger factory; startup calls this well after boot.
   let log = logger('realm:health');
@@ -44,15 +66,64 @@ export function startHealthSampler(
     let p99LagMs = toMs(histogram.percentile(99));
     histogram.reset();
     let inFlightSearch = getSearchInFlight();
-    // Stay silent when the loop is healthy and nothing is in flight — only
-    // the saturation windows are interesting.
-    if (maxLagMs < lagThresholdMs && inFlightSearch === 0) {
-      return;
-    }
-    let heapMB = Math.round(process.memoryUsage().heapUsed / (1024 * 1024));
+    // The link-shape policy's own inputs, beside the lag they are placed
+    // against. `inFlightSearch` counts admission slots, which a request the
+    // live-search cache answers from another's computation gives back early;
+    // `searchRequests` counts every admitted request until its response ends,
+    // and `searchLoad` is that count's sustained mean, the number the ladder's
+    // thresholds are compared against. A threshold derived from one of these
+    // and applied to another is off by the cache's miss rate, or by whatever
+    // the smoothing takes off a burst.
+    let searchRequests = getSearchRequestsInFlight();
+    let searchLoad = getSearchRequestLoad();
+    // Each realm's level is decided on that realm's own reading, so the
+    // process's says how loaded the replica is but not how close any realm is
+    // to a rung. The busiest realm's reading does.
+    let busiest = getBusiestRealmSearchRequestLoad();
+    // Reuse the prerender heap-telemetry helpers so the realm-server health
+    // line carries the same `heapUsedMB=… heapLimitMB=…` fields (one spelling
+    // of the quantity, and the effective V8 limit read from the running
+    // process rather than assumed from the task definition). Alerts threshold
+    // on the used/limit ratio, which survives a task resize or a Node bump.
+    let heap = heapTelemetry();
+    let connections = opts.connectionStats?.();
+    // Module compiles finished in this window, with their wall times. A large
+    // compile's transform runs on this thread, so lag that matches
+    // `transpileMs` was most likely spent compiling, not waiting on searches or
+    // the database. The times are wall time, not time the thread was held:
+    // overlapping compiles each count their whole span, so `total` can exceed
+    // the window. Read it beside `eventLoopLagMs`, not instead of it.
+    let compiles = takeModuleCompileStats();
+    // The realm event line toward synapse. `realmEventQueueAgeMs` is how long
+    // the oldest event still waiting to start has waited — the delay a
+    // subscriber sees on top of the send itself — and is the number to alert
+    // on: a queue that drains keeps it near zero however deep the burst.
+    // `realmEventBackPressure` counts sends synapse (or the proxy in front of
+    // it) answered as overloaded in this window.
+    let realmEvents = realmEventDispatcher().takeStats();
     log.info(
       `eventLoopLagMs(mean/p99/max)=${meanLagMs.toFixed(0)}/${p99LagMs.toFixed(0)}/${maxLagMs.toFixed(0)} ` +
-        `inFlightSearch=${inFlightSearch} heapMB=${heapMB}`,
+        `inFlightSearch=${inFlightSearch} searchRequests=${searchRequests} ` +
+        `searchLoad=${searchLoad.toFixed(2)} ` +
+        `realmSearchLoadMax=${(busiest?.sustained ?? 0).toFixed(2)} ` +
+        (connections
+          ? `dbConnections=${connections.inUse}/${connections.limit} ` +
+            `dbWaiting=${connections.waiting} ` +
+            `dbWaitingAtShare=${connections.waitingAtShare} `
+          : '') +
+        `transpiles=${compiles.count} ` +
+        `transpileMs(total/max)=${compiles.totalMs.toFixed(0)}/${compiles.maxMs.toFixed(0)} ` +
+        `realmEventsQueued=${realmEvents.queuedEvents} ` +
+        `realmEventQueuedKB=${(realmEvents.queuedBytes / 1024).toFixed(0)} ` +
+        `realmEventQueueAgeMs=${realmEvents.oldestQueuedMs.toFixed(0)} ` +
+        `realmEventSendsInFlight=${realmEvents.sendsInFlight} ` +
+        `realmEventSends=${realmEvents.sends} ` +
+        `realmEventSendMs(mean/max)=${realmEvents.sendMsMean.toFixed(0)}/${realmEvents.sendMsMax.toFixed(0)} ` +
+        `realmEventFailedSends=${realmEvents.failedSends} ` +
+        `realmEventBackPressure=${realmEvents.backPressure} ` +
+        `realmEventsCoalesced=${realmEvents.coalesced} ` +
+        `realmEventsDropped=${realmEvents.dropped} ` +
+        `${formatHeapTelemetry(heap)}`,
     );
   }, intervalMs);
   // Don't keep the process alive solely for sampling.

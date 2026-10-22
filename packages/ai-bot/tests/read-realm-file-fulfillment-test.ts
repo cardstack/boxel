@@ -1,8 +1,15 @@
 import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
-import { fulfillReadRealmFileCalls } from '../lib/read-realm-file-fulfillment.ts';
-import { READ_REALM_FILE_TOOL_NAME } from '../lib/read-realm-file.ts';
+import {
+  fulfillReadRealmFileCall,
+  type ReadRealmFileFulfillmentDeps,
+  type ReadRealmFileFulfillmentOutcome,
+} from '../lib/bot-tools/read-realm-file/fulfillment.ts';
+import {
+  READ_REALM_FILE_MAX_URLS,
+  READ_REALM_FILE_TOOL_NAME,
+} from '../lib/bot-tools/read-realm-file/read.ts';
 import {
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -70,6 +77,19 @@ function baseDeps(client: any, extra: object = {}) {
   };
 }
 
+// The calls of one response, fulfilled one at a time as the bot's call loop
+// does.
+async function fulfillReadRealmFileCalls(
+  calls: any[],
+  deps: ReadRealmFileFulfillmentDeps,
+): Promise<ReadRealmFileFulfillmentOutcome[]> {
+  let outcomes: ReadRealmFileFulfillmentOutcome[] = [];
+  for (let call of calls) {
+    outcomes.push(await fulfillReadRealmFileCall(call, deps));
+  }
+  return outcomes;
+}
+
 // Reads the (stringified) data payload back off a recorded event.
 function dataOf(sentEvent: { content: any }) {
   return JSON.parse(sentEvent.content.data);
@@ -134,7 +154,9 @@ module('fulfillReadRealmFileCalls', () => {
       }),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
     let data = dataOf(sent[0]);
     assert.strictEqual(
       data.attachedFiles.length,
@@ -169,7 +191,7 @@ module('fulfillReadRealmFileCalls', () => {
 
     assert.deepEqual(
       outcomes,
-      [{ commandRequestId: 'c1', ok: true }],
+      [{ commandRequestId: 'c1', ok: true, published: true }],
       'a degraded skill read is still a successful file read',
     );
     let { content } = sent[0];
@@ -250,7 +272,9 @@ module('fulfillReadRealmFileCalls', () => {
       }),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
     assert.strictEqual(sent.length, 1, 'one command-result event posted');
     let { eventType, content } = sent[0];
     assert.strictEqual(eventType, APP_BOXEL_TOOL_RESULT_EVENT_TYPE);
@@ -276,6 +300,35 @@ module('fulfillReadRealmFileCalls', () => {
     assert.strictEqual(data.context.agentId, AGENT_ID);
   });
 
+  test('a file named in prefix form is read from the URL its prefix stands for', async () => {
+    let { client, sent } = fakeClient();
+    let fetched: string[] = [];
+    let fetch = (async (url: string) => {
+      fetched.push(url);
+      return new Response('export class CardDef {}', { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: ['@cardstack/base/card-api.gts'] })],
+      baseDeps(client, {
+        fetch,
+        realmPrefixes: new Map([
+          ['@cardstack/base/', 'https://localhost:4201/base/'],
+        ]),
+        uploadText: async () => 'https://localhost/media/card-api',
+      }),
+    );
+
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
+    assert.deepEqual(fetched, ['https://localhost:4201/base/card-api.gts']);
+    assert.strictEqual(
+      dataOf(sent[0]).attachedFiles[0].sourceUrl,
+      'https://localhost:4201/base/card-api.gts',
+    );
+  });
+
   test('one call with many urls reads them all into a single result event', async () => {
     let { client, sent } = fakeClient();
     let otherUrl = 'https://localhost:4201/user/jane/notes.md';
@@ -294,7 +347,9 @@ module('fulfillReadRealmFileCalls', () => {
       }),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
     assert.strictEqual(sent.length, 1, 'all files ride one result event');
     let { content } = sent[0];
     assert.strictEqual(
@@ -411,6 +466,92 @@ module('fulfillReadRealmFileCalls', () => {
     assert.false(outcomes[0].ok);
     assert.false(fetched, 'never fetched for malformed arguments');
     assert.strictEqual(sent[0].content['m.relates_to'].key, 'invalid');
+  });
+
+  test('arguments cut off mid-list still read the urls that arrived, once each', async () => {
+    let { client, sent } = fakeClient();
+    let fetched: string[] = [];
+    let fetch = (async (url: string) => {
+      fetched.push(url);
+      return new Response('# Trip Planner', { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    // A generation stopped at the output-token limit while repeating urls:
+    // the list never closes and the last entry is partial. A non-markdown
+    // file, so each url costs exactly one fetch.
+    let rawUrl =
+      'https://localhost:4201/user/jane/skills/trip-planner/cities.txt';
+    let truncated = `{"urls":["${rawUrl}","${rawUrl}","${rawUrl}","https://localhost:4201/user/jane/skills/trip-pl`;
+    let outcomes = await fulfillReadRealmFileCalls(
+      [
+        {
+          id: 'c1',
+          type: 'function',
+          function: { name: READ_REALM_FILE_TOOL_NAME, arguments: truncated },
+        } as any,
+      ],
+      baseDeps(client, {
+        fetch,
+        uploadText: async () => 'https://localhost/media/trip-planner',
+      }),
+    );
+
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
+    assert.strictEqual(
+      fetched.filter((url) => url === rawUrl).length,
+      1,
+      'a url repeated in the cut-off list is fetched once',
+    );
+    assert.strictEqual(sent[0].content['m.relates_to'].key, 'applied');
+    assert.strictEqual(dataOf(sent[0]).attachedFiles.length, 1);
+  });
+
+  test('urls past the per-call cap are not fetched and are named in the result', async () => {
+    let { client, sent } = fakeClient();
+    let fetched: string[] = [];
+    let fetch = (async (url: string) => {
+      fetched.push(url);
+      return new Response('cities', { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+    // Non-markdown files, so each url costs exactly one fetch.
+    let urls = Array.from(
+      { length: READ_REALM_FILE_MAX_URLS + 2 },
+      (_, i) =>
+        `https://localhost:4201/user/jane/skills/trip-planner/file-${i}.txt`,
+    );
+    let dropped = urls.slice(READ_REALM_FILE_MAX_URLS);
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls })],
+      baseDeps(client, {
+        fetch,
+        uploadText: async () => 'https://localhost/media/file',
+      }),
+    );
+
+    assert.deepEqual(
+      fetched,
+      urls.slice(0, READ_REALM_FILE_MAX_URLS),
+      'only the first urls up to the cap are fetched',
+    );
+    assert.strictEqual(sent[0].content['m.relates_to'].key, 'applied');
+    assert.strictEqual(
+      dataOf(sent[0]).attachedFiles.length,
+      READ_REALM_FILE_MAX_URLS,
+    );
+    let failureReason: string = sent[0].content.failureReason;
+    assert.true(
+      failureReason.includes(
+        `${dropped.length} of the ${urls.length} urls in this call were not read`,
+      ),
+      'the model is told how many files it did not get',
+    );
+    for (let url of dropped) {
+      assert.true(failureReason.includes(url), `${url} is named as not read`);
+    }
+    assert.false(outcomes[0].ok, 'a capped read is not reported as complete');
   });
 
   test('an empty urls list fails without fetching', async () => {

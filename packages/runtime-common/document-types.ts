@@ -1,3 +1,4 @@
+import type { RenderErrorSummary } from './error.ts';
 import type { QueryResultsMeta } from './index-query-engine.ts';
 import type { CardTypeSummary, RealmMetaValue } from './index-structure.ts';
 import {
@@ -15,9 +16,37 @@ import {
   isEntryResource,
 } from './resource-types.ts';
 
+// What a response says about its own `included[]` when the assembled-resource
+// budget stopped the link walk short. It is the document's answer to a question
+// `included[]` cannot answer for itself: a short one is what a small graph and a
+// clipped large one both look like. The ceiling that applied is deliberately
+// absent — it is an operator's number, recorded in the realm-server log, while
+// the fact is what a consumer could act on. `meta.incomplete` does the same job
+// for a result set whose row count came up short.
+//
+// No consumer branches on this yet. A clipped link is already self-describing
+// to the client, which deserializes it to a not-loaded value and fetches the
+// card when something reads the field, so nothing has to consult the document
+// to behave correctly. It is here so that a caller assembling a total, or a
+// person reading a response, can tell a short `included[]` from a small graph.
+export interface DocumentClosureMeta {
+  linkClosureTruncated?: boolean;
+}
+
+// What a card's document says about its prerendered output: the error its
+// current render recorded, when that render failed while the index visit that
+// read the card's data succeeded. The document is the card's intact data
+// either way. A client that renders the card itself can ignore it; one that
+// shows the card's prerendered output (a search result, a published page)
+// gets that output's error treatment from the prerendered channel directly.
+export interface DocumentRenderMeta {
+  renderError?: RenderErrorSummary;
+}
+
 export interface SingleCardDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>;
   included?: (FileMetaResource | CardResource<Saved>)[];
+  meta?: DocumentClosureMeta & DocumentRenderMeta;
 }
 export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>[];
@@ -40,12 +69,30 @@ export type EntryIncludedResource =
 export interface EntryCollectionDocument {
   data: EntryResource[];
   included?: EntryIncludedResource[];
-  meta: QueryResultsMeta & {
-    // The applied (bound or defaulted) htmlQuery, echoed once at the document
-    // level — it cannot vary across entries, so it is never repeated per
-    // entry. Present whenever the fieldset puts the html branch in play.
-    htmlQuery?: HtmlQuery;
-  };
+  meta: QueryResultsMeta &
+    DocumentClosureMeta & {
+      // The applied (bound or defaulted) htmlQuery, echoed once at the document
+      // level — it cannot vary across entries, so it is never repeated per
+      // entry. Present whenever the fieldset puts the html branch in play.
+      htmlQuery?: HtmlQuery;
+      // Each answering realm's own match count, keyed by realm URL. The summed
+      // `page.total` can't tell a consumer how many rows one realm holds past
+      // its page, which is what paging a single realm's results needs.
+      realmTotals?: Record<string, number>;
+      // The realms whose rows here are the only ones of theirs the result may
+      // hold, because the server decided them by more than the caller's query:
+      // the caller does not read the realm outright, so what they see of it is
+      // their policy's to decide, or the query is a declared one the server
+      // resolved from its own definition. A client reconciling the result
+      // against cards it holds may drop one of these realms' rows that no
+      // longer matches, and may never add a row of theirs the server did not
+      // return.
+      //
+      // It names realms and nothing more. No filter, no rule and no count of
+      // what was withheld, since any of those tells the caller the shape of
+      // their own grant. Absent when no realm is scoped.
+      policyScopedRealms?: string[];
+    };
 }
 
 // The single-instance entry response (the card+html / file-meta+html GET): one
@@ -56,6 +103,7 @@ export interface EntryCollectionDocument {
 export interface EntrySingleDocument {
   data: EntryResource;
   included?: EntryIncludedResource[];
+  meta?: DocumentClosureMeta;
 }
 
 // The public-API name for the raw entry wire format a programmatic

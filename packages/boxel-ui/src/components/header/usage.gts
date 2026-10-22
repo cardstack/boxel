@@ -102,7 +102,8 @@ export default class HeaderUsage extends Component {
     </FreestyleUsage>
     <style scoped>
       .definition-container {
-        --boxel-header-min-height: 1.56rem;
+        /* 25px exactly. */
+        --boxel-header-min-height: 1.5625rem;
         --boxel-header-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         --boxel-header-background-color: var(--boxel-300);
         --boxel-header-text-color: var(--boxel-dark);

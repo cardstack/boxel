@@ -1,0 +1,62 @@
+{
+  "repository": "cardstack/boxel-catalog",
+  "revision": "79e145361cdebed7c23ee002453a865041131098",
+  "files": [
+    {
+      "path": "realm-policy/realm-policy.gts",
+      "reason": "RealmPolicy, PolicyRule and OperationGrant: the policy shapes the realm's operation-permission checks read"
+    },
+    {
+      "path": "fields/policy-predicate/policy-predicate.gts",
+      "reason": "PolicyPredicateField: the BXL `where` condition on an OperationGrant"
+    }
+  ],
+  "tests": {
+    "host": [
+      "Integration | realm policy",
+      "Integration | realm config policy standing",
+      "Integration | policy-scoped search",
+      "Integration | a realm that checks permissions"
+    ],
+    "realmServer": [
+      "catalog-test-subset-test",
+      "direct-writer-queries-test",
+      "realm-endpoints/search-test",
+      "realm-policy-activation-test",
+      "realm-policy-anonymous-explain-test",
+      "realm-policy-anonymous-named-operation-test",
+      "realm-policy-anonymous-read-test",
+      "realm-policy-anonymous-search-test",
+      "realm-policy-anonymous-write-test",
+      "realm-policy-archived-seal-test",
+      "realm-policy-batch-test",
+      "realm-policy-capabilities-test",
+      "realm-policy-capture-authority-test",
+      "realm-policy-card-write-test",
+      "realm-policy-chain-types-test",
+      "realm-policy-compile-test",
+      "realm-policy-config-standing-test",
+      "realm-policy-create-lane-test",
+      "realm-policy-decision-telemetry-test",
+      "realm-policy-explain-test",
+      "realm-policy-gate-test",
+      "realm-policy-html-sharing-test",
+      "realm-policy-index-read-test",
+      "realm-policy-non-grantable-test",
+      "realm-policy-publish-test",
+      "realm-policy-query-filter-test",
+      "realm-policy-query-reach-test",
+      "realm-policy-reach-check-test",
+      "realm-policy-render-search-test",
+      "realm-policy-row-reach-test",
+      "realm-policy-school-example-test",
+      "realm-policy-search-infrastructure-test",
+      "realm-policy-snapshot-test",
+      "realm-policy-source-read-test",
+      "realm-policy-validate-test",
+      "realm-policy-write-lock-test",
+      "server-endpoints/delegated-session-federated-endpoints-test",
+      "server-endpoints/policy-scoped-search-test"
+    ]
+  }
+}

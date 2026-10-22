@@ -50,6 +50,8 @@ import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
 import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure.ts';
+import { receiveSecretsKeyring } from './lib/secrets-at-rest/index.ts';
+import { getInstanceId } from './lib/instance-id.ts';
 
 let log = logger('worker');
 
@@ -68,14 +70,7 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
   process.exit(-1);
 }
 
-// This is an ENV var we get from ECS that looks like:
-// http://169.254.170.2/v3/a1de500d004f49bea02ace30cefb0f01-3236013547 where the
-// last segment is the "container runtime ID", where the value on the left of
-// the '-' is the task ID.
-const ECS_CONTAINER_METADATA_URI = process.env.ECS_CONTAINER_METADATA_URI;
-let workerId = ECS_CONTAINER_METADATA_URI
-  ? `${ECS_CONTAINER_METADATA_URI.split('/').pop()!}-pid-${process.pid}`
-  : `worker-pid-${process.pid}`;
+let workerId = `${getInstanceId()}-pid-${process.pid}`;
 
 let {
   matrixURL,
@@ -143,7 +138,6 @@ log.info(
 );
 
 let prerenderer = createRemotePrerenderer(prerendererUrl);
-let createPrerenderAuth = buildCreatePrerenderAuth(REALM_SECRET_SEED);
 if (fromUrls.length !== toUrls.length) {
   log.error(
     `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`,
@@ -168,9 +162,26 @@ for (let i = 0; i < fromUrls.length; i++) {
     virtualNetwork.addRealmMapping(from, to.href);
   }
 }
+// The worker has no single server URL of its own: each token names the origin
+// its realm is mapped to, and ids in prefix form resolve through the mappings.
+let createPrerenderAuth = buildCreatePrerenderAuth(
+  REALM_SECRET_SEED,
+  undefined,
+  (realm) => virtualNetwork.toURL(realm),
+);
 let autoMigrate = migrateDB || undefined;
 
 (async () => {
+  // The worker manager unwrapped the data keys and ran the self-check at its
+  // own startup; a worker takes its keyring from the manager, so starting or
+  // respawning one never calls KMS.
+  try {
+    await receiveSecretsKeyring();
+  } catch (e: any) {
+    log.error(`Could not get the secrets keyring: ${e.message}`);
+    process.exit(-1);
+  }
+
   function reportStatus({ jobId, status, realm, url, deps }: StatusArgs) {
     if (process.send) {
       process.send(

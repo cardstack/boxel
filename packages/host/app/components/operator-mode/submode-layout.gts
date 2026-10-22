@@ -1,8 +1,6 @@
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
-import { scheduleOnce } from '@ember/runloop';
 
 import { service } from '@ember/service';
 
@@ -144,36 +142,6 @@ export default class SubmodeLayout extends Component<Signature> {
   @service('search-sheet-state')
   declare private searchSheetState: SearchSheetStateService;
 
-  // `?openProfileSettings` deep link. Consumed here, not in the
-  // index route, because this component exists only once logged in — a
-  // logged-out arrival renders <Auth /> after the model hook has returned.
-  // afterRender: both writes touch state this render pass already read.
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-
-    if (
-      this.operatorModeStateService.operatorModeController.openProfileSettings
-    )
-      scheduleOnce('afterRender', this, this.consumeProfileSettingsDeepLink);
-  }
-
-  // Nulled like `sid` in matrix/auth.gts, so the modal does not reopen on
-  // the model refresh every schedulePersist() triggers.
-  private consumeProfileSettingsDeepLink = () => {
-    let controller = this.operatorModeStateService.operatorModeController;
-    let requested = controller.openProfileSettings;
-    if (!requested) {
-      return;
-    }
-    controller.openProfileSettings = null;
-    // An unrecognized value still opens settings: this param is linked from
-    // external pages, so a stale or mistyped link degrades to the modal's
-    // default view rather than doing nothing.
-    this.operatorModeStateService.openProfileSettings(
-      requested === 'subscription' ? 'subscription' : undefined,
-    );
-  };
-
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
   declare private doSearch: (term: string, typeRef?: ResolvedCodeRef) => void;
@@ -250,6 +218,14 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.store.peek(stackItem.id)?.id;
   }
 
+  // Switching to code mode opens the right-most stack's last card, or the
+  // current realm when no card is open (see `updateSubmode`).
+  private get codeSubmodeOffered() {
+    return this.operatorModeStateService.codeSubmodeOffered(
+      this.lastCardIdInRightMostStack ?? this.lastStackItem?.id,
+    );
+  }
+
   private get isToggleWorkspaceChooserDisabled() {
     return this.operatorModeStateService.state.stacks.length === 0;
   }
@@ -272,16 +248,14 @@ export default class SubmodeLayout extends Component<Signature> {
 
         if (currentSubmode === Submodes.Code) {
           // Check if current code path is a card instance ID
-          let codePathString = this.operatorModeStateService.codePathString;
-          if (codePathString) {
-            let cardId = codePathString.replace(/\.json$/, '');
+          let codePath = this.operatorModeStateService.state.codePath;
+          if (codePath) {
+            let cardId = codePath.replace(/\.json$/, '');
             let card = this.store.peek(cardId);
 
             if (card && this.isCardInstance(card)) {
               // Current code path is a card instance, use it directly
-              this.operatorModeStateService.setHostModePrimaryCard(
-                codePathString,
-              );
+              this.operatorModeStateService.setHostModePrimaryCard(codePath);
             } else {
               // Current code path is a card definition, try to get card ID from playground panel
               let playgroundSelection =
@@ -293,7 +267,7 @@ export default class SubmodeLayout extends Component<Signature> {
               } else {
                 // Try to find any card instance related to this definition
                 let relatedCardId =
-                  await this.findRelatedCardInstance(codePathString);
+                  await this.findRelatedCardInstance(codePath);
                 if (relatedCardId) {
                   this.operatorModeStateService.setHostModePrimaryCard(
                     relatedCardId + '.json',
@@ -515,6 +489,7 @@ export default class SubmodeLayout extends Component<Signature> {
                 class='submode-switcher'
                 @isCollapsed={{this.submodeSwitcherCollapsed}}
                 @submode={{this.operatorModeStateService.state.submode}}
+                @codeSubmodeOffered={{this.codeSubmodeOffered}}
                 @onSubmodeSelect={{this.updateSubmode}}
               />
               {{#if @newFileOptions}}

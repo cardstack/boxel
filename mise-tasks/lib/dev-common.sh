@@ -153,6 +153,8 @@ spawn_cleanup_guardian() {
       sleep 1
     done
     echo \"[guardian \$(date +%H:%M:%S)] dev-all pid $_scg_parent_pid is gone; running cleanup\"
+    BOXEL_DEV_COMMON_CLEANUP_ONLY=1
+    BOXEL_DEV_ALL_PIDFILE='$PIDFILE'
     . '$_scg_lib'
     kill_from_pidfile
     sweep_orphaned_services
@@ -283,6 +285,15 @@ _kill_tree_walk() {
 #     but the X-Boxel-Assume-User CORS header in the icons invocation is
 #     Boxel-specific and won't appear in unrelated http-server instances.
 sweep_orphaned_services() {
+  # In environment mode every process this session started carries the
+  # environment's slug, so the slug-scoped stop-environment finds them all.
+  # The argv regexes below can't tell this environment's realm-server,
+  # workers and prerenderers from the fixed-port stack or another
+  # environment's, so they must never run for an env-mode session.
+  if [ -n "${BOXEL_ENVIRONMENT:-}" ] && [ -z "${SWEEP_FORCE:-}" ]; then
+    "$REPO_ROOT/scripts/stop-environment.sh" "$BOXEL_ENVIRONMENT" || true
+    return 0
+  fi
   # If another dev-all/dev session is alive, the regex sweep would
   # false-positive match its child processes (vite-serve, realm-server,
   # workers, etc.) and SIGKILL them — argv patterns can't distinguish
@@ -333,6 +344,8 @@ esac
 # Phase 1 readiness URLs
 BASE_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/base/${READY_PATH}"
 SKILLS_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/skills/${READY_PATH}"
+# choreo-gallery and pretui boot last and the test realms need neither, so they
+# finish indexing while the test realms start.
 PHASE1_URLS="${BASE_REALM_READY}|${SKILLS_READY}"
 
 if [ -z "${SKIP_CATALOG:-}" ]; then
@@ -351,8 +364,10 @@ PHASE1_URLS="${PHASE1_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}
 # Phase 2 readiness URL
 NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-test/${READY_PATH}"
 
-# In environment mode, bootstrap infra before starting services
-if [ -n "$BOXEL_ENVIRONMENT" ]; then
+# In environment mode, bootstrap infra before starting services. The cleanup
+# guardian loads this file only for its functions, after the stack has exited,
+# and must not bring the environment's database, index or Synapse back up.
+if [ -n "$BOXEL_ENVIRONMENT" ] && [ -z "${BOXEL_DEV_COMMON_CLEANUP_ONLY:-}" ]; then
   ./scripts/start-pg.sh
   echo "Waiting for Postgres to accept connections…"
   until boxel_pg_is_ready; do sleep 1; done

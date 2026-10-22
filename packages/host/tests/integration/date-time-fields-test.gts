@@ -1,24 +1,24 @@
 import { click } from '@ember/test-helpers';
 
+import DateField from '@cardstack/base/date';
+import DayField from '@cardstack/base/date/day';
+import MonthField from '@cardstack/base/date/month';
+import MonthDayField from '@cardstack/base/date/month-day';
+import MonthYearField from '@cardstack/base/date/month-year';
+import QuarterField from '@cardstack/base/date/quarter';
+import WeekField from '@cardstack/base/date/week';
+import YearField from '@cardstack/base/date/year';
+import DateTimeField from '@cardstack/base/datetime';
+import DatetimeStampField from '@cardstack/base/datetime-stamp';
+import TimeField from '@cardstack/base/time';
+import DurationField from '@cardstack/base/time/duration';
+import RelativeTimeField from '@cardstack/base/time/relative-time';
 import { module, test } from 'qunit';
 
 import {
   setupBaseRealm,
-  DateField,
-  DateTimeField,
-  DatetimeStampField,
-  DayField,
   DateRangeField,
-  MonthDayField,
-  YearField,
-  MonthField,
-  MonthYearField,
-  WeekField,
-  QuarterField,
-  TimeField,
   TimeRangeField,
-  DurationField,
-  RelativeTimeField,
 } from '../helpers/base-realm';
 import {
   renderField,
@@ -26,6 +26,7 @@ import {
   buildField,
 } from '../helpers/field-test-helpers';
 import { setupRenderingTest } from '../helpers/setup';
+import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 
 module('Integration | date-time fields', function (hooks) {
   setupRenderingTest(hooks);
@@ -485,7 +486,10 @@ module('Integration | date-time fields', function (hooks) {
       `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     // Anchor on mid-month days so all asserted cells are guaranteed to be
     // rendered in the calendar pane that centers on the current month.
-    let now = new Date();
+    // The same instant the calendar measures from: the field reads the clock
+    // through the seam, so a test that asked the real clock what "today" is
+    // would be asserting against a different day than the component rendered.
+    let now = new Date(TEST_CLOCK_INSTANT);
     let day14 = new Date(now.getFullYear(), now.getMonth(), 14);
     let day15 = new Date(now.getFullYear(), now.getMonth(), 15);
     let day16 = new Date(now.getFullYear(), now.getMonth(), 16);

@@ -143,7 +143,12 @@ module('Responder Cancellation', (hooks) => {
   });
 
   test('cancellation after chunks sends final event with isCanceled flag', async (assert) => {
-    let responder = new Responder(fakeMatrixClient, 'room-cancel-1', 'agent-1');
+    let responder = new Responder(
+      fakeMatrixClient,
+      'room-cancel-1',
+      'agent-1',
+      [],
+    );
     await responder.ensureThinkingMessageSent();
 
     // Send some chunks
@@ -174,7 +179,12 @@ module('Responder Cancellation', (hooks) => {
   });
 
   test('cancellation before any chunks sends final event with isCanceled flag', async (assert) => {
-    let responder = new Responder(fakeMatrixClient, 'room-cancel-2', 'agent-2');
+    let responder = new Responder(
+      fakeMatrixClient,
+      'room-cancel-2',
+      'agent-2',
+      [],
+    );
     await responder.ensureThinkingMessageSent();
 
     // Cancel immediately — no chunks received
@@ -194,7 +204,12 @@ module('Responder Cancellation', (hooks) => {
   });
 
   test('onError is suppressed after cancellation finalize', async (assert) => {
-    let responder = new Responder(fakeMatrixClient, 'room-cancel-3', 'agent-3');
+    let responder = new Responder(
+      fakeMatrixClient,
+      'room-cancel-3',
+      'agent-3',
+      [],
+    );
     await responder.ensureThinkingMessageSent();
     await responder.onChunk({} as any, snapshotWithContent('partial'));
     clock.tick(250);
@@ -229,6 +244,7 @@ module('Responder Cancellation', (hooks) => {
         fakeMatrixClient,
         'room-cancel-sentry',
         'agent-sentry',
+        [],
       );
       await responder.ensureThinkingMessageSent();
       await responder.onChunk({} as any, snapshotWithContent('partial'));
@@ -252,7 +268,12 @@ module('Responder Cancellation', (hooks) => {
   });
 
   test('second finalize after cancel finalize is a no-op', async (assert) => {
-    let responder = new Responder(fakeMatrixClient, 'room-cancel-4', 'agent-4');
+    let responder = new Responder(
+      fakeMatrixClient,
+      'room-cancel-4',
+      'agent-4',
+      [],
+    );
     await responder.ensureThinkingMessageSent();
     await responder.onChunk({} as any, snapshotWithContent('content'));
     clock.tick(250);

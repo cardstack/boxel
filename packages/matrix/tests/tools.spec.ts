@@ -81,7 +81,7 @@ test.describe('Commands', () => {
     // card's type, so every card open, switch, or schema edit would change
     // the tools array, and tool definitions render ahead of all message
     // history, re-billing the whole conversation on every change. Card
-    // edits go through patch-fields and SEARCH/REPLACE patches instead.
+    // edits go through patch-fields and run-realm-code instead.
     expect(boxelMessageData.context.openCardIds).toContain(cardId);
     expect(boxelMessageData.context.tools).toMatchObject([]);
   });

@@ -1,9 +1,4 @@
-import {
-  FieldDef,
-  Component,
-  field,
-  contains,
-} from '../card-api';
+import { FieldDef, Component, field, contains } from '../card-api';
 import StringField from '../string';
 import { action } from '@ember/object';
 import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';

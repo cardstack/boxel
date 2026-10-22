@@ -3,6 +3,7 @@ import type {
   FileExtractResponse,
   FileRenderArgs,
   FileRenderResponse,
+  PrerenderResponseMeta,
   RenderResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
@@ -21,6 +22,11 @@ type VisitOpts = { timeoutMs?: number; simulateTimeoutMs?: number };
 
 type Wrapped<R> = {
   response: R;
+  // The visit envelope's own meta, which is where a card's diagnostics end up:
+  // `decorateRenderErrorsWithTimings` lifts the block `render.meta` spread onto
+  // the card sub-response and deletes it from there, so `response.diagnostics`
+  // reads `undefined` on every visit and only this carries the counters.
+  meta: PrerenderResponseMeta | undefined;
   timings: {
     launchMs: number;
     renderMs: number;
@@ -58,6 +64,7 @@ export async function prerenderCard(
   }
   return {
     response: result.response.card,
+    meta: result.response.meta,
     timings: result.timings,
     pool: result.pool,
   };
@@ -82,6 +89,7 @@ export async function prerenderFileExtract(
   }
   return {
     response: result.response.fileExtract,
+    meta: result.response.meta,
     timings: result.timings,
     pool: result.pool,
   };
@@ -109,6 +117,7 @@ export async function prerenderFileRender(
   }
   return {
     response: result.response.fileRender,
+    meta: result.response.meta,
     timings: result.timings,
     pool: result.pool,
   };

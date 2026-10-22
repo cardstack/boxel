@@ -10,6 +10,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
   realmIdentifierSegments,
+  realmURLDisplayText,
   resolvedRealmURLHref,
 } from '../../lib/realm-utils';
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
@@ -63,7 +64,13 @@ export default class RealmPicker extends Component<Signature> {
       let info = this.realm.info(realmURL);
       let label = info?.name ?? this.realmDisplayNameFromURL(realmURL);
       let icon = info?.iconURL ?? undefined;
-      return { id: realmURL, icon, label, type: 'option' as const };
+      return {
+        id: realmURL,
+        icon,
+        label,
+        tooltip: realmURLDisplayText(this.network.virtualNetwork, realmURL),
+        type: 'option' as const,
+      };
     });
   }
 
@@ -85,6 +92,7 @@ export default class RealmPicker extends Component<Signature> {
         id: resolvedRealmURLHref(this.network.virtualNetwork, identifier),
         icon,
         label,
+        tooltip: realmURLDisplayText(this.network.virtualNetwork, identifier),
         type: 'option',
       });
     }

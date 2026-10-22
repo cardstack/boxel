@@ -21,6 +21,7 @@ import type {
   ErrorEntry,
   RealmIdentifier,
   RuntimeDependencyTrackingContext,
+  SearchEntryResults,
 } from '@cardstack/runtime-common';
 import {
   subscribeToRealm,
@@ -36,6 +37,9 @@ import {
   canonicalQuerySignature,
   parseSearchURL,
   ri,
+  rri,
+  searchEntryWireQueryFromQuery,
+  wireFilterTypeAnchors,
   RealmPaths,
   runtimeDependencyContextWithSource,
   type CardAPIForMatching,
@@ -45,10 +49,14 @@ import {
 } from '@cardstack/runtime-common';
 import type { Filter, Query } from '@cardstack/runtime-common/query';
 
+import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
+import { LiveSearchTypeGate } from '../lib/live-search-type-gate';
+import { canonicalRealmIdentifier } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type { CardDef } from '@cardstack/base/card-api';
@@ -132,6 +140,10 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
     // concurrency). Set only by `StoreService.getSearchResource` (the card
     // `@context` surface); host-internal `getSearch` callers leave it unset.
     cardInitiated?: boolean;
+    // Take a slot in the store's query-field search lane without the other
+    // card caps. Set by query-field resolution, whose fan-out is one search per
+    // query field per deserialized card.
+    throttled?: boolean;
     // The realm a no-realm card search targets (the realm the `@context` was
     // provided with). Only meaningful with `cardInitiated`.
     getDefaultRealm?: () => string | undefined;
@@ -185,6 +197,7 @@ export class SearchResource<
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   @service declare private loaderService: LoaderService;
+  @service declare private realm: RealmService;
   #storeServiceOverride: StoreService | undefined;
   @tracked private realmsToSearch: RealmIdentifier[] = [];
   // Resist the urge to expose this property publicly as that may entice
@@ -198,7 +211,13 @@ export class SearchResource<
   // reconciled against in-memory Store state (the client-side filtering step);
   // otherwise it is passed through unchanged.
   private _instances = new TrackedArray<T>();
-  @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
+  @tracked private _meta: SearchEntryResults['meta'] = { page: { total: 0 } };
+  // The realms the result set held was answered for by a completed search, so
+  // the realms whose policy-scoped mark in `_meta` is the server's word for
+  // this caller. Empty until a search completes, and again after one fails or a
+  // seed replaces its result: a seed is resolved under its owner realm's
+  // authority rather than the viewer's, so it carries no mark to go by.
+  @tracked private answeredRealms: RealmPaths[] = [];
   @tracked private _errors: ErrorEntry[] | undefined;
   // The card-api slice the client-side matcher/comparator need. Loaded
   // asynchronously for live searches; until it resolves the search behaves as
@@ -225,6 +244,12 @@ export class SearchResource<
   @tracked private activeQuery: Query | undefined;
   #isLive = false;
   #cardInitiated = false;
+  #throttled = false;
+  // Bumped by each run of the search task, so a run can tell whether it is
+  // still the current one. What a queued throttled search is asked when its
+  // turn comes: a restart moved this past it, and the result it would fetch has
+  // no consumer left.
+  #searchEpoch = 0;
   #getDefaultRealm: (() => string | undefined) | undefined;
   #seedApplied = false;
   // Identity of the seeded result set this resource holds, cleared once a search
@@ -260,6 +285,43 @@ export class SearchResource<
   // side exact means stamping the resolution's own generation on the umbrella
   // relationship where the indexer resolves it.
   #resultGenerations = new Map<string, number>();
+  // Per realm, the highest generation carried by the realm events waiting on
+  // the scheduler's window — the coalesced form of what each event used to
+  // pass to its own `search.perform`. Consumed by the flush, which hands the
+  // batch to the search task to raise the floors above once the run
+  // succeeds. Untracked, like `#resultGenerations`: the subscription callback
+  // writes it, and it is drained by the flush and by `modify()` (which folds
+  // any pending batch into the run its query/realm change performs). A plain
+  // Map is safe for that `modify()` read because it is untracked — unlike the
+  // tracked-state hazard the sibling comment on `realmsNeedingRefresh` warns
+  // about.
+  #pendingRefreshFloors = new Map<RealmIdentifier, number>();
+  // Defers the event-triggered re-run so a burst of realm events costs one
+  // search, not one per event. The subscription callback accumulates the
+  // generation floors above and arms this; the flush performs the search.
+  // Only event-triggered re-runs are deferred — a query/realm change in
+  // modify() and a reseed's shortfall query still search immediately.
+  #refreshScheduler = new LiveSearchRefreshScheduler(() =>
+    this.#flushLiveRefresh(),
+  );
+  // Decides which realm events are worth a re-run. Anchors are read out of the
+  // wire translation of the active query so the anchor rules are the entry
+  // grammar's, which is what the server compiles this query against. The
+  // prerender_html correlation is on because that channel is a second,
+  // independent re-run trigger here: this search excludes rows with an
+  // effective error, so membership can move on a render result alone.
+  #typeGate = new LiveSearchTypeGate({
+    anchors: () =>
+      this.#previousQuery === undefined
+        ? undefined
+        : wireFilterTypeAnchors(
+            searchEntryWireQueryFromQuery(this.#previousQuery).filter,
+          ),
+    loader: () => this.loaderService.loader,
+    virtualNetwork: () => this.network.virtualNetwork,
+    isDestroyed: () => isDestroyed(this),
+    correlatePrerenderHtml: true,
+  });
   // No match count is known yet and one must not be inferred. Tracked, because
   // `totalMatchCount` is read during render and has to re-derive when a seed or
   // a live search supplies a real count.
@@ -442,6 +504,8 @@ export class SearchResource<
   constructor(owner: object) {
     super(owner);
     registerDestructor(this, () => {
+      this.#refreshScheduler.cancel();
+      this.#typeGate.forget();
       for (let instance of this._instances) {
         this.runtimeStore.dropReference(instance.id);
       }
@@ -461,6 +525,7 @@ export class SearchResource<
       owner,
       storeService,
       cardInitiated,
+      throttled,
       getDefaultRealm,
     } = named;
 
@@ -472,6 +537,9 @@ export class SearchResource<
     }
     if (cardInitiated !== undefined) {
       this.#cardInitiated = cardInitiated;
+    }
+    if (throttled !== undefined) {
+      this.#throttled = throttled;
     }
     if (getDefaultRealm !== undefined) {
       this.#getDefaultRealm = getDefaultRealm;
@@ -519,7 +587,7 @@ export class SearchResource<
         let { query: seedQuery } = parseSearchURL(seed.searchURL);
         this.#previousQueryString = this.querySignature(seedQuery);
       }
-      this.#previousQuery = query;
+      this.#adoptQuery(query);
       if (seed.realms) {
         this.#previousRealms = seed.realms;
       }
@@ -554,7 +622,7 @@ export class SearchResource<
         // signature drift between the parent doc's `links.search` and
         // the recomputed query doesn't sneak a fetch back in.
         this.#previousRealms = realms;
-        this.#previousQuery = query;
+        this.#adoptQuery(query);
         this.#previousQueryString = this.querySignature(query);
         return;
       }
@@ -600,15 +668,47 @@ export class SearchResource<
             // The generation the indexing pass committed, and the realm whose
             // counter it belongs to. A search answering this event reads the
             // index at or after it, so together they stand as the floor for
-            // what the result set reflects of that realm.
+            // what the result set reflects of that realm. Accumulated rather
+            // than performed: the scheduler coalesces this event's re-run
+            // with the rest of its burst, and the flush passes the batch of
+            // floors to the one search that answers them all.
             let generation =
               'generation' in event && typeof event.generation === 'number'
                 ? event.generation
                 : undefined;
-            this.trackStoreLoad(
-              this.search.perform(this.#previousQuery, generation, realm),
-              'live-refresh',
-            );
+            if (generation !== undefined) {
+              let current = this.#pendingRefreshFloors.get(realm);
+              if (current === undefined || generation > current) {
+                this.#pendingRefreshFloors.set(realm, generation);
+              }
+            }
+
+            // Both channels carry the floor above whether or not they earn a
+            // re-run: the generation states where the realm's index is, which
+            // is true of an event this query sits out just as much as of one
+            // it answers, and a query whose membership the event provably left
+            // alone already reflects that index. What the gate decides is only
+            // whether a search has to run to find that out.
+            //
+            // Without it a write to any type in the realm re-queries every
+            // realm this query spans, on every client holding it, for every
+            // such query each of them holds — and the two channels double it,
+            // since one write announces itself on both.
+            if (isIncrementalIndex) {
+              if (this.#typeGate.indexEventCannotMatch(event)) {
+                this.#log.info(
+                  `incremental index event on ${realm} touched no type this query is anchored on; skipping refresh`,
+                );
+                return;
+              }
+            } else if (this.#typeGate.prerenderEventCannotMatch(event)) {
+              this.#log.info(
+                `prerender_html event on ${realm} re-rendered no row of a type this query is anchored on; skipping refresh`,
+              );
+              return;
+            }
+
+            this.#refreshScheduler.schedule();
           }),
         };
       });
@@ -630,9 +730,39 @@ export class SearchResource<
     }
 
     this.#previousRealms = realms;
-    this.#previousQuery = query;
+    this.#adoptQuery(query);
     this.#previousQueryString = queryString;
-    this.trackStoreLoad(this.search.perform(query), 'search');
+    // This run reads the index at least as fresh as any event still waiting
+    // on the scheduler's window, so fold the pending flush into it rather
+    // than letting a second search fire after it. Scope the fold to the
+    // realms this run actually searches: a realm-set change drops the
+    // realms it removed, and a floor for one of those would otherwise be
+    // stamped on success though this run never read that realm's index.
+    this.#refreshScheduler.cancel();
+    let floors = new Map(
+      [...this.#pendingRefreshFloors].filter(([realm]) =>
+        this.realmsToSearch.includes(realm),
+      ),
+    );
+    this.#pendingRefreshFloors = new Map();
+    this.trackStoreLoad(this.search.perform(query, floors), 'search');
+  }
+
+  // Take `query` as the one this resource is running.
+  //
+  // Snapshot, don't alias: everything derived from this query — the signature
+  // it is compared by, the floors stamped on its results, and the type gate's
+  // resolved anchor keys — describes the query as it stood here. A caller that
+  // mutates a long-lived query object in place would otherwise move the filter
+  // out from under all three, leaving the gate skipping events for an anchor
+  // the searches are no longer running.
+  //
+  // The gate's keys describe the anchors they came from, so they are dropped
+  // here rather than at each call site — a key set that outlived its query
+  // would gate the new one against the old one's anchors.
+  #adoptQuery(query: Query): void {
+    this.#previousQuery = structuredClone(query);
+    this.#typeGate.forget();
   }
 
   // Spelling-tolerant query identity, so a server-produced seed query
@@ -675,7 +805,9 @@ export class SearchResource<
     // before it. The comparison needs a realm and a generation on both sides;
     // absent any of them the identity check above decides alone.
     let seedFloor =
-      seed.realm != null ? this.#resultGenerations.get(seed.realm) : undefined;
+      seed.realm != null
+        ? this.#resultGenerations.get(this.#generationKey(seed.realm))
+        : undefined;
     if (
       seed.generation != null &&
       seedFloor != null &&
@@ -732,10 +864,19 @@ export class SearchResource<
     if (realm == null || generation == null) {
       return;
     }
-    let current = this.#resultGenerations.get(realm);
+    let key = this.#generationKey(realm);
+    let current = this.#resultGenerations.get(key);
     if (current == null || generation > current) {
-      this.#resultGenerations.set(realm, generation);
+      this.#resultGenerations.set(key, generation);
     }
+  }
+
+  // A seed names its realm as the realm server does, and a refresh floor as
+  // the caller spelled it; a realm named by a registered prefix is spelled
+  // differently by the two. Generations are kept under the form card ids
+  // carry so the two compare.
+  #generationKey(realm: string): string {
+    return canonicalRealmIdentifier(this.network.virtualNetwork, realm);
   }
 
   // Both routes to a result set count as loading. A seeded resource commonly
@@ -821,13 +962,25 @@ export class SearchResource<
 
     // Add candidates the server didn't return but that match locally, scoped to
     // the query's target realm(s). `unresolvable` candidates are not added.
-    let added = candidatePool.filter(
-      (instance) =>
-        instance.id != null &&
-        !serverIds.has(instance.id) &&
-        this.isInTargetRealm(instance.id) &&
-        localMatch(instance) === 'match',
-    );
+    //
+    // Nor is any candidate of a realm the arm may not widen into (see
+    // `mayWidenInto`).
+    let { virtualNetwork } = this.network;
+    let added = candidatePool.filter((instance) => {
+      if (instance.id == null || serverIds.has(instance.id)) {
+        return false;
+      }
+      // Card ids are canonical already, but a FileDef id stays in the form it
+      // was loaded by, which for a file read on its own is its URL. Folding
+      // it once here makes every candidate comparable to the canonical target
+      // realms.
+      let id = rri(virtualNetwork.unresolveURL(instance.id));
+      return (
+        this.isInTargetRealm(id) &&
+        this.mayWidenInto(id) &&
+        localMatch(instance) === 'match'
+      );
+    });
 
     // These candidates are displayed but absent from `_instances`, so the
     // server-result reference bookkeeping in `updateInstances` doesn't cover
@@ -902,20 +1055,76 @@ export class SearchResource<
     return true;
   }
 
-  private isInTargetRealm(id: RealmResourceIdentifier): boolean {
-    return this.realmsToSearch.some((realm) =>
-      new RealmPaths(realm).inRealm(id),
+  // Whether a card the server did not return may be added to the displayed
+  // result. Never into a realm the result marks policy-scoped: what the result
+  // holds of such a realm was decided by more than the query this matcher knows
+  // (the caller's policy, or the server's own resolution of a declared query),
+  // so a matching card of it that the server did not return may be one it
+  // withheld. Those realms' returned rows still narrow; they never widen.
+  //
+  // The mark speaks only for the realms a completed search answered. For any
+  // other realm the result holds no answer about this caller: before the first
+  // search lands, after one fails, when a seed stands in for one, or for a realm
+  // the resource has just started searching. The arm then widens only into a
+  // realm this session already knows it reads outright, which the server never
+  // marks for an ad-hoc search. A realm the caller reaches only through a policy
+  // is never widened into, whichever state the result is in.
+  private mayWidenInto(id: RealmResourceIdentifier): boolean {
+    if (this.answeredRealms.some((realm) => realm.inRealm(id))) {
+      return !this.policyScopedRealms.some((realm) => realm.inRealm(id));
+    }
+    let target = this.targetRealms.find(({ paths }) => paths.inRealm(id));
+    return target !== undefined && this.realm.canRead(target.realm);
+  }
+
+  // `realmsToSearch` in the form card ids carry (see
+  // `canonicalRealmIdentifier`), each paired with the caller's spelling so a
+  // hit can be reported, or passed to `realm.canRead`, as the caller named it.
+  // The fold happens here, once per realm list, so membership below is a
+  // same-form prefix test with no VirtualNetwork. Recomputed when the realm
+  // list changes, not when the network's mappings do: those are registered at
+  // boot.
+  @cached
+  private get targetRealms(): { realm: RealmIdentifier; paths: RealmPaths }[] {
+    let { virtualNetwork } = this.network;
+    return this.realmsToSearch.map((realm) => ({
+      realm,
+      paths: new RealmPaths(canonicalRealmIdentifier(virtualNetwork, realm)),
+    }));
+  }
+
+  // The realms the current result set marks policy-scoped. The server marks a
+  // realm by the URL it registered it under; each mark is folded to the form
+  // card ids carry so the comparison is same-form.
+  @cached
+  private get policyScopedRealms(): RealmPaths[] {
+    let { virtualNetwork } = this.network;
+    return (this._meta?.policyScopedRealms ?? []).map(
+      (realm) =>
+        new RealmPaths(canonicalRealmIdentifier(virtualNetwork, realm)),
     );
+  }
+
+  private isInTargetRealm(id: RealmResourceIdentifier): boolean {
+    return this.targetRealms.some(({ paths }) => paths.inRealm(id));
   }
 
   @cached
   get instancesByRealm() {
-    return this.realmsToSearch
-      .map((realm) => {
-        let realmPath = new RealmPaths(realm);
-        let cards = this.instances.filter((card) => realmPath.inRealm(card.id));
-        return { realm, cards };
-      })
+    // A FileDef id may be in URL form (see the local merge in
+    // `displayedInstances`), so each id is folded before grouping.
+    let { virtualNetwork } = this.network;
+    let ids = this.instances.map((card) =>
+      card.id == null ? undefined : rri(virtualNetwork.unresolveURL(card.id)),
+    );
+    return this.targetRealms
+      .map(({ realm, paths }) => ({
+        realm,
+        cards: this.instances.filter((_card, i) => {
+          let id = ids[i];
+          return id !== undefined && paths.inRealm(id);
+        }),
+      }))
       .filter((r) => r.cards.length > 0);
   }
   @cached
@@ -993,12 +1202,9 @@ export class SearchResource<
             dependencyTrackingContext,
           });
         } else {
-          await this.runtimeStore.add(
+          await this.runtimeStore.addWithoutPersisting(
             card as CardDef,
-            {
-              doNotPersist: true,
-              dependencyTrackingContext,
-            }, // search results always have id's
+            { dependencyTrackingContext }, // search results always have id's
           );
         }
       }
@@ -1083,13 +1289,40 @@ export class SearchResource<
       // rows there would turn "unknown" into "you have all of them".
       this.seedTotalUnknown = Boolean(seed.totalUnknown);
       this._meta = seed.meta ?? { page: { total: cards.length } };
+      this.answeredRealms = [];
       this._errors = seed.errors;
       await this.updateInstances(cards, dependencyTrackingContext);
     },
   );
 
+  // The deferred arm of the subscription callback: performs one search over
+  // the burst the scheduler's window accumulated, consuming the pending
+  // generation floors so the run carries them as its own. An event arriving
+  // after this consumes them lands in a fresh map and arms a fresh flush, so
+  // nothing is lost to the handoff. The floor itself is load-bearing — it is
+  // the ordering `reseed` uses to decline a stale document — but dropping a
+  // batch on a run that fails (or is restarted by a query change) is still
+  // correct: such a run applied no result set, so there is no coverage for a
+  // floor raise to claim. Only a run that applied a set may raise floors.
+  #flushLiveRefresh(): void {
+    if (
+      isDestroyed(this) ||
+      isDestroying(this) ||
+      this.#previousQuery === undefined
+    ) {
+      return;
+    }
+    let floors = this.#pendingRefreshFloors;
+    this.#pendingRefreshFloors = new Map();
+    this.trackStoreLoad(
+      this.search.perform(this.#previousQuery, floors),
+      'live-refresh',
+    );
+  }
+
   private search = restartableTask(
-    async (query: Query, generation?: number, realm?: string) => {
+    async (query: Query, refreshFloors?: Map<RealmIdentifier, number>) => {
+      let epoch = ++this.#searchEpoch;
       this.#log.info(
         `search task start; realms=${this.realmsToSearch.join(',')}; query=${JSON.stringify(query)}`,
       );
@@ -1105,14 +1338,27 @@ export class SearchResource<
           // A card-`@context` search runs card-initiated — under the page,
           // realms, and concurrency caps inside `store.search`. `realmsToSearch`
           // has already resolved a no-realm card search to the current realm
-          // (see modify). Host-internal searches pass no flag and are unbounded.
-          let { instances, meta } = await this.runtimeStore.search<T>(
+          // (see modify). A query-field search takes only a concurrency slot, in
+          // a lane of its own, since clamping its page or its realms would
+          // change which cards the field reports as members. Host-internal
+          // searches pass neither flag and are unbounded.
+          let realms = this.realmsToSearch;
+          let { instances, meta } = await this.runtimeStore.searchWithMeta(
             query,
-            this.realmsToSearch,
+            realms,
             {
-              includeMeta: true,
               dependencyTrackingContext,
               cardInitiated: this.#cardInitiated,
+              throttled: this.#throttled,
+              // A search that queued behind the concurrency ceiling can outlive
+              // its reason to run: a newer query restarts this task, or the
+              // resource is torn down with the request still waiting. Either
+              // way this run's result is discarded, so it gives the slot back
+              // instead of fetching.
+              isObsolete: () =>
+                this.#searchEpoch !== epoch ||
+                isDestroyed(this) ||
+                isDestroying(this),
             },
           );
           this.#log.info(
@@ -1129,10 +1375,20 @@ export class SearchResource<
           // restoring the very set the search moved off. What orders this set
           // against a later document is the generation instead.
           this.#appliedSeedIdentity = undefined;
-          this.#raiseResultGeneration(realm, generation);
+          for (let [realm, generation] of refreshFloors ?? []) {
+            this.#raiseResultGeneration(realm, generation);
+          }
           this._meta = meta;
+          let { virtualNetwork } = this.network;
+          this.answeredRealms = realms.map(
+            (realm) =>
+              new RealmPaths(canonicalRealmIdentifier(virtualNetwork, realm)),
+          );
           this._errors = undefined;
-          await this.updateInstances(instances, dependencyTrackingContext);
+          await this.updateInstances(
+            instances as T[],
+            dependencyTrackingContext,
+          );
         } catch (err) {
           if (didCancel(err)) {
             throw err;
@@ -1156,6 +1412,7 @@ export class SearchResource<
           // signal exists to prevent.
           this.seedTotalUnknown = true;
           this._meta = { page: { total: 0 }, incomplete: true };
+          this.answeredRealms = [];
           // The applied seed identity deliberately survives a failure, unlike a
           // completed search above. A failed search computed nothing, so what a
           // document last asserted about this field is still the last thing
@@ -1198,6 +1455,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
     isLive?: boolean;
     storeService?: StoreService;
     cardInitiated?: boolean;
+    throttled?: boolean;
     getDefaultRealm?: () => string | undefined;
     doWhileRefreshing?: (() => void) | undefined;
     seed?:
@@ -1228,6 +1486,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
       isLive: opts?.isLive != null ? opts.isLive : false,
       storeService: opts?.storeService,
       cardInitiated: opts?.cardInitiated,
+      throttled: opts?.throttled,
       getDefaultRealm: opts?.getDefaultRealm,
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,

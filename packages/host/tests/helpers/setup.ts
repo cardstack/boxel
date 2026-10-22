@@ -20,7 +20,10 @@ import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type SessionService from '@cardstack/host/services/session';
 import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
 
-import { getTestRealmRegistry } from './test-realm-registry';
+import {
+  getTestRealmRegistry,
+  isInProcessRealmURL,
+} from './test-realm-registry';
 
 import { cleanupMonacoEditorModels } from './index';
 
@@ -59,7 +62,30 @@ let nextFetchId = 0;
 // cleared the buffer would repopulate it and misattribute URLs to N+1.
 const recentFailedFetches: string[] = [];
 const RECENT_FAILED_FETCHES_LIMIT = 20;
+
+// Fetches that took a long time but SUCCEEDED, per test. The in-flight
+// snapshot names only what was still outstanding when the diagnostic ran, and
+// `recentFailedFetches` only what rejected, so a request that answered
+// eventually leaves no trace in either — yet a handful of them in sequence is
+// how a test that does nothing wrong exhausts QUnit's 60s budget. A round trip
+// whose far end has to reach a third service (a realm searching a type it has
+// to place in another realm, say) is the shape that shows up here: correct,
+// answered, and expensive enough that a few of them are the whole budget.
+// Recorded with the duration so the timeout dump separates a suite that was
+// stuck from one that was merely slow, and names the endpoint that cost the
+// time.
+const slowFetches: { desc: string; durationMs: number }[] = [];
+const SLOW_FETCH_THRESHOLD_MS = 1_000;
+const SLOW_FETCHES_LIMIT = 20;
 let currentTestEpoch = 0;
+
+// The current test's owner and whether ember-qunit has destroyed it, so a
+// fetch diagnostic can tell a request the live app issued from one made
+// mid-teardown or after the owner is gone. The owner is held here rather than
+// read from getContext(), which ember-qunit unsets before it destroys the
+// owner, and is dropped once destroyed so it isn't pinned past its test.
+let currentOwner: { isDestroying?: boolean; isDestroyed?: boolean } | undefined;
+let ownerDestroyed = false;
 
 // Module/name of the test currently running, captured from QUnit.testStart so a
 // global error can be attributed to the test that produced it. Resets on page
@@ -247,13 +273,15 @@ function getQUnitWithCallbacks():
     : undefined;
 }
 
-function setupFetchDebugging(hooks: NestedHooks) {
+function setupFetchDebugging(hooks: NestedHooks): () => void {
   let originalFetch: typeof globalThis.fetch | undefined;
   let wrappedFetch: typeof globalThis.fetch | undefined;
 
   hooks.beforeEach(function () {
+    currentOwner = (this as { owner?: typeof currentOwner }).owner;
     inFlightFetches.clear();
     recentFailedFetches.length = 0;
+    slowFetches.length = 0;
     currentTestEpoch++;
     installTimeoutDiagnosticsOnce();
     if (!globalThis.fetch) {
@@ -265,9 +293,11 @@ function setupFetchDebugging(hooks: NestedHooks) {
       let { method, url } = describeFetchRequest(input, init);
       let id = nextFetchId++;
       let epoch = currentTestEpoch;
+      let startedAt = Date.now();
+      let rejected = false;
       inFlightFetches.set(id, {
         desc: `${method} ${url}`,
-        startedAt: Date.now(),
+        startedAt,
       });
       try {
         // Requests to a registered test realm are answered in-page rather
@@ -280,8 +310,11 @@ function setupFetchDebugging(hooks: NestedHooks) {
         // is populated at realm construction, so this path has no such
         // window. Non-fetch resources (images, workers) still rely on the
         // service worker.
-        for (let [realmUrl, { realm }] of getTestRealmRegistry()) {
+        let registry = getTestRealmRegistry();
+        let matchedRealm = false;
+        for (let [realmUrl, { realm }] of registry) {
           if (url.startsWith(realmUrl)) {
+            matchedRealm = true;
             let response = await realm.maybeHandle(new Request(input, init));
             if (response) {
               return response;
@@ -289,20 +322,48 @@ function setupFetchDebugging(hooks: NestedHooks) {
             break;
           }
         }
+        let ownerState = describeOwnerState();
+        if (
+          !matchedRealm &&
+          isInProcessRealmURL(url) &&
+          ownerState !== 'live'
+        ) {
+          // The in-process realm-server origin has no listener on the real
+          // network, so this request is about to reject with `Failed to
+          // fetch`. A miss while the owner is live is routine (host mode's
+          // head lookup targets the server root, and some tests register no
+          // realms at all); one with the owner going away is a request that
+          // outlived its test's app, and the owner state plus what the
+          // registry held says which teardown step it slipped past.
+          console.warn(
+            `[test-fetch] no registered test realm serves ${method} ${url} ` +
+              `(owner: ${ownerState}; registered realms: ${
+                [...registry.keys()].join(', ') || '<none>'
+              }; test: ${currentTestLabel})`,
+          );
+        }
         return await boundFetch(input, init);
       } catch (error) {
+        rejected = true;
         let reason = formatErrorForLog(error);
         console.error(`[test-fetch] ${method} ${url} failed: ${reason}`);
         rememberFailedFetch(epoch, method, url, reason);
         throw error;
       } finally {
         inFlightFetches.delete(id);
+        // Only requests that answered: one that rejected is already named in
+        // `recentFailedFetches`, and counting it here as well would both
+        // double-report it and inflate a total the dump presents as the cost
+        // of work that succeeded.
+        if (!rejected) {
+          rememberSlowFetch(epoch, method, url, Date.now() - startedAt);
+        }
       }
     };
     globalThis.fetch = wrappedFetch;
   });
 
-  hooks.afterEach(function () {
+  return function restoreFetch() {
     if (originalFetch && globalThis.fetch === wrappedFetch) {
       globalThis.fetch = originalFetch;
     }
@@ -312,7 +373,82 @@ function setupFetchDebugging(hooks: NestedHooks) {
     // afterEach, so clearing here would empty the snapshot exactly when
     // the timeout-diagnostics callback needs it. beforeEach already
     // resets the buffer at the start of the next test.
+  };
+}
+
+// QUnit runs afterEach hooks last-registered-first, and ember-qunit destroys
+// the owner in the afterEach it registers. Until that hook has run the app is
+// still live: teardown's own `settled()` calls re-render, realm index events
+// are still delivered, and a card's fire-and-forget load (a CardsGrid's
+// `_types` refresh, say) can issue a fetch. Such a fetch must still be
+// answered in-process — on the real network the test-realm host doesn't exist,
+// and the `Failed to fetch` it rejects with escapes as an uncaught error that
+// fails the test. So the fetch wrapper and the test-realm registry are torn
+// down in a hook registered ahead of ember-qunit's, which therefore runs after
+// the owner is destroyed.
+function setupAfterOwnerTeardown(
+  hooks: NestedHooks,
+  getRestoreFetch: () => (() => void) | undefined,
+) {
+  hooks.beforeEach(function () {
+    ownerDestroyed = false;
   });
+  hooks.afterEach(function () {
+    ownerDestroyed = true;
+    currentOwner = undefined;
+    getRestoreFetch()?.();
+    getTestRealmRegistry().clear();
+    failOnStrandedPrerenderMarkers();
+  });
+}
+
+// Everything a test renders leaves with its root element, and the render route
+// removes the prerender markers it appended to the page itself when it is
+// destroyed. A `[data-prerender]` or `[data-prerender-error]` still on the page
+// once the owner is gone would be read by the next test here that queries the
+// document for one — whichever test happens to load after this one in its
+// shard. So it is removed, and the test that stranded it fails instead.
+function failOnStrandedPrerenderMarkers() {
+  let stranded = [
+    ...document.querySelectorAll<HTMLElement>(
+      '[data-prerender], [data-prerender-error]',
+    ),
+  ];
+  if (stranded.length === 0) {
+    return;
+  }
+  let described = stranded.map(
+    (element) =>
+      `<${element.tagName.toLowerCase()} data-prerender-id=${
+        element.dataset.prerenderId ?? 'none'
+      } data-prerender-status=${element.dataset.prerenderStatus ?? 'none'}>`,
+  );
+  let payload = (
+    document.querySelector('[data-prerender-error]')?.textContent ?? ''
+  )
+    .trim()
+    .slice(0, 500);
+  for (let element of stranded) {
+    element.remove();
+  }
+  throw new Error(
+    `${stranded.length} prerender marker(s) outlived this test's app: ` +
+      `${described.join(', ')}${payload ? `; error payload: ${payload}` : ''}`,
+  );
+}
+
+function describeOwnerState(): string {
+  if (ownerDestroyed) {
+    return 'destroyed';
+  }
+  if (!currentOwner) {
+    return 'none';
+  }
+  return currentOwner.isDestroyed
+    ? 'destroyed'
+    : currentOwner.isDestroying
+      ? 'destroying'
+      : 'live';
 }
 
 function rememberFailedFetch(
@@ -333,6 +469,40 @@ function rememberFailedFetch(
       recentFailedFetches.length - RECENT_FAILED_FETCHES_LIMIT,
     );
   }
+}
+
+function rememberSlowFetch(
+  epoch: number,
+  method: string,
+  url: string,
+  durationMs: number,
+) {
+  // Same per-test gate as the failed-fetch buffer: a slow request that
+  // finishes after the next test has started belongs to neither test's
+  // diagnostic, so it is dropped rather than misattributed.
+  if (epoch !== currentTestEpoch || durationMs < SLOW_FETCH_THRESHOLD_MS) {
+    return;
+  }
+  slowFetches.push({ desc: `${method} ${url}`, durationMs });
+  if (slowFetches.length > SLOW_FETCHES_LIMIT) {
+    // Keep the most expensive, not the most recent: the budget is spent by
+    // the slowest requests, and a test can make hundreds.
+    slowFetches.sort((a, b) => b.durationMs - a.durationMs);
+    slowFetches.length = SLOW_FETCHES_LIMIT;
+  }
+}
+
+function summarizeSlowFetches(): string {
+  if (!slowFetches.length) {
+    return `completed fetches over ${SLOW_FETCH_THRESHOLD_MS}ms this test: <none>`;
+  }
+  let ranked = [...slowFetches].sort((a, b) => b.durationMs - a.durationMs);
+  let total = ranked.reduce((sum, f) => sum + f.durationMs, 0);
+  return (
+    `completed fetches over ${SLOW_FETCH_THRESHOLD_MS}ms this test ` +
+    `(${ranked.length}, ${total}ms in total):\n  ` +
+    ranked.map((f) => `${f.desc} (took ${f.durationMs}ms)`).join('\n  ')
+  );
 }
 
 // Resolve the qunit runtime object (the one the qunit package installs on the
@@ -453,6 +623,7 @@ function logRejectionDiagnostics(prefix: string, formattedReason: string) {
       recent.length
         ? `recent failed fetches this test (${recent.length}):\n  ${recent.join('\n  ')}`
         : 'recent failed fetches this test: <none>',
+      summarizeSlowFetches(),
       summarizeSettledState(),
       summarizePendingRunloopTimers(),
       summarizeRealmAuth(),
@@ -879,10 +1050,12 @@ function seedAiAssistantClosed(hooks: NestedHooks) {
 }
 
 export function setupApplicationTest(hooks: NestedHooks) {
+  let restoreFetch: (() => void) | undefined;
+  setupAfterOwnerTeardown(hooks, () => restoreFetch);
   emberSetupApplicationTest(hooks);
   setupWindowMock(hooks);
   seedAiAssistantClosed(hooks);
-  setupFetchDebugging(hooks);
+  restoreFetch = setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
     resetServiceIfPresent(this.owner, 'service:ai-assistant-panel-service');
@@ -913,10 +1086,12 @@ function failOnParticipantErrors(session: SessionService | undefined) {
 }
 
 export function setupRenderingTest(hooks: NestedHooks) {
+  let restoreFetch: (() => void) | undefined;
+  setupAfterOwnerTeardown(hooks, () => restoreFetch);
   emberSetupRenderingTest(hooks);
   setupWindowMock(hooks);
   seedAiAssistantClosed(hooks);
-  setupFetchDebugging(hooks);
+  restoreFetch = setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
     // MatrixService is the session orchestrator, not a participant, so

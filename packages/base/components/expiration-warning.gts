@@ -185,7 +185,7 @@ export class ExpirationWarning extends GlimmerComponent<ExpirationSignature> {
 
       .expiration-warning.critical .icon,
       .expiration-warning.expired .icon {
-        color: var(--destructive, #ef4444);
+        color: var(--destructive-ink);
       }
 
       .warning-content {
@@ -210,7 +210,7 @@ export class ExpirationWarning extends GlimmerComponent<ExpirationSignature> {
 
       .expiration-warning.critical .warning-title,
       .expiration-warning.expired .warning-title {
-        color: var(--destructive, #ef4444);
+        color: var(--destructive-ink);
       }
 
       .warning-message {
@@ -232,7 +232,7 @@ export class ExpirationWarning extends GlimmerComponent<ExpirationSignature> {
       }
 
       .expiration-warning.critical .renew-button {
-        color: var(--destructive, #ef4444);
+        color: var(--destructive-ink);
       }
     </style>
   </template>

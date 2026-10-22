@@ -277,7 +277,7 @@ export default class FileUploadService extends Service {
         );
       }
 
-      let fileDef = await this.store.getWithoutCache<FileDef>(targetId, {
+      let fileDef = await this.store.getWithoutCache(targetId, {
         type: 'file-meta',
       });
       if (isCardErrorJSONAPI(fileDef)) {

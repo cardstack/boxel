@@ -1,5 +1,7 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import { getPendingWaiterState } from '@ember/test-waiters';
+
 import { getService } from '@universal-ember/test-support';
 import { rawTimeout } from 'ember-concurrency';
 import { module, test } from 'qunit';
@@ -14,9 +16,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
 } from '../helpers';
-
-import { setupBaseRealm } from '../helpers/base-realm';
-
 import { setupMockMatrix } from '../helpers/mock-matrix';
 
 import { setupRenderingTest } from '../helpers/setup';
@@ -40,8 +39,6 @@ module(
       activeRealms: [baseRealm.url, testRealmURL],
       autostart: true,
     });
-
-    setupBaseRealm(hooks);
 
     hooks.beforeEach(async function (this: RenderingTestContext) {
       await setupIntegrationTestRealm({
@@ -107,6 +104,26 @@ module(
         replays,
         1,
         'a second start() on an already-authenticated session does not re-fire sessionStarted',
+      );
+    });
+
+    test('a boot in flight holds `settled()` open', async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+
+      // Read between `start()` being called and its first await resolving:
+      // the waiter is registered by then, and nothing the boot itself goes on
+      // to hold has been acquired yet, so this names the sign-in waiter alone.
+      let booting = matrixService.start();
+      assert.ok(
+        getPendingWaiterState().waiters['matrix-service:sign-in'],
+        'the sign-in waiter is pending while the boot runs',
+      );
+
+      await booting;
+      assert.notOk(
+        getPendingWaiterState().waiters['matrix-service:sign-in'],
+        'and is released once the boot finishes',
       );
     });
   },

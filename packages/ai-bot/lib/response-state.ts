@@ -1,6 +1,7 @@
 import { thinkingMessage } from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import { cleanContent } from '@cardstack/runtime-common/ai';
+import { ToolCallIds } from './tool-call-ids.ts';
 
 export default class ResponseState {
   latestReasoning: string = '';
@@ -8,14 +9,45 @@ export default class ResponseState {
   toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
   private toolCallsJson: string | undefined;
   private allowedToolNames: Set<string> | undefined;
+  // Makes each tool call's id unique in the room (see tool-call-ids.ts).
+  private toolCallIds: ToolCallIds;
+
+  constructor(usedToolCallIds: Iterable<string>) {
+    this.toolCallIds = new ToolCallIds(usedToolCallIds);
+  }
+
+  // A reply's tool calls with the ids they are posted with. Ids are assigned
+  // by position, so the streamed snapshot and the finished completion must
+  // both come through here to get the same ids.
+  withPostedIds<T extends { id?: string }>(
+    toolCalls: (T | null | undefined)[] | undefined,
+  ): T[] {
+    return this.toolCallIds.apply(
+      (toolCalls ?? []).filter((call): call is T => Boolean(call)),
+    );
+  }
   isStreamingFinished = false;
   isCanceled = false;
   // The provider's finish_reason for this turn. Only the chunk that ends the
   // generation carries one; keep the last non-null value so trailing chunks
-  // (e.g. the usage report) cannot clear it.
+  // (e.g. the usage report) cannot clear it. OpenRouter normalizes the
+  // upstream reason: a generation that hit the output-token limit while
+  // emitting a tool call arrives as 'tool_calls', with the cut visible only
+  // in `native_finish_reason` ('max_output_tokens' / 'length'). Record that
+  // here as 'length' so the cut is reported to the user either way.
   finishReason: string | undefined;
 
-  updateFinishReason(finishReason: string | null | undefined) {
+  updateFinishReason(
+    finishReason: string | null | undefined,
+    nativeFinishReason?: string | null,
+  ) {
+    if (
+      nativeFinishReason === 'max_output_tokens' ||
+      nativeFinishReason === 'length'
+    ) {
+      this.finishReason = 'length';
+      return;
+    }
     if (finishReason) {
       this.finishReason = finishReason;
     }
@@ -47,13 +79,13 @@ export default class ResponseState {
       | undefined,
   ) {
     if (toolCallsSnapshot?.length) {
+      // Assigned by position in the reply, so before any call is filtered out.
+      toolCallsSnapshot = this.withPostedIds(toolCallsSnapshot);
       // In lengthy conversations, the LLM will sometimes call checkCorrectness
-      // tool on its own, even when we explicitly disallow this in our prompts.
-      // The LLM will usually place this tool call after code patches are offered
-      // but the user hasn't accepted them yet. When this happens, ignore these
-      // tool calls. We only allow them when we construct them ourselves (in the
-      // ai bot's code), at the point where we know the user has accepted the
-      // card/code patches.
+      // tool on its own, even when we explicitly disallow this in our prompts,
+      // often before its own edits have been applied. Ignore these tool calls.
+      // We only allow them when we construct them ourselves (in the ai bot's
+      // code), at the point where we know the edits have results.
       toolCallsSnapshot = toolCallsSnapshot.filter((call) => {
         let name = (call as any)?.function?.name;
         if (!name) {

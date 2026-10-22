@@ -1,18 +1,41 @@
 name: Restore boxel-icons build cache
 description: Restores cached boxel-icons build output (dist + declarations) keyed on source inputs
 
+inputs:
+  save:
+    description: >-
+      Whether to save the build output under the key when the job succeeds and
+      the restore missed. Pass "false" in a job that may rebuild boxel-icons
+      from a different tree than the one the key was computed from.
+    required: false
+    default: "true"
+
 outputs:
   cache-hit:
     description: Whether the cache was hit
-    value: ${{ steps.cache.outputs.cache-hit }}
+    value: ${{ steps.cache.outputs.cache-hit || steps.restore.outputs.cache-hit }}
 
 runs:
   using: composite
   steps:
+    - id: key
+      shell: bash
+      run: echo "key=boxel-icons-${{ hashFiles('packages/boxel-icons/src/**', 'packages/boxel-icons/unpublished-development-types/**', 'packages/boxel-icons/package.json', 'packages/boxel-icons/rollup.config.mjs', 'packages/boxel-icons/tsconfig.json', 'packages/boxel-icons/babel.config.json') }}" >> "$GITHUB_OUTPUT"
+
     - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       id: cache
+      if: inputs.save != 'false'
       with:
         path: |
           packages/boxel-icons/dist
           packages/boxel-icons/declarations
-        key: boxel-icons-${{ hashFiles('packages/boxel-icons/src/**', 'packages/boxel-icons/unpublished-development-types/**', 'packages/boxel-icons/package.json', 'packages/boxel-icons/rollup.config.mjs', 'packages/boxel-icons/tsconfig.json', 'packages/boxel-icons/babel.config.json') }}
+        key: ${{ steps.key.outputs.key }}
+
+    - uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      id: restore
+      if: inputs.save == 'false'
+      with:
+        path: |
+          packages/boxel-icons/dist
+          packages/boxel-icons/declarations
+        key: ${{ steps.key.outputs.key }}

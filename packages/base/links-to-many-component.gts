@@ -1,8 +1,8 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn, get } from '@ember/helper';
+import type { BaseDef, CreateCardFn, CardCrudFunctions } from './card-api';
 import {
-  BaseDef,
   type CardContext,
   type Box,
   type BoxComponent,
@@ -11,8 +11,6 @@ import {
   type FieldDef,
   type Format,
   type LinkableDefConstructor,
-  CreateCardFn,
-  CardCrudFunctions,
   isFileDef,
   brokenLinkDisplayName,
   brokenLinkFormat,
@@ -23,8 +21,8 @@ import {
   type RelationshipState,
 } from './field-support';
 import { rawArrayValues } from './watched-array';
+import type { BoxComponentSignature } from './field-component';
 import {
-  BoxComponentSignature,
   CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
   PermissionsConsumer,
@@ -37,6 +35,8 @@ import {
   Pill,
 } from '@cardstack/boxel-ui/components';
 import { restartableTask } from 'ember-concurrency';
+import { loaderForModule, type Loader } from '@cardstack/runtime-common';
+import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
   chooseCard,
   chooseFile,
@@ -47,12 +47,10 @@ import {
   RealmURLContextName,
   getNarrowestType,
   loadCardDef,
-  Loader,
   isCardInstance,
   type ResolvedCodeRef,
   uuidv4,
   CardCrudFunctionsContextName,
-  CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 import {
   IconMinusCircle,
@@ -839,15 +837,19 @@ export function getLinksToManyComponent({
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
+      //
+      // An iterator walks one snapshot of the component list, so a whole
+      // `{{#each @fields.x}}` builds the list once: an array iterator bound to
+      // this proxy would read `length` and every index back through it, and
+      // each of those reads re-reads the field, which re-evaluates it when it
+      // is computed or query-backed.
       if (property === Symbol.iterator) {
-        // getComponents() is in the "hot" path, don't touch it unless absolutely necessary
-        let components = getComponents();
-        return components[Symbol.iterator];
+        return () => getComponents()[Symbol.iterator]();
       }
       if (property === 'length') {
         return arrayField.children.length;
       }
-      if (typeof property === 'string' && property.match(/\d+/)) {
+      if (typeof property === 'string' && /^\d+$/.test(property)) {
         let child = arrayField.children[parseInt(property)];
         if (!child) {
           return undefined;
@@ -873,12 +875,8 @@ export function getLinksToManyComponent({
 }
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
-
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
   // @ts-ignore
-  return (import.meta as any).loader;
+  return loaderForModule(import.meta);
 }

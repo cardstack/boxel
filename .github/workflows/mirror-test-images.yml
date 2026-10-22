@@ -6,8 +6,11 @@ name: Mirror test Docker images to GHCR
 # source of the recurring registry-1.docker.io pull timeouts. The
 # warm-test-images composite action consumes these. The tags are version-pinned
 # and rarely change, so a weekly refresh plus a refresh when the pins change is
-# enough. Run once manually (workflow_dispatch) to seed the packages, then make
-# them public so CI (and fork PRs) can pull them without authenticating.
+# enough. Run once manually (workflow_dispatch) to seed a new package. The
+# packages are private and CI pulls them with the job's token, so each
+# package's Manage Actions access has to list every repository whose runs pull
+# it: boxel, and boxel-catalog with the Read role, since its calls into
+# catalog-test-subset-consumers.yml warm from this mirror too.
 
 on:
   workflow_dispatch:

@@ -103,7 +103,11 @@ export class AiAppGenerator extends CardDef {
                 disabled={{this.generateApp.isRunning}}
                 data-test-create-this-for-me
               >
-                {{if this.generateApp.isRunning 'Creating...' 'Create this for me'}}
+                {{if
+                  this.generateApp.isRunning
+                  'Creating...'
+                  'Create this for me'
+                }}
               </BoxelButton>
             </div>
           </div>

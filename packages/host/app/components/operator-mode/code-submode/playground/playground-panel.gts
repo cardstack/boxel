@@ -288,19 +288,21 @@ export default class PlaygroundPanel extends Component<Signature> {
     this.persistSelections(selectedCardId, format);
   }
 
-  private get realmInfo() {
+  private get realmLookupURL() {
     if (this.args.isFileDef) {
-      let fileId = this.selectedFileMetaInstance?.id;
-      if (!fileId) {
-        return undefined;
-      }
-      return this.realm.info(fileId);
+      return this.selectedFileMetaInstance?.id;
     }
-    let url = this.card ? urlForRealmLookup(this.card) : undefined;
-    if (!url) {
-      return undefined;
-    }
-    return this.realm.info(url);
+    return this.card ? urlForRealmLookup(this.card) : undefined;
+  }
+
+  private get realmInfo() {
+    let url = this.realmLookupURL;
+    return url ? this.realm.info(url) : undefined;
+  }
+
+  private get realmURLText() {
+    let url = this.realmLookupURL;
+    return url ? this.realm.realmURLTextOf(url) : undefined;
   }
 
   private get canEditCard() {
@@ -912,7 +914,11 @@ export default class PlaygroundPanel extends Component<Signature> {
     )?.click();
 
   private get currentFileDef(): FileDef | undefined {
-    let codePath = this.operatorModeStateService.state.codePath?.href;
+    let codePath = this.operatorModeStateService.state.codePath
+      ? this.network.virtualNetwork.toURLHref(
+          this.operatorModeStateService.state.codePath,
+        )
+      : undefined;
     if (!codePath) {
       return undefined;
     }
@@ -1135,6 +1141,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                     @format={{this.effectiveFormat}}
                     @codeRef={{this.effectiveCodeRef}}
                     @realmInfo={{this.realmInfo}}
+                    @realmURLText={{this.realmURLText}}
                     @contextMenuItems={{unless
                       @isFileDef
                       this.contextMenuItems

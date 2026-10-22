@@ -7,6 +7,17 @@ import {
   triggerEvent,
 } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  CardInfoField,
+  Component,
+  contains,
+  linksTo,
+  linksToMany,
+  field,
+} from '@cardstack/base/card-api';
+import { CardsGrid } from '@cardstack/base/cards-grid';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import window from 'ember-window-mock';
@@ -19,8 +30,10 @@ import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   Deferred,
   baseRealm,
+  baseRRI,
   skillCardRef,
   rri,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import {
@@ -57,22 +70,11 @@ import {
   catalogRealmURL,
   realmConfigCardJSON,
 } from '../helpers';
-
 import {
-  CardDef,
-  CardInfoField,
-  Component,
-  CardsGrid,
-  contains,
-  linksTo,
-  linksToMany,
-  field,
   setupBaseRealm,
-  StringField,
   SystemCard,
   ModelConfiguration,
 } from '../helpers/base-realm';
-
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';
@@ -1193,6 +1195,42 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-autoattached-card]').doesNotExist();
   });
 
+  test('auto-attaches the module of a card whose adoptsFrom is prefix-form', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [[]],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    let indexJSON = await (
+      await getService('network').authedFetch(`${testRealmURL}index.json`, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      })
+    ).json();
+    assert.strictEqual(
+      indexJSON.data.meta.adoptsFrom.module,
+      '@cardstack/base/cards-grid',
+      'the fixture adopts from a prefix-form module',
+    );
+
+    let cardsGridModuleURL = getService('network').virtualNetwork.toURL(
+      rri('@cardstack/base/cards-grid.gts'),
+    ).href;
+    assert.dom('[data-test-autoattached-file]').exists({ count: 2 });
+    assert
+      .dom(
+        `[data-test-attached-file="${testRealmURL}index.json"][data-test-autoattached-file]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-attached-file="${cardsGridModuleURL}"][data-test-autoattached-file]`,
+      )
+      .exists('the prefix-form module resolves to the base realm');
+  });
+
   test('errored card instance is not auto-attached in code mode', async function (assert) {
     // Start directly in code mode with the errored card's JSON file
     await visitOperatorMode({
@@ -1237,9 +1275,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-attached-card]').doesNotExist();
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
-    await click(
-      `[data-test-item-button="https://cardstack.com/base/types/card"]`,
-    );
+    await click(`[data-test-item-button="${baseRealm.url}types/card"]`);
 
     await click(`[data-test-card-chooser-go-button]`);
 
@@ -2334,6 +2370,34 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         canWrite: true,
       },
       'Context sent with message contains correct realmPermissions',
+    );
+  });
+
+  test('code mode context names a base module by its prefix form', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: virtualNetwork.toURLHref(baseRRI('card-api.gts')),
+      stacks: [[]],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    await fillIn('[data-test-message-field]', `Message`);
+    await click('[data-test-send-message-btn]');
+
+    let roomEvents = mockMatrixUtils.getRoomEvents(matrixRoomId);
+    let contextSent: BoxelContext = JSON.parse(
+      roomEvents[roomEvents.length - 1].content.data,
+    ).context;
+    assert.strictEqual(
+      contextSent.codeMode!.currentFile,
+      baseRRI('card-api.gts'),
+      'currentFile is the prefix form',
+    );
+    assert.strictEqual(
+      contextSent.realmPrefixes?.[baseRRI('')],
+      virtualNetwork.toURLHref(baseRRI('')),
+      'the context maps the base prefix to the URL it is served from',
     );
   });
 

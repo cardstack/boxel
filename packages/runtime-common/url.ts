@@ -1,9 +1,10 @@
 import type { LooseCardResource, FileMetaResource } from './index.ts';
 import { relationshipEntries } from './relationship-utils.ts';
 import { RealmPaths } from './paths.ts';
-import type {
-  RealmIdentifier,
-  RealmResourceIdentifier,
+import {
+  isPrefixForm,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
 } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
@@ -127,6 +128,27 @@ export function maybeRelativeReference(
   return reference instanceof URL ? reference.href : reference;
 }
 
+// How a file in `realm` writes a reference to the module or card at
+// `reference`: relative when it is inside the realm, by its realm's registered
+// prefix when it is in another realm that has one, and by its URL otherwise.
+// A reference to a well-known realm therefore never carries the URL that realm
+// answers to in the current environment. With no `realm`, nothing is treated
+// as inside it.
+export function portableReference(
+  reference: RealmResourceIdentifier | URL,
+  relativeTo: URL,
+  realm: URL | undefined,
+  virtualNetwork: VirtualNetwork,
+): string {
+  let absolute = reference instanceof URL ? reference.href : reference;
+  let relative = realm
+    ? maybeRelativeReference(reference, relativeTo, realm)
+    : absolute;
+  return relative === absolute
+    ? virtualNetwork.unresolveURL(absolute)
+    : relative;
+}
+
 // Synthetic origin used to borrow the URL parser's path-normalization for
 // prefix-form RRI bases. The host is invalid-by-construction so it can never
 // collide with a real realm URL.
@@ -148,12 +170,31 @@ const RRI_SYNTHETIC_ORIGIN = 'https://rri.invalid';
 //     resolving the realm root requires realm mappings — `resolveRRI` likewise
 //     has no realm root to resolve against there.)
 // Falls back to the reference unchanged when there is no usable base.
+// A reference in scoped RRI form (e.g. `@cardstack/base/card-api`) is an
+// absolute cross-realm identifier and must never be treated as realm-relative.
+// Registered prefixes are a subset, but a scoped reference to a realm this
+// VirtualNetwork does not know is still scoped — the leading `@` is the signal.
+//
+// Read and write share this one definition on purpose. Serving a document and
+// storing one have to agree on which references are already canonical: when
+// only the read path skipped them, a link the client sent as `@scope/name/x`
+// was stored as whatever URL that realm happened to resolve to in the writing
+// environment.
+export function isScopedReference(
+  reference: string,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  return (
+    isPrefixForm(reference) || virtualNetwork.isRegisteredPrefix(reference)
+  );
+}
+
 export function resolveRRIReference(
   reference: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
   if (
-    reference.startsWith('@') ||
+    isPrefixForm(reference) ||
     // Any absolute-URL scheme (`http:`/`https:`, but also `data:`, `blob:`,
     // `mailto:`, …) is already canonical — return it unchanged rather than
     // treating it as a relative reference to join against the base. Matches an
@@ -173,7 +214,7 @@ export function resolveRRIReference(
   if (reference.startsWith('$REALM/')) {
     let path = reference.slice('$REALM/'.length);
     let parts = base.split('/');
-    if (parts.length >= 2 && parts[0].startsWith('@')) {
+    if (parts.length >= 2 && isPrefixForm(base)) {
       return `${parts[0]}/${parts[1]}/${path}`;
     }
     return reference;
@@ -185,7 +226,7 @@ export function resolveRRIReference(
   // (`@scope/name`), matching `sharedNamespace`; the remainder is the in-realm
   // path the reference resolves against.
   let parts = base.split('/');
-  if (parts.length >= 2 && parts[0].startsWith('@')) {
+  if (parts.length >= 2 && isPrefixForm(base)) {
     let namespace = `${parts[0]}/${parts[1]}`;
     let path = base.slice(namespace.length) || '/';
     let resolved = new URL(reference, `${RRI_SYNTHETIC_ORIGIN}${path}`);

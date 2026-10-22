@@ -417,6 +417,19 @@ export function isSparseItemResource(
   return Array.isArray(resource.meta?.sparseFields);
 }
 
+// A `card`/`file-meta` serialization served with its relationships withheld
+// (`meta.relationshipsWithheld`) — the `item` shape a query declaring `links:
+// 'none'` produces. It is silent about the card's links rather than saying
+// there are none, so, like a sparse item, it must never enter the Store as the
+// card's instance. A plain boolean rather than a guard, so a caller already
+// holding a `card`/`file-meta` type keeps it on the negative branch.
+export function hasWithheldRelationships(resource: any): boolean {
+  if (!isCardResource(resource) && !isFileMetaResource(resource)) {
+    return false;
+  }
+  return resource.meta?.relationshipsWithheld === true;
+}
+
 // ---------------------------------------------------------------------------
 // Documents
 // ---------------------------------------------------------------------------

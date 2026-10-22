@@ -8,8 +8,11 @@ import {
   decideHostShellRecycle,
   raceAgainstDrain,
   shouldRerenderForStaleShell,
+  stampGatewayFailure,
   stampHostShellTokens,
+  stampStaleShellFailure,
 } from '../prerender/prerender-app.ts';
+import { parseHostShellGeneration } from '../prerender/prerender-constants.ts';
 
 // Unit tests for the host-shell recycle decision a prerender server makes on
 // every heartbeat: the manager echoes the current host-shell token, and the
@@ -386,6 +389,192 @@ module(basename(import.meta.filename), function () {
         response.meta,
         { requestId: 'abc' } as unknown as typeof response.meta,
         'no empty keys, and no diagnostics object invented',
+      );
+    });
+  });
+
+  module('the warmed generation a row is stamped with', function () {
+    // The one value here a write site reads rather than an operator: it
+    // becomes the row's `host_shell_generation`, so a repair pass selects on
+    // it. Stamped from the start sample, which names the bundle the page was
+    // running when the render began.
+    test('rides beside the warmed token it orders', function (assert) {
+      let response = {
+        meta: { diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: 'b778fe76',
+        atCompletion: 'b778fe76',
+        warmedAtStart: 'b778fe76',
+        warmedAtCompletion: 'b778fe76',
+        warmedGenerationAtStart: 7,
+      });
+      let d = (response.meta as any).diagnostics;
+      assert.strictEqual(d.warmedHostShellGeneration, 7);
+      assert.strictEqual(
+        d.warmedHostShellHash,
+        'b778fe76',
+        'the token it orders is still on the row',
+      );
+    });
+
+    // A realm server whose database could not answer reports the token alone,
+    // and the two services deploy separately, so a render sees this state
+    // throughout a rolling deploy. The row has to read as unknown, not as
+    // generation zero — the repair predicate is `< current`, and a zero would
+    // put every such row in the first repair that runs.
+    test('is absent, not zero, when no number reached the render', function (assert) {
+      let response = { meta: {} } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: 'b778fe76',
+        atCompletion: 'b778fe76',
+        warmedAtStart: 'b778fe76',
+        warmedAtCompletion: 'b778fe76',
+      });
+      let d = (response.meta as any).diagnostics;
+      assert.false('warmedHostShellGeneration' in d);
+    });
+
+    // The early return exists so a render that knows nothing stamps nothing.
+    // A generation is one of the values it has to count as something, or a
+    // response carrying only that would be dropped on the floor.
+    test('a generation alone is enough to stamp', function (assert) {
+      let response = { meta: {} } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: undefined,
+        atCompletion: undefined,
+        warmedGenerationAtStart: 4,
+      });
+      assert.strictEqual(
+        (response.meta as any).diagnostics.warmedHostShellGeneration,
+        4,
+        'the early return must not swallow a response whose only value is the generation',
+      );
+    });
+  });
+
+  module('parseHostShellGeneration', function () {
+    test('accepts a real generation, as text or as a number', function (assert) {
+      assert.strictEqual(parseHostShellGeneration('7'), 7);
+      assert.strictEqual(parseHostShellGeneration(7), 7);
+      assert.strictEqual(
+        parseHostShellGeneration('1'),
+        1,
+        'the first transition takes 1, so that is the lowest real answer',
+      );
+      assert.strictEqual(parseHostShellGeneration(2147483647), 2147483647);
+    });
+
+    // Every rejection below would otherwise be stamped onto a row and compared
+    // against the current generation, where it orders nothing. Discarding
+    // leaves the column null, which reads as unknown.
+    test('rejects anything that would not order', function (assert) {
+      assert.strictEqual(parseHostShellGeneration(undefined), undefined);
+      assert.strictEqual(parseHostShellGeneration(null), undefined);
+      assert.strictEqual(parseHostShellGeneration(''), undefined);
+      assert.strictEqual(parseHostShellGeneration('nope'), undefined);
+      assert.strictEqual(parseHostShellGeneration('1.5'), undefined);
+      assert.strictEqual(parseHostShellGeneration(-1), undefined);
+      assert.strictEqual(parseHostShellGeneration(Number.NaN), undefined);
+      assert.strictEqual(parseHostShellGeneration(Infinity), undefined);
+    });
+
+    // Zero is the seeded "no shell observed yet" sentinel, not a generation —
+    // a real claim never returns it, because the first transition takes 1. It
+    // is rejected here rather than only at the producer that filters it today:
+    // `?? null` at the write site does not catch a zero, so one reaching this
+    // boundary would ride to the column intact and read as older than
+    // everything there is.
+    test('rejects the no-observation sentinel', function (assert) {
+      assert.strictEqual(parseHostShellGeneration('0'), undefined);
+      assert.strictEqual(parseHostShellGeneration(0), undefined);
+    });
+
+    // The column is `integer`. A larger value parses cleanly as a number and
+    // then fails at the write, turning a malformed header into a failed index
+    // row rather than an unstamped one.
+    test('rejects a value the column could not hold', function (assert) {
+      assert.strictEqual(parseHostShellGeneration('99999999999'), undefined);
+      assert.strictEqual(parseHostShellGeneration(2147483648), undefined);
+    });
+  });
+
+  module('stampStaleShellFailure', function () {
+    // The write site tests only for this field's presence, so its encoding is
+    // the whole contract: absence has to mean "no verdict" rather than
+    // "attributable", or a response from anything that does not stamp it would
+    // read as a licence to withhold a row.
+    test('names the rows it covers and leaves the rest of diagnostics alone', function (assert) {
+      let response = {
+        meta: { requestId: 'abc', diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampStaleShellFailure(response, ['instance']);
+      assert.deepEqual(response.meta, {
+        requestId: 'abc',
+        diagnostics: { renderMs: 12, staleShellFailure: ['instance'] },
+      } as unknown as typeof response.meta);
+    });
+
+    // A visit's rows fail independently, so a verdict that named the response
+    // rather than the rows would let one row's stale failure withhold
+    // another's genuine one. The write site tests membership, so an empty
+    // verdict must not be written at all.
+    test('an empty verdict stamps nothing', function (assert) {
+      let response = {
+        meta: { diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampStaleShellFailure(response, []);
+      assert.false(
+        'staleShellFailure' in ((response.meta as any).diagnostics ?? {}),
+        'absent rather than an empty array a reader might mis-test',
+      );
+    });
+
+    test('an unmarked response carries no verdict at all', function (assert) {
+      let response = {
+        meta: { diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      assert.false(
+        'staleShellFailure' in ((response.meta as any).diagnostics ?? {}),
+        'absent rather than false — a reader must require presence',
+      );
+    });
+  });
+
+  module('stampGatewayFailure', function () {
+    // Same contract as the stale-shell stamp: the write site tests only for
+    // this field's presence, so absence must mean "no verdict" rather than
+    // "attributable", and the field carries the row types it covers because a
+    // visit's rows fail independently.
+    test('names the rows it covers and leaves the rest of diagnostics alone', function (assert) {
+      let response = {
+        meta: { requestId: 'abc', diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampGatewayFailure(response, ['instance']);
+      assert.deepEqual(response.meta, {
+        requestId: 'abc',
+        diagnostics: { renderMs: 12, gatewayFailure: ['instance'] },
+      } as unknown as typeof response.meta);
+    });
+
+    test('an empty verdict stamps nothing', function (assert) {
+      let response = {
+        meta: { diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampGatewayFailure(response, []);
+      assert.false(
+        'gatewayFailure' in ((response.meta as any).diagnostics ?? {}),
+        'absent rather than an empty array a reader might mis-test',
+      );
+    });
+
+    test('an unmarked response carries no verdict at all', function (assert) {
+      let response = {
+        meta: { diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      assert.false(
+        'gatewayFailure' in ((response.meta as any).diagnostics ?? {}),
+        'absent rather than false — a reader must require presence',
       );
     });
   });

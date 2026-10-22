@@ -1,6 +1,8 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { waitUntil } from '@ember/test-helpers';
 
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -26,21 +28,11 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
 } from '../helpers';
-import {
-  CardDef,
-  contains,
-  field,
-  StringField,
-  setupBaseRealm,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
-
 module('Integration | store search public API', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   let loader: Loader;
   let realm: Realm;
   let storeService: StoreService;
@@ -82,10 +74,9 @@ module('Integration | store search public API', function (hooks) {
   });
 
   test('search returns instances only and hydrates them into the store', async function (assert) {
-    let instances = await storeService.search<CardDefType>(
-      { filter: { type: bookRef } },
-      [testRealmURL],
-    );
+    let instances = await storeService.search({ filter: { type: bookRef } }, [
+      testRealmURL,
+    ]);
 
     assert.strictEqual(instances.length, 2, 'both books are returned');
     for (let instance of instances) {
@@ -106,10 +97,9 @@ module('Integration | store search public API', function (hooks) {
     // BaseDef terminates both kinds' type chains, so as a filter it matches
     // file rows too — but it selects no kind, so `search` pins the 'cards'
     // scope for it just like an untyped query.
-    let instances = await storeService.search<CardDefType>(
-      { filter: { type: baseRef } },
-      [testRealmURL],
-    );
+    let instances = await storeService.search({ filter: { type: baseRef } }, [
+      testRealmURL,
+    ]);
 
     assert.true(
       instances.every((instance) => isCardInstance(instance)),
@@ -122,10 +112,9 @@ module('Integration | store search public API', function (hooks) {
   });
 
   test('search with includeMeta returns the single { instances, meta } shape', async function (assert) {
-    let result = await storeService.search<CardDefType>(
+    let result = await storeService.searchWithMeta(
       { filter: { type: bookRef } },
       [testRealmURL],
-      { includeMeta: true },
     );
 
     assert.deepEqual(Object.keys(result).sort(), ['instances', 'meta']);
@@ -134,6 +123,31 @@ module('Integration | store search public API', function (hooks) {
       result.instances.every((instance) => isCardInstance(instance)),
       'every result is a card instance',
     );
+  });
+
+  test('search and searchEntries find the realm a registered prefix names', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    // Mapping a prefix onto a realm that is already loaded changes the form
+    // its modules and cards canonicalize to, so a type filter or a hydrated
+    // instance would not match even by URL. An untyped search and the
+    // server's count are what show the request reached the realm.
+    virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+    try {
+      let { meta } = await storeService.searchWithMeta({}, ['@test/mapped/']);
+      assert.strictEqual(meta.page.total, 2, 'search finds the books');
+
+      let doc = await storeService.searchEntries(
+        { scope: 'cards', fields: { entry: ['item'] } },
+        ['@test/mapped/'],
+      );
+      assert.deepEqual(
+        doc.data.map((entry) => entry.id).sort(),
+        [`${testRealmURL}books/1`, `${testRealmURL}books/2`],
+        'searchEntries finds the books',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
   });
 
   test('search rejects the removed asData path', async function (assert) {

@@ -1,3 +1,18 @@
+import {
+  field,
+  contains,
+  containsMany,
+  linksTo,
+  linksToMany,
+  CardDef,
+  FieldDef,
+  Component,
+  createFromSerialized,
+  getDataBucket,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import { searchDocFromFields } from '@cardstack/base/searchable';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -20,25 +35,8 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import {
-  setupBaseRealm,
-  field,
-  contains,
-  containsMany,
-  linksTo,
-  linksToMany,
-  CardDef,
-  FieldDef,
-  Component,
-  StringField,
-  createFromSerialized,
-  getDataBucket,
-  searchDocFromFields,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
-
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let loader: Loader;
 let realm: Realm;
@@ -51,7 +49,6 @@ let realm: Realm;
 // indexed card continues into it.
 module('Integration | searchable search doc', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
@@ -291,12 +288,31 @@ module('Integration | searchable search doc', function (hooks) {
     }
 
     // ---- query-backed field (must never appear in the doc) -----------------
+    // Neither does a computed that reads one: its value derives from a live
+    // search nothing reindexes this row for. `relatedCount` reads the query
+    // field directly and `relatedSummary` reaches it through `relatedCount`,
+    // while `shoutedTitle` reads only the card's own data and stays.
     class ArticleQuery extends CardDef {
       static displayName = 'ArticleQuery';
       @field title = contains(StringField);
       @field related = linksToMany(() => Agent, {
         searchable: true,
         query: { filter: { eq: { name: 'Agent Smith' } } },
+      });
+      @field relatedCount = contains(NumberField, {
+        computeVia: function (this: ArticleQuery) {
+          return this.related.length;
+        },
+      });
+      @field relatedSummary = contains(StringField, {
+        computeVia: function (this: ArticleQuery) {
+          return `${this.relatedCount} related`;
+        },
+      });
+      @field shoutedTitle = contains(StringField, {
+        computeVia: function (this: ArticleQuery) {
+          return this.title.toUpperCase();
+        },
       });
     }
 
@@ -739,7 +755,7 @@ module('Integration | searchable search doc', function (hooks) {
 
   async function loadAndGenerate(id: string) {
     let store = getService('store') as StoreService;
-    let instance = (await store.get(id)) as CardDefType;
+    let instance = (await store.get(id)) as CardDef;
     return await searchDocFromFields(instance);
   }
 
@@ -1201,6 +1217,23 @@ module('Integration | searchable search doc', function (hooks) {
     assert.notOk('related' in doc, 'the query-backed field is skipped');
   });
 
+  test('a computed that reads a query-backed field never appears in the doc', async function (assert) {
+    let doc = await loadAndGenerate(`${testRealmURL}ArticleQuery/q1`);
+    assert.notOk(
+      'relatedCount' in doc,
+      'a computed reading the query field is skipped',
+    );
+    assert.notOk(
+      'relatedSummary' in doc,
+      'a computed reading the query field through another computed is skipped',
+    );
+    assert.strictEqual(
+      doc.shoutedTitle,
+      'QUERY',
+      'a computed that reads no query field is still indexed',
+    );
+  });
+
   test('a throwing branch does not stop sibling link loads in the same walk', async function (assert) {
     // Build the instance from its bare document on a dedicated store, so both
     // of its links start not-loaded — the shape the indexer's walk sees. (The
@@ -1231,7 +1264,7 @@ module('Integration | searchable search doc', function (hooks) {
       doc,
       new URL(doc.data.id),
       { store },
-    )) as CardDefType;
+    )) as CardDef;
     let thrown: unknown;
     try {
       await searchDocFromFields(instance);
@@ -1336,7 +1369,7 @@ module('Integration | searchable search doc', function (hooks) {
 
   async function loadInstance(id: string) {
     let store = getService('store') as StoreService;
-    return (await store.get(id)) as CardDefType;
+    return (await store.get(id)) as CardDef;
   }
 
   // A store-resident instance can arrive with its link fields already
@@ -1345,7 +1378,7 @@ module('Integration | searchable search doc', function (hooks) {
   // the walk drives the load itself — the state an indexing visit starts
   // from.
   function unloadLink(
-    instance: CardDefType,
+    instance: CardDef,
     fieldName: string,
     reference: string | string[],
   ) {

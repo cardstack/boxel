@@ -25,14 +25,29 @@ import type { Icon } from '@cardstack/boxel-ui/icons';
 import { logger, ri } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
+import { catalogRealmURL } from '@cardstack/host/lib/utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
 import ArchivedWorkspace from './archived-workspace';
+import ManageCatalogs from './manage-catalogs';
 import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
+
+// Moves `first` to the front of `urls` when it's there, keeping the rest in
+// order.
+export function leadWith<T extends string>(
+  urls: T[],
+  first: string | null,
+): T[] {
+  let index = first ? urls.indexOf(first as T) : -1;
+  if (index <= 0) {
+    return urls;
+  }
+  return [urls[index], ...urls.slice(0, index), ...urls.slice(index + 1)];
+}
 
 interface SortOption {
   label: string;
@@ -152,13 +167,6 @@ export default class WorkspaceChooser extends Component<Signature> {
     return this.selectedSortOption.value;
   }
 
-  private get displayCatalogWorkspaces() {
-    return (
-      this.realmServer.displayedCatalogRealmIdentifiers &&
-      this.realmServer.displayedCatalogRealmIdentifiers.length > 0
-    );
-  }
-
   private get communityRealmIdentifiers() {
     let realmURLs = this.realmServer.displayedCatalogRealmIdentifiers ?? [];
     if (config.environment !== 'production') {
@@ -212,9 +220,13 @@ export default class WorkspaceChooser extends Component<Signature> {
     return this.filterByHosted(this.realmServer.userRealmIdentifiers);
   }
 
+  // Newest first, except the Boxel catalog, which always leads the section.
   private get filteredCatalogRealmIdentifiers() {
     return this.filterByHosted(
-      this.sortByCreatedAtDesc(this.communityRealmIdentifiers),
+      leadWith(
+        this.sortByCreatedAtDesc(this.communityRealmIdentifiers),
+        catalogRealmURL,
+      ),
     );
   }
 
@@ -262,13 +274,12 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   private get catalogEmptyMessage(): string | null {
-    if (
-      this.sortOrder === 'hosted-only' &&
-      this.filteredCatalogRealmIdentifiers.length === 0
-    ) {
-      return 'No matching results';
+    if (this.filteredCatalogRealmIdentifiers.length > 0) {
+      return null;
     }
-    return null;
+    return this.sortOrder === 'hosted-only'
+      ? 'No matching results'
+      : 'No catalogs yet. Add public realms with the gear.';
   }
 
   private get favoritesEmptyMessage(): string | null {
@@ -386,7 +397,7 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   private get renderedCatalogCount() {
-    if (!this.displayCatalogWorkspaces || this.catalogEmptyMessage) {
+    if (this.catalogEmptyMessage) {
       return 0;
     }
     return this.filteredCatalogRealmIdentifiers.length;
@@ -593,7 +604,7 @@ export default class WorkspaceChooser extends Component<Signature> {
               as |option|
             >
               <option.icon width='16' height='16' />
-              {{option.label}}
+              <span class='sort-label'>{{option.label}}</span>
             </BoxelSelect>
           </div>
         {{/in-element}}
@@ -695,36 +706,35 @@ export default class WorkspaceChooser extends Component<Signature> {
               </div>
             {{/if}}
           </div>
-          {{#if this.displayCatalogWorkspaces}}
-            <div class='workspace-section'>
-              <div class='section-header'>
-                <IconGlobe width='20' height='20' class='section-header-icon' />
-                <span class='workspace-chooser__title'>Catalogs</span>
-              </div>
-              {{#if this.catalogEmptyMessage}}
-                <span
-                  class='section-empty'
-                  data-test-catalog-empty
-                >{{this.catalogEmptyMessage}}</span>
-              {{else}}
-                <div class='workspace-list' data-test-catalog-list>
-                  {{#each
-                    this.filteredCatalogRealmIdentifiers
-                    as |realmIdentifier i|
-                  }}
-                    {{#let (add this.catalogNavBase i) as |navIndex|}}
-                      <Workspace
-                        @realmIdentifier={{realmIdentifier}}
-                        @navIndex={{navIndex}}
-                        @isSelected={{eq this.currentIndex navIndex}}
-                        @selectionActive={{this.isSelectionActive}}
-                      />
-                    {{/let}}
-                  {{/each}}
-                </div>
-              {{/if}}
+          <div class='workspace-section'>
+            <div class='section-header'>
+              <IconGlobe width='20' height='20' class='section-header-icon' />
+              <span class='workspace-chooser__title'>Catalogs</span>
+              <ManageCatalogs />
             </div>
-          {{/if}}
+            {{#if this.catalogEmptyMessage}}
+              <span
+                class='section-empty'
+                data-test-catalog-empty
+              >{{this.catalogEmptyMessage}}</span>
+            {{else}}
+              <div class='workspace-list' data-test-catalog-list>
+                {{#each
+                  this.filteredCatalogRealmIdentifiers
+                  as |realmIdentifier i|
+                }}
+                  {{#let (add this.catalogNavBase i) as |navIndex|}}
+                    <Workspace
+                      @realmIdentifier={{realmIdentifier}}
+                      @navIndex={{navIndex}}
+                      @isSelected={{eq this.currentIndex navIndex}}
+                      @selectionActive={{this.isSelectionActive}}
+                    />
+                  {{/let}}
+                {{/each}}
+              </div>
+            {{/if}}
+          </div>
           <div class='workspace-section' data-test-archived-section>
             <button
               type='button'
@@ -781,21 +791,46 @@ export default class WorkspaceChooser extends Component<Signature> {
         height: 100%;
         width: 100%;
         z-index: var(--host-workspace-chooser-z-index);
+        --workspace-chooser-gutter: 5rem;
+        --workspace-chooser-card-width: fit-content;
+        --workspace-chooser-tile-width: var(--boxel-xxs-container);
+        /* Favorites until the grid is measured; capped so the tile never
+           outgrows a content area narrower than 1.5 tiles. */
+        --workspace-chooser-enlarged-tile-width: min(
+          var(--boxel-xxs-container) * 1.5,
+          100vw - 2 * var(--workspace-chooser-gutter)
+        );
       }
       .sort-controls {
         display: flex;
         align-items: center;
-        /* Keep the trigger on a single line at narrow top-bar widths rather
-           than letting its label wrap under the icon. */
         white-space: nowrap;
       }
       .sort-select {
         flex-shrink: 0;
+        /* Keep the icon and label on one line at narrow top-bar widths. */
+        --boxel-select-trigger-content-wrap: nowrap;
         --boxel-select-background-color: var(--boxel-800);
         --boxel-select-text-color: var(--boxel-light);
         --boxel-select-border-color: var(--boxel-light-25);
         --boxel-select-focus-border-color: var(--boxel-light-50);
         --icon-color: var(--boxel-light);
+      }
+      /* Below this top-bar width the label would push the trigger over the
+         profile button, so show the icon only and keep the label for screen
+         readers. */
+      @container (width <= 20rem) {
+        .sort-select {
+          --boxel-select-trigger-gap: var(--boxel-sp-2xs);
+        }
+        .sort-select .sort-label {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+        }
       }
       :global(.boxel-select__dropdown.workspace-chooser-sort-dropdown) {
         --boxel-dropdown-background-color: var(--boxel-650);
@@ -818,7 +853,17 @@ export default class WorkspaceChooser extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-lg);
         height: 100%;
-        padding: calc(5rem + 3.75rem) 5rem 5rem;
+        /* The bottom always clears the floating AI assistant button, which
+           sits over the chooser's bottom-right corner. */
+        padding: calc(var(--workspace-chooser-gutter) + 3.75rem)
+          var(--workspace-chooser-gutter)
+          max(
+            var(--workspace-chooser-gutter),
+            calc(
+              var(--container-button-size) + var(--operator-mode-spacing) +
+                var(--boxel-sp)
+            )
+          );
         overflow: auto;
         /* Fade in only the contents; the dark chooser background above
            paints immediately so the grey operator-mode canvas never flashes
@@ -856,6 +901,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       }
       .section-disclosure-icon {
         --icon-color: var(--boxel-light);
+        --icon-fill: var(--boxel-light);
         color: var(--boxel-light);
         flex-shrink: 0;
         transition: transform 0.15s ease;
@@ -900,6 +946,19 @@ export default class WorkspaceChooser extends Component<Signature> {
       }
       .unreachable-notice-spinner {
         flex-shrink: 0;
+      }
+      /* One tile per row, filling the chooser's own width, which is less
+         than the viewport's when the AI assistant panel is open. */
+      @media (max-width: 30rem) {
+        .workspace-chooser {
+          --workspace-chooser-gutter: var(--boxel-sp);
+          --workspace-chooser-card-width: 100%;
+          --workspace-chooser-tile-width: 100%;
+          --workspace-chooser-enlarged-tile-width: 100%;
+        }
+        .sections-wrapper {
+          width: 100%;
+        }
       }
     </style>
   </template>

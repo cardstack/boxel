@@ -6,9 +6,11 @@ import {
   wrapWithStrictNamespace,
   isRetryableShimResolveError,
   withResolveRetry,
+  withResolveDeadline,
   describeShimError,
   type ShimRetryLogger,
 } from '../package-shim-handler.ts';
+import { VirtualNetwork } from '../virtual-network.ts';
 
 // No-op logger so the retry-focused tests don't print warn/debug
 // noise to CI output. The realm-server harness defaults to
@@ -633,6 +635,129 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       assert.strictEqual(attempts, 2, 'one retry was sufficient');
     },
 
+  // The loader awaits a shim resolver with no clock of its own, so without
+  // the handler's deadline a resolver that never settles parks every import
+  // of its specifier forever, naming nothing. These pin the deadline that
+  // turns that into an error.
+  'withResolveDeadline rejects when the resolver never settles': async (
+    assert,
+  ) => {
+    let fire: (() => void) | undefined;
+    let cancelled = false;
+    let bounded = withResolveDeadline(
+      'never-settles',
+      () => new Promise<never>(() => {}),
+      {
+        resolveDeadlineMs: 1234,
+        scheduleTimeout: (callback) => {
+          fire = callback;
+          return () => {
+            cancelled = true;
+          };
+        },
+      },
+    );
+    let settled = bounded();
+    fire!();
+    try {
+      await settled;
+      assert.ok(false, 'expected the deadline to reject');
+    } catch (err: any) {
+      assert.strictEqual(err.name, 'ShimResolveTimeout');
+      assert.ok(
+        err.message.includes('never-settles'),
+        `the message names the specifier: ${err.message}`,
+      );
+      assert.ok(
+        err.message.includes('1234ms'),
+        'the message names the deadline it exceeded',
+      );
+    }
+    assert.true(cancelled, 'the armed timer is cancelled once it has fired');
+  },
+
+  'withResolveDeadline cancels its timer when the resolver settles first':
+    async (assert) => {
+      let cancelled = false;
+      let bounded = withResolveDeadline(
+        'settles-fine',
+        async () => ({ ok: true }),
+        {
+          scheduleTimeout: () => () => {
+            cancelled = true;
+          },
+        },
+      );
+      assert.deepEqual(await bounded(), { ok: true });
+      assert.true(
+        cancelled,
+        'a resolver that answers leaves no timer holding the event loop open',
+      );
+    },
+
+  'a prefix shim deadline names the module that was asked for': async (
+    assert,
+  ) => {
+    let fire: (() => void) | undefined;
+    let bounded = withResolveDeadline(
+      (rest: string) => `@stalled-prefix/${rest}`,
+      () => new Promise<never>(() => {}),
+      {
+        scheduleTimeout: (callback) => {
+          fire = callback;
+          return () => {};
+        },
+      },
+    );
+    let settled = bounded('some-module');
+    fire!();
+    try {
+      await settled;
+      assert.ok(false, 'expected the deadline to reject');
+    } catch (err: any) {
+      assert.ok(
+        err.message.includes('@stalled-prefix/some-module'),
+        `the message names the requested module, not just the prefix: ${err.message}`,
+      );
+    }
+  },
+
+  'a shimAsyncModule resolver that never settles fails the lookup rather than hanging it':
+    async (assert) => {
+      let fire: (() => void) | undefined;
+      let handler = new PackageShimHandler(
+        (id) => `${PACKAGES_FAKE_ORIGIN}${id}`,
+      );
+      handler.shimAsyncModule(
+        {
+          id: 'stalled-module',
+          resolve: () => new Promise<never>(() => {}),
+        },
+        {
+          delay: async () => {},
+          retryDelaysMs: [],
+          scheduleTimeout: (callback) => {
+            fire = callback;
+            return () => {};
+          },
+        },
+      );
+      let lookup = handler.lookupModule(
+        `${PACKAGES_FAKE_ORIGIN}stalled-module`,
+      );
+      fire!();
+      try {
+        await lookup;
+        assert.ok(false, 'expected the lookup to reject');
+      } catch (err: any) {
+        assert.strictEqual(err.name, 'ShimResolveTimeout');
+        assert.ok(
+          err.message.includes('stalled-module'),
+          `the message names the specifier: ${err.message}`,
+        );
+      }
+    },
+
   'shimAsyncModule returns null from handle() when the resolver throws permanently':
     async (assert) => {
       let handler = new PackageShimHandler(
@@ -720,6 +845,115 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       'a bigint (which JSON.stringify throws on) still yields a string',
     );
   },
+
+  'a VirtualNetwork retries a shim resolver while the global setTimeout is disabled':
+    async (assert) => {
+      let nativeSetTimeout = globalThis.setTimeout;
+      let nativeClearTimeout = globalThis.clearTimeout;
+      // Wired the way the host wires its network: the fetch timer is the
+      // native one, which a prerender leaves running.
+      let network = new VirtualNetwork(
+        async () => new Response(null, { status: 404 }),
+        {
+          scheduleFetchTimer: (callback, ms) => nativeSetTimeout(callback, ms),
+        },
+      );
+      let attempts = 0;
+      network.shimAsyncModule({
+        id: 'chunk-blip-during-prerender',
+        resolve: async () => {
+          attempts++;
+          if (attempts === 1) {
+            throw new TypeError(
+              'Failed to fetch dynamically imported module: https://host.example/assets/chunk.js',
+            );
+          }
+          return { served: true };
+        },
+      });
+      let hung = Symbol('hung');
+      let bound: ReturnType<typeof setTimeout> | undefined;
+      let outcome: unknown;
+      // What render-timer-stub does to the global setTimeout during a
+      // prerender: the call is accepted and the callback never runs.
+      globalThis.setTimeout = (() => 0) as unknown as typeof setTimeout;
+      try {
+        outcome = await Promise.race([
+          network.getShimmedModule(
+            `${PACKAGES_FAKE_ORIGIN}chunk-blip-during-prerender`,
+          ),
+          new Promise((resolve) => {
+            bound = nativeSetTimeout(() => resolve(hung), 5000);
+          }),
+        ]);
+      } finally {
+        globalThis.setTimeout = nativeSetTimeout;
+        nativeClearTimeout(bound);
+      }
+      assert.notStrictEqual(
+        outcome,
+        hung,
+        'the retry fired instead of waiting on the disabled global setTimeout',
+      );
+      assert.true(
+        (outcome as { served?: boolean } | undefined)?.served,
+        'the module the second attempt resolved is served',
+      );
+      assert.strictEqual(attempts, 2, 'one retry recovered the blip');
+    },
+
+  'the retry log says which attempt a resolver recovered on, and when it gave up':
+    async (assert) => {
+      let warnings: string[] = [];
+      let log: ShimRetryLogger = {
+        warn: (message) => warnings.push(String(message)),
+        debug: () => {},
+      };
+      let calls = 0;
+      let recovering = withResolveRetry(
+        'test:recovers',
+        log,
+        async () => {
+          calls++;
+          if (calls === 1) {
+            throw new Error(
+              'Failed to fetch dynamically imported module: a.js',
+            );
+          }
+          return { ok: true };
+        },
+        { delay: async () => {}, retryDelaysMs: [10, 50, 200] },
+      );
+      await recovering();
+      assert.true(
+        warnings.some(
+          (w) =>
+            w.includes('test:recovers') &&
+            w.includes('recovered on attempt 2/4'),
+        ),
+        `a recovery names its resolver and attempt, got: ${warnings.join(' | ')}`,
+      );
+
+      warnings.length = 0;
+      let failing = withResolveRetry(
+        'test:gives-up',
+        log,
+        async () => {
+          throw new Error('Failed to fetch dynamically imported module: b.js');
+        },
+        { delay: async () => {}, retryDelaysMs: [10, 50] },
+      );
+      await failing().catch(() => {});
+      assert.true(
+        warnings.some(
+          (w) =>
+            w.includes('test:gives-up') &&
+            w.includes('final attempt 3/3') &&
+            w.includes('b.js'),
+        ),
+        `giving up names its resolver, attempt, and error, got: ${warnings.join(' | ')}`,
+      );
+    },
 });
 
 export default tests;

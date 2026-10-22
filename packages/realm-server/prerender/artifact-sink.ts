@@ -27,14 +27,14 @@
 //     budget is a soft ceiling, never a source of truncated/!invalid
 //     blobs).
 //
-// In ECS the bucket write grant rides on the task role, which the AWS SDK
-// resolves automatically from the container credentials endpoint — there
-// are no access keys or profiles to configure here.
+// The client comes from `lib/s3-client.ts`, which resolves the endpoint,
+// region and credentials for every S3 client in the runtime.
 
 import type { Readable } from 'stream';
-import { S3Client } from '@aws-sdk/client-s3';
+import type { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { logger } from '@cardstack/runtime-common';
+import { createS3Client } from '../lib/s3-client.ts';
 
 const log = logger('prerenderer');
 
@@ -44,9 +44,6 @@ const log = logger('prerenderer');
 // the bucket's lifecycle expiry; an operator targeting a long session can
 // raise it.
 const DEFAULT_MAX_SESSION_BYTES = 5 * 1024 * 1024 * 1024; // 5 GiB
-// Fallback S3 region. Both deployed environments live in us-east-1; an
-// operator can override per-process without a code change.
-const DEFAULT_REGION = 'us-east-1';
 
 // The artifact formats this sink carries. Each maps to a file suffix the
 // usual tools recognise: `.cpuprofile` (Chrome DevTools / speedscope),
@@ -90,7 +87,7 @@ export interface ArtifactKeyParts {
   jobId?: string;
   // Card / module url being rendered.
   card?: string;
-  // Render step / pass (e.g. `card isolated/0`, `screenshot png`).
+  // Render step / pass (e.g. `card isolated/0`, `capture png`).
   step?: string;
   kind: ArtifactKind;
 }
@@ -121,12 +118,8 @@ function artifactEnv(): string {
   return env.length > 0 ? env : 'unknown';
 }
 
-function artifactRegion(): string {
-  return (
-    process.env.PRERENDER_ARTIFACTS_REGION?.trim() ||
-    process.env.AWS_REGION?.trim() ||
-    DEFAULT_REGION
-  );
+function artifactRegion(): string | undefined {
+  return process.env.PRERENDER_ARTIFACTS_REGION?.trim() || undefined;
 }
 
 // The configured per-session byte budget, or the built-in default when the
@@ -255,7 +248,7 @@ function sanitizeSegment(value: string | undefined): string {
 let client: S3Client | undefined;
 function getClient(): S3Client {
   if (!client) {
-    client = new S3Client({ region: artifactRegion() });
+    client = createS3Client({ region: artifactRegion() });
   }
   return client;
 }

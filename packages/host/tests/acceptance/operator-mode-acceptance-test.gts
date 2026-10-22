@@ -28,7 +28,10 @@ import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
+import {
+  claimsFromRawToken,
+  tokenRefreshPeriodSec,
+} from '@cardstack/host/services/realm';
 
 import {
   AiAssistantOpen,
@@ -54,6 +57,7 @@ import {
   setupRealmServerEndpoints,
   realmConfigCardJSON,
 } from '../helpers';
+import { signInThroughCredentialFields } from '../helpers/credential-fields';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
   getPlaygroundSelections,
@@ -1215,6 +1219,29 @@ module('Acceptance | operator mode tests', function (hooks) {
       );
     });
 
+    test('a deep link arriving with the layout already mounted opens the modal', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      })!;
+      assert.dom('[data-test-settings-modal]').doesNotExist();
+
+      // Arriving from an in-app link rather than a cold boot: the submode
+      // layout is already mounted and is not rebuilt by this navigation, so
+      // nothing tied to its construction can act on the param.
+      await visit('/?openProfileSettings=subscription');
+
+      assert.dom('[data-test-settings-modal]').exists();
+      assert.strictEqual(
+        getService('operator-mode-state-service').profileSettingsSection,
+        'subscription',
+        'the modal opened targeting the subscription section',
+      );
+      assert.notOk(
+        currentURL().includes('openProfileSettings'),
+        'the param is consumed on arrival',
+      );
+    });
+
     test('a closed settings modal stays closed when operator mode state persists', async function (assert) {
       await visit('/?openProfileSettings=subscription');
       assert.dom('[data-test-settings-modal]').exists();
@@ -1248,15 +1275,37 @@ module('Acceptance | operator mode tests', function (hooks) {
         'the param must outlive the login form',
       );
 
-      await fillIn('[data-test-username-field]', 'testuser');
-      await fillIn('[data-test-password-field]', 'mock-password');
-      await click('[data-test-login-btn]');
+      await signInThroughCredentialFields();
 
-      assert.dom('[data-test-settings-modal]').exists();
+      // Three things have to line up for the modal to be on screen, and the
+      // assertion alone cannot say which one is missing. Report the session's
+      // readiness, whether the request was acted on, and whether the URL still
+      // carries it, so a failure names the stage rather than the symptom. A
+      // diagnostic must never mask the failure it explains, so a snapshot that
+      // cannot be read says so instead of throwing.
+      let state: string;
+      try {
+        state = JSON.stringify({
+          url: currentURL(),
+          profileSettingsOpen: getService('operator-mode-state-service')
+            .profileSettingsOpen,
+          ...getService('matrix-service').loginReadinessDebug,
+        });
+      } catch (error) {
+        state = `<unavailable: ${String(error)}>`;
+      }
+
+      // qunit-dom's own wording is lost when a message is supplied, and the
+      // element it names is half the headline, so carry it through.
+      assert
+        .dom('[data-test-settings-modal]')
+        .exists(
+          `Element [data-test-settings-modal] exists — login state: ${state}`,
+        );
       assert.strictEqual(
         getService('operator-mode-state-service').profileSettingsSection,
         'subscription',
-        'the modal opened targeting the subscription section',
+        `the modal opened targeting the subscription section — login state: ${state}`,
       );
       assert.notOk(
         currentURL().includes('openProfileSettings'),
@@ -1714,6 +1763,84 @@ module('Acceptance | operator mode tests', function (hooks) {
       );
 
       assert.dom('[data-test-login-btn]').exists();
+    });
+  });
+
+  module('signing out', function (hooks) {
+    setupRealmCacheTeardown(hooks);
+
+    let signOuts: { method: string; url: string; user?: string }[];
+    let answerSignOut: (response: Response) => void;
+    let signOutAnswered: Promise<Response>;
+
+    hooks.beforeEach(function () {
+      signOuts = [];
+      signOutAnswered = new Promise((resolve) => (answerSignOut = resolve));
+      getService('network').mount(
+        async (req: Request) => {
+          if (new URL(req.url).pathname !== '/_secure-sessions') {
+            return null;
+          }
+          let token = req.headers.get('Authorization')?.replace(/^Bearer /, '');
+          signOuts.push({
+            method: req.method,
+            url: req.url,
+            user: token ? claimsFromRawToken(token).user : undefined,
+          });
+          return await signOutAnswered;
+        },
+        { prepend: true },
+      );
+    });
+
+    async function signOut() {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      await click('[data-test-profile-icon-button]');
+      // Not awaited: `click` waits for every test waiter to settle, and the
+      // request to the realm server is one of them until it is answered.
+      let signedOut = click('[data-test-signout-button]');
+      await waitFor('[data-test-login-btn]');
+      return signedOut;
+    }
+
+    test("signing out signs the user's secure windows out", async function (assert) {
+      answerSignOut(new Response(null, { status: 204 }));
+      await signOut();
+
+      assert.dom('[data-test-login-btn]').exists();
+      assert.strictEqual(signOuts.length, 1, 'the realm server is told once');
+      let [{ method, url, user }] = signOuts;
+      assert.strictEqual(method, 'DELETE');
+      assert.strictEqual(
+        new URL(url).searchParams.get('client'),
+        'window',
+        "only the secure window's sessions are ended",
+      );
+      assert.strictEqual(
+        user,
+        '@testuser:localhost',
+        "under the outgoing account's session",
+      );
+    });
+
+    test("a realm server that doesn't answer doesn't hold sign-out up", async function (assert) {
+      let signedOut = signOut();
+      await waitFor('[data-test-login-btn]');
+
+      assert.dom('[data-test-login-btn]').exists('signed out');
+      assert.strictEqual(signOuts.length, 1, 'still waiting on the server');
+      answerSignOut(new Response(null, { status: 204 }));
+      await signedOut;
+    });
+
+    test("a realm server that refuses doesn't stop sign-out", async function (assert) {
+      answerSignOut(new Response('unavailable', { status: 503 }));
+      await signOut();
+
+      assert.dom('[data-test-login-btn]').exists('signed out');
+      assert.strictEqual(signOuts.length, 1);
     });
   });
 });

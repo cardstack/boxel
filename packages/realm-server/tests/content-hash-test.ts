@@ -7,6 +7,7 @@ import {
   CONTENT_HASH_TAIL_BYTES,
   CONTENT_HASH_WHOLE_LIMIT_BYTES,
   computeContentHash,
+  computeContentHashFromRanges,
   isSampledContentHash,
 } from '@cardstack/runtime-common';
 
@@ -153,5 +154,72 @@ module(basename(import.meta.filename), function () {
     );
     assert.notStrictEqual(flip(0), base, 'the first byte is covered');
     assert.notStrictEqual(flip(len - 1), base, 'the last byte is covered');
+  });
+
+  test('the ranged form returns the same fingerprint as the whole form', async function (assert) {
+    // What lets a caller holding a file read a fingerprint out of it without
+    // streaming it, and still have that value compare equal to one computed
+    // and stored from whole content. A different value either way would make
+    // the cheap read a different fingerprint rather than a cheaper one.
+    for (let length of [
+      0,
+      1,
+      1024,
+      CONTENT_HASH_WHOLE_LIMIT_BYTES,
+      CONTENT_HASH_WHOLE_LIMIT_BYTES + 1,
+      OVER_LIMIT,
+      CONTENT_HASH_WHOLE_LIMIT_BYTES * 8,
+    ]) {
+      let content = bytes(length);
+      let ranged = await computeContentHashFromRanges(
+        length,
+        async (start, count) => content.subarray(start, start + count),
+      );
+      assert.strictEqual(
+        ranged,
+        computeContentHash(content),
+        `${length} bytes hash the same either way`,
+      );
+    }
+  });
+
+  test('the ranged form reads no more than the whole-hash limit', async function (assert) {
+    // The I/O bound, stated the same way the CPU bound is: as a property of
+    // which ranges are asked for rather than as a measurement. A file eight
+    // times the limit is read for the limit, so the read does not grow with
+    // the file.
+    let length = CONTENT_HASH_WHOLE_LIMIT_BYTES * 8;
+    let content = bytes(length);
+    let reads: { start: number; count: number }[] = [];
+    await computeContentHashFromRanges(length, async (start, count) => {
+      reads.push({ start, count });
+      return content.subarray(start, start + count);
+    });
+    assert.deepEqual(
+      reads,
+      [
+        { start: 0, count: CONTENT_HASH_HEAD_BYTES },
+        {
+          start: length - CONTENT_HASH_TAIL_BYTES,
+          count: CONTENT_HASH_TAIL_BYTES,
+        },
+      ],
+      'exactly the head and the tail, and nothing in between',
+    );
+    assert.strictEqual(
+      reads.reduce((total, { count }) => total + count, 0),
+      CONTENT_HASH_WHOLE_LIMIT_BYTES,
+      'which totals the limit whatever the size above it',
+    );
+  });
+
+  test('empty content is hashed without a read at all', async function (assert) {
+    let reads = 0;
+    let hash = await computeContentHashFromRanges(0, async () => {
+      reads++;
+      return new Uint8Array();
+    });
+    assert.strictEqual(hash, computeContentHash(new Uint8Array()));
+    assert.strictEqual(reads, 0, 'there are no bytes to ask for');
   });
 });

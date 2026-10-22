@@ -70,6 +70,7 @@ export {
 export { AudioPreview } from './audio-preview';
 export { ImagePreview } from './image-preview';
 export { MarkdownPreview } from './markdown-preview';
+export { VideoPreview } from './video-preview';
 
 // The compound metadata shapes an extractor writes into. Shared per metadata
 // family rather than per file extension, so a camera or a color profile reads
@@ -103,6 +104,7 @@ export {
   FileResource,
   FileVideo,
   applyFileFont,
+  fileElementURL,
   fileResourceURL,
   type FileResourceLike,
   type ResolvedFileResource,

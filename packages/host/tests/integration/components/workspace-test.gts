@@ -31,10 +31,10 @@ module('Integration | Card | workspace', function (hooks) {
 
     assert.dom('nav.tabs').exists('renders the sections nav');
     assert
-      .dom('nav.tabs .tab')
+      .dom('nav.tabs [data-test-workspace-tab]')
       .exists({ count: 3 }, 'Home, Library, and Activity tabs');
     assert
-      .dom('nav.tabs .tab.active')
+      .dom('nav.tabs [aria-current="true"]')
       .hasText('Home', 'Home is the default active segment');
   });
 
@@ -47,7 +47,7 @@ module('Integration | Card | workspace', function (hooks) {
     await renderCard(loader, card, 'isolated');
 
     assert
-      .dom('nav.tabs .tab.active')
+      .dom('nav.tabs [aria-current="true"]')
       .hasText('Home', 'Home is the active segment');
     assert
       .dom('[data-test-browse]')
@@ -58,7 +58,7 @@ module('Integration | Card | workspace', function (hooks) {
     let card = new Workspace({});
     await renderCard(loader, card, 'edit');
 
-    assert.dom('.settings-title').hasText('Workspace settings');
+    assert.dom('[data-test-settings-title]').hasText('Workspace settings');
   });
 
   // Graceful degradation: a Workspace whose `workspace` link (the realm's
@@ -73,7 +73,7 @@ module('Integration | Card | workspace', function (hooks) {
         .dom('[data-test-workspace-index]')
         .exists('the isolated shell renders');
       assert
-        .dom('nav.tabs .tab.active')
+        .dom('nav.tabs [aria-current="true"]')
         .hasText('Home', 'Home is active and its stage rendered without error');
     });
 
@@ -82,7 +82,7 @@ module('Integration | Card | workspace', function (hooks) {
       await renderCard(loader, card, 'edit');
 
       assert
-        .dom('.settings-title')
+        .dom('[data-test-settings-title]')
         .hasText('Workspace settings', 'the settings form still renders');
       // Name/Icon live on the RealmConfig card, so they fall away when it is
       // missing — the rest of the form (including the config-card picker) stays.

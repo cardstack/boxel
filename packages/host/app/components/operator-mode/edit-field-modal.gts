@@ -184,7 +184,7 @@ export default class EditFieldModal extends Component<Signature> {
     });
 
     if (specId) {
-      let spec = await this.store.get<Spec>(specId);
+      let spec = await this.store.get(specId);
       if (spec && isCardInstance<Spec>(spec)) {
         this.fieldCard = await loadCardDef(spec.ref, {
           loader: this.loaderService.loader,
@@ -242,7 +242,7 @@ export default class EditFieldModal extends Component<Signature> {
         fieldType,
         fieldDefinitionType: this.isFieldDef ? 'field' : 'card',
         incomingRelativeTo,
-        outgoingRelativeTo: new URL(
+        outgoingRelativeTo: this.network.virtualNetwork.toURL(
           this.operatorModeStateService.state.codePath!,
         ),
         outgoingRealmURL: new URL(this.args.file.realmURL),

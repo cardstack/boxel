@@ -51,7 +51,7 @@ fallback for a token from elsewhere (e.g. copied from the browser's
 2. `usage` — check the cache line per turn; a `cached` reset mid-session means
    history was rewritten.
 3. `timeline` — walk the tool requests and their results. For each
-   `toolResult`/`codePatchResult` with an error, pull the full payload with
+   `toolResult` with an error, pull the full payload with
    `raw <roomId> <substring>` and classify: model error (wrong API, bad
    import, hallucinated field), skill-text gap (the skill did not say it),
    or platform error (indexing, realm 4xx/5xx, host command failure).
@@ -77,8 +77,7 @@ fallback for a token from elsewhere (e.g. copied from the browser's
 - Tool requests appear under `app.boxel.toolRequests` on the bot's message
   (`app.boxel.commandRequests` in rooms from before the command→tool rename);
   the host answers with an `app.boxel.toolResult` event (legacy:
-  `app.boxel.commandResult`). Code patches get `app.boxel.codePatchResult`
-  events plus a `codePatchCorrectness` follow-up.
+  `app.boxel.commandResult`).
 
 ## Why didn't a tool auto-run?
 

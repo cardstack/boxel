@@ -179,6 +179,28 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       assert.dom('.search-sheet-content').containsText('Recent');
     });
 
+    test(`hovering a recent card's realm name shows the realm URL`, async function (assert) {
+      let recentCardsService = getService('recent-cards-service');
+      recentCardsService.add(`${testRealmURL}Pet/mango`);
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      await click(`[data-test-open-search-field]`);
+      await fillIn(`[data-test-search-field]`, 'man');
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+      await triggerEvent(
+        `[data-test-realm-url-tooltip-trigger="${testRealmURL}"]:has([data-test-realm-name])`,
+        'mouseenter',
+      );
+      assert.dom('[data-test-realm-url-tooltip]').hasText('test-realm/test');
+    });
+
     test(`filters cards by search key`, async function (assert) {
       let recentCardsService = getService('recent-cards-service');
       [`${testRealmURL}Pet/mango`, `${testRealmURL}Person/fadhlan`].map((url) =>
@@ -411,6 +433,52 @@ module('Integration | operator-mode | card chooser', function (hooks) {
         .dom(`[data-test-recent-card-result="${testRealmURL}Person/fadhlan"]`)
         .doesNotExist('non-Pet recent cards are filtered out');
     });
+
+    test('realm picker stays typeable after the chooser is reopened', async function (assert) {
+      ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+
+      // The pickers portal their dropdowns outside the modal, so the modal's
+      // focus trap has to cover that container, and it reads the container list
+      // once, when it installs. Reopening the chooser is what catches a
+      // container the trap can no longer reach.
+      await waitFor(`[data-test-add-new="pet"]`);
+      await click(`[data-test-add-new="pet"]`);
+      await waitFor('[data-test-card-chooser-modal]');
+      await settled();
+      await click('[data-test-card-chooser-cancel-button]');
+
+      await click(`[data-test-add-new="pet"]`);
+      await waitFor('[data-test-card-chooser-modal]');
+      await settled();
+
+      await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+      await waitFor('[data-test-boxel-picker-search] input');
+      // This is the assertion that discriminates the regression. `typeIn` below
+      // focuses its own target first, so the value and filtered-row assertions
+      // pass even when the trap had stolen focus away — only this `isFocused`
+      // check fails when the fix is reverted. Don't drop it on the belief the
+      // rest still covers this.
+      assert
+        .dom('[data-test-boxel-picker-search] input')
+        .isFocused('the realm filter field keeps the focus it opened with');
+
+      await typeIn('[data-test-boxel-picker-search] input', ctx.realmName);
+      assert
+        .dom('[data-test-boxel-picker-search] input')
+        .hasValue(ctx.realmName, 'the realm filter field accepts typing');
+      assert
+        .dom(`[data-test-boxel-picker-option-row="${testRealmURL}"]`)
+        .exists('the matching realm is still listed');
+      assert
+        .dom(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`)
+        .doesNotExist('non-matching realms are filtered out');
+    });
   });
 
   test(`displays searching results`, async function (assert) {
@@ -516,10 +584,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor(`[data-test-item-button]`);
-    await fillIn(
-      `[data-test-search-field]`,
-      `https://cardstack.com/base/types/card`,
-    );
+    await fillIn(`[data-test-search-field]`, `${baseRealm.url}types/card`);
 
     await waitFor('[data-test-item-button]', {
       count: 1,
@@ -661,6 +726,28 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     await fillIn(`[data-test-search-field]`, `friend`);
     await waitFor('[data-test-item-button]', { count: 0 });
     assert.dom(`[data-test-search-content-empty]`).hasText('No results found');
+  });
+
+  test(`hovering a realm section icon shows the realm URL`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-create-new-card-button]`);
+    await waitFor(`[data-test-realm-url="${testRealmURL}"]`, {
+      timeout: 10000,
+    });
+
+    await triggerEvent(
+      `[data-test-realm-url="${testRealmURL}"] [data-test-realm-url-tooltip-trigger]`,
+      'mouseenter',
+    );
+    assert.dom('[data-test-realm-url-tooltip]').hasText('test-realm/test');
   });
 
   test(`can filter by realm after searching in card chooser`, async function (assert) {
@@ -1384,9 +1471,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     await click('[data-test-create-new-card-button]');
     await waitFor(`[data-test-item-button]`);
     await fillIn(`[data-test-search-field]`, `Skill`);
-    await click(
-      '[data-test-item-button="https://cardstack.com/base/cards/skill"]',
-    );
+    await click(`[data-test-item-button="${baseRealm.url}cards/skill"]`);
     await click('[data-test-card-chooser-go-button]');
 
     await fillIn('[data-test-field="cardTitle"] input', 'New Skill');

@@ -1,0 +1,100 @@
+name: Catalog Test Subset
+
+# Validates the catalog test subset declared in packages/catalog/test-subset.json:
+# every subset file at the pinned boxel-catalog revision must match
+# boxel-catalog's main, since the deployed catalog realm serves main and
+# boxel's tests should run against exactly what deployments serve; and the
+# pinned files must fetch and form a closed set a test stack can load.
+#
+# Runs on every pull request so it can be a required check. A change that
+# touches neither the manifest, the sync script nor this workflow inherits its
+# base branch's pin, which was validated when it merged, so the job passes
+# without checking the catalog. Otherwise a catalog change to a subset file
+# would turn every open boxel PR red until someone re-pinned. A change to the
+# host's shimmed modules re-runs only the closure check, which reads them.
+#
+# The pin may also be the head of an open catalog pull request this change
+# merges before, while that pull request is approved to merge right after it
+# (openPinVerdict in scripts/pairing.ts). The pairing is declared in the
+# description, so editing the description re-runs this.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate catalog test subset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # The merge commit and its parents, so the next step can diff the
+          # change against its base branch.
+          fetch-depth: 2
+          sparse-checkout: |
+            packages/catalog/test-subset.json
+            packages/catalog/scripts/sync-test-subset.ts
+            packages/catalog/scripts/pairing.ts
+            packages/host/app/lib/externals.ts
+          sparse-checkout-cone-mode: false
+
+      - name: Does this change touch the subset?
+        id: touched
+        run: |
+          pin_paths=(
+            packages/catalog/test-subset.json
+            packages/catalog/scripts/sync-test-subset.ts
+            packages/catalog/scripts/pairing.ts
+            .github/workflows/catalog-test-subset.yml
+          )
+          if git diff-tree -r --quiet HEAD^1 HEAD -- "${pin_paths[@]}"; then
+            echo "pin=false" >> "$GITHUB_OUTPUT"
+            if git diff-tree -r --quiet HEAD^1 HEAD -- packages/host/app/lib/externals.ts; then
+              echo "closure=false" >> "$GITHUB_OUTPUT"
+              echo "This change keeps its base branch's catalog test subset pin; nothing to validate."
+            else
+              echo "closure=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "pin=true" >> "$GITHUB_OUTPUT"
+            echo "closure=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: steps.touched.outputs.closure == 'true'
+        with:
+          node-version: "24"
+
+      # Lint Catalog reports a malformed or one-sided pairing, so a pairing
+      # problem doesn't fail this job. It drops the resolution instead, since a
+      # pairing with a problem can't excuse a pin, and without a resolution the
+      # pin waits on any open catalog pull request it comes from.
+      - name: Read the catalog pairing
+        if: steps.touched.outputs.pin == 'true'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node packages/catalog/scripts/pairing.ts \
+            --repository="$GITHUB_REPOSITORY" \
+            --number="$PR_NUMBER" \
+            --base="$PR_BASE" \
+            --counterpart=cardstack/boxel-catalog \
+            --out="$RUNNER_TEMP/catalog-pairing.json" ||
+            rm -f "$RUNNER_TEMP/catalog-pairing.json"
+
+      - name: Pinned subset files match boxel-catalog main
+        if: steps.touched.outputs.pin == 'true'
+        run: node packages/catalog/scripts/sync-test-subset.ts --check-pin --pairing="$RUNNER_TEMP/catalog-pairing.json"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Pinned files fetch and form a closed set
+        if: steps.touched.outputs.closure == 'true'
+        run: node packages/catalog/scripts/sync-test-subset.ts

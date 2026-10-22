@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "unitName": "Cardiology"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clinical-dashboard",
+        "name": "ClinicalDashboard"
+      }
+    }
+  }
+}

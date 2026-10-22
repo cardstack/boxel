@@ -14,6 +14,7 @@ import {
 import { cn } from '@cardstack/boxel-ui/helpers';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { ComponentLike } from '@glint/template';
@@ -39,7 +40,8 @@ const BaseContainerHeader: TemplateOnlyComponent<BaseContainerHeaderSignature> =
     </Header>
     <style scoped>
       .base-container-header {
-        --boxel-header-min-height: 1.56rem;
+        /* 25px exactly. */
+        --boxel-header-min-height: 1.5625rem;
         --boxel-header-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         --boxel-header-background-color: var(--boxel-300);
         --boxel-header-text-color: var(--boxel-dark);
@@ -119,7 +121,12 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
           {{#if @fileURL}}
             {{#let (this.realm.info @fileURL) as |realmInfo|}}
               <div class='realm-info'>
-                <RealmIcon class='realm-info-icon' @realmInfo={{realmInfo}} />
+                <RealmURLTooltip
+                  @urlInRealm={{@fileURL}}
+                  @label={{realmInfo.name}}
+                >
+                  <RealmIcon class='realm-info-icon' @realmInfo={{realmInfo}} />
+                </RealmURLTooltip>
                 <Label
                   class='realm-name'
                   data-test-definition-realm-name

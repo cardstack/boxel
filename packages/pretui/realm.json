@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": { "name": "Pret UI" },
+      "iconURL": "https://boxel-images.boxel.ai/icons/Letter-p.png",
+      "backgroundURL": "https://boxel-images.boxel.ai/background-images/4k-watercolor-splashes.jpg"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/realm-config",
+        "name": "RealmConfig"
+      }
+    }
+  }
+}

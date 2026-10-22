@@ -1,7 +1,6 @@
 import type {
   CardMessageEvent,
   CardMessageContent,
-  CodePatchResultEvent,
   ToolResultEvent,
   EncodedToolRequest,
   MatrixEvent as DiscreteMatrixEvent,
@@ -13,7 +12,6 @@ import type { IRoomEvent } from 'matrix-js-sdk';
 
 import { logger } from '../log.ts';
 import {
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
@@ -39,7 +37,7 @@ export async function constructHistory(
   client: MatrixClient,
 ) {
   /**
-   * Return a list of all message events and command/patch result events for the room,
+   * Return a list of all message events and tool result events for the room,
    * in chronological order
    */
 
@@ -50,8 +48,7 @@ export async function constructHistory(
   for (let rawEvent of eventsWithAggregatedReplacements) {
     if (
       rawEvent.type !== 'm.room.message' &&
-      !isToolResultEventType(rawEvent.type) &&
-      rawEvent.type !== APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
+      !isToolResultEventType(rawEvent.type)
     ) {
       continue;
     }
@@ -62,7 +59,6 @@ export async function constructHistory(
     let event = { ...rawEvent } as
       | CardMessageEvent
       | ToolResultEvent
-      | CodePatchResultEvent
       | RealmServerEvent
       | MessageEvent; // Typescript could have inferred this from the line above
     let eventId = event.event_id!;

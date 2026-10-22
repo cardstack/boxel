@@ -7,6 +7,7 @@ import {
   waitUntil,
   currentURL,
   visit,
+  triggerKeyEvent,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -19,6 +20,7 @@ import stringify from 'safe-stable-stringify';
 
 import {
   baseRealmRRI,
+  baseRRI,
   Deferred,
   type Realm,
   type ResolvedCodeRef,
@@ -2192,7 +2194,9 @@ export class TestCard extends ExportedCard {
       assert.strictEqual(content, expectedSrc, 'the source is correct');
       deferred.fulfill();
     });
-    await percySnapshot(assert);
+    await percySnapshot(assert, {
+      scope: '[data-test-create-file-modal] [data-test-modal-container-box]',
+    });
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -2523,7 +2527,6 @@ export class ExportedCard extends ExportedCardParent {
       deferred.fulfill();
     });
 
-    await percySnapshot(assert);
     await click('[data-test-create-card-instance]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
@@ -2654,6 +2657,96 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
       .exists();
+  });
+
+  test('find instances of CardDef leaves the type picker on Any', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: getService('network').virtualNetwork.toURLHref(
+        baseRRI('card-api.gts'),
+      ),
+    });
+
+    await waitFor('[data-boxel-selector-item-text="CardDef"]');
+    await click('[data-boxel-selector-item-text="CardDef"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Find instances"]');
+    await waitFor('[data-test-search-sheet-search-result]');
+
+    // CardDef is a root type the picker never offers, so the search runs
+    // across every type and the picker shows "Any" rather than an empty
+    // selection.
+    assert
+      .dom(
+        '[data-test-type-picker] [data-test-boxel-picker-selected-item="Any"]',
+      )
+      .exists('type picker shows Any');
+  });
+
+  test('a base module code path given as its URL is held as its RRI', async function (assert) {
+    let cardApiURL = getService('network').virtualNetwork.toURLHref(
+      baseRRI('card-api.gts'),
+    );
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: cardApiURL,
+    });
+    await waitFor('[data-boxel-selector-item-text="CardDef"]');
+
+    assert.strictEqual(
+      getService('operator-mode-state-service').state.codePath,
+      baseRRI('card-api.gts'),
+      'state holds the prefix form',
+    );
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(baseRRI('card-api.gts'), 'URL bar shows the prefix form');
+  });
+
+  test('the URL bar takes a base module by its prefix form, not its URL, and the query param keeps it', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await waitFor('[data-test-card-url-bar-input]');
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      getService('network').virtualNetwork.toURLHref(baseRRI('card-api.gts')),
+    );
+    assert
+      .dom('[data-test-card-url-bar-error]')
+      .containsText(`Use ${baseRRI('card-api.gts')}`);
+
+    await fillIn('[data-test-card-url-bar-input]', baseRRI('card-api.gts'));
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await waitFor('[data-boxel-selector-item-text="CardDef"]');
+
+    assert.strictEqual(
+      getService('operator-mode-state-service').state.codePath,
+      baseRRI('card-api.gts'),
+    );
+    let serializedCodePath = () =>
+      JSON.parse(
+        new URL(currentURL(), 'http://localhost').searchParams.get(
+          'operatorModeState',
+        )!,
+      ).codePath;
+    await waitUntil(() => serializedCodePath() === baseRRI('card-api.gts'));
+    assert.strictEqual(
+      serializedCodePath(),
+      baseRRI('card-api.gts'),
+      'the query param holds the prefix form',
+    );
   });
 
   test('find instances starts clean, ignoring a previously persisted search', async function (assert) {

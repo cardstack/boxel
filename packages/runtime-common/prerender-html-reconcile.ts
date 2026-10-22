@@ -1,13 +1,19 @@
 import type { DBAdapter } from './db.ts';
 import {
   addExplicitParens,
+  every,
   param,
   query,
   separatedByCommas,
   type Expression,
 } from './expression.ts';
 import type { IncrementalChange } from './tasks/indexer.ts';
-import { prerenderHtmlConcurrencyGroup } from './jobs/prerender-html.ts';
+import {
+  parseSpawningIndexPasses,
+  prerenderHtmlConcurrencyGroup,
+  type SpawningIndexPass,
+} from './jobs/prerender-html.ts';
+import { laneFamiliesPredicate, laneFamilyOf } from './jobs/lane-family.ts';
 
 // The catch-up sweep's read side. It reconciles two independently-advancing
 // channels — the search-doc index (`boxel_index`) and the prerendered HTML
@@ -49,24 +55,52 @@ export const PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP = 3;
 // sweep tick that lands just after the failure immediately re-rendering it.
 export const PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 
-// The declared-screenshot twin of the visit-failure bounds. A capture
+// The declared-capture twin of the visit-failure bounds. A capture
 // failure never errors its row — the row publishes with the manifest
-// omitting the failed name and `diagnostics.screenshotErrors` recording why
+// omitting the failed name and `diagnostics.captureErrors` recording why
 // (the broken-links model) — so the retry lane keys off that diagnostics
 // record rather than an `error_doc`. Same shape as the visit-failure lane:
 // consecutive-failure runs are capped, and a failed row waits out a minimum
 // age between attempts. The cap is enforced against the row-level
-// `screenshotCaptureFailureRenders` counter (renders that recorded any
+// `captureFailureRenders` counter (renders that recorded any
 // capture failure), not only the per-slot runs: a per-slot run resets
 // whenever the failing name changes, which is exactly the shape a
 // struggling row takes (a roster-level '*' failure alternating with a
 // per-name one, format groups failing on alternating renders), and the
 // row counter is the term no name change can reset. At the cap, the
 // absence is the recorded outcome — the card stays fully served and
-// searchable, the screenshot simply stays missing until the URL's next
+// searchable, the capture simply stays missing until the URL's next
 // invalidation re-renders it.
-export const DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP = 3;
-export const DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
+// A row whose render failure was withheld as stale-shell carries no
+// `error_doc` and sits at the current generation, so it reads as a healthy
+// fresh render while serving the last good pass's HTML. That is the point —
+// the alternative was publishing a failure the environment caused — but it
+// also removes the `has_error` that used to tell an operator to reindex. This
+// lane re-drives those rows instead, so a deploy overlap that resolves gets
+// the re-render it needs without anyone watching for it.
+//
+// Capped rather than unbounded: if the shells never agree, retrying forever
+// buys nothing and the diagnostics remain for someone to read.
+export const STALE_SHELL_FAILURE_RETRY_CAP = 3;
+export const STALE_SHELL_FAILURE_RETRY_MIN_AGE_MS = 10 * 60 * 1000;
+
+// The gateway-failure twin of the stale-shell bounds. A withheld gateway
+// failure is the same shape of row — no `error_doc`, sitting at the current
+// generation while serving the last good pass's HTML — so it reads as a
+// healthy fresh render and nothing asks for the re-render once the network
+// recovers. This lane re-drives those rows instead. The min age can be shorter
+// than the stale-shell lane's: a stale shell may take a whole deploy overlap
+// to resolve, but the gateway failures this withholds — a balancer keep-alive
+// race, a task replacement, a brief upstream blip — have already passed by the
+// time the row is written, so re-rendering promptly is safe and is what turns
+// a days-long latch into a sweep-cadence one. Capped for the same reason:
+// a gateway failure that keeps recurring stops costing renders once the cap is
+// reached and leaves its diagnostics for someone to read.
+export const GATEWAY_FAILURE_RETRY_CAP = 3;
+export const GATEWAY_FAILURE_RETRY_MIN_AGE_MS = 5 * 60 * 1000;
+
+export const DECLARED_CAPTURE_RETRY_CAP = 3;
+export const DECLARED_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 
 // Index rows whose prerendered HTML is behind the search-doc index, or absent
 // entirely, restricted to live, non-errored rows:
@@ -86,12 +120,12 @@ export const DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 // reaches `PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP`, after which it reads as
 // terminal exactly like a deterministic render error.
 //
-// A fourth arm admits the declared-screenshot retry lane: a *healthy*
-// published row (no `error_doc`) whose `diagnostics.screenshotErrors`
+// A fourth arm admits the declared-capture retry lane: a *healthy*
+// published row (no `error_doc`) whose `diagnostics.captureErrors`
 // records capture failures is repairable while its row-level
-// `screenshotCaptureFailureRenders` counter AND some recorded slot's
+// `captureFailureRenders` counter AND some recorded slot's
 // consecutive-failure run are both below
-// `DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP`. The row counter is what makes
+// `DECLARED_CAPTURE_RETRY_CAP`. The row counter is what makes
 // the lane converge — a per-slot run resets whenever the failing name
 // changes, and per-slot runs alone would retry such a row forever — while
 // the per-slot term stops retrying a stable failure set once every name
@@ -101,8 +135,18 @@ export const DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 // a plain re-render of the URL; the capture rides the prerender-html
 // visit, and a slot already at its cap that happens to recapture
 // successfully along the way just heals early. A capped row is terminal —
-// the screenshots stay absent (thumbnail consumers fall through their
+// the captures stay absent (thumbnail consumers fall through their
 // chain) until the URL's next invalidation.
+//
+// The fifth and sixth arms admit the withheld-failure lanes — stale-shell and
+// gateway. Both withhold by clearing the `error_doc` and keeping the prior
+// render at the current generation, so the row reads as healthy and no
+// `has_error` is left asking for a reindex; these arms re-drive such rows
+// while their `diagnostics.<verdict>` array is present and the matching
+// `<verdict>Renders` counter is below its cap, so a transient cause that
+// recovers gets its re-render without anyone watching and one that keeps
+// recurring stops costing renders at the cap. Their caps and min ages are
+// tuned per cause (see the constants above).
 //
 // The jsonb operators here are Postgres-only, like the `jobs`-table scans
 // in this module: the reconcile task that issues this query runs solely
@@ -127,17 +171,31 @@ export async function findStalePrerenderedHtmlRows(
              < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
                - ${PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS})
          OR (ph.error_doc IS NULL
-           AND jsonb_typeof(ph.diagnostics->'screenshotErrors') = 'array'
-           AND COALESCE((ph.diagnostics->>'screenshotCaptureFailureRenders')::int, 1)
-             < ${DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP}
+           AND jsonb_typeof(ph.diagnostics->'captureErrors') = 'array'
+           AND COALESCE((ph.diagnostics->>'captureFailureRenders')::int, 1)
+             < ${DECLARED_CAPTURE_RETRY_CAP}
            AND EXISTS (
              SELECT 1
-             FROM jsonb_array_elements(ph.diagnostics->'screenshotErrors') se
+             FROM jsonb_array_elements(ph.diagnostics->'captureErrors') se
              WHERE COALESCE((se->>'consecutiveFailures')::int, 1)
-               < ${DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP})
+               < ${DECLARED_CAPTURE_RETRY_CAP})
            AND ph.rendered_at
              < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
-               - ${DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS}))`,
+               - ${DECLARED_CAPTURE_RETRY_MIN_AGE_MS})
+         OR (ph.error_doc IS NULL
+           AND jsonb_typeof(ph.diagnostics->'staleShellFailure') = 'array'
+           AND COALESCE((ph.diagnostics->>'staleShellFailureRenders')::int, 1)
+             < ${STALE_SHELL_FAILURE_RETRY_CAP}
+           AND ph.rendered_at
+             < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+               - ${STALE_SHELL_FAILURE_RETRY_MIN_AGE_MS})
+         OR (ph.error_doc IS NULL
+           AND jsonb_typeof(ph.diagnostics->'gatewayFailure') = 'array'
+           AND COALESCE((ph.diagnostics->>'gatewayFailureRenders')::int, 1)
+             < ${GATEWAY_FAILURE_RETRY_CAP}
+           AND ph.rendered_at
+             < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+               - ${GATEWAY_FAILURE_RETRY_MIN_AGE_MS}))`,
   ] as Expression)) as {
     realm_url: string;
     url: string;
@@ -172,6 +230,16 @@ export async function findStalePrerenderedHtmlRows(
 // through the bounded retry lane in `findStalePrerenderedHtmlRows` until its
 // consecutive-failure cap. The per-row generation gate means an older job
 // never masks residue the index has moved past.
+//
+// A job spawned by index passes stamps each row from the live index once its
+// spawning passes have committed, so the generation it carries does not say
+// what it covers. It covers a URL at the newest generation those passes
+// committed, read from the `realm_index_commits` ledger — or at every
+// generation while one of them has yet to commit, since the job has not read
+// its stamps yet and will read them from a commit newer than any row the sweep
+// sees now. A job enqueued from committed state (a reconcile repair, or a job
+// from a worker predating `spawningIndexPasses`) covers at the generation it
+// carries.
 export async function findActivePrerenderHtmlJobCoverage(
   dbAdapter: DBAdapter,
 ): Promise<Map<string, Map<string, number>>> {
@@ -181,13 +249,14 @@ export async function findActivePrerenderHtmlJobCoverage(
        AND status = 'unfulfilled'`,
   ] as Expression)) as { args: unknown }[];
 
+  let jobs = rows
+    .map((row) => parseCoverageArgs(row.args))
+    .filter((parsed) => parsed !== undefined);
+  let committedByPass = await committedGenerationsByPass(dbAdapter, jobs);
   let byRealm = new Map<string, Map<string, number>>();
-  for (let row of rows) {
-    let parsed = parseCoverageArgs(row.args);
-    if (!parsed) {
-      continue;
-    }
-    let { realmURL, generation, changes } = parsed;
+  for (let parsed of jobs) {
+    let { realmURL, changes } = parsed;
+    let generation = coverageGeneration(parsed, committedByPass);
     let urls = byRealm.get(realmURL);
     if (!urls) {
       urls = new Map<string, number>();
@@ -206,11 +275,70 @@ export async function findActivePrerenderHtmlJobCoverage(
   return byRealm;
 }
 
-function parseCoverageArgs(
-  args: unknown,
-):
-  | { realmURL: string; generation: number; changes: IncrementalChange[] }
-  | undefined {
+interface CoverageArgs {
+  realmURL: string;
+  generation: number;
+  spawningIndexPasses: SpawningIndexPass[];
+  changes: IncrementalChange[];
+}
+
+// The generation each spawning index pass committed, keyed by pass id, for
+// the passes the given jobs wait on. One query per realm, so each is served by
+// the ledger's `(realm_url, pass_id)` index.
+async function committedGenerationsByPass(
+  dbAdapter: DBAdapter,
+  jobs: CoverageArgs[],
+): Promise<Map<string, number>> {
+  let passIdsByRealm = new Map<string, Set<string>>();
+  for (let job of jobs) {
+    for (let pass of job.spawningIndexPasses) {
+      let passIds = passIdsByRealm.get(job.realmURL) ?? new Set<string>();
+      passIds.add(pass.passId);
+      passIdsByRealm.set(job.realmURL, passIds);
+    }
+  }
+  let committed = new Map<string, number>();
+  for (let [realmURL, passIds] of passIdsByRealm) {
+    let rows = (await query(dbAdapter, [
+      'SELECT pass_id, generation FROM realm_index_commits WHERE',
+      ...every([
+        ['realm_url =', param(realmURL)],
+        [
+          'pass_id IN',
+          ...addExplicitParens(
+            separatedByCommas([...passIds].map((id) => [param(id)])),
+          ),
+        ],
+      ]),
+    ] as Expression)) as { pass_id: string; generation: number | string }[];
+    for (let row of rows) {
+      committed.set(row.pass_id, Number(row.generation));
+    }
+  }
+  return committed;
+}
+
+// The generation a pending job is on track to render its URLs at (see
+// `findActivePrerenderHtmlJobCoverage`).
+function coverageGeneration(
+  job: CoverageArgs,
+  committedByPass: Map<string, number>,
+): number {
+  if (job.spawningIndexPasses.length === 0) {
+    return job.generation;
+  }
+  let newest = -1;
+  for (let { passId } of job.spawningIndexPasses) {
+    let committed = committedByPass.get(passId);
+    if (committed === undefined) {
+      return Number.POSITIVE_INFINITY;
+    }
+    newest = Math.max(newest, committed);
+  }
+  return newest;
+}
+
+function parseCoverageArgs(args: unknown): CoverageArgs | undefined {
   let obj: unknown = args;
   if (typeof args === 'string') {
     try {
@@ -222,7 +350,7 @@ function parseCoverageArgs(
   if (!isObjectLike(obj)) {
     return undefined;
   }
-  let { realmURL, generation, changes } = obj;
+  let { realmURL, generation, spawningIndexPasses, changes } = obj;
   if (
     typeof realmURL !== 'string' ||
     typeof generation !== 'number' ||
@@ -239,7 +367,12 @@ function parseCoverageArgs(
       });
     }
   }
-  return { realmURL, generation, changes: normalized };
+  return {
+    realmURL,
+    generation,
+    spawningIndexPasses: parseSpawningIndexPasses(spawningIndexPasses) ?? [],
+    changes: normalized,
+  };
 }
 
 // The realm-level target for a repair: HTML is (re)rendered from current source
@@ -347,29 +480,27 @@ export async function findPrerenderHtmlRejectionStreaks(
   if (realmURLs.length === 0) {
     return streaks;
   }
-  let realmByGroup = new Map(
+  // Keyed by the realm's prerender-html lane family, so a job in any of the
+  // realm's lanes counts toward the realm's streak.
+  let realmByFamily = new Map(
     realmURLs.map((realmURL) => [
       prerenderHtmlConcurrencyGroup(realmURL),
       realmURL,
     ]),
   );
   let rows = (await query(dbAdapter, [
-    `SELECT concurrency_group, status,
+    `SELECT ${laneFamilyOf('jobs')} AS lane_family, status,
        (EXTRACT(EPOCH FROM (NOW() - finished_at)) * 1000)::bigint AS ms_since_finished
      FROM jobs
      WHERE job_type = 'prerender_html'
        AND status IN ('resolved', 'rejected')
        AND finished_at IS NOT NULL
        AND finished_at > NOW() - INTERVAL '${REJECTION_STREAK_LOOKBACK_HOURS} hours'
-       AND concurrency_group IN`,
-    ...addExplicitParens(
-      separatedByCommas(
-        [...realmByGroup.keys()].map((group) => [param(group)]),
-      ),
-    ),
+       AND`,
+    ...laneFamiliesPredicate([...realmByFamily.keys()]),
     `ORDER BY finished_at DESC`,
   ] as Expression)) as {
-    concurrency_group: string;
+    lane_family: string;
     status: string;
     ms_since_finished: number | string;
   }[];
@@ -379,7 +510,7 @@ export async function findPrerenderHtmlRejectionStreaks(
   // rejections before that realm's first non-rejected row.
   let settled = new Set<string>();
   for (let row of rows) {
-    let realmURL = realmByGroup.get(row.concurrency_group);
+    let realmURL = realmByFamily.get(row.lane_family);
     if (!realmURL || settled.has(realmURL)) {
       continue;
     }

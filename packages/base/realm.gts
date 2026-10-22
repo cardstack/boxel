@@ -44,7 +44,9 @@ class EditComponent extends Component<typeof RealmField> {
     if (!this.args.model) {
       return undefined;
     }
-    return this.writableRealms.find((realm) => realm.realmIdentifier === this.args.model);
+    return this.writableRealms.find(
+      (realm) => realm.realmIdentifier === this.args.model,
+    );
   }
 
   get selectedRealmLabel(): string {

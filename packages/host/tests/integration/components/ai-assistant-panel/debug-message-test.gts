@@ -29,7 +29,6 @@ import {
   withCachedRealmSetup,
   realmConfigCardJSON,
 } from '../../../helpers';
-import { setupBaseRealm } from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
@@ -44,7 +43,6 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;

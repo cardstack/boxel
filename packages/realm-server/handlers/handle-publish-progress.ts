@@ -2,16 +2,20 @@ import type Koa from 'koa';
 import {
   ensureTrailingSlash,
   fetchRealmPermissions,
-  param,
   query,
   SupportedMimeType,
   type DBAdapter,
 } from '@cardstack/runtime-common';
-import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
+import {
+  indexingConcurrencyGroup,
+  jobTypeFilter,
+  INDEX_WRITING_JOB_TYPES,
+} from '@cardstack/runtime-common/jobs/indexing';
 import {
   prerenderHtmlConcurrencyGroup,
   publishedHtmlHasCaughtUp,
 } from '@cardstack/runtime-common/jobs/prerender-html';
+import { laneFamilyPredicate } from '@cardstack/runtime-common/jobs/lane-family';
 import {
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
@@ -163,6 +167,11 @@ async function readPublishProgress(
   let indexJob = await currentJobProgress(
     dbAdapter,
     indexingConcurrencyGroup(realmURL),
+    // Only the index-writing members of the lane. Readiness narrows the same
+    // way, and this endpoint exists to agree with readiness — a queued
+    // `scoped-css-gc` reported as `queued` here would show a publish stalled
+    // that readiness had already passed.
+    INDEX_WRITING_JOB_TYPES,
   );
   if (indexJob) {
     return indexJob.has_worker
@@ -197,9 +206,10 @@ async function readPublishProgress(
 }
 
 // The job currently holding a realm's lane, and whether a worker is actually on
-// it. Jobs in one concurrency group serialize, so at most one is held at a time;
-// prefer the held one and fall back to the oldest queued, which is the one a
-// worker will claim next.
+// it. Each lane of the family runs one job at a time, and a family's exclusive
+// work runs alone, so outside writer lanes at most one is held at a time;
+// prefer a held one, the oldest when writer lanes hold several, and fall back
+// to the oldest queued, which is the one a worker will claim next.
 //
 // `has_worker` is a live reservation — uncompleted and not yet expired. An
 // expired one means the worker that held the job died without finishing it, so
@@ -211,7 +221,10 @@ async function readPublishProgress(
 // rather than dropping the phase.
 async function currentJobProgress(
   dbAdapter: DBAdapter,
-  concurrencyGroup: string,
+  // Every lane of the family counts, so a pass in a writer lane reports the
+  // same phase an exclusive one does.
+  laneFamily: string,
+  jobTypes?: string[],
 ): Promise<PublishProgressRow | undefined> {
   let [row] = (await query(dbAdapter, [
     `SELECT jp.total_files, jp.files_completed,`,
@@ -219,8 +232,9 @@ async function currentJobProgress(
     `AND jr.completed_at IS NULL AND jr.locked_until > NOW()) AS has_worker`,
     `FROM jobs j`,
     `LEFT JOIN job_progress jp ON jp.job_id = j.id`,
-    `WHERE j.status = 'unfulfilled' AND j.concurrency_group =`,
-    param(concurrencyGroup),
+    `WHERE j.status = 'unfulfilled' AND`,
+    ...laneFamilyPredicate(laneFamily, 'j'),
+    ...jobTypeFilter(jobTypes, 'j.job_type'),
     `ORDER BY has_worker DESC, j.id ASC LIMIT 1`,
   ])) as PublishProgressRow[];
   return row;

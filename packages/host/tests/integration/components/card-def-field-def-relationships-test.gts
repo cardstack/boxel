@@ -1,5 +1,17 @@
 import { click, waitFor, triggerEvent } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  Component,
+  contains,
+  containsMany,
+  field,
+  FieldDef,
+  linksTo,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -21,19 +33,6 @@ import {
   setupOperatorModeStateCleanup,
   realmConfigCardJSON,
 } from '../../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  containsMany,
-  field,
-  FieldDef,
-  linksTo,
-  linksToMany,
-  NumberField,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent, renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -61,7 +60,6 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     autostart: true,
   });
 
-  setupBaseRealm(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import('@cardstack/base/card-api'),

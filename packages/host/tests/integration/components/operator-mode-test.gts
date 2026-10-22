@@ -90,7 +90,7 @@ module('Integration | operator-mode | basics', function (hooks) {
       'in code mode',
     );
     assert.strictEqual(
-      ctx.operatorModeStateService.state?.codePath?.href,
+      ctx.operatorModeStateService.state?.codePath,
       `${testRealmURL}ExplodingCard/exploded.json`,
       'codePath is correct',
     );
@@ -220,7 +220,7 @@ module('Integration | operator-mode | basics', function (hooks) {
           'in code mode',
         );
         assert.strictEqual(
-          ctx.operatorModeStateService.state?.codePath?.href,
+          ctx.operatorModeStateService.state?.codePath,
           `${testRealmURL}ExplodingCard/1.json`,
           'codePath is correct',
         );
@@ -805,7 +805,7 @@ module('Integration | operator-mode | basics', function (hooks) {
       Person: new (...args: unknown[]) => CardDef;
     };
     let instance = new Person({ firstName: 'Unsaved Person' });
-    await store.add(instance, { doNotPersist: true, realm: testRealmURL });
+    await store.addWithoutPersisting(instance, { realm: testRealmURL });
 
     ctx.operatorModeStateService.restore({
       stacks: [[{ id: instance[localId], format: 'isolated' }]],
@@ -873,6 +873,50 @@ module('Integration | operator-mode | basics', function (hooks) {
       assert
         .dom('[data-test-expand-button]')
         .doesNotExist('restore button is gone after collapse');
+    });
+
+    test('on a phone-width viewport every card is full width and cannot be restored', async function (assert) {
+      let personCard = `${testRealmURL}Person/fadhlan`;
+      let petCard = `${testRealmURL}Pet/mango`;
+      ctx.operatorModeStateService.isMobileViewport = true;
+      ctx.operatorModeStateService.restore({
+        stacks: [
+          [
+            { id: personCard, format: 'isolated' },
+            { id: petCard, format: 'isolated' },
+          ],
+        ],
+      });
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${petCard}"]`);
+
+      assert
+        .dom(`[data-test-stack-card="${petCard}"]`)
+        .hasClass('expanded', 'the top card is expanded');
+      assert
+        .dom(`[data-test-stack-card="${personCard}"]`)
+        .doesNotHaveClass(
+          'buried',
+          'the card underneath keeps its own layout for the slide',
+        );
+      assert
+        .dom('[data-test-expand-button]')
+        .doesNotExist('there is no restore button');
+
+      await click('[data-test-more-options-button]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
+        .exists('the top card’s menu is open');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Restore Width"]')
+        .doesNotExist('there is no Restore Width menu item');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Expand to Full Width"]')
+        .doesNotExist();
     });
   });
 

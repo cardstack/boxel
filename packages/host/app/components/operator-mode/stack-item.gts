@@ -17,7 +17,7 @@ import { tracked, cached } from '@glimmer/tracking';
 import DeselectIcon from '@cardstack/boxel-icons/deselect';
 import Maximize from '@cardstack/boxel-icons/maximize';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
-import { restartableTask, timeout, dropTask } from 'ember-concurrency';
+import { dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
@@ -57,6 +57,7 @@ import {
   cardTypeIcon,
   isRealmIndexCardId,
   realmURL,
+  rri,
   localId as localIdSymbol,
   CardContextName,
   CardCrudFunctionsContextName,
@@ -71,9 +72,11 @@ import {
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import consumeContext from '../../helpers/consume-context';
+import keepScrollWhileBuried from '../../modifiers/keep-scroll-while-buried';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../resources/element-tracker';
+import { removeCardJsonExtension } from '../../utils/search/types';
 import CardRenderer from '../card-renderer';
 
 import ArchivedRealmState from './archived-realm-state';
@@ -94,8 +97,7 @@ import type {
 } from '@cardstack/base/card-api';
 
 export interface StackItemComponentAPI {
-  clearSelections: () => void;
-  scrollIntoView: (selector: string) => Promise<void>;
+  deselectCard: (cardId: string) => void;
   startAnimation: (type: 'closing' | 'movingForward') => Promise<void>;
 }
 
@@ -108,10 +110,6 @@ interface Signature {
     toolContext: ToolContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
-    onSelectedCards: (
-      selectedCards: CardDefOrId[],
-      stackItem: StackItem,
-    ) => void;
     setupStackItem: (
       model: StackItem,
       componentAPI: StackItemComponentAPI,
@@ -159,8 +157,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     | 'movingForward'
     | undefined = 'opening';
   @tracked private cardResource: ReturnType<getCard> | undefined;
-  private contentEl: HTMLElement | undefined;
-  private containerEl: HTMLElement | undefined;
   private itemEl: HTMLElement | undefined;
 
   @provide(PermissionsContextName)
@@ -183,8 +179,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.args.setupStackItem(this.args.item, {
-      clearSelections: this.clearSelections,
-      scrollIntoView: this.scrollIntoViewTask.perform,
+      deselectCard: this.deselectCard,
       startAnimation: this.startAnimation.perform,
     });
   }
@@ -197,6 +192,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private get url() {
     return this.card?.id ?? this.cardError?.id;
+  }
+
+  private get codeSubmodeOffered() {
+    return this.operatorModeStateService.codeSubmodeOffered(
+      this.url ?? this.args.item.id,
+    );
   }
 
   private get renderedCardsForOverlayActions(): StackItemRenderedCardForOverlayActions[] {
@@ -238,7 +239,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     // flow size the card so .item.expanded CSS rules apply cleanly
     // without fighting inline !important overrides. Mirrors host-mode
     // pattern: parent constrains height, children inherit.
-    if (this.isExpanded) {
+    if (this.isExpanded || this.isPhoneLayout) {
       return htmlSafe(`z-index: calc(${this.args.index} + 1);`);
     }
 
@@ -285,7 +286,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private get isIndexCard() {
     return isRealmIndexCardId(
-      this.url,
+      this.url ? rri(this.url) : undefined,
       this.realmURL,
       this.network.virtualNetwork,
     );
@@ -319,24 +320,42 @@ export default class OperatorModeStackItem extends Component<Signature> {
   //     stored intent is preserved.
   //   - When the card pops back to the top, isExpanded reads true
   //     again from storage and the card re-expands.
-  private get itemExpandKey(): string {
-    return this.args.item.instanceId;
-  }
   private get isExpandedIntent(): boolean {
-    return this.operatorModeStateService.isStackItemExpanded(
-      this.itemExpandKey,
-    );
+    return this.operatorModeStateService.isStackItemExpanded(this.args.item);
   }
   private get isExpanded(): boolean {
     return this.isTopCard && this.isExpandedIntent;
   }
+  // On a phone every card in the stack keeps the full-width geometry,
+  // buried or not, so pushing and popping slides cards over each other
+  // instead of morphing them between stacked and expanded sizes.
+  private get isPhoneLayout(): boolean {
+    return (
+      this.operatorModeStateService.isMobileViewport && this.isExpandedIntent
+    );
+  }
+  // A phone card under another is only seen mid-slide, looking as it
+  // did on top, so cards never get the `buried` hook that strips their
+  // chrome.
+  private get showsAsBuried(): boolean {
+    return this.isBuried && !this.isPhoneLayout;
+  }
+  // Phone-width cards are always expanded, so there is nothing to toggle.
+  private get canToggleExpanded(): boolean {
+    return this.isTopCard && !this.operatorModeStateService.isMobileViewport;
+  }
+  private get onToggleExpanded() {
+    return this.isExpanded && this.canToggleExpanded
+      ? this.toggleExpanded
+      : undefined;
+  }
   private toggleExpanded = () => {
-    if (!this.isTopCard) return;
+    if (!this.canToggleExpanded) return;
     const cardEl = this.itemEl;
     const cardFrom = cardEl?.getBoundingClientRect();
 
     this.operatorModeStateService.setStackItemExpanded(
-      this.itemExpandKey,
+      this.args.item,
       !this.isExpandedIntent,
     );
 
@@ -441,10 +460,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     // about to be removed from the stack, so the entry on the
     // service map should not linger (would re-apply if a card with
     // the same id ever returned).
-    this.operatorModeStateService.setStackItemExpanded(
-      this.itemExpandKey,
-      false,
-    );
+    this.operatorModeStateService.setStackItemExpanded(this.args.item, false);
     await this.args.dismissStackedCardsAbove(this.args.index - 1);
   });
 
@@ -456,14 +472,25 @@ export default class OperatorModeStackItem extends Component<Signature> {
     } else {
       this.selectedCards.add(cardId);
     }
-
-    // pass a copy of the array so that this doesn't become a
-    // back door into mutating the state of this component
-    this.args.onSelectedCards([...this.selectedCards], this.args.item);
   }
 
   private clearSelections = () => {
     this.selectedCards.clear();
+  };
+
+  // Drop one card/file from the selection when it is deleted out from under
+  // the grid, so the selection chip and per-row checkmark stop counting a row
+  // that no longer exists. The local set keys on `normalizeCardId` (a card
+  // id's `.json` extension intact), while the delete flow may hand either the
+  // extensionless card id or the `.json` file id, so match on the
+  // extensionless form rather than an exact string.
+  private deselectCard = (cardId: string) => {
+    let target = removeCardJsonExtension(cardId);
+    for (let selectedId of [...this.selectedCards]) {
+      if (removeCardJsonExtension(selectedId) === target) {
+        this.selectedCards.delete(selectedId);
+      }
+    }
   };
 
   private selectAll = () => {
@@ -476,9 +503,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     availableCards.forEach((cardId) => {
       this.selectedCards.add(cardId);
     });
-
-    // Notify parent component of selection changes
-    this.args.onSelectedCards([...this.selectedCards], this.args.item);
   };
 
   private confirmAndDeleteSelected = () => {
@@ -536,9 +560,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.deleteError = 'An unexpected error occurred. Please try again.';
     } finally {
       this.isDeletingCards = false;
-
-      // Notify parent component of selection changes
-      this.args.onSelectedCards([...this.selectedCards], this.args.item);
     }
   };
 
@@ -676,7 +697,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }) ?? [],
     );
 
-    if (this.isTopCard) {
+    if (this.canToggleExpanded) {
       let expandItem = new MenuItem({
         label: this.isExpanded ? 'Restore Width' : 'Expand to Full Width',
         icon: Maximize,
@@ -766,29 +787,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.operatorModeStateService.setItemFormat(item, 'isolated', { request });
   };
 
-  private scrollIntoViewTask = restartableTask(async (selector: string) => {
-    if (!this.contentEl || !this.containerEl) {
-      return;
-    }
-    await timeout(500); // need to wait for DOM to update with new card(s)
-
-    let item = document.querySelector(selector);
-    if (!item) {
-      return;
-    }
-    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    await timeout(1000);
-    // ember-velcro uses visibility: hidden to hide items (vs display: none).
-    // visibility:hidden alters the geometry of the DOM elements such that
-    // scrollIntoView thinks the container itself is scrollable (it's not) because of
-    // the additional height that the hidden velcro-ed items are adding and
-    // scrolls the entire container (including the header). this is a workaround
-    // to reset the scroll position for the container. I tried adding middleware to alter
-    // the hiding behavior for ember-velcro, but for some reason the state
-    // used to indicate if the item is visible is not available to middleware...
-    this.containerEl.scrollTop = 0;
-  });
-
   private startAnimation = dropTask(
     async (animationType: 'closing' | 'movingForward') => {
       this.animationType = animationType;
@@ -858,14 +856,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.handleAnimationCompletion('opening');
   };
 
-  private setupContentEl = (el: HTMLElement) => {
-    this.contentEl = el;
-  };
-
-  private setupContainerEl = (el: HTMLElement) => {
-    this.containerEl = el;
-  };
-
   private get canEdit() {
     return (
       this.card &&
@@ -909,6 +899,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private get defaultCodeRef() {
     return this.args.item.useBaseTemplate ? baseCardRef : undefined;
+  }
+
+  // Loading and error states have no body of their own to paint a
+  // background, so an expanded card keeps its container's.
+  private get isShowingCard() {
+    return Boolean(this.cardResource?.isLoaded) && !this.showError;
   }
 
   private get showError() {
@@ -968,8 +964,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
     <div
       class={{cn
         'item'
-        buried=this.isBuried
+        buried=this.showsAsBuried
         expanded=this.isExpanded
+        phone-layout=this.isPhoneLayout
         opening-animation=this.doOpeningAnimation
         closing-animation=this.doClosingAnimation
         move-forward-animation=this.doMovingForwardAnimation
@@ -984,11 +981,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
       {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer
-        class='stack-item-card'
+        class={{cn 'stack-item-card' showing-card=this.isShowingCard}}
         style={{cssVar
           card-error-header-height='var(--stack-item-header-height)'
         }}
-        {{ContentElement onSetup=this.setupContainerEl}}
       >
         {{#if (not this.cardResource.isLoaded)}}
           <div class='loading' data-test-stack-item-loading-card>
@@ -1027,7 +1023,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             {{else}}
               <CardError
                 @error={{this.cardError}}
-                @viewInCodeMode={{true}}
+                @viewInCodeMode={{this.codeSubmodeOffered}}
                 @headerOptions={{this.cardErrorHeaderOptions}}
                 class='stack-item-header'
                 style={{cssVar
@@ -1073,12 +1069,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
                   @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
                   @realmInfo={{realmInfo}}
+                  @realmURLText={{this.realm.realmURLTextOf
+                    this.urlForRealmLookup
+                  }}
                   @utilityMenu={{this.utilityMenu}}
                   @onEdit={{if
                     this.canEdit
                     (fn this.cardCrudFunctions.editCard this.card)
                   }}
-                  @onExpand={{if this.isExpanded this.toggleExpanded}}
+                  @onExpand={{this.onToggleExpanded}}
                   @isExpanded={{this.isExpanded}}
                   @onFinishEditing={{if this.isEditing this.doneEditing}}
                   @onClose={{unless this.isBuried this.closeItem}}
@@ -1096,12 +1095,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
                 @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
                 @realmInfo={{realmInfo}}
+                @realmURLText={{this.realm.realmURLTextOf
+                  this.urlForRealmLookup
+                }}
                 @utilityMenu={{this.utilityMenu}}
                 @onEdit={{if
                   this.canEdit
                   (fn this.cardCrudFunctions.editCard this.card)
                 }}
-                @onExpand={{if this.isExpanded this.toggleExpanded}}
+                @onExpand={{this.onToggleExpanded}}
                 @isExpanded={{this.isExpanded}}
                 @onFinishEditing={{if this.isEditing this.doneEditing}}
                 @onClose={{unless this.isBuried this.closeItem}}
@@ -1140,7 +1142,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           {{/let}}
           <div
             class='stack-item-content'
-            {{ContentElement onSetup=this.setupContentEl}}
+            {{keepScrollWhileBuried buried=this.isBuried}}
             data-test-stack-item-content
           >
             <CardRenderer
@@ -1196,6 +1198,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
           opacity: 1;
         }
       }
+      @keyframes slideUp {
+        from {
+          transform: translateY(100%);
+        }
+        to {
+          transform: translateY(0);
+        }
+      }
 
       .item {
         --stack-item-header-height: 3rem;
@@ -1227,17 +1237,75 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .item.move-forward-animation.testing {
         animation-duration: 0s;
       }
+      .item.phone-layout.opening-animation {
+        animation-name: slideUp;
+      }
+      .item.phone-layout.move-forward-animation {
+        animation: none;
+      }
+
+      /* reduced motion: a card fades in and out where it stands, on a phone
+         as on a wide screen, and the cards under it keep their places rather
+         than sliding */
+      @keyframes stackItemFadeIn {
+        from {
+          opacity: 0;
+        }
+      }
+
+      @keyframes stackItemFadeOut {
+        to {
+          opacity: 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .item {
+          transition: none;
+        }
+
+        .item.opening-animation,
+        .item.phone-layout.opening-animation {
+          animation-name: stackItemFadeIn;
+        }
+
+        .item.closing-animation {
+          animation-name: stackItemFadeOut;
+        }
+
+        .item.move-forward-animation {
+          animation: none;
+        }
+      }
 
       .item.buried {
         --stack-item-header-height: 2.5rem;
         --realm-icon-border-radius: 4px;
       }
 
-      .item.expanded {
+      .item.expanded,
+      .item.phone-layout {
         top: 0;
         left: 0;
         width: 100%;
+      }
+      .item.expanded {
         pointer-events: auto;
+      }
+      /* A buried phone card is covered by the top card, so it is shown
+         only while the card above it slides in or out. */
+      .item.phone-layout:not(
+          .expanded,
+          .closing-animation,
+          :has(+ .item.opening-animation),
+          :has(+ .item.closing-animation)
+        ) {
+        visibility: hidden;
+      }
+      /* Its header moves to the top bar once it is the top card, so it
+         is left out while buried to keep the content from jumping. */
+      .item.phone-layout:not(.expanded) .showing-card .stack-item-header {
+        display: none;
       }
       /* Propagate height through the chain so bottom-docked chrome
          lands at the viewport's bottom edge. .stack-item-content
@@ -1246,16 +1314,18 @@ export default class OperatorModeStackItem extends Component<Signature> {
          studio's flex: 1 has no defined parent height. Keep
          overflow: auto (matches host-mode pattern) so isolated
          content longer than the viewport can scroll. */
-      .item.expanded .stack-item-content,
-      .item.expanded .stack-item-preview {
+      .item:is(.expanded, .phone-layout) .stack-item-content,
+      .item:is(.expanded, .phone-layout) .stack-item-preview {
         min-height: 0;
       }
-      .item.expanded .stack-item-card {
+      .item:is(.expanded, .phone-layout) .stack-item-card {
         border-radius: 0;
         box-shadow: none;
-        /* Tray "chrome" (rounded corners, shadow, white background)
-           all dissolve at end of morph — the tray becomes a
-           positioning anchor only. Body content (.stack-item-content)
+      }
+      .item:is(.expanded, .phone-layout) .stack-item-card.showing-card {
+        /* With the corners and shadow gone, the tray's background
+           dissolves too — the tray becomes a positioning anchor
+           only. Body content (.stack-item-content)
            inside renders normally without inheriting transparency
            because background, not opacity, is what's faded. */
         background: transparent;
@@ -1272,9 +1342,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
          within .operator-mode-stack > .inner; uses :has() to match
          buried items that have an expanded sibling AFTER them in the
          DOM (top card = last in DOM order). */
-      .item:not(.expanded):has(~ .item.expanded) {
+      .item:not(.expanded, .phone-layout):has(~ .item.expanded) {
         opacity: 0;
         transition: opacity 380ms ease;
+      }
+      /* A faded card takes no clicks either. The deepest buried cards
+         rise into the top bar's strip, which passes clicks through to
+         the stack, and a click must never act on a card the user can't
+         see. */
+      .item:not(.expanded):has(~ .item.expanded) > .stack-item-card {
+        pointer-events: none;
       }
 
       .stack-item-card {

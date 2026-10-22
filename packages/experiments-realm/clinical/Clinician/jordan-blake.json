@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "fullName": "Jordan Blake, RN",
+      "role": "Cardiac care nurse",
+      "userId": "@jordan.blake:boxel.ai",
+      "activeCaseload": [
+        "PT-1001"
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clinician",
+        "name": "Clinician"
+      }
+    }
+  }
+}

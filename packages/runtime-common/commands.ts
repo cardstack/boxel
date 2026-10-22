@@ -26,6 +26,20 @@ export interface ToolRequest {
   // can later carry e.g. 'host' too. The host therefore matches its own
   // executor explicitly rather than treating any value as "not mine to run".
   executedBy?: string;
+  // Set by ai-bot when the model's arguments for this call were not valid
+  // JSON once the turn finished; `arguments` is then empty. It carries the
+  // parse error so the tool result can tell the model what was wrong.
+  argumentsError?: string;
+  // Set by ai-bot only on stream previews, while the arguments are not
+  // complete JSON yet: the raw text received so far, for display. `arguments`
+  // is empty then; nothing runs a call from this text.
+  argumentsText?: string;
+  // Set by ai-bot on a call it runs itself but will not run until the user
+  // approves it (a readUrl of a URL nobody in the room gave). The host shows
+  // the call with Approve / Decline instead of a status indicator, and
+  // answers with an 'approved' result (ai-bot then runs the call) or an
+  // 'invalid' one naming the decline.
+  approvalRequired?: boolean;
 }
 
 export const ToolContextStamp = Symbol.for('CommandContext');
@@ -236,6 +250,12 @@ export function decodeToolRequest(
   if (commandRequest.executedBy != null) {
     decodedCommandRequest.executedBy = commandRequest.executedBy;
   }
+  if (commandRequest.argumentsError != null) {
+    decodedCommandRequest.argumentsError = commandRequest.argumentsError;
+  }
+  if (commandRequest.approvalRequired != null) {
+    decodedCommandRequest.approvalRequired = commandRequest.approvalRequired;
+  }
   return decodedCommandRequest;
 }
 
@@ -258,6 +278,12 @@ export function encodeCommandRequest(
   }
   if (commandRequest.executedBy != null) {
     encodedCommandRequest.executedBy = commandRequest.executedBy;
+  }
+  if (commandRequest.argumentsError != null) {
+    encodedCommandRequest.argumentsError = commandRequest.argumentsError;
+  }
+  if (commandRequest.approvalRequired != null) {
+    encodedCommandRequest.approvalRequired = commandRequest.approvalRequired;
   }
   return encodedCommandRequest;
 }

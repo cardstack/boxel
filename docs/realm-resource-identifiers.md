@@ -75,7 +75,8 @@ Registration happens in two places:
 
 - **Host** — `packages/host/app/services/network.ts` registers
   `@cardstack/base/` plus whichever of `@cardstack/catalog/`,
-  `@cardstack/skills/`, and `@cardstack/openrouter/` the build config resolves.
+  `@cardstack/skills/`, `@cardstack/openrouter/` and `@cardstack/pretui/` the
+  build config resolves.
 - **Realm server and workers** — `main.ts` and `worker.ts` translate each
   `--fromUrl` / `--toUrl` pair on the command line. A `--fromUrl` that is not
   URL-shaped becomes a realm mapping directly:
@@ -84,10 +85,11 @@ Registration happens in two places:
   --fromUrl='@cardstack/catalog/' --toUrl="${CATALOG_REALM_URL}"
   ```
 
-Prefixes are a convention, not a registry: `@cardstack/<realm>/` maps to
-`<realm-server>/<realm>/`. `boxel-cli` relies on exactly this convention to
-resolve an RRI against the active profile's realm-server URL without consulting
-a VirtualNetwork at all (`packages/boxel-cli/src/lib/resolve-realm-identifier.ts`).
+A prefix's URL is whatever its mapping says, not a naming convention.
+`boxel-cli` still resolves `@cardstack/<realm>/` as `<realm-server>/<realm>/`
+without a VirtualNetwork (`packages/boxel-cli/src/lib/resolve-realm-identifier.ts`).
+ADR 002 §1.2 forbids that: a client without a VirtualNetwork builds one from
+the prefix map the realm server serves.
 
 Realms with no registered prefix — most user workspaces — are addressed by
 their URL, and that URL is their RRI. Nothing about the identifier system
@@ -142,7 +144,7 @@ identifiers arriving there are already canonical and only need joining — see
 | ------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `toURL(rri)`              | RRI → `URL`             | Resolve a prefix through its mapping, or parse a URL-form RRI. Throws for an unmapped bare identifier.                                 |
 | `toURLHref(rri)`          | RRI → `string`          | Same resolution, memoized, no `URL` object allocated.                                                                                  |
-| `toRealURLHref(id)`       | any spelling → `string` | The canonical store key. Also collapses a virtual alias onto its real backing URL, so every spelling of one card converges on one key. |
+| `toRealURLHref(id)`       | any spelling → `string` | Internal store key only. Also collapses a virtual alias onto its real backing URL, so every spelling of one card converges on one key. |
 | `unresolveURL(url)`       | URL → RRI               | The inverse: rewrite a URL back to prefix form when a mapping matches. Chases through URL aliases first.                               |
 | `unresolveURLs(urls)`     | URL[] → RRI[]           | Canonicalize and dedupe a set (dependency lists, etc.).                                                                                |
 | `equivalentURLForms(url)` | URL → string[]          | Every known spelling of one resource — used to match index data written before a reference was canonicalized.                          |
@@ -155,6 +157,13 @@ of identifiers thousands of times per render. The memos are a pure function of
 the registered mappings, so adding or removing any mapping clears all three.
 Consumers that key their own caches by resolved form can subscribe to
 `onMappingChange` to invalidate alongside them.
+
+Telling the two forms apart needs no VirtualNetwork, and code asks only one
+way: `isPrefixForm(identifier)` from `@cardstack/runtime-common`. It reads the
+spelling, so it answers for an unregistered prefix too. Don't ask a URL parser
+instead: `URL.canParse` answers `false` for a prefix-form identifier, which is
+absolute, and so misreads it as a relative path. Whether a prefix is registered
+is a separate question, and `isRegisteredPrefix` answers it.
 
 ## Resolution belongs at the network boundary
 
@@ -170,6 +179,15 @@ Practical consequences:
 - Don't thread a `VirtualNetwork` into rendering, serialization, or store code
   to resolve something. Reaching for VN at an in-memory site is a signal that
   resolution is happening at the wrong layer.
+- A realm list, and any realm the server names (a search row's realm,
+  `realmTotals`, `policyScopedRealms`, a seed's realm, a realm event's
+  `realmURL`), is canonicalized with `unresolveURL` like every other
+  identifier (`canonicalRealmIdentifier` / `canonicalRealmIdentifiers` in
+  `packages/host/app/lib/realm-utils.ts`), and compared with plain
+  `RealmPaths` or string tests after that. The base realm's alias, the URL it
+  is served from and `@cardstack/base/` are all `@cardstack/base/`.
+  `MessageService` keys realm subscriptions the same way, so a subscriber may
+  name a realm by any spelling.
 - Serialization writes RRI form. Deserialization canonicalizes to RRI on entry,
   which is what makes the rule hold for data arriving from the network.
 
@@ -184,7 +202,14 @@ Realm request handling accepts RRI-form identifiers where clients send them for
 the same reason — a client shouldn't have to know a realm's serving URL to
 reference a card in it. Atomic-operation hrefs are the clearest example: the
 realm resolves a registered prefix to a real URL before doing path math, and
-leaves plain URL and relative hrefs untouched.
+leaves plain URL and relative hrefs untouched. The realm server's federated
+endpoints (`_federated-search`, `_federated-info`, `_federated-types`,
+`_federated-index-counts`) do the same for the realms a request names: each
+may be a registered prefix, the URL the realm is registered under, or the URL
+it is served from, and `registeredRealmURL` (`packages/runtime-common/search-utils.ts`)
+reads all three as the registered URL. The host sends a realm list as its
+caller spelled it and canonicalizes what the server sends back, so it never
+has to know the URL a realm is registered under.
 
 ## RealmPaths
 
@@ -246,8 +271,9 @@ The well-known base refs are built from the `@cardstack/base/` prefix in
 `skillCardRef`, …), so they match what `identifyCard` emits for base classes.
 
 **Card JSON.** `data.id`, `meta.adoptsFrom.module`, `links.self`, and
-relationship links are all RRIs. (`meta.realmURL` is the exception: it carries
-the realm's served URL, not its prefix.) Within a realm they are usually
+relationship links are all RRIs. (`meta.realmURL` still carries the realm's
+served URL, not its prefix. ADR 002 §1.1 deprecates it in favor of
+`meta.realmIdentifier`, an RRI.) Within a realm they are usually
 written relative (`./sibling`, `../Model/abc`) and resolved against the
 document's own id; cross-realm references are absolute, in whichever form that
 realm uses:
@@ -310,12 +336,16 @@ be retired.
 Two lint rules keep the URL form from creeping back into source:
 
 - `@cardstack/boxel/no-url-form-base-imports` flags (and auto-fixes)
-  `https://cardstack.com/base/…` in static imports, dynamic `import()`, and
-  `loader.import()`. It deliberately ignores the URL in fetch targets, alias
-  registration, and tests that assert on served content — those are legitimate.
+  `https://cardstack.com/base/…` in static imports, dynamic `import()`,
+  `loader.import()` and `importResource()`, including a template literal that
+  starts with it. Elsewhere it flags the alias, without a fix, except where it
+  is defined or recognized: `baseRealm`, `equivalentURLForms`, `internalKeyFor`,
+  `registeredRealmURL`, and tests of alias tolerance, canonicalization or
+  migration that a package's ESLint config names.
 - `@cardstack/boxel/no-literal-realm-urls` flags environment-specific realm
-  URLs (`http://localhost:4201/catalog/`, `https://app.boxel.ai/catalog/`, …)
-  that should be written as the prefix instead.
+  URLs for every registered prefix realm (`http://localhost:4201/catalog/`,
+  `https://app.boxel.ai/skills/`, …) that should be written as the prefix
+  instead.
 
 ## Migrating existing realm data
 

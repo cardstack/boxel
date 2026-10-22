@@ -7,9 +7,9 @@ import {
   type RenderVisitResponse,
   logger,
   type RunCommandResponse,
-  type ScreenshotCaptureSpec,
-  type ScreenshotFormat,
-  type ScreenshotPrerenderResponse,
+  type CaptureRequestSpec,
+  type OnDemandCaptureFormat,
+  type CapturePrerenderResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager.ts';
 import {
@@ -19,16 +19,26 @@ import {
 } from './page-pool.ts';
 import { RenderRunner, type Timings } from './render-runner.ts';
 import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry.ts';
-import { toAffinityKey } from './affinity.ts';
+import {
+  isAffinityOfRealm,
+  isRealmAuthorityAffinityKey,
+  realmAffinityKeyOf,
+  toAffinityKey,
+} from './affinity.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AffinityActivityTracker } from './affinity-activity.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
+import {
+  UnresponsiveTabTracker,
+  type UnresponsiveTabReport,
+} from './unresponsive-tab-tracker.ts';
 import { formatHeapTelemetry, heapTelemetry } from './heap-telemetry.ts';
 import { maybeAutoCaptureHeapSnapshot } from './heap-snapshot.ts';
 import {
   type BatchOwner,
   computeBatchClearCacheGate,
 } from './batch-ownership-gate.ts';
+import { batchStaleAfterMs } from './prerender-constants.ts';
 import {
   AffinitySnapshotSampler,
   type PeakRegistration,
@@ -70,12 +80,17 @@ export class Prerenderer {
   // visit following a cancelled render must acquire a fresh page rather
   // than detour through the restart recovery lane.
   #browserRestartCount = 0;
-  // `clearCache` batch ownership (CS-10758 step 3). Maps affinityKey to
-  // `{ batchId, since }` for the batch that currently owns the affinity's
-  // warm loader. See `#gateClearCache` for the full policy. Populated on
-  // any batch'd `clearCache: true` visit and cleared on `releaseBatch`,
-  // successor-batch replacement, or affinity disposal.
-  #batchOwnership = new Map<string, BatchOwner>();
+  // Decides when timeouts on unresponsive tabs call for a browser recycle
+  // rather than just the tab retirements their evictions already do.
+  #unresponsiveTabs = new UnresponsiveTabTracker();
+  // `clearCache` batch ownership. Maps affinityKey to the batches holding the
+  // affinity's warm loader, batch id → when each last started a visit there.
+  // Several at once is normal: index passes of one realm run one per writer
+  // lane, each beside its own `prerender_html` job. See `#gateClearCache` and
+  // `batch-ownership-gate.ts` for the policy. A batch's entry is added on its
+  // visits and removed by its own `releaseBatch`, by a successor dropping it
+  // as finished, or by affinity disposal.
+  #batchOwnership = new Map<string, Map<string, number>>();
 
   // CS-10872 (affinity-snapshot diagnostic): per-affinity tracker of
   // in-flight + queued Prerenderer calls. Populated on every
@@ -90,7 +105,11 @@ export class Prerenderer {
   // finally block.
   #affinitySnapshotSampler!: AffinitySnapshotSampler;
 
-  constructor(options: { serverURL: string; maxPages?: number }) {
+  constructor(options: {
+    serverURL: string;
+    maxPages?: number;
+    registerWithManager?: boolean;
+  }) {
     let maxPages = options.maxPages ?? 5;
     this.#semaphore = new AsyncSemaphore(maxPages);
     this.#browserManager = new BrowserManager();
@@ -106,6 +125,7 @@ export class Prerenderer {
     this.#pagePool = new PagePool({
       maxPages,
       serverURL: options.serverURL,
+      registerWithManager: options.registerWithManager,
       browserManager: this.#browserManager,
       boxelHostURL,
       renderSemaphore: this.#semaphore,
@@ -127,11 +147,15 @@ export class Prerenderer {
         // until another job for the same realm replaced it. A still-running
         // job just re-renders each type's icon once as the memo re-warms.
         this.#renderRunner.clearIconMemo(affinityKey);
+        // And the auth its tabs last ran with, which only decides whether
+        // those tabs can serve the next render.
+        this.#renderRunner.clearAuthCache(affinityKey);
       },
     });
     this.#renderRunner = new RenderRunner({
       pagePool: this.#pagePool,
       boxelHostURL,
+      onUnresponsiveTab: (report) => this.#noteUnresponsiveTab(report),
     });
     this.#affinitySnapshotSampler = new AffinitySnapshotSampler({
       pagePool: this.#pagePool,
@@ -156,15 +180,51 @@ export class Prerenderer {
     this.#pagePool.serverURL = url;
   }
 
+  // The manager routes by realm, so a realm's session affinities are
+  // reported to it as the realm's own key.
   getWarmAffinities(): string[] {
-    return this.#pagePool.getWarmAffinities();
+    return [
+      ...new Set(this.#pagePool.getWarmAffinities().map(realmAffinityKeyOf)),
+    ];
   }
 
+  // A realm's row under the realm's key, built from its realm-authority
+  // affinities: idle only when every one of them is, with their tabs summed
+  // and the highest priority any of them has waiting. A tab of a reader's or
+  // an anonymous session serves only that session, so it is no warmth another
+  // request routed to the realm can use, and its queue doesn't hold up the
+  // realm's own renders.
   getVacancySnapshot(): Record<
     string,
     { idle: boolean; tabCount: number; maxPendingPriority?: number }
   > {
-    return this.#pagePool.getVacancySnapshot();
+    let snapshot: Record<
+      string,
+      { idle: boolean; tabCount: number; maxPendingPriority?: number }
+    > = {};
+    for (let [affinityKey, vacancy] of Object.entries(
+      this.#pagePool.getVacancySnapshot(),
+    )) {
+      if (!isRealmAuthorityAffinityKey(affinityKey)) {
+        continue;
+      }
+      let realmKey = realmAffinityKeyOf(affinityKey);
+      let row = snapshot[realmKey];
+      if (!row) {
+        snapshot[realmKey] = { ...vacancy };
+        continue;
+      }
+      row.idle = row.idle && vacancy.idle;
+      row.tabCount += vacancy.tabCount;
+      if (
+        vacancy.maxPendingPriority !== undefined &&
+        (row.maxPendingPriority === undefined ||
+          vacancy.maxPendingPriority > row.maxPendingPriority)
+      ) {
+        row.maxPendingPriority = vacancy.maxPendingPriority;
+      }
+    }
+    return snapshot;
   }
 
   // CS-10872: richer-than-vacancy snapshot used by prerender-app's
@@ -217,9 +277,17 @@ export class Prerenderer {
     affinityType: AffinityType;
     affinityValue: string;
   }): Promise<void> {
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
-    this.#renderRunner.clearAuthCache(affinityKey);
-    await this.#pagePool.disposeAffinity(affinityKey);
+    // A realm's affinity goes with every session affinity it was split into.
+    let realmKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKeys = new Set([
+      realmKey,
+      ...this.#pagePool
+        .getAffinityKeys()
+        .filter((key) => isAffinityOfRealm(key, realmKey)),
+    ]);
+    for (let affinityKey of affinityKeys) {
+      await this.#pagePool.disposeAffinity(affinityKey);
+    }
   }
 
   // Block until the standby pool has reached its desired count. The
@@ -281,7 +349,6 @@ export class Prerenderer {
         await this.#pagePool.disposeAffinity(affinityKey, {
           retainSharedContext: true,
         });
-        this.#renderRunner.clearAuthCache(affinityKey);
       } catch (disposeErr: any) {
         log.warn(
           `failed to dispose affinity ${affinityKey} after cancel: ${
@@ -292,25 +359,37 @@ export class Prerenderer {
     }
   }
 
-  // Release this batch's ownership of an affinity's warm loader (CS-10758
-  // step 3). Called from `IndexRunner`'s `finally` blocks and via the
-  // `/release-batch` HTTP endpoint. No-ops if the caller isn't the current
-  // owner — a successor batch that acquired ownership before the prior
-  // batch got around to releasing should not have its ownership cleared.
+  // Release this batch's hold on an affinity's warm loader. Called from
+  // `IndexRunner`'s `finally` blocks and via the `/release-batch` HTTP
+  // endpoint. Removes only the releasing batch's entry, so a concurrent batch
+  // on the same affinity keeps its protection. The release names the realm,
+  // and the batch's renders ran on one of the realm's session affinities, so
+  // it is released from each of them; a batch id names one batch, so no other
+  // batch's hold goes with it.
   async releaseBatch({
     batchId,
     affinityType,
     affinityValue,
   }: ReleaseBatchArgs): Promise<void> {
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
-    let owner = this.#batchOwnership.get(affinityKey);
-    if (owner?.batchId === batchId) {
-      this.#batchOwnership.delete(affinityKey);
-      // The job's icon memo has no readers once its batch releases the
-      // affinity (a later job carries a different job key), so drop it
-      // rather than letting it idle until the next job replaces it.
-      this.#renderRunner.clearIconMemo(affinityKey);
-      log.debug(`batch ${batchId} released ownership of ${affinityKey}`);
+    let realmKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKeys = new Set(
+      [
+        ...this.#batchOwnership.keys(),
+        ...this.#renderRunner.iconMemoAffinityKeys,
+      ].filter((key) => isAffinityOfRealm(key, realmKey)),
+    );
+    for (let affinityKey of affinityKeys) {
+      let owners = this.#batchOwnership.get(affinityKey);
+      if (owners?.delete(batchId)) {
+        if (owners.size === 0) {
+          this.#batchOwnership.delete(affinityKey);
+        }
+        log.debug(`batch ${batchId} released its hold on ${affinityKey}`);
+      }
+      // The batch's icon memo has no readers once it releases (a later job
+      // carries a different job key), so drop it rather than letting it
+      // idle. Only this batch's: a concurrent job's memo is still being read.
+      this.#renderRunner.releaseIconMemo(affinityKey, batchId);
     }
   }
 
@@ -324,18 +403,17 @@ export class Prerenderer {
   // Read-only observability accessor used by tests. Callers outside of
   // tests should not rely on this shape; it's a debugging surface, not a
   // stable API.
-  getBatchOwnership(
-    affinityKey: string,
-  ): { batchId: string; since: number } | undefined {
-    let owner = this.#batchOwnership.get(affinityKey);
-    return owner ? { batchId: owner.batchId, since: owner.since } : undefined;
+  getBatchOwnership(affinityKey: string): BatchOwner[] {
+    return [...(this.#batchOwnership.get(affinityKey) ?? [])].map(
+      ([batchId, since]) => ({ batchId, since }),
+    );
   }
 
   // Read-only observability accessor used by tests. Callers outside of
   // tests should not rely on this shape; it's a debugging surface, not a
   // stable API.
-  getIconMemo(affinityKey: string) {
-    return this.#renderRunner.getIconMemo(affinityKey);
+  getIconMemo(affinityKey: string, jobId?: string) {
+    return this.#renderRunner.getIconMemo(affinityKey, jobId);
   }
 
   // Back-compat static re-export: older callers / tests reference
@@ -351,20 +429,29 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({
       affinityType: args.affinityType,
       affinityValue: args.affinityValue,
+      auth: args.auth,
     });
-    let owner = this.#batchOwnership.get(affinityKey);
-    let decision = computeBatchClearCacheGate(args, owner, Date.now());
-    if (decision.newOwner === null) {
+    let owners = this.#batchOwnership.get(affinityKey);
+    let decision = computeBatchClearCacheGate(args, owners, Date.now(), {
+      staleAfterMs: batchStaleAfterMs,
+      isInFlight: (batchId) =>
+        this.#affinityActivity.hasBatchInFlight(affinityKey, batchId),
+    });
+    for (let batchId of decision.drop ?? []) {
+      owners?.delete(batchId);
+      this.#renderRunner.releaseIconMemo(affinityKey, batchId);
+    }
+    if (decision.claim) {
+      if (!owners) {
+        owners = new Map();
+        this.#batchOwnership.set(affinityKey, owners);
+      }
+      owners.set(decision.claim.batchId, decision.claim.since);
+    } else if (owners?.size === 0) {
       this.#batchOwnership.delete(affinityKey);
-    } else if (decision.newOwner) {
-      this.#batchOwnership.set(affinityKey, decision.newOwner);
     }
     if (decision.log) {
-      if (decision.log.level === 'info') {
-        log.info(decision.log.message);
-      } else if (decision.log.level === 'warn') {
-        log.warn(decision.log.message);
-      }
+      log[decision.log.level](decision.log.message);
     }
     return decision.gatedArgs as T;
   }
@@ -401,7 +488,7 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     let activity = this.#affinityActivity.record(
       affinityKey,
       url,
@@ -431,6 +518,7 @@ export class Prerenderer {
       // result we return, not earlier retries. Reset the marker at the
       // top of each iteration so launch+render still sums to ~total.
       let attemptStart = Date.now();
+      let freshTabRetried = false;
       for (let attempt = 0; attempt < 3; attempt++) {
         throwIfAborted(signal);
         attemptStart = Date.now();
@@ -527,6 +615,24 @@ export class Prerenderer {
           );
         }
 
+        let failedChunk = result.pool.evicted
+          ? this.#renderRunner.failedHostChunkImport(result.response.error)
+          : undefined;
+        if (failedChunk && !freshTabRetried) {
+          // The evicted tab can never import that chunk again, but a fresh
+          // tab fetches it anew, so the next attempt gets one.
+          log.warn(
+            `retrying module prerender for ${url} on a fresh tab: the evicted tab failed to import host chunk ${failedChunk}`,
+          );
+          freshTabRetried = true;
+          continue;
+        }
+        if (failedChunk) {
+          log.warn(
+            `module prerender for ${url} failed to import host chunk ${failedChunk} on a fresh tab too`,
+          );
+        }
+
         Prerenderer.decorateRenderErrorsWithTimings(
           result.response,
           result.timings,
@@ -593,6 +699,7 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({
       affinityType: 'user',
       affinityValue: userId,
+      auth,
     });
     try {
       let result = await this.#renderRunner.runCommandAttempt({
@@ -627,12 +734,13 @@ export class Prerenderer {
     }
   }
 
-  async prerenderScreenshot({
+  async prerenderCapture({
     realm,
     url,
     auth,
     format,
     captureSpec,
+    renderOptions,
     priority,
     opts,
     signal,
@@ -640,26 +748,28 @@ export class Prerenderer {
     realm: string;
     url: string;
     auth: string;
-    format: ScreenshotFormat;
-    captureSpec?: ScreenshotCaptureSpec;
+    format: OnDemandCaptureFormat;
+    captureSpec?: CaptureRequestSpec;
+    renderOptions?: RenderRouteOptions;
     priority?: number;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     signal?: AbortSignal;
   }): Promise<{
-    response: ScreenshotPrerenderResponse;
+    response: CapturePrerenderResponse;
     timings: Timings;
     pool: PoolMeta;
   }> {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
-    let screenshotStart = Date.now();
+    let cdpCaptureStart = Date.now();
     let affinityKey = toAffinityKey({
       affinityType: 'realm',
       affinityValue: realm,
+      auth,
     });
     try {
-      let result = await this.#renderRunner.captureScreenshotAttempt({
+      let result = await this.#renderRunner.runCaptureAttempt({
         affinityType: 'realm',
         affinityValue: realm,
         realm,
@@ -667,6 +777,7 @@ export class Prerenderer {
         auth,
         format,
         ...(captureSpec ? { captureSpec } : {}),
+        ...(renderOptions ? { renderOptions } : {}),
         priority,
         opts,
         signal,
@@ -674,16 +785,16 @@ export class Prerenderer {
       Prerenderer.decorateRenderErrorsWithTimings(
         result.response,
         result.timings,
-        Date.now() - screenshotStart,
+        Date.now() - cdpCaptureStart,
         { priority, tabReused: result.pool?.reused },
       );
       return result;
     } catch (e) {
       if (e instanceof PrerenderCancelledError) {
-        await this.#handlePrerenderCancel(e, affinityKey, screenshotStart, url);
+        await this.#handlePrerenderCancel(e, affinityKey, cdpCaptureStart, url);
         throw e;
       }
-      log.error(`screenshot attempt failed (url ${url})`, e);
+      log.error(`capture attempt failed (url ${url})`, e);
       throw e;
     }
   }
@@ -730,20 +841,23 @@ export class Prerenderer {
       opts,
       priority,
       jobId,
-      screenshots,
+      batchId,
+      captures,
       renderScope,
+      cardSource,
     } = this.#gateClearCache(rawArgs);
     let signal = (rawArgs as { signal?: AbortSignal }).signal;
     let testOnTabAcquired = (
       rawArgs as { onTabAcquired?: (info: { pageId: string }) => void }
     ).onTabAcquired;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     let activity = this.#affinityActivity.record(
       affinityKey,
       url,
       'visit',
       'file',
       priority,
+      batchId,
     );
     let onTabAcquired = (info: { pageId: string }) => {
       activity.markRunning();
@@ -769,6 +883,7 @@ export class Prerenderer {
       // CS-10872: see prerenderModule for why totalElapsedMs is
       // attempt-local rather than loop-wide.
       let attemptStart = Date.now();
+      let freshTabRetried = false;
       for (let attempt = 0; attempt < 3; attempt++) {
         throwIfAborted(signal);
         attemptStart = Date.now();
@@ -792,8 +907,10 @@ export class Prerenderer {
             cardTypes,
             priority,
             jobId,
-            screenshots,
+            batchId,
+            captures,
             renderScope,
+            cardSource,
             signal,
             onTabAcquired,
           });
@@ -829,8 +946,10 @@ export class Prerenderer {
               cardTypes,
               priority,
               jobId,
-              screenshots,
+              batchId,
+              captures,
               renderScope,
+              cardSource,
               signal,
               onTabAcquired,
             });
@@ -875,6 +994,22 @@ export class Prerenderer {
             `visit prerender retry with clearCache did not resolve error signature ${retrySignature.join(
               ' | ',
             )} for ${url}`,
+          );
+        }
+        let failedChunk = result.pool.evicted
+          ? this.#visitFailedHostChunkImport(result.response)
+          : undefined;
+        if (failedChunk && !freshTabRetried) {
+          // See the matching retry in prerenderModule.
+          log.warn(
+            `retrying visit prerender for ${url} on a fresh tab: the evicted tab failed to import host chunk ${failedChunk}`,
+          );
+          freshTabRetried = true;
+          continue;
+        }
+        if (failedChunk) {
+          log.warn(
+            `visit prerender for ${url} failed to import host chunk ${failedChunk} on a fresh tab too`,
           );
         }
         Prerenderer.decorateRenderErrorsWithTimings(
@@ -926,6 +1061,21 @@ export class Prerenderer {
     return undefined;
   }
 
+  #visitFailedHostChunkImport(
+    response: RenderVisitResponse,
+  ): string | undefined {
+    for (let renderError of [
+      response.pageUnusableError,
+      response.card?.error,
+      response.fileExtract?.error,
+      response.fileRender?.error,
+    ]) {
+      let failedChunk = this.#renderRunner.failedHostChunkImport(renderError);
+      if (failedChunk) return failedChunk;
+    }
+    return undefined;
+  }
+
   async #restartBrowser(): Promise<void> {
     // Coalesce concurrent callers onto a single in-flight restart. Without
     // this, multiple failing visits in the same tick each trigger their own
@@ -943,6 +1093,36 @@ export class Prerenderer {
     return this.#restartInFlight;
   }
 
+  // Reports that arrive while a restart is in flight describe tabs of the
+  // browser being replaced, so they are dropped rather than counted against
+  // its successor.
+  //
+  // The recycle kills Chrome before tearing the pool down. The restart path
+  // closes every tab and context over CDP before closing the browser, which
+  // fails fast against a crashed browser but waits out the protocol timeout,
+  // call by call, against one that is connected and hung. Once the process
+  // is gone every pending call rejects, the renders holding tabs on it fail
+  // and release them, and the teardown runs through.
+  //
+  // Not awaited by the reporter: the report comes from inside a render that
+  // still holds its tab, and the restart's `closeAll` waits for that tab.
+  #noteUnresponsiveTab(report: UnresponsiveTabReport): void {
+    if (this.#stopped || this.#restartInFlight) {
+      return;
+    }
+    let reason = this.#unresponsiveTabs.record(report);
+    if (!reason) {
+      return;
+    }
+    log.warn(
+      `Recycling prerender browser (recycle ${this.#unresponsiveTabs.recycleCount}): ${reason}`,
+    );
+    this.#browserManager.killBrowserProcess();
+    void this.#restartBrowser().catch((e) => {
+      log.error('Failed to recycle prerender browser:', e);
+    });
+  }
+
   async #runRestart(): Promise<void> {
     log.warn('Restarting prerender browser');
     this.#browserRestartCount++;
@@ -955,6 +1135,8 @@ export class Prerenderer {
       return;
     }
     await this.#browserManager.restartBrowser();
+    // Every tab counted so far belonged to the browser just replaced.
+    this.#unresponsiveTabs.reset();
     await this.#pagePool.warmStandbys().catch((e) => {
       log.error('Failed to warm standby pages after browser restart:', e);
     });
@@ -993,10 +1175,10 @@ export class Prerenderer {
       void this.#browserManager.cleanupUserDataDirs();
       void this.#pagePool
         .evictIdleAffinities(this.#affinityIdleEvictMs)
-        .then((evictedAffinities) => {
-          for (let affinityKey of evictedAffinities) {
-            this.#renderRunner.clearAuthCache(affinityKey);
-          }
+        .then(() => {
+          this.#renderRunner.pruneAuthCache(
+            new Set(this.#pagePool.getAffinityKeys()),
+          );
         })
         .catch((e) => {
           log.warn('Error evicting idle prerender affinities:', e);

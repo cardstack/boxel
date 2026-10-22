@@ -31,9 +31,7 @@ function deserializeForUI(value: string | null): bigint | null {
 }
 
 class View extends Component<typeof BigIntegerField> {
-  <template>
-    {{BigIntegerSerializer.serialize @model}}
-  </template>
+  <template>{{BigIntegerSerializer.serialize @model}}</template>
 }
 
 class Edit extends Component<typeof BigIntegerField> {

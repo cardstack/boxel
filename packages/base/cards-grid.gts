@@ -15,6 +15,7 @@ import AllCardsIcon from '@cardstack/boxel-icons/square-stack';
 import AllFilesIcon from '@cardstack/boxel-icons/files';
 import FileIcon from '@cardstack/boxel-icons/file';
 
+import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
   chooseCard,
   specRef,
@@ -25,7 +26,6 @@ import {
   subscribeToRealm,
   codeRefFromInternalKey,
   type Query,
-  CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
 import CardsGridLayout, {
@@ -47,7 +47,7 @@ import {
   type BoxComponent,
 } from './card-api';
 import type { RealmEventContent } from './matrix-event';
-import { Spec } from './spec';
+import type { Spec } from './spec';
 import StringField from './string';
 
 const [_CardView, StripView, GridView] = VIEW_OPTIONS;
@@ -280,7 +280,7 @@ class Isolated extends Component<typeof CardsGrid> {
     let filter = this.activeFilter?.query?.filter;
     let activeFilterRef = filter && 'type' in filter ? filter.type : undefined;
 
-    let spec: Spec | CardErrorJSONAPI | undefined;
+    let spec: CardDef | CardErrorJSONAPI | undefined;
     if (activeFilterRef) {
       let instances = await this.args.context?.store.search({
         filter: {
@@ -309,7 +309,7 @@ class Isolated extends Component<typeof CardsGrid> {
         return;
       }
 
-      spec = await this.args.context?.store.get<Spec>(specId);
+      spec = await this.args.context?.store.get(specId);
     }
 
     if (spec && isCardInstance<Spec>(spec)) {
@@ -450,19 +450,19 @@ class Isolated extends Component<typeof CardsGrid> {
 
     try {
       // Load the welcome-to-boxel card
-      const welcomeCardUrl = `https://cardstack.com/base/welcome-to-boxel.json`;
+      const welcomeCardUrl = `${baseRealmRRI}welcome-to-boxel`;
       const welcomeCard = (await this.args.context.store.get(
         welcomeCardUrl,
       )) as BaseDef;
 
       // Load the ai-app-generator card
-      const aiAppGeneratorUrl = `https://cardstack.com/base/ai-app-generator.json`;
+      const aiAppGeneratorUrl = `${baseRealmRRI}ai-app-generator`;
       const aiAppGeneratorCard = (await this.args.context.store.get(
         aiAppGeneratorUrl,
       )) as BaseDef;
 
       // Load the community cards
-      const communityCardsUrl = `https://cardstack.com/base/join-the-community.json`;
+      const communityCardsUrl = `${baseRealmRRI}join-the-community`;
       const communityCards = (await this.args.context.store.get(
         communityCardsUrl,
       )) as BaseDef;

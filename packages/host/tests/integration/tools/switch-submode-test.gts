@@ -1,6 +1,7 @@
 import { getOwner } from '@ember/owner';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import { CardDef } from '@cardstack/base/card-api';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -18,11 +19,8 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
-import { CardDef, setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let store: StoreService;
 
@@ -37,7 +35,6 @@ class StubRealmService extends RealmService {
 
 module('Integration | tools | switch-submode', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -63,7 +60,7 @@ module('Integration | tools | switch-submode', function (hooks) {
   });
 
   test('switch to code submode by local id of a saved instance', async function (assert) {
-    let instance = (await store.add(new CardDef())) as CardDefType;
+    let instance = (await store.add(new CardDef())) as CardDef;
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
@@ -77,7 +74,7 @@ module('Integration | tools | switch-submode', function (hooks) {
     });
     assert.strictEqual(operatorModeStateService.state?.submode, 'code');
     assert.strictEqual(
-      operatorModeStateService.state?.codePath?.href,
+      operatorModeStateService.state?.codePath,
       `${instance.id}.json`,
     );
   });
@@ -97,13 +94,13 @@ module('Integration | tools | switch-submode', function (hooks) {
     });
     assert.strictEqual(operatorModeStateService.state?.submode, 'code');
     assert.strictEqual(
-      operatorModeStateService.state?.codePath?.href,
+      operatorModeStateService.state?.codePath,
       `${instance.id}.json`,
     );
   });
 
   test('when workspace chooser is open, close it when switching', async function (assert) {
-    let instance = (await store.add(new CardDef())) as CardDefType;
+    let instance = (await store.add(new CardDef())) as CardDef;
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
@@ -144,7 +141,7 @@ module('Integration | tools | switch-submode', function (hooks) {
     });
 
     assert.strictEqual(operatorModeStateService.state?.submode, 'code');
-    assert.strictEqual(operatorModeStateService.state?.codePath?.href, fileUrl);
+    assert.strictEqual(operatorModeStateService.state?.codePath, fileUrl);
     assert.notOk(result, 'no result card when using requested path');
 
     let { status, content } = await cardService.getSource(new URL(fileUrl));
@@ -181,7 +178,7 @@ module('Integration | tools | switch-submode', function (hooks) {
     assert.ok(result, 'returns a result card with the new filename');
     assert.strictEqual(result?.codePath, newFileIdentifier);
     assert.strictEqual(
-      operatorModeStateService.state?.codePath?.href,
+      operatorModeStateService.state?.codePath,
       newFileIdentifier,
     );
 
@@ -213,7 +210,7 @@ module('Integration | tools | switch-submode', function (hooks) {
       createFile: true,
     });
 
-    assert.strictEqual(operatorModeStateService.state?.codePath?.href, fileUrl);
+    assert.strictEqual(operatorModeStateService.state?.codePath, fileUrl);
     assert.notOk(result, 'no result card when using existing blank file');
 
     let { status, content } = await cardService.getSource(new URL(fileUrl));

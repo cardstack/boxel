@@ -14,10 +14,15 @@ import {
   isCodeRef,
 } from './index.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
+import { isPrefixForm } from './realm-identifiers.ts';
 import { isMeta, type CardFields, type Meta } from './resource-types.ts';
 import type { DefinitionLookup } from './definition-lookup.ts';
 import { serialize as serializeCodeRef } from './serializers/code-ref.ts';
-import { maybeRelativeReference as makeRelativeReference } from './url.ts';
+import {
+  isScopedReference,
+  maybeRelativeReference as makeRelativeReference,
+  portableReference,
+} from './url.ts';
 
 export default async function serialize({
   doc,
@@ -47,14 +52,13 @@ export default async function serialize({
   const metaCodeRefOpts = {
     ...codeRefOpts,
     allowRelative: true as true,
-    ...(realmURL && {
-      maybeRelativeReference: (reference: string) =>
-        makeRelativeReference(
-          new URL(reference, relativeTo),
-          relativeTo,
-          realmURL,
-        ),
-    }),
+    maybeRelativeReference: (reference: string) =>
+      portableReference(
+        new URL(reference, relativeTo),
+        relativeTo,
+        realmURL,
+        virtualNetwork,
+      ),
   };
 
   const result: LooseSingleCardDocument = {
@@ -115,10 +119,17 @@ export default async function serialize({
   delete result.data.meta.realmURL;
   delete result.data.meta.lastModified;
   delete result.data.meta.resourceCreatedAt;
-  // Serve-time join output (the durable screenshot URLs of whatever instance
+  // The fingerprint of the file's own bytes, reported on a write response.
+  // Storing it inside those bytes would make it a statement about the file as
+  // it was before this write, and change the very content it describes.
+  delete result.data.meta.version;
+  // Serve-time join output (the durable capture URLs of whatever instance
   // the doc was GET from) — persisting an echo would pin a copied card's
   // source file to the original's captures.
-  delete result.data.meta.screenshots;
+  delete result.data.meta.captures;
+  // How a search row carrying this card was served, not a fact about the card:
+  // a client writing back a row whose relationships were withheld echoes it.
+  delete result.data.meta.relationshipsWithheld;
   delete result.included;
   delete result.data.links;
   result.data.type = 'card';
@@ -319,6 +330,82 @@ async function resolveChildDef(
   return await definitionLookup.lookupDefinition(codeRef);
 }
 
+// What a relationship's `links.self` should be stored as.
+//
+// Inside the writing realm a link is stored relative, whichever form the
+// client sent. Outside it, a scoped reference is stored exactly as sent, and a
+// URL is stored by its realm's registered prefix when that realm has one, so
+// the catalog is written as `@cardstack/catalog/…` however the client spelled
+// it. A URL in a realm with no registered prefix is stored resolved.
+//
+// Whether a link is inside the realm is decided in URL space, so the link is
+// resolved before the question is asked: `relativeTo` is always a URL here,
+// and `relativeReference` refuses a mixed RRI/URL pair rather than resolve
+// across forms — handing it a scoped reference returns that reference
+// unchanged, which looks like "cannot be relativized" even for a link into
+// this very realm.
+//
+// Storing a resolved URL for a link into a realm that has a registered prefix
+// is the bug this exists to prevent: it bakes whatever URL the linked realm answers to in this
+// environment into a realm that is version controlled.
+export function storedRelationshipLink(
+  selfLink: string,
+  relativeTo: URL,
+  realmURL: URL,
+  virtualNetwork: VirtualNetwork,
+): string {
+  // A scoped reference whose prefix this process has not registered cannot be
+  // resolved, and asking anyway is worse than not asking: `resolveURL` treats
+  // it as a relative reference and joins it against the base, so
+  // `@scope/name/x` comes back as a URL *inside* the writing realm and then
+  // relativizes to `./@scope/name/x`. It is absolute and cross-realm by
+  // construction, so store it exactly as sent.
+  if (!virtualNetwork.isRegisteredPrefix(selfLink) && isPrefixForm(selfLink)) {
+    return selfLink;
+  }
+  let resolved: URL;
+  try {
+    resolved = virtualNetwork.resolveURL(selfLink, relativeTo);
+  } catch (e) {
+    // A reference that will not resolve is left exactly as it arrived.
+    return selfLink;
+  }
+  let relative = makeRelativeReference(resolved, relativeTo, realmURL);
+  if (
+    relative === resolved.href &&
+    isScopedReference(selfLink, virtualNetwork)
+  ) {
+    return selfLink;
+  }
+  if (relative === resolved.href) {
+    return virtualNetwork.unresolveURL(resolved.href);
+  }
+  return relative;
+}
+
+// The card a stored relationship's `links.self` names.
+//
+// The inverse of `storedRelationshipLink`, and it has to be the realm's own
+// resolution rather than URL math for the same reasons that one is: a link
+// inside the writing realm is stored relative to the file that holds it, and a
+// scoped reference is stored exactly as sent. A reader that resolved either by
+// hand would get a URL inside the wrong realm.
+//
+// A reference that will not resolve comes back as it was stored, which is what
+// `storedRelationshipLink` does with the same input — one unresolvable link is
+// not a reason to refuse a read of every other one.
+export function resolvedRelationshipLink(
+  selfLink: string,
+  relativeTo: URL,
+  virtualNetwork: VirtualNetwork,
+): string {
+  try {
+    return virtualNetwork.resolveURL(selfLink, relativeTo).href;
+  } catch (e) {
+    return selfLink;
+  }
+}
+
 async function processRelationships({
   relationships,
   definition,
@@ -346,15 +433,12 @@ async function processRelationships({
       if (processedValue.links.self !== null) {
         let selfLink = processedValue.links.self;
         if (realmURL && selfLink) {
-          try {
-            selfLink = makeRelativeReference(
-              virtualNetwork.resolveURL(selfLink, relativeTo),
-              relativeTo,
-              realmURL,
-            );
-          } catch (e) {
-            // ignore malformed URLs and leave as-is
-          }
+          selfLink = storedRelationshipLink(
+            selfLink,
+            relativeTo,
+            realmURL,
+            virtualNetwork,
+          );
         }
         processedValue.links = {
           self: selfLink,

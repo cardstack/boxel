@@ -12,6 +12,41 @@ import {
 
 import { tracked } from '@glimmer/tracking';
 
+import Base64ImageField from '@cardstack/base/base64-image';
+import BigIntegerField from '@cardstack/base/big-integer';
+import BooleanField from '@cardstack/base/boolean';
+import {
+  CardDef,
+  Component,
+  contains,
+  containsMany,
+  field,
+  FieldDef,
+  flushLogs,
+  getFieldDescription,
+  getQueryableValue,
+  linksTo,
+  linksToMany,
+  MaybeBase64Field,
+  queryableValue,
+  subscribeToChanges,
+  unsubscribeFromChanges,
+  ReadOnlyField,
+  instanceOf,
+  CardInfoField,
+  Theme,
+} from '@cardstack/base/card-api';
+import CodeRefField from '@cardstack/base/code-ref';
+import DateField from '@cardstack/base/date';
+import DateTimeField from '@cardstack/base/datetime';
+import EmailField from '@cardstack/base/email';
+import EthereumAddressField from '@cardstack/base/ethereum-address';
+import { FileDef } from '@cardstack/base/file-api';
+import MarkdownField from '@cardstack/base/markdown';
+import NumberField from '@cardstack/base/number';
+import PhoneNumberField from '@cardstack/base/phone-number';
+import StringField from '@cardstack/base/string';
+import TextAreaField from '@cardstack/base/text-area';
 import Plane from '@cardstack/boxel-icons/plane';
 import { getService } from '@universal-ember/test-support';
 import format from 'date-fns/format';
@@ -31,6 +66,7 @@ import {
   PermissionsContextName,
   fields,
   cardTypeDisplayName,
+  CardURLContextName,
   rri,
   type CodeRef,
 } from '@cardstack/runtime-common';
@@ -48,42 +84,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
 } from '../../helpers';
-import {
-  Base64ImageField,
-  BigIntegerField,
-  BooleanField,
-  CardDef,
-  CodeRefField,
-  Component,
-  contains,
-  containsMany,
-  DateField,
-  DateTimeField,
-  EmailField,
-  EthereumAddressField,
-  field,
-  FieldDef,
-  FileDef,
-  flushLogs,
-  getFieldDescription,
-  getQueryableValue,
-  linksTo,
-  linksToMany,
-  MarkdownField,
-  MaybeBase64Field,
-  NumberField,
-  PhoneNumberField,
-  queryableValue,
-  setupBaseRealm,
-  StringField,
-  subscribeToChanges,
-  TextAreaField,
-  unsubscribeFromChanges,
-  ReadOnlyField,
-  instanceOf,
-  CardInfoField,
-  Theme,
-} from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
@@ -95,7 +95,6 @@ let loader: Loader;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
@@ -985,7 +984,7 @@ module('Integration | card-basics', function (hooks) {
     // The capture/discovery contract: a rendered field boundary — a card
     // rendered as a field, a compound field's wrapper, and the plural wrappers
     // in both their view and edit forms — carries data-card-field=<fieldName>,
-    // so selector-based screenshot capture and region discovery can address
+    // so selector-based capture and region discovery can address
     // fields in templates that never opted in. The card root itself carries no
     // field context, so it must not carry the attribute.
     test('rendered field boundaries carry data-card-field', async function (assert) {
@@ -1705,6 +1704,75 @@ module('Integration | card-basics', function (hooks) {
         .hasValue('', 'input field is correct');
       assert.deepEqual(driver.ref, undefined, 'code ref can be unset');
     });
+
+    module(
+      'CodeRef field in a realm registered under a prefix',
+      function (hooks) {
+        let mockMatrixUtils = setupMockMatrix(hooks);
+        setupLocalIndexing(hooks);
+
+        test('a relative code ref resolves against the prefix-form card id and is stored in that form', async function (assert) {
+          class Person extends CardDef {}
+          class DriverCard extends CardDef {
+            @field ref = contains(CodeRefField);
+            static edit = class Edit extends Component<typeof this> {
+              <template>
+                <div data-test-ref><@fields.ref /></div>
+              </template>
+            };
+          }
+          await setupIntegrationTestRealm({
+            mockMatrixUtils,
+            contents: {
+              'person.gts': { Person },
+              'driver.gts': { DriverCard },
+              'driver-1.json': {
+                data: {
+                  attributes: {},
+                  meta: {
+                    adoptsFrom: { module: './driver', name: 'DriverCard' },
+                  },
+                },
+              },
+            },
+          });
+          let virtualNetwork = getService('network').virtualNetwork;
+          virtualNetwork.addRealmMapping('@test/cards/', testRealmURL);
+          try {
+            let store = getService('store');
+            let driver = (await store.get(
+              `${testRealmURL}driver-1`,
+            )) as CardDef & {
+              ref?: CodeRef;
+            };
+            assert.strictEqual(
+              driver.id,
+              '@test/cards/driver-1',
+              'the card is identified in prefix form',
+            );
+
+            // Card renderers provide the card's id as the base a relative
+            // module resolves against; `renderCard` renders the field alone.
+            provideConsumeContext(CardURLContextName, driver.id);
+            await renderCard(loader, driver, 'edit');
+            await fillIn('[data-test-ref] input', './person/Person');
+            await waitFor('[data-test-hasValidated]');
+            assert
+              .dom(
+                '[data-test-ref] [data-test-boxel-input-validation-state="valid"]',
+              )
+              .exists('the relative code ref is valid');
+            assert.deepEqual(
+              driver.ref,
+              { module: rri('@test/cards/person'), name: 'Person' },
+              'the module is stored as an RRI in prefix form',
+            );
+          } finally {
+            virtualNetwork.removeRealmMapping('@test/cards/');
+          }
+        });
+      },
+    );
 
     test('render base64 image card', async function (assert) {
       class DriverCard extends CardDef {
@@ -3181,6 +3249,109 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-name]')
         .exists('field content is still rendered')
         .containsText('Arthur Dent');
+    });
+
+    test('atom field without a container inherits the color of the surface it sits on', async function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+        @field cardTitle = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+      }
+      class Person extends CardDef {
+        @field pet = linksTo(Pet);
+        @field favoritePet = linksTo(Pet);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            {{! template-lint-disable no-inline-styles }}
+            <div class='dark-container' data-test-surface>
+              <@fields.pet @format='atom' @displayContainer={{false}} />
+              <@fields.favoritePet @format='atom' />
+            </div>
+            <style scoped>
+              .dark-container {
+                background-color: rgb(0, 0, 0);
+                color: rgb(255, 255, 255);
+              }
+            </style>
+          </template>
+        };
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Pet, Person });
+
+      let mango = new Pet({ name: 'Mango' });
+      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+      let hassan = new Person({ pet: mango, favoritePet: mango });
+
+      await renderCard(loader, hassan, 'isolated');
+
+      assert
+        .dom('[data-test-surface] .display-container-false')
+        .containsText('Mango')
+        .hasStyle(
+          { color: 'rgb(255, 255, 255)' },
+          'the container-less atom takes the surface color',
+        );
+      assert
+        .dom('[data-test-surface] .display-container-true')
+        .containsText('Mango')
+        .doesNotHaveStyle(
+          { color: 'rgb(255, 255, 255)' },
+          'the contained atom keeps the container foreground color',
+        );
+    });
+
+    test('card container corner follows the theme radius', async function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+        @field cardTitle = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+      }
+      class Person extends CardDef {
+        @field pet = linksTo(Pet);
+        @field otherPet = linksTo(Pet);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <@fields.pet @format='embedded' />
+            <@fields.otherPet @format='embedded' />
+          </template>
+        };
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Pet, Person });
+
+      let squareTheme = new Theme({
+        cardInfo: new CardInfoField({ name: 'Square' }),
+        cssVariables: ':root { --radius: 0px; }',
+      });
+      await saveCard(squareTheme, `${testRealmURL}Theme/square`, loader);
+      let mango = new Pet({
+        name: 'Mango',
+        cardInfo: new CardInfoField({ theme: squareTheme }),
+      });
+      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+      let vanGogh = new Pet({ name: 'Van Gogh' });
+      await saveCard(vanGogh, `${testRealmURL}Pet/vangogh`, loader);
+      let hassan = new Person({ pet: mango, otherPet: vanGogh });
+
+      await renderCard(loader, hassan, 'isolated');
+
+      assert
+        .dom(`[data-test-card="${testRealmURL}Pet/mango"]`)
+        .hasStyle(
+          { borderRadius: '0px' },
+          'a themed card takes its corner from the theme --radius',
+        );
+      assert
+        .dom(`[data-test-card="${testRealmURL}Pet/vangogh"]`)
+        .hasStyle(
+          { borderRadius: '10px' },
+          'an unthemed card keeps the default corner',
+        );
     });
 
     test('can #each over a containsMany primitive @fields', async function (assert) {

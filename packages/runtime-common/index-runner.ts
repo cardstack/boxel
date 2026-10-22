@@ -6,13 +6,19 @@ import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import {
   logger,
-  hasExecutableExtension,
+  passInvalidatesExecutables,
   isCardResource,
   jobIdentity,
   Deferred,
   RealmPaths,
+  realmConfigHrefFor,
   type IndexWriter,
   type Batch,
+  type BatchDoneResult,
+  type CommitValidation,
+  type CommitValidationRound,
+  type IncrementalArgs,
+  type IncrementalChange,
   type LooseCardResource,
   type InstanceEntry,
   type InstanceErrorIndexEntry,
@@ -30,6 +36,7 @@ import {
   type SearchIndexEntry,
 } from './index.ts';
 import { moduleFrom } from './code-ref.ts';
+import { baseRealm } from './constants.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { CacheScope, DefinitionLookup } from './definition-lookup.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -38,8 +45,10 @@ import {
   coerceErrorMessage,
   isCardError,
   serializableError,
+  stringifyErrorForLog,
 } from './error.ts';
 import type { IndexingProgressEvent } from './worker.ts';
+import { progressLaneOf } from './jobs/queue-claim.ts';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver.ts';
 import { resolveModuleCacheContext } from './index-runner/prewarm-modules.ts';
 import {
@@ -62,6 +71,91 @@ type VisitRenderOutcome =
   | { status: 'rendered'; result: IndexVisitRenderResult }
   | { status: 'skipped' }
   | { status: 'error'; error: unknown };
+
+// A render that times out while its page is idle — main thread responsive, no
+// script running, nothing fetching, no module import or document load in
+// flight — was waiting on nothing, and nothing about the next file changes
+// that. Several in a row therefore describe the stack rather than the files:
+// an origin the page needs (the host bundle, the realm-server, the icons
+// server) is unreachable from the browser, and every remaining file would
+// cost the full render timeout to fail the same way. A from-scratch pass gives
+// up after this many consecutive idle timeouts, so the job fails within
+// minutes naming the cause instead of grinding to its wall-clock limit and
+// being rejected with nothing written. 0 disables the guard.
+const DEFAULT_IDLE_RENDER_TIMEOUT_ABORT_AFTER = 3;
+const envIdleRenderTimeoutAbortAfter = Number(
+  (
+    globalThis as {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process?.env?.INDEX_IDLE_RENDER_TIMEOUT_ABORT_AFTER,
+);
+export const IDLE_RENDER_TIMEOUT_ABORT_AFTER =
+  Number.isFinite(envIdleRenderTimeoutAbortAfter) &&
+  envIdleRenderTimeoutAbortAfter >= 0
+    ? envIdleRenderTimeoutAbortAfter
+    : DEFAULT_IDLE_RENDER_TIMEOUT_ABORT_AFTER;
+
+// Script-busy fraction below which the page counts as idle. The CPU sample
+// covers a short window, so a page that is doing nothing useful can still show
+// a few percent of housekeeping.
+const IDLE_SCRIPT_BUSY_MAX = 0.05;
+
+const RENDER_TIMEOUT_TITLE = 'Render timeout';
+// How many reads `#removalsBackOnDisk` keeps in flight against the realm.
+const REMOVAL_READ_CONCURRENCY = 8;
+
+// A module every realm depends on and none owns. When consecutive renders
+// have timed out idle, whether this renders decides between a stack that
+// cannot render anything and cards that happen to hang on their own.
+const CANARY_MODULE_URL = new URL('card-api', baseRealm.url).href;
+
+// Whether a visit's render timed out with nothing in flight. The timeout error
+// carries the diagnostics the prerender server captured as it fired (see
+// RenderTimeoutDiagnostics), flattened onto the visit's `diagnostics`. The
+// signals that decide idleness are the ones captured from outside the page —
+// the responsiveness probe, the CPU sample, the CDP request list — and each
+// must be present and idle: a timeout whose diagnostics are missing, or show
+// work in progress, is a slow or stuck render rather than an idle one and does
+// not count. The in-page counters are captured only once the page has reached
+// a render stage; when present they can show work the outside view cannot, and
+// then disqualify, but their absence says nothing.
+export function isIdleRenderTimeout(result: IndexVisitRenderResult): boolean {
+  let errors = [
+    result.pageUnusableError,
+    result.card?.error,
+    result.fileExtract?.error,
+    result.fileRender?.error,
+  ];
+  if (!errors.some((e) => e?.error?.title === RENDER_TIMEOUT_TITLE)) {
+    return false;
+  }
+  let d = result.diagnostics;
+  if (!d || d.mainThreadResponsive !== true) {
+    return false;
+  }
+  if (
+    typeof d.scriptBusyFraction !== 'number' ||
+    d.scriptBusyFraction >= IDLE_SCRIPT_BUSY_MAX
+  ) {
+    return false;
+  }
+  if (
+    !Array.isArray(d.pendingNetworkRequests) ||
+    d.pendingNetworkRequests.length > 0
+  ) {
+    return false;
+  }
+  let busy = (list: unknown[] | undefined) =>
+    Array.isArray(list) && list.length > 0;
+  return !(
+    busy(d.inFlightModuleImports) ||
+    busy(d.cardDocsInFlight) ||
+    busy(d.fileMetaDocsInFlight) ||
+    busy(d.cardDocLoadsInFlight) ||
+    busy(d.fileMetaDocLoadsInFlight)
+  );
+}
 
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
@@ -105,9 +199,29 @@ export class IndexRunner {
   // concurrently with the still-running index pass.
   #onInvalidationsReady?: (args: {
     changes: PrerenderedHtmlChange[];
-    generation: number;
     loaderEpoch: string;
+    // The pass's own id, which its `realm_index_commits` row will carry.
+    passId: string;
+    // The generation the pass anticipated at setup. Only a guess at the one it
+    // commits under; see `PrerenderHtmlArgs.generation` for its one reader.
+    provisionalGeneration: number;
   }) => void;
+  // Builds the `incremental-index` job a commit enqueues when peer commits
+  // keep leaving this pass's rows stale past the validation rounds (see
+  // `CommitValidation.followUpJobArgs`).
+  #followUpJobArgs?: (
+    changes: IncrementalChange[],
+    ignoreData: Record<string, string>,
+  ) => IncrementalArgs;
+  // URLs this pass's commit validation added to its invalidation set, in the
+  // order the rounds added them. Reported with the pass's invalidations, so
+  // the event announcing the pass names them too.
+  #validationAddedURLs: string[] = [];
+  // The number of the commit-time validation round now re-visiting, or 0
+  // outside one. Each round renders under a scope of its own: a peer's commit
+  // moved what the pass read, and a prerender tab reuses what it read under
+  // one scope without checking it again (see `renderScopeFor`).
+  #renderScopeRound = 0;
   readonly stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,
@@ -115,7 +229,21 @@ export class IndexRunner {
     fileErrors: 0,
     totalIndexEntries: 0,
   };
-  #shouldClearCacheForNextRender = true;
+  // Armed only by a pass whose invalidation set contains an executable — the
+  // same condition that mints a fresh loader epoch. A pass that touches no
+  // module has nothing to drop: the tab's evaluated graph still describes the
+  // modules on disk, and asking it to drop the graph costs a full re-fetch and
+  // re-evaluation of every module the first card reaches. That cost is
+  // amortized across a large pass and is the whole of a one-row pass, which is
+  // what a single card save produces.
+  #shouldClearCacheForNextRender = false;
+  // Unconditional, unlike the loader drop above: every pass sends this on its
+  // first render. Dropping the store is what stops a pass being handed an
+  // instance, a cached document, or a local-id pairing another pass left on
+  // the tab, and that is true whether or not any module changed. It is also
+  // cheap — the instances are rebuilt from documents the pass is fetching
+  // anyway — so there is nothing here to trade away.
+  #shouldResetStoreForNextRender = true;
   // Identifier for this runner's indexing batch (CS-10758 step 3).
   // Threaded into PrerenderVisitArgs and released from the fromScratch /
   // incremental finally blocks. One runner = one batch: if fromScratch
@@ -123,6 +251,7 @@ export class IndexRunner {
   // warm loader ownership — intended). Populated in the constructor after
   // jobInfo is known so the id is easy to correlate with a job in logs.
   #batchId!: string;
+  #idleRenderTimeoutAbortAfter: number;
 
   constructor({
     realmURL,
@@ -136,10 +265,12 @@ export class IndexRunner {
     reportStatus,
     onProgress,
     onInvalidationsReady,
+    followUpJobArgs,
     prerenderer,
     auth,
     fetch,
     realmOwnerUserId,
+    idleRenderTimeoutAbortAfter = IDLE_RENDER_TIMEOUT_ABORT_AFTER,
   }: {
     realmURL: URL;
     reader: Reader;
@@ -151,6 +282,9 @@ export class IndexRunner {
     auth: string;
     fetch: typeof globalThis.fetch;
     realmOwnerUserId: string;
+    // Consecutive idle render timeouts after which a from-scratch pass gives
+    // up; see IDLE_RENDER_TIMEOUT_ABORT_AFTER. 0 disables the guard.
+    idleRenderTimeoutAbortAfter?: number;
     jobInfo?: JobInfo;
     // Optional override of `jobInfo.priority`. When both are present,
     // `jobPriority` wins — this is the path the worker handler takes
@@ -164,9 +298,14 @@ export class IndexRunner {
     onProgress?(event: IndexingProgressEvent): void;
     onInvalidationsReady?(args: {
       changes: PrerenderedHtmlChange[];
-      generation: number;
       loaderEpoch: string;
+      passId: string;
+      provisionalGeneration: number;
     }): void;
+    followUpJobArgs?(
+      changes: IncrementalChange[],
+      ignoreData: Record<string, string>,
+    ): IncrementalArgs;
   }) {
     this.#indexWriter = indexWriter;
     this.#realmPaths = new RealmPaths(realmURL, virtualNetwork);
@@ -179,16 +318,20 @@ export class IndexRunner {
       reservationId: -1,
       priority: 0,
       queueWaitMs: null,
+      concurrencyGroup: null,
+      laneFamily: null,
     };
     this.#jobPriority = jobPriority ?? jobInfo?.priority ?? 0;
     this.#batchId = `${this.#jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
     this.#reportStatus = reportStatus;
     this.#onProgress = onProgress;
     this.#onInvalidationsReady = onInvalidationsReady;
+    this.#followUpJobArgs = followUpJobArgs;
     this.#prerenderer = prerenderer;
     this.#auth = auth;
     this.#fetch = fetch;
     this.#realmOwnerUserId = realmOwnerUserId;
+    this.#idleRenderTimeoutAbortAfter = idleRenderTimeoutAbortAfter;
     this.#definitionLookup = definitionLookup;
     this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
@@ -218,9 +361,11 @@ export class IndexRunner {
     current.#dependencyResolver.reset();
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
-    // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
+    // at the end. `visitLoopMs`, `swapMs` and the swap's attempt counts are set
+    // inside the try below.
     let visitLoopMs: number | undefined;
     let swapMs: number | undefined;
+    let swapCommit: Omit<BatchDoneResult, 'totalIndexEntries'> | undefined;
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing`,
     );
@@ -242,6 +387,7 @@ export class IndexRunner {
       type: 'indexing-started',
       realmURL: current.realmURL.href,
       jobId: current.#jobInfo.jobId,
+      ...progressLaneOf(current.#jobInfo),
       jobType: 'from-scratch',
       totalFiles: 0,
       files: [],
@@ -262,8 +408,14 @@ export class IndexRunner {
     invalidations = discoverResult.urls.map((href) => new URL(href));
     // The from-scratch URL list lives outside the batch's invalidation set
     // until each visit writes its row; feed the loader-epoch scan up front
-    // so the epoch is fixed before the enqueue and the first visit.
+    // so the epoch is fixed before the enqueue and the first visit. The
+    // loader reset reads the same list for the same reason: it is decided
+    // before the first visit, and `batch.invalidations` is empty until that
+    // visit has already been dispatched.
     current.batch.noteInvalidatedURLs(discoverResult.urls);
+    if (passInvalidatesExecutables(discoverResult.urls)) {
+      current.#scheduleClearCacheForNextRender();
+    }
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed invalidations in ${discoverMs} ms`,
     );
@@ -300,9 +452,10 @@ export class IndexRunner {
     let resumedSkipped = 0;
     try {
       await current.#runVisitLoop(invalidations, {
-        // Resume guard. If a previous attempt of this same job already wrote
-        // URL_X to the working table AND the EFS mtime hasn't changed since,
-        // skip the visit — the existing working row is still authoritative
+        abortAfterIdleRenderTimeouts: current.#idleRenderTimeoutAbortAfter,
+        // Resume guard. If a previous attempt of this same job already staged
+        // URL_X AND the EFS mtime hasn't changed since, skip the visit — the
+        // row this attempt resumed from it is still authoritative
         // and `applyBatchUpdates` will promote it (the constructor pre-seeded
         // it into `#invalidations`). If mtime DID change, fall through to a
         // normal visit so the upsert in `updateEntry` overwrites the resumed
@@ -326,6 +479,7 @@ export class IndexRunner {
             type: 'file-visited',
             realmURL: current.realmURL.href,
             jobId: current.#jobInfo.jobId,
+            reservationId: current.#jobInfo.reservationId,
             url: url.href,
             filesCompleted,
             totalFiles,
@@ -342,8 +496,31 @@ export class IndexRunner {
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
       );
       let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
-      swapMs = Date.now() - finalizeStart;
+      let { totalIndexEntries, ...commit } = await current.batch.done({
+        fullRealm: true,
+        validation: current.#commitValidation(
+          new Set(discoverResult.deletedUrls),
+          {
+            grow: (count) => {
+              totalFiles += count;
+            },
+            onVisited: (url) => {
+              filesCompleted++;
+              current.#onProgress?.({
+                type: 'file-visited',
+                realmURL: current.realmURL.href,
+                jobId: current.#jobInfo.jobId,
+                reservationId: current.#jobInfo.reservationId,
+                url: url.href,
+                filesCompleted,
+                totalFiles,
+              });
+            },
+          },
+        ),
+      });
+      swapMs = Date.now() - finalizeStart - (commit.validationMs ?? 0);
+      swapCommit = commit;
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index finalization in ${swapMs} ms`,
       );
@@ -353,6 +530,7 @@ export class IndexRunner {
         type: 'indexing-finished',
         realmURL: current.realmURL.href,
         jobId: current.#jobInfo.jobId,
+        ...progressLaneOf(current.#jobInfo),
         stats: current.stats,
       });
       // Release the batch's ownership of this realm's affinity on the
@@ -379,10 +557,14 @@ export class IndexRunner {
       } in ${Date.now() - start} ms`,
     );
     return {
-      invalidations: [...invalidations].map((url) => url.href),
+      invalidations: [
+        ...invalidations.map((url) => url.href),
+        ...current.#validationAddedURLs,
+      ],
       ignoreData: current.#ignoreData,
       stats: current.stats,
-      generation: current.batch.currentGeneration,
+      generation: current.batch.committedGeneration,
+      baseGeneration: current.batch.baseGeneration,
       phaseTimings: {
         totalMs: Date.now() - start,
         setupMs,
@@ -392,6 +574,7 @@ export class IndexRunner {
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
         writeMs: current.batch.writeMs,
         ...(swapMs !== undefined ? { swapMs } : {}),
+        ...(swapCommit ?? {}),
       },
     };
   }
@@ -407,9 +590,11 @@ export class IndexRunner {
     current.#dependencyResolver.reset();
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
-    // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
+    // at the end. `visitLoopMs`, `swapMs` and the swap's attempt counts are set
+    // inside the try below.
     let visitLoopMs: number | undefined;
     let swapMs: number | undefined;
+    let swapCommit: Omit<BatchDoneResult, 'totalIndexEntries'> | undefined;
     let operations = new Map<string, 'update' | 'delete'>();
     for (let { url, operation } of changes) {
       if (operation === 'delete') {
@@ -417,6 +602,21 @@ export class IndexRunner {
       } else if (!operations.has(url.href)) {
         operations.set(url.href, 'update');
       }
+    }
+    // A removal is decided by what the realm holds when the pass runs, not by
+    // the change that asked for it. Every removal is published after its file
+    // is gone, so a file that is on disk now was written again since, and
+    // indexing it as removed would drop the row of a card that exists. The
+    // writer that put it back may be the same one, whose publish the queue
+    // merged into this job, or another one, whose own pass in its own lane may
+    // already have run. Either way this pass indexes the file. So a writer
+    // recreating a path never has to wait for the removal's pass, and a removal
+    // releases its locks once its bytes are gone.
+    let removals = [...operations]
+      .filter(([, operation]) => operation === 'delete')
+      .map(([href]) => href);
+    for (let href of await current.#removalsBackOnDisk(removals)) {
+      operations.set(href, 'update');
     }
     let urls = [...operations.keys()].map((href) => new URL(href));
     current.#log.debug(
@@ -437,6 +637,7 @@ export class IndexRunner {
       type: 'indexing-started',
       realmURL: current.realmURL.href,
       jobId: current.#jobInfo.jobId,
+      ...progressLaneOf(current.#jobInfo),
       jobType: 'incremental',
       totalFiles: 0,
       files: [],
@@ -488,15 +689,17 @@ export class IndexRunner {
           current.batch.invalidations.map((href) => new URL(href)),
           current.realmURL,
         );
+        invalidations = prioritizeWrittenURLs(
+          invalidations,
+          urls,
+          current.realmURL,
+        );
         invalidations =
           await current.#dependencyResolver.orderInvalidationsByDependencies(
             invalidations,
           );
         orderMs = Date.now() - orderStart;
-        let hasExecutableInvalidation = invalidations.some((url) =>
-          hasExecutableExtension(url.href),
-        );
-        if (hasExecutableInvalidation) {
+        if (passInvalidatesExecutables(invalidations.map((url) => url.href))) {
           if (!current.#shouldClearCacheForNextRender) {
             current.#log.debug(
               `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
@@ -529,7 +732,7 @@ export class IndexRunner {
             // file is deleted, there is nothing to visit
             return 'delete';
           }
-          // Previous attempt of this job already produced a working row for
+          // Previous attempt of this job already staged a row for
           // this URL. `args.changes` is the deterministic seed for
           // incremental jobs; if the file changed again, that's a different
           // changeset enqueued as a separate job. Skip.
@@ -549,6 +752,7 @@ export class IndexRunner {
             type: 'file-visited',
             realmURL: current.realmURL.href,
             jobId: current.#jobInfo.jobId,
+            reservationId: current.#jobInfo.reservationId,
             url: url.href,
             filesCompleted,
             totalFiles,
@@ -563,14 +767,41 @@ export class IndexRunner {
       visitLoopMs = Date.now() - loopStart;
 
       let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
-      swapMs = Date.now() - finalizeStart;
+      let { totalIndexEntries, ...commit } = await current.batch.done({
+        validation: current.#commitValidation(
+          new Set(
+            [...operations]
+              .filter(([, operation]) => operation === 'delete')
+              .map(([href]) => href),
+          ),
+          {
+            grow: (count) => {
+              totalFiles += count;
+            },
+            onVisited: (url) => {
+              filesCompleted++;
+              current.#onProgress?.({
+                type: 'file-visited',
+                realmURL: current.realmURL.href,
+                jobId: current.#jobInfo.jobId,
+                reservationId: current.#jobInfo.reservationId,
+                url: url.href,
+                filesCompleted,
+                totalFiles,
+              });
+            },
+          },
+        ),
+      });
+      swapMs = Date.now() - finalizeStart - (commit.validationMs ?? 0);
+      swapCommit = commit;
       current.stats.totalIndexEntries = totalIndexEntries;
     } finally {
       current.#onProgress?.({
         type: 'indexing-finished',
         realmURL: current.realmURL.href,
         jobId: current.#jobInfo.jobId,
+        ...progressLaneOf(current.#jobInfo),
         stats: current.stats,
       });
       // Release the batch's ownership of this realm's affinity on the
@@ -595,10 +826,15 @@ export class IndexRunner {
       }ms`,
     );
     return {
-      invalidations: [...invalidations].map((url) => url.href),
+      invalidations: [
+        ...invalidations.map((url) => url.href),
+        ...current.#validationAddedURLs,
+      ],
+      invalidatedTypes: current.batch.touchedTypes,
       ignoreData: current.#ignoreData,
       stats: current.stats,
-      generation: current.batch.currentGeneration,
+      generation: current.batch.committedGeneration,
+      baseGeneration: current.batch.baseGeneration,
       phaseTimings: {
         totalMs: Date.now() - start,
         setupMs,
@@ -607,19 +843,63 @@ export class IndexRunner {
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
         writeMs: current.batch.writeMs,
         ...(swapMs !== undefined ? { swapMs } : {}),
+        ...(swapCommit ?? {}),
       },
     };
   }
 
+  // Which of `removals` have a file on disk again, read through the realm a
+  // few at a time: a folder removal can carry thousands of urls, and a burst
+  // of reads that size against the realm is what makes a read stall. A read
+  // that fails leaves its url a removal, which is what the caller asked for;
+  // only a recreate that coincides with the failure goes unindexed, until
+  // the recreating writer's own pass or a later one visits the url.
+  async #removalsBackOnDisk(removals: string[]): Promise<string[]> {
+    let backOnDisk: string[] = [];
+    let next = 0;
+    let readNext = async () => {
+      while (next < removals.length) {
+        let href = removals[next++];
+        try {
+          if (await this.#reader.readFile(new URL(href))) {
+            backOnDisk.push(href);
+          }
+        } catch (err: unknown) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} could not read ${href} to tell whether it was written again after its removal; indexing it as removed: ${stringifyErrorForLog(err)}`,
+          );
+        }
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(REMOVAL_READ_CONCURRENCY, removals.length) },
+        readNext,
+      ),
+    );
+    return backOnDisk;
+  }
+
   // Announce this pass's now-fixed invalidation set, tagged per URL:
   // genuine deletions (the URLs in `deletes`) as 'delete', everything else —
-  // fan-out dependents are always re-renders — as 'update'. Only fires in
-  // split mode; the fused path renders HTML inline and enqueues nothing.
-  #notifyInvalidationsReady(urls: string[], deletes: Set<string>) {
-    if (!this.#onInvalidationsReady || urls.length === 0) {
-      return;
-    }
-    if (!this.batch.splitPrerenderHtml) {
+  // fan-out dependents are always re-renders — as 'update'. The HTML job
+  // renders the URLs this pass visits plus the fan-out's render-only
+  // dependents, which this pass does not visit (see
+  // `Batch.renderOnlyInvalidations`). Only fires in split mode; the fused
+  // path renders HTML inline and enqueues nothing.
+  #notifyInvalidationsReady(visited: string[], deletes: Set<string>) {
+    this.#announceToPrerenderHtml(
+      [...new Set([...visited, ...this.batch.renderOnlyInvalidations])],
+      deletes,
+    );
+  }
+
+  #announceToPrerenderHtml(urls: string[], deletes: Set<string>) {
+    if (
+      !this.#onInvalidationsReady ||
+      !this.batch.splitPrerenderHtml ||
+      urls.length === 0
+    ) {
       return;
     }
     this.#onInvalidationsReady({
@@ -627,9 +907,86 @@ export class IndexRunner {
         url,
         operation: deletes.has(url) ? 'delete' : 'update',
       })),
-      generation: this.batch.currentGeneration,
       loaderEpoch: this.batch.loaderEpoch,
+      passId: this.batch.passId,
+      provisionalGeneration: this.batch.provisionalGeneration,
     });
+  }
+
+  // How this pass's commit handles peer passes of the realm that committed
+  // while it ran (see `CommitValidation`). `deletes` are the job's own
+  // deletions, for tagging a re-announcement. `progress` keeps the dashboard's
+  // count honest as rounds add visits.
+  #commitValidation(
+    deletes: Set<string>,
+    progress: { grow(count: number): void; onVisited(url: URL): void },
+  ): CommitValidation {
+    let followUpJobArgs = this.#followUpJobArgs;
+    return {
+      revisit: async (round) =>
+        await this.#revisitForPeers(round, deletes, progress),
+      ...(followUpJobArgs
+        ? {
+            followUpJobArgs: (urls: string[]) =>
+              followUpJobArgs(
+                urls.map((url) => ({ url, operation: 'update' as const })),
+                this.#ignoreData,
+              ),
+          }
+        : {}),
+    };
+  }
+
+  // One validation round: re-visits the URLs a peer's commit left stale, the
+  // way the pass's own visit loop did, then tells the HTML job what it does
+  // not know yet. Everything a visit caches for the pass is dropped first,
+  // since a peer has since changed what it read: the per-instance visit
+  // guard, the dependency-row caches, the store on the prerender tab, and —
+  // when the round touches a module or the loader epoch moved — the tab's
+  // loader.
+  async #revisitForPeers(
+    round: CommitValidationRound,
+    deletes: Set<string>,
+    progress: { grow(count: number): void; onVisited(url: URL): void },
+  ): Promise<void> {
+    this.#indexingInstances.clear();
+    this.#dependencyResolver.reset();
+    this.#renderScopeRound = round.round;
+    this.#shouldResetStoreForNextRender = true;
+    if (round.loaderEpochChanged || passInvalidatesExecutables(round.urls)) {
+      this.#scheduleClearCacheForNextRender();
+    }
+    let urls = sortInvalidations(
+      round.urls.map((href) => new URL(href)),
+      this.realmURL,
+    );
+    urls =
+      await this.#dependencyResolver.orderInvalidationsByDependencies(urls);
+    // The prefetch reads the files' current content hashes, which a peer's
+    // write has moved for any file it rewrote.
+    await this.batch.prefetchFileMeta(this.#visitLocalPaths(urls));
+    this.#validationAddedURLs.push(...round.addedURLs);
+    progress.grow(urls.length);
+    await this.#runVisitLoop(urls, {
+      // Nothing is skipped: a resumed row is exactly what a round replaces,
+      // and a URL the job deleted is read again in case a peer has written
+      // it back since.
+      skipReason: () => undefined,
+      onSkip: () => {},
+      onVisited: progress.onVisited,
+    });
+    this.#announceToPrerenderHtml(
+      ...validationRoundAnnouncement({
+        round,
+        invalidations: this.batch.invalidations,
+        renderOnlyInvalidations: this.batch.renderOnlyInvalidations,
+        deletes,
+      }),
+    );
+    // A later round, or a later full re-announcement, tags these the same way.
+    for (let url of round.urls) {
+      deletes.delete(url);
+    }
   }
 
   // Local paths for the URLs this pass will visit, keyed the same way the
@@ -669,9 +1026,10 @@ export class IndexRunner {
         jobPriority: this.#jobPriority,
         auth: this.#auth,
         batchId: this.#batchId,
+        renderScopeRound: this.#renderScopeRound,
         prerenderer: this.#prerenderer,
-        virtualNetwork: this.#virtualNetwork,
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        consumeResetStoreForRender: () => this.#consumeResetStoreForRender(),
         logDebug: (message) => this.#log.debug(message),
         logWarn: (message) => this.#log.warn(message),
       });
@@ -696,7 +1054,7 @@ export class IndexRunner {
   // dependents — but the NEXT visit's render is started before the current
   // visit's bookkeeping + row write, so the tab renders file N+1 while the
   // worker writes file N. Since a render reads only production `boxel_index`
-  // (never this pass's uncommitted `boxel_index_working` rows), rendering
+  // (never this pass's uncommitted `boxel_index_pending` rows), rendering
   // ahead cannot observe a write that hasn't landed yet.
   //
   // `skipReason` suppresses the render for URLs a prior attempt already
@@ -709,14 +1067,21 @@ export class IndexRunner {
       skipReason,
       onSkip,
       onVisited,
+      abortAfterIdleRenderTimeouts = 0,
     }: {
       skipReason: (url: URL) => 'resumed' | 'delete' | undefined;
       onSkip: (url: URL, reason: 'resumed' | 'delete') => void;
       onVisited: (url: URL) => void;
+      // When set, the pass throws — abandoning the batch — once this many
+      // consecutive visits time out idle (see isIdleRenderTimeout). A
+      // from-scratch pass sets it; an incremental pass, whose rows are the
+      // only record of a write, does not.
+      abortAfterIdleRenderTimeouts?: number;
     },
   ): Promise<void> {
     let n = invalidations.length;
     let renders = new Map<number, Promise<VisitRenderOutcome>>();
+    let idleTimeouts: string[] = [];
     // Start the render for the next non-skipped URL at or after `from`,
     // keeping exactly one render in flight ahead of the finish cursor.
     let prefetch = (from: number) => {
@@ -757,6 +1122,74 @@ export class IndexRunner {
         await this.#handleVisitError(url, err);
       }
       onVisited(url);
+      if (abortAfterIdleRenderTimeouts > 0) {
+        if (
+          outcome.status === 'rendered' &&
+          isIdleRenderTimeout(outcome.result)
+        ) {
+          idleTimeouts.push(url.href);
+        } else {
+          idleTimeouts = [];
+        }
+        if (idleTimeouts.length >= abortAfterIdleRenderTimeouts) {
+          // Consecutive idle timeouts are not proof of a broken stack on their
+          // own: the visit order groups a definition's instances together, so
+          // one card type that hangs on an untracked promise produces the same
+          // run. A module the realm does not own settles it — if that cannot
+          // render either, nothing in this pass can.
+          let canary = await this.#canaryRenderFailure();
+          if (!canary) {
+            this.#log.warn(
+              `${jobIdentity(this.#jobInfo)}: ${idleTimeouts.length} consecutive renders timed out idle (${idleTimeouts.join(', ')}) ` +
+                `but ${CANARY_MODULE_URL} renders, so the stack is healthy and these are recorded as the files' own errors`,
+            );
+            idleTimeouts = [];
+            continue;
+          }
+          // Thrown past #handleVisitError on purpose: this is not one file's
+          // failure to isolate but the pass's inability to render anything,
+          // and the job's rejection is what carries that to whoever awaits
+          // it (readiness, a publish, an operator).
+          let message =
+            `${jobIdentity(this.#jobInfo)} giving up: the last ${idleTimeouts.length} renders each timed out with the page idle ` +
+            `(main thread responsive, no script running, nothing fetching, no module import in flight), and a base module ` +
+            `could not render either (${canary}), so the page is waiting on nothing and no file in this pass can render. ` +
+            `Check that the prerender's browser can reach the host, realm-server and icons origins. Files: ${idleTimeouts.join(', ')}`;
+          this.#log.error(message);
+          throw new Error(message);
+        }
+      }
+    }
+  }
+
+  // Renders CANARY_MODULE_URL on this pass's affinity and reports why it did
+  // not render, or undefined when it did. A module render rather than a card
+  // render: it needs nothing from this realm but the loader epoch, and it goes
+  // through the same page, host bundle, realm-server and icons origins every
+  // visit in the pass depends on.
+  async #canaryRenderFailure(): Promise<string | undefined> {
+    try {
+      let response = await this.#prerenderer.prerenderModule({
+        affinityType: 'realm',
+        affinityValue: this.#realmURL.href,
+        realm: this.#realmURL.href,
+        url: CANARY_MODULE_URL,
+        auth: this.#auth,
+        priority: this.#jobPriority,
+        renderOptions: { loaderEpoch: this.batch.loaderEpoch },
+      });
+      if (response.status === 'ready') {
+        return undefined;
+      }
+      return (
+        response.error?.error?.message ??
+        `module render reported status ${response.status}`
+      );
+    } catch (err) {
+      return coerceErrorMessage(
+        err,
+        'module render threw with no error message',
+      );
     }
   }
 
@@ -854,7 +1287,7 @@ export class IndexRunner {
 
   // A throw during the invalidation / dependency-ordering / file-meta-prefetch
   // phase happens before #runVisitLoop starts, so no per-file visit ever runs
-  // to attach an error to — and the in-flight batch's working table holds only
+  // to attach an error to — and the in-flight batch's staged rows are only
   // fan-out tombstones that were never re-visited, so promoting it via
   // `done()` would delete those dependents. Record the failure on a FRESH
   // batch scoped to just the URLs the job was handed: buffer their error rows
@@ -905,8 +1338,9 @@ export class IndexRunner {
       );
       // Seed the live-card oracle from the production index so an existing
       // card is written as an instance-error — overwriting the `instance`
-      // tombstone the in-flight batch left in the shared working table —
-      // rather than having that tombstone promoted and the card deleted.
+      // tombstone the in-flight batch staged under this job's staging id,
+      // which this batch shares — rather than having that tombstone
+      // promoted and the card deleted.
       await errorBatch.seedLiveTypesFromProduction(recordUrls);
       for (let url of recordUrls) {
         if (errorBatch.resumedRows.has(url.href)) {
@@ -923,11 +1357,7 @@ export class IndexRunner {
           );
         }
       }
-      // Carry realm_meta forward rather than recomputing it: the working
-      // table still holds the failed pass's un-promoted fan-out tombstones,
-      // and a recompute over that state would undercount live dependents in
-      // the type summary until the next successful pass.
-      await errorBatch.done({ carryForwardRealmMeta: true });
+      await errorBatch.done();
     } catch (recordErr) {
       // Recording is best-effort: if the failure was a DB outage the recovery
       // write fails too. The caller still rethrows the original error, so the
@@ -970,6 +1400,14 @@ export class IndexRunner {
       return false;
     }
     this.#shouldClearCacheForNextRender = false;
+    return true;
+  }
+
+  #consumeResetStoreForRender(): boolean {
+    if (!this.#shouldResetStoreForNextRender) {
+      return false;
+    }
+    this.#shouldResetStoreForNextRender = false;
     return true;
   }
 
@@ -1135,7 +1573,6 @@ export class IndexRunner {
       precomputedRenderResult: renderResult,
       diagnostics,
       dependencyResolver: this.#dependencyResolver,
-      virtualNetwork: this.#virtualNetwork,
       updateEntry: async (entryURL, entry) => {
         await this.#writeEntry(entryURL, entry);
         this.#dependencyResolver.invalidateRelationshipDependencyRowCache(
@@ -1168,7 +1605,7 @@ export class IndexRunner {
     }
   }
 
-  // The single chokepoint every `boxel_index_working` row write goes through.
+  // The single chokepoint every `boxel_index_pending` row write goes through.
   // Hands the row to the batch's write-behind buffer rather than upserting it
   // inline, so the visit loop can start the next file's render while this row
   // (and its neighbors, coalesced into a multi-row upsert) drains. The batch
@@ -1178,6 +1615,44 @@ export class IndexRunner {
   }
 }
 
+// What a commit-validation round re-announces to the pass's HTML job: the
+// URLs, and which of them the job deletes. The job renders only after the pass
+// commits, so it needs the URLs the round added, and every URL the round
+// re-visited needs re-announcing as an update. The HTML job may still hold one
+// of those as a deletion: the pass deleted it, a peer wrote it back, and the
+// round's visit published it live. Left as a deletion, the job would tombstone
+// the card's HTML at the generation the card commits under, which the
+// reconcile sweep never revisits. An update for a file that is gone does no
+// harm, because the job keeps the tombstone of a file it cannot read. When two
+// announcements merge, the update wins, so the correction also reaches a job
+// that is still pending. When the loader epoch moved, everything the pass
+// holds is re-announced, so no render runs under the superseded epoch and a
+// warm tab cannot keep modules older than the ones on disk.
+export function validationRoundAnnouncement({
+  round,
+  invalidations,
+  renderOnlyInvalidations,
+  deletes,
+}: {
+  round: Pick<
+    CommitValidationRound,
+    'urls' | 'addedRenderOnlyURLs' | 'loaderEpochChanged'
+  >;
+  invalidations: string[];
+  renderOnlyInvalidations: string[];
+  // The pass's deletions before the round.
+  deletes: ReadonlySet<string>;
+}): [urls: string[], deletes: Set<string>] {
+  let revisited = new Set(round.urls);
+  let urls = round.loaderEpochChanged
+    ? [...invalidations, ...renderOnlyInvalidations]
+    : [...round.urls, ...round.addedRenderOnlyURLs];
+  return [
+    [...new Set(urls)],
+    new Set([...deletes].filter((url) => !revisited.has(url))),
+  ];
+}
+
 function assertURLEndsWithJSON(url: URL): URL {
   if (!url.href.endsWith('.json')) {
     return new URL(`${url}.json`);
@@ -1185,34 +1660,108 @@ function assertURLEndsWithJSON(url: URL): URL {
   return url;
 }
 
+// Order the pass's visit list so the URLs the triggering write named — the
+// pass's targets — come first, in the order they were written, ahead of the
+// dependents the invalidation fan-out discovered.
+//
+// Visit class outranks being a target (see `visitClassRank`), for targets and
+// dependents alike: a module is visited before any instance whether or not
+// the write named it, because an instance rendering before the module it
+// adopts from has no file entry to render against — a failure, not a stale
+// read. Ranking class first is also what carries the target-first guarantee
+// through `orderInvalidationsByDependencies`, which treats this order as a
+// tie-break priority rather than a fixed sequence: inside a dependency cycle
+// it has no satisfiable order to offer and ranks the members by priority
+// alone, so a module that arrived behind an instance would stay behind it.
+//
+// Within one class the targets lead, in the order they were written, then the
+// dependents in the order they arrived in. Every URL in a class is either a
+// target with its own write position or a dependent with its own arrival
+// position, so the comparison is total and the result does not depend on the
+// sort being stable.
+//
+// A recorded dependency edge still overrules all of this downstream. What the
+// priority decides is the cases the dependency graph leaves open — a
+// dependent no persisted `deps` row connects to its target, and a target
+// stranded in a dependency cycle — where the ordering falls back to the
+// incoming order and would otherwise be free to leave the target last.
+//
+// This is a guarantee about the order in which a pass writes its rows, not
+// about what a concurrent reader can observe: the pass promotes its whole
+// staged rows in one transaction (`batch.done()`), so no reader ever sees
+// one row of a pass ahead of another.
+export function prioritizeWrittenURLs(
+  invalidations: URL[],
+  written: URL[],
+  realmURL: URL,
+): URL[] {
+  if (invalidations.length < 2) {
+    return invalidations;
+  }
+  let inFanOut = new Set(invalidations.map((url) => url.href));
+  // A written URL missing from the fan-out is one the invalidation walk
+  // recorded under its node-resolved alias instead. Nothing to rank: the
+  // dependency graph and the incoming order decide, as they always have.
+  let writePositions = new Map<string, number>();
+  for (let url of written) {
+    if (inFanOut.has(url.href) && !writePositions.has(url.href)) {
+      writePositions.set(url.href, writePositions.size);
+    }
+  }
+  let realmConfigHref = realmConfigHrefFor(realmURL);
+  let ranked = invalidations.map((url, arrival) => {
+    let writePosition = writePositions.get(url.href);
+    return {
+      url,
+      visitClass: visitClassRank(url, realmConfigHref),
+      isDependent: writePosition === undefined ? 1 : 0,
+      position: writePosition ?? arrival,
+    };
+  });
+  ranked.sort(
+    (a, b) =>
+      a.visitClass - b.visitClass ||
+      a.isDependent - b.isDependent ||
+      a.position - b.position,
+  );
+  return ranked.map(({ url }) => url);
+}
+
+// Visit-class priority, in the order a pass must write the classes:
+//
+//   0. The realm's RealmConfig card at <realmURL>realm.json — stage its
+//      index row first so any /_info query that lands AFTER the
+//      pass commits (`batch.done()` swaps boxel_index_pending into
+//      boxel_index) sees the RealmConfig overlay and resolves the realm's
+//      display name. parseRealmInfo's overlay path queries the live
+//      `boxel_index` table, which holds no staged rows, so it cannot
+//      see realm.json mid-pass; this ordering only guarantees a correct
+//      answer at and after the pass-end commit (and on subsequent
+//      passes). Host-side prerender caching of stale realmInfo (see
+//      RealmResource.fetchInfo's `dropTask` short-circuit) is a separate
+//      concern not addressed here.
+//   1. Non-.json files (modules, source) — file entries must exist before
+//      the cards that depend on them are rendered.
+//   2. Other .json files.
+//
+// Class 1 before class 2 is a correctness requirement, not a preference,
+// and it holds for a class-2 URL whose dependency on a class-1 URL the index
+// has not recorded yet — a brand-new instance and the module it adopts from,
+// written by one job. Both orderers below therefore rank by class before
+// applying their own tie-break.
+function visitClassRank(url: URL, realmConfigHref: string): number {
+  if (url.href === realmConfigHref) {
+    return 0;
+  }
+  return url.href.endsWith('.json') ? 2 : 1;
+}
+
 function sortInvalidations(urls: URL[], realmURL: URL): URL[] {
-  // Visit order priority:
-  //   1. The realm's RealmConfig card at <realmURL>realm.json — write its
-  //      working-index row first so any /_info query that lands AFTER the
-  //      pass commits (`batch.done()` swaps boxel_index_working into
-  //      boxel_index) sees the RealmConfig overlay and resolves the realm's
-  //      display name. parseRealmInfo's overlay path queries the live
-  //      `boxel_index` table without `useWorkInProgressIndex`, so it cannot
-  //      see realm.json mid-pass; this ordering only guarantees a correct
-  //      answer at and after the pass-end commit (and on subsequent
-  //      passes). Host-side prerender caching of stale realmInfo (see
-  //      RealmResource.fetchInfo's `dropTask` short-circuit) is a separate
-  //      concern not addressed here.
-  //   2. Non-.json files (modules, source) — file entries must exist before
-  //      the cards that depend on them are rendered.
-  //   3. Other .json files, sorted lexically for determinism.
-  let realmConfigHref = new RealmPaths(realmURL).fileURL('realm.json').href;
+  // Class order (see visitClassRank), then lexical by href for determinism.
+  let realmConfigHref = realmConfigHrefFor(realmURL);
   return urls.sort((a, b) => {
-    let aRealmConfig = a.href === realmConfigHref;
-    let bRealmConfig = b.href === realmConfigHref;
-    if (aRealmConfig !== bRealmConfig) {
-      return aRealmConfig ? -1 : 1;
-    }
-    let aJson = a.href.endsWith('.json');
-    let bJson = b.href.endsWith('.json');
-    if (aJson === bJson) {
-      return a.href.localeCompare(b.href);
-    }
-    return aJson ? 1 : -1;
+    let rank =
+      visitClassRank(a, realmConfigHref) - visitClassRank(b, realmConfigHref);
+    return rank !== 0 ? rank : a.href.localeCompare(b.href);
   });
 }

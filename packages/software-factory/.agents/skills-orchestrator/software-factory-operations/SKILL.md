@@ -27,20 +27,21 @@ Load what the current work touches, nothing more.
 
 ## When you need X, read Y
 
-| Need                                                                                        | read_skill                                                 |
-| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Card/field authoring, CardDef/FieldDef syntax, formats                                      | `boxel-development` (then specific `dev-*.md` references)  |
-| Fitted-format layout rules                                                                  | `boxel-development` reference `dev-fitted-formats.md`      |
-| Theme tokens / design-system CSS                                                            | `boxel-development` reference `dev-theme-design-system.md` |
-| Search query syntax (`boxel search --query`)                                                | `boxel-api`                                                |
-| Host commands via `boxel run-command`                                                       | `boxel-command`                                            |
-| File-backed fields (images, files, csv)                                                     | `boxel-file-def`                                           |
-| Catalog Spec conventions                                                                    | `boxel-development` reference `dev-spec-usage.md`          |
-| Reusable UI components before hand-rolling any UI                                           | `boxel-ui-component-discovery`                             |
-| What card code can reach (host tools, boxel-ui, runtime-common, AI services) + import paths | `boxel-runtime-surfaces`                                   |
-| Search-driven home/app cards, `searchResultsComponent` wire-query contract, live feeds      | `boxel-live-surfaces`                                      |
-| Embedding child cards (`<@fields.X @format=… />`), format choice, container chrome          | `boxel-delegated-render-control`                           |
-| fetch/auth from card code (store APIs vs raw fetch vs request-forward proxy)                | `boxel-fetch-contexts`                                     |
+| Need                                                                                        | read_skill                                 |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Card/field authoring, CardDef/FieldDef syntax, formats                                      | `boxel` (then specific `references/*.md`)  |
+| Fitted-format layout rules                                                                  | `boxel` reference `fitted-formats.md`      |
+| Theme tokens / design-system CSS                                                            | `boxel` reference `theme-design-system.md` |
+| Search query syntax (`boxel search --query`)                                                | `boxel-api`                                |
+| Host commands via `boxel run-command`                                                       | `boxel-command`                            |
+| File-backed fields (images, files, csv)                                                     | `boxel-file-def`                           |
+| Catalog Spec conventions                                                                    | `boxel` reference `spec-usage.md`          |
+| Whether the catalog already has the card, field, component or command                       | `catalog-reuse`                            |
+| Reusable UI components before hand-rolling any UI                                           | `boxel-ui-component-discovery`             |
+| What card code can reach (host tools, boxel-ui, runtime-common, AI services) + import paths | `boxel-runtime-surfaces`                   |
+| Search-driven home/app cards, `searchResultsComponent` wire-query contract, live feeds      | `boxel-live-surfaces`                      |
+| Embedding child cards (`<@fields.X @format=… />`), format choice, container chrome          | `boxel-delegated-render-control`           |
+| fetch/auth from card code (store APIs vs raw fetch vs request-forward proxy)                | `boxel-fetch-contexts`                     |
 
 Host-tool imports: the authoritative catalogue is the generated
 `host-tools-import-manifest` skill already in your context — never guess
@@ -49,20 +50,28 @@ an import path; the `imports` validation step fails phantom ones.
 ## Required flow (design-first)
 
 1. **Ground**: inspect workspace + target realm (`boxel search` via Bash);
-   read precedent `.gts`; `read_skill` what the issue touches.
-2. **DESIGN**: write `design/<slug>.html` — plain HTML+CSS mockup with
+   read precedent `.gts`; `read_skill` what the issue touches. Search the
+   **catalog** realm as well as the target — the catalog is where work
+   already done lives.
+2. **REUSE**: enumerate what the issue needs, the card itself first and then
+   its fields, components and commands. Consult the catalog per need and
+   record a decision for each — adopted, or refused with a reason — before
+   designing. `catalog-reuse` has the method. A schema you adopt is a given
+   the mockup designs around, so this precedes the mockup; afterwards the
+   hand-off is a contract and the decision can no longer be made.
+3. **DESIGN**: write `design/<slug>.html` — plain HTML+CSS mockup with
    hard-coded realistic sample copy showing the isolated view (mobile),
    fitted badge/strip/card tiles, and an embedded row. Then
    `screenshot_html({ path })`, `Read` the PNG, critique it (name the
    defects), revise, re-screenshot. At least one full crit pass. The
    accepted mockup is the binding spec for step 3.
-3. **BUILD**: translate the mockup into the `.gts` card (isolated +
+4. **BUILD**: translate the mockup into the `.gts` card (isolated +
    embedded + fitted templates), sample instances (same data as the
    mockup), and a Catalog Spec (`Spec/<slug>.json`, adoptsFrom
    `@cardstack/base/spec#Spec`, `linkedExamples` →
    instances). **MANDATORY before writing any fitted template:
-   `read_skill({ name: 'boxel-development', reference:
-'dev-fitted-formats.md' })`** — it is the container-query standard
+   `read_skill({ name: 'boxel', reference:
+'fitted-formats.md' })`** — it is the container-query standard
    (host `fitted-card` container, height quanta h40→h445, FittedCard
    component, overflow discipline). A fitted view that ignores it — one
    layout for all sizes, a local container on the root — fails review. The Spec MUST populate its catalog-facing `title` (display
@@ -70,7 +79,7 @@ an import path; the `imports` validation step fails phantom ones.
    readMe — a Spec with empty title/description renders as an unnamed
    card in the catalog UI. Call `get_card_schema` before writing any
    card JSON whose shape you don't know (Spec, tracker cards).
-4. **VERIFY**: `run_lint({ path })` per file, then `run_parse()`,
+5. **VERIFY**: `run_lint({ path })` per file, then `run_parse()`,
    `run_evaluate()`, `run_instantiate()`. Fix what they report. These
    return in-memory results; each one syncs your workspace to the realm
    first. Zero-coverage passes come back as errors — never treat them
@@ -81,9 +90,9 @@ an import path; the `imports` validation step fails phantom ones.
    fixing** — whole-realm results include pre-existing failures in files
    you didn't write; note those with `post_update` and move on, never
    fix files outside your issue.
-5. **Done**: `signal_done()`. If validation feedback comes back, fix and
+6. **Done**: `signal_done()`. If validation feedback comes back, fix and
    signal again. If truly blocked, `request_clarification({ message })`.
-6. **Review**: after your signal_done, the issue enters REVIEW — a
+7. **Review**: after your signal_done, the issue enters REVIEW — a
    product-manager reviewer judges the rendered output. If it comes back
    with "Review feedback (rework requested)" in your context, those are
    the exact, complete required changes: make them with surgical

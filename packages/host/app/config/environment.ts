@@ -39,11 +39,13 @@ export default config as {
   resolvedCatalogRealmURL: string | undefined;
   resolvedSkillsRealmURL: string;
   resolvedOpenRouterRealmURL: string | undefined;
+  resolvedPretuiRealmURL: string;
   resolvedTestRealmURL: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;
   iconsURL: string;
+  secureOriginURL: string;
   autoSaveDelayMs: number;
   monacoDebounceMs: number;
   monacoCursorDebounceMs: number;

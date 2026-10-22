@@ -304,10 +304,18 @@ export const BXL_METADATA_CALLS = names([
 
 /**
  * The request-context builtins. They read state that belongs to one request —
- * the payload, the caller, the stored document — so they are only meaningful
- * where a program runs once per request, which is the `mutation` profile.
+ * the payload, the caller, the stored document, the settings of the realm the
+ * edit lands in, the policy card a permission is judged against — so they are
+ * only meaningful where a program runs once per request, which is the
+ * `mutation` profile, or once per decision, which is a policy's.
  */
-export const BXL_REQUEST_CONTEXT_CALLS = names(['actor', 'instance', 'params']);
+export const BXL_REQUEST_CONTEXT_CALLS = names([
+  'actor',
+  'instance',
+  'params',
+  'policy',
+  'realmConfig',
+]);
 
 export const BXL_PREDICATE_LOWERABLE_CALLS = names([
   'IN',
@@ -329,6 +337,27 @@ export const BXL_MUTATION_DENIED_CALLS = names([
   ...BXL_VOLATILE_CALLS,
   ...BXL_DERIVE_CONTROL_DENIED_CALLS,
   ...BXL_METADATA_CALLS,
+]);
+
+/**
+ * `transform` bans side effects and runtime metadata, and keeps the rest —
+ * the request-context builtins included, since shaping a payload or projecting
+ * a result is exactly the work that reads what the request carries.
+ *
+ * One difference from `mutation`: a volatile call is allowed. A mutation plan
+ * is replayed by the client's optimistic path and so must be repeatable, while
+ * a transform shapes one request's payload or projects one request's result
+ * and is never stored or replayed. The operation that carries it records the
+ * volatility as `deterministic: false` rather than refusing it.
+ */
+export const BXL_TRANSFORM_DENIED_CALLS = names([
+  ...BXL_DERIVE_CONTROL_DENIED_CALLS,
+  ...BXL_METADATA_CALLS,
+  // Not in the derive set, and denied here for a reason of this dialect's
+  // own: a transform answers with exactly one value, so a program that can
+  // yield none is refused where it is written rather than at the invocation
+  // that would have produced nothing to serve.
+  'empty',
 ]);
 
 /**
@@ -458,6 +487,16 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
       metadata:
         'runtime metadata calls are not stable mutation-plan expressions',
       volatile: 'volatile calls are not repeatable mutation-plan expressions',
+    },
+  },
+  transform: {
+    deniedCalls: BXL_TRANSFORM_DENIED_CALLS,
+    denyMessageByCategory: {
+      controlOrSideEffect:
+        'control/side-effect calls are not payload or result expressions',
+      metadata:
+        'runtime metadata calls are not payload or result expressions, and a ' +
+        'transform reads the values it is handed rather than the runtime',
     },
   },
 };

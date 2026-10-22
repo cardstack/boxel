@@ -4,22 +4,30 @@
   "main": "index.js",
   "license": "MIT",
   "devDependencies": {
+    "@babel/plugin-proposal-decorators": "catalog:",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/local-types": "workspace:*",
+    "@cardstack/pretui": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "@ember/test-helpers": "catalog:",
-    "@types/qunit": "catalog:",
-    "@universal-ember/test-support": "catalog:",
     "@cardstack/view-transitions": "catalog:",
+    "@ember/test-helpers": "catalog:",
     "@types/lodash-es": "catalog:",
-    "lodash-es": "catalog:",
-    "ember-animated": "catalog:",
+    "@types/qunit": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "@universal-ember/test-support": "catalog:",
     "chess.js": "catalog:",
     "concurrently": "catalog:",
+    "ember-animated": "catalog:",
     "ember-concurrency": "catalog:",
+    "ember-eslint-parser": "catalog:",
     "ember-modifier": "^4.1.0",
     "ember-template-lint": "catalog:",
+    "eslint": "catalog:",
+    "eslint-plugin-import": "catalog:",
+    "lodash-es": "catalog:",
     "tracked-built-ins": "catalog:"
   },
   "dependencies": {
@@ -28,6 +36,8 @@
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:hbs": "ember-template-lint .",
-    "lint:hbs:fix": "ember-template-lint . --fix"
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "lint:js": "eslint . --ext .ts,.gts --cache",
+    "lint:js:fix": "eslint . --ext .ts,.gts --fix"
   }
 }

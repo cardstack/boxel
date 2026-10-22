@@ -38,9 +38,17 @@ boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default \
 A command whose input has a `linksTo(CardDef)` field (here named `card`) takes that card's ID string:
 
 ```
-boxel run-command @cardstack/boxel-host/commands/screenshot-card/default \
+boxel run-command @cardstack/boxel-host/commands/capture-card/default \
   --realm http://localhost:4201/my-realm/ \
   --input '{"card":"http://localhost:4201/my-realm/Author/1","format":"isolated"}'
+```
+
+The same command captures a paged PDF with `"type":"pdf"`; `"media":"print"` lays it out under the card's print CSS (`@page`, `@media print`). The result's `url` serves the document. Add the `download` and `filename=<name>` query params to that URL to fetch it as an attachment under a name you choose:
+
+```
+boxel run-command @cardstack/boxel-host/commands/capture-card/default \
+  --realm http://localhost:4201/my-realm/ \
+  --input '{"card":"http://localhost:4201/my-realm/Author/1","format":"isolated","type":"pdf","media":"print"}'
 ```
 
 ## Programmatic
@@ -54,7 +62,7 @@ let result = await client.runCommand(
   realmServerUrl,
   realmUrl,
   '@cardstack/boxel-host/commands/get-card-type-schema/default',
-  { codeRef: { module: '<absolute-module-url>', name: 'StickyNote' } },
+  { codeRef: { module: '<absolute-module-identifier>', name: 'StickyNote' } },
 );
 ```
 

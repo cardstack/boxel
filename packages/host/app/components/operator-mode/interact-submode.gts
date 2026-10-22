@@ -14,7 +14,6 @@ import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import { consume } from 'ember-provide-consume-context';
 
 import { get } from 'lodash-es';
-import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { cn, gt, MenuItem, MenuDivider } from '@cardstack/boxel-ui/helpers';
 import {
@@ -36,6 +35,7 @@ import {
   codeRefWithAbsoluteIdentifier,
   identifyCard,
   isCardInstance,
+  isFileDefInstance,
   isResolvedCodeRef,
   CardError,
   loadCardDef,
@@ -57,23 +57,17 @@ import {
 
 import {
   detectStackItemTypeForTarget,
+  takesFileDeleteRoute,
   StackItem,
   type StackItemType,
 } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
-import CopyCardToStackTool from '@cardstack/host/tools/copy-card-to-stack';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
 import consumeContext from '../../helpers/consume-context';
 
-import {
-  removeCardJsonExtension,
-  type SearchResultKind,
-} from '../../utils/search/types';
-
-import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import NeighborStackTriggerButton, {
   SearchSheetTriggers,
@@ -84,7 +78,6 @@ import OperatorModeStack from './stack';
 import SubmodeLayout from './submode-layout';
 
 import type { NewFileOptions } from './new-file-button';
-import type { CardDefOrId } from './stack-item';
 
 import type { StackItemComponentAPI } from './stack-item';
 
@@ -98,18 +91,19 @@ import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 import type ToolService from '../../services/tool-service';
-import type { CardContext, CardDef, Format } from '@cardstack/base/card-api';
+import type { SearchResultKind } from '../../utils/search/types';
+import type {
+  CardContext,
+  CardDef,
+  FileDef,
+  Format,
+} from '@cardstack/base/card-api';
 import type { Spec } from '@cardstack/base/spec';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
 export type Stack = StackItem[];
 
-// Selections are tracked by card id rather than by loaded instance. Materializing
-// a CardDef for every selected card is expensive (a fetch + deserialize per card
-// that isn't already resident), which made "Select All" over a large grid freeze
-// the UI for seconds. Instances are now loaded lazily, only when a copy is invoked.
-const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<string>>();
 const stackItemComponentAPI = new WeakMap<StackItem, StackItemComponentAPI>();
 
 const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
@@ -130,6 +124,7 @@ const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
 interface CardToDelete {
   id: string;
   title: string;
+  isFile?: boolean;
 }
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
@@ -247,8 +242,7 @@ export default class InteractSubmode extends Component {
   ): Promise<string | undefined> => {
     let instance: CardDef;
     if (opts?.doc) {
-      instance = await this.store.add(opts.doc, {
-        doNotWaitForPersist: true,
+      instance = await this.store.addWithoutWaiting(opts.doc, {
         realm: opts?.realmURL?.href,
       });
     } else {
@@ -264,8 +258,7 @@ export default class InteractSubmode extends Component {
         },
       );
       instance = new CardKlass() as CardDef;
-      await this.store.add(instance, {
-        doNotWaitForPersist: true,
+      await this.store.addWithoutWaiting(instance, {
         realm: opts?.realmURL?.href,
         localDir: opts?.localDir,
       });
@@ -441,19 +434,21 @@ export default class InteractSubmode extends Component {
       return;
     }
     let cardId = this.cardToDelete.id;
-
+    let isFile = this.cardToDelete.isFile ?? false;
     for (let stack of this.stacks) {
-      // remove all selections for the deleted card
+      // Prune the deleted card/file from each stack item's selection (drives
+      // the selection chip and per-row checkmarks). The component API matches
+      // on the extensionless form itself.
       for (let item of stack) {
-        let selections = cardSelections.get(item);
-        if (!selections) {
-          continue;
-        }
-        selections.delete(cardId);
+        stackItemComponentAPI.get(item)?.deselectCard(cardId);
       }
     }
     await this.withTestWaiters(async () => {
-      await this.operatorModeStateService.deleteCard(cardId);
+      // The dialog already classified this target; `deleteCard` would have to
+      // re-derive it from store residency, which can have moved on since.
+      await (isFile
+        ? this.operatorModeStateService.deleteFile(cardId)
+        : this.operatorModeStateService.deleteCard(cardId));
       await timeout(500); // task running message can be displayed long enough for the user to read it
     });
 
@@ -475,81 +470,33 @@ export default class InteractSubmode extends Component {
     }
   }
 
-  // dropTask will ignore any subsequent copy requests until the one in progress is done
-  private copy = dropTask(
-    async (
-      sourceIds: string[],
-      sourceItem: StackItem,
-      destinationItem: StackItem,
-    ) => {
-      // if this.selectCards task is still running, wait for it to finish before copying
-      if (this.selectCards.isRunning) {
-        await this.selectCards.last;
-      }
-
-      await this.withTestWaiters(async () => {
-        let destinationIndexCardUrl = destinationItem.id;
-        if (!destinationIndexCardUrl) {
-          throw new Error(`destination index card has no URL`);
-        }
-        let destinationIndexCard = await this.store.get(
-          destinationIndexCardUrl,
-        );
-        if (!isCardInstance(destinationIndexCard)) {
-          throw new Error(
-            `destination index card ${destinationIndexCardUrl} is not a card`,
-          );
-        }
-        // Materialize the selected cards now (lazily, only for a copy) rather
-        // than when they were selected.
-        let sources = (
-          await Promise.all(sourceIds.map((id) => this.store.get(id)))
-        ).filter(isCardInstance) as CardDef[];
-        sources.sort((a, b) => a.cardTitle.localeCompare(b.cardTitle));
-        let scrollToCardId: string | undefined;
-        let newCardId: string | undefined;
-        let targetStackIndex = destinationItem.stackIndex;
-        for (let [index, card] of sources.entries()) {
-          ({ newCardId } = await new CopyCardToStackTool(
-            this.toolService.toolContext,
-          ).execute({
-            sourceCard: card,
-            targetStackIndex,
-          }));
-          if (index === 0) {
-            scrollToCardId = newCardId; // we scroll to the first card lexically by title
-          }
-        }
-        let clearSelection =
-          stackItemComponentAPI.get(sourceItem)?.clearSelections;
-        if (typeof clearSelection === 'function') {
-          clearSelection();
-        }
-        cardSelections.delete(sourceItem);
-        let scrollIntoView =
-          stackItemComponentAPI.get(destinationItem)?.scrollIntoView;
-        if (scrollToCardId) {
-          // Currently the destination item is always a cards-grid, so we use that
-          // fact to be able to scroll to the newly copied item
-          scrollIntoView?.(
-            `[data-stack-card="${destinationIndexCardUrl}"] [data-cards-grid-item="${scrollToCardId}"]`,
-          );
-        }
-      });
-    },
-  );
   @action private addToStack(item: StackItem) {
     this.operatorModeStateService.addItemToStack(item);
   }
 
   @action
-  private onSelectedCards(selectedCards: CardDefOrId[], stackItem: StackItem) {
-    this.selectCards.perform(selectedCards, stackItem);
-  }
-
-  @action
   private async requestDeleteCard(card: CardDef | URL | string): Promise<void> {
     let cardToDelete: CardToDelete | undefined;
+    let id =
+      typeof card === 'string' || card instanceof URL
+        ? new URL(card).href
+        : card.id;
+    if (takesFileDeleteRoute(card, id, this.store)) {
+      let fileDef = isFileDefInstance<FileDef>(card)
+        ? card
+        : await this.store.get(id, { type: 'file-meta' });
+      // A file whose metadata fails to load is still deletable; fall back to
+      // its URL's filename for the dialog.
+      let title = isFileDefInstance<FileDef>(fileDef)
+        ? fileDef.name
+        : undefined;
+      this.cardToDelete = {
+        id,
+        title: title || decodeURIComponent(id.split('/').pop() ?? id),
+        isFile: true,
+      };
+      return;
+    }
     if (typeof card === 'object' && 'id' in card) {
       let loadedCard = card as CardDef;
       cardToDelete = {
@@ -578,43 +525,6 @@ export default class InteractSubmode extends Component {
       }
     }
     this.cardToDelete = cardToDelete;
-  }
-
-  private selectCards = restartableTask(
-    async (selectedCards: CardDefOrId[], stackItem: StackItem) => {
-      let waiterToken = waiter.beginAsync();
-      try {
-        // Prerendered-card IDs arrive with the `.json` file extension on
-        // them, but the canonical card id (and `cardToDelete.id` in the
-        // delete handler) is the extensionless URL. Strip the extension
-        // here so prune-on-delete and copy lookups match.
-        let ids = selectedCards
-          .map((cardDefOrId) => {
-            let raw =
-              typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
-            return raw ? removeCardJsonExtension(raw) : undefined;
-          })
-          .filter(Boolean) as string[];
-
-        let selected = cardSelections.get(stackItem);
-        if (!selected) {
-          selected = new TrackedSet([]);
-          cardSelections.set(stackItem, selected);
-        }
-        selected.clear();
-        for (let id of ids) {
-          selected.add(id);
-        }
-      } finally {
-        waiter.endAsync(waiterToken);
-      }
-    },
-  );
-
-  private get selectedCardIds() {
-    return this.operatorModeStateService
-      .topMostStackItems()
-      .map((i) => [...(cardSelections.get(i) ?? [])]);
   }
 
   private setupStackItem = (
@@ -881,7 +791,7 @@ export default class InteractSubmode extends Component {
       return;
     }
 
-    let spec = await this.store.get<Spec>(specId);
+    let spec = await this.store.get(specId);
 
     if (!spec) {
       throw new Error(`Could not find spec "${specId}" in the store`);
@@ -979,17 +889,10 @@ export default class InteractSubmode extends Component {
                 @deleteCard={{this.requestDeleteCard}}
                 @toolContext={{this.toolService.toolContext}}
                 @close={{this.close}}
-                @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}
               />
             {{/let}}
           {{/each}}
-
-          <CopyButton
-            @selectedCardIds={{this.selectedCardIds}}
-            @copy={{fn (perform this.copy)}}
-            @isCopying={{this.copy.isRunning}}
-          />
         </div>
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
@@ -1010,7 +913,8 @@ export default class InteractSubmode extends Component {
             @isDeleteRunning={{this.delete.isRunning}}
           >
             <:content>
-              Delete the card
+              Delete the
+              {{if this.cardToDelete.isFile 'file' 'card'}}
               <strong>{{this.cardToDelete.title}}</strong>?
             </:content>
           </DeleteModal>
@@ -1024,8 +928,16 @@ export default class InteractSubmode extends Component {
         --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
       }
 
+      /* The top bar floats over the stacks, and the headers of buried
+         stack items peek out in the strip it covers. The bar's own box
+         lets pointer events through to them; only its controls take
+         clicks. */
       .interact-submode-layout :deep(.submode-layout-top-bar) {
         position: absolute;
+        pointer-events: none;
+      }
+      .interact-submode-layout :deep(.submode-layout-top-bar > *) {
+        pointer-events: auto;
       }
 
       .interact-submode {

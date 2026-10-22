@@ -100,15 +100,32 @@ module(basename(import.meta.filename), function () {
       let cssA = `${realmURL}Author.gts.QUJD.glimmer-scoped.css`;
       let cssB = `${realmURL}Pet.gts.WHp1.glimmer-scoped.css`;
       assert.deepEqual(
-        scopedCssHrefsFromDeps([
-          `${realmURL}author`,
-          cssA,
-          `${realmURL}pet`,
-          cssB,
-        ]),
+        scopedCssHrefsFromDeps(
+          [`${realmURL}author`, cssA, `${realmURL}pet`, cssB],
+          realmURL,
+        ),
         [cssA, cssB],
+        'inline deps pass through verbatim',
       );
-      assert.deepEqual(scopedCssHrefsFromDeps(null), [], 'null deps → []');
+      assert.deepEqual(
+        scopedCssHrefsFromDeps(null, realmURL),
+        [],
+        'null deps → []',
+      );
+    });
+
+    test('scopedCssHrefsFromDeps rewrites hashed deps into the serving realm', function (assert) {
+      let hash = 'a'.repeat(32);
+      let ownModule = `${realmURL}Author.gts.md5-${hash}.glimmer-scoped.css`;
+      let foreignModule = `@cardstack/base/card-api.gts.md5-${hash}.glimmer-scoped.css`;
+      assert.deepEqual(
+        scopedCssHrefsFromDeps([ownModule, foreignModule], realmURL),
+        [
+          `${realmURL}_scoped-css/Author.gts.md5-${hash}.glimmer-scoped.css`,
+          `${realmURL}_scoped-css/card-api.gts.md5-${hash}.glimmer-scoped.css`,
+        ],
+        'hashed deps — same-realm and foreign-module alike — serve from the answering realm, which interned them',
+      );
     });
 
     test('buildCssResource hashes the href and is a css resource', function (assert) {

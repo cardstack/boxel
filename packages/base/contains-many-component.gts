@@ -20,11 +20,11 @@ import {
   PermissionsConsumer,
 } from './field-component';
 import { Button, IconButton } from '@cardstack/boxel-ui/components';
+import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import {
   getPlural,
   fields,
   type ResolvedCodeRef,
-  Loader,
   loadCardDef,
   uuidv4,
   isCardInstance,
@@ -202,7 +202,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       }
       .remove:focus,
       .remove:hover {
-        --icon-color: var(--destructive, var(--boxel-danger));
+        --icon-color: var(--destructive-ink);
         outline: 0;
       }
       .remove:focus + .item-container,
@@ -315,20 +315,19 @@ export function getContainsManyComponent({
   if (stable) {
     return stable.component;
   }
+  let componentFor = (child: Box<FieldDef>) =>
+    getBoxComponent(
+      cardTypeFor(field, child, () =>
+        isCardInstance(model.value as CardDef)
+          ? overridesCache.get(model.value as CardDef)
+          : undefined,
+      ),
+      child,
+      field,
+    );
   // Wrap the the components in a function so that the template is reactive
   // to changes in the model (this is essentially a helper)
-  let getComponents = () =>
-    arrayField.children.map((child) =>
-      getBoxComponent(
-        cardTypeFor(field, child, () =>
-          isCardInstance(model.value as CardDef)
-            ? overridesCache.get(model.value as CardDef)
-            : undefined,
-        ),
-        child,
-        field,
-      ),
-    );
+  let getComponents = () => arrayField.children.map(componentFor);
   let isComputed = !!field.computeVia;
   function shouldRenderEditor(
     format: Format | undefined,
@@ -427,16 +426,23 @@ export function getContainsManyComponent({
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
-      let components = getComponents();
-
+      //
+      // Each read builds only what it returns, from the field's current rows.
+      // An iterator walks one snapshot of the component list, so a whole
+      // `{{#each @fields.x}}` builds the list once, not once per row: the
+      // iterator reads `length` and every index through its `this`, and an
+      // array iterator bound to this proxy would rebuild the list on each of
+      // those reads. Building a row's component reads that row's value, which
+      // re-evaluates the field when it is computed.
       if (property === Symbol.iterator) {
-        return components[Symbol.iterator];
+        return () => getComponents()[Symbol.iterator]();
       }
       if (property === 'length') {
-        return components.length;
+        return arrayField.children.length;
       }
-      if (typeof property === 'string' && property.match(/\d+/)) {
-        return components[parseInt(property)];
+      if (typeof property === 'string' && /^\d+$/.test(property)) {
+        let child = arrayField.children[parseInt(property)];
+        return child ? componentFor(child) : undefined;
       }
       return Reflect.get(target, property, received);
     },
@@ -457,12 +463,8 @@ export function getContainsManyComponent({
 }
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
-
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
   // @ts-ignore
-  return (import.meta as any).loader;
+  return loaderForModule(import.meta);
 }

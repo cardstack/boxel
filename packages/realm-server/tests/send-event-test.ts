@@ -3,7 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { createSendEvent } from '../handlers/send-event.ts';
+import { createSendEvent } from '@cardstack/runtime-common/send-event';
 
 // Realm events are addressed to a user's session room. Callers treat the
 // notify as best-effort and catch its failures, so what matters here is that
@@ -15,14 +15,26 @@ module(basename(import.meta.filename), function () {
       loggedIn?: boolean;
       loginFails?: boolean;
       sendFails?: boolean;
+      notInRoom?: boolean;
     } = {},
   ) {
     let sent: { roomId: string; body: unknown }[] = [];
+    let executes: string[] = [];
     let logins = 0;
     let dbAdapter = {
       kind: 'pg',
-      execute: async () =>
-        sessionRoomId === null ? [] : [{ session_room_id: sessionRoomId }],
+      execute: async (sql: string) => {
+        executes.push(sql);
+        // The stale-room self-heal issues `UPDATE ... SET session_room_id =
+        // NULL ... RETURNING id`; report one row cleared. Every other read is
+        // the session-room lookup.
+        if (/SET session_room_id = NULL/i.test(sql)) {
+          return [{ id: 'cleared-1' }];
+        }
+        return sessionRoomId === null
+          ? []
+          : [{ session_room_id: sessionRoomId }];
+      },
     } as unknown as DBAdapter;
     let matrixClient = {
       isLoggedIn: () => opts.loggedIn ?? true,
@@ -33,6 +45,17 @@ module(basename(import.meta.filename), function () {
         }
       },
       sendEvent: async (roomId: string, _type: string, body: unknown) => {
+        if (opts.notInRoom) {
+          // Shape of a real Synapse rejection when the sender was never a
+          // member of the room (a stale row from a prior room owner).
+          throw new Error(
+            `Unable to send room event 'm.room.message' to room ${roomId}: status 403 - ` +
+              JSON.stringify({
+                errcode: 'M_FORBIDDEN',
+                error: `@sender:localhost not in room ${roomId}`,
+              }),
+          );
+        }
         if (opts.sendFails) {
           throw new Error('homeserver rejected the event');
         }
@@ -42,6 +65,7 @@ module(basename(import.meta.filename), function () {
     return {
       sendEvent: createSendEvent({ matrixClient, dbAdapter }),
       sent,
+      executes,
       loginCount: () => logins,
     };
   }
@@ -92,6 +116,24 @@ module(basename(import.meta.filename), function () {
       sendEvent('@mango:localhost', 'realms-list-updated'),
       /homeserver rejected the event/,
       'the caller decides what a failed delivery means',
+    );
+  });
+
+  // A stale session-room row (the sender was never in the room, e.g. it was
+  // minted by a prior room owner) is not a caller-visible failure: the helper
+  // clears the row so the user's next auth re-mints one this account is in,
+  // and resolves as the best-effort no-op it always was.
+  test('a "not in room" send clears the stale session room instead of throwing', async function (assert) {
+    let { sendEvent, sent, executes } = fakeDeps('!stale-room:localhost', {
+      notInRoom: true,
+    });
+
+    await sendEvent('@mango:localhost', 'realms-list-updated');
+
+    assert.deepEqual(sent, [], 'the event was not considered delivered');
+    assert.ok(
+      executes.some((sql) => /SET session_room_id = NULL/i.test(sql)),
+      'the stale session-room row was cleared',
     );
   });
 

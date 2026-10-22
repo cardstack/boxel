@@ -16,9 +16,7 @@ export function extractSvgDimensions(bytes: Uint8Array): {
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
-    throw new FileContentMismatchError(
-      'File cannot be decoded as UTF-8 text',
-    );
+    throw new FileContentMismatchError('File cannot be decoded as UTF-8 text');
   }
 
   // Find the opening <svg ...> tag (case-insensitive, may span multiple lines)
@@ -31,8 +29,12 @@ export function extractSvgDimensions(bytes: Uint8Array): {
   let svgTag = svgTagMatch[0];
 
   // Try explicit width/height attributes first (numeric values, optional "px")
-  let widthAttr = svgTag.match(/\bwidth\s*=\s*["']?\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*["']?/i);
-  let heightAttr = svgTag.match(/\bheight\s*=\s*["']?\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*["']?/i);
+  let widthAttr = svgTag.match(
+    /\bwidth\s*=\s*["']?\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*["']?/i,
+  );
+  let heightAttr = svgTag.match(
+    /\bheight\s*=\s*["']?\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*["']?/i,
+  );
 
   if (widthAttr && heightAttr) {
     return {

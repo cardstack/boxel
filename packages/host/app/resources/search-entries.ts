@@ -25,9 +25,10 @@ import {
   isIconResource,
   logger as runtimeLogger,
   resourceIdentity,
-  ri,
   rri,
+  stringifyErrorForLog,
   wireFilterHasMatches,
+  wireFilterTypeAnchors,
   RealmPaths,
   type CardResource,
   type ErrorEntry,
@@ -38,16 +39,26 @@ import {
   type Saved,
   type StoreReadType,
   type EntryCollectionDocument,
+  type NamedQueryInvocation,
   type SearchEntryRendering,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
 import { knownFileMetaUrls } from '../lib/known-file-meta-urls';
-import { normalizeRealms } from '../lib/realm-utils';
+import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
+import {
+  LiveSearchTypeGate,
+  stripJsonSuffix,
+} from '../lib/live-search-type-gate';
+import {
+  canonicalRealmIdentifier,
+  dedupeRealmsByIdentity,
+} from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type {
@@ -56,7 +67,6 @@ import type {
 } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('search-entries-resource:search-waiter');
-
 // `SearchEntryRendering` is the card-facing rendering view-model (it rides the
 // `@context` search surface), so it lives in runtime-common; re-exported
 // here because this resource builds it and call sites import it from here.
@@ -110,6 +120,7 @@ interface Args {
 export class SearchEntriesResource extends Resource<Args> {
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
+  @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
 
@@ -120,6 +131,9 @@ export class SearchEntriesResource extends Resource<Args> {
     page: { total: 0 },
   };
   @tracked private _errors: ErrorEntry[] | undefined;
+  // The query whose full run produced the held entries; undefined while none
+  // has succeeded, so a consumer can tell the rows are a previous query's.
+  @tracked private _entriesQuery: SearchEntryWireQuery | undefined;
 
   // Realms whose index moved since the last fetch. A non-empty set scopes the
   // next run to just those realms (the per-realm partial refresh); rows from
@@ -139,12 +153,38 @@ export class SearchEntriesResource extends Resource<Args> {
   // `realmsNeedingRefresh`.
   private pendingSelectiveRefresh: Map<string, number> | undefined;
 
+  // Decides which incremental index events are worth a re-run, by comparing
+  // the types an event names against the ones this query's filter anchors on.
+  // The prerender_html channel is not routed through it: that channel is
+  // handled below by refreshing the members the event carries newer HTML for,
+  // which already costs nothing when it names none of them.
+  #typeGate = new LiveSearchTypeGate({
+    anchors: () =>
+      namesItsOperation(this.#previousQuery)
+        ? undefined
+        : wireFilterTypeAnchors(this.#previousQuery?.filter),
+    loader: () => this.loaderService.loader,
+    virtualNetwork: () => this.network.virtualNetwork,
+    isDestroyed: () => isDestroyed(this),
+  });
+
   // Bumped by every search-task run (and on teardown) so an in-flight
   // `#computeSelectiveRefresh` from a superseded run stops issuing GETs: the
   // task body's awaits are cancellable, but a plain async method keeps
   // executing after its caller was cancelled, and without this check it
   // would keep fetching members the replacement run already owns.
   #refreshEpoch = 0;
+
+  // Defers the event-triggered re-run so a burst of realm events — one
+  // write's index event plus its prerender_html follow-ups, or a stream of
+  // concurrent writes — costs one search, not one per event. The subscription
+  // callback accumulates what to refresh (`realmsNeedingRefresh`,
+  // `pendingSelectiveRefresh`) and arms this; the flush performs the search
+  // over everything accumulated. Only event-triggered re-runs are deferred —
+  // a query/realm change in modify() still searches immediately.
+  #refreshScheduler = new LiveSearchRefreshScheduler(() =>
+    this.#flushEventRefresh(),
+  );
 
   // A partial refresh splices fetched-realm rows into the standing result
   // set, so it is only sound once a full run has populated that set. Until
@@ -177,6 +217,7 @@ export class SearchEntriesResource extends Resource<Args> {
     super(owner);
     registerDestructor(this, () => {
       this.search.cancelAll();
+      this.#refreshScheduler.cancel();
       for (let subscription of this.subscriptions) {
         subscription.unsubscribe();
       }
@@ -184,6 +225,7 @@ export class SearchEntriesResource extends Resource<Args> {
       this.realmsNeedingRefresh.clear();
       this.pendingSelectiveRefresh = undefined;
       this.#refreshEpoch++;
+      this.#typeGate.forget();
     });
   }
 
@@ -250,6 +292,8 @@ export class SearchEntriesResource extends Resource<Args> {
       this.#previousRealms = undefined;
       this.realmsNeedingRefresh.clear();
       this.pendingSelectiveRefresh = undefined;
+      this.#typeGate.forget();
+      this.#refreshScheduler.cancel();
       // An in-flight selective refresh must stop issuing GETs for the
       // cleared query, same as on teardown.
       this.#refreshEpoch++;
@@ -278,6 +322,9 @@ export class SearchEntriesResource extends Resource<Args> {
           if (this._errors !== undefined) {
             this._errors = undefined;
           }
+          if (this._entriesQuery !== undefined) {
+            this._entriesQuery = undefined;
+          }
         });
       }
       return;
@@ -288,7 +335,15 @@ export class SearchEntriesResource extends Resource<Args> {
     // realms array turns a render into a federated scan across the whole
     // server. A host-owned search (not card-initiated) keeps the all-realms
     // default.
-    let realms = normalizeRealms(
+    //
+    // The list keeps the caller's spelling of each realm (a registered prefix
+    // such as `@cardstack/catalog/`, or a URL), so rows carry `realmUrl` as
+    // the caller named the realm. What the server sends back names a realm by
+    // its URL; `realmUrlResolver` folds both sides to the form card ids carry
+    // before matching, and realm events reach a subscription under any
+    // spelling (MessageService keys them the same way).
+    let realms = dedupeRealmsByIdentity(
+      this.network.virtualNetwork,
       query.realms && query.realms.length > 0
         ? query.realms
         : this.#cardInitiated
@@ -319,6 +374,20 @@ export class SearchEntriesResource extends Resource<Args> {
             return;
           }
 
+          // An incremental index event that provably can't have moved this
+          // query's membership costs nothing: without the test, a write to a
+          // type this query isn't anchored on re-runs it in full — on every
+          // client holding it, for every such query each of them holds.
+          if (
+            isIncrementalIndex &&
+            this.#typeGate.indexEventCannotMatch(event)
+          ) {
+            this.#log.info(
+              `incremental index event on ${realm} touched no type this query is anchored on; skipping refresh`,
+            );
+            return;
+          }
+
           // A prerender_html event can't change a structured query's
           // membership — only its members' renderings. So for a structured,
           // refreshable query, refresh just the members the event carries
@@ -326,17 +395,21 @@ export class SearchEntriesResource extends Resource<Args> {
           // re-querying the whole realm. Full-text (matches) queries,
           // paginated queries, composite/sparse selections, and a malformed
           // event (no usable generation to judge staleness by) can't refresh
-          // in isolation and fall through to the coarse re-run.
+          // in isolation and fall through to the coarse re-run. So does an
+          // event from a realm the session may not read: the realm answers
+          // the card+html GET on its own permissions alone, so a member a
+          // policy grant let the search return is refused there.
           if (
             event.eventName === 'prerender_html' &&
             typeof event.generation === 'number' &&
-            this.#canSelectivelyRefresh()
+            this.#canSelectivelyRefresh() &&
+            !this.#sessionCannotRead(realm)
           ) {
             this.#log.info(
               `prerender_html event on ${realm}; scheduling selective per-member refresh`,
             );
             this.#recordSelectiveRefresh(event);
-            this.#trackSearchLoad(this.search.perform());
+            this.#refreshScheduler.schedule();
             return;
           }
 
@@ -344,7 +417,7 @@ export class SearchEntriesResource extends Resource<Args> {
             `${event.eventName === 'prerender_html' ? 'prerender_html' : 'incremental index'} event on ${realm}; scheduling partial refresh`,
           );
           this.realmsNeedingRefresh.add(realm);
-          this.#trackSearchLoad(this.search.perform());
+          this.#refreshScheduler.schedule();
         }),
       }));
     }
@@ -358,7 +431,13 @@ export class SearchEntriesResource extends Resource<Args> {
     // in place would otherwise be compared against itself and never re-run.
     this.#previousQuery = structuredClone(query);
     this.#previousRealms = realms;
-    // A query/realm change owns the whole result set again.
+    if (queryChanged) {
+      this.#typeGate.forget();
+    }
+    // A query/realm change owns the whole result set again — including any
+    // event-triggered refresh still waiting in the scheduler's window, whose
+    // accumulated state was just cleared.
+    this.#refreshScheduler.cancel();
     this.realmsNeedingRefresh.clear();
     this.pendingSelectiveRefresh = undefined;
     this.hasCompletedFullRun = false;
@@ -424,6 +503,40 @@ export class SearchEntriesResource extends Resource<Args> {
     return this._errors;
   }
 
+  get entriesQuery(): SearchEntryWireQuery | undefined {
+    return this._entriesQuery;
+  }
+
+  // Re-runs the current query, e.g. after a failed fetch: an unchanged query
+  // otherwise never re-issues.
+  retry(): void {
+    if (
+      isDestroyed(this) ||
+      isDestroying(this) ||
+      this.#previousQuery === undefined
+    ) {
+      return;
+    }
+    this.#hasSettled = false;
+    this.#trackSearchLoad(this.search.perform());
+  }
+
+  // The deferred arm of the subscription callback: performs one search over
+  // everything the window accumulated. Guarded the same way the callback is —
+  // the query may have been cleared (or the resource destroyed) between arm
+  // and flush, and cancel() on those paths makes this mostly belt and
+  // suspenders.
+  #flushEventRefresh(): void {
+    if (
+      isDestroyed(this) ||
+      isDestroying(this) ||
+      this.#previousQuery === undefined
+    ) {
+      return;
+    }
+    this.#trackSearchLoad(this.search.perform());
+  }
+
   private search = restartableTask(async () => {
     let query = this.#previousQuery;
     if (query === undefined) {
@@ -487,7 +600,8 @@ export class SearchEntriesResource extends Resource<Args> {
       let isPartialRefresh =
         this.hasCompletedFullRun &&
         this.realmsNeedingRefresh.size > 0 &&
-        query.page === undefined;
+        query.page === undefined &&
+        !namesItsOperation(query);
       let realmsToFetch = isPartialRefresh
         ? [...this.realmsNeedingRefresh]
         : this.realmsToSearch;
@@ -529,9 +643,18 @@ export class SearchEntriesResource extends Resource<Args> {
           // Unpaginated (a partial refresh precondition), so the standing
           // entry count is the exact whole-set total; the response's total
           // only speaks for the fetched realm subset.
+          let refreshedTotals = this.realmTotalsFor(doc);
           this._meta = {
             ...this._meta,
             page: { total: this._entries.length },
+            ...(refreshedTotals
+              ? {
+                  realmTotals: {
+                    ...this._meta.realmTotals,
+                    ...refreshedTotals,
+                  },
+                }
+              : {}),
           };
         } else {
           // Server order is authoritative on a full run, but an unchanged
@@ -544,7 +667,9 @@ export class SearchEntriesResource extends Resource<Args> {
             adoptFresh(previousById.get(entry.id), entry),
           );
           this._entries.splice(0, this._entries.length, ...next);
-          this._meta = doc.meta;
+          let realmTotals = this.realmTotalsFor(doc);
+          this._meta = realmTotals ? { ...doc.meta, realmTotals } : doc.meta;
+          this._entriesQuery = query;
           this.hasCompletedFullRun = true;
         }
 
@@ -559,6 +684,7 @@ export class SearchEntriesResource extends Resource<Args> {
         if (!isPartialRefresh) {
           this._entries.splice(0, this._entries.length);
           this._meta = { page: { total: 0 } };
+          this._entriesQuery = undefined;
         }
         // On a failed partial refresh the stale rows stay (with the error
         // surfaced) and the realms stay marked, so the next event retries
@@ -587,7 +713,7 @@ export class SearchEntriesResource extends Resource<Args> {
     if (query === undefined || !this.hasCompletedFullRun) {
       return false;
     }
-    if (query.page !== undefined) {
+    if (query.page !== undefined || namesItsOperation(query)) {
       return false;
     }
     if (wireFilterHasMatches(query.filter)) {
@@ -603,6 +729,15 @@ export class SearchEntriesResource extends Resource<Args> {
     // The GET's ?fields= serves only html / item / html,item; a sparse
     // item.<field> selection has no query-string spelling.
     return this.#fieldsetIsRefreshable(query.fields?.entry);
+  }
+
+  // Whether the session is known not to read `realm`: the host holds a
+  // session for it whose permissions leave out `read`. A realm the host holds
+  // no session for, such as a public one it never signed in to, or one whose
+  // info it loaded without signing in, is not known either way, and its
+  // card+html GET is answered as it always is.
+  #sessionCannotRead(realm: string): boolean {
+    return this.realm.token(realm) !== undefined && !this.realm.canRead(realm);
   }
 
   // Refreshable = the html branch is in play (the default resolution or an
@@ -714,6 +849,15 @@ export class SearchEntriesResource extends Resource<Args> {
         if (refreshed === undefined) {
           return 'fallback';
         }
+        // The card+html GET serves the formats the card's type withholds
+        // data-only, while this search is governed by its own declaration,
+        // and an ad-hoc one declares nothing. A member the search served with
+        // markup that comes back without any may be one of those formats, and
+        // splicing it in would show it data-only until the next full run
+        // shows it with markup again — so the whole search re-runs instead.
+        if (member.html.length > 0 && refreshed.html.length === 0) {
+          return 'fallback';
+        }
         replacements.set(member.id, refreshed);
       } catch (err) {
         this.#log.warn(
@@ -733,15 +877,64 @@ export class SearchEntriesResource extends Resource<Args> {
     return fields === undefined ? undefined : fields.join(',');
   }
 
-  // The `css` resources base64-embed their whole stylesheet in the href; the
-  // loader import is what registers each scoped stylesheet with the document,
-  // so entries are paint-ready when exposed.
+  // The loader import is what registers each scoped stylesheet with the
+  // document, so entries are paint-ready when exposed. An inline-form href
+  // resolves locally, but a hashed-form href is a network fetch that can fail
+  // (a post-sweep orphan, an unreachable realm) — a missing stylesheet
+  // degrades that entry's styling, never the result list.
   private async loadStylesheets(doc: EntryCollectionDocument) {
     let hrefs = (doc.included ?? [])
       .filter(isCssResource)
       .map((resource) => resource.attributes.href);
-    await Promise.all(
+    let results = await Promise.allSettled(
       hrefs.map((href) => this.loaderService.loader.import(href)),
+    );
+    for (let [i, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        this.#log.warn(
+          `could not load scoped stylesheet ${hrefs[i]}; results render ` +
+            `unstyled: ${stringifyErrorForLog(result.reason)}`,
+        );
+      }
+    }
+  }
+
+  // Resolves a URL to the searched realm holding it, in the form entry rows
+  // carry as `realmUrl`. One RealmPaths per searched realm per call.
+  private realmUrlResolver(): (id: string) => string {
+    let { virtualNetwork } = this.network;
+    let targets = this.realmsToSearch.map((realm) => ({
+      realm,
+      paths: new RealmPaths(canonicalRealmIdentifier(virtualNetwork, realm)),
+    }));
+    return (id: string): string => {
+      // The server names an entry, and a realm in `realmTotals`, by its URL;
+      // folded, it compares with the searched realms in one form.
+      let idRRI = rri(virtualNetwork.unresolveURL(id));
+      for (let { realm, paths } of targets) {
+        if (paths.inRealm(idRRI)) {
+          return realm;
+        }
+      }
+      return new RealmPaths(virtualNetwork.toURL(id)).url;
+    };
+  }
+
+  // Re-keys the per-realm totals by the `realmUrl` form entry rows carry, so a
+  // section can look up its own realm's count.
+  private realmTotalsFor(
+    doc: EntryCollectionDocument,
+  ): Record<string, number> | undefined {
+    let totals = doc.meta?.realmTotals;
+    if (!totals) {
+      return undefined;
+    }
+    let realmUrlFor = this.realmUrlResolver();
+    return Object.fromEntries(
+      Object.entries(totals).map(([realm, total]) => [
+        realmUrlFor(realm),
+        total,
+      ]),
     );
   }
 
@@ -768,19 +961,7 @@ export class SearchEntriesResource extends Resource<Args> {
       }
     }
 
-    // One RealmPaths per searched realm per build — not per entry.
-    let realmPaths = this.realmsToSearch.map(
-      (realm) => new RealmPaths(ri(realm)),
-    );
-    let realmUrlFor = (id: string): string => {
-      let idRRI = rri(id);
-      for (let paths of realmPaths) {
-        if (paths.inRealm(idRRI)) {
-          return paths.url;
-        }
-      }
-      return new RealmPaths(this.network.virtualNetwork.toURL(id)).url;
-    };
+    let realmUrlFor = this.realmUrlResolver();
 
     return doc.data.map((entry) => {
       let htmlResources = (entry.relationships.html?.data ?? [])
@@ -831,6 +1012,20 @@ export class SearchEntriesResource extends Resource<Args> {
       };
     });
   }
+}
+
+// Whether a query names the declared operation it runs. The realm answers such
+// a query with its own resolution of that operation, so the filter, sort and
+// page it carries are only this side's resolution of it, and they differ from
+// the realm's whenever this side's definition is stale. None of the shortcuts
+// that judge from a query's shape which realm events can move its results, or
+// whether a partial fetch can stand in for a full one, can trust them, so a
+// named query takes the full re-run on every event that reaches it.
+function namesItsOperation(query: SearchEntryWireQuery | undefined): boolean {
+  return (
+    (query as Partial<NamedQueryInvocation> | undefined)?.operation !==
+    undefined
+  );
 }
 
 function buildRendering(
@@ -893,21 +1088,11 @@ function contentEquals(a: SearchEntry, b: SearchEntry): boolean {
   return isEqual(aContent, bContent);
 }
 
-// A prerender_html invalidation names the underlying file (`books/1.json`),
-// which can back TWO result rows: the card instance (id `books/1` — instance
-// ids never carry the extension) and the file-meta row (id `books/1.json` —
-// every file gets a file entry, card JSON included). Stripping a trailing
-// `.json` from both sides lets the one invalidation reach both rows without
-// knowing which kind a member is: the instance row needs the invalidation
-// normalized, and the file row then needs its own id normalized the same way
-// to keep matching. For every other file kind (`notes.md`, `book.gts`) the
-// strip is a no-op and the comparison is exact.
-function stripJsonSuffix(url: string): string {
-  return url.replace(/\.json$/, '');
-}
-
 // The highest generation among the queued invalidation URLs that name this
-// member, or undefined when none do.
+// member, or undefined when none do. Both sides are normalized because one
+// prerender_html invalidation can back two result rows — the card instance
+// and the file-meta row — and which kind a member is doesn't have to be
+// known to reach it.
 function invalidationGenerationFor(
   member: SearchEntry,
   invalidations: Map<string, number>,

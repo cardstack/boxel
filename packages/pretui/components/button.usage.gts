@@ -1,0 +1,159 @@
+// Pretui — Button usage page. The freestyle contract for the catalog tile:
+// live example, knobs for every arg, and the API table the kit teaches from.
+import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { FreestyleUsage } from './freestyle-usage';
+import { BUTTON_SHAPES, Button } from './button';
+import type { ButtonShape } from './button';
+import {
+  PRETUI_APPEARANCES,
+  PRETUI_SIZES,
+  PRETUI_TONES,
+} from '../pretui-primitives';
+import type {
+  PretuiAppearance,
+  PretuiSize,
+  PretuiTone,
+} from '../pretui-primitives';
+
+// Spread the published vocabulary rather than restating it: Freestyle's
+// @options takes a mutable string[], and a hand-written copy silently omits
+// any axis value added later.
+const TONES = [...PRETUI_TONES];
+const APPEARANCES = [...PRETUI_APPEARANCES];
+const SIZES = [...PRETUI_SIZES];
+const SHAPES = [...BUTTON_SHAPES];
+
+export class ButtonUsage extends GlimmerComponent {
+  @tracked tone = 'primary';
+  @tracked appearance = 'accent';
+  @tracked size = 'm';
+  @tracked busy = false;
+  @tracked busyLabel = '';
+  @tracked disabled = false;
+  @tracked href = '';
+  @tracked shape = 'rounded';
+  setTone = (v: string) => (this.tone = v);
+  setAppearance = (v: string) => (this.appearance = v);
+  setSize = (v: string) => (this.size = v);
+  setBusy = (v: boolean) => (this.busy = v);
+  setBusyLabel = (v: string) => (this.busyLabel = v);
+  setDisabled = (v: boolean) => (this.disabled = v);
+  setHref = (v: string) => (this.href = v);
+  setShape = (v: string) => (this.shape = v);
+  get toneVal() {
+    return this.tone as PretuiTone;
+  }
+  get appearanceVal() {
+    return this.appearance as PretuiAppearance;
+  }
+  get hrefVal() {
+    return this.href || undefined;
+  }
+  get shapeVal() {
+    return this.shape as ButtonShape;
+  }
+  get sizeVal() {
+    return this.size as PretuiSize;
+  }
+  get usage() {
+    let bits = [`@tone='${this.tone}'`, `@appearance='${this.appearance}'`];
+    if (this.size !== 'm') bits.push(`@size='${this.size}'`);
+    if (this.busy) bits.push('@busy={{true}}');
+    if (this.busyLabel) bits.push(`@busyLabel='${this.busyLabel}'`);
+    if (this.disabled) bits.push('@disabled={{true}}');
+    if (this.href) bits.push(`@href='${this.href}'`);
+    if (this.shape !== 'rounded') bits.push(`@shape='${this.shape}'`);
+    return `<Button ${bits.join(' ')}>Keep selling</Button>`;
+  }
+  <template>
+    <FreestyleUsage
+      @name='Button'
+      @description='Interactive button for actions and form submission. The boxel-ui @kind axis is re-cut as the two-axis treatment grid: @tone picks the hue, @appearance picks the recipe. Renders a native button, or a native link with @href; the boxel-ui LinkTo mode is host-router coupling and stays behind.'
+      @source={{this.usage}}
+    >
+      <:example>
+        <Button
+          @tone={{this.toneVal}}
+          @appearance={{this.appearanceVal}}
+          @size={{this.sizeVal}}
+          @busy={{this.busy}}
+          @busyLabel={{this.busyLabel}}
+          @disabled={{this.disabled}}
+          @href={{this.hrefVal}}
+          @shape={{this.shapeVal}}
+        >Keep selling</Button>
+      </:example>
+      <:api as |Args|>
+        <Args.String
+          @name='tone'
+          @value={{this.tone}}
+          @options={{TONES}}
+          @defaultValue='primary'
+          @description='Semantic color — WHY the element is colored. Sets --pretui-tone/--pretui-tone-on from theme tokens.'
+          @onInput={{this.setTone}}
+        />
+        <Args.String
+          @name='appearance'
+          @value={{this.appearance}}
+          @options={{APPEARANCES}}
+          @defaultValue='accent'
+          @description='Visual weight — HOW loud. One recipe per appearance, written once, reading the tone variables.'
+          @onInput={{this.setAppearance}}
+        />
+        <Args.String
+          @name='size'
+          @value={{this.size}}
+          @options={{SIZES}}
+          @defaultValue='m'
+          @description='Sets only the host font-size; every internal dimension rides the em (webawesome scaling). m is 28px-high.'
+          @onInput={{this.setSize}}
+        />
+        <Args.Bool
+          @name='busy'
+          @value={{this.busy}}
+          @defaultValue={{false}}
+          @description='Swaps the label for a spinner while an action runs, at the same width. Presses are ignored, but the button keeps focus (aria-disabled, not disabled).'
+          @onInput={{this.setBusy}}
+        />
+        <Args.String
+          @name='busyLabel'
+          @value={{this.busyLabel}}
+          @description='Shown next to the spinner while busy when it fits in the button, and always added to the accessible name. Set it when the visible label does not already say the button is busy.'
+          @onInput={{this.setBusyLabel}}
+        />
+        <Args.Bool
+          @name='disabled'
+          @value={{this.disabled}}
+          @defaultValue={{false}}
+          @description='Disables the button.'
+          @onInput={{this.setDisabled}}
+        />
+        <Args.String
+          @name='href'
+          @value={{this.href}}
+          @description='Renders a real link (an <a>) with the same look. A disabled link drops its href; @busy does not apply.'
+          @onInput={{this.setHref}}
+        />
+        <Args.String
+          @name='shape'
+          @value={{this.shape}}
+          @options={{SHAPES}}
+          @defaultValue='rounded'
+          @description="Corner treatment. rounded is the theme's --radius less 2px; --pretui-button-radius overrides any shape per instance."
+          @onInput={{this.setShape}}
+        />
+        <Args.Base
+          @name='variant'
+          @typeLabel='String'
+          @description='Deprecated sugar over @tone + @appearance: primary→primary/accent, secondary→neutral/outlined, ghost→neutral/plain, destructive→danger/accent.'
+          @hideControls={{true}}
+        />
+      </:api>
+    </FreestyleUsage>
+  </template>
+}
+
+export const DEMOS_BUTTON: Record<string, unknown> = {
+  Button: ButtonUsage,
+};

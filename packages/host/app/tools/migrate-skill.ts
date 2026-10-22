@@ -2,11 +2,17 @@ import { service } from '@ember/service';
 
 import { stringify as stringifyYaml } from 'yaml';
 
-import { rri, skillCardRef } from '@cardstack/runtime-common';
+import {
+  RealmPaths,
+  rri,
+  skillCardRef,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 import type * as BaseToolModule from '@cardstack/base/command';
@@ -56,6 +62,7 @@ export default class MigrateSkillTool extends HostBaseTool<
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
+  @service declare private network: NetworkService;
   @service declare private store: StoreService;
 
   description = `Migrate a realm's legacy Skill cards into skills/<name>/SKILL.md \
@@ -73,18 +80,18 @@ files with boxel.kind: skill frontmatter.`;
   protected async run(
     input: BaseToolModule.MigrateSkillInput,
   ): Promise<BaseToolModule.MigrateSkillResult> {
-    let realmUrl = this.realm.realmOf(rri(input.realm));
-    if (!realmUrl) {
+    let realmId = this.realm.realmOf(rri(input.realm));
+    if (!realmId) {
       throw new Error(`Invalid or unknown realm provided: ${input.realm}`);
     }
 
     // The `type` filter matches the legacy `Skill` card and its subclasses
     // (e.g. `SkillPlus`, `SkillPlusMarkdown`), so every flavour of legacy skill
     // in the realm is migrated.
-    let skills = await this.store.search<Skill>(
-      { filter: { type: skillCardRef } },
-      [realmUrl],
-    );
+    let skills = (await this.store.search({ filter: { type: skillCardRef } }, [
+      realmId,
+    ])) as Skill[];
+    let realmPaths = new RealmPaths(realmId);
 
     // Sort by id so slug de-duplication is deterministic: re-running the command
     // assigns the same `-2`/`-3` suffixes in the same order, which keeps the
@@ -112,12 +119,9 @@ files with boxel.kind: skill frontmatter.`;
       let slug = this.slugForSkill(skill, usedSlugs);
       usedSlugs.add(slug);
 
-      // `realmUrl` is a realm identifier. No form guard, and reachability by a
-      // prefix form is unverified.
-      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-      let url = new URL(`skills/${slug}/SKILL.md`, realmUrl);
+      let fileId = realmPaths.fileRRI(`skills/${slug}/SKILL.md`);
 
-      if (!input.overwrite && (await this.fileExists(url))) {
+      if (!input.overwrite && (await this.fileExists(fileId))) {
         if (skill.id) {
           skippedSkillIds.push(skill.id);
         }
@@ -126,11 +130,11 @@ files with boxel.kind: skill frontmatter.`;
 
       let content = this.buildSkillMarkdown(skill, body);
       await this.cardService.saveSource(
-        url,
+        this.network.virtualNetwork.toURL(fileId),
         content,
         input.overwrite ? 'editor' : 'create-file',
       );
-      migratedFiles.push(url.href);
+      migratedFiles.push(fileId);
     }
 
     let commandModule = await this.loadToolModule();
@@ -183,15 +187,15 @@ files with boxel.kind: skill frontmatter.`;
     return `---\n${stringifyYaml(frontmatter)}---\n\n${body}\n`;
   }
 
-  private async fileExists(url: URL): Promise<boolean> {
-    let { status } = await this.cardService.getSource(url);
+  private async fileExists(fileId: RealmResourceIdentifier): Promise<boolean> {
+    let { status } = await this.cardService.getSource(fileId);
     if (status === 404) {
       return false;
     }
     if (status === 200 || status === 406) {
       return true;
     }
-    throw new Error(`Error checking if file exists at ${url}: ${status}`);
+    throw new Error(`Error checking if file exists at ${fileId}: ${status}`);
   }
 }
 

@@ -230,6 +230,15 @@ let response = await request
 
 The response is an `entry` collection document: each entry resolves to prerendered HTML (the fast path) or a live serialization, and `fields: ['item']` asks for the full card/file serialization in `included`.
 
+### A result a policy scoped
+
+`meta.policyScopedRealms` lists the realms whose rows in the result the server decided by more than the query the caller sent:
+
+- every realm the caller cannot read outright. What such a realm contributes is its policy's to decide: the rows a grant admits, or none. The realm is listed either way, so the list does not tell a caller whether they hold a grant there.
+- every realm a declared query (one naming an `operation`) searched, since the server answers it with its own resolution of the declaration.
+
+A client that reconciles a result with cards it already holds, as the host's live search does with local creates and edits, may drop a row of a listed realm that no longer matches, and must never add one the server did not return: a matching card the client holds may be one the policy withheld. Realms that are not listed reconcile freely. The list names realms and nothing else. It never carries the filter a grant composed, the rule that matched, or a count of what was withheld. When no realm is listed, the key is absent.
+
 ### Result kinds and `scope`
 
 The index holds two row kinds: card instances and files (a card's `.json` is dual-indexed — it appears as both an `instance` row and a `file` row that share the same URL). A search spans both kinds by default.

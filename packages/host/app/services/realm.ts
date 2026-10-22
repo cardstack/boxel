@@ -51,6 +51,7 @@ import {
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import ENV from '@cardstack/host/config/environment';
+import { realmURLDisplayText } from '@cardstack/host/lib/realm-utils';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
@@ -75,7 +76,7 @@ const log = logger('service:realm');
 
 // Reports "pending" while a realm has incremental indexing in flight (between
 // the incremental-index-initiation Matrix event and the matching incremental/
-// full/copy completion event). Lets `await settled()` automatically wait for
+// full completion event). Lets `await settled()` automatically wait for
 // indexing to finish in tests, which is the primary leverage point for
 // fixing the test surface that pre-CS-11003 relied on the synchronous-
 // indexing semantic of the +source POST.
@@ -153,7 +154,7 @@ class RealmResource {
   @tracked private realmPermissions: RealmPermissions | null | undefined;
 
   // When realm-side indexing is in flight (incremental-index-initiation
-  // received but matching incremental/full/copy event hasn't arrived yet),
+  // received but matching incremental/full event hasn't arrived yet),
   // hold a test-waiter token so `await settled()` and other Ember test
   // helpers wait for the index event before proceeding. This is the
   // primary semaphore for tests that, before CS-11003, relied on the
@@ -323,7 +324,6 @@ class RealmResource {
               }
               break;
             case 'full':
-            case 'copy':
             case 'incremental':
               this.info.isIndexing = false;
               if (this.indexingWaiterToken) {
@@ -334,7 +334,7 @@ class RealmResource {
               // which surfaces as an incremental re-index that invalidates the
               // config card. Refresh realm info then, so the workspace chooser
               // label and index card title update without a reload. Other
-              // re-indexes (full/copy, or incremental of unrelated cards) are
+              // re-indexes (full, or incremental of unrelated cards) are
               // deliberately left alone — refetching on those would, among
               // other things, clobber client-managed publish state. Instance
               // invalidations carry the card id without `.json`, so the
@@ -352,7 +352,7 @@ class RealmResource {
               // Optimistic and client-clock based — no round-trip, so it can't
               // fail, log, or fire a stray request mid-test; the next federated
               // info load reconciles it with the authoritative value. Scoped to
-              // incremental indexes: full/copy re-indexes are rebuilds, not user
+              // incremental indexes: full re-indexes are rebuilds, not user
               // writes, and only source realms actually move (a non-source realm
               // would self-correct on that next load).
               if (data.indexType === 'incremental' && this.info) {
@@ -595,51 +595,6 @@ class RealmResource {
       }),
     );
   }
-
-  async setRealmPermission(
-    userId: string,
-    permissions: ('read' | 'write')[] | null,
-  ): Promise<void> {
-    return await this.setRealmPermissionTask.perform(userId, permissions);
-  }
-
-  private setRealmPermissionTask = restartableTask(
-    async (userId: string, permissions: ('read' | 'write')[] | null) => {
-      await this.loginTask.perform();
-      let headers: Record<string, string> = {
-        Accept: SupportedMimeType.Permissions,
-        Authorization: `Bearer ${this.token}`,
-      };
-      let response = await this.network.authedFetch(
-        `${this.realmURL}_permissions`,
-        {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({
-            data: {
-              type: 'permissions',
-              id: this.url,
-              attributes: {
-                permissions: {
-                  [userId]: permissions,
-                } as RealmPermissions,
-              },
-            },
-          }),
-        },
-      );
-
-      if (response.status !== 200) {
-        throw new Error(
-          `Failed to set realm permissions for '${userId}:${
-            permissions ? permissions.join() : 'null'
-          }' in realm ${this.url}: ${response.status}`,
-        );
-      }
-      let json = await waitForPromise(response.json());
-      this.realmPermissions = json.data.attributes.permissions;
-    },
-  );
 
   private tokenRefresher = restartableTask(async () => {
     if ((globalThis as any).__boxelRenderContext || !this.claims) {
@@ -1073,31 +1028,81 @@ export default class RealmService extends Service {
     });
   }
 
-  restoreSessionsFromStorage(): void {
+  // `startingVisit` is for the routes each pass of a prerender visit enters
+  // through. The prerender server writes the visit's sessions into storage
+  // before its first pass, replacing the ones it wrote for the visit before —
+  // and the pool can hand a warm tab from one realm to another, so that visit
+  // may have been another realm's. A realm holding a session storage doesn't
+  // carry is then dropped rather than kept beside the new ones. A realm left
+  // behind keeps answering `knownRealm`, which takes the first realm whose URL
+  // prefixes the one asked about: a leftover realm at an origin's root claims
+  // every realm under it, and a render of one of their cards fetches the root
+  // realm's info instead of its own.
+  //
+  // The memo doesn't apply to it: an add-only restore — `token()`'s fallback —
+  // may have read the visit's sessions first, and that one keeps whatever the
+  // tab held. Every pass of a visit re-runs the drop, which finds nothing new
+  // after the first because storage only gains sessions within a visit: this
+  // service's own writes add or refresh a realm's token, and the one write that
+  // clears the others — reauthentication — doesn't run in a prerender tab.
+  //
+  // Each session is registered under its own realm (`exact`), so a known realm
+  // whose URL prefixes a session's realm is never handed that session — and,
+  // since assigning a token stores it, never written back into storage as a
+  // session this visit carries.
+  restoreSessionsFromStorage({
+    startingVisit = false,
+  }: { startingVisit?: boolean } = {}): void {
     let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
-    if (sessionsString === this.lastRestoredSessionsString) {
+    if (!startingVisit && sessionsString === this.lastRestoredSessionsString) {
       return;
     }
-    if (!sessionsString) {
+    if (!sessionsString && !startingVisit) {
       this.lastRestoredSessionsString = sessionsString;
       return;
     }
-    let tokens = JSON.parse(sessionsString) as Record<string, string>;
+    let tokens = (sessionsString ? JSON.parse(sessionsString) : {}) as Record<
+      string,
+      string
+    >;
     // Record the memo only after a successful parse, so a malformed blob can't
     // poison it and suppress a later retry.
     this.lastRestoredSessionsString = sessionsString;
+    if (startingVisit) {
+      this.dropSessionsNotCarriedBy(tokens);
+    }
     for (let [realmURL, token] of Object.entries(tokens)) {
-      let resource = this.getOrCreateRealmResource(realmURL, token);
+      let resource = this.getOrCreateRealmResource(realmURL, token, {
+        exact: true,
+      });
       if (token && resource.token !== token) {
         resource.token = token;
       }
     }
   }
 
-  info = (url: string): EnhancedRealmInfo => {
-    if (this.network.virtualNetwork.isRegisteredPrefix(url)) {
-      url = this.network.virtualNetwork.toURL(url).href;
+  // Only realms holding a session go: one this tab identified without a
+  // session holds nothing a caller was handed. Compared the way `knownRealm`
+  // compares, so a realm filed under one identifier form is not taken for
+  // missing because storage names it by another.
+  private dropSessionsNotCarriedBy(tokens: Record<string, string>): void {
+    let vn = this.network.virtualNetwork;
+    let carried = new Set(
+      Object.keys(tokens).map((realmURL) => vn.unresolveURL(realmURL)),
+    );
+    let stale = [...this._realms]
+      .filter(
+        ([realmURL, resource]) =>
+          resource.token && !carried.has(vn.unresolveURL(realmURL)),
+      )
+      .map(([realmURL]) => realmURL);
+    for (let realmURL of stale) {
+      this.removeRealm(realmURL);
     }
+  }
+
+  info = (url: string): EnhancedRealmInfo => {
+    url = this.toLookupURL(url);
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource) {
       this.identifyRealm
@@ -1182,22 +1187,12 @@ export default class RealmService extends Service {
   }
 
   async allUsersPermissions(url: string) {
-    if (this.network.virtualNetwork.isRegisteredPrefix(url)) {
-      url = this.network.virtualNetwork.toURL(url).href;
-    }
+    url = this.toLookupURL(url);
     let resource = this.knownRealm(url);
     if (!resource) {
       await this.identifyRealm.perform(url);
     }
     return await resource?.fetchRealmPermissions();
-  }
-
-  async setPermissions(
-    url: string,
-    userId: string,
-    permissions: ('read' | 'write')[],
-  ) {
-    await this.knownRealm(url)?.setRealmPermission(userId, permissions);
   }
 
   removeRealm(url: string) {
@@ -1296,6 +1291,23 @@ export default class RealmService extends Service {
     // Misses are not cached: a realm learned later may claim this id.
     return undefined;
   }
+
+  // The realm a card, file or module URL belongs to: the one `info()` answers
+  // for, so a realm's URL always matches the name and icon shown beside it.
+  // This doesn't look an unknown realm up itself: the `info()` call for the
+  // same URL does, and the answer updates when that lookup finds it.
+  realmURLOf(urlInRealm: string): string | undefined {
+    void this.identifyRealmTracker;
+    return this.knownRealmKey(this.toLookupURL(urlInRealm));
+  }
+
+  // That realm's URL as shown beside its name.
+  realmURLTextOf = (urlInRealm: string): string | undefined => {
+    let realmURL = this.realmURLOf(urlInRealm);
+    return realmURL
+      ? realmURLDisplayText(this.network.virtualNetwork, realmURL)
+      : undefined;
+  };
 
   realmForSessionRoomId(sessionRoomId: string) {
     return Array.from(this.realms.values()).find(
@@ -1579,6 +1591,36 @@ export default class RealmService extends Service {
     return resource.publishProgress(publishedRealmURL);
   };
 
+  // The form realm lookups take a URL in.
+  private toLookupURL(url: string): string {
+    let vn = this.network.virtualNetwork;
+    return vn.isRegisteredPrefix(url) ? vn.toURL(url).href : url;
+  }
+
+  // Untracked: callers that render the answer pair it with a tracked read.
+  private knownRealmKey(url: string): string | undefined {
+    // `this.realms` is keyed by the user-facing realm URL (typically a
+    // virtual alias like `https://cardstack.com/base/`). Callers may
+    // pass the resolved real URL (e.g. `https://localhost:4201/base/`)
+    // or an RRI prefix (e.g. `@cardstack/base/`) — all three should
+    // match the same realm. Normalize both sides via
+    // `virtualNetwork.unresolveURL` (chases through any registered
+    // virtual → real URL mapping and unifies to the realm-prefix RRI
+    // form) so the comparison is form-agnostic.
+    let vn = this.network.virtualNetwork;
+    let normalizedUrl = vn.unresolveURL(url);
+    for (let key of this.realms.keys()) {
+      if (url.startsWith(key)) {
+        return key;
+      }
+      let normalizedKey = vn.unresolveURL(key);
+      if (normalizedUrl.startsWith(normalizedKey)) {
+        return key;
+      }
+    }
+    return undefined;
+  }
+
   // By default, this does a tracked read from currentKnownRealms so that your
   // answer can be invalidated if a new realm is discovered. Internally, we also
   // use it untracked to implement the read-through cache.
@@ -1593,24 +1635,9 @@ export default class RealmService extends Service {
       }
       return undefined;
     }
-    // `this.realms` is keyed by the user-facing realm URL (typically a
-    // virtual alias like `https://cardstack.com/base/`). Callers may
-    // pass the resolved real URL (e.g. `https://localhost:4201/base/`)
-    // or an RRI prefix (e.g. `@cardstack/base/`) — all three should
-    // match the same realm. Normalize both sides via
-    // `virtualNetwork.unresolveURL` (chases through any registered
-    // virtual → real URL mapping and unifies to the realm-prefix RRI
-    // form) so the comparison is form-agnostic.
-    let vn = this.network.virtualNetwork;
-    let normalizedUrl = vn.unresolveURL(url);
-    for (let [key, value] of this.realms) {
-      if (url.startsWith(key)) {
-        return value;
-      }
-      let normalizedKey = vn.unresolveURL(key);
-      if (normalizedUrl.startsWith(normalizedKey)) {
-        return value;
-      }
+    let key = this.knownRealmKey(url);
+    if (key) {
+      return this.realms.get(key);
     }
     if (tracked) {
       this.currentKnownRealms.has(url);
@@ -1624,15 +1651,25 @@ export default class RealmService extends Service {
       return inProgressAuthentication;
     }
     let deferred = new Deferred<string | undefined>();
+    // Every caller that joins this sign-in awaits the deferred and handles
+    // its rejection; this keeps a failure nobody joined from also surfacing
+    // as an unhandled rejection.
+    deferred.promise.catch(() => {});
     this.reauthentications.set(realmURL, deferred.promise);
 
-    let resource = this.getOrCreateRealmResource(realmURL);
-    resource.logout();
-    await resource.login();
-    let result = resource.token;
-    deferred.fulfill(result);
+    // A sign-in that fails is reported to every caller waiting on it, and
+    // clears the in-progress entry as one that succeeds does, so the next
+    // call signs in afresh rather than waiting on this one.
     try {
+      let resource = this.getOrCreateRealmResource(realmURL);
+      resource.logout();
+      await resource.login();
+      let result = resource.token;
+      deferred.fulfill(result);
       return result;
+    } catch (e) {
+      deferred.reject(e);
+      throw e;
     } finally {
       this.reauthentications.delete(realmURL);
     }
@@ -1648,13 +1685,20 @@ export default class RealmService extends Service {
     return resource;
   }
 
+  // `exact` finds only the realm registered under `realmURL` itself, in any of
+  // its identifier forms. Without it the lookup is `knownRealm`'s, and a known
+  // realm whose URL merely prefixes `realmURL` is returned — and handed
+  // `token` — in its place.
   getOrCreateRealmResource(
     realmURL: string,
     token: string | undefined = undefined,
+    { exact = false }: { exact?: boolean } = {},
   ): RealmResource {
     // this should be the only place we do the untracked read. It needs to be
     // untracked so our `this._realms.set` below will not be an assertion.
-    let resource = this.knownRealm(realmURL, { tracked: false });
+    let resource = exact
+      ? this.registeredRealm(realmURL)
+      : this.knownRealm(realmURL, { tracked: false });
 
     if (resource && !resource?.token && token) {
       resource.token = token;
@@ -1668,6 +1712,17 @@ export default class RealmService extends Service {
       this.currentKnownRealms.add(realmURL);
     }
     return resource;
+  }
+
+  private registeredRealm(realmURL: string): RealmResource | undefined {
+    let vn = this.network.virtualNetwork;
+    let identity = vn.unresolveURL(realmURL);
+    for (let [key, resource] of this._realms) {
+      if (key === realmURL || vn.unresolveURL(key) === identity) {
+        return resource;
+      }
+    }
+    return undefined;
   }
 
   private identifyRealm = task(

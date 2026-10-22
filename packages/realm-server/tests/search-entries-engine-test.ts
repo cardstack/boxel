@@ -287,6 +287,42 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('a relevance sort carrying a type anchor orders the same as one without', async function (assert) {
+      // `_matchRelevance` is a computed column, not a field of the anchored
+      // type, so an `item.on` beside it changes nothing about the ordering.
+      let personRef = { module: `${realmHref}person`, name: 'Person' };
+      let query = (sort: Record<string, unknown>) =>
+        parseSearchEntryQueryFromPayload({
+          filter: {
+            'item.on': personRef,
+            any: [{ matches: 'john' }, { eq: { 'item.firstName': 'Jane' } }],
+          },
+          sort: [sort],
+        });
+      let anchored = await testRealm.realmIndexQueryEngine.searchEntries(
+        query({ by: 'item._matchRelevance', 'item.on': personRef }),
+      );
+      assert.deepEqual(
+        anchored.data.map((entry) => entry.id),
+        [johnId, janeId],
+        'the full-text hit still ranks first',
+      );
+      assert.strictEqual(
+        typeof entryFor(anchored, johnId)!.meta?._matchRelevance,
+        'number',
+        'the score still rides the entry',
+      );
+      assert.throws(
+        () =>
+          parseSearchEntryQueryFromPayload({
+            filter: { 'item.on': personRef },
+            sort: [{ by: 'item._matchRelevance', 'item.on': personRef }],
+          }),
+        /requires at least one positive `matches` filter/,
+        'the anchor does not exempt it from the matches requirement',
+      );
+    });
+
     test('a relevance sort with no positive matches term is rejected at parse time', async function (assert) {
       assert.throws(
         () =>

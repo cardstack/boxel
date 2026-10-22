@@ -1,9 +1,4 @@
-import {
-  FieldDef,
-  Component,
-  field,
-  contains,
-} from '../card-api';
+import { FieldDef, Component, field, contains } from '../card-api';
 import ClockIcon from '@cardstack/boxel-icons/clock';
 import TimeField from '../time';
 

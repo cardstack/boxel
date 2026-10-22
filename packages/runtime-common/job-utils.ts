@@ -9,6 +9,7 @@ import {
   type PgPrimitive,
   type Querier,
 } from './expression.ts';
+import { laneFamilyPredicate } from './jobs/lane-family.ts';
 
 export const userInitiatedJobCancellationResult = Object.freeze({
   status: 418,
@@ -66,17 +67,21 @@ export async function findJobIdForReservationId(
   return row?.job_id ?? null;
 }
 
-export async function findRunningJobIdsForConcurrencyGroup(
+// The running jobs of every lane in `laneFamily` — its exclusive work and each
+// of its writer lanes. A realm's index and prerender-html lanes are families,
+// named by `indexingConcurrencyGroup` and `prerenderHtmlConcurrencyGroup`, so
+// stopping a realm's work stops all of it rather than one lane's.
+export async function findRunningJobIdsInLaneFamily(
   dbAdapter: DBAdapter,
-  concurrencyGroup: string,
+  laneFamily: string,
   querier?: Querier,
 ): Promise<string[]> {
   let q = querier ?? dbAdapterQuerier(dbAdapter);
   let rows = (await q([
     `SELECT DISTINCT j.id FROM jobs j`,
     `INNER JOIN job_reservations jr ON jr.job_id = j.id`,
-    `WHERE j.concurrency_group =`,
-    param(concurrencyGroup),
+    `WHERE`,
+    ...laneFamilyPredicate(laneFamily, 'j'),
     `AND j.status = 'unfulfilled'`,
     `AND jr.completed_at IS NULL`,
     `AND`,
@@ -89,14 +94,14 @@ export async function findRunningJobIdsForConcurrencyGroup(
   return rows.map((row) => row.id);
 }
 
-export async function cancelRunningJobsInConcurrencyGroup(
+export async function cancelRunningJobsInLaneFamily(
   dbAdapter: DBAdapter,
-  concurrencyGroup: string,
+  laneFamily: string,
   querier?: Querier,
 ): Promise<string[]> {
-  let runningJobIds = await findRunningJobIdsForConcurrencyGroup(
+  let runningJobIds = await findRunningJobIdsInLaneFamily(
     dbAdapter,
-    concurrencyGroup,
+    laneFamily,
     querier,
   );
   for (let jobId of runningJobIds) {
@@ -111,21 +116,21 @@ export async function cancelRunningJobsInConcurrencyGroup(
 }
 
 /**
- * Cancel ALL jobs in a concurrency group — both running (active reservations)
- * and pending (unfulfilled, no active reservation).
+ * Cancel ALL jobs in a lane family — both running (active reservations) and
+ * pending (unfulfilled, no active reservation), in every lane of the family.
  */
-export async function cancelAllJobsInConcurrencyGroup(
+export async function cancelAllJobsInLaneFamily(
   dbAdapter: DBAdapter,
-  concurrencyGroup: string,
+  laneFamily: string,
 ): Promise<{ cancelledRunning: string[]; cancelledPending: string[] }> {
-  let cancelledRunning = await cancelRunningJobsInConcurrencyGroup(
+  let cancelledRunning = await cancelRunningJobsInLaneFamily(
     dbAdapter,
-    concurrencyGroup,
+    laneFamily,
   );
 
   let pendingRows = (await query(dbAdapter, [
-    `SELECT id FROM jobs WHERE concurrency_group =`,
-    param(concurrencyGroup),
+    `SELECT id FROM jobs WHERE`,
+    ...laneFamilyPredicate(laneFamily),
     `AND status = 'unfulfilled'`,
   ] as Expression)) as { id: string }[];
 

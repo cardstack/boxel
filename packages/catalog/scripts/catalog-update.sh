@@ -23,6 +23,10 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPTS_DIR/.."
 
 pnpm catalog:setup
+# Test-subset files merged into the clone are not part of its history; take
+# them out so a pull that adds the same paths upstream is never blocked. The
+# realm-server start re-merges them afterwards.
+node scripts/sync-test-subset.ts --remove-from-clone
 cd contents
 
 # Force English error messages so the detection grep below is locale-safe.

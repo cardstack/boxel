@@ -297,3 +297,28 @@ export function extractAvifColorProfile(
     iccProfile,
   });
 }
+
+// An AVIF image sequence is required to list the `avis` brand in its `ftyp`
+// box, so the brands alone decide animation: `avis` anywhere means a sequence
+// (a single-frame sequence reads as animated, which only costs it srcset),
+// and its absence means a still image item.
+export function extractAvifAnimated(bytes: Uint8Array): boolean | undefined {
+  if (bytes.length < MIN_BYTES || !matchBytes(bytes, 4, FTYP_MARKER)) {
+    return undefined;
+  }
+  let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let ftypSize = view.getUint32(0);
+  if (ftypSize < MIN_BYTES || ftypSize > bytes.length) {
+    return undefined;
+  }
+  if (matchBytes(bytes, 8, AVIS_BRAND)) {
+    return true;
+  }
+  // ftyp: [size:4] ["ftyp":4] [major_brand:4] [minor_version:4] [compatible_brands:4 × n]
+  for (let offset = 16; offset + 4 <= ftypSize; offset += 4) {
+    if (matchBytes(bytes, offset, AVIS_BRAND)) {
+      return true;
+    }
+  }
+  return false;
+}

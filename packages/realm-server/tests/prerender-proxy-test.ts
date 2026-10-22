@@ -4,7 +4,11 @@ import Koa from 'koa';
 import Router from '@koa/router';
 import supertest from 'supertest';
 import { basename } from 'path';
-import type { DBAdapter, Prerenderer } from '@cardstack/runtime-common';
+import {
+  query,
+  type DBAdapter,
+  type Prerenderer,
+} from '@cardstack/runtime-common';
 import type { RenderRouteOptions } from '@cardstack/runtime-common';
 
 import handlePrerenderProxy from '../handlers/handle-prerender-proxy.ts';
@@ -33,11 +37,19 @@ module(basename(import.meta.filename), function () {
         async getColumnNames() {
           return [];
         },
+        async withFileWriteLocks(_url, _paths, fn) {
+          return await fn(() => {});
+        },
         async withWriteLock(_url, fn) {
           return await fn(undefined);
         },
         async withUserCostLock(_userId, fn) {
           return await fn();
+        },
+        async withTransaction(fn) {
+          return await fn((expression, coerceTypes) =>
+            query(this, expression, coerceTypes),
+          );
         },
       };
     }
@@ -438,6 +450,93 @@ module(basename(import.meta.filename), function () {
           },
         ],
         'forwards requests to prerenderer with derived auth info',
+      );
+    });
+
+    test('drops a caller-supplied loaderEpoch and clearCache before it reaches the prerenderer', async function (assert) {
+      let { prerenderer, renderCalls } = makePrerenderer();
+      let realm = 'http://example.test/';
+      let dbAdapter = makeDbAdapter([
+        {
+          username: '@someone:localhost',
+          read: true,
+          write: true,
+          realm_owner: false,
+        },
+      ]);
+      let app = new Koa();
+      let router = new Router();
+      for (let kind of ['card', 'file-extract', 'module'] as const) {
+        router.post(
+          `/_prerender-${kind}`,
+          jwtMiddleware(realmSecretSeed, dbAdapter),
+          handlePrerenderProxy({
+            kind,
+            prerenderer,
+            dbAdapter,
+            matrixURL,
+            createPrerenderAuth,
+          }),
+        );
+      }
+      app.use(router.routes());
+
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let callerOptions = { clearCache: true, loaderEpoch: 'caller-epoch' };
+      for (let [kind, path] of [
+        ['card', 'card'],
+        ['file-extract', 'notes.txt'],
+        ['module', 'module.gts'],
+      ] as const) {
+        await supertest(app.callback())
+          .post(`/_prerender-${kind}`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({
+            data: {
+              attributes: {
+                realm,
+                url: `${realm}${path}`,
+                renderOptions: callerOptions,
+              },
+            },
+          })
+          .expect(201);
+      }
+
+      assert.strictEqual(
+        renderCalls.length,
+        3,
+        'invokes prerenderer for each kind',
+      );
+      for (let { kind, args } of renderCalls) {
+        assert.notOk(
+          args.renderOptions?.clearCache,
+          `${kind} render does not carry the caller's clearCache`,
+        );
+        assert.notStrictEqual(
+          args.renderOptions?.loaderEpoch,
+          'caller-epoch',
+          `${kind} render does not carry the caller's loaderEpoch`,
+        );
+      }
+      let [cardCall, fileExtractCall, moduleCall] = renderCalls;
+      assert.strictEqual(
+        cardCall?.args.renderOptions?.loaderEpoch,
+        undefined,
+        'card render carries no loaderEpoch',
+      );
+      assert.strictEqual(
+        fileExtractCall?.args.renderOptions?.loaderEpoch,
+        undefined,
+        'file-extract render carries no loaderEpoch',
+      );
+      assert.strictEqual(
+        typeof moduleCall?.args.renderOptions?.loaderEpoch,
+        'string',
+        "module render carries the realm's own loaderEpoch",
       );
     });
 

@@ -8,6 +8,7 @@ import {
   PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
+import type { CreateCardFn } from './card-api';
 import {
   type BaseDef,
   type Box,
@@ -16,9 +17,9 @@ import {
   type LinkableDefConstructor,
   brokenLinkDisplayName,
   brokenLinkItemType,
-  CreateCardFn,
   isFileDef,
 } from './card-api';
+import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import {
   chooseCard,
   chooseFile,
@@ -27,7 +28,6 @@ import {
   CardContextName,
   RealmURLContextName,
   getNarrowestType,
-  Loader,
   type ResolvedCodeRef,
   isCardInstance,
 } from '@cardstack/runtime-common';
@@ -38,7 +38,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
-import { type RelationshipState } from './field-support';
+import type { RelationshipState } from './field-support';
 
 // A broken singular link surfaces as a terminal failure state from
 // `getRelationshipMembershipState`. The owning `linksTo` component reads it (it has the
@@ -287,12 +287,8 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
 }
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
-
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
   // @ts-ignore
-  return (import.meta as any).loader;
+  return loaderForModule(import.meta);
 }

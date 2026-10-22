@@ -15,12 +15,14 @@ import {
   Job,
   Deferred,
 } from '@cardstack/runtime-common';
+import { laneFamilyKey } from '@cardstack/runtime-common/jobs/lane-family';
 
 let id = 0;
 
 interface QueueWorkItem {
   jobType: string;
   concurrencyGroup: string | null;
+  laneFamily?: string | null;
   timeout: number;
   priority: number;
   args: PgPrimitive;
@@ -82,12 +84,19 @@ export class BrowserQueue implements QueuePublisher, QueueRunner {
       };
       this.jobs.push(workItem);
     } else {
+      // Coalescing is per lane, as in the server queue: same group, same
+      // lane family.
       let candidates: QueueCoalesceCandidate[] = this.jobs
-        .filter((job) => job.concurrencyGroup === incoming.concurrencyGroup)
+        .filter(
+          (job) =>
+            job.concurrencyGroup === incoming.concurrencyGroup &&
+            laneFamilyKey(job) === laneFamilyKey(incoming),
+        )
         .map((job) => ({
           id: job.id,
           jobType: job.jobType,
           concurrencyGroup: job.concurrencyGroup,
+          laneFamily: job.laneFamily ?? null,
           timeout: job.timeout,
           priority: job.priority,
           args: job.args,

@@ -41,7 +41,7 @@ while IFS= read -r table; do
   # Fixed-string match (-F) so a table name is never interpreted as a regex.
   # The trailing space matches the column list that always follows the table
   # name ("COPY public.foo (col, ...) FROM stdin;"), so a table name that is a
-  # prefix of another (prerendered_html vs prerendered_html_working) can't
+  # prefix of another (prerendered_html vs prerendered_html_pending) can't
   # match by accident. No ^ anchor is needed: every line in copy_headers
   # already begins with "COPY public.".
   if printf '%s\n' "$copy_headers" | grep -qF "COPY public.${table} "; then

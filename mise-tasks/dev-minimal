@@ -27,18 +27,34 @@ if [ -z "${BOXEL_ENVIRONMENT:-}" ]; then
 fi
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
-BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
-NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
+# Pick wait-on's protocol prefix from the realm-server's scheme, as
+# lib/dev-common.sh does: local dev serves HTTPS, and `${URL#*://}` strips
+# whichever scheme is in use to feed wait-on's authority-only form.
+case "$REALM_BASE_URL" in
+  https://*) REALM_READY_SCHEME="https-get" ;;
+  *)         REALM_READY_SCHEME="http-get"  ;;
+esac
+case "$REALM_TEST_URL" in
+  https://*) REALM_TEST_READY_SCHEME="https-get" ;;
+  *)         REALM_TEST_READY_SCHEME="http-get"  ;;
+esac
+BASE_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/base/${READY_PATH}"
+NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-test/${READY_PATH}"
 
+# START_SERVER_AND_TEST_INSECURE=1 relaxes wait-on's cert check for the mkcert
+# leaf: on a first run the cert is created after this coordinator starts,
+# so it can't inherit NODE_EXTRA_CA_CERTS. It doesn't affect the services.
 WAIT_ON_TIMEOUT=7200000 \
+  START_SERVER_AND_TEST_INSECURE=1 \
   SKIP_EXPERIMENTS=true \
+  SKIP_CHOREO_GALLERY=true \
   SKIP_CATALOG=true \
   SKIP_BOXEL_HOMEPAGE=true \
   SKIP_SUBMISSION=true \
   NODE_NO_WARNINGS=1 \
   start-server-and-test \
     'run-p -ln start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
-    "${BASE_REALM_READY}|http-get://${REALM_BASE_URL#http://}/software-factory/${READY_PATH}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}" \
+    "${BASE_REALM_READY}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/software-factory/${READY_PATH}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}" \
     'run-p -ln start:worker-test start:test-realms' \
     "${NODE_TEST_REALM_READY}" \
     'wait'

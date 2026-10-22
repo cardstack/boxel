@@ -13,12 +13,17 @@ import {
 
 import type { RoomMember } from './member';
 
-import type MessageCodePatchResult from './message-code-patch-result';
-
 import type MessageTool from './message-tool';
 import type { FileDef } from '@cardstack/base/file-api';
 import type { TokenUsage } from '@cardstack/base/matrix-event';
 import type { EventStatus } from 'matrix-js-sdk';
+
+// A compaction ai-bot runs before this answer: it summarizes the earlier
+// conversation when the prompt is too long for the model.
+export interface MessageCompaction {
+  status: 'running' | 'done' | 'failed';
+  summary?: string;
+}
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
@@ -58,7 +63,6 @@ export class Message implements RoomMessageInterface {
   @tracked _body: string;
   @tracked _reasoningContent?: string | null;
   @tracked _tools: TrackedArray<MessageTool>;
-  @tracked codePatchResults: TrackedArray<MessageCodePatchResult>;
   @tracked created: Date;
   @tracked _isStreamingFinished?: boolean;
   @tracked _isCanceled?: boolean;
@@ -74,6 +78,9 @@ export class Message implements RoomMessageInterface {
   transactionId?: string | null;
   @tracked private _errorMessage?: string;
   clientGeneratedId?: string;
+  // The chat composer sent this message: the user typed it (see
+  // BoxelContext.typedByUser).
+  typedByUser?: boolean;
   isDebugMessage?: boolean;
   reloadBillingData?: boolean;
   isCodePatchCorrectness?: boolean;
@@ -87,6 +94,9 @@ export class Message implements RoomMessageInterface {
   // Tracked because the counts arrive on a late streamed edit, after the
   // message is already rendered.
   @tracked private _usage?: TokenUsage;
+  // Set from the room's compaction events, which arrive while the answer is
+  // already rendered.
+  @tracked compaction?: MessageCompaction;
 
   //This property is used for testing purpose
   instanceId: string;
@@ -108,7 +118,6 @@ export class Message implements RoomMessageInterface {
     this.continuationOf = init.continuationOf;
     this._reasoningContent = init.reasoningContent;
     this._tools = new TrackedArray<MessageTool>();
-    this.codePatchResults = new TrackedArray<MessageCodePatchResult>();
     this.instanceId = guidFor(this);
     this.isCodePatchCorrectness = false;
   }
@@ -229,7 +238,7 @@ export class Message implements RoomMessageInterface {
     if (!this.body) {
       return this.body;
     }
-    return markdownToHtml(escapeHtmlOutsideCodeBlocks(this.body), {
+    return markdownToHtml(escapeHtmlOutsideCodeBlocks(this.body)!, {
       sanitize: false,
       escapeHtmlInCodeBlocks: true,
     });

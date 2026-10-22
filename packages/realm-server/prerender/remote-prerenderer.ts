@@ -6,7 +6,7 @@ import {
   type RenderVisitResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
-  type ScreenshotPrerenderResponse,
+  type CapturePrerenderResponse,
   logger,
 } from '@cardstack/runtime-common';
 import {
@@ -197,10 +197,21 @@ export function createRemotePrerenderer(
           // logs for the same requestId to see where the time went
           // (queue wait vs slow render).
           let elapsedMs = Date.now() - attemptStart;
+          // The subject is what identifies a stall: an affinity tag names only
+          // the realm, or only the user for a command, so without it every
+          // request under that tag reads the same and there is no way to tell
+          // which one never came back. A command request carries no url; its
+          // name is the subject, and it is the command name rather than
+          // `commandInput`, which is the part that would carry data.
+          let subject = attributes.url
+            ? ` url=${attributes.url}`
+            : typeof attributes.command === 'string' && attributes.command
+              ? ` command=${attributes.command}`
+              : '';
           throw new Error(
             `Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms ` +
               `(requestId=${requestId}, attempt=${attempts}/${maxAttempts}, ` +
-              `affinity=${affinityTag}, elapsed=${elapsedMs}ms; ` +
+              `affinity=${affinityTag}${subject}, elapsed=${elapsedMs}ms; ` +
               `grep manager/prerender-server logs for requestId=${requestId} to locate the stall)`,
           );
         }
@@ -284,8 +295,9 @@ export function createRemotePrerenderer(
       batchId,
       priority,
       jobId,
-      screenshots,
+      captures,
       renderScope,
+      cardSource,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
       return await requestWithRetry<RenderVisitResponse>(
         'prerender-visit',
@@ -304,8 +316,9 @@ export function createRemotePrerenderer(
           ...(batchId ? { batchId } : {}),
           ...(priority !== undefined ? { priority } : {}),
           ...(jobId ? { jobId } : {}),
-          ...(screenshots ? { screenshots } : {}),
+          ...(captures ? { captures } : {}),
           ...(renderScope ? { renderScope } : {}),
+          ...(cardSource ? { cardSource } : {}),
         },
       );
     },
@@ -323,18 +336,19 @@ export function createRemotePrerenderer(
         },
       );
     },
-    async prerenderScreenshot({
+    async prerenderCapture({
       realm,
       url,
       auth,
       format,
       captureSpec,
+      renderOptions,
       priority,
       jobId,
     }) {
-      return await requestWithRetry<ScreenshotPrerenderResponse>(
-        'prerender-screenshot',
-        'screenshot-request',
+      return await requestWithRetry<CapturePrerenderResponse>(
+        'prerender-capture',
+        'capture-request',
         {
           affinityType: 'realm',
           affinityValue: realm,
@@ -343,6 +357,7 @@ export function createRemotePrerenderer(
           auth,
           format,
           ...(captureSpec ? { captureSpec } : {}),
+          ...(renderOptions ? { renderOptions } : {}),
           ...(priority !== undefined ? { priority } : {}),
           // Stripped into the x-boxel-job-id header by requestWithRetry, so
           // manager and prerender-server logs join back to the worker job.

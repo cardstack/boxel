@@ -28,7 +28,6 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../../helpers';
-import { setupBaseRealm } from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
@@ -42,7 +41,7 @@ const SYSTEM_CARD_CONTENT = {
     attributes: {},
     meta: {
       adoptsFrom: {
-        module: 'https://cardstack.com/base/system-card',
+        module: '@cardstack/base/system-card',
         name: 'SystemCard',
       },
     },
@@ -64,7 +63,6 @@ function commonSetup(hooks: NestedHooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
   envDefaultGuard(hooks);
 
   hooks.beforeEach(function () {

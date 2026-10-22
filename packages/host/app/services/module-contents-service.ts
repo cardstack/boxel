@@ -5,6 +5,7 @@ import {
   Command,
   getAncestor,
   getField,
+  baseRRI,
   isBaseDef,
   rri,
 } from '@cardstack/runtime-common';
@@ -90,7 +91,7 @@ export function isComponentDeclaration(
   let { name, module } = declaration.super;
   return (
     module === '@glimmer/component' ||
-    (name === 'Component' && module === 'https://cardstack.com/base/card-api')
+    (name === 'Component' && module === baseRRI('card-api'))
   );
 }
 
@@ -128,7 +129,7 @@ export default class ModuleContentsService extends Service {
       throw new Error(`Failed to fetch module source from ${url}: ${r.status}`);
     }
     let source = r.content;
-    let moduleSyntax = new ModuleSyntax(
+    let moduleSyntax = await ModuleSyntax.create(
       source,
       moduleId,
       this.network.virtualNetwork,

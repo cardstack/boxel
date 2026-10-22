@@ -21,6 +21,10 @@ import {
   type JSONAPISingleResourceDocument,
   type SerializeOpts,
 } from './card-serialization';
+import {
+  dropComputedTurnMemoIfHeld,
+  readComputedThroughTurnMemo,
+} from './computed-turn-memo';
 import { initSharedState } from './shared-state';
 import { rawArrayValues } from './watched-array';
 import { flatMap } from 'lodash-es';
@@ -113,9 +117,8 @@ export function bumpFieldLoadingSignal(
 // Pass-scoped computed-field memo. When non-null, `getter` consults a
 // per-instance Map before invoking `computeVia` and stores the result for
 // the duration of the synchronous traversal that opened the pass (see
-// `beginComputePass`). Off-pass reads pay only a single null check on this
-// module local and follow the original path — the JIT branch-predicts the
-// off-pass case in the host-UI hot loop.
+// `beginComputePass`). Off-pass reads go through the turn-scoped memo in
+// `computed-turn-memo.ts` instead.
 let passComputeMemo: WeakMap<BaseDef, Map<string, any>> | null = null;
 // Counters snapshotted by the render/meta route to populate
 // `boxel_index.diagnostics`. They are unconditional integer
@@ -127,6 +130,104 @@ let computedCacheHitCount = 0;
 export interface ComputePassSnapshot {
   calls: number;
   cacheHits: number;
+}
+
+// A query-backed field resolves against a live search the index cannot
+// invalidate, which is why the serializers omit one outright. A computed that
+// READS such a field derives from the same unwatched result set, so indexing
+// leaves it unpopulated for the same reason — it would otherwise bake in a
+// value nothing will ever recompute.
+//
+// The relation is observed rather than declared: `computeVia` is an ordinary
+// function and nothing about its source says which fields it reads. Every
+// query-field read raises `markQueryFieldRead`, which marks each `computeVia`
+// running at that moment, and the two serializers ask `isQueryTaintedField`
+// after evaluating a field. Taint therefore reaches a computed that reads a
+// query field through another computed, on the same terms.
+//
+// Both live in shared state rather than in module scope, because the compute
+// that records a taint and the serializer that reads it need not resolve the
+// same instance of this module while several loaders cooperate in one
+// environment. A split there loses the record silently — the serializer finds
+// nothing and stores the derived value — which is the one outcome this is here
+// to prevent. (`passComputeMemo` above stays module-local: a miss on a memo
+// costs a recompute, not a wrong answer.)
+interface ComputeFrame {
+  tainted: boolean;
+}
+const computeFrames = initSharedState(
+  'queryTaintComputeFrames',
+  () => [] as ComputeFrame[],
+);
+const queryTaintedFields = initSharedState(
+  'queryTaintedFields',
+  () => new WeakMap<BaseDef, Set<string>>(),
+);
+
+// Raised by every read of a query-backed field (`ensureQueryFieldSearchResource`
+// is the single funnel for the getters and the relationship probe alike). Marks
+// the whole open stack rather than its top, so an outer computed that reaches a
+// query field through an inner one is tainted too.
+export function markQueryFieldRead(): void {
+  for (let frame of computeFrames) {
+    frame.tainted = true;
+  }
+}
+
+// Whether `fieldName` on this instance was computed from a query-backed field.
+// Read in two roles: the two serializers consult it under `omitQueryFields` to
+// decide which computeds to drop, and `getter` / `computeWithTaintFrame` replay
+// it on every computed read — re-raising `markQueryFieldRead` so a value served
+// from a compute memo (which skips the query-field read that first raised the
+// taint) still taints the compute reading it. That replay marks whatever frames
+// are open and can record a fresh taint against them, so it is the conservative
+// propagation the omission relies on, not a free read. Off the indexing pass no
+// frame is open, so the re-raise is a no-op beyond the map lookup.
+export function isQueryTaintedField(
+  instance: BaseDef,
+  fieldName: string,
+): boolean {
+  return queryTaintedFields.get(instance)?.has(fieldName) ?? false;
+}
+
+// Run a field's `computeVia` under a taint frame. A compute that read a query
+// field is recorded against the instance, and the taint is re-raised after the
+// pop so it reaches the compute that asked for this one.
+function computeWithTaintFrame<CardT extends BaseDefConstructor>(
+  instance: BaseDef,
+  field: Field<CardT>,
+): any {
+  let frame: ComputeFrame = { tainted: false };
+  computeFrames.push(frame);
+  let value: any;
+  try {
+    value = field.computeVia!.bind(instance)();
+  } finally {
+    computeFrames.pop();
+  }
+  if (frame.tainted) {
+    let tainted = queryTaintedFields.get(instance);
+    if (!tainted) {
+      tainted = new Set();
+      queryTaintedFields.set(instance, tainted);
+    }
+    tainted.add(field.name);
+  }
+  // Re-raise the mark from the record, not just from this frame. A compute
+  // factory may serve its result from its own memo without re-running the
+  // expression (BXL's `computeVia` caches per instance per compute cycle), so
+  // the query-field read that first raised the taint does not recur on a later
+  // read — this frame stays clean even though the field is query-derived. A
+  // chained computed reads the inner one after it is already memoized (fields
+  // serialize in declaration order), so replaying from the recorded taint is
+  // what carries it outward; relying on the read recurring would drop it.
+  if (isQueryTaintedField(instance, field.name)) {
+    markQueryFieldRead();
+  }
+  if (value === undefined) {
+    value = field.emptyValue(instance);
+  }
+  return value;
 }
 
 // Open a synchronous compute-memo pass. Callers MUST pair this with
@@ -162,27 +263,35 @@ export function getter<CardT extends BaseDefConstructor>(
   cardTracking.get(instance);
 
   if (field.computeVia) {
-    // Fast path when no pass is open: skip the counter + memo entirely
-    // so production reads pay only one branch on the module-local null
-    // check. JIT branch-predicts this and the original behaviour is
-    // unchanged.
+    // No pass open (a format render, or any other read in the host): the
+    // turn memo collapses repeated reads until the next microtask checkpoint
+    // into a single `computeVia`, and leaves the pass counters alone.
     if (passComputeMemo === null) {
-      let value = field.computeVia.bind(instance)();
-      if (value === undefined) {
-        value = field.emptyValue(instance);
+      let value = readComputedThroughTurnMemo(instance, field.name, () =>
+        computeWithTaintFrame(instance, field),
+      );
+      // A memo hit skips `computeWithTaintFrame`, and with it the replay of a
+      // recorded query taint, so replay it here for the compute reading this
+      // one. On a miss the replay has already run; raising it twice is
+      // harmless.
+      if (isQueryTaintedField(instance, field.name)) {
+        markQueryFieldRead();
       }
       return value as BaseInstanceType<CardT>;
     }
     let perInstance = passComputeMemo.get(instance);
     if (perInstance && perInstance.has(field.name)) {
       computedCacheHitCount++;
+      // A memoized value is returned without running `computeVia`, so the
+      // reading compute would miss a taint the first evaluation raised. Replay
+      // it from the record instead.
+      if (isQueryTaintedField(instance, field.name)) {
+        markQueryFieldRead();
+      }
       return perInstance.get(field.name);
     }
     computedCallCount++;
-    let value = field.computeVia.bind(instance)();
-    if (value === undefined) {
-      value = field.emptyValue(instance);
-    }
+    let value = computeWithTaintFrame(instance, field);
     if (!perInstance) {
       perInstance = new Map();
       passComputeMemo.set(instance, perInstance);
@@ -491,8 +600,35 @@ function computeFields(
         // searchability (searchable annotations drive the search doc, not this
         // serialization). Callers wanting every declared link pass
         // `includeUnrenderedFields`; contained fields are always kept.
+        //
+        // A computed link is exempt from this check: `isFieldUsed` reads the
+        // data bucket, which a `computeVia` getter never writes to, so a
+        // computed `linksTo`/`linksToMany` would always look "never authored"
+        // and be dropped — leaving its relationship out of the indexed
+        // document even though the field derives real targets. Whether a
+        // computed link serializes is governed solely by `includeComputeds`
+        // below, the same as a computed contained field.
+        //
+        // Caveat, same as a computed contained field: a computed link whose
+        // `computeVia` reads a query-backed field derives from a live search
+        // the index cannot invalidate (its `queryDefinition` is undefined, so
+        // `omitQueryFields` does not filter it, and the deps reached through a
+        // query context are not the row's own). Such a value serializes here
+        // with no invalidation edge to keep it true, so it can go stale — a
+        // known limitation, not addressed by exempting the field.
+        //
+        // Once in the document, a resolved computed link is a first-class
+        // relationship, not just a stored-row entry: `loadLinks` walks every
+        // relationship carrying a `links.self` and side-loads its target into
+        // `included[]` on every served card document and search-result item,
+        // spending the same expansion budget authored links spend. That is
+        // intended — a resolved computed link names a real target and should
+        // serve like an authored one — but it does widen the served closure,
+        // so a card sitting near the budget can now trade an authored target
+        // out of `included[]` for a computed one.
         if (
           opts?.usedLinksToFieldsOnly &&
+          !maybeField.computeVia &&
           !isFieldUsed(instance, maybeFieldName) &&
           !['contains', 'containsMany'].includes(maybeField.fieldType)
         ) {
@@ -859,10 +995,17 @@ export function registerRelationshipProbe(probe: RelationshipProbe): void {
 
 // Read the relationship status for a `linksTo` or `linksToMany` field. Always
 // returns a `Relationship` object (never a bare array): `isLoading` plus
-// `membership` (per the type above). Pure read — entangles with card tracking
-// via the shared field getter so templates re-render when sentinels change, but
-// never triggers `lazilyLoadLink` / the search and never mutates the data
-// bucket.
+// `membership` (per the type above). Entangles with card tracking via the
+// shared field getter, so templates re-render when sentinels change.
+//
+// A declared relationship is observed and never loaded: this does not trigger
+// `lazilyLoadLink`. A query-backed one is resolved, because asking such a field
+// for its state is the only demand a card ever makes of it — a card that shows
+// a pending state until `isLoaded` and reads its rows only afterwards never
+// touches the field itself, and would wait on a search nobody sent. Resolving
+// builds the field's search resource and mirrors any error it is already
+// carrying into the data bucket; it is idempotent, so reading the status
+// repeatedly observes rather than restarts.
 //
 // Render stability: this returns a fresh envelope on every call, so the
 // envelope's identity is NOT stable across renders. The stable anchors are each
@@ -1151,7 +1294,12 @@ export function setRealmContextOnField(
   instance: FieldDef,
   realmURLString: string,
 ) {
-  instance[realmContext] = realmURLString;
+  // Computeds read a field's realm context untracked, so a change drops the
+  // turn memo when it holds this instance's computeds.
+  if (instance[realmContext] !== realmURLString) {
+    instance[realmContext] = realmURLString;
+    dropComputedTurnMemoIfHeld(instance);
+  }
 }
 
 function getRealmURLString(realmOrInstance: string | BaseDef | undefined) {

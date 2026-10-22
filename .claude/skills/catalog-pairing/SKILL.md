@@ -1,0 +1,87 @@
+---
+name: catalog-pairing
+description: How a boxel pull request and a boxel-catalog pull request that depend on each other are paired — a `Merges before:` / `Merges after:` line in each description naming the other, declared from both sides — and which merges first. Covers when a change needs a pair (a boxel change the catalog's cards must follow, such as renaming or removing a host tool, command, base export or type the catalog imports; or a catalog definition boxel's tests need first), the declaration syntax and the rules a declaration must meet, merge order in each direction and in the three-PR flow, what boxel's Lint Catalog does with the pairing (it lints the paired catalog pull request's head, refuses to let catalog main be left broken behind a pull request that isn't ready, and fails on any error the change adds to the whole catalog at the revision boxel pins), why a boxel-first change pins its catalog pull request's head, and how to read its failures. Use before opening or editing any pull request in cardstack/boxel-catalog; before opening a boxel pull request that changes something boxel-catalog's cards import or that pins or tests a catalog change; whenever Lint Catalog fails; and whenever a check says `pairing:`, "doesn't name … back", "waiting on cardstack/boxel-catalog#… to merge", "is not approved yet", "pair the two", "Merges before" / "Merges after", "which predates it", or "can't contain it yet".
+---
+
+# Pairing boxel and boxel-catalog pull requests
+
+This repo's `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses to open or edit a boxel-catalog pull request, or to write a `Merges before:` / `Merges after:` line into any pull request's description, through `gh pr` or the GitHub MCP tools, until the session or subagent has loaded this skill.
+
+boxel-catalog's cards import boxel (host tools, `@cardstack/base`, runtime types), and boxel's tests use some catalog definitions. So a change in one repository can need a change in the other, and the two pull requests have to be checked together and merged in the right order. Each pull request says which pull request it pairs with in its description, and the checks in both repositories read that.
+
+## When a change needs a pair
+
+- **A boxel change the catalog has to follow.** Renaming or removing a host tool or command (`@cardstack/boxel-host/tools/*`), a base export, a field or a type that catalog cards import, or tightening a type or lint rule they trip. The boxel pull request merges first, and the catalog pull request that adapts the cards merges right after it. The boxel pull request also pins the catalog pull request's head (see [The pin covers the whole catalog](#the-pin-covers-the-whole-catalog)).
+- **A catalog change boxel's tests need.** A new or changed definition in the catalog test subset (the `catalog-test-subset` skill). The catalog pull request merges first, and the boxel pull request that re-pins and tests it merges after.
+- **Both at once: the three-PR flow.** A catalog definition that needs new platform code, and whose boxel tests need the new definition. Platform pull request A merges, then catalog pull request C, then boxel pull request B, which re-pins and tests. C is tested against B's head, and that head needs A's platform code. So B carries A by merging A's branch into it and following A until A merges. B may target `main` with A merged in, or be stacked on A (below) and be retargeted to `main` once A merges. Stacked, B can't pass the catalog-main gate as a `Merges before` side until it's retargeted, since merging it lands it on A's branch, not `main`.
+
+A change that keeps working against the other repository's `main` needs no pair. Lint Catalog checks exactly that, so an unneeded pair costs nothing and a missing one fails.
+
+## The declaration
+
+Each pull request of a pair has one line in its description naming the other. The key states this pull request's merge order relative to the one it names:
+
+```
+Merges before: cardstack/boxel-catalog#123
+```
+
+```
+Merges after: https://github.com/cardstack/boxel/pull/456
+```
+
+- **Both sides, inverse keys.** If boxel pull request A says `Merges before` naming catalog pull request C, then C says `Merges after` naming A. A declaration that the other side doesn't return fails, so a typo or a stale pointer can't pair two unrelated changes.
+- **The named pull request must be valid.** It exists, is open or already merged, targets `main` or is stacked (below), and comes from a branch of its own repository, not a fork. Both sides name each other under inverse keys only: naming the same pull request under both keys, or both sides using the same key, fails.
+- **Either side may be stacked.** A pull request that targets the branch of an open pull request in its own repository, rather than `main`, is stacked on it. The check passes with a notice to retarget it to `main` once the parent merges. On its next run after the parent has merged, it fails while the pull request still targets the parent's branch, naming where to retarget: `main`, or the branch of the open pull request the parent merged into. It fails when the branch belongs to no open pull request of its own repository, including one closed without merging or pushed from a fork. A paired pull request that merged into a parent's branch hasn't reached `main`, so the pair waits until every parent below it has merged too. A stacked pull request still follows its parent: merge the parent's branch into it whenever the parent moves. Nothing re-runs the check when the parent merges: neither repository deletes a merged branch, so GitHub doesn't retarget the stacked pull request, and its green "stacked" run stays up. The parent's branch also has no required checks, so the stacked pull request could still be merged into it. So when the parent merges, retarget the stacked one to `main` yourself (`gh pr edit <n> --repo <owner/repo> --base main`). Changing the base fires the pull request's `edited` event, which re-runs Lint Catalog. A change merged into a parent's branch after the parent had merged never reaches `main`, and the check says so.
+- **At most one line per key.** In the three-PR flow, C has one of each: `Merges after` naming A, and `Merges before` naming B.
+- **Line format.** The key is case-insensitive and starts its line; a list marker or wrapping backticks are fine. The value is `owner/repo#N` or the pull request's URL. Lines inside fenced code blocks or HTML comments are ignored, so put any example of the syntax in a code block, or mid-sentence, never at the start of a line of prose.
+- **Make the merge order prominent for the people merging.** Open each description of the pair with a GitHub `> [!IMPORTANT]` callout giving the merge and landing order: which pull request merges first, what follows, and any step after merging, such as a re-pin or a deploy. Then put the pairing line directly below the callout, not inside it: a line that starts with `>` isn't a declaration, so the check wouldn't read it. The check finds the line anywhere in the description, but the people merging read the top.
+
+  ```markdown
+  > [!IMPORTANT]
+  > **Merge order: cardstack/boxel#456, then cardstack/boxel-catalog#123.**
+  > Merge this first, then cardstack/boxel-catalog#123 right after.
+
+  Merges before: cardstack/boxel-catalog#123
+  ```
+
+- **Edits re-run the check, but only on its own side.** Editing a boxel pull request's description re-runs Lint Catalog. The boxel run lints the catalog head it read when it ran, and nothing in the other repository triggers it. So re-run the boxel pull request's Lint Catalog by hand after any change on the catalog side: its description, its approval, or a push. boxel-catalog keeps approvals across pushes, so a green boxel check can be judging an older catalog head.
+
+Edit a description with `gh pr edit <n> --repo <owner/repo> --body-file <file>` only after checking that the file isn't empty. A failed fetch that leaves the file empty blanks the description.
+
+## What the checks do with it
+
+**boxel's Lint Catalog** (`.github/workflows/lint-catalog.yaml`, `packages/catalog/scripts/pairing.ts` and `lint-sweep.ts`):
+
+1. It reads this pull request's declaration and checks it from both sides. A problem fails the job immediately, naming the line to add or fix and the pull request it belongs on.
+   The catalog revision this pull request pins in `packages/catalog/test-subset.json` must contain its `Merges after` pair's merge commit (for a pair stacked in its own repository, the merge commit its stack reached `main` through), since production deploys the catalog at the revision boxel pins. While that pair is open, the job's last step fails with `… hasn't merged, so … can't contain it yet`, after the lint steps have judged the pair's head. Nothing re-runs the job when the pair merges, so the push that re-pins with `pnpm --dir packages/catalog catalog:test-subset --bump` is what runs it again. A pin that predates the merge commit fails with `cardstack/boxel-catalog#N merged as <sha>, but … pins <rev>, which predates it`.
+2. It lints the paired catalog pull request's head against the change, in place of catalog `main`. That is the `Merges after` pair if it's unmerged, since it lands first, otherwise the `Merges before` pair. Errors there are for the catalog pull request to fix.
+3. It also lints catalog `main` against the change, against the base branch too, so only errors this change adds count. If the change adds errors to catalog `main`:
+   - **`Merges after` pair unmerged**: fails with `waiting on cardstack/boxel-catalog#N to merge`. Re-run after it merges. This comes first, because that pull request has to land before this one.
+   - **`Merges before` pair open, ready for review and approved** (GitHub's own review decision): passes, and says to merge the catalog pull request right after this one. It fails instead while either side is stacked, because a stacked pull request lands on its parent's branch, not `main`, so the other one can't follow it right after. Retarget the stacked side to `main` once its parent merges, then re-run.
+   - **`Merges before` pair still a draft, not approved, or approval unreadable**: fails, saying which. Fix that, then re-run.
+   - **No pair**: fails with the two exact lines to add. If the declared `Merges before` pair has already merged, it says to replace that line. Alternatively, keep the change compatible with catalog `main`.
+
+**boxel-catalog's Boxel Test Subset** pairs by branch name: it tests a catalog pull request against the boxel branch with the same name, or against boxel `main` if there is none. So give the two branches the same name as well, and push the boxel branch first.
+
+4. It lints the whole catalog at the revision `packages/catalog/test-subset.json` pins against the change, and compares it with the base branch's pin linted against the base branch. Every error the change adds there fails, paired or not (the failure title is `catalog lint (pin)`). The pairing only decides which revision the error tells you to pin instead. When the pin is the revision step 2 or 3 already linted, that recording is reused.
+
+**boxel's Catalog Test Subset** pin check reads the pairing too. It compares only the subset files at the pin with catalog `main`, so it passes a pin from a catalog pull request that touches no subset file without looking at the pull request at all. When a subset file at the pin differs from `main`, the pinned commit identifies its catalog pull request, and the check fails until that pull request merges, with one exception. The exception is a pin at the head of the catalog pull request this change says `Merges before:`, while that pull request is open, ready for review and approved, neither side is stacked, and no `Merges after:` pair of this change is still open. A pin at any other commit of that pull request fails, because the head is what lands. The check re-runs when the description is edited, but not when the catalog pull request is approved, so re-run it by hand then. Either way, the approval gate for a boxel-first pair is Lint Catalog's catalog-main step (step 3), which fails until the catalog pull request is approved.
+
+## The pin covers the whole catalog
+
+Manual Deploy [boxel] to production deploys the catalog at the revision the deployed boxel commit pins (the `catalog-deploy` skill). So the pin has to mean "this boxel works with the whole catalog at this revision", not only with the subset files boxel's tests load. Lint Catalog's step 4 enforces that.
+
+For a boxel-first pair, this means the boxel pull request pins the catalog pull request's head. The old pin is a catalog revision that the boxel change breaks, and production would deploy the two together. The steps:
+
+1. Open the catalog pull request with the fix, paired with the boxel pull request in both descriptions.
+2. In the boxel pull request, set `revision` in `packages/catalog/test-subset.json` to the catalog pull request's head, run `pnpm --dir packages/catalog catalog:test-subset`, run the manifest's tests, and commit the new pin. Re-pin each time the catalog pull request gets new commits.
+3. Get the catalog pull request approved, then re-run the boxel pull request's Lint Catalog, and its Catalog Test Subset check if that one ran.
+4. Merge the boxel pull request, then the catalog pull request right after it. Once it has merged, the lockstep deploy (`dispatch-catalog-deploy.sh`) deploys its merge commit in place of the pinned head, whatever the merge method: the head branches off before production's catalog, which the deploy check refuses, and after a squash or rebase it isn't on catalog `main` at all. The merge commit carries the same change and everything `main` had when it merged.
+
+Before the boxel pull request merges, the pin is a commit catalog `main` doesn't have yet. Until the catalog pull request merges, any other boxel pull request that touches the manifest fails `--check-pin`, waiting on it. That's one more reason to merge the catalog pull request right after.
+
+## Merging
+
+- **Boxel first:** the boxel pull request pins the catalog pull request's head. Merge the boxel pull request only once its catalog pull request is approved and neither one is stacked, then merge the catalog one right after. Until the catalog one merges, catalog `main` fails against boxel `main`, and boxel-catalog CI is red for everyone.
+- **Catalog first:** merge the catalog pull request, re-pin the boxel pull request onto catalog `main` (`pnpm --dir packages/catalog catalog:test-subset --bump`), re-run its checks, then merge it. Lint Catalog enforces the re-pin: it fails the boxel pull request that declares `Merges after:` the catalog pull request until that has merged and the pin contains its merge commit, since production deploys the catalog at the revision boxel pins.
+- **Each environment gets the catalog on its own schedule.** Staging syncs catalog `main` on every catalog merge. Production gets only what boxel-catalog's "Deploy to production" deploys: the revision boxel pins, before and after Manual Deploy [boxel] to production releases, or a catalog `main` revision someone deploys by hand. That deploy refuses while a catalog pull request in it says `Merges after:` a boxel pull request production doesn't run. So a catalog change that needs boxel code declares its pair even when Lint Catalog wouldn't require one. The `catalog-deploy` skill covers the deploy and its refusals.

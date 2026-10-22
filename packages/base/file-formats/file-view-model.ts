@@ -12,6 +12,7 @@ import {
   formatClock,
   type FileIconComponent,
 } from './file-presentation';
+import { fileContentRevision, urlAtRevision } from './file-revision';
 import {
   extensionOfFile,
   profileForFile,
@@ -101,6 +102,10 @@ export interface FileViewModel {
   previewKind: string;
   previewAdapter: PreviewAdapter | string;
   previewSource: PreviewSource | string;
+  // An image's `imageUrl` and a media file's `mediaUrl` are what a native
+  // element loads the file's own bytes from. They carry the file's content
+  // revision so the element reloads when the file is written; `url` and
+  // `resourceUrl` stay the file's own URL for links, downloads, and copy-link.
   imageUrl?: string;
   posterUrl: string;
   thumbnailUrl: string;
@@ -119,6 +124,9 @@ export interface FileViewModel {
   width?: number;
   height?: number;
   aspectRatio?: number;
+  // Whether a raster's container holds more than one frame; undefined when
+  // its reader couldn't tell or the family doesn't record it.
+  animation?: 'animated' | 'still';
   aspectLabel: string;
   heroFact: string;
   facts: string[];
@@ -333,12 +341,12 @@ function linkedFileURL(value: any): string {
 }
 
 // The durable URL of the capture the file's family flags `useAsThumbnail`
-// among its declared screenshots. Duck-typed off the model rather than
+// among its declared captures. Duck-typed off the model rather than
 // imported from card-api (this module sits inside card-api's dependency
-// graph): a FileDef instance exposes `screenshotsMeta`, and a plain
+// graph): a FileDef instance exposes `capturesMeta`, and a plain
 // wire-shape object may carry the same key.
-function screenshotThumbnailURL(file: FileModelLike): string {
-  let entries = file.screenshotsMeta as
+function captureThumbnailURL(file: FileModelLike): string {
+  let entries = file.capturesMeta as
     | Record<string, { url?: string; useAsThumbnail?: boolean } | undefined>
     | undefined;
   if (!entries || typeof entries !== 'object') {
@@ -363,6 +371,7 @@ export function fileViewModel(
 ): FileViewModel {
   let file = (model ?? {}) as FileModelLike;
   let url = String(file.url ?? file.sourceUrl ?? file.id ?? '');
+  let revisionedUrl = urlAtRevision(url, fileContentRevision(file));
   let name = String(file.name ?? url.split('/').pop() ?? '');
   let contentType = file.contentType;
   let profile = profileForFile({ name, contentType });
@@ -400,13 +409,13 @@ export function fileViewModel(
   // A generated poster (video) is a separate linked FileDef, never bytes in
   // card JSON.
   let posterUrl = linkedFileURL(file.posterImage);
-  // The thumbnail is the declared-screenshot capture the family flags
-  // `useAsThumbnail`, read from `meta.screenshots` via the instance's
-  // `screenshotsMeta` getter (a plain wire-shape object may carry the same
+  // The thumbnail is the declared-capture the family flags
+  // `useAsThumbnail`, read from `meta.captures` via the instance's
+  // `capturesMeta` getter (a plain wire-shape object may carry the same
   // key). Staleness is not modeled: a file-content-keyed slot recaptures
   // when the bytes change and serves its prior capture until then, so there
   // is no "rendered from bytes the file no longer has" state to expose.
-  let thumbnailUrl = screenshotThumbnailURL(file);
+  let thumbnailUrl = captureThumbnailURL(file);
 
   let width = file.width;
   let height = file.height;
@@ -538,10 +547,16 @@ export function fileViewModel(
     previewSource,
     // One presentation slot covers both a native image and a video's poster.
     imageUrl:
-      family === 'image' ? url : family === 'video' ? posterUrl : undefined,
+      family === 'image'
+        ? revisionedUrl
+        : family === 'video'
+          ? posterUrl
+          : undefined,
     posterUrl,
     thumbnailUrl,
-    mediaUrl: ['audio', 'video', 'music'].includes(family) ? url : undefined,
+    mediaUrl: ['audio', 'video', 'music'].includes(family)
+      ? revisionedUrl
+      : undefined,
     captionUrl: file.captionUrl,
     waveformBars: waveformBarsFor(file, format),
     title,
@@ -565,6 +580,10 @@ export function fileViewModel(
     height,
     aspectRatio:
       width && height ? Math.round((width / height) * 1000) / 1000 : undefined,
+    animation:
+      file.animation === 'animated' || file.animation === 'still'
+        ? file.animation
+        : undefined,
     aspectLabel: aspectLabel(width, height),
     heroFact: heroFactFor(file, previewKind, width, height),
     facts,

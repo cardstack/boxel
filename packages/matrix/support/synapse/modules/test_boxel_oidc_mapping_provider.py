@@ -8,6 +8,8 @@ pinned Synapse image (see scripts/test-oidc-mapping-provider.sh).
 """
 
 import inspect
+import json
+import os
 import unittest
 from unittest.mock import AsyncMock, Mock
 
@@ -19,17 +21,19 @@ def make_provider(existing_users=(), users_by_email=()):
     """Build a provider whose module_api is mocked.
 
     existing_users: localparts that already have an account (drives
-        check_user_exists).
+        check_user_exists, which matches them without case, as Synapse's does).
     users_by_email: full mxids returned for the email lookup (drives
         _find_users_by_email).
     """
-    existing = {f"@{lp}:localhost" for lp in existing_users}
+    existing = {
+        f"@{lp}:localhost".lower(): f"@{lp}:localhost" for lp in existing_users
+    }
     module_api = Mock()
     module_api.get_qualified_user_id = Mock(
         side_effect=lambda localpart: f"@{localpart}:localhost"
     )
     module_api.check_user_exists = AsyncMock(
-        side_effect=lambda user_id: user_id if user_id in existing else None
+        side_effect=lambda user_id: existing.get(user_id.lower())
     )
     module_api.run_db_interaction = AsyncMock(return_value=list(users_by_email))
     return BoxelOidcMappingProvider({}, module_api)
@@ -91,6 +95,39 @@ class MapUserAttributesTests(unittest.IsolatedAsyncioTestCase):
         provider = make_provider(existing_users=["alice", "alice1", "alice2"])
         result = await provider.map_user_attributes(userinfo(), {}, 0)
         self.assertEqual(result["localpart"], "alice3")
+
+
+# The vectors the realm server's own Google sign-in runs too, so the two
+# resolve a Google identity to the same account.
+VECTORS_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "test_google_sign_in_vectors.json"
+)
+
+
+class SharedVectorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_shared_vectors(self):
+        with open(VECTORS_PATH, encoding="utf-8") as f:
+            vectors = json.load(f)["vectors"]
+        for vector in vectors:
+            with self.subTest(vector=vector["name"]):
+                provider = make_provider(
+                    existing_users=vector["existingLocalparts"],
+                    users_by_email=vector["usersByEmail"],
+                )
+                expected = vector["expected"]
+                if expected["outcome"] == "refused":
+                    with self.assertRaises(MappingException) as raised:
+                        await provider.map_user_attributes(
+                            vector["userinfo"], {}, 0
+                        )
+                    self.assertEqual(str(raised.exception), expected["message"])
+                    continue
+                result = await provider.map_user_attributes(
+                    vector["userinfo"], {}, 0
+                )
+                self.assertEqual(result["localpart"], expected["localpart"])
+                self.assertEqual(result["display_name"], expected["displayName"])
+                self.assertEqual(result["emails"], [expected["email"]])
 
 
 class InterfaceShapeTests(unittest.TestCase):

@@ -37,7 +37,7 @@ The run works phases front to back and stops after the target phase (inclusive).
 
 ## Prerequisites
 
-- Node >= 24 (the repo pins `24.17.0` via `.nvmrc` / Volta — run `nvm use` or let Volta pick it up)
+- Node >= 24 (the repo pins `24.22.1` via `.nvmrc` / Volta — run `nvm use` or let Volta pick it up)
 - **One-time build/setup** — on a fresh `pnpm install`-only checkout, run:
 
   ```bash

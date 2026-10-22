@@ -38,17 +38,34 @@ import {
 import { handleDebugCommands } from './lib/debug.ts';
 import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
 import {
-  classifyToolCalls,
-  READ_REALM_FILE_TOOL_NAME,
-} from './lib/read-realm-file.ts';
-import { fulfillReadRealmFileCalls } from './lib/read-realm-file-fulfillment.ts';
-import { Responder } from './lib/responder.ts';
-import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
+  abandonedBotToolCalls,
+  cancelBotToolCalls,
+  fulfillBotToolCalls,
+  offeredBotTools,
+  startBotToolTurns,
+  type BotToolCall,
+  type BotToolCallEntry,
+  type BotToolTurn,
+  type ClassifiedToolCalls,
+} from './lib/bot-tools/index.ts';
+import { INTERRUPTED_TOOL_CALL_REASON } from './lib/bot-tools/results.ts';
 import {
-  shouldSetRoomTitle,
-  setTitle,
-  roomTitleAlreadySet,
-} from './lib/set-title.ts';
+  ApprovalClaims,
+  releasedToolCalls,
+  unreleasedApproval,
+  type ReleasedToolCall,
+} from './lib/bot-tools/approval.ts';
+import { RoomTurns, type RoomTurn } from './lib/room-turns.ts';
+import {
+  readStopState,
+  STOPPED_TOOL_CALL_REASON,
+} from '@cardstack/runtime-common/ai/stop';
+import { isApprovalResult } from '@cardstack/runtime-common/ai';
+import type { Tool } from '@cardstack/base/matrix-event';
+import { Responder } from './lib/responder.ts';
+import { collectUsedToolCallIds } from './lib/tool-call-ids.ts';
+import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
+import { shouldSetRoomTitle, setTitle, roomHasTitle } from './lib/set-title.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
@@ -71,15 +88,33 @@ import {
   waitForPendingCreditTracking,
   scheduleFallbackCostTracking,
 } from './lib/credit-tracking.ts';
+import {
+  compactRoomHistory,
+  isContextLengthExceededError,
+} from './lib/compaction.ts';
+import {
+  contextLengthExceededErrorMessage,
+  messageTooLargeErrorMessage,
+} from './constants.ts';
 
 let log = logger('ai-bot');
+
+// The approved bot-tool calls this process has taken on running (see
+// ApprovalClaims).
+const approvalClaims = new ApprovalClaims();
+
+// The handler runs in flight per room, so a stop reaches the parts of a run
+// that come after its history was read (see RoomTurns).
+const roomTurns = new RoomTurns();
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
   string,
   {
     responder: Responder;
-    runner: ChatCompletionStream;
+    // What a stop or a newer message aborts: the streaming generation, or
+    // the summary request while a compaction runs.
+    runner: Pick<ChatCompletionStream, 'abort'>;
     lastGeneratedChunkId: string | undefined;
     completionPromise: Promise<void>;
   }
@@ -116,14 +151,10 @@ class Assistant {
   getResponse(
     prompt: PromptParts,
     senderMatrixUserId?: string,
-    offerRealmFileRead = false,
+    botTools: Tool[] = [],
   ) {
     return this.openai.chat.completions.stream(
-      buildChatCompletionRequest(
-        prompt,
-        senderMatrixUserId,
-        offerRealmFileRead,
-      ),
+      buildChatCompletionRequest(prompt, senderMatrixUserId, botTools),
     );
   }
 
@@ -142,6 +173,16 @@ class Assistant {
     );
   }
 
+  async compactHistory(
+    opts: Omit<Parameters<typeof compactRoomHistory>[0], 'openai' | 'client'>,
+  ) {
+    return compactRoomHistory({
+      ...opts,
+      openai: this.openai,
+      client: this.client,
+    });
+  }
+
   async setTitle(
     roomId: string,
     history: DiscreteMatrixEvent[],
@@ -158,6 +199,41 @@ class Assistant {
       senderMatrixUserId,
     );
   }
+}
+
+// Debits a generation's cost under the per-user cost lock, so the next
+// same-user credit gate observes it.
+async function debitUsageCost(
+  senderMatrixUserId: string,
+  costInUsd: number | undefined,
+  generationId: string | undefined,
+) {
+  await assistant.pgAdapter.withUserCostLock(senderMatrixUserId, async () => {
+    if (
+      typeof costInUsd === 'number' &&
+      Number.isFinite(costInUsd) &&
+      costInUsd > 0
+    ) {
+      await spendUsageCost(assistant.pgAdapter, senderMatrixUserId, costInUsd);
+    } else if (generationId) {
+      // No inline cost: fall back to the slow generation-cost API. Register
+      // it in the tracking map here (inside the lock) so the next same-user
+      // request's waitForPendingCreditTracking observes it, but let the
+      // fetch + debit run detached — its backoff can take up to 10 minutes
+      // and must not pin the lock's connection that long.
+      scheduleFallbackCostTracking({
+        dbAdapter: assistant.pgAdapter,
+        matrixUserId: senderMatrixUserId,
+        generationId,
+        openRouterApiKey: process.env.OPENROUTER_API_KEY!,
+        trackAiUsageCostPromises,
+      });
+    } else {
+      log.warn(
+        `No usage cost and no generation ID for user ${senderMatrixUserId}, skipping credit deduction`,
+      );
+    }
+  });
 }
 
 let startTime = Date.now();
@@ -233,6 +309,7 @@ Common issues are:
     async function (event, room, toStartOfTimeline) {
       let eventId = event.getId()!;
       let releaseRoomTurn: (() => void) | undefined;
+      let roomTurn: RoomTurn | undefined;
 
       try {
         // Ensure that the event body we have is a string
@@ -251,9 +328,12 @@ Common issues are:
           .getJoinedMembers()
           .filter((member) => member.userId !== aiBotUserId);
         let humanRoomMemberCount = humanRoomMembers.length;
-        let realmFileReadingAllowed =
-          assistant.delegatedUserRealmSessions.enabled &&
-          humanRoomMemberCount === 1;
+        // The tools the bot runs itself that this room is offered; each
+        // tool decides from these facts (see lib/bot-tools).
+        let botTools = offeredBotTools({
+          humanMemberCount: humanRoomMemberCount,
+          realmDelegation: assistant.delegatedUserRealmSessions.enabled,
+        });
 
         if (event.event.origin_server_ts! < startTime) {
           return;
@@ -262,13 +342,14 @@ Common issues are:
           return; // don't print paginated results
         }
 
-        // A continuation the bot triggered with its own readRealmFile result
-        // event arrives with sender = the bot. Re-attribute it to the single
-        // human in the room so the guard below lets it through and all per-user
-        // logic (billing, the delegated read's onBehalfOf, request.user) acts on
-        // the user's behalf rather than the bot's. Only single-human rooms
-        // fulfill reads, so the human is unambiguous; every other bot-sent event
-        // keeps sender = bot and is ignored by the guard. getShouldRespond still
+        // A continuation the bot triggered with the result event of a tool it
+        // runs itself (see lib/bot-tools) arrives with sender = the bot.
+        // Re-attribute it to the single human in the room so the guard below
+        // lets it through and all per-user logic (billing, the delegated
+        // read's onBehalfOf, request.user) acts on the user's behalf rather
+        // than the bot's. Only single-human rooms fulfill bot tools, so the
+        // human is unambiguous; every other bot-sent event keeps sender = bot
+        // and is ignored by the guard. getShouldRespond still
         // decides whether we actually generate, so this can't loop on its own
         // answer.
         if (
@@ -297,6 +378,14 @@ Common issues are:
             ts: event.event.origin_server_ts,
           });
         }
+
+        if (event.getType() === APP_BOXEL_STOP_GENERATING_EVENT_TYPE) {
+          roomTurns.stop(room.roomId);
+        }
+        // The run can be stopped from here on, including while it waits for
+        // an interrupted generation, its turn in the room, or the room lock.
+        let thisRoomTurn = roomTurns.begin(room.roomId);
+        roomTurn = thisRoomTurn;
 
         // Handle the case where the user stops the generation
         let activeGeneration = activeGenerations.get(room.roomId);
@@ -367,16 +456,34 @@ Common issues are:
           resolveGenerationCompletion = resolve;
         });
 
-        // readRealmFile reads are fulfilled after the room lock is released
+        // Bot-tool calls are fulfilled after the room lock is released
         // (see the finally below). Fulfilling posts a command-result event that
         // re-triggers the bot for the continuation turn, and that re-trigger
         // has to acquire the room lock this handler holds — so fulfillment must
         // wait until the lock is free.
-        let pendingFulfillBotToolCalls: ReturnType<
-          typeof classifyToolCalls
-        >['botToolCalls'] = [];
+        let pendingFulfillBotToolCalls: ClassifiedToolCalls['botToolCalls'] =
+          [];
         let pendingFulfillRequestEventId: string | undefined;
         let pendingFulfillAgentId: string | undefined;
+        let pendingReleasedCalls: ReleasedToolCall[] = [];
+        let pendingReleasedAgentId: string | undefined;
+        // The bot-tool calls of an answer that was canceled mid-stream. They
+        // never run, but each is answered as canceled (after the lock is
+        // released, like the calls above), so no call is left without a
+        // result for the next prompt to trip over.
+        let pendingCanceledBotToolCalls: BotToolCall[] = [];
+        let pendingCanceledRequestEventId: string | undefined;
+        let pendingCanceledAgentId: string | undefined;
+        let pendingCanceledReason = STOPPED_TOOL_CALL_REASON;
+        // Whether the user has stopped the loop the bot-tool calls belong
+        // to: a stop already in the room when this run read it (after the
+        // approval the run picks up, say), or one that lands while the run
+        // is in flight.
+        let stopInHistory = false;
+        let stopped = () => thisRoomTurn.stopped || stopInHistory;
+        // Each offered bot tool's state for this handler run, started once
+        // the room history is in hand.
+        let botToolTurns: Map<string, BotToolTurn> = new Map();
 
         try {
           log.info(
@@ -409,8 +516,8 @@ Common issues are:
             return;
           }
 
-          // The bot drives its own continuation by posting a readRealmFile
-          // result event, and the handler runs on that event's *local echo* —
+          // The bot drives its own continuation by posting a bot-tool result
+          // event, and the handler runs on that event's *local echo* —
           // before the homeserver has indexed it into /messages. getRoomEvents
           // is a server fetch, so it misses the just-posted result, which would
           // leave the read looking unresolved (shouldRespond=false) and stall
@@ -422,11 +529,10 @@ Common issues are:
           if (
             isToolResultEventType(event.getType()) &&
             triggerCommandRequestId &&
-            !eventList.some(
-              (e: any) =>
-                isToolResultEventType(e.type) &&
-                e.content?.commandRequestId === triggerCommandRequestId,
-            )
+            // Matched by event id, not by call: a call can already have
+            // another result in the fetch (the user's approval of a held
+            // bot-tool call) while this one is still missing.
+            !eventList.some((e: any) => e.event_id === event.getId())
           ) {
             eventList.push({
               type: event.getType(),
@@ -452,6 +558,74 @@ Common issues are:
               ? JSON.parse(event.getContent().data)
               : event.getContent().data;
           const agentId = contentData.context?.agentId;
+
+          // The offered tools' turns are started only when a run needs them
+          // (starting one can mean downloading what earlier calls read), and
+          // once per handler run.
+          let botToolTurnsStarted:
+            | Promise<Map<string, BotToolTurn>>
+            | undefined;
+          let startTurns = () =>
+            (botToolTurnsStarted ??= startBotToolTurns(botTools, {
+              humanMemberCount: humanRoomMemberCount,
+              realmDelegation: assistant.delegatedUserRealmSessions.enabled,
+              history: eventList,
+              aiBotUserId,
+              client,
+              onBehalfOf: senderMatrixUserId,
+              delegatedUserRealmSessions: assistant.delegatedUserRealmSessions,
+            }));
+          stopInHistory =
+            readStopState(eventList, aiBotUserId).inForce !== undefined;
+          // Run every held bot-tool call the user has approved and the bot
+          // hasn't run yet, whatever event this handler runs for: an approval
+          // whose own handler was stood down for a newer event is picked up
+          // here. Claimed in-process so an approval that lands while an
+          // earlier run of the same call is in flight doesn't run it again.
+          // The runs happen after the room lock is released; each result
+          // starts the continuation as any bot tool result does.
+          let releasedCalls = releasedToolCalls(
+            eventList,
+            aiBotUserId,
+            new Set(botTools.map((tool) => tool.name)),
+          );
+          pendingReleasedCalls = approvalClaims.claim(eventList, releasedCalls);
+          pendingReleasedAgentId = agentId;
+          if (pendingReleasedCalls.length > 0) {
+            botToolTurns = await startTurns();
+          }
+          // An approval is not a turn of its own (getShouldRespond ignores
+          // it), so its handler stops here.
+          if (isApprovalResult({ content: event.getContent() })) {
+            let unreleased = unreleasedApproval(
+              eventList,
+              triggerCommandRequestId,
+              releasedCalls,
+              pendingReleasedCalls,
+            );
+            if (unreleased === 'missing') {
+              log.warn(
+                `[${eventId}] approval of ${triggerCommandRequestId} matches no held call in the history of ${room.roomId}`,
+              );
+              // A constant message, so every occurrence groups as one issue.
+              Sentry.captureMessage(
+                'approval matches no held call in the history',
+                {
+                  level: 'warning',
+                  extra: {
+                    roomId: room.roomId,
+                    eventId,
+                    commandRequestId: triggerCommandRequestId,
+                  },
+                },
+              );
+            } else if (unreleased) {
+              log.debug(
+                `[${eventId}] approval of ${triggerCommandRequestId} released no call to run in ${room.roomId}: ${unreleased}`,
+              );
+            }
+            return;
+          }
           // Route to-device streaming previews (see AI_BOT_STREAMING_MODE
           // handling in Responder) at the device that composed the prompt for
           // this turn. A continuation triggered by a tool / code-patch result
@@ -493,6 +667,7 @@ Common issues are:
             client,
             room.roomId,
             agentId,
+            collectUsedToolCallIds(eventList),
             streamPreviewTarget,
           );
 
@@ -508,11 +683,21 @@ Common issues are:
             );
             responder.responseState.setAllowedToolNames([
               ...(promptParts.tools?.map((tool) => tool.function.name) ?? []),
-              // readRealmFile is offered separately (in getResponse), not via
-              // promptParts.tools, so allow it explicitly when this room may use
-              // it — otherwise the surfaced tool call would be filtered out.
-              ...(realmFileReadingAllowed ? [READ_REALM_FILE_TOOL_NAME] : []),
+              // Bot tools are offered separately (in getResponse), not via
+              // promptParts.tools, so allow the ones this room is offered
+              // explicitly — otherwise their surfaced calls would be filtered
+              // out.
+              ...botTools.map((tool) => tool.name),
             ]);
+            // The user stopped the loop after this run read the room; that
+            // stop is not in the history, so it holds the correctness check
+            // as well as the generation here.
+            if (thisRoomTurn.stopped) {
+              if (responder.responseEventId) {
+                await responder.finalize({ isCanceled: true });
+              }
+              return;
+            }
             if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
                 promptParts.pendingCodePatchCorrectnessChecks,
@@ -528,6 +713,10 @@ Common issues are:
               sendPromptAsDebugMessage(client, room.roomId, promptParts);
             }
             await responder.ensureThinkingMessageSent();
+            // Started before generation: the publisher asks each turn
+            // whether a streamed call waits for the user's approval.
+            botToolTurns = await startTurns();
+            responder.setBotToolTurns(botToolTurns);
           } catch (e) {
             log.error(e);
             Sentry.captureException(e, {
@@ -600,198 +789,313 @@ Common issues are:
             return;
           }
 
-          log.info(
-            `[${eventId}] Starting generation with model %s`,
-            promptParts.model,
-          );
-          const requestStart = Date.now();
-          let firstChunkAt: number | undefined;
-          if (profEnabled()) {
-            profNote(eventId, 'llm:request:start', {
-              model: promptParts.model,
-            });
-          }
-          try {
-            let roundCostInUsd: number | undefined;
-            const runner = assistant
-              .getResponse(
-                promptParts,
-                senderMatrixUserId,
-                realmFileReadingAllowed,
-              )
-              .on('chunk', async (chunk, snapshot) => {
-                log.info(`[${eventId}] Received chunk %s`, chunk.id);
-                if (profEnabled() && firstChunkAt == null) {
-                  firstChunkAt = Date.now();
-                  profNote(eventId, 'llm:ttft', {
-                    ms: firstChunkAt - requestStart,
-                    model: promptParts.model,
-                  });
-                }
-                generationId = chunk.id;
-                if (chunk.usage && (chunk.usage as any).cost != null) {
-                  roundCostInUsd = (chunk.usage as any).cost;
-                }
-                let activeGeneration = activeGenerations.get(room.roomId);
-                if (activeGeneration) {
-                  activeGeneration.lastGeneratedChunkId = generationId;
-                }
-
-                let chunkProcessingResult = await profTime(
-                  eventId,
-                  'llm:chunk:onChunk',
-                  async () => responder.onChunk(chunk, snapshot),
-                );
-                let chunkProcessingResultError = chunkProcessingResult.find(
-                  (promiseResult) =>
-                    promiseResult &&
-                    'errorMessage' in promiseResult &&
-                    promiseResult.errorMessage != null,
-                ) as { errorMessage: string } | undefined;
-
-                if (chunkProcessingResultError) {
-                  chunkHandlingError = chunkProcessingResultError.errorMessage;
-
-                  // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
-                  // then we want to stop accepting more chunks by aborting the runner. This will throw an error
-                  // where the await responder.finalize() is called (the catch block below will handle this)
-                  runner.abort();
-                }
-              })
-              .on('error', async (error) => {
-                await responder.onError(error);
-              });
-
-            activeGenerations.set(room.roomId, {
-              responder,
-              runner,
-              lastGeneratedChunkId: generationId,
-              completionPromise: generationCompletionPromise,
-            });
-
-            let completion = await profTime(
-              eventId,
-              'llm:finalChatCompletion',
-              async () => runner.finalChatCompletion(),
-            );
-            if (typeof roundCostInUsd === 'number') {
-              costInUsd = (costInUsd ?? 0) + roundCostInUsd;
+          // Summarizes the room so its prompt fits the model again. Returns
+          // the event list with the compaction event, or undefined when
+          // nothing could be compacted.
+          let nothingToCompact = false;
+          // A stop or a newer message during the compaction cancels the
+          // summary request and the retry with it.
+          let compactionAbort = new AbortController();
+          let compactForRetry = async (): Promise<
+            DiscreteMatrixEvent[] | undefined
+          > => {
+            let activeGeneration = activeGenerations.get(room.roomId);
+            if (activeGeneration) {
+              activeGeneration.runner = {
+                abort: () => compactionAbort.abort(),
+              };
             }
-
-            log.info(`[${eventId}] Generation complete`);
-            await profTime(eventId, 'response:finalize', async () =>
-              responder.finalize(),
-            );
-            log.info(`[${eventId}] Response finalized`);
-
-            // readRealmFile is a tool ai-bot fulfills itself. The answer has
-            // already streamed (with the reads surfaced as executedBy:
-            // 'ai-bot' command requests); now fetch each file, attach it to
-            // a command-result event, and let the normal command-result path
-            // drive the continuation on a later turn — exactly as a host
-            // command result would. Because reads now resolve next-turn like
-            // host commands, an answer may freely mix the two; the host
-            // fulfills its commands, we fulfill ours, and getShouldRespond
-            // waits for all of them before generating again.
-            let message = completion.choices?.[0]?.message;
-            let { botToolCalls } = message
-              ? classifyToolCalls(message)
-              : { botToolCalls: [] };
-            if (
-              realmFileReadingAllowed &&
-              botToolCalls.length > 0 &&
-              responder.responseEventId
-            ) {
-              // Defer fulfillment until after the room lock is released
-              // (see the finally below): fulfilling posts a result event
-              // that re-triggers the bot, and that re-trigger needs the
-              // room lock this handler still holds here.
-              pendingFulfillBotToolCalls = botToolCalls;
-              pendingFulfillRequestEventId = responder.responseEventId;
-              pendingFulfillAgentId = agentId;
-            }
-          } catch (error) {
-            // Aborting the runner always surfaces as APIUserAbortError, but
-            // the user is not the only one who aborts it: the chunk handler
-            // does too when publishing a chunk fails, and that failure is
-            // the answer being cut off rather than withdrawn. Telling them
-            // apart by `chunkHandlingError` keeps a send failure from being
-            // recorded as a cancellation — which reads to the user as an
-            // answer that simply stops mid-sentence, with no error to act on
-            // and nothing in the log but "canceled by user".
-            if (error instanceof APIUserAbortError && chunkHandlingError) {
-              log.error(
-                `[${eventId}] Generation aborted after a chunk could not be published`,
-              );
-              log.error(chunkHandlingError);
-              await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
-            } else if (error instanceof APIUserAbortError) {
-              log.info(`[${eventId}] Generation was canceled by user`);
-              await responder.finalize({ isCanceled: true });
-            } else {
-              log.error(`[${eventId}] Error during generation or finalization`);
-              log.error(error);
-              if (chunkHandlingError) {
-                await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
-              } else {
-                await responder.onError(error as OpenAIError);
-              }
-            }
-          } finally {
-            // Debit the inline cost under the per-user lock so the next
-            // same-user gate observes it before validating. This path has the
-            // best data (both costInUsd from inline chunks and
-            // generationId). The user-facing response is already
-            // finalized, so a billing-write failure here must not skip the
-            // activeGenerations cleanup below (a stale entry would make a
-            // later message abort an already-finished run); swallow and log
-            // it, and let the next request surface any billing error via
-            // validateAICredits / waitForPendingCreditTracking.
+            // A stop that landed before the compaction began found no
+            // runner to abort.
+            thisRoomTurn.whenStopped(() => compactionAbort.abort());
             try {
-              await assistant.pgAdapter.withUserCostLock(
-                senderMatrixUserId,
-                async () => {
-                  if (
-                    typeof costInUsd === 'number' &&
-                    Number.isFinite(costInUsd) &&
-                    costInUsd > 0
-                  ) {
-                    await spendUsageCost(
-                      assistant.pgAdapter,
-                      senderMatrixUserId,
-                      costInUsd,
-                    );
-                  } else if (generationId) {
-                    // No inline cost: fall back to the slow generation-cost
-                    // API. Register it in the tracking map here (inside the
-                    // lock) so the next same-user request's
-                    // waitForPendingCreditTracking observes it, but let the
-                    // fetch + debit run detached — its backoff can take up to
-                    // 10 minutes and must not pin the lock's connection that
-                    // long.
-                    scheduleFallbackCostTracking({
-                      dbAdapter: assistant.pgAdapter,
-                      matrixUserId: senderMatrixUserId,
-                      generationId,
-                      openRouterApiKey: process.env.OPENROUTER_API_KEY!,
-                      trackAiUsageCostPromises,
-                    });
-                  } else {
-                    log.warn(
-                      `No usage cost and no generation ID for user ${senderMatrixUserId}, skipping credit deduction`,
-                    );
-                  }
-                },
+              let result = await profTime(
+                eventId,
+                'history:compact',
+                async () =>
+                  assistant.compactHistory({
+                    roomId: room.roomId,
+                    aiBotUserId,
+                    eventList,
+                    history: promptParts.history,
+                    senderMatrixUserId,
+                    botTools: botTools.map((tool) => tool.definition),
+                    responseEventId: responder.responseEventId,
+                    signal: compactionAbort.signal,
+                    recordCost: (cost, costGenerationId) =>
+                      debitUsageCost(
+                        senderMatrixUserId,
+                        cost,
+                        costGenerationId,
+                      ),
+                  }),
               );
-            } catch (costError) {
-              log.error(`[${eventId}] Failed to record AI usage cost`);
-              log.error(costError);
-              Sentry.captureException(costError, {
+              if (!result.compacted) {
+                nothingToCompact = result.nothingToCompact;
+                log.warn(
+                  `[${eventId}] Could not compact the room history: ${result.reason}`,
+                );
+                return undefined;
+              }
+              log.info(`[${eventId}] Compacted the room history`);
+              return result.eventList;
+            } catch (compactionError) {
+              if (compactionAbort.signal.aborted) {
+                return undefined;
+              }
+              log.error(`[${eventId}] Error compacting the room history`);
+              log.error(compactionError);
+              Sentry.captureException(compactionError, {
                 extra: { roomId: room.roomId, eventId },
               });
+              return undefined;
             }
-            activeGenerations.delete(room.roomId);
-          }
+          };
+
+          // A prompt the provider rejects as too long for the model is
+          // compacted once (see lib/compaction.ts) and the turn runs again.
+          let compactionAttempted = false;
+          let retryAfterCompaction: boolean;
+          do {
+            retryAfterCompaction = false;
+            log.info(
+              `[${eventId}] Starting generation with model %s`,
+              promptParts.model,
+            );
+            const requestStart = Date.now();
+            let firstChunkAt: number | undefined;
+            if (profEnabled()) {
+              profNote(eventId, 'llm:request:start', {
+                model: promptParts.model,
+              });
+            }
+            try {
+              let roundCostInUsd: number | undefined;
+              const runner = assistant
+                .getResponse(
+                  promptParts,
+                  senderMatrixUserId,
+                  botTools.map((tool) => tool.definition),
+                )
+                .on('chunk', async (chunk, snapshot) => {
+                  log.info(`[${eventId}] Received chunk %s`, chunk.id);
+                  if (profEnabled() && firstChunkAt == null) {
+                    firstChunkAt = Date.now();
+                    profNote(eventId, 'llm:ttft', {
+                      ms: firstChunkAt - requestStart,
+                      model: promptParts.model,
+                    });
+                  }
+                  generationId = chunk.id;
+                  if (chunk.usage && (chunk.usage as any).cost != null) {
+                    roundCostInUsd = (chunk.usage as any).cost;
+                  }
+                  let activeGeneration = activeGenerations.get(room.roomId);
+                  if (activeGeneration) {
+                    activeGeneration.lastGeneratedChunkId = generationId;
+                  }
+
+                  let chunkProcessingResult = await profTime(
+                    eventId,
+                    'llm:chunk:onChunk',
+                    async () => responder.onChunk(chunk, snapshot),
+                  );
+                  let chunkProcessingResultError = chunkProcessingResult.find(
+                    (promiseResult) =>
+                      promiseResult &&
+                      'errorMessage' in promiseResult &&
+                      promiseResult.errorMessage != null,
+                  ) as { errorMessage: string } | undefined;
+
+                  if (chunkProcessingResultError) {
+                    chunkHandlingError =
+                      chunkProcessingResultError.errorMessage;
+
+                    // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
+                    // then we want to stop accepting more chunks by aborting the runner. This will throw an error
+                    // where the await responder.finalize() is called (the catch block below will handle this)
+                    runner.abort();
+                  }
+                })
+                .on('error', async (error) => {
+                  // Handled where the generation's promise rejects, below.
+                  if (isContextLengthExceededError(error)) {
+                    return;
+                  }
+                  await responder.onError(error);
+                });
+
+              activeGenerations.set(room.roomId, {
+                responder,
+                runner,
+                lastGeneratedChunkId: generationId,
+                completionPromise: generationCompletionPromise,
+              });
+              // A stop that landed while the request was being prepared, or
+              // while the history was being compacted, found no runner to
+              // abort.
+              thisRoomTurn.whenStopped(() => runner.abort());
+
+              let completion = await profTime(
+                eventId,
+                'llm:finalChatCompletion',
+                async () => runner.finalChatCompletion(),
+              );
+              if (typeof roundCostInUsd === 'number') {
+                costInUsd = (costInUsd ?? 0) + roundCostInUsd;
+              }
+
+              log.info(`[${eventId}] Generation complete`);
+              await profTime(eventId, 'response:finalize', async () =>
+                responder.finalize(),
+              );
+              log.info(`[${eventId}] Response finalized`);
+
+              // Bot tools are fulfilled by ai-bot itself. The answer has
+              // already streamed (with their calls surfaced as executedBy:
+              // 'ai-bot' command requests); now each tool runs its calls and
+              // publishes their command-result events, and the normal
+              // command-result path
+              // drive the continuation on a later turn — exactly as a host
+              // command result would. Because reads now resolve next-turn like
+              // host commands, an answer may freely mix the two; the host
+              // fulfills its commands, we fulfill ours, and getShouldRespond
+              // waits for all of them before generating again.
+              let message = completion.choices?.[0]?.message;
+              let botToolCalls = message
+                ? responder.postedBotToolCalls(message)
+                : [];
+              // Only the bot tools this room was offered are run, and a call
+              // held for the user's approval waits for it.
+              botToolCalls = botToolCalls.filter(
+                (call) =>
+                  call.type === 'function' &&
+                  botToolTurns
+                    .get(call.function.name)
+                    ?.needsApproval(call.function.arguments) === false,
+              );
+              if (botToolCalls.length > 0 && responder.responseEventId) {
+                // Defer fulfillment until after the room lock is released
+                // (see the finally below): fulfilling posts a result event
+                // that re-triggers the bot, and that re-trigger needs the
+                // room lock this handler still holds here.
+                pendingFulfillBotToolCalls = botToolCalls;
+                pendingFulfillRequestEventId = responder.responseEventId;
+                pendingFulfillAgentId = agentId;
+              }
+            } catch (error) {
+              // Aborting the runner always surfaces as APIUserAbortError, but
+              // the user is not the only one who aborts it: the chunk handler
+              // does too when publishing a chunk fails, and that failure is
+              // the answer being cut off rather than withdrawn. Telling them
+              // apart by `chunkHandlingError` keeps a send failure from being
+              // recorded as a cancellation — which reads to the user as an
+              // answer that simply stops mid-sentence, with no error to act on
+              // and nothing in the log but "canceled by user".
+              if (error instanceof APIUserAbortError && chunkHandlingError) {
+                log.error(
+                  `[${eventId}] Generation aborted after a chunk could not be published`,
+                );
+                log.error(chunkHandlingError);
+                await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+              } else if (isContextLengthExceededError(error)) {
+                log.info(
+                  `[${eventId}] The prompt is too long for model %s`,
+                  promptParts.model,
+                );
+                let compactedEventList: DiscreteMatrixEvent[] | undefined;
+                // Only a request that streamed nothing is tried again, and
+                // only once: a second rejection means the prompt is too long
+                // even without the history a summary can replace.
+                if (!compactionAttempted && !generationId) {
+                  compactionAttempted = true;
+                  compactedEventList = await compactForRetry();
+                }
+                let compactedPromptParts: PromptParts | undefined;
+                if (compactedEventList) {
+                  try {
+                    compactedPromptParts = await getPromptParts(
+                      compactedEventList,
+                      aiBotUserId,
+                      client,
+                    );
+                  } catch (promptError) {
+                    log.error(
+                      `[${eventId}] Error building the prompt after compaction`,
+                    );
+                    log.error(promptError);
+                  }
+                }
+                if (compactionAbort.signal.aborted) {
+                  log.info(
+                    `[${eventId}] Compaction was canceled by a stop or a newer message`,
+                  );
+                  await responder.finalize({ isCanceled: true });
+                } else if (compactedEventList && compactedPromptParts) {
+                  eventList = compactedEventList;
+                  promptParts = compactedPromptParts;
+                  retryAfterCompaction = true;
+                } else {
+                  await responder.onError(
+                    nothingToCompact
+                      ? messageTooLargeErrorMessage
+                      : contextLengthExceededErrorMessage,
+                  );
+                }
+              } else if (error instanceof APIUserAbortError) {
+                log.info(`[${eventId}] Generation was canceled by user`);
+                await responder.finalize({ isCanceled: true });
+                // The canceled answer keeps the calls it had streamed, the
+                // last one possibly cut off mid-arguments. A stop or a newer
+                // message aborts the runner, and in neither case does a call
+                // run.
+                if (responder.responseEventId) {
+                  pendingCanceledBotToolCalls = abandonedBotToolCalls(
+                    responder.responseState.toolCalls,
+                  );
+                  pendingCanceledRequestEventId = responder.responseEventId;
+                  pendingCanceledAgentId = agentId;
+                  pendingCanceledReason = stopped()
+                    ? STOPPED_TOOL_CALL_REASON
+                    : INTERRUPTED_TOOL_CALL_REASON;
+                }
+              } else {
+                log.error(
+                  `[${eventId}] Error during generation or finalization`,
+                );
+                log.error(error);
+                if (chunkHandlingError) {
+                  await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+                } else {
+                  await responder.onError(error as OpenAIError);
+                }
+              }
+            } finally {
+              // Debit the inline cost under the per-user lock so the next
+              // same-user gate observes it before validating. This path has the
+              // best data (both costInUsd from inline chunks and
+              // generationId). The user-facing response is already
+              // finalized, so a billing-write failure here must not skip the
+              // activeGenerations cleanup below (a stale entry would make a
+              // later message abort an already-finished run); swallow and log
+              // it, and let the next request surface any billing error via
+              // validateAICredits / waitForPendingCreditTracking.
+              try {
+                await debitUsageCost(
+                  senderMatrixUserId,
+                  costInUsd,
+                  generationId,
+                );
+              } catch (costError) {
+                log.error(`[${eventId}] Failed to record AI usage cost`);
+                log.error(costError);
+                Sentry.captureException(costError, {
+                  extra: { roomId: room.roomId, eventId },
+                });
+              }
+              activeGenerations.delete(room.roomId);
+            }
+          } while (retryAfterCompaction);
           generationCompleted = true;
 
           if (
@@ -836,19 +1140,66 @@ Common issues are:
           // posts a command-result event that re-triggers the bot for the
           // continuation turn; that re-trigger acquires the room lock this
           // handler just released. Fulfilling here (rather than inside the
-          // lock) is what lets the continuation proceed.
-          if (
-            pendingFulfillRequestEventId &&
-            pendingFulfillBotToolCalls.length > 0
-          ) {
-            await fulfillReadRealmFileCalls(pendingFulfillBotToolCalls, {
-              client,
-              roomId: room.roomId,
-              requestEventId: pendingFulfillRequestEventId,
-              agentId: pendingFulfillAgentId,
-              onBehalfOf: senderMatrixUserId,
-              delegatedUserRealmSessions: assistant.delegatedUserRealmSessions,
-            });
+          // lock) is what lets the continuation proceed. The approved calls
+          // go first, then the response's own; one loop runs them all and
+          // checks for a stop before each (see fulfillBotToolCalls).
+          let entries: BotToolCallEntry[] = [];
+          for (let released of pendingReleasedCalls) {
+            let turn = botToolTurns.get(released.toolName);
+            if (turn) {
+              entries.push({
+                call: released.call,
+                turn,
+                target: {
+                  client,
+                  roomId: room.roomId,
+                  requestEventId: released.requestEventId,
+                  agentId: pendingReleasedAgentId,
+                },
+              });
+            }
+          }
+          if (pendingFulfillRequestEventId) {
+            // Each tool runs its own calls, in the registry's order.
+            for (let [toolName, turn] of botToolTurns) {
+              for (let call of pendingFulfillBotToolCalls) {
+                if (
+                  call.type === 'function' &&
+                  call.function.name === toolName
+                ) {
+                  entries.push({
+                    call,
+                    turn,
+                    target: {
+                      client,
+                      roomId: room.roomId,
+                      requestEventId: pendingFulfillRequestEventId,
+                      agentId: pendingFulfillAgentId,
+                    },
+                  });
+                }
+              }
+            }
+          }
+          if (pendingCanceledRequestEventId) {
+            await cancelBotToolCalls(
+              pendingCanceledBotToolCalls,
+              {
+                client,
+                roomId: room.roomId,
+                requestEventId: pendingCanceledRequestEventId,
+                agentId: pendingCanceledAgentId,
+              },
+              pendingCanceledReason,
+            );
+          }
+          let outcomes = await fulfillBotToolCalls(entries, stopped);
+          // An approved call whose result never reached the room (or whose
+          // tool this run was not offered) is left to a later handler run.
+          for (let released of pendingReleasedCalls) {
+            if (!outcomes.get(released.call.id)?.published) {
+              approvalClaims.release(released.call.id);
+            }
           }
         }
       } catch (e) {
@@ -863,6 +1214,9 @@ Common issues are:
         return;
       } finally {
         releaseRoomTurn?.();
+        if (room && roomTurn) {
+          roomTurns.end(room.roomId, roomTurn);
+        }
       }
     },
   );
@@ -886,15 +1240,20 @@ Common issues are:
       undefined,
     );
     try {
-      //TODO: optimise this so we don't need to sync room events within a reaction event
+      // Most rooms already have their title by now, and the name events
+      // alone settle that, so check them before fetching any history.
+      if (
+        await profTime(event.getId()!, 'title:roomHasTitle', async () =>
+          roomHasTitle(room.roomId, client),
+        )
+      ) {
+        return;
+      }
       let eventList = await profTime(
         event.getId()!,
         'title:getRoomEvents',
         async () => getRoomEvents(room.roomId, client, event.getId()),
       );
-      if (roomTitleAlreadySet(eventList)) {
-        return;
-      }
       let history: DiscreteMatrixEvent[] = await profTime(
         event.getId()!,
         'title:constructHistory',

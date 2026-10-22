@@ -83,6 +83,10 @@ const CLEAN_FIXTURES: { name: string; covers: string }[] = [
     name: 'bxl-formula',
     covers: '@cardstack/bxl import in a computeVia formula',
   },
+  {
+    name: 'motion-card',
+    covers: 'glimmer-motion and @cardstack/choreo imports, subpaths included',
+  },
 ];
 
 describe('boxel parse (against the installed CLI)', () => {
@@ -115,7 +119,7 @@ describe('boxel parse (against the installed CLI)', () => {
   );
 
   it(
-    'surfaces a real diagnostic for a genuine type error (proves glint ran)',
+    'surfaces a real diagnostic, with its elaboration, for a genuine type error (proves glint ran)',
     async () => {
       let result = await parseFixture('deliberate-type-error');
       expect(result.status).toBe('failed');
@@ -126,6 +130,36 @@ describe('boxel parse (against the installed CLI)', () => {
       expect(messages).toMatch(/not assignable to type 'number'/);
       // …and specifically NOT the environmental "nothing got checked"
       // message that masks a broken type-resolution setup as a pass.
+      expect(messages).not.toContain(NOTHING_CHECKED);
+
+      // tsc's elaboration lines, which name where the types differ, are
+      // part of the error's message.
+      let nested = result.errors.find((e) => e.file === 'nested-mismatch.gts');
+      expect(nested?.message.split('\n')).toEqual([
+        "Type '{ a: { b: string; }; }' is not assignable to type 'Want'.",
+        "  The types of 'a.b' are incompatible between these types.",
+        "    Type 'string' is not assignable to type 'number'.",
+      ]);
+    },
+    { timeout: 180_000 },
+  );
+});
+
+describe('boxel parse — glimmer-motion and Choreo subpaths', () => {
+  it(
+    'rejects a subpath the host does not shim',
+    async () => {
+      // Both packages publish more subpaths than the host shims. parse
+      // resolves only the shimmed ones, so a card importing another fails
+      // here instead of type-checking clean and then failing to load.
+      let result = await parseFixture('motion-unshimmed-subpath');
+      expect(result.status).toBe('failed');
+
+      let messages = result.errors.map((e) => e.message).join('\n');
+      expect(messages).toContain("Cannot find module 'glimmer-motion/scroll'");
+      expect(messages).toContain(
+        "Cannot find module '@cardstack/choreo/easings'",
+      );
       expect(messages).not.toContain(NOTHING_CHECKED);
     },
     { timeout: 180_000 },

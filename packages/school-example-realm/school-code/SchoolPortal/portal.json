@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "schoolName": "Northfield Elementary",
+      "educationRealm": "../../school-education/"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../school-portal",
+        "name": "SchoolPortal"
+      }
+    }
+  }
+}

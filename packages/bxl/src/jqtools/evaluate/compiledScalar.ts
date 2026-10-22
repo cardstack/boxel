@@ -6,7 +6,7 @@ import {
   getBareNativeFilter,
   type NativeFilter,
 } from './filters/lib/nativeFilter.ts';
-import { access, isTrue, type PathItem } from './utils/utils.ts';
+import { access, isTrue, ownValue, type PathItem } from './utils/utils.ts';
 
 export type CompiledScalarExpression = (input: unknown) => unknown;
 
@@ -69,7 +69,7 @@ function accessStaticStringPath(value: unknown, path: string[]): unknown {
       continue;
     }
     if (typeof current === 'object' && !Array.isArray(current)) {
-      current = (current as Record<string, unknown>)[key] ?? null;
+      current = ownValue(current, key);
       continue;
     }
     current = access(current, key);

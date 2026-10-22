@@ -24,7 +24,6 @@ on:
       - packages/boxel-cli/src/commands/realm/push.ts
       - packages/realm-server/handlers/handle-publish-realm.ts
       - packages/realm-server/handlers/handle-unpublish-realm.ts
-      - packages/runtime-common/tasks/copy.ts
   pull_request:
     paths:
       - .github/workflows/sync-workspace.yml
@@ -35,7 +34,6 @@ on:
       - packages/boxel-cli/src/commands/realm/push.ts
       - packages/realm-server/handlers/handle-publish-realm.ts
       - packages/realm-server/handlers/handle-unpublish-realm.ts
-      - packages/runtime-common/tasks/copy.ts
 
 concurrency:
   group: preview-realm-integration-${{ github.head_ref || github.run_id }}
@@ -142,6 +140,13 @@ jobs:
           Pushed by the integration workflow to exercise the CLI
           commands the reusable workflows wrap.
           EOF
+          echo "Left alone by the re-push below." > /tmp/preview-realm-fixture/unchanged.md
+          # The sync-workspace.yml reusable workflow pushes from a git
+          # checkout with `--changed-since`, so the fixture is one too.
+          git -C /tmp/preview-realm-fixture init -q
+          git -C /tmp/preview-realm-fixture add .
+          git -C /tmp/preview-realm-fixture -c user.name=ci -c user.email=ci@example.com commit -q -m "fixture"
+          echo "FIXTURE_BASE=$(git -C /tmp/preview-realm-fixture rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: boxel realm create
         run: boxel realm create "$REALM_NAME" "Preview-realm integration test"
@@ -154,8 +159,36 @@ jobs:
 
       - name: boxel realm push (re-push to source realm)
         # Mirrors the sync-workspace.yml reusable workflow's `boxel realm
-        # push --delete` invocation against an already-populated realm.
-        run: boxel realm push /tmp/preview-realm-fixture "$SOURCE_URL" --delete
+        # push --delete --changed-since` invocation against an
+        # already-populated realm. A workflow run checks out a fresh tree
+        # with no sync manifest, so the manifest the first push left is
+        # removed. The push is given two revisions, as sync-workspace.yml
+        # can be: README.md is unchanged since HEAD but changed since
+        # FIXTURE_BASE, so it goes up only if the push skips a file just
+        # when it's unchanged against every revision.
+        shell: bash
+        run: |
+          cd /tmp/preview-realm-fixture
+          rm -f .boxel-sync.json
+          echo "Changed after the first push." >> README.md
+          git -c user.name=ci -c user.email=ci@example.com commit -q -am "change README.md"
+
+          set +e
+          OUTPUT=$(boxel realm push . "$SOURCE_URL" --delete --changed-since "$FIXTURE_BASE" --changed-since HEAD 2>&1)
+          STATUS=$?
+          set -e
+          echo "$OUTPUT"
+          if [ $STATUS -ne 0 ]; then
+            exit $STATUS
+          fi
+          if ! grep -qx '  Uploaded: README.md' <<< "$OUTPUT"; then
+            echo "::error::README.md changed since $FIXTURE_BASE but wasn't uploaded"
+            exit 1
+          fi
+          if grep -q '^  Uploaded: unchanged.md$' <<< "$OUTPUT"; then
+            echo "::error::unchanged.md is unchanged since $FIXTURE_BASE but was uploaded"
+            exit 1
+          fi
 
       - name: boxel realm unpublish
         if: always()

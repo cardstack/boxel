@@ -241,7 +241,7 @@ class Person extends CardDef {
 }
 ```
 
-This example builds on to the field and card definitions in the previous item (7). The screenshot below shows the differences in appearance when a `Person` card instance is rendered in `edit` format.
+This example builds on to the field and card definitions in the previous item (7). The capture below shows the differences in appearance when a `Person` card instance is rendered in `edit` format.
 
 Note that the `linksTo` and `linksToMany` fields (named `currentLocation` and `previousLocations`) render in `embedded` format provided in the `Country` card definition.
 

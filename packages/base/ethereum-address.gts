@@ -18,9 +18,7 @@ function deserializeForUI(value: string | null): string | null {
 }
 
 class View extends Component<typeof EthereumAddressField> {
-  <template>
-    {{@model}}
-  </template>
+  <template>{{@model}}</template>
 }
 
 class Edit extends Component<typeof EthereumAddressField> {

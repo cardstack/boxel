@@ -100,6 +100,12 @@ interface Signature {
     // and no overlay (chip / options menu / selection toggle) ever anchors to
     // it — for a consumer that lays results out in its own UI.
     overlays?: boolean;
+    // Whether the hydrated live card renders its card container chrome
+    // (defaults to `true`), matching the `@fields` switch. The inert HTML is
+    // not touched here — a caller passing `false` hands in `@component` with
+    // its container classes already rewritten (see `RenderableSearchEntry`),
+    // so a row looks the same before and after hydration.
+    displayContainer?: boolean;
     // The format the live/hydrated card renders as, so it matches the
     // prerendered HTML the query selected (defaults to `fitted`).
     format?: Format;
@@ -266,6 +272,10 @@ export default class HydratableCard extends Component<Signature> {
     return cardContext;
   }
 
+  private get displayContainer(): boolean {
+    return this.args.displayContainer ?? true;
+  }
+
   @action private hydrate() {
     if (this.args.isError) {
       return;
@@ -284,7 +294,7 @@ export default class HydratableCard extends Component<Signature> {
         @card={{this.liveCard}}
         @format={{this.format}}
         @codeRef={{@renderType}}
-        @displayContainer={{false}}
+        @displayContainer={{this.displayContainer}}
         data-hydration={{this.hydrationState}}
         data-test-hydratable-card={{@cardId}}
         ...attributes

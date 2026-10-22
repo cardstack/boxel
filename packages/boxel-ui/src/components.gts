@@ -11,7 +11,10 @@ import BrokenLink, {
   type BrokenLinkTemplateArgs,
   type BrokenLinkViewFn,
 } from './components/broken-link/index.gts';
-import BoxelButton from './components/button/index.gts';
+import BoxelButton, {
+  type BoxelButtonKind,
+  type BoxelButtonSize,
+} from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
 import CardHeader from './components/card-header/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
@@ -67,9 +70,9 @@ import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
 import MarkdownContentShell from './components/markdown-content-shell/index.gts';
 import Menu from './components/menu/index.gts';
-import BoxelMessage from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
-import BoxelMultiSelect, {
+import {
+  BoxelMultiSelect,
   BoxelMultiSelectBasic,
 } from './components/multi-select/index.gts';
 import PhoneInput from './components/phone-input/index.gts';
@@ -107,6 +110,8 @@ import ViewSelector, {
 } from './components/view-selector/index.gts';
 
 export {
+  type BoxelButtonKind,
+  type BoxelButtonSize,
   type BrokenLinkErrorDoc,
   type BrokenLinkFormat,
   type BrokenLinkItemType,
@@ -139,7 +144,6 @@ export {
   BoxelInputGroup,
   BoxelInputValidationState,
   BoxelInputValidationStates,
-  BoxelMessage,
   BoxelMultiSelect,
   BoxelMultiSelectBasic,
   BoxelSelect,
@@ -179,7 +183,6 @@ export {
   LoadingIndicator,
   MarkdownContentShell,
   Menu,
-  BoxelMessage as Message,
   Modal,
   PhoneInput,
   Picker,

@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Education realm policy"
+      },
+      "rules": [
+        {
+          "targetType": {
+            "module": "../../school-code/classroom",
+            "name": "Classroom"
+          },
+          "grants": [
+            {
+              "operation": "read",
+              "where": "(.teacherIds | any(. == actor())) or (.leadTeacherIds | any(. == actor()))"
+            },
+            {
+              "operation": "appendActivity",
+              "where": ".teacherIds | any(. == actor())"
+            }
+          ]
+        },
+        {
+          "targetType": {
+            "module": "../../school-code/service-plan-schedule",
+            "name": "ServicePlanSchedule"
+          },
+          "grants": [
+            {
+              "operation": "read",
+              "where": ".providerId == actor()"
+            },
+            {
+              "operation": "listMySchedules",
+              "where": ".providerId == actor()"
+            }
+          ]
+        }
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/catalog/realm-policy/realm-policy",
+        "name": "RealmPolicy"
+      }
+    }
+  }
+}

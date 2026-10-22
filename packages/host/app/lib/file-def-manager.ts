@@ -24,6 +24,7 @@ import {
   TOOL_CALL_DESCRIPTION_SCHEMA,
   TOOL_CALL_REQUIRED_PROPERTIES,
 } from '@cardstack/runtime-common/helpers/ai';
+import { LOCAL_SOURCE_URL_PREFIX } from '@cardstack/runtime-common/matrix-constants';
 
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
@@ -48,7 +49,6 @@ interface CacheEntry {
 }
 
 const CACHE_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutes
-const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
 
 export interface FileDefManager {
   /**
@@ -106,6 +106,14 @@ export interface FileDefManager {
    * @returns Promise resolving to the downloaded file in the browser
    */
   downloadAsFileInBrowser(serializedFile: SerializedFile): Promise<void>;
+
+  /**
+   * Downloads a file's content with the Matrix session, which room media
+   * requires: a browser request without it is refused.
+   * @param serializedFile File definition to download from
+   * @returns Promise resolving to the file's content
+   */
+  downloadContentAsBlob(serializedFile: SerializedFile): Promise<Blob>;
 }
 
 export interface PrivilegedFileDefManager extends FileDefManager {

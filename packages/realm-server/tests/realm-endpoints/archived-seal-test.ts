@@ -1,14 +1,18 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { Test, SuperTest, Response } from 'supertest';
-import { basename } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { basename, join } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { archiveRealm, unarchiveRealm } from '@cardstack/runtime-common';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   setupPermissionedRealmCached,
   testRealmHref,
   testRealmURLFor,
   createJWT,
+  realmServerTestMatrix,
+  realmSecretSeed,
 } from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -20,6 +24,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('archived realm seal', function (hooks) {
     let testRealm: Realm;
+    let testRealmPath: string;
     let request: SuperTest<Test>;
     let dbAdapter: PgAdapter;
 
@@ -32,10 +37,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       },
       onRealmSetup(args: {
         testRealm: Realm;
+        testRealmPath: string;
         request: SuperTest<Test>;
         dbAdapter: PgAdapter;
       }) {
         testRealm = args.testRealm;
+        testRealmPath = args.testRealmPath;
         request = args.request;
         dbAdapter = args.dbAdapter;
       },
@@ -137,9 +144,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         '_readiness-check stays reachable while archived',
       );
 
-      // The exemption is path-based, not header-based: a bare health probe
-      // that sends no `Accept` header is never sealed — it's handled exactly
-      // as on an active realm, with no archived marker. (The router itself
+      // A bare health probe that sends no `Accept` header reaches no route,
+      // and the seal lets it through: it's handled exactly as on an active
+      // realm, with no archived marker. (The router itself
       // gates `_readiness-check` on the `Accept` header, so a header-less probe
       // doesn't reach the handler on either an active or archived realm; the
       // point here is that the seal doesn't single it out.)
@@ -167,6 +174,209 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         'content is served again after unarchive',
       );
     });
+
+    test('a request for an operational endpoint that the router hands to another route meets the seal', async function (assert) {
+      await archiveRealm(dbAdapter, new URL(testRealmHref));
+      let card = {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'CardDef',
+            },
+          },
+        },
+      };
+
+      // Each endpoint's path with a trailing slash is the directory of that
+      // name, which the card+json create and the directory listing answer.
+      for (let path of ['/_session/', '/_readiness-check/']) {
+        assertArchived403(
+          assert,
+          await request
+            .post(path)
+            .set('Accept', 'application/vnd.card+json')
+            .set('Authorization', ownerJWT())
+            .send(card),
+          `owner card+json POST ${path}`,
+        );
+        assertArchived403(
+          assert,
+          await request
+            .get(path)
+            .set('Accept', 'application/vnd.api+json')
+            .set('Authorization', ownerJWT()),
+          `owner directory listing of ${path}`,
+        );
+      }
+
+      // The endpoints' own paths, asked for under a media type the endpoint
+      // does not answer, reach the card+source routes.
+      assertArchived403(
+        assert,
+        await request
+          .post('/_session')
+          .set('Accept', 'application/vnd.card+source')
+          .set('Content-Type', 'text/plain')
+          .set('Authorization', ownerJWT())
+          .send('written while archived'),
+        'owner card+source POST _session',
+      );
+      assertArchived403(
+        assert,
+        await request
+          .get('/_readiness-check')
+          .set('Accept', 'application/vnd.card+source')
+          .set('Authorization', ownerJWT()),
+        'owner card+source GET _readiness-check',
+      );
+      // A `HEAD` under those two media types is the read of what is stored
+      // at the path, not the probe's discovery answer.
+      for (let accept of [
+        'application/vnd.card+source',
+        'application/vnd.card+json',
+      ]) {
+        let response = await request
+          .head('/_readiness-check')
+          .set('Accept', accept)
+          .set('Authorization', ownerJWT());
+        let label = `owner ${accept} HEAD _readiness-check`;
+        assert.strictEqual(response.status, 403, `${label}: HTTP 403`);
+        assert.strictEqual(
+          response.get('X-Boxel-Realm-Archived'),
+          'true',
+          `${label}: carries the X-Boxel-Realm-Archived marker`,
+        );
+      }
+
+      for (let path of ['_session', '_readiness-check']) {
+        assert.false(
+          existsSync(join(testRealmPath, path)),
+          `nothing is written at or beneath ${path}`,
+        );
+      }
+    });
+
+    test('the operational endpoints themselves stay reachable while archived', async function (assert) {
+      // The probe's `HEAD` under the media types a health checker sends,
+      // answered while the realm is active, to compare against below.
+      let headAccepts = ['*/*', 'application/vnd.api+json'];
+      let activeHeads: number[] = [];
+      for (let accept of headAccepts) {
+        let response = await request
+          .head('/_readiness-check')
+          .set('Accept', accept);
+        activeHeads.push(response.status);
+      }
+
+      await archiveRealm(dbAdapter, new URL(testRealmHref));
+
+      let matrixClient = new MatrixClient({
+        matrixURL: realmServerTestMatrix.url,
+        username: realmServerTestMatrix.username,
+        seed: realmSecretSeed,
+      });
+      await matrixClient.login();
+      let openIdToken = await matrixClient.getOpenIdToken();
+      let session = await request
+        .post('/_session')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .send(JSON.stringify(openIdToken));
+      assert.strictEqual(session.status, 201, '_session authenticates');
+      assert.ok(
+        session.get('Authorization'),
+        '_session issues a session token',
+      );
+
+      let readiness = await request
+        .get('/_readiness-check')
+        .set('Accept', 'application/vnd.api+json');
+      assert.strictEqual(readiness.status, 200, '_readiness-check answers');
+
+      for (let [index, accept] of headAccepts.entries()) {
+        let response = await request
+          .head('/_readiness-check')
+          .set('Accept', accept);
+        let label = `HEAD _readiness-check (accept: ${accept})`;
+        assert.strictEqual(
+          response.status,
+          200,
+          `${label} gets the discovery answer`,
+        );
+        assert.strictEqual(
+          response.status,
+          activeHeads[index],
+          `${label} gets the answer it gets while the realm is active`,
+        );
+        assert.strictEqual(
+          response.get('X-Boxel-Realm-Archived'),
+          undefined,
+          `${label} is not given the archived seal`,
+        );
+      }
+    });
+
+    test('a readiness probe that no route answers reads nothing the realm stores at its path', async function (assert) {
+      // A file stored at the probe's path, which the card+source read serves
+      // while the realm is active.
+      let stored = 'stored at the probe path';
+      let write = await request
+        .post('/_readiness-check')
+        .set('Accept', 'application/vnd.card+source')
+        .set('Content-Type', 'text/plain')
+        .set('Authorization', ownerJWT())
+        .send(stored);
+      assert.strictEqual(write.status, 204, 'the owner stores the file');
+      assert.strictEqual(
+        readFileSync(join(testRealmPath, '_readiness-check'), 'utf8'),
+        stored,
+        'the file is stored at the probe path',
+      );
+      let source = await request
+        .get('/_readiness-check')
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', ownerJWT());
+      assert.strictEqual(source.status, 200, 'the card+source read serves it');
+
+      // Probes a health checker sends: no `Accept`, and one that names no
+      // media type in particular. Each is told nothing is there, whether the
+      // realm is archived or active.
+      let probes: [string, string | undefined][] = [
+        ['GET', undefined],
+        ['GET', '*/*'],
+        ['HEAD', undefined],
+      ];
+      async function assertProbesReadNothing(state: string) {
+        for (let [method, accept] of probes) {
+          let req =
+            method === 'HEAD'
+              ? request.head('/_readiness-check')
+              : request.get('/_readiness-check');
+          if (accept) {
+            req = req.set('Accept', accept);
+          }
+          let response = await req;
+          let label = `${state}: ${method} _readiness-check (accept: ${accept ?? 'none'})`;
+          assert.strictEqual(
+            response.status,
+            404,
+            `${label} is told nothing is there rather than served the file`,
+          );
+          assert.strictEqual(
+            response.get('X-Boxel-Realm-Archived'),
+            undefined,
+            `${label} is not given the archived seal`,
+          );
+        }
+      }
+
+      await assertProbesReadNothing('active');
+      await archiveRealm(dbAdapter, new URL(testRealmHref));
+      await assertProbesReadNothing('archived');
+    });
   });
 
   // The seal must not leak a private realm's existence or archived state to
@@ -182,11 +392,13 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let dbAdapter: PgAdapter;
 
       setupPermissionedRealmCached(hooks, {
-        fixture: 'blank',
+        fixture: 'simple',
         // A private realm: no `*` permission.
         realmURL: testRealmURLFor('private-archived/'),
         permissions: {
           owner: ['read', 'write', 'realm-owner'],
+          reader: ['read'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
         onRealmSetup(args: {
           testRealm: Realm;
@@ -204,6 +416,166 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       function path(suffix: string) {
         return `${new URL(testRealm.url).pathname.replace(/\/$/, '')}${suffix}`;
       }
+
+      // A `HEAD` passes the realm ACL whoever sends it, so it is the one
+      // request a caller who cannot read the realm gets past the ACL with.
+      // These are the `HEAD`s that read something from a caller who may read
+      // the realm: a card, a module's source, and the raw file serve.
+      const contentHeads: [string, string | undefined][] = [
+        ['/person-1', 'application/vnd.card+json'],
+        ['/person.gts', 'application/vnd.card+source'],
+        ['/sample.md', '*/*'],
+        ['/sample.md', undefined],
+      ];
+      // For each content `HEAD` in order, one that finds nothing to read: a
+      // path with nothing behind it in the same bucket, and for the last, the
+      // same file under an `Accept` no route claims. Each shares its twin's
+      // extension, since the server names a content type from the path's
+      // extension when a response carries none.
+      const missingTwins: [string, string | undefined][] = [
+        ['/no-such-card', 'application/vnd.card+json'],
+        ['/no-such-module.gts', 'application/vnd.card+source'],
+        ['/no-such-file.md', '*/*'],
+        ['/sample.md', 'image/png'],
+      ];
+      // These read nothing even for a caller who may read the realm: the
+      // buckets whose `HEAD` is the discovery answer for everyone, a file the
+      // realm is part-way through writing, and the health probe's `HEAD`s.
+      const otherHeads: [string, string | undefined][] = [
+        ['/_info', 'application/vnd.api+json'],
+        ['/_search', 'application/vnd.card+json'],
+        ['/sample.md.boxel-partial', undefined],
+        ['/_readiness-check', 'application/vnd.api+json'],
+        ['/_readiness-check', '*/*'],
+        ['/_readiness-check', undefined],
+      ];
+
+      interface HeadAnswer {
+        label: string;
+        status: number;
+        headers: Record<string, string>;
+      }
+
+      async function head(
+        heads: [string, string | undefined][],
+        callers: [string, string | undefined][],
+      ): Promise<HeadAnswer[]> {
+        let answers: HeadAnswer[] = [];
+        for (let [caller, authorization] of callers) {
+          for (let [suffix, accept] of heads) {
+            let req = request.head(path(suffix));
+            if (accept) {
+              req = req.set('Accept', accept);
+            }
+            if (authorization) {
+              req = req.set('Authorization', authorization);
+            }
+            let response = await req;
+            let headers = { ...(response.headers as Record<string, string>) };
+            delete headers.date;
+            answers.push({
+              label: `${caller} HEAD ${suffix} (accept: ${accept ?? 'none'})`,
+              status: response.status,
+              headers,
+            });
+          }
+        }
+        return answers;
+      }
+
+      test('a HEAD from a caller who may not read the realm gets the answer it gets while the realm is active', async function (assert) {
+        let callers: [string, string | undefined][] = [
+          ['anonymous', undefined],
+          ['unpermitted', `Bearer ${createJWT(testRealm, 'stranger', [])}`],
+        ];
+        let heads = [...contentHeads, ...missingTwins, ...otherHeads];
+        // Where each caller's answer to `heads[index]` sits in a result.
+        let at = (callerIndex: number, index: number) =>
+          callerIndex * heads.length + index;
+        let active = await head(heads, callers);
+        for (let answer of active) {
+          assert.strictEqual(
+            answer.headers['x-boxel-realm-url'],
+            testRealm.url,
+            `active: ${answer.label} names the realm`,
+          );
+        }
+        for (let callerIndex = 0; callerIndex < callers.length; callerIndex++) {
+          for (let index = 0; index < contentHeads.length; index++) {
+            let answer = active[at(callerIndex, index)];
+            assert.strictEqual(
+              answer.status,
+              200,
+              `active: ${answer.label} gets the discovery answer`,
+            );
+            assert.notOk(
+              answer.headers['etag'],
+              `active: ${answer.label} carries no validator`,
+            );
+          }
+        }
+
+        await archiveRealm(dbAdapter, new URL(testRealm.url));
+        let archived = await head(heads, callers);
+        assert.strictEqual(archived.length, active.length);
+        for (let [index, answer] of archived.entries()) {
+          assert.deepEqual(
+            { status: answer.status, headers: answer.headers },
+            {
+              status: active[index].status,
+              headers: active[index].headers,
+            },
+            `archived: ${answer.label} gets the answer it gets while the realm is active`,
+          );
+          assert.notOk(
+            answer.headers['x-boxel-realm-archived'],
+            `archived: ${answer.label} is not told the realm is archived`,
+          );
+        }
+        for (let callerIndex = 0; callerIndex < callers.length; callerIndex++) {
+          for (let index = 0; index < contentHeads.length; index++) {
+            let hit = archived[at(callerIndex, index)];
+            let miss = archived[at(callerIndex, contentHeads.length + index)];
+            assert.deepEqual(
+              { status: miss.status, headers: miss.headers },
+              { status: hit.status, headers: hit.headers },
+              `archived: ${miss.label} gets the answer ${hit.label} gets`,
+            );
+          }
+        }
+      });
+
+      test('a HEAD from a caller who may read the realm meets the seal', async function (assert) {
+        let callers: [string, string | undefined][] = [
+          ['reader', `Bearer ${createJWT(testRealm, 'reader', ['read'])}`],
+          [
+            'owner',
+            `Bearer ${createJWT(testRealm, 'owner', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          ],
+        ];
+        let active = await head(contentHeads, callers);
+        for (let answer of active) {
+          assert.strictEqual(
+            answer.status,
+            200,
+            `active: ${answer.label} is answered`,
+          );
+        }
+
+        await archiveRealm(dbAdapter, new URL(testRealm.url));
+        for (let answer of await head(contentHeads, callers)) {
+          assert.strictEqual(answer.status, 403, `${answer.label}: HTTP 403`);
+          assert.strictEqual(
+            answer.headers['x-boxel-realm-archived'],
+            'true',
+            `${answer.label}: carries the X-Boxel-Realm-Archived marker`,
+          );
+        }
+      });
 
       test('a private archived realm returns the normal 401/403 to callers who cannot prove access, and the archived marker only to authorized callers', async function (assert) {
         await archiveRealm(dbAdapter, new URL(testRealm.url));

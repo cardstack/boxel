@@ -24,7 +24,7 @@ import {
   type BxlMutationReadEvent,
 } from '../../src/mutation/index.ts';
 import { evaluateBxl } from '../../src/index.ts';
-import { mutationBuiltinLibraries } from '../../src/bxl/registry/index.ts';
+import { requestContextBuiltinLibraries } from '../../src/bxl/registry/index.ts';
 import { withRequestContext } from '../../src/jqtools/evaluate/runtimeState.ts';
 
 // A resource's `relationships` map holds either a single relationship or an
@@ -1208,8 +1208,9 @@ strictEqual(
 // through `instance`; the host supplies all three through `context`.
 const requestContext = {
   params: { tag: 'typed', expectedStatus: 'language', caption: 'from Ada' },
-  actor: { id: 'user:ada', displayName: 'Ada' },
+  actor: 'user:ada',
   instance: { id: 'https://example.test/TierItem/typescript', revision: 7 },
+  realmConfig: { curator: 'user:mae', minimumTags: 2 },
 };
 
 const contextSource = sourceFixture();
@@ -1217,7 +1218,7 @@ const contextResult = mutateBxlCardSource(
   contextSource,
   'assert(.tags[0] == params("expectedStatus"), "tags must still lead with the language");\n' +
     'append(.tags; params("tag"));\n' +
-    'append(.tags; actor("id"));\n' +
+    'append(.tags; actor());\n' +
     '.image = instance("id");',
   {
     schema,
@@ -1243,11 +1244,11 @@ deepStrictEqual(
   'the input source document is still immutable',
 );
 
-// `actor()` and `instance()` with no argument hand the program the whole
-// object, so a caption can be composed from several of its fields.
+// `instance()` with no argument hands the program the whole object, so a
+// caption can be composed from several of its fields alongside the caller.
 const wholeObjectResult = mutateBxlCardSource(
   sourceFixture(),
-  '.image = actor().displayName + " · " + (instance().revision | tostring);',
+  '.image = actor() + " · " + (instance().revision | tostring);',
   {
     schema,
     syntax: 'solidified',
@@ -1256,7 +1257,28 @@ const wholeObjectResult = mutateBxlCardSource(
     ...projectionOptions,
   },
 );
-strictEqual(wholeObjectResult.document.data.attributes?.image, 'Ada · 7');
+strictEqual(wholeObjectResult.document.data.attributes?.image, 'user:ada · 7');
+
+// `actor()` is the caller's user id and has nothing to read a key out of, so
+// a keyed read resolves to no builtin at all — and the failure says what to
+// write instead rather than leaving the author to guess why the name that
+// works keyless does not work keyed.
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), 'append(.tags; actor("id"));', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-keyed-actor',
+      context: requestContext,
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /'actor\/1' is not defined\. `actor\(\)` takes no argument and returns the caller's user id/.test(
+      error.message,
+    ),
+  'a keyed actor read names the keyless form that replaces it',
+);
 
 // A false `assert` reading the payload fails the program rather than the
 // builtin: the value arrived, the precondition did not hold.
@@ -1298,7 +1320,7 @@ throws(
 // The same for a slot the host left out of the context it did supply.
 throws(
   () =>
-    mutateBxlCardSource(sourceFixture(), 'append(.tags; actor("id"));', {
+    mutateBxlCardSource(sourceFixture(), 'append(.tags; actor());', {
       schema,
       syntax: 'solidified',
       programId: 'request-context-missing-slot',
@@ -1307,7 +1329,7 @@ throws(
     }),
   (error: unknown) =>
     error instanceof BxlMutationError &&
-    /actor\(key\) needs the caller identity/.test(error.message),
+    /actor\(\) needs the caller identity/.test(error.message),
   'a program naming actor without an actor in the context fails',
 );
 
@@ -1331,6 +1353,83 @@ throws(
     /params\(key\) asks for "undeclared"/.test(error.message) &&
     /"caption", "expectedStatus", "tag"/.test(error.message),
   'an undeclared payload key fails and the error lists the declared ones',
+);
+
+// `realmConfig` is the realm the program runs in rather than the request that
+// reached it, which is what lets one card type read a value that differs per
+// realm. A present setting is a value like any other, keyed or whole.
+const realmSettingResult = mutateBxlCardSource(
+  sourceFixture(),
+  'assert((.tags | length) >= realmConfig("minimumTags"), "a tier item needs its tags");\n' +
+    '.image = realmConfig("curator") + " · " + (realmConfig() | keys | length | tostring);',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'request-context-realm-config',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+strictEqual(
+  realmSettingResult.document.data.attributes?.image,
+  'user:mae · 2',
+  'realmConfig reads one setting by name and the whole map without one',
+);
+
+// A realm that carries no such setting is told so by name. This is the state a
+// program authored against another realm lands in, so the message names the
+// settings the realm does have.
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), '.image = realmConfig("curator");', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-realm-config-absent',
+      context: { ...requestContext, realmConfig: { minimumTags: 2 } },
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /realmConfig\(key\) asks for "curator", which is not in the realm configuration/.test(
+      error.message,
+    ) &&
+    /it has "minimumTags"/.test(error.message),
+  'an absent realm setting fails and the error lists the ones the realm has',
+);
+
+// A realm that configures nothing at all is a different answer from a host
+// that supplied no settings, and the two say so differently: the first is the
+// realm's to fix, the second the caller's.
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), '.image = realmConfig("curator");', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-realm-config-empty',
+      context: { ...requestContext, realmConfig: {} },
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /not in the realm configuration — it has no readable keys/.test(
+      error.message,
+    ),
+  'a realm with no settings names the realm rather than the request',
+);
+
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), '.image = realmConfig("curator");', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-realm-config-missing-slot',
+      context: { params: requestContext.params },
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /realmConfig\(key\) needs the realm configuration/.test(error.message),
+  'a program naming realmConfig without one in the context fails',
 );
 
 // A plan never shares structure with the host's context object, and a host
@@ -1474,7 +1573,7 @@ for (const notFinite of [NaN, Infinity, -Infinity] as const) {
   const hostInstance = { nested: { n: 1 } };
   const handed = withRequestContext({ instance: hostInstance }, () =>
     evaluateBxl('instance()', null, {
-      libraries: mutationBuiltinLibraries(),
+      libraries: requestContextBuiltinLibraries(),
     }),
   ).value as { nested: { n: number } };
   ok(handed !== hostInstance, 'the whole slot is handed over as a copy');
@@ -1492,7 +1591,7 @@ for (const notFinite of [NaN, Infinity, -Infinity] as const) {
   const hostPayload = { obj: { n: 1 } };
   const key = withRequestContext({ params: hostPayload }, () =>
     evaluateBxl('params("obj")', null, {
-      libraries: mutationBuiltinLibraries(),
+      libraries: requestContextBuiltinLibraries(),
     }),
   ).value as { n: number };
   ok(key !== hostPayload.obj, 'a keyed read is handed over as a copy too');
@@ -1723,11 +1822,12 @@ deepStrictEqual(withContext.document, withoutContext.document);
 deepStrictEqual(withContext.plan, withoutContext.plan);
 
 // Readable syntax reaches the same builtins. The call name passes through as
-// written; the quoted key is held literal by the compiler, which is what the
-// colliding-label case below relies on.
+// written, the quoted key of `params`, `instance` and `realmConfig` is held
+// literal by the compiler — which is what the colliding-label case below
+// relies on — and `actor()` carries no key to hold.
 const readableResult = mutateBxlCardSource(
   sourceFixture(),
-  'append(Tags, params("tag"));\nImage = actor("id");',
+  'append(Tags, params("tag"));\nImage = actor();',
   {
     schema,
     programId: 'request-context-readable',
@@ -1742,11 +1842,30 @@ deepStrictEqual(readableResult.document.data.attributes?.tags, [
 ]);
 strictEqual(readableResult.document.data.attributes?.image, 'user:ada');
 
+// The same holds for a realm setting, which is why the readable compiler has
+// to know the name: a realm whose settings happen to be named after the card's
+// own labels would otherwise have each one read as that field.
+const readableRealmSetting = mutateBxlCardSource(
+  sourceFixture(),
+  'Image = realmConfig("curator");',
+  {
+    schema,
+    programId: 'request-context-readable-realm-config',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+strictEqual(
+  readableRealmSetting.document.data.attributes?.image,
+  'user:mae',
+  'a quoted realmConfig key is a setting name, not a field label',
+);
+
 // How a key is read, and how the diagnostic lists keys. Both are properties
 // of the accessor protocol rather than of any value, so they need host
 // objects that observe being read.
 {
-  const readProbe = prepareBxlMutation('.title = actor("lazy");', {
+  const readProbe = prepareBxlMutation('.title = instance("lazy");', {
     targetKind: 'card',
     syntax: 'solidified',
     schema: {
@@ -1765,7 +1884,7 @@ strictEqual(readableResult.document.data.attributes?.image, 'user:ada');
   // An accessor is read once per lookup, and the program receives the value
   // that was checked — not whatever a second read would return.
   let reads = 0;
-  const counting: Record<string, unknown> = { id: 'user:ada' };
+  const counting: Record<string, unknown> = { id: 'https://example.test/1' };
   Object.defineProperty(counting, 'lazy', {
     enumerable: true,
     get() {
@@ -1777,7 +1896,7 @@ strictEqual(readableResult.document.data.attributes?.image, 'user:ada');
     { title: null },
     {
       programId: 'request-context-single-read',
-      context: { actor: counting } as never,
+      context: { instance: counting } as never,
     },
   );
   strictEqual(
@@ -1870,7 +1989,7 @@ strictEqual(readableResult.document.data.attributes?.image, 'user:ada');
         // diagnostic itself has to survive the throwing accessor.
         withRequestContext({ params: trapped }, () =>
           evaluateBxl('params("nope")', null, {
-            libraries: mutationBuiltinLibraries(),
+            libraries: requestContextBuiltinLibraries(),
           }),
         );
         return false;
@@ -2065,6 +2184,47 @@ strictEqual(
     'cardInfo.theme',
   ).links?.self,
   darkTheme,
+);
+
+// A host that could not supply a linked Card's Fields names those Fields, not
+// the link. The Card stores the edge, so reading the edge is reading the Card's
+// own value and still answers; only the Fields beneath it are refused.
+const shadowedMembers: BxlMutationOverlays = {
+  unavailable: [
+    { path: 'cardInfo.theme.name', tier: 'linked', reason: 'not-searchable' },
+  ],
+};
+strictEqual(
+  overlayMutation('.image = .cardInfo.theme.id;', {
+    overlays: shadowedMembers,
+  }).document.data.attributes?.image,
+  'https://example.test/Theme/original',
+);
+doesNotThrow(
+  () =>
+    overlayMutation('assert(.cardInfo.theme != null;"needs a theme");', {
+      overlays: shadowedMembers,
+    }),
+  'an assert over the stored edge holds rather than demanding a snapshot',
+);
+strictEqual(
+  overlayError('.image = .cardInfo.theme.name;', {
+    overlays: shadowedMembers,
+  }).code,
+  'snapshot-unavailable',
+  'the Field the host could not supply is still refused',
+);
+
+// The relief above is keyed on the Card answering at that path of its own. The
+// root is excluded: every Card with any content answers there, so the test
+// cannot discriminate, and the whole Card is precisely what an overlay
+// completes.
+strictEqual(
+  overlayError('.image = (. | tostring);', {
+    overlays: shadowedMembers,
+  }).code,
+  'snapshot-unavailable',
+  'a read of the whole Card still reports what it is missing',
 );
 
 // The same holds however the overlay shapes the value: a computed Field the

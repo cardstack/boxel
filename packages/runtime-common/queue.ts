@@ -49,6 +49,54 @@ import type { Deferred } from './deferred.ts';
 // nothing else.
 export const userInitiatedPriority = 10;
 export const userInitiatedPrerenderHtmlPriority = 9;
+// ── Job heartbeats ─────────────────────────────────────────────────────────
+//
+// A job's `timeout` bounds how long it may go *without progress*, not how long
+// it may run in total. A pass over a large realm is not stuck because it is
+// taking a while; it is stuck when it stops getting anywhere. Bounding total
+// runtime instead makes a big realm structurally impossible to finish — its
+// deadline expires mid-pass however many times it is retried.
+//
+// A handler that knows it is progressing calls `heartbeatJob` with the
+// `reservationId` it was given. The queue registers the callback while the job
+// runs and drops it afterwards, so a heartbeat for a job that has already
+// finished is a no-op rather than an error. A handler that never heartbeats —
+// which is most of them — keeps exactly the old behaviour: one deadline,
+// measured from the start.
+//
+// The registry lives here rather than in the queue implementation because the
+// queue package imports this one, and a handler must be able to reach it
+// without depending on which queue backend is in play.
+let jobHeartbeats = new Map<number, () => void>();
+
+export function registerJobHeartbeat(
+  reservationId: number,
+  onHeartbeat: () => void,
+): void {
+  jobHeartbeats.set(reservationId, onHeartbeat);
+}
+
+// Whether a job is still being tracked. Exists so a test can assert the
+// registry does not retain callbacks for jobs that have ended — a leak that is
+// otherwise invisible, because a retained entry changes nothing a caller can
+// observe until memory runs out.
+export function jobHeartbeatRegistered(reservationId: number): boolean {
+  return jobHeartbeats.has(reservationId);
+}
+
+export function unregisterJobHeartbeat(reservationId: number): void {
+  jobHeartbeats.delete(reservationId);
+}
+
+// Report that the job holding `reservationId` is still getting somewhere.
+// Safe to call often and safe to call late: an unknown reservation is ignored.
+export function heartbeatJob(reservationId: number | undefined): void {
+  if (reservationId == null) {
+    return;
+  }
+  jobHeartbeats.get(reservationId)?.();
+}
+
 export const systemInitiatedPriority = 1;
 export const systemInitiatedPrerenderHtmlPriority = 0;
 
@@ -74,9 +122,43 @@ export interface QueuePublisher {
 export interface QueuePublishRequest {
   jobType: string;
   priority?: number;
+  // The lane the job runs in. The queue runs at most one job per group at a
+  // time, and coalesces a publish only into jobs of its own group.
   concurrencyGroup: string | null;
+  // The family the lane belongs to, when it belongs to one. A family is a set
+  // of lanes that share the same work, such as one realm's index, and it
+  // separates two kinds of member:
+  //
+  // - Exclusive work runs with nothing else in the family at its own priority
+  //   tier or above. A job is exclusive when its group names the family
+  //   itself, or when it names no family at all, which is every job published
+  //   without one.
+  // - A writer lane is a group inside the family with a name of its own. Its
+  //   jobs run alongside other writer lanes' jobs, and alongside exclusive
+  //   work of a lower tier. A pending exclusive job is a barrier that later
+  //   writer jobs at its priority tier or below wait behind; later writer jobs
+  //   at a higher tier start past it, at the family's full lane count.
+  //
+  // So a job never waits on work beneath its own tier, pending or running. An
+  // exclusive job that must have the family to itself has to be published at
+  // or above the tier of every writer it needs to exclude.
+  //
+  // Readers that ask about the family as a whole (is the realm's index behind,
+  // cancel the realm's work) match on `laneFamilyPredicate`, so they see every
+  // lane the family holds. See `pg-queue.ts` for the claim rules.
+  laneFamily?: string | null;
   timeout: number;
   args: PgPrimitive;
+  // The users whose work this job carries, recorded on the row so a gate in
+  // any replica can ask whether anything of its own caller's is outstanding
+  // rather than whether the lane is occupied. A set because jobs coalesce: a
+  // publish that merges into a pending one joins the callers already on it.
+  //
+  // Generic here rather than derived from `args`, which only the job type's
+  // own handler can read. A job type that nobody gates on leaves it out, and
+  // the row records nothing — which reads as the realm owner, see
+  // `awaitRealmIndexSettled`.
+  initiatedBy?: string[];
 }
 
 export interface QueueJobSpec extends Omit<QueuePublishRequest, 'priority'> {
@@ -101,7 +183,10 @@ export interface QueueCoalesceContext {
 }
 
 export type QueueCoalesceJoinUpdate = Partial<
-  Pick<QueueJobSpec, 'jobType' | 'args' | 'priority' | 'timeout'>
+  Pick<
+    QueueJobSpec,
+    'jobType' | 'args' | 'priority' | 'timeout' | 'initiatedBy'
+  >
 >;
 
 export type QueueCoalesceDecision =
@@ -148,6 +233,7 @@ export function normalizeQueueJobSpec(args: QueuePublishRequest): QueueJobSpec {
     // A publish that doesn't state a priority is background work, so it
     // takes the system-initiated tier.
     priority: args.priority ?? systemInitiatedPriority,
+    laneFamily: args.laneFamily ?? null,
   };
 }
 

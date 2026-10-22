@@ -5,11 +5,12 @@ import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { basename, join } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
-import { dirSync, type DirResult } from 'tmp';
+import { dirSync } from 'tmp';
 import fsExtra from 'fs-extra';
 const { copySync, ensureDirSync } = fsExtra;
 import {
   setupDB,
+  setupTestDatabaseTemplate,
   runTestRealmServer,
   closeServer,
   createJWT,
@@ -18,15 +19,36 @@ import {
   insertPlan,
   realmSecretSeed,
   createVirtualNetwork,
+  insertProxyEndpoints,
+  setupSecretsKeyring,
   waitUntil,
 } from './helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { logger } from '@cardstack/runtime-common';
 import {
   addToCreditsLedger,
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import { MAX_IN_FLIGHT_CALLS_PER_USER } from '../lib/billable-call.ts';
+import {
+  configureOutbound,
+  OutboundRefusedError,
+  resetOutbound,
+} from '../lib/outbound/client.ts';
+import {
+  configureClientStall,
+  resetClientStall,
+} from '../lib/proxy-forward.ts';
+import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
+import * as Sentry from '@sentry/node';
+import {
+  startSentryCapture,
+  type SentryCapture,
+} from './helpers/sentry-capture.ts';
+import { logLinesDuring, withLogDefinition } from './helpers/log-capture.ts';
+import { leaksCredential } from './helpers/credential-leaks.ts';
 
 module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | _request-forward', function (hooks) {
@@ -36,15 +58,8 @@ module(basename(import.meta.filename), function () {
     let publisher: any;
     let runner: any;
     let request: SuperTest<Test>;
-    let testRealmDir: string;
-    let dir: DirResult;
 
     let virtualNetwork = createVirtualNetwork();
-
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-      copySync(fixtureDir('simple'), dir.name);
-    });
 
     async function startRealmServer(
       dbAdapter: any,
@@ -54,6 +69,11 @@ module(basename(import.meta.filename), function () {
       if (testRealm) {
         virtualNetwork.unmount(testRealm.handle);
       }
+
+      let dir = dirSync();
+      let testRealmDir = join(dir.name, 'realm_server_2', 'test');
+      ensureDirSync(testRealmDir);
+      copySync(fixtureDir('simple'), testRealmDir);
 
       ({ testRealm: testRealm, testRealmHttpServer: testRealmHttpServer } =
         await runTestRealmServer({
@@ -69,30 +89,87 @@ module(basename(import.meta.filename), function () {
       request = supertest(testRealmHttpServer);
     }
 
+    function sendChatForward(jwt: string) {
+      return request
+        .post('/_request-forward')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          url: 'https://openrouter.ai/api/v1/chat/completions',
+          method: 'POST',
+          requestBody: JSON.stringify({
+            model: 'openai/gpt-3.5-turbo',
+            messages: [{ role: 'user', content: 'Hi' }],
+          }),
+        });
+    }
+
+    async function inFlightReservations(): Promise<number> {
+      let [{ count }] = await dbAdapter.execute(
+        `SELECT COUNT(*) AS count FROM billable_call_reservations WHERE matrix_user_id = '@testuser:localhost'`,
+      );
+      return Number(count);
+    }
+
+    async function stopRealmServer() {
+      AllowedProxyDestinations.reset();
+      await closeServer(testRealmHttpServer);
+    }
+
+    // The realm `startRealmServer` brings up is indexed once, into a template
+    // database each test starts from, rather than from scratch before each
+    // test.
+    let templateDatabase = setupTestDatabaseTemplate(hooks, {
+      key: import.meta.filename,
+      build: async ({ dbAdapter, publisher, runner }) => {
+        await startRealmServer(dbAdapter, publisher, runner);
+        return stopRealmServer;
+      },
+    });
+
+    // Keys are sealed as the proxy endpoints are written, and opened as the
+    // proxy reads them.
+    setupSecretsKeyring(hooks);
+
     setupDB(hooks, {
+      templateDatabase,
       beforeEach: async (_dbAdapter, _publisher, _runner) => {
         dbAdapter = _dbAdapter;
         publisher = _publisher;
         runner = _runner;
-        testRealmDir = join(dir.name, 'realm_server_2', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(fixtureDir('simple'), testRealmDir);
 
         // Set up allowed proxy destinations in database BEFORE starting server
-        await dbAdapter.execute(
-          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at) 
-           VALUES 
-             (gen_random_uuid(), 'https://openrouter.ai/api/v1/chat/completions', 'openrouter-api-key', 'openrouter', true, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-             (gen_random_uuid(), 'https://api.example.com', 'example-api-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-             (gen_random_uuid(), 'https://www.googleapis.com/customsearch/v1', 'google-api-key', 'no-credit', false, 'url-parameter', 'key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-             (gen_random_uuid(), 'https://gateway.ai.cloudflare.com/v1/4a94a1eb2d21bbbe160234438a49f687/boxel/', 'cloudflare-api-key', 'no-credit', true, 'header', 'cf-aig-authorization', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-           ON CONFLICT (url) 
-           DO UPDATE SET 
-             api_key = EXCLUDED.api_key,
-             credit_strategy = EXCLUDED.credit_strategy,
-             supports_streaming = EXCLUDED.supports_streaming,
-             updated_at = CURRENT_TIMESTAMP`,
-        );
+        await insertProxyEndpoints(dbAdapter, [
+          {
+            url: 'https://openrouter.ai/api/v1/chat/completions',
+            apiKey: 'sk-or-v1-test-5c1d8e2f9a73b046',
+            creditStrategy: 'openrouter',
+            supportsStreaming: true,
+          },
+          {
+            url: 'https://api.example.com',
+            apiKey: 'example-api-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+          },
+          {
+            url: 'https://www.googleapis.com/customsearch/v1',
+            apiKey: 'google-api-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+            authMethod: 'url-parameter',
+            authParameterName: 'key',
+          },
+          {
+            url: 'https://gateway.ai.cloudflare.com/v1/4a94a1eb2d21bbbe160234438a49f687/boxel/',
+            apiKey: 'cloudflare-api-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: true,
+            authMethod: 'header',
+            authParameterName: 'cf-aig-authorization',
+          },
+        ]);
 
         await startRealmServer(dbAdapter, publisher, runner);
 
@@ -127,10 +204,7 @@ module(basename(import.meta.filename), function () {
           });
         }
       },
-      afterEach: async () => {
-        AllowedProxyDestinations.reset();
-        await closeServer(testRealmHttpServer);
-      },
+      afterEach: stopRealmServer,
     });
 
     test('should forward request to OpenRouter and deduct credits', async function (assert) {
@@ -664,6 +738,11 @@ module(basename(import.meta.filename), function () {
         response.body.errors?.[0]?.includes('minimum of 10 credits'),
         'Should return insufficient credits error',
       );
+      assert.strictEqual(
+        await inFlightReservations(),
+        0,
+        'a denied call takes no in-flight slot',
+      );
     });
 
     test('should handle missing authentication token', async function (assert) {
@@ -1046,23 +1125,16 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('serializes concurrent same-user OpenRouter calls via the cost-barrier lock', async function (assert) {
-      // Two concurrent requests from the same matrix user must not both
-      // forward to OpenRouter against the same credit balance — the second
-      // must wait until the first's cost row has landed. Before the
-      // db-coordinated barrier the second forwarded immediately because
-      // its credit check raced the first's pending deduction.
+    test("runs one user's concurrent calls in parallel up to the in-flight limit, and the next waits for a slot", async function (assert) {
+      // A page that asks for several generations at once must get them
+      // concurrently. Past the limit a call waits rather than failing, and
+      // starts as soon as one of the user's calls finishes.
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
-      // Each forward should see the prior cost already debited. We don't
-      // assert exact debit ordering against the upstream calls (the lock
-      // serializes both ends of the work), only that across both
-      // completions the ledger reflects both costs.
-      const inflightChatCalls: Array<{
-        release: () => void;
-        started: Promise<void>;
-      }> = [];
+      // Each upstream call is held open until the test releases it, so the
+      // calls genuinely overlap.
+      const upstreamCalls: Array<{ release: () => void }> = [];
 
       mockFetch.callsFake(async (input: string | URL | Request) => {
         const url = typeof input === 'string' ? input : input.toString();
@@ -1071,20 +1143,294 @@ module(basename(import.meta.filename), function () {
             status: 404,
           });
         }
-        // Suspend the upstream call until the test releases it, so two
-        // concurrent same-user requests would actually overlap upstream
-        // without the lock. With the lock the second call won't even
-        // reach this point until the first completes.
         let releaseFn!: () => void;
-        let startedFn!: () => void;
-        const startedSignal = new Promise<void>((res) => (startedFn = res));
-        const gate = new Promise<void>((res) => (releaseFn = res));
-        inflightChatCalls.push({ release: releaseFn, started: startedSignal });
-        startedFn();
-        await gate;
+        const released = new Promise<void>((res) => (releaseFn = res));
+        upstreamCalls.push({ release: releaseFn });
+        const callNumber = upstreamCalls.length;
+        await released;
         return new Response(
           JSON.stringify({
-            id: `gen-${inflightChatCalls.length}`,
+            id: `gen-${callNumber}`,
+            choices: [{ text: 'ok' }],
+            usage: { total_tokens: 10, cost: 0.002 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      });
+
+      const pending: Promise<unknown>[] = [];
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+        const send = () => sendChatForward(jwt).then((r) => r);
+
+        // supertest's Test is a thenable that only fires on `.then`, which
+        // `send` calls, so every request is on the wire from here.
+        for (let i = 0; i < MAX_IN_FLIGHT_CALLS_PER_USER + 1; i++) {
+          pending.push(send());
+        }
+
+        await waitUntil(
+          async () => upstreamCalls.length >= MAX_IN_FLIGHT_CALLS_PER_USER,
+          {
+            timeout: 15000,
+            timeoutMessage: `${MAX_IN_FLIGHT_CALLS_PER_USER} same-user calls should reach upstream together`,
+          },
+        );
+        // The call past the limit must still be waiting. Give it time it
+        // would need to get through if it were not.
+        await new Promise((r) => setTimeout(r, 1000));
+        assert.strictEqual(
+          upstreamCalls.length,
+          MAX_IN_FLIGHT_CALLS_PER_USER,
+          'the call past the in-flight limit waits instead of reaching upstream',
+        );
+
+        upstreamCalls[0].release();
+        await waitUntil(
+          async () => upstreamCalls.length === MAX_IN_FLIGHT_CALLS_PER_USER + 1,
+          {
+            timeout: 15000,
+            timeoutMessage:
+              'the waiting call should reach upstream once a slot frees',
+          },
+        );
+
+        for (const call of upstreamCalls) call.release();
+        const responses = (await Promise.all(pending)) as Array<{
+          status: number;
+        }>;
+        assert.deepEqual(
+          responses.map((r) => r.status),
+          new Array(MAX_IN_FLIGHT_CALLS_PER_USER + 1).fill(200),
+          'every call is served',
+        );
+
+        // Every call's cost lands (0.002 USD × 1000 = 2 credits each).
+        const expected = 50 - 2 * (MAX_IN_FLIGHT_CALLS_PER_USER + 1);
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === expected;
+          },
+          {
+            timeoutMessage: `every call should be debited (${expected} credits left)`,
+          },
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'every finished call gives its slot back',
+        );
+      } finally {
+        // A failed assertion mid-flight would otherwise leave gated upstream
+        // calls hanging the test process.
+        for (const call of upstreamCalls) call.release();
+        await Promise.allSettled(pending);
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('a client that leaves while waiting for a slot never reaches upstream', async function (assert) {
+      // A call waiting at the in-flight limit has taken no slot yet. Its
+      // client giving up must end the wait, and must not leave a slot taken
+      // or an upstream call started once a slot frees.
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      const upstreamCalls: Array<{ release: () => void }> = [];
+      mockFetch.callsFake(async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (!url.includes('/chat/completions')) {
+          return new Response(JSON.stringify({ error: 'Not found' }), {
+            status: 404,
+          });
+        }
+        let releaseFn!: () => void;
+        const released = new Promise<void>((res) => (releaseFn = res));
+        upstreamCalls.push({ release: releaseFn });
+        await released;
+        return new Response(
+          JSON.stringify({
+            id: `gen-${upstreamCalls.length}`,
+            choices: [{ text: 'ok' }],
+            usage: { total_tokens: 10, cost: 0.002 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      });
+
+      const jwt = createRealmServerJWT(
+        { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+        realmSecretSeed,
+      );
+      const running: Promise<unknown>[] = [];
+      const waiting = sendChatForward(jwt);
+      let waitingSettled: Promise<unknown> | undefined;
+      try {
+        for (let i = 0; i < MAX_IN_FLIGHT_CALLS_PER_USER; i++) {
+          running.push(sendChatForward(jwt).then((r) => r));
+        }
+        await waitUntil(
+          async () => upstreamCalls.length >= MAX_IN_FLIGHT_CALLS_PER_USER,
+          {
+            timeout: 15000,
+            timeoutMessage: 'the first calls should fill every slot',
+          },
+        );
+
+        // supertest's Test fires on `.then`; both outcomes are swallowed
+        // because this is the request the test walks away from.
+        waitingSettled = waiting.then(
+          () => undefined,
+          () => undefined,
+        );
+        // Long enough for the request to reach admission and start waiting.
+        await new Promise((r) => setTimeout(r, 1000));
+        waiting.abort();
+        await waitingSettled;
+
+        for (const call of upstreamCalls) call.release();
+        await Promise.all(running);
+        // Give a call that wrongly kept waiting the time it would need to be
+        // admitted once the slots freed.
+        await new Promise((r) => setTimeout(r, 3000));
+
+        assert.strictEqual(
+          upstreamCalls.length,
+          MAX_IN_FLIGHT_CALLS_PER_USER,
+          'the abandoned call never reaches upstream',
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the abandoned call leaves no slot taken',
+        );
+      } finally {
+        for (const call of upstreamCalls) call.release();
+        await Promise.allSettled(running);
+        await waitingSettled;
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test("a call still resolving its cost does not hold up the user's next call", async function (assert) {
+      // A response with no inline cost is priced by polling the provider,
+      // which can take minutes. The user's next call must not wait on it.
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      let chatCalls = 0;
+      let costLookupStarted = false;
+      let releaseCostLookup!: () => void;
+      const costLookupReleased = new Promise<void>(
+        (res) => (releaseCostLookup = res),
+      );
+
+      mockFetch.callsFake(async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.includes('/generation?id=')) {
+          costLookupStarted = true;
+          await costLookupReleased;
+          return new Response(
+            JSON.stringify({ data: { id: 'gen-no-cost', total_cost: 0.003 } }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        if (url.includes('/chat/completions')) {
+          chatCalls++;
+          const body =
+            chatCalls === 1
+              ? { id: 'gen-no-cost', choices: [{ text: 'ok' }] }
+              : {
+                  id: `gen-${chatCalls}`,
+                  choices: [{ text: 'ok' }],
+                  usage: { total_tokens: 10, cost: 0.002 },
+                };
+          return new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ error: 'Not found' }), {
+          status: 404,
+        });
+      });
+
+      let first: Promise<unknown> | undefined;
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+
+        first = sendChatForward(jwt).then((r) => r);
+        await waitUntil(async () => costLookupStarted, {
+          timeout: 15000,
+          timeoutMessage: 'the first call should start looking up its cost',
+        });
+
+        const second = await sendChatForward(jwt);
+        assert.strictEqual(
+          second.status,
+          200,
+          'the next call is served while the first is still being priced',
+        );
+
+        releaseCostLookup();
+        await first;
+
+        // 0.003 USD for the first and 0.002 USD for the second: 5 credits.
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 45;
+          },
+          { timeoutMessage: 'both calls should be debited (50 - 5 = 45)' },
+        );
+      } finally {
+        releaseCostLookup();
+        await first?.catch(() => undefined);
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('an in-flight reservation left behind by a dead replica stops counting once it expires', async function (assert) {
+      // A replica that dies mid-call never gives its slot back. The row it
+      // left must not lock the user out for good.
+      for (let i = 0; i < MAX_IN_FLIGHT_CALLS_PER_USER; i++) {
+        await dbAdapter.execute(
+          `INSERT INTO billable_call_reservations (matrix_user_id, expires_at) VALUES ('@testuser:localhost', ${
+            Date.now() - 1000
+          })`,
+        );
+      }
+
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+      mockFetch.callsFake(async () => {
+        return new Response(
+          JSON.stringify({
+            id: 'gen-1',
             choices: [{ text: 'ok' }],
             usage: { total_tokens: 10, cost: 0.002 },
           }),
@@ -1097,86 +1443,14 @@ module(basename(import.meta.filename), function () {
           { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
           realmSecretSeed,
         );
-
-        // supertest's Test is a thenable, not an eagerly-evaluating
-        // Promise — it fires the HTTP request when `.then` is called.
-        // Wrapping in `.then((r) => r)` forces the request to start now
-        // so the test can wait on inflight stub activity below; otherwise
-        // `const p1 = send()` would never actually hit the server until
-        // we awaited it.
-        const send = () =>
-          request
-            .post('/_request-forward')
-            .set('Accept', 'application/json')
-            .set('Content-Type', 'application/json')
-            .set('Authorization', `Bearer ${jwt}`)
-            .send({
-              url: 'https://openrouter.ai/api/v1/chat/completions',
-              method: 'POST',
-              requestBody: JSON.stringify({
-                model: 'openai/gpt-3.5-turbo',
-                messages: [{ role: 'user', content: 'Hi' }],
-              }),
-            })
-            .then((r) => r);
-
-        const p1 = send();
-        // Wait until the first forward has hit the upstream stub so we
-        // know it owns the lock. waitUntil defaults to a 1s budget, which
-        // isn't enough on a cold realm server (JWT → body parse → DB
-        // destination-config lookup → advisory-lock acquire → validate-
-        // Credits before fetch fires); give it real headroom.
-        await waitUntil(async () => inflightChatCalls.length >= 1, {
-          timeout: 15000,
-          timeoutMessage: 'first upstream call should reach the fetch stub',
-        });
-        const p2 = send();
-
-        // With the lock held, the second request must NOT reach upstream
-        // until the first releases. Give it generous wall time then assert.
-        await new Promise((r) => setTimeout(r, 500));
+        const response = await sendChatForward(jwt);
+        assert.strictEqual(response.status, 200, 'the call is served');
         assert.strictEqual(
-          inflightChatCalls.length,
-          1,
-          'second concurrent same-user request blocks on the cost-barrier lock',
-        );
-
-        // Release the first; the second should then proceed and reach
-        // upstream by itself.
-        inflightChatCalls[0].release();
-        await p1;
-
-        await waitUntil(async () => inflightChatCalls.length >= 2, {
-          timeout: 15000,
-          timeoutMessage:
-            'second upstream call should proceed once lock releases',
-        });
-        inflightChatCalls[1].release();
-        await p2;
-
-        // Both costs (0.002 USD × 1000 = 2 credits each) should have
-        // landed, leaving 50 - 4 = 46.
-        const user = await getUserByMatrixUserId(
-          dbAdapter,
-          '@testuser:localhost',
-        );
-        await waitUntil(
-          async () => {
-            const credits = await sumUpCreditsLedger(dbAdapter, {
-              creditType: ['extra_credit', 'extra_credit_used'],
-              userId: user!.id,
-            });
-            return credits === 46;
-          },
-          {
-            timeoutMessage:
-              'both serialized costs should be debited (50 - 4 = 46)',
-          },
+          await inFlightReservations(),
+          0,
+          'the expired reservations are cleared',
         );
       } finally {
-        // If a test assertion failed mid-flight, leftover gated upstream
-        // calls would hang the test process — release any survivors.
-        for (const c of inflightChatCalls) c.release();
         mockFetch.restore();
         global.fetch = originalFetch;
       }
@@ -1207,6 +1481,1627 @@ module(basename(import.meta.filename), function () {
         ),
         'Should return multipart validation error message',
       );
+    });
+
+    test('a forward whose client is still waiting is never cancelled', async function (assert) {
+      // The signal has to distinguish a client that left from one that is
+      // still there. Node closes the *request* stream as soon as its body has
+      // been read — on every request, served or abandoned — so watching that
+      // would cancel every forward the moment it started, which only the
+      // response stream's close-without-having-been-written tells apart.
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      let forwardSignal: AbortSignal | undefined;
+      let abortedDuringCall = false;
+
+      mockFetch.callsFake(
+        async (input: string | URL | Request, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (!url.includes('/chat/completions')) {
+            return new Response(JSON.stringify({ error: 'Not found' }), {
+              status: 404,
+            });
+          }
+          forwardSignal = init?.signal ?? undefined;
+          abortedDuringCall = forwardSignal?.aborted === true;
+          return new Response(
+            JSON.stringify({
+              id: 'gen-uninterrupted',
+              choices: [{ text: 'ok' }],
+              usage: { total_tokens: 10, cost: 0.002 },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        },
+      );
+
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+
+        const response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://openrouter.ai/api/v1/chat/completions',
+            method: 'POST',
+            requestBody: JSON.stringify({
+              model: 'openai/gpt-3.5-turbo',
+              messages: [{ role: 'user', content: 'Hi' }],
+            }),
+          });
+
+        assert.strictEqual(response.status, 200, 'the forward is served');
+        assert.false(
+          abortedDuringCall,
+          'the upstream call starts with a signal that has not fired',
+        );
+        assert.false(
+          forwardSignal?.aborted,
+          'a delivered forward is never cancelled',
+        );
+      } finally {
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('a client that disconnects mid-forward cancels the upstream call and gives back its in-flight slot', async function (assert) {
+      // A forward occupies one of the user's in-flight slots for the whole
+      // life of the upstream call, so a caller that walks away from a slow
+      // model call would otherwise keep that slot for an answer nobody is
+      // going to read.
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      // Upstream calls that never answer on their own — a generation still
+      // running when its reader leaves. Each settles only when the test
+      // releases it or its signal aborts, which is what a real fetch does
+      // with an aborted signal.
+      const upstreamCalls: Array<{
+        signal: AbortSignal | undefined;
+        release: () => void;
+      }> = [];
+
+      mockFetch.callsFake(
+        async (input: string | URL | Request, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (!url.includes('/chat/completions')) {
+            return new Response(JSON.stringify({ error: 'Not found' }), {
+              status: 404,
+            });
+          }
+
+          const signal = init?.signal ?? undefined;
+          let releaseFn!: () => void;
+          const released = new Promise<void>((res) => (releaseFn = res));
+          upstreamCalls.push({ signal, release: releaseFn });
+
+          await new Promise<void>((resolve, reject) => {
+            released.then(resolve);
+            signal?.addEventListener('abort', () => {
+              const abortError = new Error('The operation was aborted');
+              abortError.name = 'AbortError';
+              reject(abortError);
+            });
+          });
+
+          return new Response(
+            JSON.stringify({
+              id: `gen-${upstreamCalls.length}`,
+              choices: [{ text: 'ok' }],
+              usage: { total_tokens: 10, cost: 0.002 },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        },
+      );
+
+      const jwt = createRealmServerJWT(
+        { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+        realmSecretSeed,
+      );
+      const send = () =>
+        request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://openrouter.ai/api/v1/chat/completions',
+            method: 'POST',
+            requestBody: JSON.stringify({
+              model: 'openai/gpt-3.5-turbo',
+              messages: [{ role: 'user', content: 'Hi' }],
+            }),
+          });
+
+      const abandoned = send();
+      // supertest's Test is a thenable, not an eagerly-evaluating Promise —
+      // `.then` is what fires the request. Both outcomes are swallowed: this
+      // is the request the test walks away from.
+      const abandonedSettled = abandoned.then(
+        () => undefined,
+        () => undefined,
+      );
+
+      try {
+        await waitUntil(async () => upstreamCalls.length >= 1, {
+          timeout: 15000,
+          timeoutMessage: 'first forward should reach the upstream stub',
+        });
+
+        abandoned.abort();
+
+        await waitUntil(async () => upstreamCalls[0].signal?.aborted === true, {
+          timeout: 15000,
+          timeoutMessage:
+            'the abandoned request should cancel its upstream call',
+        });
+        assert.true(
+          Boolean(upstreamCalls[0].signal?.aborted),
+          'the upstream call is cancelled when its client goes away',
+        );
+
+        await waitUntil(async () => (await inFlightReservations()) === 0, {
+          timeout: 15000,
+          timeoutMessage: 'the abandoned forward should give its slot back',
+        });
+
+        const second = send().then((r) => r);
+        await waitUntil(async () => upstreamCalls.length >= 2, {
+          timeout: 15000,
+          timeoutMessage: 'the next same-user forward should reach upstream',
+        });
+        upstreamCalls[1].release();
+        const response = await second;
+        assert.strictEqual(
+          response.status,
+          200,
+          'the next forward is served normally',
+        );
+
+        // Only the delivered call is billed (0.002 USD × 1000 = 2 credits).
+        // A cancelled call never produces a response to charge for, so 46
+        // here would mean the abandoned one was billed too.
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 48;
+          },
+          {
+            timeoutMessage:
+              'only the delivered forward should be debited (50 - 2 = 48)',
+          },
+        );
+      } finally {
+        // A failed assertion mid-flight would otherwise leave gated upstream
+        // calls hanging the test process.
+        for (const call of upstreamCalls) call.release();
+        await abandonedSettled;
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('a client that disconnects mid-stream cancels the upstream stream and gives back its in-flight slot', async function (assert) {
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      // The first upstream stream emits a delta and then keeps generating —
+      // no `[DONE]`, so nothing ever gets charged for it.
+      // Erroring the body when the signal aborts stands in for what fetch
+      // does to a response body once its request is cancelled.
+      const streamSignals: Array<AbortSignal | undefined> = [];
+
+      mockFetch.callsFake(
+        async (input: string | URL | Request, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (!url.includes('/chat/completions')) {
+            return new Response(JSON.stringify({ error: 'Not found' }), {
+              status: 404,
+            });
+          }
+
+          const signal = init?.signal ?? undefined;
+          streamSignals.push(signal);
+          const isFirstStream = streamSignals.length === 1;
+          const encoder = new TextEncoder();
+
+          const body = new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  `data: {"id":"gen-stream-${streamSignals.length}","choices":[{"delta":{"content":"Hello"}}]}\n\n`,
+                ),
+              );
+              if (isFirstStream) {
+                signal?.addEventListener('abort', () => {
+                  const abortError = new Error('The operation was aborted');
+                  abortError.name = 'AbortError';
+                  controller.error(abortError);
+                });
+                return;
+              }
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"choices":[{"delta":{"content":" world"}}],"usage":{"cost":0.002}}\n\n',
+                ),
+              );
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+            },
+          });
+
+          return new Response(body, {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        },
+      );
+
+      const jwt = createRealmServerJWT(
+        { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+        realmSecretSeed,
+      );
+      const send = () =>
+        request
+          .post('/_request-forward')
+          .set('Accept', 'text/event-stream')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://openrouter.ai/api/v1/chat/completions',
+            method: 'POST',
+            requestBody: JSON.stringify({
+              model: 'openai/gpt-3.5-turbo',
+              messages: [{ role: 'user', content: 'Hi' }],
+              stream: true,
+            }),
+            stream: true,
+          });
+
+      const abandoned = send();
+      const abandonedSettled = abandoned.then(
+        () => undefined,
+        () => undefined,
+      );
+
+      try {
+        await waitUntil(async () => streamSignals.length >= 1, {
+          timeout: 15000,
+          timeoutMessage: 'first stream should reach the upstream stub',
+        });
+
+        abandoned.abort();
+
+        await waitUntil(async () => streamSignals[0]?.aborted === true, {
+          timeout: 15000,
+          timeoutMessage:
+            'the abandoned stream should cancel its upstream stream',
+        });
+        assert.true(
+          Boolean(streamSignals[0]?.aborted),
+          'the upstream stream is cancelled when its client goes away',
+        );
+        await waitUntil(async () => (await inFlightReservations()) === 0, {
+          timeout: 15000,
+          timeoutMessage: 'the abandoned stream should give its slot back',
+        });
+
+        const response = await send();
+        assert.strictEqual(
+          response.status,
+          200,
+          'the next stream is served normally',
+        );
+        assert.true(
+          response.text.includes('data: [DONE]'),
+          'the next stream runs to completion',
+        );
+        assert.strictEqual(
+          streamSignals.length,
+          2,
+          'exactly one upstream stream per forward',
+        );
+
+        // The cancelled stream never reached `[DONE]`, so only the completed
+        // one is debited (0.002 USD × 1000 = 2 credits).
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 48;
+          },
+          {
+            timeoutMessage:
+              'only the completed stream should be debited (50 - 2 = 48)',
+          },
+        );
+      } finally {
+        await abandonedSettled;
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    // These forwards reach a real socket: the stub vendor on loopback, which
+    // the development allowlist names, so they pass through the outbound
+    // guard exactly as a deployed forward does.
+    module('through the outbound guard', function (hooks) {
+      let vendor: StubVendor;
+
+      hooks.before(async function () {
+        vendor = await startStubVendor();
+      });
+      hooks.after(async function () {
+        await vendor.close();
+      });
+      hooks.beforeEach(async function () {
+        vendor.requests.length = 0;
+        configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+        await insertProxyEndpoints(dbAdapter, [
+          {
+            url: `${vendor.url}/`,
+            apiKey: 'stub-vendor-key',
+            creditStrategy: 'openrouter',
+            supportsStreaming: true,
+          },
+          {
+            url: 'https://10.0.0.1/',
+            apiKey: 'private-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+          },
+        ]);
+        AllowedProxyDestinations.reset();
+      });
+      hooks.afterEach(function () {
+        resetOutbound();
+      });
+
+      function jwt() {
+        return createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+      }
+
+      // Answers OpenRouter generation-cost lookups with `costInUsd` and lets
+      // every other request through, returning the ids looked up.
+      function stubGenerationCost(costInUsd: number): string[] {
+        let lookups: string[] = [];
+        let realFetch = global.fetch.bind(globalThis);
+        sinon
+          .stub(global, 'fetch')
+          .callsFake(
+            async (input: string | URL | Request, init?: RequestInit) => {
+              let url =
+                typeof input === 'string'
+                  ? input
+                  : input instanceof URL
+                    ? input.href
+                    : input.url;
+              let match = /\/api\/v1\/generation\?id=([^&]+)/.exec(url);
+              if (match) {
+                lookups.push(decodeURIComponent(match[1]));
+                return new Response(
+                  JSON.stringify({
+                    data: { id: match[1], total_cost: costInUsd },
+                  }),
+                  {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                  },
+                );
+              }
+              return realFetch(input, init);
+            },
+          );
+        return lookups;
+      }
+
+      async function extraCredits(): Promise<number> {
+        let user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        return await sumUpCreditsLedger(dbAdapter, {
+          creditType: ['extra_credit', 'extra_credit_used'],
+          userId: user!.id,
+        });
+      }
+
+      // Forwards a POST to `url` and walks away once the first of the body
+      // has arrived.
+      async function abandonMidBody(url: string): Promise<void> {
+        await new Promise<void>((resolve, reject) => {
+          let forward = request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({ url, method: 'POST', requestBody: JSON.stringify({}) })
+            .buffer(true)
+            .parse((res, callback) => {
+              res.once('data', () => {
+                forward.abort();
+                resolve();
+              });
+              // Answered once, whichever way the abandoned response ends.
+              let answered = false;
+              let answer = () => {
+                if (!answered) {
+                  answered = true;
+                  callback(null, null);
+                }
+              };
+              res.on('end', answer);
+              res.on('error', answer);
+            });
+          forward.then(
+            () => reject(new Error('the forward completed before it was left')),
+            () => resolve(),
+          );
+        });
+      }
+
+      test("the incoming request's own headers never reach the vendor", async function (assert) {
+        let token = jwt();
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${token}`)
+          .set('Cookie', 'session=browser-session')
+          .set('X-Boxel-Consuming-Realm', 'http://127.0.0.1:4445/test/')
+          .set('X-Custom-Incoming', 'from-the-browser')
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ hello: 'vendor' }),
+            headers: { 'X-Vendor-Option': 'kept' },
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests.length,
+          1,
+          'one call reached the vendor',
+        );
+        let received = vendor.requests[0].headers;
+        assert.strictEqual(
+          received.authorization,
+          'Bearer stub-vendor-key',
+          'the vendor sees the stored credential, not the caller session token',
+        );
+        assert.false(
+          JSON.stringify(received).includes(token),
+          'the session token appears nowhere in what the vendor received',
+        );
+        assert.notOk(received.cookie, 'no cookie is forwarded');
+        assert.notOk(
+          received['x-custom-incoming'],
+          'no incoming header is forwarded',
+        );
+        assert.false(
+          Object.keys(received).some((name) => name.startsWith('x-boxel-')),
+          'no X-Boxel header is forwarded',
+        );
+        assert.strictEqual(
+          received['x-vendor-option'],
+          'kept',
+          "the body's own headers are sent",
+        );
+        assert.strictEqual(vendor.requests[0].body, '{"hello":"vendor"}');
+      });
+
+      test('a credential slot in a forward is sent as the text it is, never filled', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ token: '{{apiKey}}' }),
+            headers: { 'X-Vendor-Key': '{{userKey}}' },
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests[0].headers['x-vendor-key'],
+          '{{userKey}}',
+          'the header carries the slot as written',
+        );
+        assert.strictEqual(
+          vendor.requests[0].body,
+          '{"token":"{{apiKey}}"}',
+          'the body carries the slot as written',
+        );
+      });
+
+      test('the vendor receives the sealed key', async function (assert) {
+        let [row] = await dbAdapter.execute(
+          `SELECT api_key_ciphertext IS NOT NULL AS sealed FROM proxy_endpoints WHERE url = $1`,
+          { bind: [`${vendor.url}/`] },
+        );
+        assert.true(row.sealed, 'the endpoint key is sealed');
+
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ hello: 'vendor' }),
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests[0].headers.authorization,
+          'Bearer stub-vendor-key',
+        );
+      });
+
+      test('an X-Boxel header in the forwarded headers is refused', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ hello: 'vendor' }),
+            headers: { 'x-boxel-realm-url': 'http://127.0.0.1:4445/test/' },
+          });
+
+        assert.strictEqual(response.status, 400);
+        assert.true(
+          JSON.stringify(response.body).includes('x-boxel-realm-url'),
+          'the refusal names the header',
+        );
+        assert.strictEqual(
+          vendor.requests.length,
+          0,
+          'nothing reached the vendor',
+        );
+      });
+
+      test('an allowlisted destination on a private address is refused', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: 'https://10.0.0.1/v1/things',
+            method: 'POST',
+            requestBody: JSON.stringify({}),
+          });
+
+        assert.strictEqual(response.status, 502);
+        assert.false(
+          JSON.stringify(response.body).includes('private-key'),
+          'the refusal does not carry the credential',
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the slot is given back',
+        );
+      });
+
+      test("a vendor's error status passes through", async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/status/429`,
+            method: 'POST',
+            requestBody: JSON.stringify({}),
+          });
+
+        assert.strictEqual(response.status, 429);
+        assert.deepEqual(response.body, { status: 429 });
+      });
+
+      test('a vendor echoing the header system key returns nothing of it to the caller', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ hello: 'vendor' }),
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests[0]?.headers.authorization,
+          'Bearer stub-vendor-key',
+          'the vendor received the key',
+        );
+        assert.false(
+          response.text.includes('stub-vendor-key'),
+          `the key is not in the response: ${response.text}`,
+        );
+        assert.strictEqual(
+          response.body.headers.authorization,
+          'Bearer [REDACTED]',
+        );
+        assert.strictEqual(
+          response.body.body,
+          '{"hello":"vendor"}',
+          'the rest of the echo is unchanged',
+        );
+      });
+
+      test('a vendor echoing the url-parameter system key returns nothing of it to the caller', async function (assert) {
+        await insertProxyEndpoints(dbAdapter, [
+          {
+            url: `${vendor.alternateUrl}/echo`,
+            apiKey: 'stub-param-key-7f3e9a',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+            authMethod: 'url-parameter',
+            authParameterName: 'key',
+          },
+        ]);
+        AllowedProxyDestinations.reset();
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.alternateUrl}/echo?q=boxel`,
+            method: 'POST',
+            requestBody: JSON.stringify({}),
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests[0]?.path,
+          '/echo?q=boxel&key=stub-param-key-7f3e9a',
+          'the vendor received the key in its query string',
+        );
+        assert.false(
+          response.text.includes('stub-param-key-7f3e9a'),
+          `the key is not in the response: ${response.text}`,
+        );
+        assert.strictEqual(response.body.path, '/echo?q=boxel&key=[REDACTED]');
+      });
+
+      test('a streamed error echoing the system key reaches neither the caller nor the log', async function (assert) {
+        let log = logger('proxy-forward');
+        let logged: string[] = [];
+        let originalFactory = log.methodFactory;
+        let originalLevel = log.getLevel();
+        log.methodFactory = (methodName, level, loggerName) => {
+          let raw = originalFactory(methodName, level, loggerName);
+          return (...args: unknown[]) => {
+            logged.push(args.map(String).join(' '));
+            raw(...args);
+          };
+        };
+        log.setLevel('trace');
+        let response;
+        try {
+          response = await request
+            .post('/_request-forward')
+            .set('Accept', 'text/event-stream')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/respond`,
+              method: 'POST',
+              requestBody: JSON.stringify({
+                status: 401,
+                headers: { 'content-type': 'application/json' },
+                chunks: [
+                  '{"error":"Invalid key ',
+                  Buffer.from('Bearer stub-vendor-key').toString('base64'),
+                  ' (stub-vendor-key)"}',
+                ],
+              }),
+              stream: true,
+            });
+        } finally {
+          log.methodFactory = originalFactory;
+          log.setLevel(originalLevel);
+        }
+
+        assert.strictEqual(response.status, 401);
+        assert.true(response.text.includes('Invalid key'));
+        assert.false(
+          response.text.includes('stub-vendor-key'),
+          `the key is not in the response: ${response.text}`,
+        );
+        assert.false(
+          response.text.includes(
+            // The part of the encoding made only of the key's own bytes.
+            Buffer.from('Bearer stub-vendor-key').toString('base64').slice(12),
+          ),
+          'nor is its base64 form',
+        );
+        assert.true(
+          logged.some((line) => line.includes('Invalid key')),
+          'the vendor error is logged',
+        );
+        assert.false(
+          logged.some((line) => line.includes('stub-vendor-key')),
+          'without the key',
+        );
+      });
+
+      test('a multi-megabyte JSON response reaches the caller as it arrives, and is charged from its usage', async function (assert) {
+        // The vendor sends everything but the usage at the end and then
+        // waits. The caller is sent megabytes before that wait ends only if
+        // the forward passes the body on as it arrives instead of holding
+        // it until it is whole.
+        const bodyBytes = 4 * 1024 * 1024;
+        const releaseAfterBytes = 2 * 1024 * 1024;
+        let receivedBytes = 0;
+        let receivedBeforeRelease: number | undefined;
+        let release = () => {
+          if (receivedBeforeRelease === undefined) {
+            receivedBeforeRelease = receivedBytes;
+            vendor.releaseHeld();
+          }
+        };
+        // If the forward buffers, nothing arrives until the vendor finishes;
+        // let it finish so the test fails on its assertion rather than
+        // timing out.
+        let fallback = setTimeout(release, 10_000);
+
+        let response;
+        try {
+          response = await request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/completion?bytes=${bodyBytes}&cost=0.004&hold=1`,
+              method: 'POST',
+              requestBody: JSON.stringify({ model: 'image-model' }),
+            })
+            .buffer(true)
+            .parse((res, callback) => {
+              let chunks: Buffer[] = [];
+              res.on('data', (chunk: Buffer) => {
+                chunks.push(chunk);
+                receivedBytes += chunk.length;
+                if (receivedBytes >= releaseAfterBytes) {
+                  release();
+                }
+              });
+              res.on('end', () =>
+                callback(null, Buffer.concat(chunks).toString('utf8')),
+              );
+              res.on('error', (error: Error) => callback(error, null));
+            });
+        } finally {
+          clearTimeout(fallback);
+        }
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          response.headers['content-type'],
+          'application/json',
+        );
+        assert.true(
+          (receivedBeforeRelease ?? 0) >= releaseAfterBytes,
+          `the caller received ${receivedBeforeRelease} bytes before the vendor finished the body`,
+        );
+        let body = JSON.parse(response.body as string);
+        assert.strictEqual(body.id, 'gen-completion');
+        assert.strictEqual(
+          body.choices[0].message.content,
+          'A'.repeat(bodyBytes),
+          'the body arrives intact',
+        );
+        assert.deepEqual(body.usage, { cost: 0.004 });
+
+        // The response completes only once the call is settled, so the
+        // charge and the slot are read straight away, without waiting.
+        // 0.004 USD × 1000 = 4 credits.
+        assert.strictEqual(
+          await extraCredits(),
+          46,
+          'the call is charged (50 - 4 = 46) by the time its response completes',
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the slot is given back by the time the response completes',
+        );
+      });
+
+      test('a JSON response cut off after its generation id resets the caller and is charged for the generation', async function (assert) {
+        let lookups = stubGenerationCost(0.003);
+        try {
+          // The vendor drops the connection only once the caller has the
+          // start of the body, so the cut lands after the response began.
+          let outcome = await new Promise<string>((resolve) => {
+            request
+              .post('/_request-forward')
+              .set('Accept', 'application/json')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', `Bearer ${jwt()}`)
+              .send({
+                url: `${vendor.url}/completion?bytes=${256 * 1024}&hold=1&truncate=1`,
+                method: 'POST',
+                requestBody: JSON.stringify({}),
+              })
+              .buffer(true)
+              .parse((res, callback) => {
+                res.once('data', () => vendor.releaseHeld());
+                res.on('data', () => undefined);
+                res.on('end', () => {
+                  resolve('complete');
+                  callback(null, null);
+                });
+                res.on('aborted', () => resolve('reset'));
+                res.on('error', () => resolve('reset'));
+                res.on('close', () => resolve('reset'));
+              })
+              .then(
+                () => undefined,
+                () => resolve('reset'),
+              );
+          });
+
+          assert.strictEqual(
+            outcome,
+            'reset',
+            'the caller cannot take the partial body for a whole one',
+          );
+          // The usage never arrived; the generation is priced by its id.
+          // 0.003 USD × 1000 = 3 credits.
+          await waitUntil(async () => (await extraCredits()) === 47, {
+            timeoutMessage:
+              'the generation should be charged from its id (50 - 3 = 47)',
+          });
+          assert.deepEqual(lookups, ['gen-completion']);
+        } finally {
+          sinon.restore();
+        }
+      });
+
+      test('a charged call whose caller stops reading without leaving is given up on, read to its end and charged', async function (assert) {
+        configureClientStall(500);
+        // Any generation lookup would mean the usage at the end was never
+        // read.
+        let lookups = stubGenerationCost(0.003);
+        let forward: ReturnType<typeof request.post> | undefined;
+        try {
+          // Far more than the socket buffers between the vendor and the
+          // caller hold, so a caller that never reads holds the forward up.
+          forward = request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/completion?bytes=${24 * 1024 * 1024}&cost=0.004`,
+              method: 'POST',
+              requestBody: JSON.stringify({}),
+            })
+            .buffer(true)
+            .parse((res, _callback) => {
+              // The node parser is handed the raw incoming message.
+              (res as unknown as NodeJS.ReadableStream).pause();
+            });
+          forward.then(
+            () => undefined,
+            () => undefined,
+          );
+
+          // 0.004 USD × 1000 = 4 credits, from the usage at the end of the
+          // body, read once the stalled caller was given up on.
+          await waitUntil(async () => (await extraCredits()) === 46, {
+            timeout: 20000,
+            timeoutMessage:
+              'the stalled call should be charged from its usage (50 - 4 = 46)',
+          });
+          assert.deepEqual(lookups, [], 'no generation was looked up');
+          await waitUntil(async () => (await inFlightReservations()) === 0, {
+            timeoutMessage: 'the slot should be given back',
+          });
+        } finally {
+          forward?.abort();
+          sinon.restore();
+          resetClientStall();
+        }
+      });
+
+      test('a charged call whose caller leaves mid-body is still read to its end and charged', async function (assert) {
+        let abandonedBefore = vendor.abandonedResponses();
+        await abandonMidBody(
+          `${vendor.url}/completion?bytes=${512 * 1024}&cost=0.004&hold=1`,
+        );
+        // The caller is gone; the vendor now sends the usage that prices the
+        // call.
+        vendor.releaseHeld();
+
+        await waitUntil(async () => (await extraCredits()) === 46, {
+          timeoutMessage:
+            'the call should be charged from the usage at the end (50 - 4 = 46)',
+        });
+        assert.strictEqual(
+          vendor.abandonedResponses(),
+          abandonedBefore,
+          "the vendor's response was read to its end",
+        );
+        await waitUntil(async () => (await inFlightReservations()) === 0, {
+          timeoutMessage: 'the slot should be given back',
+        });
+      });
+
+      test('an uncharged call whose caller leaves mid-body cancels the upstream body', async function (assert) {
+        // The same vendor under its other name, as a destination that is not
+        // charged for.
+        configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+        await insertProxyEndpoints(dbAdapter, [
+          {
+            url: `${vendor.alternateUrl}/`,
+            apiKey: 'stub-vendor-free-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+          },
+        ]);
+        AllowedProxyDestinations.reset();
+
+        // The vendor holds the rest of the body back and never sends it, so
+        // only the caller leaving can end the read.
+        let abandonedBefore = vendor.abandonedResponses();
+        await abandonMidBody(
+          `${vendor.alternateUrl}/completion?bytes=${512 * 1024}&hold=1`,
+        );
+
+        await waitUntil(
+          async () => vendor.abandonedResponses() === abandonedBefore + 1,
+          {
+            timeoutMessage:
+              "the caller leaving should cancel the vendor's held response",
+          },
+        );
+        await waitUntil(async () => (await inFlightReservations()) === 0, {
+          timeoutMessage: 'the slot should be given back',
+        });
+        assert.strictEqual(await extraCredits(), 50, 'nothing is charged');
+      });
+
+      test('a vendor answer that is not JSON is answered with a 500 and charges nothing', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/not-json`,
+            method: 'POST',
+            requestBody: JSON.stringify({}),
+          });
+
+        assert.strictEqual(response.status, 500);
+        assert.false(
+          response.text.includes('Bad gateway'),
+          "the vendor's page is not passed on",
+        );
+        let user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user!.id,
+          }),
+          50,
+          'nothing is charged',
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the slot is given back',
+        );
+      });
+
+      test('an OpenRouter-shaped stream is forwarded and charged', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'text/event-stream')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/sse?cost=0.003`,
+            method: 'POST',
+            requestBody: JSON.stringify({ stream: true }),
+            stream: true,
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.true(response.text.includes('"content":"Hello"'));
+        assert.true(response.text.includes('data: [DONE]'));
+        assert.strictEqual(
+          vendor.requests[0]?.headers.authorization,
+          'Bearer stub-vendor-key',
+        );
+
+        // 0.003 USD × 1000 = 3 credits.
+        let user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () =>
+            (await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            })) === 47,
+          { timeoutMessage: 'the stream should be charged (50 - 3 = 47)' },
+        );
+      });
+
+      test('a cost lookup whose host resolves to a private address is refused and the charge is skipped', async function (assert) {
+        configureOutbound({
+          devAllowlist: ['127.0.0.1'],
+          resolveHost: async (hostname) =>
+            hostname === 'openrouter.ai' ? ['10.0.0.1'] : ['127.0.0.1'],
+        });
+        // The warnings the cost lookup and the credit strategy log, with the
+        // values they were logged with.
+        let warnings: unknown[][] = [];
+        let channels = [logger('ai-billing'), logger('credit-strategies')];
+        let restore = channels.map((log) => {
+          let originalFactory = log.methodFactory;
+          let originalLevel = log.getLevel();
+          log.methodFactory = (methodName, level, loggerName) => {
+            let raw = originalFactory(methodName, level, loggerName);
+            return (...args: unknown[]) => {
+              if (methodName === 'warn') {
+                warnings.push(args);
+              }
+              raw(...args);
+            };
+          };
+          log.setLevel('warn');
+          return () => {
+            log.methodFactory = originalFactory;
+            log.setLevel(originalLevel);
+          };
+        });
+        let skipped = () =>
+          warnings.some(([message]) =>
+            String(message).includes(
+              'Failed to fetch generation cost for user @testuser:localhost (generationId: gen-stub), credit deduction skipped',
+            ),
+          );
+        try {
+          let response = await request
+            .post('/_request-forward')
+            .set('Accept', 'text/event-stream')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/sse?cost=none`,
+              method: 'POST',
+              requestBody: JSON.stringify({ stream: true }),
+              stream: true,
+            });
+
+          assert.strictEqual(response.status, 200);
+          assert.true(response.text.includes('data: [DONE]'));
+
+          await waitUntil(async () => skipped(), {
+            timeoutMessage:
+              'the refused cost lookup should skip the charge with a warning',
+          });
+          let attempts = warnings.filter(([message]) =>
+            String(message).includes('to fetch generation cost failed'),
+          );
+          assert.strictEqual(
+            attempts.length,
+            1,
+            'a refused lookup is not retried',
+          );
+          let error = attempts[0]?.[1];
+          assert.true(
+            error instanceof OutboundRefusedError,
+            'the outbound guard refused the lookup',
+          );
+          assert.strictEqual(
+            (error as OutboundRefusedError | undefined)?.reason,
+            'address',
+          );
+          let user = await getUserByMatrixUserId(
+            dbAdapter,
+            '@testuser:localhost',
+          );
+          assert.strictEqual(
+            await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            }),
+            50,
+            'nothing is charged',
+          );
+        } finally {
+          restore.forEach((undo) => undo());
+        }
+      });
+
+      // What an operator or a caller can see of a send-path failure: the
+      // proxy's log lines, the event Sentry would receive, and the response.
+      module('credentials stay out of what is recorded', function (hooks) {
+        let sentry: SentryCapture | undefined;
+        const channels = ['request-forward', 'proxy-forward', 'outbound'];
+
+        hooks.beforeEach(function () {
+          configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+        });
+        hooks.afterEach(async function () {
+          await sentry?.stop();
+          sentry = undefined;
+        });
+
+        async function forward(url: string) {
+          return await request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({ url, method: 'GET' });
+        }
+
+        test('a stored key Node refuses as a header value is in no log line, Sentry event or response', async function (assert) {
+          // The part of the key before the line break, which Node quotes in
+          // its error along with the rest.
+          let quoted = 'sk-planted-0123456789/abc+def=';
+          let destination = `${vendor.alternateUrl}/echo`;
+          await insertProxyEndpoints(dbAdapter, [
+            {
+              url: `${destination}`,
+              apiKey: `${quoted}\r\nInjected: 1`,
+              creditStrategy: 'no-credit',
+              supportsStreaming: false,
+            },
+          ]);
+          AllowedProxyDestinations.reset();
+          sentry = startSentryCapture({ tracing: true });
+
+          // The caller's own query string may carry a token or user content;
+          // a send failure records only the origin and path.
+          let callerToken = 'planted-caller-token-0123456789';
+          let response: Awaited<ReturnType<typeof forward>> | undefined;
+          let lines = await logLinesDuring(channels, async () => {
+            response = await forward(
+              `${destination}?caller_token=${callerToken}`,
+            );
+          });
+          let sent = await sentry.flushed();
+
+          assert.strictEqual(response!.status, 500);
+          assert.deepEqual(
+            JSON.parse(response!.text),
+            { errors: ['An error occurred while processing the request'] },
+            'the caller sees the same message as before',
+          );
+          assert.strictEqual(vendor.requests.length, 0, 'nothing was sent');
+          let failure = lines.find((line) =>
+            line.message.includes('Error in request forward handler'),
+          );
+          assert.ok(failure, 'the failure is logged');
+          assert.true(
+            failure!.message.includes(
+              `(key=system:${destination} url=${destination})`,
+            ),
+            'the log line names the key: ' + failure!.message,
+          );
+          assert.true(
+            failure!.message.includes('invalid header value'),
+            "the log line keeps Node's reason",
+          );
+          assert.true(
+            sent.includes('OutboundSendError'),
+            'the error reached Sentry',
+          );
+          assert.false(
+            lines.some((line) => leaksCredential(line.message, quoted)),
+            'no log line carries the key',
+          );
+          assert.false(leaksCredential(sent, quoted), 'Sentry does not');
+          assert.false(
+            lines.some((line) => line.message.includes(callerToken)),
+            "no log line carries the caller's query string",
+          );
+          assert.false(
+            sent.includes(callerToken),
+            "Sentry does not carry the caller's query string",
+          );
+          assert.false(
+            leaksCredential(response!.text, quoted),
+            'the response does not',
+          );
+        });
+
+        test('a url-parameter key a vendor echoes as malformed JSON is in no log line, breadcrumb, Sentry event or response', async function (assert) {
+          // Short enough that JSON.parse would quote it whole, and starting
+          // with a byte a bare JSON scalar can start with, so the forward
+          // would hand the body to JSON.parse. The response is scrubbed before
+          // the forward reads it, so what it reads is the marker instead.
+          let key = 'tsk-0123456789';
+          let precondition = '';
+          try {
+            JSON.parse(key);
+          } catch (error) {
+            precondition = (error as Error).message;
+          }
+          assert.true(
+            precondition.includes(key),
+            'precondition: JSON.parse quotes the key it fails on',
+          );
+          let destination = `${vendor.alternateUrl}/reflect-credential`;
+          await insertProxyEndpoints(dbAdapter, [
+            {
+              url: `${destination}`,
+              apiKey: key,
+              creditStrategy: 'no-credit',
+              supportsStreaming: false,
+              authMethod: 'url-parameter',
+              authParameterName: 'key',
+            },
+          ]);
+          AllowedProxyDestinations.reset();
+          sentry = startSentryCapture({ tracing: true });
+
+          let response: { status: number; text: string } | undefined;
+          let lines = await logLinesDuring(channels, async () => {
+            let answer = await request
+              .post('/_request-forward')
+              .set('Accept', 'application/json')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', `Bearer ${jwt()}`)
+              .send({ url: `${destination}?q=1`, method: 'GET' })
+              // The marker is passed on as the vendor's body, which is not a
+              // JSON document, so it is read as text.
+              .buffer(true)
+              .parse((res, callback) => {
+                let text = '';
+                res.setEncoding('utf8');
+                res.on('data', (chunk: string) => (text += chunk));
+                res.on('end', () => callback(null, text));
+              });
+            response = { status: answer.status, text: answer.body as string };
+          });
+          Sentry.captureException(new Error('probe for breadcrumbs'));
+          let sent = await sentry.flushed();
+
+          assert.strictEqual(
+            new URL(vendor.requests[0].path, vendor.url).searchParams.get(
+              'key',
+            ),
+            key,
+            'the vendor received the key in the query string',
+          );
+          assert.strictEqual(
+            response!.text,
+            '[REDACTED]',
+            'the key was replaced before the forward read the body',
+          );
+          assert.false(
+            lines.some((line) =>
+              line.message.includes('Error in request forward handler'),
+            ),
+            'nothing is left for JSON.parse to fail on and quote',
+          );
+          let size = lines.find((line) =>
+            line.message.startsWith('outbound response size:'),
+          );
+          assert.true(
+            size?.message.includes(`destination=${destination} `),
+            'the size line records the URL as the caller sent it',
+          );
+          assert.false(
+            lines.some((line) => leaksCredential(line.message, key)),
+            'no log line carries the key',
+          );
+          assert.false(
+            leaksCredential(sent, key),
+            'no Sentry event or breadcrumb carries it',
+          );
+          assert.false(
+            leaksCredential(response!.text, key),
+            'the response does not',
+          );
+        });
+
+        test('no run of a full-length key a vendor quotes back reaches a log line, Sentry event or response', async function (assert) {
+          let key = 'sk-or-v1-8d2f61c04b9e3a75f0c1d6e28b4a9f3c7e05d1b6';
+          let destination = `${vendor.alternateUrl}/respond`;
+          await insertProxyEndpoints(dbAdapter, [
+            {
+              url: `${destination}`,
+              apiKey: key,
+              creditStrategy: 'no-credit',
+              supportsStreaming: false,
+            },
+          ]);
+          AllowedProxyDestinations.reset();
+          sentry = startSentryCapture({ tracing: true });
+
+          // A body that isn't JSON and starts with a truncated copy of the
+          // key, the way a vendor's plain-text error might. JSON.parse quotes
+          // the start of what it fails on.
+          let response: Awaited<ReturnType<typeof forward>> | undefined;
+          let lines = await logLinesDuring(channels, async () => {
+            response = await request
+              .post('/_request-forward')
+              .set('Accept', 'application/json')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', `Bearer ${jwt()}`)
+              .send({
+                url: destination,
+                method: 'POST',
+                requestBody: JSON.stringify({
+                  status: 401,
+                  headers: { 'content-type': 'text/plain' },
+                  chunks: [`${key.slice(0, 31)}… is not a valid key`],
+                }),
+              });
+          });
+          Sentry.captureException(new Error('probe for breadcrumbs'));
+          let sent = await sentry.flushed();
+
+          assert.strictEqual(
+            vendor.requests[0]?.headers.authorization,
+            `Bearer ${key}`,
+            'the vendor received the key',
+          );
+          assert.strictEqual(response!.status, 500);
+          assert.true(
+            lines.some((line) => line.message.includes('SyntaxError')),
+            'the parse failure is logged',
+          );
+          // Every run of the key long enough to identify it.
+          let runs: string[] = [];
+          for (let start = 0; start + 10 <= key.length; start++) {
+            runs.push(key.slice(start, start + 10).toLowerCase());
+          }
+          let carries = (text: string) =>
+            runs.some((run) => text.toLowerCase().includes(run));
+          assert.false(
+            lines.some((line) => carries(line.message)),
+            'no log line carries any of it',
+          );
+          assert.false(carries(sent), 'no Sentry event or breadcrumb does');
+          assert.false(carries(response!.text), 'the response does not');
+        });
+      });
+
+      // What a Sentry event raised during a forward carries of the incoming
+      // request: the caller's URL, headers and body are theirs, and the
+      // Authorization header is their session token.
+      module('the incoming request in a Sentry event', function (hooks) {
+        let sentry: SentryCapture | undefined;
+        const destinationPath = '/respond';
+
+        hooks.beforeEach(async function () {
+          configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+          await insertProxyEndpoints(dbAdapter, [
+            {
+              url: `${vendor.alternateUrl}${destinationPath}`,
+              apiKey: 'telemetry-vendor-key',
+              creditStrategy: 'no-credit',
+              supportsStreaming: false,
+            },
+          ]);
+          AllowedProxyDestinations.reset();
+        });
+        hooks.afterEach(async function () {
+          await sentry?.stop();
+          sentry = undefined;
+        });
+
+        // A forward whose vendor answers with a body that is not JSON, so
+        // the handler fails and reports the error to Sentry.
+        async function failingForward(markers: {
+          token: string;
+          urlToken: string;
+          bodyMarker: string;
+          cookie: string;
+          query: string;
+        }) {
+          return await request
+            .post(`/_request-forward?caller=${markers.query}`)
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${markers.token}`)
+            .set('Cookie', `session=${markers.cookie}`)
+            .send({
+              url: `${vendor.alternateUrl}${destinationPath}?token=${markers.urlToken}`,
+              method: 'POST',
+              requestBody: JSON.stringify({
+                status: 401,
+                headers: { 'content-type': 'text/plain' },
+                chunks: ['not a JSON document'],
+                marker: markers.bodyMarker,
+              }),
+            });
+        }
+
+        function markers() {
+          return {
+            token: jwt(),
+            urlToken: 'url-query-token-5c1e09',
+            bodyMarker: 'request-body-marker-7f3a2d',
+            cookie: 'cookie-marker-b84e61',
+            query: 'incoming-query-marker-2d9c40',
+          };
+        }
+
+        test('keeps only the method and path of a failed forward', async function (assert) {
+          sentry = startSentryCapture({
+            tracing: false,
+            incomingRequests: true,
+          });
+          let planted = markers();
+          // With the request log on, Sentry keeps its line, which names the
+          // incoming URL, as a breadcrumb.
+          let response: Awaited<ReturnType<typeof failingForward>> | undefined;
+          let lines = await withLogDefinition('realm:requests', 'info', () =>
+            logLinesDuring(['realm:requests'], async () => {
+              response = await failingForward(planted);
+            }),
+          );
+          let sent = await sentry.flushed();
+          let events = await sentry.flushedEvents();
+
+          assert.true(
+            lines.some((line) => line.message.includes(planted.query)),
+            'precondition: the request log line names the incoming query',
+          );
+          assert.strictEqual(response!.status, 500, 'the forward failed');
+          assert.strictEqual(events.length, 1, 'the failure reached Sentry');
+          let recorded = events[0].request as
+            | { method?: string; url?: string }
+            | undefined;
+          assert.deepEqual(
+            Object.keys(recorded ?? {}).sort(),
+            ['method', 'url'],
+            'the event has the request, and only its method and URL',
+          );
+          assert.strictEqual(recorded?.method, 'POST');
+          assert.strictEqual(
+            new URL(recorded!.url!).pathname,
+            '/_request-forward',
+          );
+          assert.strictEqual(
+            new URL(recorded!.url!).search,
+            '',
+            'the URL has no query string',
+          );
+          for (let [name, value] of Object.entries(planted)) {
+            assert.false(
+              sent.includes(value),
+              `no envelope carries the ${name}`,
+            );
+          }
+        });
+
+        test("a forward's transaction keeps its route, method and status and none of its query strings", async function (assert) {
+          sentry = startSentryCapture({
+            tracing: true,
+            incomingRequests: true,
+          });
+          let planted = markers();
+          let response = await failingForward(planted);
+          let sent = await sentry.flushed();
+          let transactions = await sentry.flushedTransactions();
+
+          assert.strictEqual(response.status, 500, 'the forward failed');
+          let transaction = transactions.find(
+            (t) => t.transaction === 'POST /_request-forward',
+          );
+          assert.ok(transaction, 'the forward was recorded as a transaction');
+          let contexts = transaction!.contexts as {
+            trace: { data: Record<string, unknown> };
+            response?: { status_code?: number };
+          };
+          let data = contexts.trace.data;
+          assert.strictEqual(data['http.method'], 'POST', 'the method is kept');
+          assert.strictEqual(
+            data['http.target'],
+            '/_request-forward',
+            'the target keeps its path and no query string',
+          );
+          assert.strictEqual(
+            new URL(data['http.url'] as string).pathname,
+            '/_request-forward',
+            'the URL keeps its path',
+          );
+          assert.strictEqual(
+            new URL(data['http.url'] as string).search,
+            '',
+            'the URL has no query string',
+          );
+          assert.false('http.query' in data, 'the query string is dropped');
+          assert.strictEqual(
+            contexts.response?.status_code,
+            500,
+            'the status is kept',
+          );
+          assert.strictEqual(typeof transaction!.start_timestamp, 'number');
+          assert.strictEqual(typeof transaction!.timestamp, 'number');
+          let spanURLs = JSON.stringify(transaction!.spans ?? []);
+          assert.false(
+            spanURLs.includes(vendor.alternateUrl),
+            'the guarded call to the vendor records no span',
+          );
+          for (let [name, value] of Object.entries(planted)) {
+            assert.false(
+              sent.includes(value),
+              `no envelope carries the ${name}`,
+            );
+          }
+        });
+
+        // Sentry copies a body only from `data` listeners. The forward reads
+        // its body through the stream's async iterator, so a multi-megabyte
+        // body is never buffered for Sentry at all.
+        test("the forward's body is not buffered for Sentry", async function (assert) {
+          // Without the hook, to see what the instrumentation itself recorded.
+          sentry = startSentryCapture({
+            tracing: false,
+            incomingRequests: true,
+            scrub: false,
+          });
+          let planted = markers();
+          let response = await failingForward(planted);
+          let events = await sentry.flushedEvents();
+
+          assert.strictEqual(response.status, 500, 'the forward failed');
+          assert.strictEqual(events.length, 1, 'the failure reached Sentry');
+          let recorded = events[0].request as
+            | { headers?: Record<string, string>; data?: unknown }
+            | undefined;
+          assert.strictEqual(
+            recorded?.headers?.authorization,
+            `Bearer ${planted.token}`,
+            'precondition: the instrumentation recorded the incoming request',
+          );
+          assert.false('data' in (recorded ?? {}), 'it recorded no body');
+        });
+      });
     });
   });
 });

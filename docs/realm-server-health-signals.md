@@ -15,9 +15,11 @@ signal answers which question, and what to do with each.
 ### `GET /` — the load balancer's check
 
 `healthCheck` in `packages/realm-server/middleware/index.ts` answers `OK` from
-memory to any request whose user-agent starts with `ELB-HealthChecker`, ahead of
-the host-app and realm-serving middleware. It touches no database, no filesystem,
-and no realm state.
+memory to any request whose user-agent starts with a prefix listed in
+`HEALTH_CHECK_USER_AGENTS`, ahead of the host-app and realm-serving middleware.
+The deployed start scripts set it to `ELB-HealthChecker`, and a deployed server
+with it unset logs a warning at boot. It touches no
+database, no filesystem, and no realm state.
 
 It is served **by the event loop**, so it answers only when the loop has capacity
 to answer. That is what makes it the right signal for routing: a target that
@@ -71,12 +73,63 @@ those cases, but it is a reason not to over-trust a 200 here on its own.
 lag crosses a threshold or a search is in flight:
 
 ```
-eventLoopLagMs(mean/p99/max)=… inFlightSearch=… heapMB=…
+eventLoopLagMs(mean/p99/max)=… inFlightSearch=… searchRequests=… searchLoad=… realmSearchLoadMax=… heapMB=…
 ```
+
+`inFlightSearch` counts admission slots — concurrent search _computations_,
+since a request the live-search cache answers from another's computation hands
+its slot back early. `searchRequests` counts every admitted search request until
+its response ends, and `searchLoad` is that count's time-weighted mean. The
+first two differ by the live-search cache's miss rate.
+
+The link-shape policy's thresholds are compared against a realm's own reading —
+the same mean over only the requests in flight that name the realm — so a busy
+realm does not degrade its idle neighbours. A request naming several realms
+counts in full toward each, so the per-realm readings need not sum to
+`searchLoad`. `realmSearchLoadMax` is the highest of those
+per-realm readings: the number to hold against a rung. It never exceeds
+`searchLoad`, and when load is concentrated on one realm the two are close.
 
 Silent on an idle, healthy server — so its presence in the logs is itself the
 signal. Lag climbing in step with `inFlightSearch` is the fingerprint of the loop
 being starved by concurrent search serialization.
+
+The line also reports the realm event queue: the per-process line every realm
+event takes to its subscribers' session rooms on synapse
+(`realm-event-dispatcher.ts`):
+
+```
+realmEventsQueued=… realmEventQueuedKB=… realmEventQueueAgeMs=… realmEventSendsInFlight=… realmEventSends=… realmEventSendMs(mean/max)=… realmEventFailedSends=… realmEventBackPressure=… realmEventsCoalesced=… realmEventsDropped=…
+```
+
+`realmEventQueueAgeMs` is how long the oldest event still waiting to start has
+waited, which is the delay a browser sees on top of the send itself. A burst
+that drains keeps it low however deep the queue gets, so it, not the depth, is
+what the "Realm Server Realm Event Backlog" alert reads. When it climbs, the
+next field to read is `realmEventBackPressure`. It counts the sends and logins in
+the window that synapse, or the proxy in front of it, answered with 429, 502,
+503 or 504, did not answer within 30 seconds, or could not be reached for:
+
+- Nonzero: synapse is overloaded, and the queue is pausing to let it recover.
+  Look at synapse CPU and at what is writing in bulk.
+- Zero: the queue is running at its configured rate. That rate is set by
+  `REALM_EVENT_SENDS_PER_SECOND` (default 50) and
+  `REALM_EVENT_MAX_SENDS_IN_FLIGHT` (default 8).
+
+`realmEventsDropped` counts events discarded because the queue passed
+`REALM_EVENT_MAX_QUEUED_BYTES` (default 64 MiB). The realm with the longest
+backlog loses its oldest queued event, preferring one that isn't the completion
+of an indexing pass (`incremental` or `full`).
+
+The queue is in memory. A server stopping on purpose waits up to 10 seconds for
+it to empty before closing its database. If it is not empty by then, the server
+logs `realm events still undelivered at shutdown` with the counts it is giving
+up on.
+
+The counters (`realmEventSends`, `realmEventFailedSends`,
+`realmEventBackPressure`, `realmEventsCoalesced`, `realmEventsDropped`) cover
+the window since the previous line. The others are read at the moment of the
+sample.
 
 ## `_readiness-check` is not one of them
 
@@ -95,11 +148,21 @@ no per-request timeout of their own.
 
 Blocking is therefore the correct behavior, not a symptom. The endpoint holds the
 request open while work is outstanding and answers 503 with `Retry-After` plus an
-`X-Boxel-Not-Ready: index | prerender-html` header naming the stage. Every caller
-retries on a non-ok status, so a 503 costs a poll rather than an error — which is
-also why the hold is short by design: a hold that outlives a caller's own deadline
-converts its poll loop into a single failed attempt, so the budget stays under the
-shortest deadline any caller brings.
+`X-Boxel-Not-Ready: startup | index | prerender-html` header naming the stage.
+Every caller retries on a non-ok status, so a 503 costs a poll rather than an
+error — which is also why the hold is short by design: a hold that outlives a
+caller's own deadline converts its poll loop into a single failed attempt, so the
+budget stays under the shortest deadline any caller brings.
+
+One stage is terminal. A brand-new realm whose first from-scratch index failed —
+the worker gave up, or the job hit its wall-clock limit — is mounted over an empty
+index. Readiness answers 503 with `X-Boxel-Not-Ready: index-failed`, the failure
+in the body, and no `Retry-After`: a false ready would hand the caller a realm that
+serves nothing, and `index` would keep it polling for work that is not coming.
+The publish flow's poll and the CI realm wait both stop on it. The state is read
+from the same rows every replica reads — the realm has no index, and the newest
+from-scratch job for it was rejected — so a reindex from any path clears it the
+moment it lands.
 
 The gating has to read shared state, because in a multi-replica deployment the poll
 need not reach the replica that did the work. In-process indexing state is
@@ -118,13 +181,22 @@ gate, which likewise treats a failed render as work that is finished. A realm wh
 indexing failed surfaces as missing or errored content, not as a readiness check
 that hangs forever.
 
+Which jobs count is narrower than the lane. A realm's indexing concurrency group
+serializes everything that must not overlap an index pass, and not all of that
+writes the index — the daily scoped-CSS sweep joins the lane for mutual exclusion
+alone. The gate reads only the index-writing types, so a queued or wedged sweep
+holds the lane while readiness passes over it. Gating on the whole lane instead
+would report every realm the sweep touches as mid-index for as long as the
+background queue takes to drain it, which is a claim about the queue rather than
+about any realm's index.
+
 Two consequences follow from reading shared state, both intended. A deploy enqueues
 a system reindex for every realm, so readiness across the fleet reports not-ready
 until those passes drain — the realms really are behind their source. And a wedged
-worker holds its realm's lane until the reservation reaper collects it, so that
-realm reports not-ready on every replica for as long as that takes. Both are the
-answer a caller can act on: the alternative is a 200 from whichever replica happens
-to be ignorant of the work.
+worker on an index job holds its realm's gate until the reservation reaper collects
+it, so that realm reports not-ready on every replica for as long as that takes. Both
+are the answer a caller can act on: the alternative is a 200 from whichever replica
+happens to be ignorant of the work.
 
 ## An event-loop-gated failure is honest
 

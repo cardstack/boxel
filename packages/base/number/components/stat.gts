@@ -199,7 +199,7 @@ export class StatEmbedded extends GlimmerComponent<StatSignature> {
       .stat-subtitle {
         font-size: 0.875rem;
         font-weight: 600;
-        color: var(--success);
+        color: var(--success-ink);
         display: flex;
         align-items: center;
         gap: 0.25rem;

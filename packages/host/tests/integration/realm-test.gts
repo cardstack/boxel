@@ -1,5 +1,16 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import {
+  FieldDef,
+  contains,
+  containsMany,
+  linksTo,
+  linksToMany,
+  Component,
+  CardDef,
+  field,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -32,18 +43,6 @@ import {
   getFileCreatedAt,
   realmConfigCardJSON,
 } from '../helpers';
-import {
-  setupBaseRealm,
-  FieldDef,
-  contains,
-  containsMany,
-  linksTo,
-  linksToMany,
-  Component,
-  CardDef,
-  StringField,
-  field,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { searchCardsForTest } from '../helpers/search-cards';
 import { setupRenderingTest } from '../helpers/setup';
@@ -57,7 +56,6 @@ let loader: Loader;
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
@@ -135,6 +133,7 @@ module('Integration | realm', function (hooks) {
     // The card+json GET stamps the index-data generation in per-instance meta;
     // it's server metadata not asserted by this structural comparison.
     delete json.data.meta.generation;
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -290,6 +289,7 @@ module('Integration | realm', function (hooks) {
     // The card+json GET stamps the index-data generation in per-instance meta;
     // it's server metadata not asserted by this structural comparison.
     delete json.data.meta.generation;
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -756,9 +756,22 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 201, 'successful http status');
     let json = await response.json();
     let id = json.data.id.split('/').pop()!;
-    let ownerCreatedAt = await getFileCreatedAt(realm, 'dir/owner.json');
     let petCreatedAt = await getFileCreatedAt(realm, `Pet/${id}.json`);
     assert.ok(uuidValidate(id), 'card ID is a UUID');
+    // A write response reports the stored file's `version`, a hash of the bytes
+    // the commit wrote. Asserted well-formed and then dropped before the
+    // structural comparison, the way `generation` is: this adapter keeps its
+    // files in memory and does not hand the stored bytes back verbatim, so
+    // recomputing the hash here would compare against a re-serialization rather
+    // than against what was stored. That the reported version agrees with the
+    // bytes on disk is pinned where real files exist, in the realm-server card
+    // endpoint tests, for both a create and a patch.
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -774,10 +787,6 @@ module('Integration | realm', function (hooks) {
           owner: {
             links: {
               self: `../dir/owner`,
-            },
-            data: {
-              type: 'card',
-              id: `${testRealmURL}dir/owner`,
             },
           },
         },
@@ -797,38 +806,6 @@ module('Integration | realm', function (hooks) {
           self: `${testRealmURL}Pet/${id}`,
         },
       },
-      included: [
-        {
-          type: 'card',
-          id: `${testRealmURL}dir/owner`,
-          attributes: {
-            cardDescription: 'Person',
-            email: null,
-            posts: null,
-            cardThumbnailURL: null,
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-            cardTitle: 'Hassan Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            cardInfo,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}person`,
-              name: 'Person',
-            },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}dir/owner.json`,
-            ),
-            resourceCreatedAt: ownerCreatedAt!,
-            realmInfo: testRealmInfo,
-            realmURL: testRealmURL,
-          },
-          links: {
-            self: `./owner`,
-          },
-        },
-      ],
     });
     let fileRef = await adapter.openFile(`Pet/${id}.json`);
     if (!fileRef) {
@@ -1126,6 +1103,12 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -1204,6 +1187,166 @@ module('Integration | realm', function (hooks) {
     );
   });
 
+  test('realm PATCH replaces a primitive field holding an object rather than merging into it', async function (assert) {
+    // A JSON-valued primitive is one value, so a key the patch leaves out is a
+    // key the card no longer has. A compound field beside it still merges, so
+    // a patch can name only the nested fields it changes.
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'realm.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              cardInfo: { name: 'Settings Workspace', summary: 'Kept' },
+              config: { approver: '@mae:localhost', retired: true },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}realm`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              cardInfo: { name: 'Renamed Workspace' },
+              config: { approvers: '@mae:localhost' },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        }),
+      }),
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let fileRef = await adapter.openFile('realm.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    let { attributes } = JSON.parse(fileRef.content as string).data;
+    assert.deepEqual(
+      attributes.config,
+      { approvers: '@mae:localhost' },
+      'the stored map is the one the patch sent, with the renamed and dropped keys gone',
+    );
+    assert.strictEqual(
+      attributes.cardInfo.name,
+      'Renamed Workspace',
+      'the compound field takes the nested value the patch names',
+    );
+    assert.strictEqual(
+      attributes.cardInfo.summary,
+      'Kept',
+      'and keeps the nested value the patch leaves out',
+    );
+  });
+
+  test('realm PATCH replaces a primitive inside a compound field, by the type the card names for it', async function (assert) {
+    let { JsonField } = await loader.import<
+      typeof import('@cardstack/base/json-field')
+    >('@cardstack/base/json-field');
+
+    class Settings extends FieldDef {
+      @field label = contains(StringField);
+      @field values = contains(JsonField);
+    }
+    // Declares a primitive the declared type does not have, so a walk that
+    // read only the declared type would never find it.
+    class SpecialSettings extends Settings {
+      @field extra = contains(JsonField);
+    }
+    class Holder extends CardDef {
+      @field settings = contains(Settings);
+      @field special = contains(Settings);
+    }
+
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'holder.gts': { Holder, Settings, SpecialSettings },
+        'holder-1.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              settings: { label: 'Kept', values: { a: 1, b: 2 } },
+              special: { label: 'Special', extra: { a: 1, b: 2 } },
+            },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}holder`, name: 'Holder' },
+              fields: {
+                special: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}holder`,
+                    name: 'SpecialSettings',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}holder-1`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              settings: { values: { a: 1 } },
+              special: { extra: { a: 1 } },
+            },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}holder`, name: 'Holder' },
+            },
+          },
+        }),
+      }),
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let fileRef = await adapter.openFile('holder-1.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    let { attributes } = JSON.parse(fileRef.content as string).data;
+    assert.deepEqual(
+      attributes.settings.values,
+      { a: 1 },
+      'the primitive inside the compound field is replaced',
+    );
+    assert.strictEqual(
+      attributes.settings.label,
+      'Kept',
+      'while the compound field keeps the nested value the patch leaves out',
+    );
+    assert.deepEqual(
+      attributes.special.extra,
+      { a: 1 },
+      'a primitive the polymorphic type declares is replaced too',
+    );
+  });
+
   test('realm can remove item from linksToMany field via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -1270,8 +1413,6 @@ module('Integration | realm', function (hooks) {
       },
     });
     let resourceCreatedAt = await getFileCreatedAt(realm, 'jackie.json');
-    let friendCreatedAt = await getFileCreatedAt(realm, 'dir/friend.json');
-    let vanGoghCreatedAt = await getFileCreatedAt(realm, 'dir/van-gogh.json');
     let response = await handle(
       realm,
       new Request(`${testRealmURL}jackie`, {
@@ -1303,6 +1444,12 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -1318,17 +1465,9 @@ module('Integration | realm', function (hooks) {
         relationships: {
           'pets.0': {
             links: { self: `./dir/van-gogh` },
-            data: {
-              id: `${testRealmURL}dir/van-gogh`,
-              type: 'card',
-            },
           },
           friend: {
             links: { self: `./dir/friend` },
-            data: {
-              id: `${testRealmURL}dir/friend`,
-              type: 'card',
-            },
           },
         },
         meta: {
@@ -1344,63 +1483,6 @@ module('Integration | realm', function (hooks) {
           resourceCreatedAt: resourceCreatedAt!,
         },
       },
-      included: [
-        {
-          type: 'card',
-          id: `${testRealmURL}dir/friend`,
-          links: { self: `./friend` },
-          attributes: {
-            cardDescription: 'Person',
-            email: null,
-            posts: null,
-            cardThumbnailURL: null,
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            cardTitle: 'Hassan Abdel-Rahman',
-            cardInfo,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}person`,
-              name: 'Person',
-            },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}dir/friend.json`,
-            ),
-            resourceCreatedAt: friendCreatedAt!,
-            realmInfo: testRealmInfo,
-            realmURL: testRealmURL,
-          },
-        },
-        {
-          type: 'card',
-          id: `${testRealmURL}dir/van-gogh`,
-          links: { self: `./van-gogh` },
-          attributes: {
-            firstName: 'Van Gogh',
-            cardTitle: 'Van Gogh',
-            cardDescription: null,
-            cardThumbnailURL: null,
-            cardInfo,
-          },
-          relationships: {
-            owner: { links: { self: null } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}pet`,
-              name: 'Pet',
-            },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}dir/van-gogh.json`,
-            ),
-            resourceCreatedAt: vanGoghCreatedAt!,
-            realmInfo: testRealmInfo,
-            realmURL: testRealmURL,
-          },
-        },
-      ],
     });
     let fileRef = await adapter.openFile('jackie.json');
     if (!fileRef) {
@@ -1523,6 +1605,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1537,24 +1625,12 @@ module('Integration | realm', function (hooks) {
       relationships: {
         'pets.0': {
           links: { self: `./dir/mango` },
-          data: {
-            id: `${testRealmURL}dir/mango`,
-            type: 'card',
-          },
         },
         'pets.1': {
           links: { self: `./dir/van-gogh` },
-          data: {
-            id: `${testRealmURL}dir/van-gogh`,
-            type: 'card',
-          },
         },
         friend: {
           links: { self: `./dir/friend` },
-          data: {
-            id: `${testRealmURL}dir/friend`,
-            type: 'card',
-          },
         },
       },
       meta: {
@@ -1647,6 +1723,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1661,11 +1743,9 @@ module('Integration | realm', function (hooks) {
       relationships: {
         'pets.0': {
           links: { self: `./dir/mango` },
-          data: { id: `${testRealmURL}dir/mango`, type: 'card' },
         },
         'pets.1': {
           links: { self: `./dir/van-gogh` },
-          data: { id: `${testRealmURL}dir/van-gogh`, type: 'card' },
         },
       },
       meta: {
@@ -1774,7 +1854,6 @@ module('Integration | realm', function (hooks) {
     assert.deepEqual(json.data.relationships, {
       'inners.0.other': {
         links: { self: `./2` },
-        data: { id: `${testRealmURL}2`, type: 'card' },
       },
     });
     assert.deepEqual(
@@ -1869,6 +1948,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1994,6 +2079,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -2008,14 +2099,9 @@ module('Integration | realm', function (hooks) {
       relationships: {
         'pets.0': {
           links: { self: `./dir/van-gogh` },
-          data: { id: `${testRealmURL}dir/van-gogh`, type: 'card' },
         },
         friend: {
           links: { self: `./dir/different-friend` },
-          data: {
-            id: `${testRealmURL}dir/different-friend`,
-            type: 'card',
-          },
         },
       },
       meta: {
@@ -2137,6 +2223,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -2151,17 +2243,9 @@ module('Integration | realm', function (hooks) {
       relationships: {
         friend: {
           links: { self: `./dir/different-friend` },
-          data: {
-            id: `${testRealmURL}dir/different-friend`,
-            type: 'card',
-          },
         },
         'pets.0': {
           links: { self: `./dir/van-gogh` },
-          data: {
-            id: `${testRealmURL}dir/van-gogh`,
-            type: 'card',
-          },
         },
       },
       meta: {
@@ -2271,7 +2355,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
-    let marikoCreatedAt = await getFileCreatedAt(realm, 'dir/mariko.json');
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -2287,10 +2376,6 @@ module('Integration | realm', function (hooks) {
           owner: {
             links: {
               self: `./mariko`,
-            },
-            data: {
-              type: 'card',
-              id: `${testRealmURL}dir/mariko`,
             },
           },
         },
@@ -2310,38 +2395,6 @@ module('Integration | realm', function (hooks) {
           self: `${testRealmURL}dir/mango`,
         },
       },
-      included: [
-        {
-          type: 'card',
-          id: `${testRealmURL}dir/mariko`,
-          attributes: {
-            firstName: 'Mariko',
-            lastName: 'Abdel-Rahman',
-            fullName: 'Mariko Abdel-Rahman',
-            cardTitle: 'Mariko Abdel-Rahman',
-            cardDescription: 'Person',
-            email: null,
-            posts: null,
-            cardThumbnailURL: null,
-            cardInfo,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}person`,
-              name: 'Person',
-            },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}dir/mariko.json`,
-            ),
-            resourceCreatedAt: marikoCreatedAt!,
-            realmInfo: testRealmInfo,
-            realmURL: testRealmURL,
-          },
-          links: {
-            self: `./mariko`,
-          },
-        },
-      ],
     });
     let fileRef = await adapter.openFile('dir/mango.json');
     if (!fileRef) {
@@ -2462,6 +2515,12 @@ module('Integration | realm', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',

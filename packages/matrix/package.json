@@ -26,6 +26,7 @@
   "scripts": {
     "start:synapse": "./scripts/start-synapse.sh",
     "stop:synapse": "node ./scripts/synapse.ts stop",
+    "compact:synapse-db": "node ./scripts/compact-synapse-db.ts",
     "assert-synapse-running": "./scripts/assert-synapse-running.sh",
     "start:smtp": "node ./scripts/smtp.ts start",
     "stop:smtp": "node ./scripts/smtp.ts stop",

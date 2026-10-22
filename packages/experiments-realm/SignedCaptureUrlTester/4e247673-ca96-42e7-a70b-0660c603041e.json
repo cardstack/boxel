@@ -1,0 +1,26 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SignedCaptureUrlTester",
+        "module": "../signed-capture-url-tester"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Signed Capture URL Tester",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "card": {
+        "links": {
+          "self": "../default/c9ac9b4a-762b-4e89-ab35-3938286e8bde"
+        }
+      }
+    }
+  }
+}

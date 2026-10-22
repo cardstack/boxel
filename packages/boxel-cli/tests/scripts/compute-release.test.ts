@@ -1,5 +1,11 @@
+import { readdirSync, readFileSync } from 'fs';
+import { resolve } from 'path';
+
 import { describe, it, expect } from 'vitest';
+import { parse as parseYaml } from 'yaml';
+
 import {
+  BUNDLED_SOURCE_DIRS,
   classifyBumpFromTitle,
   computeRelease,
   detectSurfaces,
@@ -97,13 +103,18 @@ describe('detectSurfaces', () => {
     expect(s).toEqual({ npmTouched: false, pluginTouched: true });
   });
 
-  it('plugin-only when scripts/build-plugin.ts or build-skills.ts changed', () => {
+  it('plugin-only when scripts/build-plugin.ts changed', () => {
     expect(
       detectSurfaces(['packages/boxel-cli/scripts/build-plugin.ts']),
     ).toEqual({ npmTouched: false, pluginTouched: true });
+  });
+
+  it('neither surface when only the boxel-skills fetch script changed', () => {
+    // The boxel-skills plugin ships from its own repository; the fetch script
+    // only feeds the monorepo's local copy.
     expect(
-      detectSurfaces(['packages/boxel-cli/scripts/build-skills.ts']),
-    ).toEqual({ npmTouched: false, pluginTouched: true });
+      detectSurfaces(['packages/boxel-cli/scripts/boxel-skills.mts']),
+    ).toEqual({ npmTouched: false, pluginTouched: false });
   });
 
   it('both surfaces when a new command lands (src/ + regen)', () => {
@@ -117,6 +128,29 @@ describe('detectSurfaces', () => {
   it('npm touched when package.json changed', () => {
     const s = detectSurfaces(['packages/boxel-cli/package.json']);
     expect(s.npmTouched).toBe(true);
+  });
+
+  it('npm-only when source boxel-cli bundles into bundled-types/ changed', () => {
+    for (const file of [
+      'packages/bxl/src/index.ts',
+      'packages/glimmer-motion/src/helpers.ts',
+      'packages/choreo/src/index.ts',
+      'packages/choreo-player/src/index.ts',
+    ]) {
+      expect(detectSurfaces([file]), file).toEqual({
+        npmTouched: true,
+        pluginTouched: false,
+      });
+    }
+  });
+
+  it('neither touched when a bundled package changed outside src/', () => {
+    expect(
+      detectSurfaces([
+        'packages/glimmer-motion/tests/integration/helpers-test.gts',
+        'packages/bxl/package.json',
+      ]),
+    ).toEqual({ npmTouched: false, pluginTouched: false });
   });
 
   it('neither touched when only docs at repo root changed', () => {
@@ -284,5 +318,50 @@ describe('computeRelease', () => {
   it('preserves prereleaseN passthrough on the output', () => {
     const r = computeRelease(baseInput({ prereleaseN: 42 }));
     expect(r.prereleaseN).toBe(42);
+  });
+});
+
+describe('BUNDLED_SOURCE_DIRS', () => {
+  const repoRoot = resolve(import.meta.dirname, '../../../..');
+  const workflowsDir = resolve(repoRoot, '.github/workflows');
+
+  function triggerPaths(workflowFile: string, event: string): string[] {
+    const workflow = parseYaml(
+      readFileSync(resolve(workflowsDir, workflowFile), 'utf8'),
+    );
+    return workflow.on?.[event]?.paths ?? [];
+  }
+
+  // A directory missing from the filter never starts a publish run.
+  it('matches the publish workflow paths filter', () => {
+    const paths = triggerPaths('boxel-cli-publish.yml', 'push').filter(
+      (p) => p !== 'packages/boxel-cli/**',
+    );
+    expect(paths.sort()).toEqual(
+      BUNDLED_SOURCE_DIRS.map((dir) => `${dir}**`).sort(),
+    );
+  });
+
+  // The bump comes from the PR title, so a directory whose PRs may carry a
+  // plain title would publish nothing even when listed.
+  it('lists exactly the bundled sources whose PRs need a conventional-commit title', () => {
+    const titleChecked = new Set(
+      readdirSync(workflowsDir)
+        .filter((file) => file.endsWith('-pr-title.yml'))
+        .flatMap((file) => triggerPaths(file, 'pull_request')),
+    );
+    const buildTypes = readFileSync(
+      resolve(import.meta.dirname, '../../scripts/build-types.ts'),
+      'utf8',
+    );
+    const bundledSrc = [
+      ...buildTypes.matchAll(/join\(MONOREPO_PACKAGES, '([^']+)', 'src'\)/g),
+    ].map(([, pkg]) => pkg);
+    expect(
+      bundledSrc
+        .filter((pkg) => titleChecked.has(`packages/${pkg}/**`))
+        .map((pkg) => `packages/${pkg}/src/`)
+        .sort(),
+    ).toEqual([...BUNDLED_SOURCE_DIRS].sort());
   });
 });

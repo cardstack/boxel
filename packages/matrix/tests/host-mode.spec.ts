@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures.ts';
 import {
+  credentialFields,
   createRealm,
   createSubscribedUserAndLogin,
   logout,
@@ -363,22 +364,21 @@ test.describe('Host mode', () => {
   test('published card response includes isolated template markup', async ({
     page,
   }) => {
-    // Same readiness-gate budget as waitForPublishedMarker (not waitUntil's
-    // 10s default) — the realm may still be indexing under CI load.
-    let html = await waitUntil(async () => {
-      let response = await page.request.get(realm.publishedCardURL, {
-        headers: { Accept: 'text/html' },
-      });
+    // The same readiness gate the rest of the suite uses, rather than a poll
+    // written out here: a hand-rolled one reports a bare "Timeout waiting for
+    // condition", which says nothing about whether the realm was erroring,
+    // serving a shell, or serving another card.
+    let html = await waitForPublishedMarker(
+      page,
+      realm.publishedCardURL,
+      'data-test-host-mode-isolated',
+      { publishedRealmURL: realm.publishedRealmURL },
+    );
 
-      if (!response.ok()) {
-        return false;
-      }
-
-      let text = await response.text();
-      return text.includes('data-test-host-mode-isolated') ? text : false;
-    }, 45_000);
-
-    expect(html).toContain('data-test-host-mode-isolated');
+    // The gate matched on the marker attribute, so assert on what it did not
+    // decide: the isolated template's own content reached the served HTML,
+    // rather than an element carrying the marker and nothing inside it.
+    expect(html).toContain('Host mode isolated');
 
     await page.goto(realm.publishedCardURL, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-test-host-mode-isolated]')).toBeVisible();
@@ -395,6 +395,7 @@ test.describe('Host mode', () => {
       page,
       realm.publishedWhitePaperCardURL,
       'data-test-white-paper',
+      { publishedRealmURL: realm.publishedRealmURL },
     );
     // Diagnostic: if this test ever times out again, the warm-up timing
     // tells us whether the prerender was the slow part (long warm-up) or
@@ -443,8 +444,12 @@ test.describe('Host mode', () => {
     let connectIframe = page.frameLocator('iframe');
     await connectIframe.locator('[data-test-connect]').click();
 
-    await page.locator('[data-test-username-field]').fill(realm.username);
-    await page.locator('[data-test-password-field]').fill(realm.password);
+    await credentialFields(page)
+      .locator('[data-test-username-field]')
+      .fill(realm.username);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill(realm.password);
     await page.locator('[data-test-login-btn]').click();
 
     await expect(page).toHaveURL(realm.publishedCardURL);
@@ -490,6 +495,7 @@ test.describe('Host mode', () => {
       page,
       realm.publishedMyCardURL,
       'data-test-card-with-head-title',
+      { publishedRealmURL: realm.publishedRealmURL },
     );
 
     await page.goto(realm.publishedMyCardURL, {
@@ -555,7 +561,9 @@ test.describe('Host mode routing rules', () => {
     // card's marker — that confirms the routing rule is indexed in the
     // published realm AND the server cardURL rewrite is applying it.
     let routedURL = `${realm.publishedRealmURL}whitepaper`;
-    await waitForPublishedMarker(page, routedURL, 'data-test-white-paper');
+    await waitForPublishedMarker(page, routedURL, 'data-test-white-paper', {
+      publishedRealmURL: realm.publishedRealmURL,
+    });
 
     await page.goto(routedURL, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-test-white-paper]')).toBeVisible();
@@ -587,6 +595,7 @@ test.describe('Host mode routing rules', () => {
       page,
       realm.publishedRealmURL,
       'data-test-white-paper',
+      { publishedRealmURL: realm.publishedRealmURL },
     );
 
     let noSlashURL = realm.publishedRealmURL.replace(/\/$/, '');
@@ -595,7 +604,9 @@ test.describe('Host mode routing rules', () => {
     // navigating so `page.goto` doesn't race a cold render of this
     // variant under prerender-pool load (a cold no-slash render that
     // outruns the 60s test timeout is the flake this gate closes).
-    await waitForPublishedMarker(page, noSlashURL, 'data-test-white-paper');
+    await waitForPublishedMarker(page, noSlashURL, 'data-test-white-paper', {
+      publishedRealmURL: realm.publishedRealmURL,
+    });
     await page.goto(noSlashURL, { waitUntil: 'domcontentloaded' });
     // `[data-test-host-mode-card="<id>"]` is set by the host SPA's
     // CardRenderer — that attribute exists ONLY post-hydration (it's
@@ -639,6 +650,7 @@ test.describe('Host mode routing rules', () => {
       page,
       realm.publishedRealmURL,
       'dangling-target',
+      { publishedRealmURL: realm.publishedRealmURL },
     );
 
     await page.goto(realm.publishedRealmURL, {

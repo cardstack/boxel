@@ -4,7 +4,13 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader } from '@cardstack/runtime-common';
+import { baseRealm, Loader, VirtualNetwork } from '@cardstack/runtime-common';
+
+import {
+  beginTimerBlock,
+  enableRenderTimerStub,
+  scheduleNativeTimeout,
+} from '@cardstack/host/utils/render-timer-stub';
 
 import {
   testRealmURL,
@@ -17,6 +23,33 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
+// Bounds a promise a regression could leave pending forever. QUnit's own
+// timeout would fail the test too, but as a timeout on the whole test rather
+// than as a statement about this promise — and a module load that stalls
+// without saying so is the failure these tests exist to catch.
+const SETTLE_DEADLINE_MS = 5000;
+async function settleWithin<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `${label} did not settle within ${SETTLE_DEADLINE_MS}ms`,
+              ),
+            ),
+          SETTLE_DEADLINE_MS,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
 module('Unit | loader', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -26,8 +59,6 @@ module('Unit | loader', function (hooks) {
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    loader = getService('loader-service').loader;
-
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
@@ -126,9 +157,30 @@ module('Unit | loader', function (hooks) {
           'reexporter.js': `
           export { g } from './g';
         `,
+          // Card code reaching a host-provided package through a runtime
+          // `import()`. The realm's transpile rewrites each of these to
+          // `import.meta.loader.import(...)`, so what they exercise is the
+          // loader's own resolution of a bare specifier, not the browser's.
+          'dynamic-shim-consumer.js': `
+          export async function viaSyncShim() {
+            return (await import('test-sync-shim-pkg')).value;
+          }
+          export async function viaAsyncShim() {
+            return (await import('test-async-shim-pkg')).value;
+          }
+          export async function viaPrefixShim() {
+            return (await import('@test-shim-prefix/thing')).value;
+          }
+          export async function viaUnshimmedSpecifier() {
+            return (await import('test-specifier-nobody-shimmed')).value;
+          }
+        `,
         },
       }),
     );
+    // Realm setup can replace the service's loader and dispose the old one, so
+    // read it only once setup is done.
+    loader = getService('loader-service').loader;
   });
 
   setupCardLogs(
@@ -230,6 +282,148 @@ module('Unit | loader', function (hooks) {
     }>(`${testRealmURL}foo`);
     assert.strictEqual(checkImportMeta(), `${testRealmURL}foo.js`);
     assert.strictEqual(myLoader(), loader, 'the loader instance is correct');
+  });
+
+  // A runtime `import()` of a shim-registered bare specifier resolves
+  // through the shim registry, the same as the static form, for every shape
+  // a shim can be registered in. An import that instead neither resolves nor
+  // rejects burns a capture render's whole readiness budget and surfaces as
+  // an unrelated-looking timeout, so each case settles against a deadline and
+  // a regression fails as itself rather than as QUnit's global timeout.
+  const DYNAMIC_SHIM_SHAPES: {
+    name: string;
+    exportName: string;
+    value: string;
+    register: (virtualNetwork: VirtualNetwork) => void;
+  }[] = [
+    {
+      name: 'shimModule',
+      exportName: 'viaSyncShim',
+      value: 'sync',
+      register: (virtualNetwork) =>
+        virtualNetwork.shimModule('test-sync-shim-pkg', { value: 'sync' }),
+    },
+    {
+      name: 'shimAsyncModule by id',
+      exportName: 'viaAsyncShim',
+      value: 'async',
+      register: (virtualNetwork) =>
+        virtualNetwork.shimAsyncModule({
+          id: 'test-async-shim-pkg',
+          resolve: async () => ({ value: 'async' }),
+        }),
+    },
+    {
+      name: 'shimAsyncModule by prefix',
+      exportName: 'viaPrefixShim',
+      value: 'prefix',
+      register: (virtualNetwork) =>
+        virtualNetwork.shimAsyncModule({
+          prefix: '@test-shim-prefix/',
+          resolve: async () => ({ value: 'prefix' }),
+        }),
+    },
+  ];
+
+  for (let shape of DYNAMIC_SHIM_SHAPES) {
+    test(`a runtime import() of a bare specifier registered with ${shape.name} resolves through the shim registry`, async function (assert) {
+      shape.register(getService('network').virtualNetwork);
+      let module = await loader.import<Record<string, () => Promise<string>>>(
+        `${testRealmURL}dynamic-shim-consumer`,
+      );
+      assert.strictEqual(
+        await settleWithin(
+          module[shape.exportName](),
+          `import() of the ${shape.name} specifier`,
+        ),
+        shape.value,
+      );
+    });
+  }
+
+  test('a runtime import() of a shim whose resolver never settles rejects rather than hanging', async function (assert) {
+    // The last unbounded await in the shim path: a resolver is caller-
+    // supplied — typically a lazy chunk load — and the loader has no clock of
+    // its own to hold it to. The handler's deadline is what keeps a stalled
+    // one from reaching card code as a promise that never settles.
+    getService('network').virtualNetwork.shimAsyncModule(
+      {
+        id: 'test-async-shim-pkg',
+        resolve: () => new Promise<never>(() => {}),
+      },
+      { delay: async () => {}, retryDelaysMs: [], resolveDeadlineMs: 50 },
+    );
+    let { viaAsyncShim } = await loader.import<{
+      viaAsyncShim: () => Promise<string>;
+    }>(`${testRealmURL}dynamic-shim-consumer`);
+    await assert.rejects(
+      settleWithin(viaAsyncShim(), 'import() of a stalled shim'),
+      /test-async-shim-pkg/,
+      'the rejection names the specifier whose resolver stalled',
+    );
+  });
+
+  test('a stalled shim resolver still rejects while the prerender timer stub is blocking timers', async function (assert) {
+    // A prerender tab runs its render with the global setTimeout stubbed out,
+    // so a deadline armed on it would never fire. The network's own fetch
+    // timer is the one that still runs there. This registration passes no
+    // timer, so the deadline gets the network's.
+    getService('network').virtualNetwork.shimAsyncModule(
+      {
+        id: 'test-async-shim-pkg',
+        resolve: () => new Promise<never>(() => {}),
+      },
+      { delay: async () => {}, retryDelaysMs: [], resolveDeadlineMs: 50 },
+    );
+    let { viaAsyncShim } = await loader.import<{
+      viaAsyncShim: () => Promise<string>;
+    }>(`${testRealmURL}dynamic-shim-consumer`);
+    let restoreStub = enableRenderTimerStub();
+    let releaseBlock = beginTimerBlock();
+    let guard: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // The guard runs on the native timer too: under the stub,
+      // `settleWithin`'s own setTimeout would be swallowed, and a regression
+      // would hang until QUnit's timeout instead of failing here.
+      await assert.rejects(
+        Promise.race([
+          viaAsyncShim(),
+          new Promise<never>((_resolve, reject) => {
+            guard = scheduleNativeTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `import() of a stalled shim under the timer stub did not settle within ${SETTLE_DEADLINE_MS}ms`,
+                  ),
+                ),
+              SETTLE_DEADLINE_MS,
+            );
+          }),
+        ]),
+        /test-async-shim-pkg/,
+        'the rejection names the specifier whose resolver stalled',
+      );
+    } finally {
+      clearTimeout(guard);
+      releaseBlock();
+      restoreStub();
+    }
+  });
+
+  test('a runtime import() of a bare specifier nobody shimmed rejects rather than hanging', async function (assert) {
+    // A specifier the network cannot serve has to surface as an error the
+    // card author can act on, on the same deadline as a successful load.
+    let { viaUnshimmedSpecifier } = await loader.import<{
+      viaUnshimmedSpecifier: () => Promise<string>;
+    }>(`${testRealmURL}dynamic-shim-consumer`);
+    await assert.rejects(
+      settleWithin(
+        viaUnshimmedSpecifier(),
+        'import() of an unshimmed specifier',
+      ),
+      /test-specifier-nobody-shimmed/,
+      'the rejection names the specifier that could not be resolved',
+    );
   });
 
   // Module identifiers can be in registered prefix form (e.g.
@@ -395,6 +589,120 @@ module('Unit | loader', function (hooks) {
       're-exported module g is loaded as a dependency of reexporter',
     );
   });
+
+  test('a module shimmed on the virtual network is served to the loader without a fetch, under every spelling', async function (assert) {
+    // A shim for a realm-mapped identifier is keyed by the realm URL the
+    // identifier resolves to, and a loader import resolves to that same URL.
+    // The network's fetch pipeline only answers shims on the fake packages
+    // origin, so the loader has to ask the network for the shim itself.
+    let virtualNetwork = new VirtualNetwork();
+    let realmURL = 'https://shimmed-realm.example/';
+    let aliasURL = 'https://shimmed-alias.example/';
+    virtualNetwork.addURLMapping(new URL(aliasURL), new URL(realmURL));
+    virtualNetwork.addRealmMapping('@test-loader-shim/', realmURL);
+    class Shimmed {}
+    virtualNetwork.shimAsyncModule({
+      id: '@test-loader-shim/shimmed-module',
+      resolve: async () => ({ default: Shimmed }),
+    });
+    let throwIfFetch = new Loader(
+      async () => {
+        throw new Error(
+          'fetch should not be invoked for a module the virtual network shims',
+        );
+      },
+      virtualNetwork.resolveImport,
+      { virtualNetwork },
+    );
+
+    for (let spelling of [
+      '@test-loader-shim/shimmed-module',
+      `${realmURL}shimmed-module`,
+      `${aliasURL}shimmed-module`,
+    ]) {
+      let module = await throwIfFetch.import<{ default: typeof Shimmed }>(
+        spelling,
+      );
+      assert.strictEqual(
+        module.default,
+        Shimmed,
+        `${spelling} is served from the shim`,
+      );
+    }
+  });
+
+  // Every shape a shim can be registered in, so the remap guarantee below is a
+  // property of the handler rather than of one registration path. `prefix` is
+  // the shape a whole realm's worth of modules is most naturally shimmed in,
+  // and the one a future `@cardstack/base/` shim would use.
+  const REMAP_PREFIX = '@test-loader-remap/';
+  const REMAP_ID = `${REMAP_PREFIX}shimmed-module`;
+  const SHIM_SHAPES: {
+    name: string;
+    register: (
+      virtualNetwork: VirtualNetwork,
+      module: Record<string, unknown>,
+    ) => void;
+  }[] = [
+    {
+      name: 'shimModule',
+      register: (virtualNetwork, module) =>
+        virtualNetwork.shimModule(REMAP_ID, module),
+    },
+    {
+      name: 'shimAsyncModule by id',
+      register: (virtualNetwork, module) =>
+        virtualNetwork.shimAsyncModule({
+          id: REMAP_ID,
+          resolve: async () => module,
+        }),
+    },
+    {
+      name: 'shimAsyncModule by prefix',
+      register: (virtualNetwork, module) =>
+        virtualNetwork.shimAsyncModule({
+          prefix: REMAP_PREFIX,
+          resolve: async () => module,
+        }),
+    },
+  ];
+
+  for (let shape of SHIM_SHAPES) {
+    test(`a shim registered with ${shape.name} outlives a change to the realm mapping`, async function (assert) {
+      // The handler keys a shim by the URL its identifier resolved to when it
+      // was registered, and a lookup resolves through whatever mapping is
+      // current. Re-pointing the prefix would otherwise strand the shim under
+      // the old URL and send the import to the network.
+      let virtualNetwork = new VirtualNetwork();
+      let firstURL = 'https://shim-remap-first.example/';
+      let secondURL = 'https://shim-remap-second.example/';
+      virtualNetwork.addRealmMapping(REMAP_PREFIX, firstURL);
+      class Shimmed {}
+      shape.register(virtualNetwork, { default: Shimmed });
+      virtualNetwork.addRealmMapping(REMAP_PREFIX, secondURL);
+
+      let throwIfFetch = new Loader(
+        async () => {
+          throw new Error(
+            'fetch should not be invoked for a module the virtual network shims',
+          );
+        },
+        virtualNetwork.resolveImport,
+        { virtualNetwork },
+      );
+
+      for (let spelling of [REMAP_ID, `${secondURL}shimmed-module`]) {
+        let module = await throwIfFetch.import<{ default: typeof Shimmed }>(
+          spelling,
+        );
+        assert.strictEqual(
+          module.default,
+          Shimmed,
+          `${spelling} is served from the shim after remapping`,
+        );
+      }
+    });
+  }
 
   test('identify preserves original module for reexports', function (assert) {
     let throwIfFetch = new Loader(async () => {

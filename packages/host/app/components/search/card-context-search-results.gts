@@ -36,6 +36,7 @@ export default class CardContextSearchResults extends Component<SearchResultsCom
         @query={{@query}}
         @mode={{@mode}}
         @overlays={{@overlays}}
+        @displayContainer={{@displayContainer}}
         @cardInitiated={{true}}
         @getDefaultRealm={{this.getDefaultRealm}}
         ...attributes
@@ -48,6 +49,7 @@ export default class CardContextSearchResults extends Component<SearchResultsCom
         @query={{@query}}
         @mode={{@mode}}
         @overlays={{@overlays}}
+        @displayContainer={{@displayContainer}}
         @cardInitiated={{true}}
         @getDefaultRealm={{this.getDefaultRealm}}
         ...attributes

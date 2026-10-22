@@ -13,9 +13,16 @@ pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
 pnpm setup:skills-in-deployment
+pnpm setup:pretui-in-deployment
 pnpm setup:software-factory-in-deployment
 pnpm setup:boxel-homepage-in-deployment
 pnpm setup:openrouter-in-deployment
+pnpm setup:choreo-gallery-in-deployment
+# The secure origin's pages are served from their build, which the realm
+# server reads once, at startup, and refuses to start without. The image
+# builds them as well; building here keeps the start from depending on how
+# the image was made.
+pnpm build:secure-origin || exit 1
 
 SUBMISSION_REALM_PATH='/persistent/submissions'
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-https://realms-staging.stack.cards/submissions/}"
@@ -28,9 +35,16 @@ SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFT
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL='https://realms-staging.stack.cards/boxel-homepage/'
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
 
+# The app origins that may frame the secure origin's credential fields,
+# besides --serverURL's: the host PR previews, and a host app served from the
+# developer's own machine, over https or http and on any port. No remote page
+# can have a loopback origin, so those admit only pages the user started
+# themselves. Any other origin that frames the fields, such as a Railway
+# deployment or a custom domain, is added here by name.
 echo "[start-staging] pid=$$ ppid=$PPID about to exec node at $(date -Iseconds)" >&2
 
 NODE_NO_WARNINGS=1 \
+  HEALTH_CHECK_USER_AGENTS='ELB-HealthChecker' \
   LOW_CREDIT_THRESHOLD=2000 \
   MATRIX_URL=https://matrix-staging.stack.cards \
   MATRIX_SERVER_NAME=stack.cards \
@@ -45,6 +59,12 @@ NODE_NO_WARNINGS=1 \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://realms-staging.stack.cards' \
   --prerendererUrl='http://boxel-prerender-manager.boxel-staging-internal:4222' \
+  --secureOriginURL='https://secure.stack.cards/' \
+  --secureOriginAppOrigin='https://*.boxel-host-preview.stack.cards' \
+  --secureOriginAppOrigin='https://localhost:*' \
+  --secureOriginAppOrigin='https://127.0.0.1:*' \
+  --secureOriginAppOrigin='http://localhost:*' \
+  --secureOriginAppOrigin='http://127.0.0.1:*' \
   \
   --path='/persistent/base' \
   --username='base_realm' \
@@ -67,6 +87,11 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='@cardstack/skills/' \
   --toUrl='https://realms-staging.stack.cards/skills/' \
   \
+  --path='/persistent/pretui' \
+  --username='pretui_realm' \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl='https://realms-staging.stack.cards/pretui/' \
+  \
   --path='/persistent/boxel-homepage' \
   --username='boxel_homepage_realm' \
   --fromUrl="${BOXEL_HOMEPAGE_REALM_URL}" \
@@ -81,6 +106,12 @@ NODE_NO_WARNINGS=1 \
   --username='openrouter_realm' \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl='https://realms-staging.stack.cards/openrouter/' \
+  \
+  --path='/persistent/choreo-gallery' \
+  --username='choreo_gallery_realm' \
+  --fromUrl='https://realms-staging.stack.cards/choreo-gallery/' \
+  --toUrl='https://realms-staging.stack.cards/choreo-gallery/' \
+  --publishable='https://realms-staging.stack.cards/choreo-gallery/' \
   \
   --path='/persistent/software-factory' \
   --username='software_factory_realm' \

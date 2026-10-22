@@ -1,7 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
 
-import { DEFAULT_IMAGE_GENERATION_LLM } from '@cardstack/runtime-common/matrix-constants';
-
+import {
+  generateImage,
+  imageExtension,
+  sourceImageDataUrl,
+} from '../lib/generate-image';
 import HostBaseTool from '../lib/host-base-tool';
 
 import PatchCardInstanceTool from './patch-card-instance';
@@ -11,40 +14,6 @@ import WriteBinaryFileTool from './write-binary-file';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const maybeBuffer = (globalThis as any).Buffer;
-
-  if (typeof maybeBuffer !== 'undefined') {
-    return maybeBuffer.from(buffer).toString('base64');
-  }
-
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-
-  if (typeof btoa !== 'undefined') {
-    return btoa(binary);
-  }
-
-  throw new Error('Unable to convert image to base64 in this environment');
-}
-
-function mimeTypeToExtension(mimeType: string): string {
-  const map: Record<string, string> = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/jpg': 'jpg',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-    'image/svg+xml': 'svg',
-    'image/avif': 'avif',
-  };
-  return map[mimeType] ?? 'png';
-}
 
 function generateFilenameFromCardName(cardName: string | undefined): string {
   const uniqueId = uuidv4().split('-')[0]; // Use first segment of UUID for brevity
@@ -101,101 +70,25 @@ export default class GenerateThumbnailTool extends HostBaseTool<
       throw new Error('A prompt is required to generate a thumbnail.');
     }
 
-    let imageUrlForMessage: string | undefined;
     const sourceUrlTrimmed = sourceImageUrl?.trim();
-
-    if (sourceUrlTrimmed) {
-      if (sourceUrlTrimmed.startsWith('data:image/')) {
-        imageUrlForMessage = sourceUrlTrimmed;
-      } else {
-        const imageResponse = await fetch(sourceUrlTrimmed);
-        if (!imageResponse.ok) {
-          throw new Error(
-            `Failed to fetch source image: ${imageResponse.statusText}`,
-          );
-        }
-        const contentType =
-          imageResponse.headers.get('content-type') ?? 'image/png';
-        const arrayBuffer = await imageResponse.arrayBuffer();
-        const base64 = arrayBufferToBase64(arrayBuffer);
-        imageUrlForMessage = `data:${contentType};base64,${base64}`;
-      }
-    }
-
-    const messages: any[] = [
+    const { mimeType, base64: base64Content } = await generateImage(
       {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: promptText,
-          },
-          ...(imageUrlForMessage
-            ? [
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: imageUrlForMessage,
-                  },
-                },
-              ]
-            : []),
-        ],
+        prompt: promptText,
+        sourceImageDataUrl: sourceUrlTrimmed
+          ? await sourceImageDataUrl(sourceUrlTrimmed, (url) => fetch(url))
+          : undefined,
+        model: input.llmModel,
       },
-    ];
-
-    const model = input.llmModel?.trim() || DEFAULT_IMAGE_GENERATION_LLM;
-
-    const result = await new SendRequestViaProxyTool(this.toolContext).execute({
-      url: 'https://openrouter.ai/api/v1/chat/completions',
-      method: 'POST',
-      requestBody: JSON.stringify({
-        model,
-        messages,
-      }),
-    });
-
-    if (!result.response.ok) {
-      throw new Error(
-        `Failed to generate thumbnail: ${result.response.statusText}`,
-      );
-    }
-
-    const responseData = await result.response.json();
-    const messageContent = responseData.choices?.[0]?.message;
-
-    if (!messageContent?.images || !Array.isArray(messageContent.images)) {
-      throw new Error('No image was generated in the response.');
-    }
-
-    const generatedDataUrl: string | undefined = messageContent.images
-      .map((img: any) => img.image_url?.url)
-      .find((url: string) => url && url.startsWith('data:image/'));
-
-    if (!generatedDataUrl) {
-      const errorMessage =
-        responseData.choices?.[0]?.message?.content ||
-        'No image was generated in the response.';
-      throw new Error(`Thumbnail generation failed: ${errorMessage}`);
-    }
-
-    // Parse MIME type and base64 content from data URI
-    const commaIndex = generatedDataUrl.indexOf(',');
-    if (commaIndex === -1) {
-      throw new Error(
-        'Generated image data URL is malformed: missing comma separator.',
-      );
-    }
-    const prefix = generatedDataUrl.slice(0, commaIndex);
-    const base64Content = generatedDataUrl.slice(commaIndex + 1);
-    const mimeMatch = prefix.match(/^data:([^;]+);base64$/);
-    if (!mimeMatch) {
-      throw new Error(
-        'Generated image data URL has an unrecognisable MIME type.',
-      );
-    }
-    const mimeType = mimeMatch[1];
-    const extension = mimeTypeToExtension(mimeType);
+      async ({ url, requestBody }) =>
+        (
+          await new SendRequestViaProxyTool(this.toolContext).execute({
+            url,
+            method: 'POST',
+            requestBody,
+          })
+        ).response,
+    );
+    const extension = imageExtension(mimeType);
 
     const filename = `${generateFilenameFromCardName(cardName)}.${extension}`;
     const filePath = targetPath?.trim()
@@ -208,7 +101,6 @@ export default class GenerateThumbnailTool extends HostBaseTool<
         path: filePath,
         realm: targetRealmIdentifier,
         base64Content,
-        contentType: mimeType,
         useNonConflictingFilename: true,
       },
     );

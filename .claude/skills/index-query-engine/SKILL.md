@@ -75,8 +75,8 @@ query-backed relationship raises `FilterRefersToNonsearchableFieldError`
 instead of silently matching nothing.
 
 **Pass 2** (`expressionToSql` in `expression.ts`) is purely mechanical: params
-become `$n` binds; table-valued nodes dedupe into a map (`each_<column>`,
-`tree_<column>_<fieldPath>`) rendered as nonce-numbered aliases, with the
+become `$n` binds; table-valued nodes dedupe into a map keyed
+`tree_<column>_<fieldPath>` rendered as nonce-numbered aliases, with the
 `CROSS JOIN LATERAL …` clauses spliced into the FROM clause at the
 `__TABLE_VALUED_FUNCTIONS__` placeholder; `dbExpression` nodes pick their
 pg/sqlite branch.
@@ -135,8 +135,10 @@ the value test.
 
 - Two predicates on the _same_ path share one alias and evaluate per tree
   row: `every` of `friends.name = 'Mango'` and `friends.name = 'Ringo'`
-  matches nothing, even for a card that has both friends — the same
-  exists-one-element behavior as the shared `types` alias (next section).
+  matches nothing, even for a card that has both friends: each surviving
+  tree row is one friend's `name` node, and no single node has both names.
+  Type conditions don't behave this way — they are per-row membership
+  predicates with no alias (see "Semantics to keep in mind").
 - Predicates on _different_ leaf paths get separate tree functions and fan
   out as a cartesian product: `friends.name = 'Mango' AND friends.age = 5`
   means "some friend named Mango AND some friend aged 5" — **not necessarily
@@ -176,22 +178,47 @@ each index row into one row per JSON element; `WHERE` filters those; `GROUP BY
 i.url` keeps any url with ≥1 surviving row. So every predicate that references
 a table-valued alias means "some element satisfies this".
 
-**All references to the same column share ONE alias** (pass 2 dedupes by
-column/path). Consequences for `types` conditions specifically:
+**Type conditions are per-row membership, not a shared alias.** A `type` (or
+`on`) condition is deferred to pass 1 as a `TypeCondition` node, and
+`handleTypeCondition` resolves it to an `any` of `types-contains` predicates
+(`typesContains`), one per membership key — the ref as given plus its
+canonical defining-module ref, since rows stamp `types` with the canonical
+key. Each predicate is a self-contained scalar test against the row's own
+`types` column; it joins nothing, so it never fans the row out and never
+shares an alias with another condition. `expressionToSql` renders it per
+adapter, with the key as a bind parameter rather than inlined SQL text:
 
-- `every([{type: A}, {type: B}])` requires a _single element_ equal to both —
-  unsatisfiable for distinct types, even though a card's `types` chain
-  contains both. Positive type conditions do not AND-compose.
-- `not: {type: X}` means "some element ≠ X", which nearly every row satisfies
-  — it does **not** exclude instances of X.
-- A row whose `types` is empty or null vanishes from any query that references
-  the alias in _any_ branch (the cross join produces zero rows for it), even
-  under `OR`/`NOT`. Errored instances can lack `types`.
+- Postgres: `COALESCE(i.types, '[]'::jsonb) @> $n::jsonb`, bound to `["<key>"]`
+- SQLite: `EXISTS (SELECT 1 FROM json_each(COALESCE(i.types, '[]')) WHERE value = ?)`, bound to `<key>`
 
-Don't build features that depend on type-condition composition without first
-changing `typeCondition` to a self-contained membership predicate (pg
-`types @> '["key"]'::jsonb`, sqlite `EXISTS (SELECT 1 FROM json_each(types)
-WHERE value = ?)` — a resolved node, per the `JsonContains` pattern).
+So type conditions compose like ordinary boolean predicates:
+
+- `every([{type: A}, {type: B}])` is a true intersection — it matches a row
+  whose `types` chain contains both A and B (e.g. an instance of B where B
+  extends A).
+- `not: {type: X}` is a true exclusion — it drops every row whose `types`
+  contains X. That is every instance of X and of X's subclasses, since
+  `types` is the full ancestor chain. For a file, that chain starts at the
+  class whose extraction succeeded. When the extension's FileDef fails to
+  extract (e.g. a `.png` that isn't a PNG), the extractor falls back up the
+  class chain, and the row is indexed as the nearest ancestor that succeeded
+  (`RasterImageDef`). That row matches `{type: ImageDef}` and is dropped by
+  `not: {type: ImageDef}`, but it does not match `{type: PngDef}`.
+- The `COALESCE` keeps a row whose `types` is null a definite FALSE rather
+  than SQL NULL, so `not: {type: X}` keeps such a row instead of dropping it.
+  Errored instances can lack `types`; under this predicate they behave as
+  "member of nothing" in every branch.
+
+**The Postgres expression is pinned to a GIN index.**
+`boxel_index_types_containment_idx` and
+`boxel_index_working_types_containment_idx` (migration `1784272066344`) are
+`jsonb_path_ops` GIN indexes on exactly `COALESCE(types, '[]'::jsonb)`.
+Postgres uses an expression index only when the query's left operand
+structurally matches the indexed expression, so any semantic change to the
+`COALESCE` wrapper in the `types-contains` branch of `expression.ts`
+un-indexes every type filter unless a migration moves the index expression
+with it. Aliasing and whitespace don't matter; the wrapper and the `@>`
+operator do.
 
 **Filter polarity.** `not` flips the tracked polarity, and the `@>`
 containment rewrite for `eq` applies only at positive polarity: on an absent

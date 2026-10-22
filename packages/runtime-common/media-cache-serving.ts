@@ -1,9 +1,17 @@
 import type { Readable } from 'stream';
 import { toNodeStream } from '#media-cache-stream';
+import {
+  captureContentDisposition,
+  captureFileExtension,
+  sanitizeCaptureFilename,
+  type CaptureDisposition,
+} from './capture-disposition.ts';
 import { createResponse } from './create-response.ts';
 import type { DBAdapter } from './db.ts';
 import { logger } from './log.ts';
 import {
+  ANONYMOUS_RENDER,
+  REALM_AUTHORITY_RENDER,
   touchMediaCacheEntry,
   type MediaCacheAdapter,
   type MediaCacheEntry,
@@ -15,7 +23,7 @@ const log = logger('media-cache');
 
 // The HTTP face of a MediaCache capture, shared by every route that serves
 // one. The URL is the durable reference — what rendered HTML and
-// `meta.screenshots` embed — and the content hash surfaces only as the
+// `meta.captures` embed — and the content hash surfaces only as the
 // validator: a re-capture changes what the URL serves (the ETag rotates),
 // never the URL itself. The cache policy is a short freshness window with
 // cheap revalidation (an unchanged capture answers as a bodyless 304) plus
@@ -31,7 +39,7 @@ export const MEDIA_CACHE_MAX_AGE_SECONDS = 60;
 export const MEDIA_CACHE_STALE_WHILE_REVALIDATE_SECONDS = 3600;
 
 // `public` exactly when the realm is world-readable — the same derivation as
-// `serveLocalFile` — so a shared cache can hold a public realm's screenshots
+// `serveLocalFile` — so a shared cache can hold a public realm's captures
 // (og:image fetches, crawlers) while a private realm's stay per-client.
 export function mediaCacheVisibility(
   requestContext: RequestContext,
@@ -41,9 +49,20 @@ export function mediaCacheVisibility(
     : 'private';
 }
 
-function hitCacheControl(requestContext: RequestContext): string {
+// A capture drawn as one user is that user's view of the card, so no shared
+// cache may hold it, whatever the realm's own visibility. The realm's own
+// captures and anonymous ones draw nothing a reader of the realm may not see.
+function hitCacheControl(
+  requestContext: RequestContext,
+  entry: MediaCacheEntry,
+): string {
+  let visibility =
+    entry.renderedAs === REALM_AUTHORITY_RENDER ||
+    entry.renderedAs === ANONYMOUS_RENDER
+      ? mediaCacheVisibility(requestContext)
+      : 'private';
   return (
-    `${mediaCacheVisibility(requestContext)}, ` +
+    `${visibility}, ` +
     `max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}, ` +
     `stale-while-revalidate=${MEDIA_CACHE_STALE_WHILE_REVALIDATE_SECONDS}`
   );
@@ -53,11 +72,14 @@ function hitCacheControl(requestContext: RequestContext): string {
 // short freshness window as a hit rather than being uncacheable: an `<img>`
 // pointing at a not-yet-captured name picks the image up on a later
 // revalidation, and an image load is never made to wait synchronously on
-// capture work.
+// capture work. `varyOn` carries the vary of a URL whose answer depends on
+// the reader, so a miss for one reader never stands in for another's hit.
 export function mediaCacheMissResponse({
   requestContext,
+  varyOn,
 }: {
   requestContext: RequestContext;
+  varyOn?: string[];
 }): Response {
   return createResponse({
     body: null,
@@ -68,6 +90,7 @@ export function mediaCacheMissResponse({
       },
     },
     requestContext,
+    varyOn,
   });
 }
 
@@ -84,25 +107,49 @@ export function mediaCacheMissResponse({
 // request's ledger read and its stream open) is served as an uncaptured
 // miss, not an error: the ledger row is the GC's cleanup path and a
 // re-capture heals the URL.
+//
+// `variesByReader` marks a URL that answers each reader with the capture
+// drawn as them: the response varies on `Authorization`, so a cache keyed
+// by URL alone (a browser's, across an account switch) never hands one
+// reader's capture to another.
+//
+// `disposition` is the request's `download` / `filename` params and
+// `declaredFilename` the name a declared capture's manifest records; see
+// `contentDispositionFor` for how they combine.
 export async function serveMediaCacheEntry({
   request,
   requestContext,
   entry,
   mediaCacheAdapter,
   dbAdapter,
+  variesByReader = false,
+  disposition,
+  declaredFilename,
 }: {
   request: Request;
   requestContext: RequestContext;
   entry: MediaCacheEntry;
   mediaCacheAdapter: MediaCacheAdapter;
   dbAdapter: DBAdapter;
+  variesByReader?: boolean;
+  disposition?: CaptureDisposition;
+  declaredFilename?: string;
 }): Promise<ResponseWithNodeStream> {
+  let varyOn = variesByReader ? ['Authorization'] : undefined;
   let etag = `"${entry.objectKey}"`;
-  let headers = {
+  let headers: Record<string, string> = {
     'content-type': entry.contentType,
     etag,
-    'cache-control': hitCacheControl(requestContext),
+    'cache-control': hitCacheControl(requestContext, entry),
   };
+  let contentDisposition = contentDispositionFor({
+    entry,
+    disposition,
+    declaredFilename,
+  });
+  if (contentDisposition) {
+    headers['content-disposition'] = contentDisposition;
+  }
 
   let ifNoneMatch = request.headers.get('if-none-match');
   if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
@@ -111,12 +158,13 @@ export async function serveMediaCacheEntry({
       body: null,
       init: { status: 304, headers },
       requestContext,
+      varyOn,
     });
   }
 
   let stream = await mediaCacheAdapter.getStream(entry.objectKey);
   if (!stream) {
-    return mediaCacheMissResponse({ requestContext });
+    return mediaCacheMissResponse({ requestContext, varyOn });
   }
   await touch(dbAdapter, entry);
 
@@ -133,9 +181,75 @@ export async function serveMediaCacheEntry({
       headers: { ...headers, 'content-length': String(entry.sizeBytes) },
     },
     requestContext,
+    varyOn,
   });
   response.nodeStream = toNodeStream(stream) as Readable;
   return response;
+}
+
+// The `Content-Disposition` a served capture carries, or undefined for none.
+// A PDF always carries one: it opens in the browser's viewer or downloads,
+// and either way the name shown is otherwise the URL's last segment plus its
+// query string. An image carries one only when the request asks for it — an
+// <img> never reads the header. The name is the request's `filename`, else the
+// capture's declared filename, else the source URL's last segment; whichever
+// wins is sanitized and given the content type's extension.
+export function contentDispositionFor({
+  entry,
+  disposition,
+  declaredFilename,
+}: {
+  entry: Pick<MediaCacheEntry, 'contentType' | 'sourceURL'>;
+  disposition?: CaptureDisposition;
+  declaredFilename?: string;
+}): string | undefined {
+  let isPdf = entry.contentType === 'application/pdf';
+  let requested =
+    disposition?.attachment || disposition?.filename !== undefined;
+  if (!isPdf && !requested) {
+    return undefined;
+  }
+  let extension = captureFileExtension(entry.contentType);
+  if (!extension) {
+    return undefined;
+  }
+  let filename =
+    [disposition?.filename, declaredFilename]
+      .map((name) =>
+        name !== undefined
+          ? sanitizeCaptureFilename(name, extension)
+          : undefined,
+      )
+      .find((name) => name !== undefined) ??
+    sourceURLFilename(entry.sourceURL, extension);
+  return captureContentDisposition({
+    attachment: disposition?.attachment ?? false,
+    filename,
+  });
+}
+
+function sourceURLFilename(sourceURL: string, extension: string): string {
+  if (extension === 'pdf') {
+    return pdfFilenameFor(sourceURL);
+  }
+  let segments = sourceURL.split('/').filter((s) => s.length > 0);
+  return (
+    sanitizeCaptureFilename(segments[segments.length - 1] ?? '', extension) ??
+    `card.${extension}`
+  );
+}
+
+// The source URL's last path segment, reduced to the quoted-string-safe
+// charset (instance ids and file names are URL path segments already, so
+// this rarely rewrites anything), with the pdf extension appended.
+export function pdfFilenameFor(sourceURL: string): string {
+  let segments = sourceURL.split('/').filter((s) => s.length > 0);
+  let base = segments[segments.length - 1] ?? 'card';
+  let safe = base.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[.-]+/, '');
+  if (!safe) {
+    safe = 'card';
+  }
+  return safe.toLowerCase().endsWith('.pdf') ? safe : `${safe}.pdf`;
 }
 
 // A bump within this window of the entry's own stamp is skipped: the
@@ -153,7 +267,7 @@ export const MEDIA_CACHE_TOUCH_THROTTLE_MS = 60 * 60 * 1000;
 // on-demand capture looking idle to the GC one sweep early, and a later
 // serve re-marks it. Exported (as `touchMediaCacheEntryOnHit`) so every
 // surface that answers from the ledger — this route and the POST
-// `_screenshot-card` fast path — marks use through the one guard.
+// `POST /_capture` fast path — marks use through the one guard.
 async function touch(dbAdapter: DBAdapter, entry: MediaCacheEntry) {
   if (entry.lane !== 'on-demand') {
     return;

@@ -1,7 +1,7 @@
 import type { PromptParts } from '@cardstack/runtime-common/ai';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 import type { ChatCompletionStreamParams } from 'openai/lib/ChatCompletionStream';
-import { readRealmFileTool } from './read-realm-file.ts';
+import type { Tool } from '@cardstack/base/matrix-event';
 
 // The OpenAI request shape plus the OpenRouter-only options we set. OpenRouter
 // accepts and ignores unknown fields, and the OpenAI client forwards them.
@@ -16,10 +16,10 @@ export type ChatCompletionRequest = ChatCompletionStreamParams & {
 export function buildChatCompletionRequest(
   prompt: PromptParts,
   senderMatrixUserId?: string,
-  // Whether to offer the bot-fulfilled readRealmFile tool. The caller decides
-  // (delegation configured + a single-human room); the bot never advertises
-  // a tool it won't run.
-  offerRealmFileRead = false,
+  // The definitions of the bot tools this room is offered (see
+  // lib/bot-tools). The caller decides which; the bot never advertises a
+  // tool it won't run.
+  botTools: Tool[] = [],
 ): ChatCompletionRequest {
   if (!prompt.model) {
     throw new Error('Model is required');
@@ -72,10 +72,9 @@ export function buildChatCompletionRequest(
     request.tool_choice = prompt.toolChoice;
   }
 
-  // Offer the bot-executed readRealmFile tool when the caller allows it, even
-  // in rooms that carry no other tools.
-  if (prompt.toolsSupported === true && offerRealmFileRead) {
-    request.tools = [...(request.tools ?? []), readRealmFileTool];
+  // Bot tools are offered even in rooms that carry no other tools.
+  if (prompt.toolsSupported === true && botTools.length > 0) {
+    request.tools = [...(request.tools ?? []), ...botTools];
   }
 
   if (senderMatrixUserId) {

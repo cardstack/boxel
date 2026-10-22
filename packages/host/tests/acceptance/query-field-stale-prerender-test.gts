@@ -1,5 +1,14 @@
 import { findAll, settled, triggerEvent, waitFor } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  Component,
+  contains,
+  field,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
@@ -16,17 +25,6 @@ import {
   testRRI,
   visitOperatorMode,
 } from '../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  field,
-  linksToMany,
-  NumberField,
-  setupBaseRealm,
-  StringField,
-} from '../helpers/base-realm';
-
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -50,7 +48,6 @@ module(
   'Acceptance | query-field rollup | stale prerendered HTML self-corrects',
   function (hooks) {
     setupApplicationTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {

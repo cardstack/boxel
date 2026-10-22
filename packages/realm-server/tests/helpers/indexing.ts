@@ -4,16 +4,44 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 import { trimJsonExtension } from '@cardstack/runtime-common';
 import type { DBAdapter, Expression } from '@cardstack/runtime-common';
 import { every, param, query } from '@cardstack/runtime-common';
+import { laneFamilyPredicate } from '@cardstack/runtime-common/jobs/lane-family';
+import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import type {
   IncrementalIndexEventContent,
   IncrementalIndexInitiationContent,
 } from '@cardstack/base/matrix-event';
 import { validate as uuidValidate } from 'uuid';
 
+// The expectation for a write whose handler never reads the
+// `X-Boxel-Client-Request-Id` header — the delete path, whose event omits the
+// key. It is satisfied by an absent key and by an explicit `null` alike, so it
+// stays a true statement about that path whichever way the field is spelled.
+export const ABSENT_OR_NULL_CLIENT_REQUEST_ID: unique symbol = Symbol(
+  'absent-or-null-client-request-id',
+);
+
 interface IncrementalIndexEventTestContext {
   assert: Assert;
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>;
   realm: string;
+  // What the incremental event must carry as `clientRequestId`: a string is
+  // the write's `X-Boxel-Client-Request-Id` echoed back verbatim, `null` is a
+  // handler that read the header and found none, and the sentinel above is a
+  // handler that never reads it. Required, so each caller states which of the
+  // three the write it makes produces.
+  clientRequestId: string | null | typeof ABSENT_OR_NULL_CLIENT_REQUEST_ID;
+  // What the event must carry as `versions`. `'written'` is a write that
+  // stored bytes, so the event names a version for exactly the URL it wrote —
+  // the hash itself varies with the fixture, so the check is that the key set
+  // matches and the value is a non-empty string. `'absent'` is a request that
+  // stored none, which is every delete. A record pins the hashes exactly, for
+  // a caller that computed them from the bytes on disk.
+  //
+  // Required for the same reason `clientRequestId` is: absent, present-but-
+  // empty and populated are three different statements about the write, and a
+  // helper that defaulted would let a regression that stopped reporting
+  // versions altogether pass every caller here.
+  versions: 'written' | 'absent' | Record<string, string>;
   type?: string;
   timeout?: number;
 }
@@ -67,7 +95,15 @@ export async function expectIncrementalIndexEvent(
   since: number,
   opts: IncrementalIndexEventTestContext,
 ) {
-  let { assert, getMessagesSince, realm, type, timeout } = opts;
+  let {
+    assert,
+    getMessagesSince,
+    realm,
+    clientRequestId,
+    versions,
+    type,
+    timeout,
+  } = opts;
 
   type = type ?? 'CardDef';
 
@@ -149,6 +185,22 @@ export async function expectIncrementalIndexEvent(
   };
 
   let actualContent = { ...incrementalEventContent };
+  if (clientRequestId === ABSENT_OR_NULL_CLIENT_REQUEST_ID) {
+    assert.ok(
+      actualContent.clientRequestId == null,
+      `incremental event carries no client request id (got ${JSON.stringify(
+        actualContent.clientRequestId,
+      )})`,
+    );
+  } else {
+    assert.strictEqual(
+      actualContent.clientRequestId,
+      clientRequestId,
+      `incremental event carries clientRequestId ${JSON.stringify(
+        clientRequestId,
+      )}`,
+    );
+  }
   delete actualContent.clientRequestId;
   // The committed realm generation varies with the fixture's indexing
   // history; assert its shape and compare the rest exactly.
@@ -162,6 +214,48 @@ export async function expectIncrementalIndexEvent(
     );
     delete actualContent.generation;
   }
+  // Which adoption chains a pass touches depends on the fixture's card
+  // content, so assert that the pass reported them at all — a subscriber
+  // falls back to an unconditional re-run without them — and let the callers
+  // that know their fixture's types check the membership.
+  assert.true(
+    Array.isArray(actualContent.invalidatedTypes),
+    'incremental event carries the types its pass touched',
+  );
+  delete actualContent.invalidatedTypes;
+
+  // The post-write version of each card the request wrote directly. Compared
+  // here rather than left to the structural comparison below, because the hash
+  // is a function of the fixture's bytes and only a caller that computed it can
+  // state it — so the shared check is over the key set, which the caller's own
+  // `url` already determines.
+  if (versions === 'absent') {
+    assert.strictEqual(
+      actualContent.versions,
+      undefined,
+      'the request stored no bytes, so the event names no versions',
+    );
+  } else if (versions === 'written') {
+    assert.deepEqual(
+      Object.keys(actualContent.versions ?? {}),
+      [invalidation],
+      'the event names a version for exactly the url this write stored',
+    );
+    let reported = actualContent.versions?.[invalidation];
+    assert.true(
+      typeof reported === 'string' && reported.length > 0,
+      `the version for ${invalidation} is a non-empty string: ${JSON.stringify(
+        reported,
+      )}`,
+    );
+  } else {
+    assert.deepEqual(
+      actualContent.versions,
+      versions,
+      'the event names the versions the caller computed from the stored bytes',
+    );
+  }
+  delete actualContent.versions;
 
   assert.deepEqual(actualContent, expectedIncrementalContent);
   return incrementalEventContent;
@@ -181,7 +275,7 @@ export interface PrerenderedHtmlRow {
   is_deleted: boolean | null;
   error_doc: unknown | null;
   diagnostics: Record<string, unknown> | null;
-  screenshots: Record<string, unknown> | null;
+  captures: Record<string, unknown> | null;
 }
 
 // Fetch a production `prerendered_html` row for assertions. Returns
@@ -202,7 +296,8 @@ export async function prerenderedHtmlRowFor(
   return rows[0];
 }
 
-// The highest prerender_html job id currently on the realm's HTML channel
+// The highest prerender_html job id currently on the realm's HTML channel, in
+// any of its lanes
 // (0 when the channel is empty). Capture this BEFORE a write, then pass it to
 // settlePrerenderHtmlJobs as `afterJobId`. The index pass enqueues the
 // prerender_html job fire-and-forget, so a settle that runs before that row is
@@ -218,7 +313,7 @@ export async function maxPrerenderHtmlJobId(
   let concurrencyGroup = `prerender-html:${typeof realmURL === 'string' ? realmURL : realmURL.href}`;
   let rows = (await query(dbAdapter, [
     `SELECT COALESCE(MAX(id), 0)::int AS max_id FROM jobs WHERE`,
-    ...every([['concurrency_group =', param(concurrencyGroup)]]),
+    ...laneFamilyPredicate(concurrencyGroup),
   ] as Expression)) as { max_id: number }[];
   return rows[0]?.max_id ?? 0;
 }
@@ -238,7 +333,7 @@ export async function rejectedPrerenderHtmlJobIds(
   let concurrencyGroup = `prerender-html:${typeof realmURL === 'string' ? realmURL : realmURL.href}`;
   let rows = (await query(dbAdapter, [
     `SELECT j.id FROM jobs j WHERE j.status = 'rejected' AND`,
-    ...every([['j.concurrency_group =', param(concurrencyGroup)]]),
+    ...laneFamilyPredicate(concurrencyGroup, 'j'),
   ] as Expression)) as { id: number }[];
   return rows.map((row) => row.id);
 }
@@ -246,8 +341,9 @@ export async function rejectedPrerenderHtmlJobIds(
 // HTML lands on its own channel: the index pass fires a `prerender_html`
 // job (fire-and-forget) and completes without waiting for it, so a test
 // that writes and then asserts prerendered HTML must settle that channel
-// first. Waits until the realm's `prerender-html:<realm>` concurrency
-// group has no unfulfilled jobs and no active reservations, and fails
+// first. Waits until the realm's `prerender-html:<realm>` lane family — its
+// exclusive lane and every writer's lane — has no unfulfilled jobs and no
+// active reservations, and fails
 // loudly if any of its jobs rejected — a broken render should fail the
 // test, not silently satisfy the wait.
 //
@@ -288,7 +384,7 @@ export async function settlePrerenderHtmlJobs(
               FROM job_reservations r
              WHERE r.job_id = j.id AND r.completed_at IS NULL) AS reservation_age_sec
          FROM jobs j WHERE`,
-        ...every([['j.concurrency_group =', param(concurrencyGroup)]]),
+        ...laneFamilyPredicate(concurrencyGroup, 'j'),
       ] as Expression)) as {
         id: number;
         status: string;
@@ -492,5 +588,44 @@ export async function errorDocForIndexEntry(
   return {
     hasError: false,
     errorDoc: parseDoc(row.error_doc) ?? null,
+  };
+}
+
+// Holds a realm's indexing lanes with work a worker has claimed and never
+// finishes, which nothing runs: every index pass for the realm queues behind
+// it until the returned function lets it go. The job and the reservation that
+// stops a worker claiming it land in one statement. A bare job row on its own
+// would be picked up by a worker that dies on its empty args, poisoning the
+// realm's next index pass, so the lane is never left holding one.
+export async function holdIndexingLane(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  {
+    jobType = 'incremental-index',
+    workerId = 'held-lane-test-worker',
+  }: { jobType?: string; workerId?: string } = {},
+): Promise<() => Promise<void>> {
+  let [{ id: jobId }] = (await dbAdapter.execute(
+    `WITH job AS (
+       INSERT INTO jobs (job_type, concurrency_group, args, status, timeout)
+       VALUES ($1, $2, '{}'::jsonb, 'unfulfilled', 7200)
+       RETURNING id
+     ), reservation AS (
+       INSERT INTO job_reservations (job_id, worker_id, locked_until)
+       SELECT id, $3, NOW() + INTERVAL '7200 seconds' FROM job
+     )
+     SELECT id FROM job`,
+    { bind: [jobType, indexingConcurrencyGroup(realmURL), workerId] },
+  )) as unknown as { id: string }[];
+  return async () => {
+    await dbAdapter.execute('DELETE FROM job_reservations WHERE job_id = $1', {
+      bind: [jobId],
+    });
+    await dbAdapter.execute('DELETE FROM jobs WHERE id = $1', {
+      bind: [jobId],
+    });
+    // Removing a job wakes no worker, so the queue is told there is work, as
+    // publishing one tells it.
+    await dbAdapter.execute('NOTIFY jobs');
   };
 }

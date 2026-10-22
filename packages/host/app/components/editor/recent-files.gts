@@ -7,6 +7,8 @@ import { RealmIcon } from '@cardstack/boxel-ui/components';
 
 import { RealmPaths } from '@cardstack/runtime-common';
 
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type { RecentFile } from '@cardstack/host/services/recent-files-service';
 
@@ -53,6 +55,7 @@ class File extends Component<FileArgs> {
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
+  @service declare network: NetworkService;
 
   @action
   async openFile() {
@@ -71,7 +74,8 @@ class File extends Component<FileArgs> {
 
   get isSelected() {
     return (
-      this.operatorModeStateService.state.codePath?.href === this.fullUrl.href
+      this.operatorModeStateService.state.codePath ===
+      this.network.virtualNetwork.unresolveURL(this.fullUrl.href)
     );
   }
 
@@ -100,7 +104,9 @@ class File extends Component<FileArgs> {
           role='button'
           {{on 'click' this.openFile}}
         >
-          <RealmIcon @realmInfo={{realm.info}} />
+          <RealmURLTooltip @realmURL={{@recentFile.realmURL.href}}>
+            <RealmIcon @realmInfo={{realm.info}} />
+          </RealmURLTooltip>
           <span class='file-name'>{{this.fileName}}</span>
           {{#if this.fileExtension}}
             <span class='file-extension'>{{this.fileExtension}}</span>

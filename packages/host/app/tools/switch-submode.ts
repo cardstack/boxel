@@ -6,6 +6,8 @@ import { Submodes } from '../components/submode-switcher';
 
 import HostBaseTool from '../lib/host-base-tool';
 
+import { codeSubmodeUnavailable } from '../services/operator-mode-state-service';
+
 import WriteTextFileTool from './write-text-file';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
@@ -69,6 +71,13 @@ export default class SwitchSubmodeTool extends HostBaseTool<
               : lastId + '.json'
             : null);
         let codeRRI = codePath ? rri(codePath) : null;
+        if (
+          !this.operatorModeStateService.codeSubmodeOffered(
+            codeRRI ?? undefined,
+          )
+        ) {
+          throw new Error(codeSubmodeUnavailable(codeRRI));
+        }
         let currentSubmode = this.operatorModeStateService.state.submode;
         let finalCodePath = codeRRI;
         if (

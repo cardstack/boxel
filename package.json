@@ -26,6 +26,7 @@
     "@babel/core": "catalog:",
     "@babel/parser": "catalog:",
     "@babel/traverse": "catalog:",
+    "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@glimmer/component": "catalog:",
     "@glimmer/syntax": "^0.95.0",
     "@glimmer/tracking": "^1.1.2",
@@ -50,7 +51,7 @@
   },
   "engines": {
     "node": ">=24",
-    "pnpm": "^11"
+    "pnpm": "^12"
   },
   "dependencies": {
     "matrix-js-sdk": "38.3.0"
@@ -58,10 +59,10 @@
   "devEngines": {
     "runtime": {
       "name": "node",
-      "version": "24.17.0"
+      "version": "24.22.1"
     }
   },
   "volta": {
-    "node": "24.17.0"
+    "node": "24.22.1"
   }
 }

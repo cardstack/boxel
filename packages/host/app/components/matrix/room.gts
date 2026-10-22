@@ -53,17 +53,21 @@ import {
   internalKeyFor,
   isCardInstance,
   resolveFileDefCodeRef,
-  rri,
   stringifyErrorForLog,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
+import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
+import { LOCAL_SOURCE_URL_PREFIX } from '@cardstack/runtime-common/matrix-constants';
 import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import { formatTokenUsage } from '@cardstack/host/lib/format-token-usage';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
+import {
+  modelIdsOf,
+  pickableModels,
+} from '@cardstack/host/lib/pickable-models';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
@@ -105,8 +109,6 @@ import type { RoomSkill } from '../../resources/room';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import type { MatrixEvent } from 'matrix-js-sdk';
-
-const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
 
 interface Signature {
   Element: HTMLElement;
@@ -262,7 +264,12 @@ export default class Room extends Component<Signature> {
                 @cancel={{this.cancelActionBar}}
                 @acceptingAll={{this.isAcceptingAll}}
                 @acceptingAllLabel={{this.acceptingAllLabel}}
-                @generatingResults={{this.generatingResults}}
+                @generatingResults={{this.assistantLoopActive}}
+                @generatingLabel={{if
+                  this.generatingResults
+                  'Generating results'
+                  'Running tools'
+                }}
                 @stop={{perform this.stopGeneratingTask}}
                 @stopping={{this.stopGeneratingTask.isRunning}}
                 @showUnreadIndicator={{this.showUnreadIndicator}}
@@ -787,7 +794,11 @@ export default class Room extends Component<Signature> {
   });
 
   private get autoAttachedFileUrls() {
-    let codePathUrl = this.operatorModeStateService.state.codePath?.href;
+    let codePathUrl = this.operatorModeStateService.state.codePath
+      ? this.network.virtualNetwork.toURLHref(
+          this.operatorModeStateService.state.codePath,
+        )
+      : undefined;
     if (!codePathUrl) {
       return [];
     }
@@ -801,13 +812,14 @@ export default class Room extends Component<Signature> {
           let fileContent = JSON.parse(openFile.content);
           let adoptsFrom = fileContent?.data?.meta?.adoptsFrom;
           if (adoptsFrom?.module) {
-            // Joins a module path against the open file's identifier. No form guard,
-            // and whether a prefix-form file identifier reaches here is unverified.
-            // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-            let moduleURLWithExtension = new URL(
-              adoptsFrom.module.endsWith('.gts')
-                ? adoptsFrom.module
-                : `${adoptsFrom.module}.gts`,
+            let moduleRef = adoptsFrom.module.endsWith('.gts')
+              ? adoptsFrom.module
+              : `${adoptsFrom.module}.gts`;
+            // The module may be prefix-form (`@cardstack/base/card-api`), so it
+            // is resolved through the virtual network rather than joined onto
+            // the open file's URL.
+            let moduleURLWithExtension = this.network.virtualNetwork.resolveURL(
+              moduleRef,
               openFile.url,
             );
             if (!urls.includes(moduleURLWithExtension.href)) {
@@ -1202,59 +1214,16 @@ export default class Room extends Component<Signature> {
   // set, so the two can't drift apart.
   @cached
   private get baseLlmOptions(): LLMOption[] {
-    // Read from the system card if available
-    let systemCard = this.matrixService.systemCard;
-    if (systemCard?.modelConfigurations) {
-      let options: LLMOption[] = [];
-      let configModelIds = new Set<string>();
-      for (let modelConfig of systemCard.modelConfigurations) {
-        if (modelConfig.modelId && modelConfig.id) {
-          options.push({
-            id: modelConfig.id,
-            modelId: modelConfig.modelId,
-            name: modelConfig.cardTitle || modelConfig.modelId,
-          });
-          configModelIds.add(modelConfig.modelId);
-        }
-      }
-      // Add any used LLMs that aren't already covered by a config
-      for (let usedLLM of this.args.roomResource.usedLLMs) {
-        if (usedLLM && !configModelIds.has(usedLLM)) {
-          options.push({
-            id: usedLLM,
-            modelId: usedLLM,
-            name: usedLLM,
-          });
-        }
-      }
-      return options;
-    }
-
-    // Fallback to the realm-independent curated list. Merge in any models the
-    // room has already used so prior chats stay selectable; their display name
-    // is the raw model id when not in the curated set.
-    let fallbackById = new Map(
-      DEFAULT_FALLBACK_MODELS.map((m) => [m.modelId, m]),
+    return pickableModels(
+      this.matrixService.systemCard,
+      this.args.roomResource.usedLLMs,
     );
-    let allIds = new Set<string>(fallbackById.keys());
-    for (let usedLLM of this.args.roomResource.usedLLMs) {
-      if (usedLLM) {
-        allIds.add(usedLLM);
-      }
-    }
-    let ids = [...allIds].sort();
-
-    return ids.map((id) => ({
-      id,
-      modelId: id,
-      name: fallbackById.get(id)?.displayName ?? id,
-    }));
   }
 
   // The distinct OpenRouter model ids that can appear in the picker.
   @cached
   private get pickerModelIds(): string[] {
-    return [...new Set(this.baseLlmOptions.map((option) => option.modelId))];
+    return modelIdsOf(this.baseLlmOptions);
   }
 
   // Cost tier ($…$$$$ / Free) per model id, populated by `loadModelCostTiers`.
@@ -1309,7 +1278,9 @@ export default class Room extends Component<Signature> {
         let query: Query = {
           filter: {
             on: {
-              module: rri(new URL('openrouter-model', realmURL).href),
+              module: this.network.virtualNetwork.unresolveURL(
+                new URL('openrouter-model', realmURL).href,
+              ),
               name: 'OpenRouterModel',
             },
             in: { modelId: modelIds },
@@ -1348,11 +1319,12 @@ export default class Room extends Component<Signature> {
 
   private get isDefaultSystemCard(): boolean {
     let systemCardId = this.systemCardId;
-    let defaultSystemCardId = ENV.defaultSystemCardId;
-    if (!defaultSystemCardId) {
+    if (!ENV.defaultSystemCardId) {
       return true;
     }
-    return !systemCardId || systemCardId === defaultSystemCardId;
+    return (
+      !systemCardId || this.matrixService.isDefaultSystemCardId(systemCardId)
+    );
   }
 
   @action
@@ -1432,6 +1404,9 @@ export default class Room extends Component<Signature> {
       myLastMessage.attachedFiles,
       myLastMessage.clientGeneratedId,
       true,
+      // A retry resends the message as it was: one the app composed stays
+      // unmarked.
+      myLastMessage.typedByUser === true,
     );
   }
 
@@ -1728,10 +1703,7 @@ export default class Room extends Component<Signature> {
     bytes: Uint8Array,
   ): Promise<FileDef> {
     let sourceUrl = this.buildLocalSourceUrl(localFile.name);
-    let fileDefCodeRef = resolveFileDefCodeRef(
-      new URL(sourceUrl),
-      this.network.virtualNetwork,
-    );
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(sourceUrl));
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,
@@ -1820,6 +1792,7 @@ export default class Room extends Component<Signature> {
       files?: FileDef[],
       clientGeneratedId: string = uuidv4(),
       keepInputAndAttachments = false,
+      typedByUser = true,
     ) => {
       this.unknownMessageSendError = undefined;
       const isRetry = keepInputAndAttachments;
@@ -1882,8 +1855,14 @@ export default class Room extends Component<Signature> {
           ...(this.operatorModeStateService.getOpenCardIds() || []),
           ...this.autoAttachedCardIds,
         ]) as Set<RealmResourceIdentifier>;
-        let context =
-          await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
+        let context = {
+          ...(await this.operatorModeStateService.getSummaryForAIBot(
+            openCardIds,
+          )),
+          // Sent from the chat composer, the user typed this message; a
+          // retry carries over the original message's mark.
+          typedByUser,
+        };
         let cards: CardDef[] | undefined = [];
         if (typeof cardsOrIds?.[0] === 'string') {
           // we use detached instances since these are just
@@ -2094,6 +2073,12 @@ export default class Room extends Component<Signature> {
         (command.status === 'ready' || command.status === undefined) &&
         !this.toolService.currentlyExecutingToolRequestIds.has(command.id!) &&
         !this.toolService.executedToolRequestIds.has(command.id!) &&
+        // A call ai-bot holds for approval is answered on its own, with its
+        // full URL in view, never in bulk.
+        !command.awaitsApproval &&
+        // Until its command is resolved, whether a call auto-executes is not
+        // known yet.
+        !command.isResolving &&
         // Commands destined for auto-execution must not surface the manual
         // Accept All / Cancel bar, even during the ~100ms debounce before
         // tool-service flips `acceptingAllRoomIds`. Without this filter,
@@ -2101,13 +2086,6 @@ export default class Room extends Component<Signature> {
         // which is the CS-11647 glitch.
         !isAutoExecutableTool(command, activeMode, isOwnedByCurrentAgent),
     );
-  }
-
-  @cached
-  private get readyCodePatches() {
-    let lastMessage = this.messages[this.messages.length - 1];
-    if (!lastMessage || !lastMessage.htmlParts) return [];
-    return this.toolService.getReadyCodePatches(lastMessage.htmlParts);
   }
 
   private get generatingResults() {
@@ -2127,6 +2105,46 @@ export default class Room extends Component<Signature> {
     return !lastMessage.isStreamingFinished;
   }
 
+  // The assistant's loop is under way for its last message: the answer is
+  // still streaming, or a tool that runs without the user's click has no
+  // result yet, after which ai-bot starts the next turn on its own. Stop is
+  // offered for all of it, and a stop ends the loop. A host tool runs only in
+  // the client that sent the request, so only that client counts it as
+  // running; elsewhere the tool shows as an ordinary call. A tool that can
+  // never get a result (its result failed to send, or its answer ended in an
+  // error) is not running either.
+  @cached
+  private get assistantLoopActive() {
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (
+      !lastMessage ||
+      lastMessage.author.userId !== this.matrixService.aiBotUserId ||
+      lastMessage.isCanceled ||
+      lastMessage.errorMessage ||
+      this.args.roomResource.isStopped(lastMessage.eventId)
+    ) {
+      return false;
+    }
+    if (!lastMessage.isStreamingFinished) {
+      return true;
+    }
+    let activeMode = this.args.roomResource.getActiveLLMModeForMessage(
+      lastMessage.eventId,
+    );
+    let isOwnedByCurrentAgent =
+      lastMessage.agentId === this.matrixService.agentId;
+    return lastMessage.tools.some(
+      (tool) =>
+        (tool.status === 'ready' ||
+          tool.status === 'applying' ||
+          tool.status === undefined) &&
+        !tool.awaitsApproval &&
+        !this.matrixService.failedToolState.has(tool.id!) &&
+        (tool.executedBy === AI_BOT_EXECUTOR ||
+          isAutoExecutableTool(tool, activeMode, isOwnedByCurrentAgent)),
+    );
+  }
+
   @cached
   private get displayActionBar() {
     let lastMessage = this.messages[this.messages.length - 1];
@@ -2139,9 +2157,8 @@ export default class Room extends Component<Signature> {
     }
     return (
       this.showUnreadIndicator ||
-      this.generatingResults ||
+      this.assistantLoopActive ||
       this.readyTools.length > 0 ||
-      this.readyCodePatches.length > 0 ||
       this.isAcceptingAll
     );
   }
@@ -2154,18 +2171,7 @@ export default class Room extends Component<Signature> {
     }
   }
 
-  private async executeReadyCodePatches() {
-    let lastMessage = this.messages[this.messages.length - 1];
-    if (!lastMessage || !lastMessage.htmlParts) return;
-
-    await this.toolService.executeReadyCodePatches(
-      this.args.roomId,
-      lastMessage.htmlParts,
-    );
-  }
-
   private executeAllReadyActionsTask = task(async () => {
-    await this.executeReadyCodePatches();
     await this.executeReadyCommands();
   });
 

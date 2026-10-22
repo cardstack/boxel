@@ -3,6 +3,7 @@ import {
   access,
   isSliceAccessor,
   normalizeLeadingSliceAccessors,
+  setOwn,
   shallowClone,
   Type,
   typeOf,
@@ -33,7 +34,7 @@ export function setPath(input: any, path: Path, value: any) {
       }
       clone.splice(accessor.start, accessor.end - accessor.start, ...value);
     } else {
-      clone[accessor] = value;
+      setOwn(clone, accessor as string | number, value);
     }
   } else {
     if (isSliceAccessor(accessor)) {
@@ -41,7 +42,11 @@ export function setPath(input: any, path: Path, value: any) {
         'setPath: Leading slice accessors are not normalized',
       );
     }
-    clone[accessor] = setPath(clone[accessor], normalizedPath.slice(1), value);
+    setOwn(
+      clone,
+      accessor as string | number,
+      setPath(access(clone, accessor), normalizedPath.slice(1), value),
+    );
   }
   return clone;
 }

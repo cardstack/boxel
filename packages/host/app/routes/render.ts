@@ -15,33 +15,43 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   beginRuntimeDependencyTrackingSession,
+  computeContentHash,
   endRuntimeDependencyTrackingSession,
   formattedError,
   loadCardDef,
   snapshotRuntimeDependencies,
-  screenshotsMetaFromRoster,
+  capturesMetaFromRoster,
   SupportedMimeType,
   isCardError,
+  isJsonContentType,
   rri,
   type CardErrorsJSONAPI,
-  type DeclaredScreenshotRoster,
+  type CardSourceVisitArgs,
+  type DeclaredCaptureRoster,
   type LooseSingleCardDocument,
   type RealmIdentifier,
   type RenderError,
-  type ScreenshotsMeta,
+  type CapturesMeta,
   parseRenderRouteOptions,
   serializeRenderRouteOptions,
   logger as runtimeLogger,
+  type BuildModelDiagnostics,
+  type BuildModelStagesMs,
+  type ModuleEvaluation,
+  type StoreSettleWait,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
+  CardError,
   coerceErrorMessage,
+  isGatewayFailureStatus,
   serializableError,
 } from '@cardstack/runtime-common/error';
 
 import {
   windowErrorHandler,
   errorJsonApiToErrorEntry,
+  isBenignResizeObserverError,
 } from '../lib/window-error-handler';
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import {
@@ -49,6 +59,13 @@ import {
   recordAttemptedRenderCardId,
 } from '../utils/register-boxel-transition';
 import { runDomDesyncCheck } from '../utils/render-desync-detector';
+import {
+  newHistoryEntries,
+  newLoadEntries,
+  pruneTimingEntries,
+  pruneTimingPaths,
+  roundMs,
+} from '../utils/render-diagnostics';
 import {
   RenderCardTypeTracker,
   deriveCardTypeFromDoc,
@@ -72,7 +89,7 @@ import type RealmServerService from '../services/realm-server';
 import type RenderErrorStateService from '../services/render-error-state';
 import type RenderStoreService from '../services/render-store';
 import type StoreService from '../services/store';
-import type { CardDef } from '@cardstack/base/card-api';
+import type { CardDef, QueryLoadMeta } from '@cardstack/base/card-api';
 
 type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
 
@@ -82,6 +99,26 @@ export type Model = {
   cardId: string;
   renderOptions: ReturnType<typeof parseRenderRouteOptions>;
   capturedDeps?: string[];
+  // The content hash of the stored source this build read to hydrate
+  // `instance`. The render.meta route reports it onward, the indexer persists it
+  // as `boxel_index.source_content_hash`, and the card+json GET serves it as
+  // `meta.version` — the base a client's next write is computed against.
+  //
+  // Taken here because this is the read the served document comes from. The
+  // worker's own read of the same file, earlier in the visit, is a separate
+  // `card+source` GET that can be answered by a different realm-server replica,
+  // so a hash from there can describe bytes this build never saw.
+  //
+  // Absent on the file-extract and file-render branches, which read no card
+  // source.
+  sourceContentHash?: string;
+  // The model build's own timing breakdown, bounded and rounded for
+  // persistence. A model is built once per visit and shared by every child
+  // route step in it, so this rides the model rather than any one step: the
+  // render.meta route folds it into the payload the indexer persists. Absent
+  // on the trivial models the file-extract and file-render branches return —
+  // neither runs the stages this measures.
+  buildModelDiagnostics?: BuildModelDiagnostics;
   readonly status: RenderStatus;
   readonly ready: boolean;
   readyPromise: Promise<void>;
@@ -98,6 +135,15 @@ const renderReadyLogger = runtimeLogger('render-ready');
 const READY_SETTLE_MAX_PASSES = 20;
 const READY_SETTLE_REQUIRED_STABLE_PASSES = 2;
 const SETTLE_LOG_PRECISION = 1;
+
+// What the card branch needs to build a model, once a stash has been validated
+// and parsed: the same three values the `card+source` GET otherwise supplies.
+interface StashedCardSource {
+  realmURL: string;
+  lastModified: Date;
+  doc: LooseSingleCardDocument;
+  sourceContentHash: string;
+}
 
 export default class RenderRoute extends Route<Model> {
   @service('render-store') declare store: RenderStoreService;
@@ -128,6 +174,16 @@ export default class RenderRoute extends Route<Model> {
   #modelStates = new Map<Model, ModelState>();
   #pendingReadyModels = new Set<Model>();
   #modelPromises = new Map<string, Promise<Model>>();
+  // Stage buckets of the model build currently in progress. Held on the
+  // route rather than only on the model so the timeout capture can read the
+  // stages that completed before the stall — a model that never resolves
+  // never reaches a child route to report through.
+  #buildModelMs: BuildModelStagesMs | undefined;
+  // The same build's live per-field hydration collector. A stall inside the
+  // `hydrate` stage is exactly the case where the stage bucket never closes,
+  // so the fields collected up to the stall are what names the field the
+  // deserialization is stuck on.
+  #hydrateFieldsMs: Record<string, number> | undefined;
   #authGuard = createAuthErrorGuard();
   #restoreRenderTimers: (() => void) | undefined;
   #releaseTimerBlock: (() => void) | undefined;
@@ -145,6 +201,9 @@ export default class RenderRoute extends Route<Model> {
 
   errorHandler = (event: Event) => {
     if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+    if (isBenignResizeObserverError(event)) {
       return;
     }
     let elements = this.#ensurePrerenderElements();
@@ -179,14 +238,14 @@ export default class RenderRoute extends Route<Model> {
     // cost of an explicit clear is also small.
     this.store.clearInFlightSearch();
     // The resolved-doc search cache is INTENTIONALLY NOT cleared
-    // here. A single indexing job renders many cards in the same
+    // here. A single render scope covers many cards in the same
     // prerender tab — each card navigation activates and deactivates
-    // this route, but all those visits share one `__boxelJobId` and
-    // a stable view of the consuming realm's `boxel_index`. Cached
-    // entries from earlier renders in the job are the entire point;
-    // dropping them per-render would defeat the cache. Cross-job
-    // invalidation is handled by `fetchSearchDoc`'s entry-time
-    // jobId-change clear (and by `resetState` on harder resets).
+    // this route, but all those visits share one scope, which names a
+    // view of the consuming realm no commit has moved. Cached entries
+    // from earlier renders in the scope are the entire point; dropping
+    // them per-render would defeat the cache. Cross-scope invalidation
+    // is handled by `fetchSearchDoc`'s entry-time scope-change clear
+    // (and by `resetState` on harder resets).
     (globalThis as any).__renderModel = undefined;
     (globalThis as any).__boxelRenderCapturedDeps = undefined;
     (globalThis as any).__docsInFlight = undefined;
@@ -202,6 +261,8 @@ export default class RenderRoute extends Route<Model> {
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
+    this.#buildModelMs = undefined;
+    this.#hydrateFieldsMs = undefined;
     this.#lastAttemptedCardId = undefined;
     this.lastRenderErrorSignature = undefined;
     this.renderErrorState.clear();
@@ -236,7 +297,7 @@ export default class RenderRoute extends Route<Model> {
     if (!isTesting()) {
       // tests have their own way of dealing with window level errors in card-prerender.gts
       this.#attachWindowErrorListeners();
-      this.realm.restoreSessionsFromStorage();
+      this.realm.restoreSessionsFromStorage({ startingVisit: true });
     }
 
     // activate() doesn't run early enough for this to be set before the model()
@@ -344,6 +405,13 @@ export default class RenderRoute extends Route<Model> {
       return {
         renderStage: stage,
         stageAgeMs,
+        // The stages the model build finished. A stall leaves the stage it
+        // is in absent, and `renderStage` / `stageAgeMs` name that one — so
+        // the two together account for the whole build.
+        buildModelMs: this.#buildModelMs ?? {},
+        // Pruned on read: the collector is unbounded while the build runs,
+        // and a wedged page's diagnostic payload has to stay small.
+        hydrateFieldsMs: pruneTimingPaths(this.#hydrateFieldsMs ?? {}) ?? {},
         currentId: id,
         currentNonce: nonce,
         cardDocsInFlight: storeService.cardDocsInFlight ?? [],
@@ -415,6 +483,11 @@ export default class RenderRoute extends Route<Model> {
     // settle-time snapshot; #settleModelAfterRender repopulates it.
     (globalThis as any).__boxelRenderCapturedDeps = undefined;
     (globalThis as any).__boxelRenderRefreshCapturedDeps = undefined;
+    // Same reason: a stale bucket set from the previous card must not be
+    // readable as this build's. The trivial file branches below return
+    // before any stage runs, so they leave this empty.
+    this.#buildModelMs = {};
+    this.#hydrateFieldsMs = undefined;
     // Bind the stores to this visit's render scope before anything is fetched
     // or hydrated. A tab serves visits from many scopes and holds the
     // instances they loaded, and a resident link target is handed to
@@ -426,6 +499,13 @@ export default class RenderRoute extends Route<Model> {
     // residency midway through the render that follows it.
     this.store.observeIndexingJob();
     this.cardContextStore.observeIndexingJob();
+    // Which synchronization dropped this tab's loader, for the row's
+    // diagnostics. A dropped loader is the difference between a build that
+    // evaluates the whole module graph and one that evaluates nothing, so a
+    // reader looking at `moduleEvaluationCount` needs to know whether this
+    // visit caused it.
+    let loaderResetReason: BuildModelDiagnostics['loaderResetReason'];
+
     // Loader-epoch synchronization: indexing renders thread the realm's
     // loader epoch (re-minted whenever an index pass invalidates executable
     // modules — see RealmGenerationsTable.loader_epoch). When it differs
@@ -445,18 +525,43 @@ export default class RenderRoute extends Route<Model> {
         });
         this.store.resetCache();
         (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
+        // Which of the two the row should name is a question about blame,
+        // not about whether the graph was warm — it always is. A pooled tab
+        // boots the host app before it serves anything, so the loader has
+        // evaluated modules by the time any visit arrives, and a reset always
+        // discards something.
+        //
+        // An absent held epoch means this tab had never synchronized to this
+        // realm's epoch series: the discard is the price of where the pool ran
+        // the pass, and the pass did nothing to earn it. A held epoch that
+        // moved means the series advanced, so an executable changed and the
+        // discard follows from that change.
+        loaderResetReason = held === undefined ? 'firstEpoch' : 'loaderEpoch';
       }
     }
     if (parsedOptions.clearCache) {
+      // Never overwrites: the two fire together on the first visit of a pass
+      // that invalidated an executable, because the condition that mints a
+      // fresh epoch is the condition that arms the flag. The epoch block
+      // above already named the reset that reached every other tab serving
+      // that pass, or named the cold tab that had no graph for any of this
+      // to be about, and either is the more specific reading.
+      loaderResetReason ??= 'clearCache';
       this.loaderService.resetLoader({
         clearFetchCache: true,
         reason: 'render-route clearCache',
       });
-      let resetKey = `${id}:${nonce}`;
-      if (this.lastStoreResetKey !== resetKey) {
-        this.store.resetCache();
-        this.lastStoreResetKey = resetKey;
-      }
+      this.#resetStoreOnce(id, nonce);
+    }
+    // The store half on its own. An index pass sends this on its first render
+    // whether or not it changed a module, because a pass must never be handed
+    // an instance, a cached document, or a local-id pairing another pass left
+    // resident on this tab — and the render scope that would otherwise move
+    // that boundary (`store.observeIndexingJob` above) is only tagged onto
+    // visits by the out-of-process prerender server, so an in-browser index
+    // pass has nothing else that moves it.
+    if (parsedOptions.resetStore) {
+      this.#resetStoreOnce(id, nonce);
     }
     // A fused index render carries both `fileExtract` and `cardRender`; the
     // card branch below serves it (hydration + settle) and the render.meta
@@ -505,19 +610,19 @@ export default class RenderRoute extends Route<Model> {
       }
       let { resource } = fileRenderData;
       // The file-half twin of the card branch's declaration-derived
-      // `meta.screenshots` injection below (`declarationScreenshotsMeta`):
+      // `meta.captures` injection below (`declarationCapturesMeta`):
       // the FileDef family's declared roster asserts each slot's durable URL
       // so the file's own prerendered formats can embed it on the very first
       // pass, before that pass's captures persist.
-      let fileScreenshotsMeta = await this.fileDeclarationScreenshotsMeta(
+      let fileCapturesMeta = await this.fileDeclarationCapturesMeta(
         fileRenderData.fileDefCodeRef,
         resource,
         fileRenderData.realmURL,
       );
-      if (fileScreenshotsMeta) {
+      if (fileCapturesMeta) {
         resource = {
           ...resource,
-          meta: { ...resource.meta, screenshots: fileScreenshotsMeta },
+          meta: { ...resource.meta, captures: fileCapturesMeta },
         };
       }
       let doc = { data: resource };
@@ -558,29 +663,117 @@ export default class RenderRoute extends Route<Model> {
     // This is for host tests
     (globalThis as any).__renderModel = undefined;
 
-    (globalThis as any).__boxelSetRenderStage?.('buildModel:fetching-source');
-    let response: Response;
-    try {
-      response = await this.#authGuard.race(() =>
-        this.network.authedFetch(id, {
-          method: 'GET',
-          headers: {
-            Accept: SupportedMimeType.CardSource,
-          },
-        }),
-      );
-    } catch (err: any) {
-      if (this.#authGuard.isAuthError(err)) {
-        this.#processRenderError(err);
+    // Stage stamping for `buildModelMs`. Each `enterStage` closes the
+    // previous stage's bucket and opens the next at the same boundary the
+    // `renderStage` breadcrumb already marks — so a successful visit
+    // accounts for the model build that its route-step bucket
+    // (`indexRoutesMs.card.meta`, or `renderFormatsMs.card.isolated` on a
+    // fused visit) otherwise absorbs whole. A stage that throws or stalls
+    // never closes, which is what leaves it absent for the timeout path to
+    // name via `renderStage`.
+    // The local owns the object and the field aliases it, rather than the
+    // other way round: a build stamps the buckets it created, so a second
+    // build starting on this tab takes over what the timeout path reads
+    // without either build writing into the other's numbers.
+    let buildModelMs: BuildModelStagesMs = {};
+    this.#buildModelMs = buildModelMs;
+    let openStage: keyof BuildModelStagesMs | undefined;
+    let openedAt = 0;
+    let closeStage = () => {
+      if (openStage) {
+        buildModelMs[openStage] = roundMs(performance.now() - openedAt);
+        openStage = undefined;
+      }
+    };
+    let enterStage = (breadcrumb: string, stage: keyof BuildModelStagesMs) => {
+      closeStage();
+      openStage = stage;
+      openedAt = performance.now();
+      (globalThis as any).__boxelSetRenderStage?.(breadcrumb);
+    };
+    // Module evaluations are attributed to the build by diffing the Loader's
+    // rolling history across it. Snapshotted here rather than at the top of
+    // the method so a loader reset above (epoch change, clearCache) isn't
+    // read as this build having evaluated the whole graph twice.
+    // The slowest-N history saturates over a loader's life, so a later card
+    // in a job can evaluate modules that never enter it. The monotonic
+    // totals are snapshotted alongside it so the row can say an evaluation
+    // happened even when the itemized list comes back empty.
+    let loader = this.loaderService.loader;
+    let moduleEvaluationsBefore = loader.recentModuleEvaluations;
+    let moduleTotalsBefore = loader.moduleEvaluationTotals;
+    // Filled in place by `store.add` below; keyed by dotted field path.
+    let hydrateFieldsMs: Record<string, number> = {};
+    this.#hydrateFieldsMs = hydrateFieldsMs;
+
+    enterStage('buildModel:fetching-source', 'fetchSource');
+    let realmURL: string;
+    let lastModified: Date;
+    let doc: LooseSingleCardDocument | CardErrorsJSONAPI;
+    // The fingerprint of the stored source this build reads, whichever arm
+    // supplies it. Persisted as `boxel_index.source_content_hash` and served as
+    // `meta.version`, so both arms have to produce the same value for the same
+    // file — the one `computeContentHash` gives for the bytes on disk.
+    let sourceContentHash: string;
+    let cardSourceFrom: BuildModelDiagnostics['cardSourceFrom'];
+    let stashedSource = this.#stashedCardSource(id);
+    if (stashedSource) {
+      // An indexing visit whose caller already read these bytes. Building from
+      // them rather than fetching them again is what keeps one indexing pass
+      // from reading a card's stored source twice — and the second read is the
+      // one that crosses the public balancer, so it is also the one that can
+      // answer with something other than the card.
+      ({ realmURL, lastModified, doc, sourceContentHash } = stashedSource);
+      cardSourceFrom = 'stash';
+    } else {
+      cardSourceFrom = 'fetch';
+      let response: Response;
+      try {
+        response = await this.#authGuard.race(() =>
+          this.#fetchCardSourceWithGatewayRetry(id),
+        );
+      } catch (err: any) {
+        if (this.#authGuard.isAuthError(err)) {
+          this.#processRenderError(err);
+          throw err;
+        }
         throw err;
       }
-      throw err;
-    }
 
-    let realmURL = response.headers.get('x-boxel-realm-url')!;
-    let lastModified = new Date(response.headers.get('last-modified')!);
-    let doc: LooseSingleCardDocument | CardErrorsJSONAPI =
-      await response.json();
+      // Guard the parse. This is the document-loading path the CS-12966
+      // incident ran through: the render fetches the card's own document
+      // through the public balancer, and when that comes back a gateway error
+      // the body is the balancer's HTML error page, not a card document.
+      // Parsing it as one failed, and that parse failure was latched as the
+      // card's render verdict — one 502 that lasted milliseconds served 500 to
+      // every reader for days. A balancer 5xx, or any body that is not the JSON
+      // the request asked for, is a statement about the network rather than the
+      // card: surface it as a gateway failure the prerender server classifies
+      // and the write site withholds, instead of letting `response.json()`
+      // throw on the HTML.
+      let contentType = response.headers.get('content-type');
+      if (
+        isGatewayFailureStatus(response.status) ||
+        !isJsonContentType(contentType)
+      ) {
+        throw this.#gatewayFailureError(id, { response, contentType });
+      }
+
+      realmURL = response.headers.get('x-boxel-realm-url')!;
+      lastModified = new Date(response.headers.get('last-modified')!);
+      // Fingerprinted as bytes, before anything decodes them. A decode is not
+      // the identity: `response.text()` performs a WHATWG UTF-8 decode, which
+      // strips a leading BOM and replaces malformed sequences, while the hash a
+      // `baseVersion` is compared against is taken over what the file holds.
+      // Hashing the decoded string would give such a card a version that can
+      // never match its own base, so every operation on it would report no
+      // match and reload — the optimization silently off, for the cards least
+      // likely to be noticed. The decode still happens, downstream and only for
+      // the parse, where dropping a BOM is what `JSON.parse` requires.
+      let sourceBytes = new Uint8Array(await response.arrayBuffer());
+      sourceContentHash = computeContentHash(sourceBytes);
+      doc = JSON.parse(new TextDecoder().decode(sourceBytes));
+    }
     let canonicalId = id.replace(/\.json$/, '');
 
     let state = new TrackedMap<string, unknown>();
@@ -605,6 +798,7 @@ export default class RenderRoute extends Route<Model> {
       nonce,
       cardId: canonicalId,
       renderOptions: parsedOptions,
+      sourceContentHash,
       get status(): RenderStatus {
         return (state.get('status') as RenderStatus) ?? 'loading';
       },
@@ -616,13 +810,14 @@ export default class RenderRoute extends Route<Model> {
     this.#modelStates.set(model, modelState);
 
     let instance: CardDef | undefined;
+    let settleWaits: StoreSettleWait[] | undefined;
     try {
       if ('errors' in doc) {
         this.#dispositionModel(model, 'error');
         this.#cardTypeTracker.set({ cardId: canonicalId, nonce }, undefined);
         throw new Error(JSON.stringify(doc.errors[0], null, 2));
       }
-      (globalThis as any).__boxelSetRenderStage?.('buildModel:deriving-type');
+      enterStage('buildModel:deriving-type', 'deriveType');
       let { derivedCardType, hydratedInstance } = await this.#authGuard.race(
         async () => {
           let derivedCardType = await deriveCardTypeFromDoc(
@@ -631,8 +826,8 @@ export default class RenderRoute extends Route<Model> {
             this.loaderService.loader,
           );
 
-          await this.realm.ensureRealmMeta(realmURL);
-          let screenshotsMeta = await this.declarationScreenshotsMeta(
+          await this.#ensureVisitRealmMeta(realmURL);
+          let capturesMeta = await this.declarationCapturesMeta(
             doc,
             canonicalId,
             realmURL,
@@ -649,21 +844,35 @@ export default class RenderRoute extends Route<Model> {
                 lastModified: lastModified.getTime(),
                 realmURL: realmURL as RealmIdentifier,
                 realmInfo: { ...this.realm.info(id) },
-                ...(screenshotsMeta ? { screenshots: screenshotsMeta } : {}),
+                ...(capturesMeta ? { captures: capturesMeta } : {}),
               },
             },
           };
 
-          (globalThis as any).__boxelSetRenderStage?.('buildModel:hydrating');
-          let hydratedInstance = await this.store.add(enhancedDoc, {
-            relativeTo: rri(id),
-            realm: realmURL,
-            doNotPersist: true,
-          });
-          (globalThis as any).__boxelSetRenderStage?.(
-            'buildModel:store-settle',
+          enterStage('buildModel:hydrating', 'hydrate');
+          let hydratedInstance = await this.store.addWithoutPersisting(
+            enhancedDoc,
+            {
+              relativeTo: rri(id),
+              realm: realmURL,
+              hydrateFieldsMs,
+            },
           );
+          // What the settle drains is attributed the same way module
+          // evaluations are: the store's completed-load histories are
+          // rolling and tab-scoped, so snapshot them at the stage boundary
+          // and diff after. Hydration's own inline loads are already inside
+          // the `hydrate` bucket and its per-field breakdown; what this
+          // names is the loads it fired and left for `store.loaded()`.
+          let settleLoadsBefore = {
+            card: this.store.recentCardDocLoads(),
+            file: this.store.recentFileMetaLoads(),
+            query: this.store.recentQueryLoads(),
+          };
+          enterStage('buildModel:store-settle', 'storeSettle');
           await this.store.loaded();
+          closeStage();
+          settleWaits = this.#settleWaits(settleLoadsBefore);
           return { derivedCardType, hydratedInstance };
         },
       );
@@ -684,6 +893,25 @@ export default class RenderRoute extends Route<Model> {
     if (instance) {
       model.instance = instance;
     }
+    let moduleEvaluationsMs = pruneTimingEntries<ModuleEvaluation>(
+      newLoadEntries(moduleEvaluationsBefore, loader.recentModuleEvaluations),
+    );
+    let prunedHydrateFieldsMs = pruneTimingPaths(hydrateFieldsMs);
+    let moduleTotalsAfter = loader.moduleEvaluationTotals;
+    model.buildModelDiagnostics = {
+      buildModelMs,
+      moduleEvaluationCount: moduleTotalsAfter.count - moduleTotalsBefore.count,
+      moduleEvaluationTotalMs: roundMs(
+        moduleTotalsAfter.totalMs - moduleTotalsBefore.totalMs,
+      ),
+      ...(loaderResetReason ? { loaderResetReason } : {}),
+      ...(cardSourceFrom ? { cardSourceFrom } : {}),
+      ...(moduleEvaluationsMs ? { moduleEvaluationsMs } : {}),
+      ...(prunedHydrateFieldsMs
+        ? { hydrateFieldsMs: prunedHydrateFieldsMs }
+        : {}),
+      ...(settleWaits ? { storeSettleWaits: settleWaits } : {}),
+    };
     this.#scheduleReady(model);
 
     // this is to support in-browser rendering, where we actually don't have the
@@ -693,12 +921,270 @@ export default class RenderRoute extends Route<Model> {
     return model;
   }
 
+  // The parent `render` route's model hook runs twice per format capture (the
+  // transition normalizes through `render` before entering the child route),
+  // so a reset keyed on nothing would run twice and throw away what the first
+  // one loaded. Keyed on the card + nonce, it runs once per visit.
+  #resetStoreOnce(id: string, nonce: string) {
+    let resetKey = `${id}:${nonce}`;
+    if (this.lastStoreResetKey === resetKey) {
+      return;
+    }
+    this.store.resetCache();
+    this.lastStoreResetKey = resetKey;
+  }
+
+  // The realm info is fetched from whichever known realm `realmURL` resolves
+  // to, which is not always `realmURL`'s own: a known realm whose URL prefixes
+  // it answers first. Its fetch then fails naming a realm this render never
+  // asked about, so the failure is extended to say which realm the render asked
+  // for, which one answered, and which realm the answering one's session was
+  // issued for. A session issued for `realmURL` is this realm's own, handed to
+  // the ancestor by a registration that went through `knownRealm`; one issued
+  // for the answering realm is that realm's own, carried by this visit or left
+  // by an earlier one; no session means the tab identified the answering realm
+  // without one. The error doc then reads as a resolution fault on its own.
+  async #ensureVisitRealmMeta(realmURL: string): Promise<void> {
+    try {
+      await this.realm.ensureRealmMeta(realmURL);
+    } catch (err) {
+      let resolved = this.realm.url(realmURL);
+      let vn = this.network.virtualNetwork;
+      if (
+        err instanceof Error &&
+        resolved &&
+        vn.unresolveURL(resolved) !== vn.unresolveURL(realmURL)
+      ) {
+        let sessionRealm = this.realm.realms.get(resolved)?.claims?.realm;
+        err.message =
+          `${err.message} (this render's realm ${realmURL} resolved to the ` +
+          `known realm ${resolved}, which ` +
+          (sessionRealm
+            ? `holds a session issued for ${sessionRealm})`
+            : 'holds no session)');
+      }
+      throw err;
+    }
+  }
+
+  // What the card branch would otherwise read off its own `card+source` GET,
+  // when this render's caller already read those bytes and stashed them on the
+  // page (`__boxelCardRenderData`, the card-branch twin of
+  // `__boxelFileRenderData`). An indexing visit stashes; an on-demand `/render`
+  // of a live card has no read behind it and stashes nothing, so it fetches.
+  //
+  // Every way the stash can fail to describe this render returns `undefined`
+  // and costs only the fetch that would have happened anyway — which is why
+  // this validates rather than trusts. The one that matters is the URL: a
+  // prerender tab serves many cards, and an unkeyed stash outliving its visit
+  // would otherwise build this render's model from another card's document.
+  //
+  // Nothing upstream can be relied on to have narrowed the input. The runner
+  // clears both stashes before each of the renders it drives, but the request
+  // boundary admits any string as `source` from any caller, so the checks
+  // below — including the shape of what it parses to — are what actually hold
+  // the contract.
+  #stashedCardSource(id: string): StashedCardSource | undefined {
+    let stashed = (globalThis as any).__boxelCardRenderData as
+      | (CardSourceVisitArgs & { url: string })
+      | undefined;
+    if (
+      !stashed ||
+      typeof stashed.source !== 'string' ||
+      typeof stashed.realmURL !== 'string' ||
+      typeof stashed.lastModified !== 'number' ||
+      typeof stashed.url !== 'string'
+    ) {
+      return undefined;
+    }
+    // Both spellings reach this route: an indexing visit names the card
+    // instance's file (`…/card-1.json`) while the model is keyed on the
+    // instance (`…/card-1`), so both sides are compared stripped — the same
+    // normalization `#buildModel` applies to produce `canonicalId`.
+    if (stashed.url.replace(/\.json$/, '') !== id.replace(/\.json$/, '')) {
+      return undefined;
+    }
+    let doc: unknown;
+    try {
+      doc = JSON.parse(stashed.source);
+    } catch (err: any) {
+      // A stash that cannot be parsed is a statement about the stash, not about
+      // the card, and the card is still readable from the realm. Fetching is
+      // both the honest answer and the one that cannot make this path worse
+      // than the one it replaces.
+      console.warn(
+        `ignoring unparseable stashed card source for ${id}; fetching instead: ${err?.message}`,
+      );
+      return undefined;
+    }
+    // Parsing is not enough: `null`, `42` and `[]` all parse, and the caller
+    // goes on to test `'errors' in doc`, which throws on the first two — which
+    // would latch a render error on the card, the one outcome this fallback
+    // exists to prevent. Admit only something shaped like the document a
+    // `card+source` GET returns.
+    if (
+      typeof doc !== 'object' ||
+      doc === null ||
+      Array.isArray(doc) ||
+      typeof (doc as LooseSingleCardDocument).data !== 'object' ||
+      (doc as LooseSingleCardDocument).data === null
+    ) {
+      console.warn(
+        `ignoring stashed card source for ${id} that is not a card document; fetching instead`,
+      );
+      return undefined;
+    }
+    return {
+      realmURL: stashed.realmURL,
+      lastModified: new Date(stashed.lastModified),
+      doc: doc as LooseSingleCardDocument,
+      // Taken over the stashed source rather than over `doc`, and before the
+      // parse above is trusted for anything else. Re-serializing the parsed
+      // document would not reproduce the file: key order is whatever the parse
+      // produced, and the stored bytes are pretty-printed with a trailing
+      // newline, so the hash would be stable, deterministic and permanently
+      // unequal to the base it is compared against.
+      //
+      // The string is the file's text as the visit's reader decoded it, so for
+      // any source the realm itself wrote this is the hash of the bytes on
+      // disk. A file whose bytes are not the UTF-8 encoding of their own
+      // decoding — a BOM, or malformed sequences — can hash differently here
+      // than the write path computes, and the effect is that the card reports a
+      // version its base never matches: it reloads rather than confirming,
+      // which is the safe direction.
+      sourceContentHash: computeContentHash(stashed.source),
+    };
+  }
+
+  // Fetch the card's source document, retrying once when the first attempt
+  // fails at or above the gateway layer — a balancer 5xx, or a network-level
+  // failure that never produced a response at all. The dominant trigger for
+  // CS-12966 was a keep-alive race producing 502s that lasted milliseconds; a
+  // single retry would have turned that incident into a non-event, and it is
+  // cheaper than any classification of the failure after the fact. An auth
+  // failure is never a gateway failure, so it is rethrown untouched and never
+  // spends the one retry — the caller's auth handling deals with it.
+  async #fetchCardSourceWithGatewayRetry(id: string): Promise<Response> {
+    let attempt = () =>
+      this.network.authedFetch(id, {
+        method: 'GET',
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+      });
+    let response: Response | undefined;
+    let networkError: unknown;
+    try {
+      response = await attempt();
+    } catch (err: any) {
+      if (this.#authGuard.isAuthError(err)) {
+        throw err;
+      }
+      networkError = err;
+    }
+    if (!response || response.status >= 500) {
+      try {
+        return await attempt();
+      } catch (err: any) {
+        if (this.#authGuard.isAuthError(err)) {
+          throw err;
+        }
+        // Both attempts failed at the network level, so no response document
+        // exists to parse: this is unambiguously the network and not the card.
+        throw this.#gatewayFailureError(id, {
+          networkError: err ?? networkError,
+        });
+      }
+    }
+    return response;
+  }
+
+  // A render failure attributable to the network between the render and the
+  // realm rather than to the card. Carries a gateway status (502/503/504, or a
+  // synthesized 502 when a body could not be read as a card document or the
+  // fetch never returned) so the prerender server classifies it as
+  // unattributable and the write site withholds it — keeping the card's prior
+  // good render rather than latching a transient failure as its verdict. Its
+  // message names the URL and what actually came back, so an operator reading
+  // the row on the paths where withholding does not apply (a first render, no
+  // prior content to protect) still sees a diagnosable error.
+  #gatewayFailureError(
+    id: string,
+    opts: {
+      response?: Response;
+      contentType?: string | null;
+      networkError?: unknown;
+    },
+  ): CardError {
+    let status =
+      opts.response && isGatewayFailureStatus(opts.response.status)
+        ? opts.response.status
+        : 502;
+    let detail = opts.response
+      ? `the balancer answered HTTP ${opts.response.status}${
+          opts.contentType ? ` with content type ${opts.contentType}` : ''
+        }`
+      : `the fetch failed at the network level (${
+          (opts.networkError as Error)?.message ?? 'no error message'
+        })`;
+    let error = new CardError(
+      `Gateway or network failure while fetching the card document for ${id}: ${detail}. ` +
+        `The render's fetch of the card document went through the public balancer and did not ` +
+        `return a card document, so this describes the network rather than the card.`,
+      { status },
+    );
+    // The positive marker the prerender classifier withholds on. Stamped here,
+    // where the fetch boundary knows the failure is the network's, so the
+    // classifier never has to infer that from the status — a card render can
+    // carry a gateway status too (a render timeout is a 504), and only this
+    // marker distinguishes the two.
+    error.gatewayFailure = true;
+    return error;
+  }
+
+  // The loads that landed while the model build's settle stage was draining
+  // the store, folded into one bounded, slowest-first list. Each of the
+  // store's three histories is diffed against the snapshot taken at the
+  // stage boundary, so what comes back is this settle's own work and not the
+  // tab's. A query load names its owning field where it has one, and its
+  // `source` label otherwise — the full query shape is not persisted here
+  // (a timed-out row carries it on `recentQueryLoads`).
+  #settleWaits(before: {
+    card: Array<{ url: string; ms: number }>;
+    file: Array<{ url: string; ms: number }>;
+    query: Array<{ meta: QueryLoadMeta; ms: number }>;
+  }): StoreSettleWait[] | undefined {
+    let queryKey = ({ meta, ms }: { meta: QueryLoadMeta; ms: number }) =>
+      `${meta.cardId ?? ''}|${meta.fieldName ?? ''}|${meta.source}|${ms}`;
+    let waits: StoreSettleWait[] = [
+      ...newLoadEntries(before.card, this.store.recentCardDocLoads()).map(
+        ({ url, ms }) => ({ kind: 'card' as const, target: url, ms }),
+      ),
+      ...newLoadEntries(before.file, this.store.recentFileMetaLoads()).map(
+        ({ url, ms }) => ({ kind: 'file' as const, target: url, ms }),
+      ),
+      ...newHistoryEntries(
+        before.query,
+        this.store.recentQueryLoads(),
+        queryKey,
+      ).map(({ meta, ms }) => ({
+        kind: 'query' as const,
+        target:
+          meta.cardId && meta.fieldName
+            ? `${meta.cardId}#${meta.fieldName}`
+            : meta.source,
+        ms,
+      })),
+    ];
+    return pruneTimingEntries(waits);
+  }
+
   setupController(controller: Controller, model: Model) {
     super.setupController(controller, model);
     this.#scheduleReady(model);
   }
 
-  // The file rendering's variant of `declarationScreenshotsMeta` below (see
+  // The file rendering's variant of `declarationCapturesMeta` below (see
   // that comment for the shared rationale — declaration-derived rosters,
   // 404-then-self-heal, no `hash`): the roster comes from the file's FileDef
   // family class (resolved by extension), and the addressed path keeps its
@@ -709,14 +1195,14 @@ export default class RenderRoute extends Route<Model> {
   // in-browser prerender twin stashes no realm on purpose — it never
   // captures, so injection must stay off there, or the baked durable URLs
   // would 404 with no capture ever landing to self-heal them.
-  private async fileDeclarationScreenshotsMeta(
+  private async fileDeclarationCapturesMeta(
     fileDefCodeRef: { module: string; name: string },
     resource: {
       id?: string;
       meta?: { realmURL?: string };
     },
     visitRealmURL: string | undefined,
-  ): Promise<ScreenshotsMeta | undefined> {
+  ): Promise<CapturesMeta | undefined> {
     try {
       let id = resource.id;
       // The stashed visit realm is the authority; an extract-built resource
@@ -726,7 +1212,7 @@ export default class RenderRoute extends Route<Model> {
         return undefined;
       }
       let api = await this.cardService.getAPI();
-      if (typeof api.serializeDeclaredScreenshots !== 'function') {
+      if (typeof api.serializeDeclaredCaptures !== 'function') {
         return undefined;
       }
       let resolvedId = this.network.virtualNetwork.toURL(id);
@@ -742,28 +1228,28 @@ export default class RenderRoute extends Route<Model> {
           relativeTo: resolvedId,
         },
       );
-      let roster = api.serializeDeclaredScreenshots(
+      let roster = api.serializeDeclaredCaptures(
         Klass as typeof CardDef,
-      ) as DeclaredScreenshotRoster;
+      ) as DeclaredCaptureRoster;
       if (Object.keys(roster).length === 0) {
         return undefined;
       }
-      return screenshotsMetaFromRoster(roster, {
+      return capturesMetaFromRoster(roster, {
         realmURL,
         instanceLocalPath: resolvedId.href.slice(realmURL.length),
       });
     } catch {
-      // Same posture as `declarationScreenshotsMeta`: a class that fails to
+      // Same posture as `declarationCapturesMeta`: a class that fails to
       // load fails the render itself moments later; this auxiliary read must
       // never be what surfaces it.
       return undefined;
     }
   }
 
-  // The render context's `meta.screenshots`: derived from the class's
+  // The render context's `meta.captures`: derived from the class's
   // declared roster rather than a persisted manifest, so a card's own
   // rendered output can embed its declared captures' durable URLs
-  // (`screenshotURLs`) even on the instance's very first prerender pass —
+  // (`captureURLs`) even on the instance's very first prerender pass —
   // captures run later in that same pass, after the display-format renders,
   // so a manifest join could never see them. A URL embedded ahead of its
   // capture 404s with a short max-age until the capture lands, then
@@ -771,11 +1257,11 @@ export default class RenderRoute extends Route<Model> {
   // (`getCard`), preserving `undefined` as the not-captured absence signal.
   // Roster entries carry no `hash` for the same reason — no capture is being
   // asserted.
-  private async declarationScreenshotsMeta(
+  private async declarationCapturesMeta(
     doc: LooseSingleCardDocument,
     canonicalId: string,
     realmURL: string,
-  ): Promise<ScreenshotsMeta | undefined> {
+  ): Promise<CapturesMeta | undefined> {
     try {
       let adoptsFrom = doc.data?.meta?.adoptsFrom;
       if (!adoptsFrom) {
@@ -784,8 +1270,8 @@ export default class RenderRoute extends Route<Model> {
       let api = await this.cardService.getAPI();
       // A stale base/card-api build loaded during a deploy overlap may
       // predate this export; no roster then means no declared captures, not
-      // an error (mirrors the render.screenshots route).
-      if (typeof api.serializeDeclaredScreenshots !== 'function') {
+      // an error (mirrors the render.captures route).
+      if (typeof api.serializeDeclaredCaptures !== 'function') {
         return undefined;
       }
       let resolvedId = this.network.virtualNetwork.toURL(canonicalId);
@@ -793,16 +1279,16 @@ export default class RenderRoute extends Route<Model> {
         loader: this.loaderService.loader,
         relativeTo: resolvedId,
       });
-      let roster = api.serializeDeclaredScreenshots(
+      let roster = api.serializeDeclaredCaptures(
         Klass as typeof CardDef,
-      ) as DeclaredScreenshotRoster;
+      ) as DeclaredCaptureRoster;
       if (Object.keys(roster).length === 0) {
         return undefined;
       }
       if (!resolvedId.href.startsWith(realmURL)) {
         return undefined;
       }
-      return screenshotsMetaFromRoster(roster, {
+      return capturesMetaFromRoster(roster, {
         realmURL,
         instanceLocalPath: resolvedId.href.slice(realmURL.length),
       });
@@ -901,7 +1387,7 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__boxelRenderCapturedDeps =
       this.network.virtualNetwork.unresolveURLs(model.capturedDeps);
     // The dependency tracker keeps accumulating for this card's session after
-    // settle — child-route renders (a declared screenshot's capture-only
+    // settle — child-route renders (a declared capture's capture-only
     // component, ancestor format renders) load through the same tracker but
     // land after the snapshot above was taken. This hook lets the capture
     // engine re-snapshot once those renders are done, so a capture-only
@@ -1108,7 +1594,7 @@ export default class RenderRoute extends Route<Model> {
       }
       if (typeof routeName === 'string' && routeName.startsWith('render.')) {
         let normalized = [...params];
-        // A trailing query-params object (e.g. the fitted-screenshot
+        // A trailing query-params object (e.g. the fitted-capture
         // envelope) is not a positional route param — peel it off before the
         // base-param length heuristic below, then re-append it to the final
         // transition so router.transitionTo receives it as its query-params arg.
@@ -1561,6 +2047,34 @@ export default class RenderRoute extends Route<Model> {
     this.#windowListenersAttached = false;
   }
 
+  // The markers `#ensurePrerenderElements` mints when no render template put
+  // them on the page. A container it creates hangs off `document.body`,
+  // outside the application's root element, so tearing the app down leaves it
+  // behind; they're removed when this route is destroyed instead. Outside
+  // tests the route lives as long as the page, so this changes nothing there.
+  // In a host test run one page hosts every test's app, and a leftover
+  // `[data-prerender-error]` would answer the next test's query for one.
+  #createdPrerenderElements: HTMLElement[] = [];
+  #createdPrerenderElementsDestructorRegistered = false;
+
+  #trackCreatedPrerenderElement(element: HTMLElement) {
+    this.#createdPrerenderElements.push(element);
+    if (
+      this.#createdPrerenderElementsDestructorRegistered ||
+      this.isDestroying ||
+      this.isDestroyed
+    ) {
+      return;
+    }
+    this.#createdPrerenderElementsDestructorRegistered = true;
+    registerDestructor(this, () => {
+      for (let element of this.#createdPrerenderElements) {
+        element.remove();
+      }
+      this.#createdPrerenderElements = [];
+    });
+  }
+
   #ensurePrerenderElements(): {
     container: HTMLElement | null;
     errorElement: HTMLElement | null;
@@ -1575,6 +2089,7 @@ export default class RenderRoute extends Route<Model> {
       container = document.createElement('div');
       container.setAttribute('data-prerender', '');
       document.body.appendChild(container);
+      this.#trackCreatedPrerenderElement(container);
     }
     let errorElement = document.querySelector(
       '[data-prerender-error]',
@@ -1583,6 +2098,7 @@ export default class RenderRoute extends Route<Model> {
       errorElement = document.createElement('pre');
       errorElement.setAttribute('data-prerender-error', '');
       container.appendChild(errorElement);
+      this.#trackCreatedPrerenderElement(errorElement);
     }
     return { container, errorElement };
   }

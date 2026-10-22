@@ -1,8 +1,4 @@
-import {
-  hexToRgba,
-  hslToRgb,
-  hsvToRgb,
-} from '@cardstack/boxel-ui/helpers';
+import { hexToRgba, hslToRgb, hsvToRgb } from '@cardstack/boxel-ui/helpers';
 import type { RGBA } from '@cardstack/boxel-ui/helpers';
 
 export type ColorParseResult = {
@@ -13,7 +9,9 @@ export type ColorParseResult = {
 export const DEFAULT_RGBA: RGBA = { r: 59, g: 130, b: 246, a: 1 };
 
 // Normalize CSS colors using canvas first, then computed style.
-export function parseCssColorWithBrowser(color: string | null | undefined): ColorParseResult {
+export function parseCssColorWithBrowser(
+  color: string | null | undefined,
+): ColorParseResult {
   if (!color) {
     return { rgba: DEFAULT_RGBA, valid: false };
   }
@@ -54,7 +52,9 @@ function parseWithComputedStyle(color: string): ColorParseResult {
       return { rgba: DEFAULT_RGBA, valid: false };
     }
 
-    const rgbaMatch = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/i);
+    const rgbaMatch = computed.match(
+      /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/i,
+    );
     if (rgbaMatch) {
       return {
         rgba: {

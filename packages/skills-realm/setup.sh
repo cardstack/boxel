@@ -11,9 +11,9 @@
 # Percy diff every three weeks on a single snapshot; the fix for that belongs
 # in the tests that render third-party content, not here.
 #
-# (packages/boxel-cli/scripts/build-skills.ts does pin this same repository,
-# to a released tag. That is a different job: the CLI ships those skills to
-# users, so it needs to ship a known version.)
+# (The plugin marketplace in .claude-plugin/marketplace.json does pin this
+# same repository, to a released tag. That is a different job: it ships those
+# skills to users, so it needs to ship a known version.)
 set -euo pipefail
 
 SSH_URL="git@github.com:cardstack/boxel-skills.git"

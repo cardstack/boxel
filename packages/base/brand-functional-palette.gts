@@ -8,9 +8,9 @@ import {
 import { field, contains, Component, getFields, FieldDef } from './card-api';
 import ColorField from './color';
 import { dasherize, type CssRuleMap } from '@cardstack/boxel-ui/helpers';
-import {
-  type CssVariableField,
-  type CssVariableFieldEntry,
+import type {
+  CssVariableField,
+  CssVariableFieldEntry,
 } from './structured-theme-variables';
 
 export const formatSwatchName = (name?: string) => {

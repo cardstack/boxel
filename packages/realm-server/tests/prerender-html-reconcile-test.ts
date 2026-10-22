@@ -12,7 +12,9 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   asExpressions,
-  DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+  DECLARED_CAPTURE_RETRY_CAP,
+  GATEWAY_FAILURE_RETRY_CAP,
+  STALE_SHELL_FAILURE_RETRY_CAP,
   findPrerenderHtmlRejectionStreaks,
   insert,
   insertPermissions,
@@ -36,6 +38,7 @@ interface PrerenderHtmlJobRow {
     realmURL: string;
     realmUsername: string;
     generation: number;
+    spawningIndexPasses?: { jobId: number; passId: string }[];
     loaderEpoch: string;
     changes: { url: string; operation: string }[];
   };
@@ -181,6 +184,7 @@ module(basename(import.meta.filename), function (hooks) {
     status = 'unfulfilled',
     operation = 'update',
     finishedMinutesAgo,
+    spawningIndexPasses,
   }: {
     realmURL: string;
     generation: number;
@@ -188,6 +192,7 @@ module(basename(import.meta.filename), function (hooks) {
     status?: string;
     operation?: string;
     finishedMinutesAgo?: number;
+    spawningIndexPasses?: { jobId: number; passId: string }[];
   }) {
     let job = await insertJob(dbAdapter, {
       job_type: 'prerender_html',
@@ -197,6 +202,8 @@ module(basename(import.meta.filename), function (hooks) {
         realmURL,
         realmUsername: 'owner',
         generation,
+        // A job enqueued by current code: a repair names no passes.
+        spawningIndexPasses: spawningIndexPasses ?? [],
         loaderEpoch: '0',
         spawningJobId: null,
         coalescedPublishes: null,
@@ -458,6 +465,111 @@ module(basename(import.meta.filename), function (hooks) {
         (change) => change.url === `${realmURL}mango.json`,
       ),
       'the stale URL is in the coalesced job',
+    );
+  });
+
+  // What a spawning index pass's commit leaves on the ledger.
+  async function seedIndexCommit({
+    realmURL,
+    jobId,
+    generation,
+  }: {
+    realmURL: string;
+    jobId: number;
+    generation: number;
+  }) {
+    await query(dbAdapter, [
+      `INSERT INTO realm_index_commits
+         (realm_url, generation, base_generation, pass_id, job_id, urls, full_realm, committed_at)
+       VALUES (`,
+      param(realmURL),
+      ',',
+      param(generation),
+      ',',
+      param(generation - 1),
+      ',',
+      param(`pass-${jobId}`),
+      ',',
+      param(jobId),
+      `, NULL, false,`,
+      param(Date.now()),
+      ')',
+    ] as Expression);
+  }
+
+  test('a job still waiting on its spawning pass covers the row, whatever generation it lands at', async function (assert) {
+    const realmURL = 'http://example.com/d2/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 4,
+    });
+    // Its spawning pass has not committed, so the job has not read its
+    // stamps yet, and will read them from a commit newer than this row.
+    await seedPrerenderHtmlJob({
+      realmURL,
+      // The anticipated generation, read only by older workers.
+      generation: 5,
+      spawningIndexPasses: [{ jobId: 777, passId: 'pass-777' }],
+      urls: [`${realmURL}mango.json`],
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'the pending job covers the row',
+    );
+  });
+
+  test('a job whose spawning pass committed below the row does not cover it', async function (assert) {
+    const realmURL = 'http://example.com/d3/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 3,
+    });
+    // The spawning pass committed 3; a later pass has since moved the row
+    // to 5.
+    await seedIndexCommit({ realmURL, jobId: 778, generation: 3 });
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 3,
+      spawningIndexPasses: [{ jobId: 778, passId: 'pass-778' }],
+      urls: [`${realmURL}mango.json`],
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the row is repaired',
+    );
+    let jobs = await prerenderHtmlJobs(realmURL);
+    assert.strictEqual(jobs.length, 1, 'the repair coalesced into one job');
+    assert.deepEqual(
+      jobs[0].args.spawningIndexPasses,
+      [{ jobId: 778, passId: 'pass-778' }],
+      'the coalesced job still waits on its spawning pass',
+    );
+    assert.strictEqual(
+      jobs[0].args.generation,
+      5,
+      'and carries the committed generation the repair was spawned from',
     );
   });
 
@@ -1139,8 +1251,8 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
   });
 
-  test('a healthy row with a screenshot-capture failure below the cap is re-rendered once it ages past the minimum', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-retry/';
+  test('a healthy row with a capture-capture failure below the cap is re-rendered once it ages past the minimum', async function (assert) {
+    const realmURL = 'http://example.com/capture-retry/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5, 'epoch-a');
     await seedIndexRow({
@@ -1155,14 +1267,14 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotErrors: [
+        captureErrors: [
           {
             name: 'hero',
             message: 'render never painted',
             consecutiveFailures: 1,
           },
         ],
-        screenshotCaptureFailureRenders: 1,
+        captureFailureRenders: 1,
       },
       renderedMinutesAgo: 60,
     });
@@ -1185,8 +1297,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a screenshot-failure entry recorded without a run count reads as a run of one', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-legacy/';
+  test('a capture-failure entry recorded without a run count reads as a run of one', async function (assert) {
+    const realmURL = 'http://example.com/capture-legacy/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1199,7 +1311,7 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotErrors: [{ name: '*', message: 'roster read failed' }],
+        captureErrors: [{ name: '*', message: 'roster read failed' }],
       },
       renderedMinutesAgo: 60,
     });
@@ -1213,7 +1325,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a row whose every recorded slot has reached the capture-retry cap is terminal', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-capped/';
+    const realmURL = 'http://example.com/capture-capped/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1226,16 +1338,16 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotErrors: [
+        captureErrors: [
           {
             name: 'hero',
             message: 'render never painted',
-            consecutiveFailures: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+            consecutiveFailures: DECLARED_CAPTURE_RETRY_CAP,
           },
           {
             name: 'poster',
             message: 'capture engine returned no bytes for "poster"',
-            consecutiveFailures: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP + 1,
+            consecutiveFailures: DECLARED_CAPTURE_RETRY_CAP + 1,
           },
         ],
       },
@@ -1246,13 +1358,13 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       result,
       { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
-      'the recorded absences stand — the card stays served without the screenshots',
+      'the recorded absences stand — the card stays served without the captures',
     );
     assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
   });
 
   test('a row whose failing-render counter is at the cap is terminal even when per-slot runs are not', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-row-capped/';
+    const realmURL = 'http://example.com/capture-row-capped/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1269,14 +1381,14 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotErrors: [
+        captureErrors: [
           {
             name: '*',
-            message: 'declared screenshot capture failed',
+            message: 'declared capture failed',
             consecutiveFailures: 1,
           },
         ],
-        screenshotCaptureFailureRenders: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+        captureFailureRenders: DECLARED_CAPTURE_RETRY_CAP,
       },
       renderedMinutesAgo: 600,
     });
@@ -1291,7 +1403,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('one slot below the cap keeps a row retryable even when another slot is capped', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-mixed/';
+    const realmURL = 'http://example.com/capture-mixed/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1306,11 +1418,11 @@ module(basename(import.meta.filename), function (hooks) {
       // No row-level counter recorded (a legacy row) — it reads as one
       // failing render, so the per-slot term decides here.
       diagnostics: {
-        screenshotErrors: [
+        captureErrors: [
           {
             name: 'hero',
             message: 'render never painted',
-            consecutiveFailures: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+            consecutiveFailures: DECLARED_CAPTURE_RETRY_CAP,
           },
           {
             name: 'poster',
@@ -1330,8 +1442,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a screenshot-capture failure younger than the minimum age is not retried yet', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-fresh/';
+  test('a capture-capture failure younger than the minimum age is not retried yet', async function (assert) {
+    const realmURL = 'http://example.com/capture-fresh/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1344,7 +1456,7 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotErrors: [
+        captureErrors: [
           {
             name: 'hero',
             message: 'render never painted',
@@ -1364,8 +1476,44 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
   });
 
-  test('a healthy row with capture timings but no capture failures is not residue', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-healthy/';
+  test('a withheld stale-shell failure is re-driven once it is old enough', async function (assert) {
+    // Withholding publishes the prior render and clears the error, so the row
+    // reads as a healthy current-generation render. That removes the very
+    // signal — `has_error` — that used to tell an operator to reindex, so
+    // without this lane a deploy overlap that resolves leaves nothing asking
+    // for the re-render.
+    const realmURL = 'http://example.com/stale-shell-retry/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      // Current generation and no error_doc: indistinguishable from healthy
+      // on every other lane.
+      generation: 5,
+      diagnostics: {
+        staleShellFailure: ['instance'],
+        staleShellFailureRenders: 1,
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the withheld row is enqueued for a fresh render',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 1);
+  });
+
+  test('a withheld stale-shell failure younger than the minimum age waits', async function (assert) {
+    const realmURL = 'http://example.com/stale-shell-fresh/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1378,7 +1526,158 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotTimingsMs: { hero: 1200 },
+        staleShellFailure: ['instance'],
+        staleShellFailureRenders: 1,
+      },
+      renderedMinutesAgo: 2,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a shell disagreement is given time to resolve before re-rendering',
+    );
+  });
+
+  test('a withheld stale-shell failure at the retry cap is terminal', async function (assert) {
+    // If the shells never agree, retrying forever buys nothing — the
+    // diagnostics stay on the row for someone to read.
+    const realmURL = 'http://example.com/stale-shell-capped/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        staleShellFailure: ['instance'],
+        staleShellFailureRenders: STALE_SHELL_FAILURE_RETRY_CAP,
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a row that has exhausted its retries stops being re-driven',
+    );
+  });
+
+  test('a withheld gateway failure is re-driven once it is old enough', async function (assert) {
+    // A gateway/network failure withholds by clearing the error and keeping
+    // the prior render at the current generation — so, like a withheld
+    // stale-shell failure, the row reads as a healthy fresh render and nothing
+    // is left asking for the re-render once the network recovers. This lane is
+    // the only thing that re-drives it, which is what turns the CS-12966
+    // days-long latch into a sweep-cadence one.
+    const realmURL = 'http://example.com/gateway-retry/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        gatewayFailure: ['instance'],
+        gatewayFailureRenders: 1,
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the withheld row is enqueued for a fresh render',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 1);
+  });
+
+  test('a withheld gateway failure younger than the minimum age waits', async function (assert) {
+    const realmURL = 'http://example.com/gateway-fresh/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        gatewayFailure: ['instance'],
+        gatewayFailureRenders: 1,
+      },
+      renderedMinutesAgo: 1,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a just-written withheld row is not re-rendered in the same tick',
+    );
+  });
+
+  test('a withheld gateway failure at the retry cap is terminal', async function (assert) {
+    // If the network problem never clears, retrying forever buys nothing — the
+    // diagnostics stay on the row for someone to read.
+    const realmURL = 'http://example.com/gateway-capped/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        gatewayFailure: ['instance'],
+        gatewayFailureRenders: GATEWAY_FAILURE_RETRY_CAP,
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a row that has exhausted its retries stops being re-driven',
+    );
+  });
+
+  test('a healthy row with capture timings but no capture failures is not residue', async function (assert) {
+    const realmURL = 'http://example.com/capture-healthy/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        captureTimingsMs: { hero: 1200 },
       },
       renderedMinutesAgo: 600,
     });

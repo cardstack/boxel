@@ -7,6 +7,7 @@ import {
   logger,
   mintRealmLoaderEpoch,
   trimExecutableExtension,
+  type DefinitionLookup,
   type ErrorEntry,
   type JobInfo,
   type ModuleDefinitionResult,
@@ -18,11 +19,15 @@ import {
   rri,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { preWarmModulesTable } from '@cardstack/runtime-common/index-runner/prewarm-modules';
+import {
+  preWarmModulesTable,
+  realmCardModulesToWarm,
+} from '@cardstack/runtime-common/index-runner/prewarm-modules';
 import type { DependencyIndexRow } from '@cardstack/runtime-common/index-writer';
 import {
   setupPermissionedRealmsCached,
   createVirtualNetwork,
+  closeTestPgAdapter,
   createTestPgAdapter,
   prepareTestDB,
   testCreatePrerenderAuth,
@@ -223,6 +228,23 @@ module(basename(import.meta.filename), function () {
                 }
               }
             `,
+            // The three `BaseDef` families in one module, so the realm's own
+            // indexing writes an entry of each kind into the modules table.
+            'families.gts': `
+              import { CardDef, FieldDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { FileDef } from '@cardstack/base/file-api';
+              export class Caption extends FieldDef {
+                static displayName = "Caption";
+                @field text = contains(StringField);
+              }
+              export class Photo extends CardDef {
+                static displayName = "Photo";
+                @field caption = contains(Caption);
+              }
+              export class PhotoFile extends FileDef {
+                static displayName = "PhotoFile";
+              }
+            `,
             '1.json': {
               data: {
                 attributes: {
@@ -257,6 +279,74 @@ module(basename(import.meta.filename), function () {
           },
         });
       },
+    });
+
+    // A file has a URL and read-only, content-derived metadata, so a consumer
+    // deciding what a target supports has to be able to tell it apart from a
+    // field — which means the kind the indexer derived has to survive into the
+    // row a loaderless reader consults. Read straight off the row the fixture
+    // realm's own indexing wrote, so this covers the real classification and
+    // its persistence rather than either alone.
+    test('the indexer records each BaseDef family under its own kind', async function (assert) {
+      // The realm was from-scratch indexed during setup, and families.gts has
+      // no instances and is imported by nothing, so the realm-wide sweep is
+      // what put its row here. A module is addressable by either alias.
+      let rows = (await dbAdapter.execute(
+        `SELECT definitions FROM modules WHERE url = ANY($1) OR file_alias = ANY($1)`,
+        { bind: [[`${realmURL}families`, `${realmURL}families.gts`]] },
+      )) as { definitions: unknown }[];
+      // Exactly one row: `modules` is keyed on (url, cache_scope, auth_user_id),
+      // so a second row for this module would mean the lookup below is reading
+      // an arbitrary one of them.
+      assert.strictEqual(rows.length, 1, 'the sweep cached the module once');
+      let raw = rows[0]?.definitions;
+      let persisted =
+        typeof raw === 'string'
+          ? (JSON.parse(raw) as Record<string, any>)
+          : ((raw ?? {}) as Record<string, any>);
+      let byExportName = Object.fromEntries(
+        Object.entries(persisted).map(([key, entry]) => [
+          key.split('/').pop(),
+          (entry as any).definition,
+        ]),
+      );
+      assert.deepEqual(
+        {
+          Photo: byExportName.Photo?.type,
+          Caption: byExportName.Caption?.type,
+          PhotoFile: byExportName.PhotoFile?.type,
+        },
+        {
+          Photo: 'card-def',
+          Caption: 'field-def',
+          PhotoFile: 'file-def',
+        },
+        'each family is recorded under its own kind',
+      );
+      // `displayName` names the thing a user sees, which a card and a file
+      // both have and a field does not.
+      assert.strictEqual(
+        byExportName.Photo?.displayName,
+        'Photo',
+        "a card def's display name",
+      );
+      assert.strictEqual(
+        byExportName.PhotoFile?.displayName,
+        'PhotoFile',
+        "a file def's display name",
+      );
+      assert.strictEqual(
+        byExportName.Caption?.displayName,
+        null,
+        'the entry for a field def records none',
+      );
+      // A file def's own fields are captured the way a card's are, so a
+      // consumer reads a file's metadata off its entry without loading the
+      // module.
+      assert.ok(
+        'contentType' in (byExportName.PhotoFile?.fields ?? {}),
+        "a file def's fields are captured",
+      );
     });
 
     test('lookupDefinition', async function (assert) {
@@ -373,6 +463,66 @@ module(basename(import.meta.filename), function () {
         2,
         'prerenderModule was called a second time after invalidation',
       );
+    });
+
+    // An answer derived from definitions is kept while the generation holds
+    // the value it had before the definitions were read. The generation moves
+    // before an invalidation's delete, and again once it has committed: a
+    // reader between the two can still read the row being removed, and what
+    // it derives must not outlive the delete.
+    test('the definition generation moves before and after each invalidation’s delete', async function (assert) {
+      let lookup: CachingDefinitionLookup;
+      let atDelete: number[] = [];
+      let observed = new Proxy(dbAdapter, {
+        get(target, property) {
+          if (property === 'execute') {
+            return async (...args: Parameters<PgAdapter['execute']>) => {
+              let result = await target.execute(...args);
+              if (/DELETE FROM\s+modules/i.test(args[0])) {
+                atDelete.push(lookup.definitionGeneration());
+              }
+              return result;
+            };
+          }
+          let value = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      lookup = new CachingDefinitionLookup(
+        observed,
+        mockRemotePrerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let invalidations: [string, () => Promise<unknown>][] = [
+        ['invalidate', () => lookup.invalidate(`${realmURL}person.gts`)],
+        ['clearRealmDefinitions', () => lookup.clearRealmDefinitions(realmURL)],
+        ['clearAllDefinitions', () => lookup.clearAllDefinitions()],
+      ];
+      for (let [name, invalidation] of invalidations) {
+        atDelete = [];
+        let before = lookup.definitionGeneration();
+        await invalidation();
+        assert.true(atDelete.length > 0, `${name} deletes rows`);
+        assert.true(
+          atDelete[0] > before,
+          `${name} moves the generation before its delete`,
+        );
+        assert.true(
+          lookup.definitionGeneration() > atDelete[atDelete.length - 1],
+          `${name} moves it again once its delete has committed`,
+        );
+      }
     });
 
     test('invalidates module cache entries without file extensions', async function (assert) {
@@ -2522,7 +2672,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
       nextPrerenderMeta = undefined;
       nextPersonDefinitionParts = undefined;
       nextPersonOperations = undefined;
@@ -2674,9 +2824,37 @@ module(basename(import.meta.filename), function () {
             },
           },
           program: {
-            source:
-              'append(.comments;{body:params("body"),author:card(actor("id"))});',
+            source: 'append(.comments;{body:params("body"),postedBy:actor()});',
             syntax: 'solidified',
+          },
+          deterministic: true,
+        },
+        // The source-level writes carry no program at all: what reaches the
+        // realm for one is the item template it substitutes into the stored
+        // file, markers and all.
+        logEvent: {
+          base: 'appendContainsMany',
+          params: {
+            body: {
+              kind: 'field',
+              codeRef: { module: `${realmURL}string`, name: 'default' },
+            },
+          },
+          items: {
+            events: {
+              body: { $ref: 'params', key: 'body' },
+              at: { $ref: 'realmConfig', key: 'clock' },
+            },
+          },
+          deterministic: true,
+        },
+        record: {
+          base: 'appendLine',
+          params: {
+            line: {
+              kind: 'field',
+              codeRef: { module: `${realmURL}string`, name: 'default' },
+            },
           },
           deterministic: true,
         },
@@ -2779,6 +2957,438 @@ module(basename(import.meta.filename), function () {
   // setupPermissionedRealmsCached fixture — pre-warm runs in the worker,
   // which has no realm-server / prerender / Chromium, so we only need a pg
   // adapter, a fake registered realm for the reader, and a mock prerenderer.
+  module('remote realm visibility probe', function (hooks) {
+    let adapter: PgAdapter;
+    let localRealmURL = 'http://127.0.0.1:4453/';
+    let testUserId = '@user1:localhost';
+
+    // A module in a realm this lookup does not host is placed by probing the
+    // realm that holds it, and every case below is one the probe cannot place:
+    // buildLookupContext returns null and the lookup throws before it reads or
+    // writes the definition cache. What is under test is therefore what the
+    // probe costs, not what gets cached.
+    let localRealm = {
+      url: localRealmURL,
+      async getRealmOwnerUserId() {
+        return testUserId;
+      },
+      async visibility(): Promise<'private'> {
+        return 'private';
+      },
+    };
+
+    let unusedPrerenderer: Prerenderer = {
+      async prerenderModule(): Promise<ModuleRenderResponse> {
+        throw new Error(
+          'a probe that cannot place its module must never reach the prerenderer',
+        );
+      },
+      async prerenderVisit() {
+        throw new Error('Not implemented in mock');
+      },
+      async runCommand() {
+        throw new Error('Not implemented in mock');
+      },
+    };
+
+    let virtualNetwork: VirtualNetwork;
+    let sharedLookup: CachingDefinitionLookup;
+    let lookup: DefinitionLookup;
+
+    // A realm like the one above but owned by someone else, so a lookup
+    // scoped to it probes as a different user.
+    function realmOwnedBy(url: string, userId: string) {
+      return {
+        url,
+        async getRealmOwnerUserId() {
+          return userId;
+        },
+        async visibility(): Promise<'private'> {
+          return 'private';
+        },
+      };
+    }
+
+    hooks.before(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+    });
+
+    hooks.after(async function () {
+      await closeTestPgAdapter(adapter);
+    });
+
+    hooks.beforeEach(function () {
+      virtualNetwork = createVirtualNetwork();
+      // One instance per test, so the probe maps a test observes are its own.
+      sharedLookup = new CachingDefinitionLookup(
+        adapter,
+        unusedPrerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup = sharedLookup.forRealm(localRealm);
+    });
+
+    test('a probe whose remote never answers is abandoned at its own deadline', async function (assert) {
+      let remoteModuleURL = 'http://silent-remote-realm/person.gts';
+      let probed = false;
+
+      // A remote that accepts the request and then goes quiet, and that
+      // ignores the abort signal entirely — which is the shape that matters,
+      // because the signal is rebuilt by every layer between here and the
+      // socket (URL remapping, the retry wrapper, the undici dispatcher) and
+      // a probe must be bounded even where none of them honors it. A handler
+      // that resolved on abort instead would pass on the strength of the
+      // signal alone and say nothing about the caller's own bound.
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        probed = true;
+        return await new Promise<Response>(() => {});
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let startedAt = Date.now();
+        await assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(remoteModuleURL),
+            name: 'Person',
+          }),
+          'a realm that never answers the probe reads as one that cannot place the module',
+        );
+        let elapsed = Date.now() - startedAt;
+
+        assert.true(probed, 'the remote was probed');
+        assert.ok(
+          elapsed < 9_000,
+          `the probe is abandoned on the caller's own deadline rather than on the network's (took ${elapsed}ms)`,
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('concurrent probes of one module by one caller share a single request', async function (assert) {
+      let remoteModuleURL = 'http://slow-remote-realm/person.gts';
+      let probes = 0;
+      let releaseProbe: (() => void) | undefined;
+      let probeGate = new Promise<void>((resolve) => {
+        releaseProbe = resolve;
+      });
+
+      // A 404 answer: enough to establish that the probe was made, while
+      // leaving no unreachable-origin record behind — so the count below
+      // measures concurrent probes sharing one request and nothing else.
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        probes++;
+        await probeGate;
+        return new Response(null, { status: 404 });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let lookups = [1, 2, 3].map(() =>
+          assert.rejects(
+            lookup.lookupDefinition({
+              module: rri(remoteModuleURL),
+              name: 'Person',
+            }),
+            'no module to place under a path the realm does not serve',
+          ),
+        );
+        // Let all three lookups reach the probe before any probe answers, so
+        // a first probe that happened to settle early cannot be mistaken for
+        // three probes having been shared.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        releaseProbe!();
+        await Promise.all(lookups);
+
+        assert.strictEqual(
+          probes,
+          1,
+          'three concurrent lookups of one module probe the remote realm once',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('an origin whose probe failed at the transport is not probed again while the record stands', async function (assert) {
+      let remoteRealmURL = 'http://unreachable-remote-realm/';
+      let probes = 0;
+
+      // A transport failure — the connection never opens — as opposed to a
+      // server that answers with a status. It is a property of the origin, so
+      // the one record covers every module under it.
+      let handler = async (request: Request) => {
+        if (
+          request.method !== 'HEAD' ||
+          !request.url.startsWith(remoteRealmURL)
+        ) {
+          return null;
+        }
+        probes++;
+        throw new TypeError('fetch failed');
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        for (let moduleName of ['person.gts', 'pet.gts', 'person.gts']) {
+          await assert.rejects(
+            lookup.lookupDefinition({
+              module: rri(`${remoteRealmURL}${moduleName}`),
+              name: 'Person',
+            }),
+            `${moduleName} cannot be placed while the realm holding it is unreachable`,
+          );
+        }
+
+        assert.strictEqual(
+          probes,
+          1,
+          'the origin is probed once; later lookups under it read the record instead of the network',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('a deadline is not mistaken for a retryable failure on a retryable origin', async function (assert) {
+      // `localhost` is a retryable host in the test suite, so this probe goes
+      // through the retry loop rather than past it. The retry layer classifies
+      // by error name and treats only a caller's abort as final; a deadline
+      // that raised anything else would be retried, leaving attempts running
+      // in the background after the deadline had been reported.
+      let remoteModuleURL = 'http://localhost:9/person.gts';
+      let attempts = 0;
+
+      // Rejects with the abort reason the way a real fetch does, which is what
+      // puts the reason's name in front of the retry layer's classifier. A
+      // handler that ignored the signal would leave the request pending
+      // instead, and the retry loop — which only ever sees rejections — would
+      // never be reached at all, so the test would pass whatever the name.
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        attempts++;
+        return await new Promise<Response>((_resolve, reject) => {
+          request.signal.addEventListener(
+            'abort',
+            () => reject(request.signal.reason),
+            { once: true },
+          );
+        });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let startedAt = Date.now();
+        await assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(remoteModuleURL),
+            name: 'Person',
+          }),
+          'a retryable origin that never answers still cannot place the module',
+        );
+        let elapsed = Date.now() - startedAt;
+
+        assert.strictEqual(attempts, 1, 'the probe was attempted once');
+        assert.ok(
+          elapsed < 9_000,
+          `the deadline ended the probe rather than the retry ladder (took ${elapsed}ms)`,
+        );
+
+        // Longer than the first retry's backoff, so a retried attempt would
+        // have landed by now.
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        assert.strictEqual(
+          attempts,
+          1,
+          'no further attempt is issued after the deadline is reported',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('an origin answering one probe clears a record another probe left', async function (assert) {
+      // The record is written by a probe that fails at the transport, and read
+      // before any probe is made — so the only way a probe reaches an origin
+      // that is already recorded is by having been in flight when the record
+      // was written. That overlap is what this covers: leaving the record
+      // standing would hide a realm that is demonstrably answering.
+      let remoteRealmURL = 'http://recovering-remote-realm/';
+      let attempted: string[] = [];
+      let releaseFailing: (() => void) | undefined;
+      let releaseAnswering: (() => void) | undefined;
+      let failingGate = new Promise<void>((resolve) => {
+        releaseFailing = resolve;
+      });
+      let answeringGate = new Promise<void>((resolve) => {
+        releaseAnswering = resolve;
+      });
+
+      let handler = async (request: Request) => {
+        if (
+          request.method !== 'HEAD' ||
+          !request.url.startsWith(remoteRealmURL)
+        ) {
+          return null;
+        }
+        attempted.push(request.url);
+        if (request.url.endsWith('/fails.gts')) {
+          await failingGate;
+          throw new TypeError('fetch failed');
+        }
+        await answeringGate;
+        return new Response(null, { status: 404 });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let failing = assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(`${remoteRealmURL}fails.gts`),
+            name: 'Person',
+          }),
+          'the entry whose probe fails at the transport cannot be placed',
+        );
+        let answering = assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(`${remoteRealmURL}answers.gts`),
+            name: 'Person',
+          }),
+          'the entry whose probe is answered 404 has no module to place',
+        );
+
+        // Both probes are past the record check before either settles; the
+        // failing one then records the origin, and the answered one has to
+        // clear it.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        releaseFailing!();
+        await failing;
+        releaseAnswering!();
+        await answering;
+
+        attempted.length = 0;
+        await assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(`${remoteRealmURL}later.gts`),
+            name: 'Person',
+          }),
+          'a later entry under the same origin still cannot be placed',
+        );
+        assert.deepEqual(
+          attempted,
+          [`${remoteRealmURL}later.gts`],
+          'the origin is probed again rather than read as unreachable',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('two owners probing one module do not share a visibility result', async function (assert) {
+      // The probe's answer decides `cacheScope` and `cacheUserId`, so sharing
+      // one across callers would hand one user's view of a private realm to
+      // another. Each caller must get its own request, carrying its own
+      // assumed user.
+      let remoteRealmURL = 'http://per-user-remote-realm/';
+      let remoteModuleURL = `${remoteRealmURL}person.gts`;
+      let firstOwner = '@owner-one:localhost';
+      let secondOwner = '@owner-two:localhost';
+      let assumedUsers: string[] = [];
+      let release: (() => void) | undefined;
+      let gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        assumedUsers.push(request.headers.get('X-Boxel-Assume-User') ?? '');
+        await gate;
+        return new Response(null, { status: 404 });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let asFirst = sharedLookup.forRealm(
+          realmOwnedBy('http://127.0.0.1:4454/', firstOwner),
+        );
+        let asSecond = sharedLookup.forRealm(
+          realmOwnedBy('http://127.0.0.1:4455/', secondOwner),
+        );
+
+        let lookups = [asFirst, asSecond].map((scoped) =>
+          assert.rejects(
+            scoped.lookupDefinition({
+              module: rri(remoteModuleURL),
+              name: 'Person',
+            }),
+            'neither caller finds a module to place',
+          ),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        release!();
+        await Promise.all(lookups);
+
+        assert.deepEqual(
+          assumedUsers.slice().sort(),
+          [firstOwner, secondOwner].slice().sort(),
+          'each owner gets its own probe, carrying its own assumed user',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('a probe answered with a status is repeated rather than recorded', async function (assert) {
+      let remoteModuleURL = 'http://answering-remote-realm/person.gts';
+      let probes = 0;
+
+      // A 404 says the path is absent, not that the origin is unreachable, so
+      // it must not suppress the next probe: the module may appear a moment
+      // later, and a realm that answers is already cheap to ask.
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        probes++;
+        return new Response(null, { status: 404 });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        for (let attempt of [1, 2]) {
+          await assert.rejects(
+            lookup.lookupDefinition({
+              module: rri(remoteModuleURL),
+              name: 'Person',
+            }),
+            `attempt ${attempt} finds no module to place`,
+          );
+        }
+
+        assert.strictEqual(
+          probes,
+          2,
+          'an origin that answers is probed again on the next lookup',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+  });
+
   module('module pre-warm (worker bare lookup)', function (hooks) {
     let adapter: PgAdapter;
     let realmURL = 'http://127.0.0.1:4452/';
@@ -2851,7 +3461,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     test('explicit-context populate persists where the self-resolving lookup no-ops', async function (assert) {
@@ -3021,6 +3631,37 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("pre-warm sweep leaves out the modules the realm's ignore rules exclude", async function (assert) {
+      let files: Record<string, string> = {
+        'card.gts': '',
+        'card.test.gts': '',
+        'scripts/build.gts': '',
+        'notes.md': '',
+        '.boxelignore': '.boxelignore\n*.test.gts\nscripts/\n',
+      };
+      let reader: Reader = {
+        readFile: async (url: URL) => {
+          let path = url.href.slice(realmURL.length);
+          return path in files
+            ? { content: files[path], lastModified: 0, path }
+            : undefined;
+        },
+        readStream: () => {
+          throw new Error('reader should not stream in this test');
+        },
+        mtimes: async () =>
+          Object.fromEntries(
+            Object.keys(files).map((path) => [`${realmURL}${path}`, 1]),
+          ),
+      };
+
+      assert.deepEqual(
+        await realmCardModulesToWarm(new URL(realmURL), reader),
+        [`${realmURL}card.gts`],
+        'test files and scripts are not swept',
+      );
+    });
+
     test('pre-warm sweep warms only realm-own modules, skipping cross-realm deps', async function (assert) {
       // The populate keys every row on the job realm's cache context, while
       // the render-phase reader keys a module's row on the realm the module
@@ -3102,6 +3743,8 @@ module(basename(import.meta.filename), function () {
         reservationId: 1,
         priority: 10,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       };
 
       let warmed = await preWarmModulesTable({
@@ -3157,6 +3800,97 @@ module(basename(import.meta.filename), function () {
         `every persisted module row is realm-own (got: ${rows
           .map((row) => row.url)
           .join(', ')})`,
+      );
+    });
+
+    test('pre-warm sweep skips file deps that are not modules', async function (assert) {
+      let virtualNetwork = createVirtualNetwork();
+      let prerenderedModuleUrls: string[] = [];
+      let capturingPrerenderer: Prerenderer = {
+        async prerenderModule(args: ModulePrerenderArgs) {
+          prerenderedModuleUrls.push(args.url);
+          return Promise.resolve({
+            id: 'example-id',
+            status: 'ready',
+            nonce: '12345',
+            isShimmed: false,
+            lastModified: +new Date(),
+            createdAt: +new Date(),
+            deps: [],
+            definitions: {},
+          }) as Promise<ModuleRenderResponse>;
+        },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+      };
+      let workerLookup = new CachingDefinitionLookup(
+        adapter,
+        capturingPrerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+
+      let markdownFile = `${realmURL}docs/accordion.md`;
+      let imageFile = `${realmURL}images/hero.png`;
+      let helperModule = `${realmURL}lib/helpers.ts`;
+      let dottedModule = `${realmURL}components/accordion.usage`;
+      let unusedReader: Reader = {
+        readFile: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+        readStream: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+        mtimes: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+      };
+
+      await preWarmModulesTable({
+        realmURL: new URL(realmURL),
+        invalidations: [new URL(markdownFile)],
+        allRealmCardModules: [],
+        definitionLookup: workerLookup,
+        virtualNetwork,
+        reader: unusedReader,
+        getDependencyRows: async () =>
+          [
+            {
+              url: markdownFile,
+              type: 'file',
+              deps: [markdownFile, imageFile, helperModule, dottedModule],
+              hasError: false,
+              isDeleted: false,
+              errorDoc: null,
+            },
+          ] as DependencyIndexRow[],
+        getModuleCacheContext: async () => ({
+          resolvedRealmURL: realmURL,
+          cacheScope: 'realm-auth' as const,
+          authUserId: testUserId,
+        }),
+        prerenderUserId: testUserId,
+        jobPriority: 10,
+        jobInfo: {
+          jobId: 1,
+          reservationId: 1,
+          priority: 10,
+          queueWaitMs: null,
+          concurrencyGroup: null,
+          laneFamily: null,
+        },
+        log: logger('test-prewarm'),
+        perfLog: logger('test-prewarm-perf'),
+      });
+
+      assert.deepEqual(
+        prerenderedModuleUrls.sort(),
+        [helperModule, `${dottedModule}.gts`].sort(),
+        'only module deps were warmed; the markdown and image files were not',
       );
     });
   });

@@ -5,7 +5,6 @@ import type {
   CardResource,
   CardResourceMeta,
   FileMetaResource,
-  Loader,
   LooseCardResource,
   LooseFileMetaResource,
   LooseSingleCardDocument,
@@ -15,6 +14,7 @@ import type {
   RuntimeDependencyTrackingContext,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
+import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import type { BaseDef, BaseDefConstructor, CardDef } from './card-api';
 import type { FileDef } from './file-api';
 import type { ResourceID } from '@cardstack/runtime-common';
@@ -32,6 +32,7 @@ import {
   identifyCard,
   isSingleCardDocument,
   isSingleFileMetaDocument,
+  isPrefixForm,
   loadCardDef,
   localId,
   maybeRelativeReference,
@@ -41,7 +42,13 @@ import {
   resolveRRIReference,
   rri,
 } from '@cardstack/runtime-common';
-import { getFieldOverrides, getFields, serializedGet } from './field-support';
+import {
+  getFieldOverrides,
+  getFields,
+  isQueryTaintedField,
+  peekAtField,
+  serializedGet,
+} from './field-support';
 
 // --- Type Exports ---
 
@@ -75,6 +82,22 @@ export interface SerializeOpts {
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
   omitQueryFields?: boolean;
+  // How much of the linked graph rides along in `included[]`. 'all' — the
+  // default, and what a direct `serializeCard` call gets — serializes every
+  // resident link target. 'local' serializes only the local (unsaved,
+  // `lid`-bearing) targets reachable without crossing an excluded one: the
+  // write shape, where `included` is a co-creation manifest and saved targets
+  // are reference-only. 'none' serializes no link targets at all.
+  //
+  // An excluded target contributes its relationship entry only, and its own
+  // linked graph is not traversed — which is the point: a new card linking
+  // into a large saved graph serializes none of that graph on save. Under
+  // 'local' that also bounds what a write co-creates to the local targets it
+  // reaches directly. An unsaved card hanging off a saved link is not
+  // co-created, because nothing the write persists could reference it: the
+  // saved link's own file is not rewritten, and the write's response names
+  // only the primary card, so its id would never reach the client.
+  includedScope?: 'all' | 'local' | 'none';
   maybeRelativeReference?: (possibleReference: string) => string;
   overrides?: Map<string, typeof BaseDef>;
 }
@@ -82,6 +105,18 @@ export interface SerializeOpts {
 export interface DeserializeOpts {
   ignoreBrokenLinks?: true;
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+  // Opt-in per-field hydration timing. When a caller supplies the collector,
+  // `_updateFromSerialized` accumulates each field's inclusive
+  // deserialization wall-clock into it, keyed by dotted path, and threads
+  // `hydrateFieldPath` down the recursion so a nested field's key names its
+  // whole path from the root. Absent for every other caller, which then pays
+  // one property read per field and allocates nothing — the interactive app
+  // deserializes on its hot path too.
+  hydrateFieldsMs?: Record<string, number>;
+  // The path of the field whose value is currently being deserialized, i.e.
+  // the prefix the next level down qualifies its own field names with. Set
+  // only alongside `hydrateFieldsMs`; the root call leaves it unset.
+  hydrateFieldPath?: string;
 }
 
 // --- Serialization Symbols ---
@@ -92,14 +127,10 @@ export const deserialize = Symbol.for('cardstack-deserialize');
 // --- Serialization Functions ---
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
-
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
   // @ts-ignore
-  return (import.meta as any).loader;
+  return loaderForModule(import.meta);
 }
 
 export async function cardClassFromResource<CardT extends BaseDefConstructor>(
@@ -230,7 +261,7 @@ export function relativeReferenceFor(
   return (possibleReference: string) => {
     // Prefix-form RRIs (e.g. @cardstack/catalog/foo) are already in their
     // canonical portable form — return as-is.
-    if (possibleReference.startsWith('@')) {
+    if (isPrefixForm(possibleReference)) {
       return possibleReference;
     }
     // Identifiers are canonical RRI, so resolve relative refs to their
@@ -301,8 +332,9 @@ export function serializeCardResource(
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
-  let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
-  let { id: removedIdField, ...fields } = getFields(model, {
+  let { includeUnrenderedFields: _includeUnrenderedFields, ...fieldOpts } =
+    opts ?? {};
+  let { id: _id, ...fields } = getFields(model, {
     ...fieldOpts,
     usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
   });
@@ -321,9 +353,28 @@ export function serializeCardResource(
     .filter(([_fieldName, field]) =>
       opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
     )
-    .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
+    .map(([fieldName, field]) => {
+      // A computed that read a query-backed field derives from a live search
+      // this document's invalidation never covers, so it is left out on the
+      // same terms the query field itself is. Which computeds those are is only
+      // knowable by running them, so the value is peeked here — before
+      // `serializedGet`, which would otherwise pull a link target into
+      // `included` for a field about to be dropped — and a tainted one skipped.
+      // An untainted one serializes from the value already in hand rather than
+      // routing back through `serializedGet`, whose second `peekAtField` would
+      // land as a pass-memo hit and inflate `computedCacheHitCount` on the very
+      // route (`render/meta`) that snapshots it into diagnostics.
+      if (opts?.omitQueryFields && field.computeVia) {
+        let value = peekAtField(model, fieldName);
+        if (isQueryTaintedField(model, fieldName)) {
+          return {};
+        }
+        return field.serialize(value, doc, visited, opts);
+      }
+      return serializedGet(model, fieldName, doc, visited, opts);
+    });
   let realmURL = getCardMeta(model, 'realmURL');
-  return merge(
+  let resource = merge(
     {
       attributes: {},
     },
@@ -336,6 +387,19 @@ export function serializeCardResource(
     // is falsy we know the model is a CardDef which has [localId].
     model.id ? { id: model.id } : { lid: (model as CardDef)[localId] },
   );
+  // A computed link that resolved to nothing contributes `{ relationships: {} }`
+  // (it omits its own entry, see `LinksTo`/`LinksToMany` `serialize`), which the
+  // merge above can leave behind as an empty `relationships` object on a card
+  // that has no other relationships. That empty object is not a shape the wire
+  // format ever otherwise carries — a card without relationships has no key at
+  // all — so drop it to keep serialization a pure function of the card's data.
+  if (
+    (resource as LooseCardResource).relationships &&
+    Object.keys((resource as LooseCardResource).relationships!).length === 0
+  ) {
+    delete (resource as LooseCardResource).relationships;
+  }
+  return resource;
 }
 
 export function serializeFileDef(

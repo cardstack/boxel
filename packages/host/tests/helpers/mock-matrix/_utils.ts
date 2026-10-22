@@ -2,7 +2,11 @@ import type Owner from '@ember/owner';
 import { waitUntil } from '@ember/test-helpers';
 
 import type { RealmAction } from '@cardstack/runtime-common';
-import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_REALM_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -55,6 +59,27 @@ export class MockUtils {
     }
     return messages();
   };
+  // Wait until the mock homeserver holds the result event for a tool call,
+  // then return it. A tool's run holds a test waiter until its result event
+  // is sent, so after a settle this returns at once; the wait remains for
+  // callers that do not settle first. The event's `m.relates_to.key` is the
+  // call's status, and `failureReason` says why a call that did not apply
+  // failed.
+  waitForToolResult = async (roomId: string, toolCallId: string) => {
+    let findResult = () =>
+      this.getRoomEvents(roomId).find(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content['m.relates_to']?.rel_type ===
+            APP_BOXEL_TOOL_RESULT_REL_TYPE &&
+          event.content.commandRequestId === toolCallId,
+      );
+    await waitUntil(() => findResult(), {
+      timeout: 10_000,
+      timeoutMessage: `no result event for tool call ${toolCallId} in ${roomId}`,
+    });
+    return findResult()!;
+  };
   getRoomIds = () => {
     // A realm can fire a deferred `broadcastRealmEvent` (the trailing `index`
     // event of an indexing run) after the owning test has ended and
@@ -100,6 +125,25 @@ export class MockUtils {
       .filter(
         (e: IEvent) => isRealmEvent(e) && e.origin_server_ts > since,
       ) as RealmEvent[];
+  };
+
+  get loggedInAs(): string | undefined {
+    return this.testState.opts?.loggedInAs;
+  }
+
+  // The permissions a session this homeserver mints for `realmURL` carries,
+  // set for that realm alone. Unlike `setRealmPermissions`, every other
+  // realm's sessions and the realm-server's `_realm-auth` answers are left as
+  // they are.
+  setRealmSessionPermissions = (
+    realmURL: string,
+    permissions: RealmAction[],
+  ) => {
+    let opts = this.testState.opts!;
+    opts.realmPermissions = {
+      ...(opts.realmPermissions ?? {}),
+      [realmURL]: permissions,
+    };
   };
 
   setRealmPermissions = (permissions: Record<string, RealmAction[]>) => {

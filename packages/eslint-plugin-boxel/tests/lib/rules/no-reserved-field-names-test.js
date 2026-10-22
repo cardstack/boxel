@@ -25,7 +25,7 @@ ruleTester.run('no-reserved-field-names', rule, {
 
       export class Product extends CardDef {
         get preview() {
-          return this.screenshotURLs.card;
+          return this.captureURLs.card;
         }
       }
     `,
@@ -33,13 +33,13 @@ ruleTester.run('no-reserved-field-names', rule, {
     // concern (the runtime getter contract covers overrides)
     `
       export class NotACard {
-        screenshotURLs = {};
+        captureURLs = {};
       }
     `,
     // Other decorators under the reserved name are not fields
     `
       export class Component {
-        @tracked screenshotURLs = {};
+        @tracked captureURLs = {};
       }
     `,
   ],
@@ -51,7 +51,7 @@ ruleTester.run('no-reserved-field-names', rule, {
         import StringField from '@cardstack/base/string';
 
         export class Product extends CardDef {
-          @field screenshotURLs = contains(StringField);
+          @field captureURLs = contains(StringField);
         }
       `,
       errors: [{ messageId: 'no-reserved-field-names' }],
@@ -61,7 +61,7 @@ ruleTester.run('no-reserved-field-names', rule, {
         import { field, linksTo, CardDef } from '@cardstack/base/card-api';
 
         export class Product extends CardDef {
-          @field screenshotURLs = linksTo(() => Product);
+          @field captureURLs = linksTo(() => Product);
         }
       `,
       errors: [{ messageId: 'no-reserved-field-names' }],
@@ -72,7 +72,7 @@ ruleTester.run('no-reserved-field-names', rule, {
         import StringField from '@cardstack/base/string';
 
         export class Product extends CardDef {
-          @field screenshotsMeta = contains(StringField);
+          @field capturesMeta = contains(StringField);
         }
       `,
       errors: [{ messageId: 'no-reserved-field-names' }],

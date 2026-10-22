@@ -6,9 +6,11 @@ import { registerLintCommand } from './commands/lint.ts';
 import { registerParseCommand } from './commands/parse.ts';
 import { registerReadTranspiledCommand } from './commands/read-transpiled.ts';
 import { registerRealmCommand } from './commands/realm/index.ts';
+import { registerRealmServerCommand } from './commands/realm-server/index.ts';
 import { registerFileCommand } from './commands/file/index.ts';
+import { registerKeysCommand } from './commands/keys/index.ts';
 import { registerRunCommand } from './commands/run-command.ts';
-import { registerScreenshotCommand } from './commands/screenshot.ts';
+import { registerCaptureCommand } from './commands/capture.ts';
 import { registerSearchCommand } from './commands/search.ts';
 import { registerTestCommand } from './commands/test.ts';
 import { setQuiet } from './lib/cli-log.ts';
@@ -73,6 +75,10 @@ export function buildBoxelProgram(version: string): Command {
       '--local',
       'Target a local dev server instead of production (for add command)',
     )
+    .option(
+      '--json',
+      'Output the complete profile set as JSON (for list command)',
+    )
     .addHelpText(
       'after',
       `
@@ -117,6 +123,7 @@ Environment variables (for 'add'):
           production?: boolean;
           staging?: boolean;
           local?: boolean;
+          json?: boolean;
         },
       ) => {
         if (options?.password) {
@@ -131,11 +138,13 @@ Environment variables (for 'add'):
 
   registerBrowseCommand(program);
   registerFileCommand(program);
+  registerKeysCommand(program);
   registerLintCommand(program);
   registerParseCommand(program);
   registerRealmCommand(program);
+  registerRealmServerCommand(program);
   registerRunCommand(program);
-  registerScreenshotCommand(program);
+  registerCaptureCommand(program);
   registerSearchCommand(program);
   registerTestCommand(program);
   registerReadTranspiledCommand(program);

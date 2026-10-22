@@ -18,19 +18,31 @@ import {
   param,
   setSearchBoundsForTests,
   resetSearchBoundsForTests,
+  setSearchShapeSink,
+  LinkShapePolicy,
+  X_BOXEL_LINK_SHAPE_HEADER,
   type Expression,
+  type SearchShapeEvent,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';
 import { LiveSearchCache } from '../../live-search-cache.ts';
 import {
+  getSearchInFlight,
+  getSearchRequestsInFlight,
+} from '../../search-inflight.ts';
+import {
   closeServer,
+  connectionTenantsDuring,
   createVirtualNetwork,
+  definitionCacheReads,
+  indexReads,
   setupDB,
   matrixURL,
   realmSecretSeed,
   runTestRealmServerWithRealms,
+  setupTestDatabaseTemplate,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
@@ -45,6 +57,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     let publisher: QueuePublisher;
     let runner: QueueRunner;
     let testRealmHttpServer: Server;
+    let virtualNetwork: ReturnType<typeof createVirtualNetwork>;
 
     let ownerUserId = '@mango:localhost';
     // A second principal with read access to both realms. Used to prove the
@@ -77,6 +90,23 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
           }
         }
       `,
+      'pet.gts': `
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+
+        export class Pet extends CardDef {
+          @field nickname = contains(StringField);
+        }
+      `,
+      'employee.gts': `
+        import { contains, field } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+        import { Person } from './person';
+
+        export class Employee extends Person {
+          @field title = contains(StringField);
+        }
+      `,
       'john.json': {
         data: {
           type: 'card',
@@ -102,13 +132,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       publisher,
       runner,
       liveSearchCache,
+      linkShapePolicy,
     }: {
       dbAdapter: PgAdapter;
       publisher: QueuePublisher;
       runner: QueueRunner;
       liveSearchCache?: LiveSearchCache;
+      linkShapePolicy?: LinkShapePolicy;
     }) {
-      let virtualNetwork = createVirtualNetwork();
+      virtualNetwork = createVirtualNetwork();
       let dir = dirSync();
       let testRealmURL = new URL('http://127.0.0.1:4444/test/');
       let secondaryRealmURL = new URL('http://127.0.0.1:4444/secondary/');
@@ -138,6 +170,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         runner,
         matrixURL,
         liveSearchCache,
+        linkShapePolicy,
       });
 
       testRealmHttpServer = result.testRealmHttpServer;
@@ -157,7 +190,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       resetCatalogRealms();
     }
 
+    let templateDatabase = setupTestDatabaseTemplate(hooks, {
+      key: import.meta.filename,
+      build: async (args) => {
+        await startSearchRealmServer(args);
+        return stopSearchRealmServer;
+      },
+    });
+
     setupDB(hooks, {
+      templateDatabase,
       beforeEach: async (_dbAdapter, _publisher, _runner) => {
         dbAdapter = _dbAdapter;
         publisher = _publisher;
@@ -211,6 +253,18 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
 
     function postSearch(body: Record<string, unknown>) {
       return postSearchAs(ownerToken(), body);
+    }
+
+    // Poll for a condition that a request in flight will bring about, failing
+    // rather than hanging if it never does.
+    async function waitUntil(condition: () => boolean, what: string) {
+      let deadline = Date.now() + 5_000;
+      while (!condition()) {
+        if (Date.now() > deadline) {
+          throw new Error(`timed out waiting for ${what}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
     }
 
     test('QUERY /_federated-search federates entry results across realms', async function (assert) {
@@ -280,15 +334,60 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       }
     });
 
+    test('the index reads a federated search does are charged to the set of realms it names', async function (assert) {
+      let { result: response, statements } = await connectionTenantsDuring(
+        dbAdapter,
+        () =>
+          postSearch({
+            filter: personFilter(),
+            realms: [secondaryRealm.url, testRealm.url, secondaryRealm.url],
+          }),
+      );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let expected = [testRealm.url, secondaryRealm.url].sort().join(' ');
+      let reads = indexReads(statements);
+      assert.true(reads.length > 0, 'the search read the index');
+      assert.deepEqual(
+        reads
+          .map(({ tenant, shared }) => JSON.stringify({ tenant, shared }))
+          .filter((r, i, all) => all.indexOf(r) === i),
+        [JSON.stringify({ tenant: expected, shared: false })],
+        'every index read is charged to one tenant, the realm set, however the request ordered or repeated it, and held to its share',
+      );
+      let lookups = definitionCacheReads(statements);
+      assert.true(lookups.length > 0, 'the search looked up card definitions');
+      assert.deepEqual(
+        lookups
+          .map(({ tenant, shared }) => JSON.stringify({ tenant, shared }))
+          .filter((r, i, all) => all.indexOf(r) === i),
+        [JSON.stringify({ tenant: expected, shared: true })],
+        'definition lookups, which searches of other realms share, are ordered as the realm set that started them but run as shared work',
+      );
+    });
+
     // A federated search payload that names an archived realm must not
-    // return hits. The mechanism is the enumeration filter in
-    // fetchUserPermissions: once a realm is archived, the requester has
-    // no permission for it per the filtered enumeration, so the
-    // multi-realm-authorization middleware short-circuits the request
-    // with 403 before handle-search runs. The handler itself does no
-    // extra work; this test pins the contract end-to-end so a refactor
-    // of the enumeration layer can't silently weaken it.
-    test('archived realms in a federated search payload are refused at the auth boundary', async function (assert) {
+    // return hits from it. Archiving a realm takes every caller's permission
+    // on it away, so the realm is one the requester cannot read, and a realm
+    // a verified caller cannot read contributes no rows to a federated search
+    // rather than refusing the realms named beside it. It is sealed from the
+    // search outright, not merely unread: no policy it names is consulted.
+    // This pins the contract end-to-end so a refactor of the enumeration
+    // layer can't silently weaken it.
+    test('an archived realm in a federated search payload contributes no rows', async function (assert) {
+      let before = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      });
+      assert.strictEqual(before.status, 200);
+      let secondaryHits = (response: typeof before) =>
+        response.body.data.filter((entry: { id: string }) =>
+          entry.id.startsWith(secondaryRealm.url),
+        );
+      assert.true(
+        secondaryHits(before).length > 0,
+        'before archiving, the secondary realm answers the search',
+      );
+
       await archiveRealm(dbAdapter, new URL(secondaryRealm.url));
 
       let response = await postSearch({
@@ -297,30 +396,72 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       });
       assert.strictEqual(
         response.status,
-        403,
-        'a request including an archived realm is forbidden',
-      );
-      assert.ok(
-        String(response.body?.errors?.[0] ?? response.text).includes(
-          secondaryRealm.url,
-        ),
-        'the forbidden response names the archived realm',
-      );
-
-      let activeOnly = await postSearch({
-        filter: personFilter(),
-        realms: [testRealm.url],
-      });
-      assert.strictEqual(
-        activeOnly.status,
         200,
-        'the same request restricted to the active realm succeeds',
+        'the request is answered for the realms that can answer it',
+      );
+      assert.deepEqual(
+        secondaryHits(response),
+        [],
+        'the archived realm returns no hits',
       );
       assert.strictEqual(
-        activeOnly.body.meta.page.total,
+        response.body.meta.page.total,
         2,
         'active realms continue to search normally',
       );
+    });
+
+    test('a realm the server does not know is refused with a hint that realms takes realm URLs', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url, '@cardstack/nope/'],
+      });
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+      assert.true(
+        response.text.includes('Realms not found: @cardstack/nope/'),
+        `the unknown realm is named: ${response.text}`,
+      );
+      assert.true(
+        response.text.includes(
+          'Each entry in realms must be the URL of a realm on this server, or an identifier registered for one',
+        ),
+        `the hint is given: ${response.text}`,
+      );
+    });
+
+    test('a realm named by a registered prefix answers as its URL does', async function (assert) {
+      // The prefix is registered after the realms indexed, so only the
+      // request is in a different form: the rows the realm answers with are
+      // the same ones.
+      virtualNetwork.addRealmMapping('@test/search-test/', secondaryRealm.url);
+      try {
+        let byURL = await postSearch({
+          filter: personFilter(),
+          realms: [testRealm.url, secondaryRealm.url],
+        });
+        let byPrefix = await postSearch({
+          filter: personFilter(),
+          realms: [testRealm.url, '@test/search-test/'],
+        });
+        assert.strictEqual(byPrefix.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          byPrefix.body.meta.page.total,
+          byURL.body.meta.page.total,
+          'the prefixed realm contributes its rows',
+        );
+
+        let twice = await postSearch({
+          filter: personFilter(),
+          realms: [secondaryRealm.url, '@test/search-test/'],
+        });
+        assert.strictEqual(
+          twice.body.meta.page.total,
+          2,
+          'a realm named in both forms is searched once',
+        );
+      } finally {
+        virtualNetwork.removeRealmMapping('@test/search-test/');
+      }
     });
 
     test('cardUrls narrows results across the federation', async function (assert) {
@@ -701,6 +842,100 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       );
     });
 
+    test('a coalesced live search releases its admission slot while the compute is still running, and stays counted as a request', async function (assert) {
+      // A cache whose next compute waits on the test, so a second identical
+      // request is guaranteed to arrive while the first is still computing.
+      class HoldableLiveSearchCache extends LiveSearchCache {
+        hold: Promise<void> | undefined;
+        onComputeStarted: (() => void) | undefined;
+        override getOrPopulate(
+          args: Parameters<LiveSearchCache['getOrPopulate']>[0],
+        ) {
+          let { hold, onComputeStarted } = this;
+          return super.getOrPopulate({
+            ...args,
+            populate: async () => {
+              onComputeStarted?.();
+              if (hold) {
+                await hold;
+              }
+              return args.populate();
+            },
+          });
+        }
+      }
+      let cache = new HoldableLiveSearchCache({
+        ttlMs: 60_000,
+        telemetryIntervalMs: 0,
+      });
+      await stopSearchRealmServer();
+      await startSearchRealmServer({
+        dbAdapter,
+        publisher,
+        runner,
+        liveSearchCache: cache,
+      });
+      await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+      await settlePrerenderHtmlJobs(dbAdapter, secondaryRealm.url);
+
+      let releaseCompute!: () => void;
+      cache.hold = new Promise<void>((resolve) => (releaseCompute = resolve));
+      let computeStarted = new Promise<void>(
+        (resolve) => (cache.onComputeStarted = resolve),
+      );
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+
+      // supertest sends lazily; `.then` starts each request now.
+      let first = postSearch(searchBody).then((response) => response);
+      await computeStarted;
+      assert.strictEqual(
+        getSearchInFlight(),
+        1,
+        'the computing request holds a slot',
+      );
+
+      let second = postSearch(searchBody).then((response) => response);
+      await waitUntil(
+        () => cache.stats.joins === 1,
+        'the second request joins',
+      );
+      assert.strictEqual(
+        getSearchInFlight(),
+        1,
+        'the joiner handed its slot back while the compute is still running',
+      );
+      assert.strictEqual(
+        getSearchRequestsInFlight(),
+        2,
+        'but is still a request in flight, waiting on the computation it joined, which is what the link-shape policy reads',
+      );
+
+      releaseCompute();
+      let [a, b] = await Promise.all([first, second]);
+      assert.strictEqual(a.status, 200);
+      assert.strictEqual(b.status, 200);
+      assert.strictEqual(a.headers[LIVE_SEARCH_CACHE_HEADER], 'miss');
+      assert.strictEqual(b.headers[LIVE_SEARCH_CACHE_HEADER], 'join');
+      assert.strictEqual(b.text, a.text, 'the joiner got the shared body');
+      assert.strictEqual(
+        getSearchInFlight(),
+        0,
+        'the computing request released on completion, and only once',
+      );
+      assert.strictEqual(
+        getSearchRequestsInFlight(),
+        0,
+        'and both requests stopped counting when their responses ended',
+      );
+
+      let third = await postSearch(searchBody);
+      assert.strictEqual(third.headers[LIVE_SEARCH_CACHE_HEADER], 'hit');
+      assert.strictEqual(getSearchInFlight(), 0, 'a hit holds no slot after');
+    });
+
     test('a write to a searched realm invalidates the live search cache', async function (assert) {
       let searchBody = {
         filter: personFilter(),
@@ -742,6 +977,583 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         afterWrite.body.meta.page.total,
         5,
         'the new instance is in the fresh result',
+      );
+    });
+
+    // The live-search cache key is scoped to the types a query's filter is
+    // anchored on, so one person's save stops unreaching every other reader's
+    // cached search. These pin both directions of that: what survives a write,
+    // and what must not.
+    module('the type-scoped cache key', function (hooks) {
+      let personRef = () => ({
+        module: rri(`${testRealm.url}person`),
+        name: 'Person',
+      });
+
+      hooks.beforeEach(async function () {
+        // Retention long enough that a `hit` can only mean the key still
+        // addresses the entry. Under the production TTL the entry would age
+        // out while the write indexes, and every case below would read as a
+        // miss for the wrong reason.
+        await stopSearchRealmServer();
+        await startSearchRealmServer({
+          dbAdapter,
+          publisher,
+          runner,
+          liveSearchCache: new LiveSearchCache({
+            ttlMs: 60_000,
+            telemetryIntervalMs: 0,
+          }),
+        });
+        await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+        await settlePrerenderHtmlJobs(dbAdapter, secondaryRealm.url);
+      });
+
+      // Prime an entry and confirm it is there, so a later `miss` is
+      // attributable to the write rather than to the entry never existing.
+      //
+      // Repeated rather than a single pair: a query's type anchors are
+      // resolved to their index keys behind the request that first sees them,
+      // so the first requests are keyed on the realm-wide generation and the
+      // key changes once under the caller. Settling on a `hit` is what makes
+      // the entry the assertions below reason about the type-scoped one.
+      async function primed(assert: Assert, body: Record<string, unknown>) {
+        let outcome: string | undefined;
+        for (let attempt = 0; attempt < 10; attempt++) {
+          let response = await postSearch(body);
+          outcome = response.headers[LIVE_SEARCH_CACHE_HEADER];
+          if (outcome === 'hit' && attempt > 0) {
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        assert.strictEqual(
+          outcome,
+          'hit',
+          'the entry is cached under a settled key before the write',
+        );
+      }
+
+      async function write(localPath: string, adoptsFrom: string) {
+        await testRealm.write(
+          localPath,
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: rri(`./${adoptsFrom.toLowerCase()}`),
+                  name: adoptsFrom,
+                },
+              },
+            },
+          }),
+        );
+      }
+
+      test('a write to a type the query cannot match leaves the entry hittable', async function (assert) {
+        let searchBody = {
+          filter: { 'item.on': personRef() },
+          realms: [testRealm.url],
+        };
+        await primed(assert, searchBody);
+
+        // A Pet stamps its own chain — Pet, CardDef — and never Person, so
+        // the Person-anchored key does not move.
+        await write('ringo.json', 'Pet');
+
+        let afterWrite = await postSearch(searchBody);
+        assert.strictEqual(
+          afterWrite.headers[LIVE_SEARCH_CACHE_HEADER],
+          'hit',
+          'a write the query provably cannot have gained or lost a member from',
+        );
+        assert.strictEqual(
+          afterWrite.body.meta.page.total,
+          2,
+          'the cached body is the one the query still matches',
+        );
+      });
+
+      test('a write to a type the query does select still invalidates it', async function (assert) {
+        let searchBody = {
+          filter: { 'item.on': personRef() },
+          realms: [testRealm.url],
+        };
+        await primed(assert, searchBody);
+
+        await write('mark.json', 'Person');
+
+        let afterWrite = await postSearch(searchBody);
+        assert.strictEqual(
+          afterWrite.headers[LIVE_SEARCH_CACHE_HEADER],
+          'miss',
+          'the matching-type write moves the key',
+        );
+        assert.strictEqual(
+          afterWrite.body.meta.page.total,
+          3,
+          'the new instance is in the fresh result',
+        );
+      });
+
+      test('a write to a subtype invalidates a query anchored on the ancestor', async function (assert) {
+        let searchBody = {
+          filter: { 'item.on': personRef() },
+          realms: [testRealm.url],
+        };
+        await primed(assert, searchBody);
+
+        // The write side stamps the full adoption chain, so an Employee write
+        // stamps Person — which is what makes the ancestor-anchored query,
+        // whose result set the Employee genuinely joins, recompute.
+        await write('alice.json', 'Employee');
+
+        let afterWrite = await postSearch(searchBody);
+        assert.strictEqual(
+          afterWrite.headers[LIVE_SEARCH_CACHE_HEADER],
+          'miss',
+          'the subtype write moves the ancestor key',
+        );
+        assert.strictEqual(
+          afterWrite.body.meta.page.total,
+          3,
+          'the subtype instance is a member of the ancestor query',
+        );
+      });
+
+      test('a query with no type anchor still invalidates on any write', async function (assert) {
+        // A query with no filter matches anything, so no type can be ruled
+        // out and the key falls back to the realm-wide generation.
+        let searchBody = {
+          fields: { entry: ['item'] },
+          realms: [testRealm.url],
+        };
+        await primed(assert, searchBody);
+
+        await write('ringo.json', 'Pet');
+
+        let afterWrite = await postSearch(searchBody);
+        assert.strictEqual(
+          afterWrite.headers[LIVE_SEARCH_CACHE_HEADER],
+          'miss',
+          'an unanchored query recomputes on any write in the realm',
+        );
+      });
+    });
+
+    // Capture the query-shape lines a block of requests emits. The sink is
+    // process-global, so anything else the process searches inside the block
+    // lands in the same array — an in-render search from a background
+    // prerender job would. Each request below therefore carries its own
+    // correlation id and the assertions read only the lines stamped with it,
+    // which is also what makes "one line per search" an assertion about that
+    // request rather than about the process being quiet.
+    async function captureSearchShapes(
+      run: () => Promise<void>,
+    ): Promise<SearchShapeEvent[]> {
+      let events: SearchShapeEvent[] = [];
+      setSearchShapeSink((event) => events.push(event));
+      try {
+        await run();
+      } finally {
+        setSearchShapeSink(undefined);
+      }
+      return events;
+    }
+
+    function shapesFor(events: SearchShapeEvent[], correlationId: string) {
+      return events.filter((event) => event.correlationId === correlationId);
+    }
+
+    // A search the emitted line can be attributed to. The correlation id is
+    // deliberately out of both cache keys, so two requests differing only in
+    // it still share a cached body — which is what lets the cache-outcome
+    // assertions below tell two otherwise identical requests apart.
+    function postSearchCorrelated(
+      correlationId: string,
+      body: Record<string, unknown>,
+    ) {
+      return postSearch(body).set(
+        'x-boxel-logging-correlation-id',
+        correlationId,
+      );
+    }
+
+    test('a federated search emits one query-shape line describing what it asked for', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearchCorrelated('shape-basic', {
+          filter: personFilter(),
+          realms: [testRealm.url, secondaryRealm.url],
+          sort: [{ by: 'item.createdAt', direction: 'desc' }],
+          page: { size: 10 },
+        });
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      let lines = shapesFor(events, 'shape-basic');
+      assert.strictEqual(lines.length, 1, 'exactly one line for this search');
+      let [event] = lines;
+      assert.strictEqual(
+        event.filter,
+        `type(${baseCardRef.module}/${baseCardRef.name})`,
+        'a filter carrying only the type anchor is a pure card-type filter',
+      );
+      assert.strictEqual(
+        event.sort,
+        'createdAt:desc',
+        'the sort renders its field and direction',
+      );
+      assert.strictEqual(event.pageSize, 10);
+      assert.strictEqual(
+        event.realms,
+        `${testRealm.url},${secondaryRealm.url}`,
+        'the realms the request named',
+      );
+      assert.strictEqual(event.realmCount, 2);
+      assert.strictEqual(
+        event.linkMode,
+        'full',
+        'live traffic assembles the whole link closure',
+      );
+      assert.true(
+        event.itemAsFallback,
+        'naming no fieldset selects the default resolution policy',
+      );
+      assert.false(event.truncated, 'nothing here approaches the member cap');
+      assert.strictEqual(event.results, 4, 'the entries the response carried');
+      assert.strictEqual(event.total, 4, 'the entries the query matched');
+      assert.false(event.incomplete, 'both realms answered');
+      assert.strictEqual(event.status, 200);
+      assert.strictEqual(event.cache, 'miss', 'this request did the computing');
+      assert.true(event.totalMs >= 0, 'the request is timed');
+      assert.true(event.shapeHash.length > 0, 'the shape is hashed');
+    });
+
+    // The link-shape policy decides how much of each result's link graph the
+    // response carries, and may overrule a caller. What these pin is the
+    // handler's reporting of that decision: `describeSearchShape`'s own
+    // behaviour is covered in `search-shape-test.ts`, but nothing there can
+    // catch the handler handing it the served mode where the requested one
+    // belongs — which would make every line read as "nobody was overruled".
+    test('a stated link-shape preference is reported beside the served mode', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearchCorrelated('shape-asked', {
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 10 },
+        }).set(X_BOXEL_LINK_SHAPE_HEADER, 'links-only');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      let [event] = shapesFor(events, 'shape-asked');
+      assert.strictEqual(event.linkMode, 'links-only', 'what was served');
+      assert.strictEqual(
+        event.requestedLinkMode,
+        'links-only',
+        'what the caller asked for',
+      );
+      assert.false(
+        event.linkModeDowngraded,
+        'a caller that got what it asked for was not overruled',
+      );
+      assert.strictEqual(
+        event.linkShapeRowClass,
+        'multi-row',
+        'a page of ten may return more than one row',
+      );
+      assert.strictEqual(
+        event.linkShapeLevel,
+        null,
+        'no ladder is wired into this server, which is not the same as a quiet one',
+      );
+      assert.strictEqual(event.linkShapeLoad, null);
+    });
+
+    test('a downgraded search reports both modes and the load that decided it', async function (assert) {
+      // A policy over a reading this test sets, rather than real concurrency:
+      // the point is what the handler reports about an override, and driving a
+      // real one would make the test a race against the smoother.
+      let load = 20;
+      await stopSearchRealmServer();
+      await startSearchRealmServer({
+        dbAdapter,
+        publisher,
+        runner,
+        linkShapePolicy: new LinkShapePolicy({
+          readLoad: () => load,
+          limit: 30,
+          multiRowEngage: 8,
+          allEngage: 12,
+          minDwellMs: 0,
+          heartbeatMs: 60 * 60 * 1000,
+        }),
+      });
+      await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+      await settlePrerenderHtmlJobs(dbAdapter, secondaryRealm.url);
+
+      let events = await captureSearchShapes(async () => {
+        // The ladder moves one rung per consult, so the first search puts the
+        // realm on the rung that degrades multi-row reads and is itself served
+        // degraded.
+        let response = await postSearchCorrelated('shape-downgraded', {
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 10 },
+        });
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      let [event] = shapesFor(events, 'shape-downgraded');
+      assert.strictEqual(
+        event.requestedLinkMode,
+        'full',
+        'a caller that stated nothing asked for the closure',
+      );
+      assert.strictEqual(event.linkMode, 'links-only', 'and did not get it');
+      assert.true(event.linkModeDowngraded, 'which is the override, recorded');
+      assert.strictEqual(
+        event.linkShapeLoad,
+        20,
+        'the reading the decision was taken on',
+      );
+      assert.strictEqual(event.linkShapeLevel, 'multi-row');
+      assert.strictEqual(event.linkShapeRowClass, 'multi-row');
+    });
+
+    test('a prerender search reports no policy inputs', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearchCorrelated('shape-prerender-inputs', {
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 10 },
+        }).set('x-boxel-during-prerender', 'true');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      let [event] = shapesFor(events, 'shape-prerender-inputs');
+      assert.strictEqual(event.linkMode, 'prerender');
+      assert.strictEqual(
+        event.requestedLinkMode,
+        'prerender',
+        'a path the policy never reaches reports no preference of its own',
+      );
+      assert.false(event.linkModeDowngraded);
+      assert.strictEqual(
+        event.linkShapeLoad,
+        null,
+        'and no inputs, because none were consulted',
+      );
+      assert.strictEqual(event.linkShapeLevel, null);
+      assert.strictEqual(event.linkShapeRowClass, null);
+    });
+
+    test('the query-shape line carries no filter value', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearchCorrelated('shape-elision', {
+          filter: {
+            'item.on': baseCardRef,
+            every: [
+              { eq: { 'item.cardTitle': 'Jane' } },
+              { contains: { 'item.cardDescription': 'a private substring' } },
+            ],
+          },
+          realms: [testRealm.url],
+        });
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      let lines = shapesFor(events, 'shape-elision');
+      assert.strictEqual(lines.length, 1, 'exactly one line for this search');
+      let [event] = lines;
+      assert.strictEqual(
+        event.filter,
+        `on(${baseCardRef.module}/${baseCardRef.name}):every(contains(cardDescription),eq(cardTitle))`,
+        'the operators and the field paths they address, and nothing else',
+      );
+      let line = JSON.stringify(event);
+      assert.false(line.includes('Jane'), 'no eq value reaches the line');
+      assert.false(
+        line.includes('a private substring'),
+        'no contains value reaches the line',
+      );
+    });
+
+    test('a live-cache hit reports the outcome and claims no counts', async function (assert) {
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+      let events = await captureSearchShapes(async () => {
+        await postSearchCorrelated('shape-live-miss', searchBody);
+        let second = await postSearchCorrelated('shape-live-hit', searchBody);
+        assert.strictEqual(
+          second.headers[LIVE_SEARCH_CACHE_HEADER],
+          'hit',
+          'the follow-up is served from the live cache',
+        );
+      });
+      let [first] = shapesFor(events, 'shape-live-miss');
+      let [second] = shapesFor(events, 'shape-live-hit');
+      assert.strictEqual(first.cache, 'miss');
+      assert.strictEqual(first.results, 4, 'the computing request counted');
+      assert.strictEqual(second.cache, 'hit');
+      assert.strictEqual(
+        second.results,
+        null,
+        'a hit answers from a body it never built, so it counts nothing',
+      );
+      assert.strictEqual(second.total, null);
+      assert.strictEqual(second.incomplete, null);
+      assert.strictEqual(
+        first.shapeHash,
+        second.shapeHash,
+        'the same query hashes the same however it was answered',
+      );
+    });
+
+    test('the job-scoped cache reports populate, hit and revalidation separately', async function (assert) {
+      // The indexer's protocol: the job headers make a request cacheable, and
+      // an If-None-Match against the entry it populated revalidates into a 304.
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+      let asJob = (correlationId: string) =>
+        postSearchCorrelated(correlationId, searchBody)
+          .set('x-boxel-job-id', '42.1')
+          .set('x-boxel-consuming-realm', testRealm.url);
+
+      let etag: string | undefined;
+      let events = await captureSearchShapes(async () => {
+        let populated = await asJob('shape-job-miss');
+        assert.strictEqual(populated.status, 200);
+        etag = populated.headers['etag'];
+        assert.true(Boolean(etag), 'a cacheable request carries an ETag');
+
+        let repeated = await asJob('shape-job-hit');
+        assert.strictEqual(repeated.status, 200);
+
+        let revalidated = await asJob('shape-job-304').set(
+          'If-None-Match',
+          etag!,
+        );
+        assert.strictEqual(revalidated.status, 304);
+      });
+
+      let [populate] = shapesFor(events, 'shape-job-miss');
+      let [hit] = shapesFor(events, 'shape-job-hit');
+      let [notModified] = shapesFor(events, 'shape-job-304');
+      assert.strictEqual(
+        populate.cache,
+        'job-miss',
+        'the request that computed reports the populate',
+      );
+      assert.strictEqual(populate.results, 4);
+      assert.strictEqual(hit.cache, 'job-hit', 'the repeat reports the hit');
+      assert.strictEqual(
+        hit.results,
+        null,
+        'a job-cache hit builds no document of its own',
+      );
+      assert.strictEqual(notModified.cache, 'not-modified');
+      assert.strictEqual(
+        notModified.status,
+        304,
+        'the revalidated status is reported',
+      );
+      assert.strictEqual(
+        populate.shapeHash,
+        hit.shapeHash,
+        'one query, one shape, across all three outcomes',
+      );
+      assert.strictEqual(populate.shapeHash, notModified.shapeHash);
+    });
+
+    test('a search cut off by the time budget reports its 408', async function (assert) {
+      // The 408 and the 500 override are the only two paths whose reported
+      // status does not come from `ctxt.status`. The 408 is drivable here by
+      // collapsing the budget on an item-leg search; an escaping throw is not
+      // drivable from this suite without stubbing the search itself, so that
+      // one path's status override is covered by inspection only.
+      setSearchBoundsForTests({ timeBudgetMs: 0 });
+      try {
+        let events = await captureSearchShapes(async () => {
+          let response = await postSearchCorrelated('shape-budget', {
+            filter: personFilter(),
+            fields: { entry: ['item'] },
+            realms: [testRealm.url, secondaryRealm.url],
+          });
+          assert.strictEqual(
+            response.status,
+            408,
+            'the over-budget item-leg search is cut off',
+          );
+        });
+        let lines = shapesFor(events, 'shape-budget');
+        assert.strictEqual(lines.length, 1, 'the cutoff still emits one line');
+        let [event] = lines;
+        assert.strictEqual(event.status, 408, 'the cutoff status is reported');
+        assert.strictEqual(
+          event.results,
+          null,
+          'a search that never finished counts nothing',
+        );
+        assert.strictEqual(
+          event.cache,
+          'miss',
+          'the cache reported its decision before the populate was cut off',
+        );
+      } finally {
+        resetSearchBoundsForTests();
+      }
+    });
+
+    test('searches of the same shape share a hash across realms and pages', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        await postSearchCorrelated('shape-a', {
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 10 },
+        });
+        await postSearchCorrelated('shape-b', {
+          filter: personFilter(),
+          realms: [secondaryRealm.url],
+          page: { number: 1, size: 10 },
+        });
+        await postSearchCorrelated('shape-c', {
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 3 },
+        });
+      });
+      let [a] = shapesFor(events, 'shape-a');
+      let [b] = shapesFor(events, 'shape-b');
+      let [c] = shapesFor(events, 'shape-c');
+      assert.strictEqual(
+        a.shapeHash,
+        b.shapeHash,
+        'a different realm and page number is the same shape',
+      );
+      assert.notStrictEqual(
+        a.shapeHash,
+        c.shapeHash,
+        'a different page size is a different shape',
+      );
+    });
+
+    test('a rejected query emits no query-shape line', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearchCorrelated('shape-rejected', {
+          filter: { eq: { title: 'Jane' } },
+          realms: [testRealm.url],
+        });
+        assert.strictEqual(
+          response.status,
+          400,
+          'a field path not addressed through item. is rejected',
+        );
+      });
+      assert.deepEqual(
+        shapesFor(events, 'shape-rejected'),
+        [],
+        'a request that never parsed has no shape to report',
       );
     });
   });

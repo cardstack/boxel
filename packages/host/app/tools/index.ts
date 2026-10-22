@@ -3,12 +3,13 @@ import type { VirtualNetwork } from '@cardstack/runtime-common';
 import * as AddFieldToCardDefinitionToolModule from './add-field-to-card-definition';
 import * as UseAiAssistantToolModule from './ai-assistant';
 import * as ApplyMarkdownEditToolModule from './apply-markdown-edit';
-import * as ApplySearchReplaceBlockToolModule from './apply-search-replace-block';
 import * as AuthedFetchToolModule from './authed-fetch';
 import * as CreateListingPRRequestToolModule from './bot-requests/create-listing-pr-request';
 import * as SendBotTriggerEventToolModule from './bot-requests/send-bot-trigger-event';
 import * as CanReadRealmToolModule from './can-read-realm';
 import * as CancelIndexingJobToolModule from './cancel-indexing-job';
+import * as CaptureToolModule from './capture';
+import * as CaptureCardToolModule from './capture-card';
 import * as CheckCorrectnessToolModule from './check-correctness';
 import * as CheckDomainAvailabilityToolModule from './check-domain-availability';
 import * as CopyAndEditToolModule from './copy-and-edit';
@@ -21,6 +22,8 @@ import * as CreateAIAssistantRoomToolModule from './create-ai-assistant-room';
 import * as CreateAndOpenSubmissionWorkflowCard from './create-and-open-submission-workflow-card';
 import * as CreateSpecToolModule from './create-specs';
 import * as CreateSubmissionWorkflowToolModule from './create-submission-workflow';
+import * as CreateWorkspaceToolModule from './create-workspace';
+import * as DeleteWorkspaceToolModule from './delete-workspace';
 import * as DownloadFileToRealmToolModule from './download-file-to-realm';
 import * as EvaluateModuleToolModule from './evaluate-module';
 import * as ExecuteAtomicOperationsToolModule from './execute-atomic-operations';
@@ -43,6 +46,7 @@ import * as GetUserSystemCardToolModule from './get-user-system-card';
 import * as InstantiateCardToolModule from './instantiate-card';
 import * as InvalidateRealmIdentifiersToolModule from './invalidate-realm-identifiers';
 import * as InviteUserToRoomToolModule from './invite-user-to-room';
+import * as InvokeCardOperationToolModule from './invoke-card-operation';
 import * as LintAndFixToolModule from './lint-and-fix';
 import * as ListingBuildToolModule from './listing-action-build';
 import * as MigrateSkillToolModule from './migrate-skill';
@@ -52,7 +56,6 @@ import * as OpenCreateListingModalToolModule from './open-create-listing-modal';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
 import * as OpenWorkspaceToolModule from './open-workspace';
 import * as PatchCardInstanceToolModule from './patch-card-instance';
-import * as PatchCodeToolModule from './patch-code';
 import * as PatchFieldsToolModule from './patch-fields';
 import * as PatchThemeToolModule from './patch-theme';
 import * as PersistModuleInspectorViewToolModule from './persist-module-inspector-view';
@@ -67,11 +70,12 @@ import * as ReadTextFileToolModule from './read-text-file';
 import * as RegisterBotToolModule from './register-bot';
 import * as ReindexRealmToolModule from './reindex-realm';
 import * as RetrySubmissionWorkflowToolModule from './retry-submission-workflow';
+import * as RunRealmCodeToolModule from './run-realm-code';
 import * as SanitizeModuleListToolModule from './sanitize-module-list';
 import * as SaveCardToolModule from './save-card';
-import * as ScreenshotCardToolModule from './screenshot-card';
 import * as SearchAndChooseToolModule from './search-and-choose';
 import * as SearchCardsToolModule from './search-cards';
+import * as SearchEntriesToolModule from './search-entries';
 import * as SearchGoogleImagesToolModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyToolModule from './send-request-via-proxy';
@@ -92,6 +96,7 @@ import * as UpdatePlaygroundSelectionToolModule from './update-playground-select
 import * as UpdateRoomSkillsToolModule from './update-room-skills';
 import * as CommandUtilsModule from './utils';
 import * as ValidateRealmToolModule from './validate-realm';
+import * as ViewVisuallyToolModule from './view-visually';
 import * as WriteBinaryFileToolModule from './write-binary-file';
 import * as WriteTextFileToolModule from './write-text-file';
 
@@ -123,11 +128,6 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     virtualNetwork,
     'apply-markdown-edit',
     ApplyMarkdownEditToolModule,
-  );
-  shimHostToolModule(
-    virtualNetwork,
-    'apply-search-replace-block',
-    ApplySearchReplaceBlockToolModule,
   );
   shimHostToolModule(
     virtualNetwork,
@@ -223,6 +223,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'invalidate-realm-identifiers',
     InvalidateRealmIdentifiersToolModule,
   );
+  shimHostToolModule(
+    virtualNetwork,
+    'invoke-card-operation',
+    InvokeCardOperationToolModule,
+  );
   shimHostToolModule(virtualNetwork, 'lint-and-fix', LintAndFixToolModule);
   shimHostToolModule(
     virtualNetwork,
@@ -245,7 +250,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'patch-card-instance',
     PatchCardInstanceToolModule,
   );
-  shimHostToolModule(virtualNetwork, 'patch-code', PatchCodeToolModule);
+  shimHostToolModule(virtualNetwork, 'run-realm-code', RunRealmCodeToolModule);
   shimHostToolModule(virtualNetwork, 'patch-fields', PatchFieldsToolModule);
   shimHostToolModule(virtualNetwork, 'patch-theme', PatchThemeToolModule);
   shimHostToolModule(
@@ -277,6 +282,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(virtualNetwork, 'save-card', SaveCardToolModule);
   shimHostToolModule(virtualNetwork, 'serialize-card', SerializeCardToolModule);
   shimHostToolModule(virtualNetwork, 'search-cards', SearchCardsToolModule);
+  shimHostToolModule(virtualNetwork, 'search-entries', SearchEntriesToolModule);
   shimHostToolModule(
     virtualNetwork,
     'search-and-choose',
@@ -306,6 +312,16 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     virtualNetwork,
     'retry-submission-workflow',
     RetrySubmissionWorkflowToolModule,
+  );
+  shimHostToolModule(
+    virtualNetwork,
+    'create-workspace',
+    CreateWorkspaceToolModule,
+  );
+  shimHostToolModule(
+    virtualNetwork,
+    'delete-workspace',
+    DeleteWorkspaceToolModule,
   );
   shimHostToolModule(virtualNetwork, 'open-workspace', OpenWorkspaceToolModule);
   shimHostToolModule(
@@ -391,11 +407,10 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'generate-thumbnail',
     GenerateThumbnailToolModule,
   );
-  shimHostToolModule(
-    virtualNetwork,
-    'screenshot-card',
-    ScreenshotCardToolModule,
-  );
+  shimHostToolModule(virtualNetwork, 'capture', CaptureToolModule);
+  // An alias module name for the capture tool, which realm content imports.
+  shimHostToolModule(virtualNetwork, 'capture-card', CaptureCardToolModule);
+  shimHostToolModule(virtualNetwork, 'view-visually', ViewVisuallyToolModule);
   shimHostToolModule(virtualNetwork, 'get-card', GetCardToolModule);
   shimHostToolModule(
     virtualNetwork,
@@ -465,7 +480,6 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
 // Note - this is used for the tests
 export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   AddFieldToCardDefinitionToolModule.default,
-  ApplySearchReplaceBlockToolModule.default,
   ApplyMarkdownEditToolModule.default,
   CopyCardAsMarkdownToolModule.default,
   CopyCardToRealmModule.default,
@@ -484,7 +498,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   GenerateExampleCardsToolModule.default,
   GenerateReadmeSpecToolModule.default,
   GenerateThumbnailToolModule.default,
-  ScreenshotCardToolModule.default,
+  CaptureToolModule.default,
   GetAllRealmMetasToolModule.default,
   GetAvailableRealmIdentifiersToolModule.default,
   GetDefaultWritableRealmToolModule.default,
@@ -497,6 +511,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   GetPublishedRealmsToolModule.default,
   InviteUserToRoomToolModule.default,
   InvalidateRealmIdentifiersToolModule.default,
+  InvokeCardOperationToolModule.default,
   LintAndFixToolModule.default,
   ListingBuildToolModule.default,
   CreateListingPRRequestToolModule.default,
@@ -506,10 +521,12 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   CreateAndOpenSubmissionWorkflowCard.default,
   CreateSubmissionWorkflowToolModule.default,
   RetrySubmissionWorkflowToolModule.default,
+  CreateWorkspaceToolModule.default,
+  DeleteWorkspaceToolModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceToolModule.default,
   GenerateThemeExampleToolModule.default,
-  PatchCodeToolModule.default,
+  RunRealmCodeToolModule.default,
   PatchFieldsToolModule.default,
   PatchThemeToolModule.default,
   PersistModuleInspectorViewToolModule.default,
@@ -530,6 +547,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   SearchAndChooseToolModule.default,
   SearchCardsToolModule.SearchCardsByQueryTool,
   SearchCardsToolModule.SearchCardsByTypeAndTitleTool,
+  SearchEntriesToolModule.default,
   SearchGoogleImagesToolModule.default,
   SendAiAssistantMessageModule.default,
   SendBotTriggerEventToolModule.default,
@@ -554,6 +572,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   UpdateRoomSkillsToolModule.default,
   UseAiAssistantToolModule.default,
   ValidateRealmToolModule.default,
+  ViewVisuallyToolModule.default,
   MigrateSkillToolModule.default,
   WriteBinaryFileToolModule.default,
   WriteTextFileToolModule.default,

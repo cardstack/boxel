@@ -4,8 +4,8 @@ import FileIcon from '@cardstack/boxel-icons/file';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 
+import type { BaseDefComponent } from './card-api';
 import {
-  BaseDefComponent,
   Component,
   FieldDef,
   NumberField,
@@ -74,7 +74,10 @@ export class ArchiveEntryField extends FieldDef {
 
   static atom = class Atom extends Component<typeof ArchiveEntryField> {
     <template>
-      <span class='archive-entry-atom' title={{@model.path}}>{{@model.path}}</span>
+      <span
+        class='archive-entry-atom'
+        title={{@model.path}}
+      >{{@model.path}}</span>
       <style scoped>
         .archive-entry-atom {
           font-family: var(--font-mono);
@@ -244,7 +247,8 @@ class ArchivePreview extends GlimmerComponent<FilePreviewSignature> {
               <li title={{name}}>{{name}}</li>
             {{/each}}
             {{#if this.fittedOverflow}}
-              <li class='archive-fitted__more'>+{{this.fittedOverflow}} more</li>
+              <li class='archive-fitted__more'>+{{this.fittedOverflow}}
+                more</li>
             {{/if}}
           </ul>
         {{/if}}
@@ -274,7 +278,10 @@ class ArchivePreview extends GlimmerComponent<FilePreviewSignature> {
                     aria-hidden='true'
                   />
                 {{/if}}
-                <span class='archive-tree__name' title={{row.name}}>{{row.name}}</span>
+                <span
+                  class='archive-tree__name'
+                  title={{row.name}}
+                >{{row.name}}</span>
                 {{#if row.size}}
                   <span class='archive-tree__size'>{{row.size}}</span>
                 {{/if}}
@@ -289,8 +296,8 @@ class ArchivePreview extends GlimmerComponent<FilePreviewSignature> {
               not shown
             </div>
           {{else if this.isTruncated}}
-            <div class='archive-tree__more'>Listing truncated — archive too large
-              to read in full</div>
+            <div class='archive-tree__more'>Listing truncated — archive too
+              large to read in full</div>
           {{/if}}
         {{else}}
           <p class='archive-tree__empty'>Empty archive</p>

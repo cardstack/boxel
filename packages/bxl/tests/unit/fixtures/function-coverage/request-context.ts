@@ -1,10 +1,14 @@
 /**
- * The request-context builtins: `params`, `actor` and `instance`.
+ * The request-context builtins: `params`, `actor`, `instance`,
+ * `realmConfig` and `policy`.
  *
  * These read no arguments beyond a key name — their whole answer comes from
  * the context the host scoped around the evaluation — so each case supplies
  * one through `context` and asserts what the program read out of it. They
  * resolve only in the mutation library set, so every case names it.
+ *
+ * `actor` is the exception to the key-name shape: it has only `actor/0`, and
+ * answers the caller's user id as a string.
  *
  * The values here are deliberately unlike the document a program edits: a
  * case that read `.` instead of the context would produce the input rather
@@ -15,8 +19,10 @@ import { inMutationLibraries, jqCases, type CoverageCase } from './case.ts';
 
 const context = {
   params: { body: 'Looks good to me', mentions: ['user:grace'], count: 2 },
-  actor: { id: 'user:ada', displayName: 'Ada' },
+  actor: 'user:ada',
   instance: { id: 'https://example.test/Post/1', commentCount: 4 },
+  realmConfig: { approver: 'user:mae', escalateAfterDays: 3 },
+  policy: { blockedIps: '192.0.2.1, 198.51.100.0/24', title: 'Front desk' },
 };
 
 /** The document a program is editing, which none of these builtins read. */
@@ -69,7 +75,7 @@ const cases: CoverageCase[] = [
     input: editedDocument,
     context,
     check(outputs) {
-      deepStrictEqual(outputs, [{ id: 'user:ada', displayName: 'Ada' }]);
+      deepStrictEqual(outputs, ['user:ada']);
     },
   },
   {
@@ -79,19 +85,12 @@ const cases: CoverageCase[] = [
     throws: /needs the caller identity/,
   },
   {
-    covers: 'actor/1',
-    source: 'actor("id")',
-    input: editedDocument,
-    context,
-    expected: 'user:ada',
-  },
-  {
-    covers: 'actor/1',
-    source: 'actor("id")',
-    // An actor the host supplied as something other than an object is a host
-    // defect, and is reported as one instead of being indexed into.
-    context: { actor: 'user:ada' },
-    throws: /to be an object, but the host supplied string/,
+    covers: 'actor/0',
+    source: 'actor()',
+    // An actor the host supplied as anything but a user id is a host defect,
+    // and is reported as one instead of reaching the document.
+    context: { actor: { id: 'user:ada' } },
+    throws: /to be a string, but the host supplied object/,
   },
   {
     covers: 'instance/0',
@@ -114,23 +113,23 @@ const cases: CoverageCase[] = [
     throws: /needs the stored document being edited/,
   },
   {
-    covers: 'actor/1',
-    source: 'actor("displayName")',
+    covers: 'instance/1',
+    source: 'instance("commentCount")',
     // A key held with an explicit `undefined` is absent, not a value:
     // `undefined` is not JSON, and yielding it would reach the planner as a
     // value and write an intent that unsets the field.
-    context: { actor: { id: 'user:ada', displayName: undefined } },
-    throws: /asks for "displayName".*it has "id"/,
+    context: { instance: { id: 'https://e.test/1', commentCount: undefined } },
+    throws: /asks for "commentCount".*it has "id"/,
   },
   {
-    covers: 'actor/1',
-    source: 'actor("displayName")',
+    covers: 'instance/1',
+    source: 'instance("commentCount")',
     // A JSON `null`, by contrast, is a real value and passes through.
     //
     // `outputs` rather than `expected`, because `expected: null` normalizes
     // from an empty stream as well as from a single `null` — and emitting
     // one value rather than none is exactly what this case is for.
-    context: { actor: { id: 'user:ada', displayName: null } },
+    context: { instance: { id: 'https://e.test/1', commentCount: null } },
     outputs: [null],
   },
   {
@@ -203,6 +202,120 @@ const cases: CoverageCase[] = [
     // An absent field on a stored document is ordinary, so the message names
     // the reading that tolerates it rather than only refusing.
     throws: /Use `instance\(\)` and index it if the key may be absent\./,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    input: editedDocument,
+    context,
+    expected: 'user:mae',
+  },
+  {
+    covers: 'realmConfig/1',
+    // A setting is whatever JSON the realm owner wrote, so a program can read
+    // a number and compare it as one rather than parsing a string.
+    source: 'realmConfig("escalateAfterDays") + 1',
+    context,
+    expected: 4,
+  },
+  {
+    covers: 'realmConfig/0',
+    source: 'realmConfig() | keys',
+    input: editedDocument,
+    context,
+    outputs: [['approver', 'escalateAfterDays']],
+  },
+  {
+    covers: 'realmConfig/0',
+    // A realm that configures nothing still supplies a map. The program is
+    // told the realm has no settings, which is a different fix from the realm
+    // having supplied none at all.
+    source: 'realmConfig()',
+    context: { realmConfig: {} },
+    outputs: [{}],
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    context: { realmConfig: {} },
+    throws: /not in the realm configuration — it has no readable keys/,
+  },
+  {
+    covers: 'realmConfig/1',
+    // The same message shape the other keyed slots use, naming what is there.
+    source: 'realmConfig("approvers")',
+    context,
+    throws: /asks for "approvers".*"approver", "escalateAfterDays"/,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    // A realm setting is absent for the ordinary reason a stored field is, so
+    // the message names the reading that tolerates it.
+    context: { realmConfig: { threshold: 3 } },
+    throws: /Use `realmConfig\(\)` and index it if the setting may be absent\./,
+  },
+  {
+    covers: 'realmConfig/0',
+    source: 'realmConfig()',
+    context: { params: context.params },
+    throws: /needs the realm configuration/,
+  },
+  {
+    covers: 'realmConfig/0',
+    source: 'realmConfig()',
+    // No `context` at all, which is a different failure from a realm with no
+    // settings and says so.
+    throws: /needs a request context/,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    context: { realmConfig: ['approver'] },
+    throws: /to be an object, but the host supplied an array/,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig(3)',
+    context,
+    throws: /takes a key name as a string, not number/,
+  },
+  {
+    covers: 'policy/1',
+    source: 'policy("blockedIps")',
+    input: editedDocument,
+    context,
+    expected: '192.0.2.1, 198.51.100.0/24',
+  },
+  {
+    covers: 'policy/0',
+    source: 'policy() | .title',
+    input: editedDocument,
+    context,
+    expected: 'Front desk',
+  },
+  {
+    covers: 'policy/0',
+    // A field the policy card doesn't have is read as absent through the
+    // whole object, so a program can supply its own default.
+    source: 'policy() | .rateLimit // 60',
+    context,
+    expected: 60,
+  },
+  {
+    covers: 'policy/1',
+    source: 'policy("rateLimit")',
+    context,
+    throws:
+      /asks for "rateLimit", which is not in the policy card.*"blockedIps", "title".*Use `policy\(\)`/,
+  },
+  {
+    covers: 'policy/0',
+    // A host evaluating outside a policy supplies no policy card, and a
+    // program reading one is told so rather than handed `null`.
+    source: 'policy()',
+    context: { realmConfig: context.realmConfig },
+    throws: /needs the policy card/,
   },
 ];
 

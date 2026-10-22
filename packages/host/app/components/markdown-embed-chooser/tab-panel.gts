@@ -162,7 +162,7 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         let result =
           refType === 'card'
             ? await this.store.get(url)
-            : await this.store.get<FileDef>(url, { type: 'file-meta' });
+            : await this.store.get(url, { type: 'file-meta' });
         if (isCardErrorJSONAPI(result)) {
           // Keep `selectedUrl` and leave `selectedTarget` undefined; the pane
           // renders the broken-ref visual from `selectedError` instead of the

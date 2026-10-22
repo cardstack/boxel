@@ -5,17 +5,20 @@ import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { basename, join } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
-import { dirSync, type DirResult } from 'tmp';
+import { dirSync } from 'tmp';
 import fsExtra from 'fs-extra';
 const { copySync, ensureDirSync } = fsExtra;
 import {
   setupDB,
+  setupTestDatabaseTemplate,
   runTestRealmServer,
   closeServer,
   fixtureDir,
   insertUser,
   insertPlan,
+  insertProxyEndpoints,
   realmSecretSeed,
+  setupSecretsKeyring,
   createVirtualNetwork,
   waitUntil,
 } from './helpers/index.ts';
@@ -26,6 +29,8 @@ import {
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import { startSentryCapture } from './helpers/sentry-capture.ts';
+import { logLinesDuring, withLogDefinition } from './helpers/log-capture.ts';
 
 module(basename(import.meta.filename), function () {
   module(
@@ -37,15 +42,8 @@ module(basename(import.meta.filename), function () {
       let publisher: any;
       let runner: any;
       let request: SuperTest<Test>;
-      let testRealmDir: string;
-      let dir: DirResult;
 
       let virtualNetwork = createVirtualNetwork();
-
-      hooks.beforeEach(async function () {
-        dir = dirSync();
-        copySync(fixtureDir('simple'), dir.name);
-      });
 
       async function startRealmServer(
         dbAdapter: any,
@@ -55,6 +53,11 @@ module(basename(import.meta.filename), function () {
         if (testRealm) {
           virtualNetwork.unmount(testRealm.handle);
         }
+
+        let dir = dirSync();
+        let testRealmDir = join(dir.name, 'realm_server_2', 'test');
+        ensureDirSync(testRealmDir);
+        copySync(fixtureDir('simple'), testRealmDir);
 
         ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
           virtualNetwork,
@@ -69,28 +72,43 @@ module(basename(import.meta.filename), function () {
         request = supertest(testRealmHttpServer);
       }
 
+      async function stopRealmServer() {
+        AllowedProxyDestinations.reset();
+        await closeServer(testRealmHttpServer);
+      }
+
+      // The realm `startRealmServer` brings up is indexed once, into a
+      // template database each test starts from, rather than from scratch
+      // before each test.
+      let templateDatabase = setupTestDatabaseTemplate(hooks, {
+        key: import.meta.filename,
+        build: async ({ dbAdapter, publisher, runner }) => {
+          await startRealmServer(dbAdapter, publisher, runner);
+          return stopRealmServer;
+        },
+      });
+
+      // The endpoint's key is sealed as it is written, and opened as the
+      // passthrough reads it.
+      setupSecretsKeyring(hooks);
+
       setupDB(hooks, {
+        templateDatabase,
         beforeEach: async (_dbAdapter, _publisher, _runner) => {
           dbAdapter = _dbAdapter;
           publisher = _publisher;
           runner = _runner;
-          testRealmDir = join(dir.name, 'realm_server_2', 'test');
-          ensureDirSync(testRealmDir);
-          copySync(fixtureDir('simple'), testRealmDir);
 
           // Whitelist OpenRouter chat completions so the passthrough handler
           // can resolve a destination config + credit strategy.
-          await dbAdapter.execute(
-            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
-             VALUES
-               (gen_random_uuid(), 'https://openrouter.ai/api/v1/chat/completions', 'openrouter-api-key', 'openrouter', true, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-             ON CONFLICT (url)
-             DO UPDATE SET
-               api_key = EXCLUDED.api_key,
-               credit_strategy = EXCLUDED.credit_strategy,
-               supports_streaming = EXCLUDED.supports_streaming,
-               updated_at = CURRENT_TIMESTAMP`,
-          );
+          await insertProxyEndpoints(dbAdapter, [
+            {
+              url: 'https://openrouter.ai/api/v1/chat/completions',
+              apiKey: 'openrouter-api-key',
+              creditStrategy: 'openrouter',
+              supportsStreaming: true,
+            },
+          ]);
 
           await startRealmServer(dbAdapter, publisher, runner);
 
@@ -116,10 +134,7 @@ module(basename(import.meta.filename), function () {
             });
           }
         },
-        afterEach: async () => {
-          AllowedProxyDestinations.reset();
-          await closeServer(testRealmHttpServer);
-        },
+        afterEach: stopRealmServer,
       });
 
       test('forwards a verbatim OpenAI body to OpenRouter and deducts credits', async function (assert) {
@@ -210,6 +225,133 @@ module(basename(import.meta.filename), function () {
         } finally {
           mockFetch.restore();
           global.fetch = originalFetch;
+        }
+      });
+
+      test('an OpenRouter error echoing the key reaches the caller without it', async function (assert) {
+        const originalFetch = global.fetch;
+        const mockFetch = sinon.stub(global, 'fetch');
+        mockFetch.callsFake(
+          async () =>
+            new Response(
+              JSON.stringify({
+                error: {
+                  code: 401,
+                  message:
+                    'No auth credentials found for Bearer openrouter-api-key',
+                },
+              }),
+              { status: 401, headers: { 'content-type': 'application/json' } },
+            ),
+        );
+
+        try {
+          const jwt = createRealmServerJWT(
+            { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+            realmSecretSeed,
+          );
+          const response = await request
+            .post('/_openrouter/chat/completions')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt}`)
+            .send({
+              model: 'anthropic/claude-opus-4-7',
+              messages: [{ role: 'user', content: 'Hello' }],
+            });
+
+          assert.strictEqual(response.status, 401);
+          assert.deepEqual(response.body, {
+            error: {
+              code: 401,
+              message: 'No auth credentials found for Bearer [REDACTED]',
+            },
+          });
+        } finally {
+          mockFetch.restore();
+          global.fetch = originalFetch;
+        }
+      });
+
+      test('a Sentry event raised during a failed call keeps only the method and path of the incoming request', async function (assert) {
+        // OpenRouter answers with a body that is not JSON, so the handler
+        // fails and reports the error to Sentry.
+        const mockFetch = sinon.stub(global, 'fetch');
+        mockFetch.callsFake(
+          async () =>
+            new Response('not a JSON document', {
+              status: 200,
+              headers: { 'content-type': 'text/plain' },
+            }),
+        );
+        let sentry = startSentryCapture({
+          tracing: false,
+          incomingRequests: true,
+        });
+        try {
+          let planted = {
+            token: createRealmServerJWT(
+              { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+              realmSecretSeed,
+            ),
+            prompt: 'prompt-marker-41c7e2',
+            cookie: 'cookie-marker-90ad3f',
+            query: 'incoming-query-marker-6b2e18',
+          };
+          // With the request log on, Sentry keeps its line, which names the
+          // incoming URL, as a breadcrumb.
+          let status: number | undefined;
+          let lines = await withLogDefinition('realm:requests', 'info', () =>
+            logLinesDuring(['realm:requests'], async () => {
+              let response = await request
+                .post(`/_openrouter/chat/completions?caller=${planted.query}`)
+                .set('Accept', 'application/json')
+                .set('Content-Type', 'application/json')
+                .set('Authorization', `Bearer ${planted.token}`)
+                .set('Cookie', `session=${planted.cookie}`)
+                .send({
+                  model: 'anthropic/claude-opus-4-7',
+                  messages: [{ role: 'user', content: planted.prompt }],
+                });
+              status = response.status;
+            }),
+          );
+          let sent = await sentry.flushed();
+          let events = await sentry.flushedEvents();
+
+          assert.true(
+            lines.some((line) => line.message.includes(planted.query)),
+            'precondition: the request log line names the incoming query',
+          );
+          assert.strictEqual(status, 500, 'the call failed');
+          assert.strictEqual(events.length, 1, 'the failure reached Sentry');
+          let recorded = events[0].request as
+            | { method?: string; url?: string }
+            | undefined;
+          assert.deepEqual(
+            Object.keys(recorded ?? {}).sort(),
+            ['method', 'url'],
+            'the event has the request, and only its method and URL',
+          );
+          assert.strictEqual(recorded?.method, 'POST');
+          assert.strictEqual(
+            new URL(recorded!.url!).pathname,
+            '/_openrouter/chat/completions',
+          );
+          assert.strictEqual(
+            new URL(recorded!.url!).search,
+            '',
+            'the URL has no query string',
+          );
+          for (let [name, value] of Object.entries(planted)) {
+            assert.false(
+              sent.includes(value),
+              `no envelope carries the ${name}`,
+            );
+          }
+        } finally {
+          await sentry.stop();
+          mockFetch.restore();
         }
       });
 

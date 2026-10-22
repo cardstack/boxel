@@ -3,6 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# The test helpers start secure origins in-process, served from the pages'
+# build, so the build comes first.
+pnpm --dir="${SCRIPT_DIR}/../../../secure-origin" build
+
 "${SCRIPT_DIR}/prepare-test-pg.sh"
 trap '"${SCRIPT_DIR}/stop-test-pg.sh" >/dev/null 2>&1 || true' EXIT INT TERM
 
@@ -39,10 +43,14 @@ fi
 # cache can serve a stale compiled version — edits to test files then
 # silently don't reach the runner. See:
 # https://nodejs.org/api/module.html#moduleenablecompilecachecachedir
+# --expose-gc: a test that measures what a code path holds has to collect
+# before it reads the heap, or it measures garbage the collector has simply
+# not reached yet. Exposing the collector is all the flag does — it changes no
+# allocation or collection behavior on its own.
 LOG_LEVELS="$EFFECTIVE_LOG_LEVELS" \
 NODE_NO_WARNINGS=1 \
 NODE_DISABLE_COMPILE_CACHE=1 \
 PGPORT=55436 \
 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret \
 STRIPE_API_KEY=stripe-api-key \
-node ${JUNIT_REPORTER_ARGS[@]+"${JUNIT_REPORTER_ARGS[@]}"} tests/index.ts "$@"
+node --expose-gc ${JUNIT_REPORTER_ARGS[@]+"${JUNIT_REPORTER_ARGS[@]}"} tests/index.ts "$@"

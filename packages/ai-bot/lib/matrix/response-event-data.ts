@@ -74,12 +74,12 @@ export default class ResponseEventData {
   }
 }
 
-// A SEARCH/REPLACE block that is cut across two events is never applied: the
-// host reads patches per event, so each half is a malformed block. When the
-// cut would land inside a fenced code block, move it back to the start of
-// that block (the opening fence line, or the URL line the host expects right
-// after it), so the whole block moves to the next event. A block bigger than
-// one event still has to be cut; the hard cut stays as the fallback.
+// A fenced code block cut across two events has an unclosed fence in the
+// first event and a stray one in the second, so wherever an event's body is
+// read on its own, both halves render broken. When the cut would land inside
+// a fenced code block, move it back to that block's opening fence line, so
+// the whole block moves to the next event. A block bigger than one event
+// still has to be cut; the hard cut stays as the fallback.
 export function cutOutsideCodeBlocks(
   content: string,
   start: number,

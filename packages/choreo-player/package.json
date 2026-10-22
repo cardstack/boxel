@@ -1,0 +1,70 @@
+{
+  "name": "@cardstack/choreo-player",
+  "version": "0.1.0-unstable.0",
+  "description": "A headless, externally clocked player for Choreo runs.",
+  "keywords": [
+    "animation",
+    "choreo",
+    "glimmer",
+    "hyperframes",
+    "motion",
+    "player"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardstack/boxel.git",
+    "directory": "packages/choreo-player"
+  },
+  "license": "MIT",
+  "author": "Cardstack",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "developing:choreo": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./hyperframes": {
+      "developing:choreo": "./src/hyperframes.ts",
+      "types": "./dist/hyperframes.d.ts",
+      "default": "./dist/hyperframes.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "ember-tsc --project tsconfig.json",
+    "lint:types": "ember-tsc --project tsconfig.json --noEmit",
+    "prepack": "pnpm run test",
+    "test": "pnpm run build && pnpm run test:unit",
+    "test:unit": "node --test test/*.test.mjs",
+    "test:release": "node --test scripts/release/release.test.ts",
+    "check:packed-exports": "node ../glimmer-motion/scripts/check-exports.mjs --packed",
+    "format": "prettier . --cache --write",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
+    "lint:format": "prettier . --cache --check",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@cardstack/choreo-eslint-config": "workspace:*",
+    "@glint/ember-tsc": "catalog:",
+    "@types/semver": "^7.7.0",
+    "concurrently": "catalog:",
+    "eslint": "^9.39.4",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:",
+    "semver": "^7.7.0",
+    "typescript": "catalog:"
+  }
+}

@@ -6,6 +6,7 @@ import {
 } from '../support/synapse/index.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 import {
+  credentialFields,
   assertLoggedIn,
   assertLoggedOut,
   login,
@@ -34,19 +35,21 @@ test.describe('Login', () => {
   }) => {
     await page.goto(appURL);
 
-    await expect(page.locator('[data-test-username-field]')).toHaveAttribute(
-      'name',
-      'username',
-    );
-    await expect(page.locator('[data-test-password-field]')).toHaveAttribute(
-      'name',
-      'password',
-    );
+    await expect(
+      credentialFields(page).locator('[data-test-username-field]'),
+    ).toHaveAttribute('name', 'username');
+    await expect(
+      credentialFields(page).locator('[data-test-password-field]'),
+    ).toHaveAttribute('name', 'password');
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill(username);
+    await credentialFields(page)
+      .locator('[data-test-username-field]')
+      .fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill(password);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
@@ -85,9 +88,13 @@ test.describe('Login', () => {
     await page.goto(`${appURL}?operatorModeState=${stateParam}`);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill(username);
+    await credentialFields(page)
+      .locator('[data-test-username-field]')
+      .fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill(password);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
@@ -130,9 +137,13 @@ test.describe('Login', () => {
     await page.goto(`${appURL}?operatorModeState=${stateParam}`);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill(username);
+    await credentialFields(page)
+      .locator('[data-test-username-field]')
+      .fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill(password);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
@@ -157,9 +168,13 @@ test.describe('Login', () => {
     await page.goto(`${appURL}/hassan`);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill(username);
+    await credentialFields(page)
+      .locator('[data-test-username-field]')
+      .fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill(password);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
@@ -179,9 +194,13 @@ test.describe('Login', () => {
 
     await assertLoggedOut(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill(username);
+    await credentialFields(page)
+      .locator('[data-test-username-field]')
+      .fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill(password);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
@@ -268,9 +287,13 @@ test.describe('Login', () => {
 
     await assertLoggedOut(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill(username);
+    await credentialFields(page)
+      .locator('[data-test-username-field]')
+      .fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill(password);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
     let boxelSessionBeforeWorkspaceLoaded = await page.evaluate(async () => {
@@ -379,8 +402,12 @@ test.describe('Login', () => {
     // Logout stays in-app (a router transition, not a page reload), so this
     // second login runs against the matrix client that logout's `resetState()`
     // recreated rather than a freshly booted one.
-    await page.locator('[data-test-username-field]').fill(username);
-    await page.locator('[data-test-password-field]').fill(password);
+    await credentialFields(page)
+      .locator('[data-test-username-field]')
+      .fill(username);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill(password);
     await page.locator('[data-test-login-btn]').click();
 
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
@@ -395,8 +422,12 @@ test.describe('Login', () => {
   }) => {
     await openRoot(page, appURL);
 
-    await page.locator('[data-test-username-field]').fill(username);
-    await page.locator('[data-test-password-field]').fill('bad pass');
+    await credentialFields(page)
+      .locator('[data-test-username-field]')
+      .fill(username);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill('bad pass');
     await expect(
       page.locator('[data-test-login-error]'),
       'login error message is not displayed',
@@ -406,7 +437,9 @@ test.describe('Login', () => {
       'Sign-in failed. Please check your credentials and try again',
     );
 
-    await page.locator('[data-test-password-field]').fill(password);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill(password);
     await expect(
       page.locator('[data-test-login-error]'),
       'login error message is not displayed',
@@ -422,8 +455,12 @@ test.describe('Login', () => {
   test('it reacts to enter keypresses', async ({ page }) => {
     await openRoot(page, appURL);
 
-    await page.locator('[data-test-username-field]').fill(username);
-    await page.locator('[data-test-password-field]').fill(password);
+    await credentialFields(page)
+      .locator('[data-test-username-field]')
+      .fill(username);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill(password);
 
     await page.keyboard.press('Enter');
 

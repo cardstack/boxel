@@ -17,7 +17,7 @@
   --boxel-monospace-font-family:
     'IBM Plex Mono', 'Menlo', 'Courier New', Courier, monospace;
 
-  /* font size range -- note: see semantic names on line 248 */
+  /* font size range */
   --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.25); /* 36px */
   --boxel-font-size-xl: calc(var(--boxel-font-size) * 2); /* 32px */
   --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375); /* 22px */
@@ -26,8 +26,10 @@
   --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.875); /* 14px */
   --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.75); /* 12px */
   --boxel-font-size-2xs: calc(var(--boxel-font-size) * 0.6875); /* 11px */
+  /* text typed into a field on touch screens: iOS zooms in on focus under 16px */
+  --boxel-form-control-touch-font-size: max(1rem, var(--boxel-font-size));
 
-  /* font shorthand -- note: see semantic names on line 248 */
+  /* font shorthand */
   --boxel-font-xl: var(--boxel-font-size-xl) / calc(43 / 32)
     var(--boxel-font-family);
   --boxel-font-lg: var(--boxel-font-size-lg) / calc(30 / 22)
@@ -179,12 +181,16 @@
   --boxel-teal: #00ffba;
   --boxel-dark-teal: #00da9f; /* darker teal; feeds --boxel-highlight-hover */
   --boxel-red: #ff5050;
+  --boxel-dark-red: #bc0302;
   --boxel-pink: #ff009d;
   --boxel-orange: #ff7f00;
+  --boxel-amber: #d97706;
+  --boxel-dark-amber: #b26106; /* attention status default */
   --boxel-yellow: #ffd800;
   --boxel-lime: #c3fc33;
   --boxel-green: #37eb77;
   --boxel-dark-green: #00ac3d;
+  --boxel-deep-green: #00892f;
   --boxel-lilac: #a66dfa;
   --boxel-fuschia: #ac00ff;
   --boxel-purple: #6638ff;
@@ -242,9 +248,9 @@
   --boxel-light-600: var(--boxel-300);
 
   /* Status colors */
-  --boxel-destructive: var(--boxel-danger);
+  --boxel-destructive: var(--boxel-error-100);
   --boxel-warning: var(--boxel-yellow);
-  --boxel-success: var(--boxel-dark-green);
+  --boxel-success: var(--boxel-deep-green);
 
   --boxel-error-100: #dc0202; /* alert - attention - error */
   --boxel-error-200: #ed0000;
@@ -263,6 +269,11 @@
 
   /* Form control appearance */
   --boxel-form-control-height: 2.5rem; /* 40px */
+  --boxel-form-control-height-sm: 1.75rem; /* 28px */
+  /* the text line of a height-sm field with 0.25rem padding-block and 1px borders */
+  --boxel-form-control-line-height-sm: calc(
+    var(--boxel-form-control-height-sm) - 0.5rem - 2px
+  ); /* 18px */
   --boxel-form-control-placeholder-color: var(--boxel-400);
   --boxel-form-control-border-color: var(--boxel-border-color);
   --boxel-form-control-border-radius: var(--boxel-border-radius);
@@ -280,35 +291,4 @@
   --boxel-border-radius-xxl: var(
     --boxel-border-radius-2xl
   ); /* xxl is deprecated, use 2xl */
-}
-
-/** Semantic CSS Variables for General Use */
-:root {
-  /* font-family */
-  --boxel-body-font-family: var(--boxel-font-family);
-  --boxel-heading-font-family: var(--boxel-font-family);
-  --boxel-section-heading-font-family: var(--boxel-font-family);
-  --boxel-subheading-font-family: var(--boxel-font-family);
-  --boxel-caption-font-family: var(--boxel-font-family);
-
-  /* font-size */
-  --boxel-heading-font-size: var(--boxel-font-size-lg); /* 22px */
-  --boxel-section-heading-font-size: var(--boxel-font-size-md); /* 18px */
-  --boxel-subheading-font-size: var(--boxel-font-size); /* 16px */
-  --boxel-body-font-size: var(--boxel-font-size-sm); /* 14px */
-  --boxel-caption-font-size: var(--boxel-font-size-xs); /* 12px */
-
-  /* line-height */
-  --boxel-body-line-height: var(--boxel-line-height-sm);
-  --boxel-heading-line-height: var(--boxel-line-height-lg);
-  --boxel-caption-line-height: var(--boxel-line-height-xs);
-  --boxel-section-heading-line-height: var(--boxel-line-height-md);
-  --boxel-subheading-line-height: var(--boxel-line-height);
-
-  /* font-weight */
-  --boxel-heading-font-weight: 700;
-  --boxel-section-heading-font-weight: 500;
-  --boxel-subheading-font-weight: 500;
-  --boxel-body-font-weight: 400;
-  --boxel-caption-font-weight: 500;
 }

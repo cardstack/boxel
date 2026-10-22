@@ -38,12 +38,14 @@ import type IndexController from '@cardstack/host/controllers/index';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import type CapabilitiesService from '@cardstack/host/services/capabilities';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
+import { isTrustedMessageOrigin } from '@cardstack/host/utils/trusted-message-origin';
 
 import type HostModeService from '../services/host-mode-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
@@ -60,6 +62,7 @@ export interface IndexComponentComponentSignature {
 }
 
 export class IndexComponent extends Component<IndexComponentComponentSignature> {
+  @service declare private capabilities: CapabilitiesService;
   @service declare private toolService: ToolService;
   @service declare private hostModeService: HostModeService;
   @service declare private hostModeStateService: HostModeStateService;
@@ -176,6 +179,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
+      canInvoke: this.capabilities.canInvoke,
       store: this.cardStore,
       toolContext: this.toolContext,
       commandContext: this.toolContext,
@@ -316,5 +320,5 @@ function eventHasValidOrigin(event: MessageEvent) {
     return true;
   }
 
-  return new URL(config.realmServerURL).href.startsWith(event.origin);
+  return isTrustedMessageOrigin(event.origin, config.realmServerURL);
 }

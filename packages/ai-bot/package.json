@@ -11,15 +11,18 @@
     "@types/stream-chain": "catalog:",
     "@types/stream-json": "catalog:",
     "debug": "^4.4.3",
+    "htmlparser2": "^10.1.0",
     "lodash-es": "catalog:",
     "matrix-js-sdk": "catalog:",
     "openai": "catalog:",
     "qunit": "catalog:",
     "stream-chain": "catalog:",
     "stream-json": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "undici": "catalog:"
   },
   "devDependencies": {
+    "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@glint/ember-tsc": "catalog:",
     "@sinonjs/fake-timers": "catalog:",

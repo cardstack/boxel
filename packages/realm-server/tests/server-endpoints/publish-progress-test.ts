@@ -352,6 +352,29 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         });
       });
 
+      // The index lane also carries the daily scoped-css GC, which does not
+      // write the index. Readiness passes over it, so reporting it here would
+      // show a publish stalled behind work that is not holding it up — the
+      // disagreement between the two this endpoint exists to prevent.
+      test('ignores a queued job that does not write the index', async function (assert) {
+        let realmURL = await ownedRealm();
+        await seedIndexRow(realmURL, 3);
+        await seedRenderedHtml(realmURL, 3);
+        await insertJob(dbAdapter, {
+          job_type: 'scoped-css-gc',
+          concurrency_group: indexingConcurrencyGroup(realmURL),
+          args: { realmUrl: realmURL },
+        });
+
+        let response = await getProgress(realmURL, { as: ownerUserId });
+
+        assert.deepEqual(
+          response.body.data.attributes,
+          { phase: 'done', filesCompleted: 0, totalFiles: 0 },
+          'a queued sweep does not read as an unfinished publish',
+        );
+      });
+
       // A finished job's `job_progress` row outlives it. Reading the lane by
       // status rather than by the presence of a progress row is what keeps a
       // settled realm from reporting a stale pass.

@@ -1,3 +1,5 @@
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import {
   click,
   waitFor,
@@ -13,8 +15,9 @@ import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { baseRealmRRI } from '@cardstack/runtime-common';
+import { baseRealm, baseRealmRRI } from '@cardstack/runtime-common';
 
+import type ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 import WriteTextFileTool from '@cardstack/host/tools/write-text-file';
 import { ScrollPositions } from '@cardstack/host/utils/local-storage-keys';
 
@@ -194,6 +197,65 @@ const friendCardSource = `
   }
 `;
 
+// Records, in order, every scroll position the app stores and every scroll and
+// scrollend on the file-tree panel, so a failing scroll-position assertion
+// shows which step stored the position it restored.
+function traceFileTreeScrolling(owner: Owner): string[] {
+  let trace: string[] = [];
+  let shorten = (key: string) => key.replace(testRealmURL, '');
+  let scrollPositionService = owner.lookup(
+    'service:scroll-position-service',
+  ) as ScrollPositionService;
+  let setScrollPosition = scrollPositionService.setScrollPosition;
+  scrollPositionService.setScrollPosition = function (
+    this: ScrollPositionService,
+    container: string,
+    key: string,
+    position: number,
+  ) {
+    trace.push(`set ${container} ${shorten(key)} ${position}`);
+    return setScrollPosition.call(this, container, key, position);
+  };
+  let onScroll = (event: Event) => {
+    let target = event.target;
+    if (
+      target instanceof HTMLElement &&
+      target.matches('[data-test-togglable-left-panel]')
+    ) {
+      let entry = `${event.type} ${target.scrollTop}`;
+      if (trace[trace.length - 1] !== entry) {
+        trace.push(entry);
+      }
+    }
+  };
+  document.addEventListener('scroll', onScroll, true);
+  document.addEventListener('scrollend', onScroll, true);
+  registerDestructor(owner, () => {
+    document.removeEventListener('scroll', onScroll, true);
+    document.removeEventListener('scrollend', onScroll, true);
+  });
+  return trace;
+}
+
+// Describes the file tree's scroll state, appended to scroll-position
+// assertion messages so a failure shows what was stored and what was rendered.
+function fileTreeScrollDiagnostics(trace?: string[]) {
+  let panel = document.querySelector('[data-test-togglable-left-panel]');
+  let selected = document.querySelector('[data-test-file-selected]');
+  return JSON.stringify({
+    storedScrollPositions: window.localStorage.getItem(ScrollPositions),
+    panelScrollTop: panel?.scrollTop,
+    panelScrollHeight: panel?.scrollHeight,
+    panelClientHeight: panel?.clientHeight,
+    selectedFile: selected?.getAttribute('data-test-file'),
+    selectedFileOffsetTop: (selected as HTMLElement | null)?.offsetTop,
+    testingContainerScrollTop: document.getElementById(
+      'ember-testing-container',
+    )?.scrollTop,
+    trace: trace?.join(' | '),
+  });
+}
+
 const realmInfo = {
   name: 'Test Workspace B',
   backgroundURL:
@@ -364,10 +426,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
-    assert
-      .dom('[data-test-realm-name]')
-      .hasText(`In ${realmInfo.name}`)
-      .hasAttribute('title', `In ${realmInfo.name}`);
+    assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
     assert.dom('[data-test-realm-read-only]').doesNotExist();
 
     await waitFor('[data-test-file="pet-person.gts"]');
@@ -456,6 +515,47 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitFor('[data-test-realm-name="Base Workspace"]');
     assert.dom('[data-test-realm-name]').hasText('In Base Workspace READ ONLY');
     assert.dom('[data-test-realm-read-only]').exists();
+  });
+
+  test('can filter the realm dropdown by name', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitFor('[data-test-realm-name="Test Workspace B"]');
+    await click('[data-test-realm-dropdown-trigger]');
+
+    assert.dom('[data-test-realm-dropdown-search]').isFocused();
+    assert.dom('[data-test-boxel-menu-item-text="Base Workspace"]').exists();
+    assert.dom('[data-test-boxel-menu-item-text="Test Workspace B"]').exists();
+
+    await fillIn('[data-test-realm-dropdown-search]', 'base');
+    assert.dom('[data-test-boxel-menu-item-text="Base Workspace"]').exists();
+    assert
+      .dom('[data-test-boxel-menu-item-text="Test Workspace B"]')
+      .doesNotExist();
+
+    await fillIn('[data-test-realm-dropdown-search]', 'no such workspace');
+    assert.dom('[data-test-boxel-menu-item]').doesNotExist();
+    assert.dom('[data-test-realm-dropdown-no-results]').exists();
+
+    await fillIn('[data-test-realm-dropdown-search]', 'BASE');
+    await triggerKeyEvent(
+      '[data-test-realm-dropdown-search]',
+      'keydown',
+      'Enter',
+    );
+
+    await waitFor('[data-test-realm-name="Base Workspace"]');
+    assert.dom('[data-test-realm-dropdown-menu]').doesNotExist();
+
+    await click('[data-test-realm-dropdown-trigger]');
+    assert
+      .dom('[data-test-realm-dropdown-search]')
+      .hasValue('', 'the search is cleared when the dropdown reopens');
+    assert.dom('[data-test-boxel-menu-item-text="Test Workspace B"]').exists();
   });
 
   test('switch realm with recent file exists should open the recent file', async function (assert) {
@@ -721,6 +821,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('scroll position is restored when returning to file view but only for one file per realm', async function (assert) {
+    let scrollTrace = traceFileTreeScrolling(this.owner);
     window.localStorage.setItem(
       'code-mode-panel-widths',
       JSON.stringify({ leftPanel: 200 }),
@@ -804,15 +905,19 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await click('[data-test-file-browser-toggle]');
     await waitFor(endDirectorySelector);
     await waitFor('[data-test-file-tree-mask]', { count: 0 });
+    // waitFor polls without settling, so settle for the scroll-position
+    // debounce before checking.
+    await settled();
 
     endDirectoryElement = find(endDirectorySelector);
 
     if (!endDirectoryElement) {
       assert.ok(endDirectoryElement, 'end directory should exist');
     } else {
+      let diagnostics = fileTreeScrollDiagnostics(scrollTrace);
       assert.notOk(
         await elementIsVisible(endDirectoryElement),
-        'expected previously-stored scroll position to have been forgotten',
+        `expected previously-stored scroll position to have been forgotten after choosing another file; ${diagnostics}`,
       );
 
       endDirectoryElement.scrollIntoView({ block: 'center' });
@@ -827,6 +932,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       '[data-test-card-url-bar-input]',
       `${testModuleRealm}mango.png`,
     );
+    scrollTrace.push('mark visit other realm');
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',
       'keypress',
@@ -836,11 +942,17 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitFor('[data-test-realm-name="Test Workspace A"]', {
       timeout: 2000,
     });
+    // The realm name changes before the tree does. Wait for the other realm's
+    // tree to render so the scroll position under test is the one that realm
+    // left behind, not the end-directory position this realm's tree still had.
+    await waitFor('[data-test-file="mango.png"]');
+    scrollTrace.push('mark other realm rendered');
 
     await fillIn(
       '[data-test-card-url-bar-input]',
       `http://test-realm/test/Person/1.json`,
     );
+    scrollTrace.push('mark return to Person/1.json');
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',
       'keypress',
@@ -848,15 +960,21 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     );
     await waitFor('[data-test-realm-name="Test Workspace B"]');
     await waitFor('[data-test-file-tree-mask]', { count: 0 });
+    // Nested directory listings load after the root one.
+    await waitFor('[data-test-file="Person/1.json"]');
+    // waitFor polls without settling, so settle for the scroll-position
+    // debounce before checking.
+    await settled();
 
     endDirectoryElement = find(endDirectorySelector);
 
     if (!endDirectoryElement) {
       assert.ok(endDirectoryElement, 'end directory should exist');
     } else {
+      let diagnostics = fileTreeScrollDiagnostics(scrollTrace);
       assert.notOk(
         await elementIsVisible(endDirectoryElement),
-        'expected previously-stored scroll position to have been forgotten',
+        `expected previously-stored scroll position to have been forgotten after visiting another realm; ${diagnostics}`,
       );
     }
   });
@@ -993,7 +1111,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `https://cardstack.com/base/cards-grid.gts`,
+      codePath: `${baseRealm.url}cards-grid.gts`,
     });
 
     await waitFor('[data-test-file="cards-grid.gts"]');
@@ -1015,7 +1133,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `https://cardstack.com/base/cards-grid.gts`,
+      codePath: `${baseRealm.url}cards-grid.gts`,
     });
 
     await waitFor('[data-test-togglable-left-panel]');

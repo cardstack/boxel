@@ -79,21 +79,22 @@ export const DEFAULT_BUILTIN_LIBRARIES: BuiltinLibraryName[] = [
 ];
 
 /**
- * The library set a mutation program resolves against: whatever the caller
- * asked for, plus the request-context builtins the mutation dialect always
- * offers.
+ * The library set a request-context program resolves against: whatever the
+ * caller asked for, plus the request-context builtins both dialects that
+ * offer them always do — a mutation program and an operation's `input` /
+ * `output` transform.
  *
  * Appending, rather than naming a fixed list, is what keeps the lazy formula
- * families reachable from a mutation program: `loadAllFormulaExtensions`
- * appends them to {@link DEFAULT_BUILTIN_LIBRARIES} in place, so a separate
- * default here would freeze the set as it stood before those chunks loaded.
+ * families reachable from such a program: `loadAllFormulaExtensions` appends
+ * them to {@link DEFAULT_BUILTIN_LIBRARIES} in place, so a separate default
+ * here would freeze the set as it stood before those chunks loaded.
  *
  * `request-context` is deliberately not in {@link DEFAULT_BUILTIN_LIBRARIES}.
  * A card's computed fields resolve against that list, and `params`/`actor`/
  * `instance` have no meaning there — the `derive` profile denies them, and
  * leaving them unresolvable means a computed field cannot even name one.
  */
-export function mutationBuiltinLibraries(
+export function requestContextBuiltinLibraries(
   libraries: BuiltinLibraryName[] = DEFAULT_BUILTIN_LIBRARIES,
 ): BuiltinLibraryName[] {
   // Always last, even when the caller already listed it. Resolution is

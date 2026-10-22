@@ -265,6 +265,37 @@ describe('ProfileManager', () => {
     expect(profile.realmServerToken).toBeUndefined();
   });
 
+  it('addProfileWithAuth keeps the key-management sign-in across a re-auth to the same servers, and drops it when they change', async () => {
+    let secureSession = {
+      token: 'secure-session-jwt',
+      userId: '@bob:stack.cards',
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    };
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    manager.setSecureSession(secureSession);
+
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    expect(manager.getProfile('@bob:stack.cards')!.secureSession).toEqual(
+      secureSession,
+    );
+
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+      undefined,
+      'https://realms.new-host.example/',
+    );
+    expect(
+      manager.getProfile('@bob:stack.cards')!.secureSession,
+    ).toBeUndefined();
+  });
+
   it('addProfileWithAuth clears cached realm tokens when realmServerUrl changes', async () => {
     await manager.addProfileWithAuth(
       '@bob:stack.cards',
@@ -459,6 +490,40 @@ describe('ProfileManager', () => {
 
     const freshManager = new ProfileManager(tmpDir);
     expect(freshManager.listProfiles()).toEqual([]);
+  });
+
+  // An unreadable store must be distinguishable from an empty one: discovery
+  // reports the former as an error rather than as "no profiles".
+  it('records a load error for a corrupted config file', () => {
+    fs.writeFileSync(path.join(tmpDir, 'profiles.json'), 'not valid json{{{');
+
+    const freshManager = new ProfileManager(tmpDir);
+    expect(freshManager.listProfiles()).toEqual([]);
+    expect(freshManager.getLoadError()).toMatch(/Could not read profiles file/);
+  });
+
+  it('records a load error for valid JSON with an unrecognized shape', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'profiles.json'),
+      JSON.stringify({ foo: 'bar' }),
+    );
+
+    const freshManager = new ProfileManager(tmpDir);
+    expect(freshManager.listProfiles()).toEqual([]);
+    expect(freshManager.getLoadError()).toMatch(/not a recognizable profiles/);
+  });
+
+  it('has no load error when the store is genuinely absent', () => {
+    const freshManager = new ProfileManager(tmpDir);
+    expect(freshManager.listProfiles()).toEqual([]);
+    expect(freshManager.getLoadError()).toBeNull();
+  });
+
+  it('has no load error for a well-formed store', async () => {
+    await manager.addProfile('@testuser:stack.cards', 'password123');
+
+    const freshManager = new ProfileManager(tmpDir);
+    expect(freshManager.getLoadError()).toBeNull();
   });
 
   it('rejects unknown domains without explicit URLs', async () => {

@@ -76,6 +76,11 @@ export interface RenderableSearchEntryLike {
 export interface SearchResultsYield {
   entries: RenderableSearchEntryLike[];
   isLoading: boolean;
+  // The query `entries` answers, absent until a search has succeeded. While
+  // a changed query loads, `entries` still holds the previous query's rows;
+  // comparing this with the query passed in tells a consumer which of the
+  // query's members (say, the page) the rows on screen are behind on.
+  entriesQuery?: SearchEntryWireQuery;
   meta: EntryCollectionDocument['meta'];
   errors: ErrorEntry[] | undefined;
 }
@@ -102,6 +107,11 @@ export interface SearchResultsComponentSignature {
     // pass `false` for a card that lays results out in its own UI and wants
     // them rendered plainly, with no overlay even inside operator mode.
     overlays?: boolean;
+    // Whether each result renders inside its card container chrome (the
+    // boundary ring), the same switch `<@fields.x @displayContainer={{false}} />`
+    // offers. Defaults to `true`; pass `false` for a consumer that frames
+    // results itself.
+    displayContainer?: boolean;
   };
   Blocks: {
     default: [SearchResultsYield];

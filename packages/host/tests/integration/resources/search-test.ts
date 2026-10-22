@@ -1,4 +1,7 @@
-import { getOwner } from '@ember/owner';
+import { destroy } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import { getOwner, setOwner } from '@ember/owner';
+import { run } from '@ember/runloop';
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { settled, waitUntil } from '@ember/test-helpers';
 
@@ -12,19 +15,24 @@ import {
   Deferred,
   isFileDefInstance,
   rri,
+  QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
   SEARCH_CONCURRENCY_CAP,
   SearchBoundError,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { buildQuerySearchURL } from '@cardstack/runtime-common/query-field-utils';
 
+import ENV from '@cardstack/host/config/environment';
 import type { Args as SearchResourceArgs } from '@cardstack/host/resources/search';
 import { SearchResource } from '@cardstack/host/resources/search';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type NetworkService from '@cardstack/host/services/network';
 import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
+import type { SearchThrottleLane } from '@cardstack/host/services/store';
 
 import {
   withCachedRealmSetup,
@@ -34,7 +42,6 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -84,7 +91,6 @@ module(`Integration | search resource`, function (hooks) {
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
   });
-  setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
     cardApi = await loader.import('@cardstack/base/card-api');
     string = await loader.import('@cardstack/base/string');
@@ -462,6 +468,184 @@ module(`Integration | search resource`, function (hooks) {
     }
   });
 
+  test(`a search the realm server answers with 401 is reauthenticated and replayed once`, async function (assert) {
+    let realmServer = getService('realm-server') as RealmServerService;
+    let network = getService('network') as NetworkService;
+
+    // The search has to start holding a session, or there is nothing for the
+    // server to reject and nothing for the replay to replace.
+    await realmServer.login();
+    let rejectedToken = realmServer.token;
+    assert.ok(rejectedToken, 'the search starts with a realm-server session');
+
+    let attempts: (string | null)[] = [];
+    let gate = async (request: Request) => {
+      if (!new URL(request.url).pathname.endsWith('/_federated-search')) {
+        return null;
+      }
+      attempts.push(request.headers.get('Authorization'));
+      if (attempts.length === 1) {
+        // What `multiRealmAuthorization` answers for a session token it
+        // rejects. It names no realm, which is why the per-realm authorization
+        // middleware cannot recover from it: there is nothing for that
+        // middleware to reauthenticate against.
+        return new Response(
+          JSON.stringify({ errors: ['Unauthorized Request'] }),
+          {
+            status: 401,
+            headers: { 'content-type': 'application/vnd.card+json' },
+          },
+        );
+      }
+      // Fall through to the realm-server mock, which answers the search.
+      return null;
+    };
+    network.virtualNetwork.mount(gate, { prepend: true });
+
+    let reauthCalls = 0;
+    let reauthedFor: (string | undefined)[] = [];
+    let sessionDuringMint: (string | undefined)[] = [];
+    let originalReauthenticate =
+      realmServer.reauthenticateRealmServer.bind(realmServer);
+    realmServer.reauthenticateRealmServer = async (
+      rejectedToken?: string,
+    ): Promise<string | undefined> => {
+      reauthCalls++;
+      reauthedFor.push(rejectedToken);
+      let pending = originalReauthenticate(rejectedToken);
+      // Read before awaiting: a mint that discards the session to force one
+      // does so in its synchronous prologue, so this is where an anonymous
+      // window would be visible to every other consumer of the service.
+      sessionDuringMint.push(realmServer.token);
+      return await pending;
+    };
+
+    try {
+      let query: Query = {
+        filter: {
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
+          eq: {
+            'author.lastName': 'Jones',
+          },
+        },
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [testRealmURL],
+          isLive: false,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+
+      assert.strictEqual(
+        attempts.length,
+        2,
+        'the rejected search was sent again',
+      );
+      assert.strictEqual(
+        reauthCalls,
+        1,
+        'and exactly one session was minted to send it with',
+      );
+      assert.strictEqual(
+        attempts[0],
+        `Bearer ${rejectedToken}`,
+        'the first attempt carried the token the server rejected',
+      );
+      assert.strictEqual(
+        attempts[1],
+        `Bearer ${realmServer.token}`,
+        'and the replay carried the session the service now holds',
+      );
+      assert.deepEqual(
+        reauthedFor,
+        [rejectedToken],
+        'the mint was told which session the server refused',
+      );
+      assert.deepEqual(
+        sessionDuringMint,
+        [rejectedToken],
+        'and the service stayed logged in for the length of the mint, so a ' +
+          'concurrent caller never sees an anonymous session',
+      );
+      assert.strictEqual(
+        search.instances[0].id,
+        `${testRealmURL}card-2`,
+        'and the replay produced the result',
+      );
+    } finally {
+      realmServer.reauthenticateRealmServer = originalReauthenticate;
+      network.virtualNetwork.unmount(gate);
+    }
+  });
+
+  test(`a 401 the realm server repeats is surfaced rather than replayed forever`, async function (assert) {
+    let realmServer = getService('realm-server') as RealmServerService;
+    let network = getService('network') as NetworkService;
+    await realmServer.login();
+
+    let attempts = 0;
+    let gate = async (request: Request) => {
+      if (!new URL(request.url).pathname.endsWith('/_federated-search')) {
+        return null;
+      }
+      attempts++;
+      return new Response(
+        JSON.stringify({ errors: ['Unauthorized Request'] }),
+        {
+          status: 401,
+          headers: { 'content-type': 'application/vnd.card+json' },
+        },
+      );
+    };
+    network.virtualNetwork.mount(gate, { prepend: true });
+
+    try {
+      let query: Query = {
+        filter: {
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
+          eq: {
+            'author.lastName': 'Jones',
+          },
+        },
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [testRealmURL],
+          isLive: false,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+
+      assert.strictEqual(
+        attempts,
+        2,
+        'the search was replayed once and then left alone',
+      );
+      assert.strictEqual(
+        search.instances.length,
+        0,
+        'and the still-refused search yields no results',
+      );
+    } finally {
+      network.virtualNetwork.unmount(gate);
+    }
+  });
+
   test(`can perform a live search for cards`, async function (assert) {
     let query: Query = {
       filter: {
@@ -518,6 +702,694 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
     assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
     assert.strictEqual(search.instances[2].id, `${testRealmURL}books/3`);
+  });
+
+  test(`a live search of a realm named by a registered prefix re-runs on that realm's events`, async function (assert) {
+    // The realm's events are keyed by its URL while the search subscribes by
+    // the caller's spelling; the message service delivers across the two. A
+    // remapped live realm canonicalizes its module refs differently, so the
+    // query is left untyped: only the subscription and the re-run are under
+    // test.
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+    let messageService = getService('message-service');
+    let originalSubscribe = messageService.subscribe.bind(messageService);
+    let subscribedTo: string[] = [];
+    messageService.subscribe = (realmURL, cb) => {
+      subscribedTo.push(realmURL);
+      return originalSubscribe(realmURL, cb);
+    };
+    let originalSearchWithMeta = storeService.searchWithMeta.bind(storeService);
+    let searchedRealms: string[][] = [];
+    storeService.searchWithMeta = (async (query, realms, opts) => {
+      searchedRealms.push([...(realms ?? [])]);
+      return await originalSearchWithMeta(query, realms, opts);
+    }) as typeof storeService.searchWithMeta;
+
+    try {
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: {},
+          realms: ['@test/mapped/'],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      assert.true(
+        subscribedTo.includes('@test/mapped/'),
+        'the search subscribes by the spelling the caller used',
+      );
+      let runsBefore = searchedRealms.length;
+      assert.deepEqual(
+        searchedRealms[runsBefore - 1],
+        ['@test/mapped/'],
+        'the search itself keeps the caller spelling',
+      );
+
+      await realm.write(
+        'books/3.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              author: { firstName: 'Paper', lastName: 'Abdel-Rahman' },
+            },
+            meta: { adoptsFrom: { module: testRRI('book'), name: 'Book' } },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await waitUntil(() => searchedRealms.length > runsBefore, {
+        timeout: 10_000,
+      });
+      assert.ok(true, "the realm's event re-ran the search");
+    } finally {
+      messageService.subscribe = originalSubscribe;
+      storeService.searchWithMeta = originalSearchWithMeta;
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
+  test(`a base realm card is merged and grouped whichever spelling names the base realm`, async function (assert) {
+    // The default all-realms list names base by its alias, while a base card's
+    // id is its prefix form; membership has to hold across all three spellings.
+    // Server rows are never filtered by membership, so the cards under test are
+    // local ones the server does not return.
+    let spellings = [
+      baseRealm.url,
+      new URL(ENV.resolvedBaseRealmURL).href,
+      '@cardstack/base/',
+    ];
+    for (let [index, spelling] of spellings.entries()) {
+      let title = `local-base-${index}-${Date.now()}`;
+      // One query object for the resource's life: the client-side merge keys
+      // its canonicalized filter on the filter object itself.
+      let query: Query = {
+        filter: {
+          on: { module: baseRRI('card-api'), name: 'CardDef' },
+          eq: { 'cardInfo.name': title },
+        },
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [spelling],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      assert.deepEqual(
+        search.instances,
+        [],
+        `${spelling}: the server returns nothing for the title`,
+      );
+
+      let local = await storeService.addWithoutPersisting({
+        data: {
+          type: 'card',
+          id: `${baseRealm.url}cards/${title}`,
+          attributes: { cardInfo: { name: title } },
+          meta: {
+            adoptsFrom: { module: baseRRI('card-api'), name: 'CardDef' },
+          },
+        },
+      } as LooseSingleCardDocument);
+      await settled();
+
+      assert.strictEqual(
+        String(local.id),
+        `@cardstack/base/cards/${title}`,
+        `${spelling}: the store names the card by prefix`,
+      );
+      assert.deepEqual(
+        search.instances.map((instance) => instance.id),
+        [local.id],
+        `${spelling}: the local base card is merged`,
+      );
+      assert.deepEqual(
+        search.instancesByRealm.map((group) => [
+          group.realm,
+          group.cards.map((card) => card.id),
+        ]),
+        [[spelling, [local.id]]],
+        `${spelling}: it is grouped under the realm as the caller named it`,
+      );
+    }
+  });
+
+  test(`a seed older than an event's generation is declined for a realm named by a registered prefix`, async function (assert) {
+    // The event raises the realm's floor under the caller's spelling, the seed
+    // names the realm by the URL the server reports; both have to land on one
+    // floor for the stale seed to be turned away.
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+    let originalSearchWithMeta = storeService.searchWithMeta.bind(storeService);
+    let runs = 0;
+    storeService.searchWithMeta = (async (query, realms, opts) => {
+      let result = await originalSearchWithMeta(query, realms, opts);
+      runs++;
+      return result;
+    }) as typeof storeService.searchWithMeta;
+
+    try {
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: {},
+          realms: ['@test/mapped/'],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      let runsBefore = runs;
+      getService('message-service').relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}books/1.json`],
+        generation: 10,
+        realmURL: testRealmURL,
+      });
+      await waitUntil(() => runs > runsBefore, { timeout: 10_000 });
+      await settled();
+      let held = search.instances.map((instance) => instance.id);
+
+      let stale = await storeService.addWithoutPersisting(
+        new cardApi.CardDef({ cardTitle: 'Stale' }),
+      );
+      search.reseed!({
+        cards: [stale],
+        identity: 'stale-seed',
+        generation: 5,
+        realm: testRealmURL,
+      });
+      await settled();
+
+      assert.deepEqual(
+        search.instances.map((instance) => instance.id),
+        held,
+        'the stale seed does not replace the set the event refreshed',
+      );
+    } finally {
+      storeService.searchWithMeta = originalSearchWithMeta;
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
+  test(`a burst of realm events coalesces into a single live re-run`, async function (assert) {
+    let realmServer = getService('realm-server') as RealmServerService;
+    let fetchCalls = 0;
+    let originalMaybeAuthedFetchForRealms =
+      realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+    realmServer.maybeAuthedFetchForRealms = (async (...args) => {
+      fetchCalls++;
+      return await originalMaybeAuthedFetchForRealms(...args);
+    }) as RealmServerService['maybeAuthedFetchForRealms'];
+
+    try {
+      let query: Query = {
+        filter: {
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
+          eq: {
+            'author.lastName': 'Abdel-Rahman',
+          },
+        },
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      let baseline = fetchCalls;
+      let messageService = getService('message-service');
+
+      for (let generation = 1; generation <= 5; generation++) {
+        messageService.relayRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}books/1.json`],
+          generation,
+          realmURL: testRealmURL,
+        });
+      }
+      await settled();
+
+      assert.strictEqual(
+        fetchCalls,
+        baseline + 1,
+        'five index events inside one window produce one search fetch',
+      );
+
+      // The scheduler re-arms after a flush: a later event is not starved by
+      // the earlier burst.
+      messageService.relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}books/1.json`],
+        generation: 6,
+        realmURL: testRealmURL,
+      });
+      await settled();
+
+      assert.strictEqual(
+        fetchCalls,
+        baseline + 2,
+        'an event after the flush schedules its own re-run',
+      );
+    } finally {
+      realmServer.maybeAuthedFetchForRealms = originalMaybeAuthedFetchForRealms;
+    }
+  });
+
+  test(`a query change inside the window folds the pending re-run into it`, async function (assert) {
+    let realmServer = getService('realm-server') as RealmServerService;
+    let fetchCalls = 0;
+    let originalMaybeAuthedFetchForRealms =
+      realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+    realmServer.maybeAuthedFetchForRealms = (async (...args) => {
+      fetchCalls++;
+      return await originalMaybeAuthedFetchForRealms(...args);
+    }) as RealmServerService['maybeAuthedFetchForRealms'];
+
+    try {
+      let args = {
+        query: {
+          filter: {
+            on: { module: testRRI('book'), name: 'Book' },
+            eq: { 'author.lastName': 'Abdel-Rahman' },
+          },
+        },
+        realms: [testRealmURL],
+        isLive: true,
+        isAutoSaved: false,
+        storeService,
+        owner: this.owner,
+      } satisfies SearchResourceArgs['named'];
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: args,
+      }));
+      await search.loaded;
+      let baseline = fetchCalls;
+      let messageService = getService('message-service');
+
+      // Arm the scheduler with an event, then change the query before the
+      // window flushes. The query change must cancel the armed flush and fold
+      // its pending floors into its own run — otherwise a redundant second
+      // search over the new query fires a window later (the cost this change
+      // exists to remove), invisible because it still returns the right rows.
+      messageService.relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}books/1.json`],
+        generation: 1,
+        realmURL: testRealmURL,
+      });
+      search.modify([], {
+        ...args,
+        query: {
+          filter: {
+            on: { module: testRRI('book'), name: 'Book' },
+            eq: { 'author.lastName': 'Jones' },
+          },
+        },
+      });
+      await settled();
+
+      assert.strictEqual(
+        fetchCalls,
+        baseline + 1,
+        'the query change folds the armed flush into its own run; no redundant second search fires',
+      );
+    } finally {
+      realmServer.maybeAuthedFetchForRealms = originalMaybeAuthedFetchForRealms;
+    }
+  });
+
+  // A realm event names the adoption chains its pass touched, so a query whose
+  // type anchors are disjoint from them sits the event out instead of
+  // re-querying on every client holding it. One write announces itself twice —
+  // an index event, then the prerender_html event for the render pass it
+  // spawns — so both channels are gated or neither measurement moves.
+  module('realm event type gating', function () {
+    // Nothing in this realm adopts from it — the stand-in for "somebody else's
+    // unrelated write".
+    const unrelatedType = `${testRealmURL}observation/Observation`;
+    // One row, spelled the way each channel spells it: an index event names
+    // the instance, a prerender_html event names the file it is stored in.
+    // The relays below keep them apart so the gate's correlation is exercised
+    // across that difference rather than against one spelling.
+    const unrelatedURL = `${testRealmURL}observations/1`;
+    const unrelatedFileURL = `${unrelatedURL}.json`;
+
+    // Spelled out rather than derived through `internalKeyFor`: the gate
+    // resolves its anchors with that same function, so deriving the expected
+    // key here would move both sides of the comparison together and assert
+    // nothing about the spelling.
+    const bookType = `${testRealmURL}book/Book`;
+    const postType = `${testRealmURL}post/Post`;
+    const blogPostType = `${testRealmURL}blog-post/BlogPost`;
+
+    function relayIndexEvent(
+      invalidatedTypes: string[] | undefined,
+      invalidations: string[] = [unrelatedURL],
+    ) {
+      getService('message-service').relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations,
+        ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
+        realmURL: testRealmURL,
+      });
+    }
+
+    function relayPrerenderHtmlEvent(
+      invalidations: string[] = [unrelatedFileURL],
+      generation = 1,
+    ) {
+      getService('message-service').relayRealmEvent({
+        eventName: 'prerender_html',
+        invalidations,
+        generation,
+        realmURL: testRealmURL,
+      });
+    }
+
+    // Counts the search fetches the resource issues, so a skipped event is
+    // visible as a count that didn't move.
+    function countingFetch(): { count: () => number; restore: () => void } {
+      let realmServer = getService('realm-server') as RealmServerService;
+      let fetchCalls = 0;
+      let original = realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+      realmServer.maybeAuthedFetchForRealms = (async (...args) => {
+        fetchCalls++;
+        return await original(...args);
+      }) as RealmServerService['maybeAuthedFetchForRealms'];
+      return {
+        count: () => fetchCalls,
+        restore: () => {
+          realmServer.maybeAuthedFetchForRealms = original;
+        },
+      };
+    }
+
+    function liveSearch(owner: Owner, query: Query) {
+      return getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner,
+        },
+      }));
+    }
+
+    test('an index event that touched no anchored type does not re-run the query', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let search = liveSearch(this.owner, {
+          filter: { on: { module: testRRI('book'), name: 'Book' }, eq: {} },
+        });
+        await search.loaded;
+        let baseline = fetch.count();
+
+        // The anchors resolve off the first event that carries types, so that
+        // event takes the re-run it would have taken anyway.
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'the first typed event re-runs while the anchors resolve',
+        );
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'a write to a type the query is not anchored on is skipped',
+        );
+
+        relayIndexEvent([unrelatedType, bookType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 2,
+          'an event naming the anchored type re-runs the query',
+        );
+
+        relayIndexEvent(undefined);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 3,
+          'an event carrying no type information re-runs the query',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
+
+    test('a write to a subtype wakes a query anchored on its ancestor', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let search = liveSearch(this.owner, {
+          filter: { on: { module: testRRI('post'), name: 'Post' }, eq: {} },
+        });
+        await search.loaded;
+        let baseline = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'the anchors resolve and the second unrelated event is skipped',
+        );
+
+        // The comparison is "does the event's type set contain the query's
+        // anchor", never the reverse: a written BlogPost names its whole
+        // adoption chain, and `Post` is in it. Reading it the other way round
+        // would drop this member silently.
+        relayIndexEvent([blogPostType, postType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 2,
+          'a subtype write names the ancestor in its chain, so the query re-runs',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
+
+    test('a prerender_html event over rows an index event judged unrelated is skipped', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let search = liveSearch(this.owner, {
+          filter: { on: { module: testRRI('book'), name: 'Book' }, eq: {} },
+        });
+        await search.loaded;
+        let baseline = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'the index channel is gated once the anchors resolve',
+        );
+
+        // The render pass covers the rows its spawning index pass invalidated,
+        // and that pass named their types. The event spells the underlying
+        // file; the index event spelled the same rows, so the two reach each
+        // other.
+        relayPrerenderHtmlEvent([unrelatedFileURL]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'the render of a row no index event tied to this query is skipped',
+        );
+
+        // A repair pass renders rows an earlier generation left stale, which
+        // no index event this subscription saw has a verdict for.
+        relayPrerenderHtmlEvent([`${testRealmURL}books/1.json`]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 2,
+          'a render this query holds no verdict for re-runs it',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
+
+    test('an index event that could move a member withdraws its rows from the render gate', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let search = liveSearch(this.owner, {
+          filter: { on: { module: testRRI('book'), name: 'Book' }, eq: {} },
+        });
+        await search.loaded;
+        let baseline = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayPrerenderHtmlEvent([unrelatedFileURL]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'both channels are gated for a row judged unrelated',
+        );
+
+        // The same row, re-indexed as something this query is anchored on. Its
+        // earlier verdict can't stand: which of the event's rows changed type
+        // isn't readable off the event, so all of them lose their verdict.
+        relayIndexEvent([bookType], [unrelatedURL]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 2,
+          'the re-typed row re-runs the query on the index channel',
+        );
+
+        relayPrerenderHtmlEvent([unrelatedFileURL]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 3,
+          'and its render is no longer skipped',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
+
+    test('a query that admits a card of any type re-runs on every event', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let search = liveSearch(this.owner, {
+          filter: { eq: { 'author.lastName': 'Abdel-Rahman' } },
+        });
+        await search.loaded;
+        let baseline = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 2,
+          'an unanchored filter can gain a member of any type, so nothing is skipped',
+        );
+
+        relayPrerenderHtmlEvent([unrelatedFileURL]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 3,
+          'and its renders are not skipped either',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
+
+    test('a query change re-resolves the anchors before they gate again', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let args = {
+          query: {
+            filter: { on: { module: testRRI('book'), name: 'Book' }, eq: {} },
+          },
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        } satisfies SearchResourceArgs['named'];
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: args,
+        }));
+        await search.loaded;
+        let baseline = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'the anchors resolve and the second event is skipped',
+        );
+
+        // The keys describe the anchors of the query they came from, so the
+        // new query cannot be gated against them.
+        search.modify([], {
+          ...args,
+          query: {
+            filter: { on: { module: testRRI('post'), name: 'Post' }, eq: {} },
+          },
+        });
+        await settled();
+        let afterChange = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          afterChange + 1,
+          'the first event after the change re-runs while the anchors re-resolve',
+        );
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          afterChange + 1,
+          'the re-resolved anchors gate again',
+        );
+
+        relayIndexEvent([postType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          afterChange + 2,
+          'and they gate against the new query, not the old one',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
   });
 
   test(`cards in search results live update`, async function (assert) {
@@ -849,6 +1721,30 @@ module(`Integration | search resource`, function (hooks) {
       );
     });
 
+    test(`a realm named by a registered prefix coalesces with the same realm named by URL`, async function (assert) {
+      (
+        globalThis as unknown as { __boxelRenderContext?: boolean }
+      ).__boxelRenderContext = true;
+      let { virtualNetwork } = getService('network');
+      virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+      try {
+        let p1 = storeService.search(bookQuery, ['@test/mapped/']);
+        let p2 = storeService.search(bookQuery, [
+          testRealmURL,
+          '@test/mapped/',
+        ]);
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'both spellings key one in-flight fetch',
+        );
+        releaseFetch.fulfill();
+        await Promise.all([p1, p2]);
+      } finally {
+        virtualNetwork.removeRealmMapping('@test/mapped/');
+      }
+    });
+
     test(`concurrent same-key store.search calls do NOT coalesce outside a prerender`, async function (assert) {
       // __boxelRenderContext stays unset — this is the live-SPA path
       let p1 = storeService.search(bookQuery, [testRealmURL]);
@@ -972,10 +1868,12 @@ module(`Integration | search resource`, function (hooks) {
       let g = globalThis as unknown as {
         __boxelRenderContext?: boolean;
         __boxelJobId?: string;
+        __boxelRenderScope?: string;
         __boxelConsumingRealm?: string;
       };
       g.__boxelRenderContext = undefined;
       g.__boxelJobId = undefined;
+      g.__boxelRenderScope = undefined;
       g.__boxelConsumingRealm = undefined;
       storeService.clearInFlightSearch();
       storeService.clearSearchCache();
@@ -1019,6 +1917,40 @@ module(`Integration | search resource`, function (hooks) {
         (r1 as { id?: string }[]).map((i) => i.id ?? null),
         (r2 as { id?: string }[]).map((i) => i.id ?? null),
         'cached doc returns the same instance set',
+      );
+    });
+
+    test(`a realm named by a registered prefix hits the same-realm cache of its URL`, async function (assert) {
+      // The consuming realm is the realm's URL, so the prefix has to be
+      // canonicalized before the same-realm check for the cache to apply.
+      enterPrerender('job-1', testRealmURL);
+      releaseFetch.fulfill();
+      let { virtualNetwork } = getService('network');
+      virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+      try {
+        await storeService.search(bookQuery, ['@test/mapped/']);
+        await storeService.search(bookQuery, [testRealmURL]);
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          "the second spelling is served from the first one's cache entry",
+        );
+      } finally {
+        virtualNetwork.removeRealmMapping('@test/mapped/');
+      }
+    });
+
+    test(`base named by its prefix hits the same-realm cache when the consuming realm is its alias`, async function (assert) {
+      // The realm registry keys base by its alias, which is what a render
+      // stamps as the consuming realm; a search names base by its prefix.
+      enterPrerender('job-1', baseRealm.url);
+      releaseFetch.fulfill();
+      await storeService.search(bookQuery, ['@cardstack/base/']);
+      await storeService.search(bookQuery, ['@cardstack/base/']);
+      assert.strictEqual(
+        fetchCalls,
+        1,
+        "the second search is served from the first one's cache entry",
       );
     });
 
@@ -1096,6 +2028,28 @@ module(`Integration | search resource`, function (hooks) {
         fetchCalls,
         2,
         'cache entry from prior job is not served under new jobId',
+      );
+    });
+
+    test(`a render-scope change drops the cache while the job stays the same`, async function (assert) {
+      // A validation round re-reads under a scope of its own, inside the same
+      // job: another writer's pass committed to the realm since the answers
+      // cached under the previous scope were read.
+      enterPrerender('job-1', testRealmURL);
+      let g = globalThis as unknown as { __boxelRenderScope?: string };
+      g.__boxelRenderScope = `${testRealmURL}@1`;
+      releaseFetch.fulfill();
+
+      await storeService.search(bookQuery, [testRealmURL]);
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(fetchCalls, 1, 'one scope serves repeats from cache');
+
+      g.__boxelRenderScope = `${testRealmURL}@1~1`;
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'an answer cached under the previous scope is not served under the new one',
       );
     });
 
@@ -1271,12 +2225,14 @@ module(`Integration | search resource`, function (hooks) {
         // search doesn't count against the in-test fetch budget.
         releaseFetch.fulfill();
         let result = await storeService.search(bookQuery, [testRealmURL]);
-        let url = `${testRealmURL}_federated-search?${new URLSearchParams({
-          query: JSON.stringify(bookQuery),
-        }).toString()}`;
+        // Built by the same function the indexer writes `links.search` with,
+        // so the seed carries a URL the resource can actually parse back into
+        // the query it names. Spelling one by hand here would make the seed
+        // describe a query nothing matches, and the resource would re-run a
+        // search the seed was supposed to answer.
         return {
           cards: result as any[],
-          searchURL: url,
+          searchURL: buildQuerySearchURL([testRealmURL], bookQuery),
         };
       }
 
@@ -1532,7 +2488,7 @@ module(`Integration | search resource`, function (hooks) {
         );
       });
 
-      test(`live path with the same seed still fetches (live-SPA behavior is preserved)`, async function (assert) {
+      test(`a live resource seeded with its document's answer subscribes without searching`, async function (assert) {
         let { cards, searchURL } = await buildSeed();
         fetchCalls = 0;
 
@@ -1555,18 +2511,21 @@ module(`Integration | search resource`, function (hooks) {
         await search.loaded;
         await settled();
 
-        // Today the live path with a matching seed.searchURL happens
-        // to short-circuit via the previousQueryString equality check
-        // in SearchResource. The contract we care about for this
-        // ticket is the opposite case (non-live + seed must NOT
-        // fetch), so we only assert that live + seed produces the
-        // correct result set. Whether or not the equality-skip path
-        // saves a fetch here is an implementation detail of
-        // SearchResource that's orthogonal to this change.
+        // A seed's search URL and the query the client rebuilds compare equal
+        // under the resource's spelling-tolerant signature, so a live resource
+        // handed its document's answer has nothing left to ask for. This is
+        // what makes a query field the document resolved cost no request, and
+        // it is the half of eager resolution that is genuinely free — the
+        // subscription the same pass arms is not.
         assert.strictEqual(
           search.instances.length,
           cards.length,
-          'live path with seed still resolves to the correct set',
+          'the seed resolves the field to the set the document named',
+        );
+        assert.strictEqual(
+          fetchCalls,
+          0,
+          'and no search is issued to re-derive it',
         );
       });
 
@@ -1674,6 +2633,11 @@ module(`Integration | search resource`, function (hooks) {
     let abdelRahmanQuery: Query = {
       filter: { on: bookRef, eq: { 'author.lastName': 'Abdel-Rahman' } },
     };
+    // Matches one book where the query above matches two, so which of the two
+    // ran is readable from the result set alone.
+    let aguilarQuery: Query = {
+      filter: { on: bookRef, eq: { 'author.lastName': 'Aguilar' } },
+    };
 
     // Hydrate a Book into the Store without persisting it — a candidate the
     // server doesn't (yet) know about, standing in for a card created/edited
@@ -1683,21 +2647,18 @@ module(`Integration | search resource`, function (hooks) {
       firstName: string,
       lastName: string,
     ): Promise<any> {
-      return await storeService.add(
-        {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}${idPath}`,
-            attributes: {
-              author: { firstName, lastName },
-              editions: 0,
-              pubDate: '2024-01-01',
-            },
-            meta: { adoptsFrom: bookRef },
+      return await storeService.addWithoutPersisting({
+        data: {
+          type: 'card',
+          id: `${testRealmURL}${idPath}`,
+          attributes: {
+            author: { firstName, lastName },
+            editions: 0,
+            pubDate: '2024-01-01',
           },
-        } as LooseSingleCardDocument,
-        { doNotPersist: true },
-      );
+          meta: { adoptsFrom: bookRef },
+        },
+      } as LooseSingleCardDocument);
     }
 
     test(`a locally added matching card appears in an eligible live search without a server round-trip`, async function (assert) {
@@ -2159,22 +3120,19 @@ module(`Integration | search resource`, function (hooks) {
       await settled();
       let serverIds = search.instances.map((i) => i.id);
 
-      await storeService.add(
-        {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}posts/unresolved`,
-            attributes: { cardTitle: 'Lonely Post' },
-            relationships: {
-              article: {
-                links: { self: `${testRealmURL}does/not/exist` },
-              },
+      await storeService.addWithoutPersisting({
+        data: {
+          type: 'card',
+          id: `${testRealmURL}posts/unresolved`,
+          attributes: { cardTitle: 'Lonely Post' },
+          relationships: {
+            article: {
+              links: { self: `${testRealmURL}does/not/exist` },
             },
-            meta: { adoptsFrom: postRef },
           },
-        } as LooseSingleCardDocument,
-        { doNotPersist: true },
-      );
+          meta: { adoptsFrom: postRef },
+        },
+      } as LooseSingleCardDocument);
       await settled();
 
       assert.deepEqual(
@@ -2196,21 +3154,18 @@ module(`Integration | search resource`, function (hooks) {
       // not surface even when it satisfies the filter — that's another
       // realm's data and the local search has no authority over it.
       let otherRealmURL = 'https://other-realm.example/';
-      await storeService.add(
-        {
-          data: {
-            type: 'card',
-            id: `${otherRealmURL}books/foreign`,
-            attributes: {
-              author: { firstName: 'Foreign', lastName: 'Abdel-Rahman' },
-              editions: 0,
-              pubDate: '2024-01-01',
-            },
-            meta: { adoptsFrom: bookRef },
+      await storeService.addWithoutPersisting({
+        data: {
+          type: 'card',
+          id: `${otherRealmURL}books/foreign`,
+          attributes: {
+            author: { firstName: 'Foreign', lastName: 'Abdel-Rahman' },
+            editions: 0,
+            pubDate: '2024-01-01',
           },
-        } as LooseSingleCardDocument,
-        { doNotPersist: true },
-      );
+          meta: { adoptsFrom: bookRef },
+        },
+      } as LooseSingleCardDocument);
 
       let search = getSearchResourceForTest(loaderService, () => ({
         named: {
@@ -2282,7 +3237,7 @@ module(`Integration | search resource`, function (hooks) {
     });
 
     // The card `@context` search surface (`getSearchResource`) routes item-leg
-    // searches through the store's concurrency throttle so a card firing many
+    // searches through the store's card concurrency lane so a card firing many
     // at once can't burst concurrent `_federated-search` requests at the
     // realm-server. `enqueue` queues the excess rather than dropping it.
     test('performThrottledSearch caps concurrent card searches at the configured limit', async function (assert) {
@@ -2303,7 +3258,7 @@ module(`Integration | search resource`, function (hooks) {
         };
       };
       let results = Array.from({ length: count }, () =>
-        storeService.performThrottledSearch(makeRun()),
+        storeService.performThrottledSearch(makeRun(), 'card'),
       );
       try {
         await waitUntil(() => started >= SEARCH_CONCURRENCY_CAP);
@@ -2334,6 +3289,339 @@ module(`Integration | search resource`, function (hooks) {
         count,
         'every queued search eventually ran (enqueue, not drop)',
       );
+    });
+
+    // A caller whose result set must not be reshaped — query-field resolution,
+    // whose membership a clamped page or realm list would silently truncate —
+    // takes a slot in the query-field lane without the other card caps, while
+    // the host's own searches stay outside every lane.
+    test('a throttled search waits for a slot before it reaches the network; a host search does not', async function (assert) {
+      let cap = fillTheLane('query-field');
+      await waitUntil(cap.started, { timeout: 5_000 });
+      fetchCalls = 0;
+
+      let throttledDone = false;
+      let throttled = storeService
+        .search(abdelRahmanQuery, [testRealmURL], { throttled: true })
+        .then(() => {
+          throttledDone = true;
+        });
+      let hostDone = false;
+      let host = storeService
+        .search(abdelRahmanQuery, [testRealmURL])
+        .then(() => {
+          hostDone = true;
+        });
+
+      try {
+        await waitUntil(() => hostDone, { timeout: 5_000 });
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'the host search reached the network while every slot was taken',
+        );
+        assert.false(
+          throttledDone,
+          'the throttled search is still queued behind the full cap',
+        );
+      } finally {
+        await cap.release();
+      }
+      await throttled;
+      await host;
+      assert.true(throttledDone, 'the throttled search ran once a slot freed');
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'it reached the network only after it had a slot',
+      );
+    });
+
+    // The lanes are separate so the eager query-field fan-out can never hold
+    // the slots a card's own search needs: `enqueue` is one FIFO per lane, and
+    // a shared one would put a card search behind the whole fan-out.
+    test('a card search reaches the network while the query-field lane is full', async function (assert) {
+      let cap = fillTheLane('query-field');
+      await waitUntil(cap.started, { timeout: 5_000 });
+      fetchCalls = 0;
+
+      let queryFieldDone = false;
+      let queryField = storeService
+        .search(abdelRahmanQuery, [testRealmURL], { throttled: true })
+        .then(() => {
+          queryFieldDone = true;
+        });
+      let cardDone = false;
+      let card = storeService
+        .search(abdelRahmanQuery, [testRealmURL], { cardInitiated: true })
+        .then(() => {
+          cardDone = true;
+        });
+
+      try {
+        await waitUntil(() => cardDone, { timeout: 5_000 });
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'the card search reached the network past the queued fan-out',
+        );
+        assert.false(
+          queryFieldDone,
+          'the query-field search is still queued behind its own full lane',
+        );
+      } finally {
+        await cap.release();
+      }
+      await queryField;
+      await card;
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'the query-field search ran once its lane freed',
+      );
+    });
+
+    test('a query-field search reaches the network while the card lane is full', async function (assert) {
+      let cap = fillTheLane('card');
+      await waitUntil(cap.started, { timeout: 5_000 });
+      fetchCalls = 0;
+
+      let cardDone = false;
+      let card = storeService
+        .search(abdelRahmanQuery, [testRealmURL], { cardInitiated: true })
+        .then(() => {
+          cardDone = true;
+        });
+      let queryFieldDone = false;
+      let queryField = storeService
+        .search(abdelRahmanQuery, [testRealmURL], { throttled: true })
+        .then(() => {
+          queryFieldDone = true;
+        });
+
+      try {
+        await waitUntil(() => queryFieldDone, { timeout: 5_000 });
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'the query-field search reached the network past the queued card search',
+        );
+        assert.false(
+          cardDone,
+          'the card search is still queued behind its own full lane',
+        );
+      } finally {
+        await cap.release();
+      }
+      await card;
+      await queryField;
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'the card search ran once its lane freed',
+      );
+    });
+
+    // Queueing introduces a window the unqueued path never had: a search can
+    // sit in the queue until the consumer that wanted it is gone. Spending a
+    // slot on it then would delay the live searches behind it, so a run that
+    // reports itself obsolete when its turn comes never reaches the network.
+    test('a queued search whose consumer has gone away gives back its slot instead of fetching', async function (assert) {
+      let cap = fillTheLane('query-field');
+      await waitUntil(cap.started, { timeout: 5_000 });
+      fetchCalls = 0;
+
+      let obsolete = false;
+      let queued = storeService.searchWithMeta(
+        abdelRahmanQuery,
+        [testRealmURL],
+        {
+          throttled: true,
+          isObsolete: () => obsolete,
+        },
+      );
+      // The consumer goes away while the search is still waiting its turn.
+      obsolete = true;
+
+      await cap.release();
+      let result = await queued;
+
+      assert.strictEqual(
+        fetchCalls,
+        0,
+        'the abandoned search never reached the network',
+      );
+      assert.deepEqual(
+        result.instances,
+        [],
+        'it resolves empty for the caller that is no longer listening',
+      );
+      assert.strictEqual(
+        result.meta.page?.total,
+        0,
+        'and reports no count rather than a stale one',
+      );
+    });
+
+    // The two tests above hand `isObsolete` in, so they pin the store's side of
+    // the contract and not what decides obsolescence in production: the search
+    // resource's own epoch and destruction checks. These drive that guard —
+    // through a restart, and through a teardown — against a real queue.
+    //
+    // The epoch half rests on ember-concurrency starting a restarted instance
+    // synchronously inside `perform()`, so the stamp moves before any slot can
+    // free for the superseded run. If that ever stops holding, the superseded
+    // query reaches the network and this test says so.
+
+    // Take every slot in one lane with work that cannot finish until the test
+    // releases it.
+    function fillTheLane(lane: SearchThrottleLane) {
+      let laneCap =
+        lane === 'card'
+          ? SEARCH_CONCURRENCY_CAP
+          : QUERY_FIELD_SEARCH_CONCURRENCY_CAP;
+      let gates: Deferred<void>[] = [];
+      let occupied = 0;
+      let occupying = Array.from({ length: laneCap }, () => {
+        let gate = new Deferred<void>();
+        gates.push(gate);
+        return storeService.performThrottledSearch(async () => {
+          occupied++;
+          await gate.promise;
+        }, lane);
+      });
+      return {
+        started: () => occupied >= laneCap,
+        release: async () => {
+          for (let gate of gates) {
+            try {
+              gate.fulfill();
+            } catch {
+              // already settled
+            }
+          }
+          await Promise.all(occupying);
+        },
+      };
+    }
+
+    // Count arrivals at the throttle separately from admissions through it, so
+    // a test can wait for "the search is queued" rather than guess at it.
+    function countThrottledRuns() {
+      let enqueued = 0;
+      let perform = storeService.performThrottledSearch.bind(storeService);
+      (storeService as any).performThrottledSearch = (
+        run: () => Promise<unknown>,
+        lane: SearchThrottleLane,
+      ) => {
+        enqueued++;
+        return perform(run, lane);
+      };
+      return {
+        enqueued: () => enqueued,
+        restore: () => delete (storeService as any).performThrottledSearch,
+      };
+    }
+
+    test('a queued search superseded by a query change never sends the superseded query', async function (this: RenderingTestContext, assert) {
+      let cap = fillTheLane('query-field');
+      await waitUntil(cap.started, { timeout: 5_000 });
+      let counter = countThrottledRuns();
+      fetchCalls = 0;
+
+      let args = {
+        query: abdelRahmanQuery,
+        realms: [testRealmURL],
+        isLive: true,
+        isAutoSaved: false,
+        throttled: true,
+        storeService,
+        owner: this.owner,
+      } satisfies SearchResourceArgs['named'];
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: args,
+      }));
+
+      try {
+        // Reading a tracked getter runs the resource's lifecycle without
+        // awaiting its result — `loaded` would wait for a search the full cap
+        // is holding.
+        void search.isLoading;
+        await waitUntil(() => counter.enqueued() > 0, { timeout: 5_000 });
+
+        // Supersede it while it is still waiting for a slot.
+        search.modify([], { ...args, query: aguilarQuery });
+        await waitUntil(() => counter.enqueued() > 1, { timeout: 5_000 });
+
+        await cap.release();
+        await settled();
+
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'only the surviving query reached the network',
+        );
+        assert.strictEqual(
+          search.instances.length,
+          1,
+          "the resource holds the surviving query's one match, not the superseded query's two",
+        );
+      } finally {
+        counter.restore();
+        await cap.release();
+      }
+    });
+
+    test('a queued search whose resource is destroyed never reaches the network', async function (this: RenderingTestContext, assert) {
+      let cap = fillTheLane('query-field');
+      await waitUntil(cap.started, { timeout: 5_000 });
+      let counter = countThrottledRuns();
+      fetchCalls = 0;
+
+      // The resource's lifetime is its parent's. `Resource.from` hands back a
+      // lazy proxy, and the instance the guard asks about is a destroyable
+      // child of the helper cache rather than of that proxy — so destroying
+      // what `from` returned reaches nothing, and the guard would go on
+      // reporting a live resource. Destroying the parent is what reaches it,
+      // and is how the store's GC sweep reaches these: by dropping the card
+      // that owns them.
+      let parent = {};
+      setOwner(parent, this.owner);
+      let search = getSearchResourceForTest(parent, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          throttled: true,
+          storeService,
+          owner: this.owner,
+        } satisfies SearchResourceArgs['named'],
+      }));
+
+      try {
+        void search.isLoading;
+        await waitUntil(() => counter.enqueued() > 0, { timeout: 5_000 });
+
+        // Inside a runloop so the destroy queue flushes here: destruction
+        // cascades to the instance during that flush, and the guard is asked
+        // the moment the throttle admits the run. `settled()` would be the
+        // usual way to wait for it and cannot be used — the queued search
+        // holds a test waiter that the full cap is preventing from resolving.
+        run(() => destroy(parent));
+
+        await cap.release();
+        await settled();
+
+        assert.strictEqual(
+          fetchCalls,
+          0,
+          'the destroyed resource never sent the search it had queued',
+        );
+      } finally {
+        counter.restore();
+        await cap.release();
+      }
     });
 
     // A card-initiated search is capped; the same call from the host (no
@@ -2393,6 +3681,123 @@ module(`Integration | search resource`, function (hooks) {
         (e: Error) => e instanceof SearchBoundError,
         'the facade enforces the realms cap on an explicit list',
       );
+    });
+
+    // The caps hang off `search`, so a sibling that runs the same search
+    // without them is a way around the facade rather than a gap in it. The
+    // facade is an allowlist for that reason, and this pins it: a method the
+    // card-facing `Store` interface doesn't declare is absent at runtime, not
+    // merely absent from the types card code is checked against.
+    test('the card-facing store withholds the search methods that skip the caps', async function (assert) {
+      let cardStore = storeService.cardFacingStore(
+        () => 'http://current/',
+      ) as unknown as Record<string, unknown>;
+
+      for (let name of ['searchWithMeta', 'searchEntries', 'getWithoutCache']) {
+        assert.strictEqual(
+          typeof storeService[name as keyof typeof storeService],
+          'function',
+          `${name} is a real method on the store service`,
+        );
+        assert.strictEqual(
+          cardStore[name],
+          undefined,
+          `${name} is not reachable through the card-facing store`,
+        );
+      }
+
+      // Everything the interface does declare still arrives callable, so the
+      // allowlist withholds the siblings rather than the surface.
+      for (let name of [
+        'save',
+        'create',
+        'add',
+        'addWithoutPersisting',
+        'addWithoutWaiting',
+        'peek',
+        'peekError',
+        'get',
+        'delete',
+        'patch',
+        'search',
+        'getSaveState',
+      ]) {
+        assert.strictEqual(
+          typeof cardStore[name],
+          'function',
+          `${name} is reachable through the card-facing store`,
+        );
+      }
+    });
+
+    // The allowlist only gates property reads, so the two other ways to the
+    // service have to be closed too: an `Object.prototype` member handing back
+    // the service it was bound to, and a write landing on the service the
+    // whole host app shares.
+    test('the card-facing store gives no way back to the service and refuses writes', async function (assert) {
+      let cardStore = storeService.cardFacingStore(
+        () => 'http://current/',
+      ) as unknown as Record<string, any>;
+      let realGet = storeService.get;
+      let realSearch = storeService.search;
+
+      assert.strictEqual(
+        cardStore.valueOf(),
+        cardStore,
+        'valueOf answers the facade, not the service',
+      );
+      assert.strictEqual(
+        (cardStore.valueOf() as Record<string, unknown>).searchWithMeta,
+        undefined,
+        'so an uncapped sibling stays out of reach through it',
+      );
+      assert.strictEqual(
+        String(cardStore),
+        '[object Object]',
+        'the facade still converts to a string',
+      );
+
+      assert.throws(
+        () => {
+          cardStore.get = () => 'replaced';
+        },
+        TypeError,
+        'assigning a method through the facade is refused',
+      );
+      assert.throws(
+        () => cardStore.__defineGetter__('search', () => 'replaced'),
+        TypeError,
+        'defining a getter through the facade is refused',
+      );
+      assert.throws(
+        () => Object.defineProperty(cardStore, 'patch', { value: 'replaced' }),
+        TypeError,
+        'defining a property on the facade is refused',
+      );
+      assert.throws(
+        () => {
+          delete cardStore.search;
+        },
+        TypeError,
+        'deleting a method through the facade is refused',
+      );
+
+      assert.strictEqual(
+        storeService.get,
+        realGet,
+        "the service's get is untouched",
+      );
+      assert.strictEqual(
+        storeService.search,
+        realSearch,
+        "the service's search is untouched",
+      );
+      for (let name of ['get', 'search', 'patch']) {
+        assert.false(
+          Object.prototype.hasOwnProperty.call(storeService, name),
+          `nothing was installed as an own ${name} on the service`,
+        );
+      }
     });
   });
 });

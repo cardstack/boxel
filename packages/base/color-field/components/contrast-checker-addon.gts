@@ -278,7 +278,7 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
       }
 
       .requirement-status.unmet {
-        color: var(--destructive, #ef4444);
+        color: var(--destructive-ink);
       }
 
       .preview-container {

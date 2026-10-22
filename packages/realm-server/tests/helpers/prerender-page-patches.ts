@@ -1,5 +1,7 @@
 import { Realm as RuntimeRealm } from '@cardstack/runtime-common';
+import type { RequestListener } from 'http';
 import { PagePool } from '../../prerender/page-pool.ts';
+import type { RealmHttpServer } from '../../server.ts';
 
 export function installRealmServerAssertOwnRealmServerBypassPatch(): {
   restore: () => Promise<void>;
@@ -230,120 +232,82 @@ export function installSearchRequestObserverPatch(): {
 }
 
 /**
- * Inject transient 5xx responses for a chosen subset of fetches inside the
- * prerender chrome page. The patch enables Puppeteer request interception
- * once per page; matched URLs return the configured status until the
- * `failuresBeforeSuccess` budget is exhausted, after which they pass
- * through. Used to assert that the loader's transient-retry path actually
- * fires during prerender — without the native-sleep wiring in
- * loader-service the retry hangs at `await sleep(delay)` and the render
- * times out instead of recovering on the next attempt.
+ * Answer the first `failuresBeforeSuccess` requests the realm server receives
+ * for a chosen URL with a transient 5xx, and hand every other request to the
+ * server as usual. Used to assert that the loader's transient-retry path
+ * actually fires during prerender — without the native-sleep wiring in
+ * loader-service the retry hangs at `await sleep(delay)` and the render times
+ * out instead of recovering on the next attempt.
+ *
+ * The failure is injected on the server, not in the browser. Turning on CDP
+ * request interception in the render's tab, even for a pattern that matches
+ * only the module, can make Chrome abort the card-document fetch: a cross-origin,
+ * preflighted GET that the realm answers with a redirect, whose redirected
+ * request then never gets its preflight answered.
  */
-export function installFlakyDepFetchPatch(opts: {
-  matcher: (url: string) => boolean;
-  failuresBeforeSuccess: number;
-  status?: number;
-}): {
+export function installFlakyRealmFetchPatch(
+  // The test realm's plain HTTP server.
+  server: RealmHttpServer,
+  opts: {
+    matcher: (url: string) => boolean;
+    failuresBeforeSuccess: number;
+    status?: number;
+  },
+): {
   failuresInjected: () => number;
-  restore: () => Promise<void>;
+  trace: () => string;
+  restore: () => void;
 } {
-  let originalGetPage = PagePool.prototype.getPage;
-  let patchedPages = new WeakSet<object>();
-  let listeners = new Map<any, (request: any) => void>();
-  let interceptingPages = new Set<any>();
+  let originalListeners = server.listeners('request') as RequestListener[];
   let remainingFailures = opts.failuresBeforeSuccess;
   let failuresInjected = 0;
   let status = opts.status ?? 502;
-
-  PagePool.prototype.getPage = async function (this: PagePool, realm: string) {
-    let pageInfo = await originalGetPage.call(this, realm);
-    let page = pageInfo.page as any;
-    if (page && !patchedPages.has(page)) {
-      patchedPages.add(page);
-      // Fail fast: request.respond()/request.continue() require interception
-      // to be enabled, so attaching the listener without interception would
-      // turn into a confusing error mid-render. Let the puppeteer error
-      // propagate so the test crashes at setup with a clear stack instead.
-      await page.setRequestInterception(true);
-      interceptingPages.add(page);
-      let listener = (request: any) => {
-        let url: string;
-        let method: string;
-        try {
-          url = request.url();
-          method = request.method();
-        } catch {
-          // The request lifecycle ended before we could inspect it.
-          try {
-            request.continue();
-          } catch {
-            // ignore — request already fulfilled or aborted
-          }
-          return;
-        }
-        // Let preflight pass through to the real realm-server so its CORS
-        // middleware responds with the standard headers. We only want to
-        // inject 5xx on the actual request, mirroring the real-world
-        // transient-failure shape.
-        if (method === 'OPTIONS') {
-          request.continue().catch(() => {
-            // best-effort
-          });
-          return;
-        }
-        if (remainingFailures > 0 && opts.matcher(url)) {
-          remainingFailures--;
-          failuresInjected++;
-          request
-            .respond({
-              status,
-              contentType: 'text/plain',
-              // Mirror the realm-server's `cors({ origin: '*' })` so the
-              // browser surfaces this 5xx to the host loader instead of
-              // blocking it as a CORS-policy violation upstream of the
-              // retry path. Without this header the browser would treat
-              // the response as opaque and the loader would see a network
-              // error (synthetic 500) rather than the retryable 502.
-              headers: {
-                'access-control-allow-origin': '*',
-              },
-              body: 'Bad Gateway (test injection)',
-            })
-            .catch(() => {
-              // best-effort: page may have moved on
-            });
-          return;
-        }
-        request.continue().catch(() => {
-          // best-effort: another handler may have already responded
-        });
-      };
-      listeners.set(page, listener);
-      page.on('request', listener);
-    }
-    return { ...pageInfo, page };
+  // The requests the server received while the patch was installed and what
+  // the patch did with each. A test prints this when it fails.
+  let traceStart = Date.now();
+  let traceLines: string[] = [];
+  let record = (line: string) => {
+    traceLines.push(`+${Date.now() - traceStart}ms ${line}`);
   };
+
+  let listener: RequestListener = (req, res) => {
+    let url = new URL(req.url ?? '/', `http://${req.headers.host}`).href;
+    // Preflights reach the server so its CORS middleware answers them; only
+    // the actual request fails, the shape of a real transient failure.
+    if (
+      req.method !== 'OPTIONS' &&
+      remainingFailures > 0 &&
+      opts.matcher(url)
+    ) {
+      remainingFailures--;
+      failuresInjected++;
+      record(`${req.method} ${url} -> respond ${status}`);
+      // Mirror the realm-server's `cors({ origin: '*' })` so the browser
+      // surfaces this 5xx to the host loader instead of blocking it as a
+      // CORS-policy violation upstream of the retry path.
+      res.writeHead(status, {
+        'content-type': 'text/plain',
+        'access-control-allow-origin': '*',
+      });
+      res.end('Bad Gateway (test injection)');
+      return;
+    }
+    record(`${req.method} ${url} -> server`);
+    for (let original of originalListeners) {
+      original.call(server, req, res);
+    }
+  };
+  server.removeAllListeners('request');
+  server.on('request', listener);
 
   return {
     failuresInjected: () => failuresInjected,
-    restore: async () => {
-      PagePool.prototype.getPage = originalGetPage;
-      for (let [page, listener] of listeners) {
-        try {
-          page.off('request', listener);
-        } catch {
-          // best-effort
-        }
+    trace: () => traceLines.join('\n'),
+    restore: () => {
+      server.removeListener('request', listener);
+      for (let original of originalListeners) {
+        server.on('request', original);
       }
-      for (let page of interceptingPages) {
-        try {
-          await page.setRequestInterception(false);
-        } catch {
-          // best-effort: page may already be closed
-        }
-      }
-      listeners.clear();
-      interceptingPages.clear();
     },
   };
 }

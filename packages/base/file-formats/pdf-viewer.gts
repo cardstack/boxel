@@ -4,27 +4,176 @@
 // for free), while the budgeted fitted cell shows a lightweight page placeholder
 // rather than a live PDF engine per tile.
 //
-// The fitted first-page poster is deliberately not drawn here — it needs the
-// derived-artifact contract (CS-12231) to rasterize and store a page image. Once
-// that lands and populates `thumbnailUrl`, the preview stage prefers the real
-// poster over this placeholder automatically, with no change to this component.
+// The fitted first-page poster is deliberately not drawn here: the family's
+// declared `poster` capture (see `pdf-captures`) rasterizes page 1 during the
+// prerender pass, and the preview stage prefers that rendition over this
+// placeholder through the view model's `thumbnailUrl` — the placeholder is
+// the graceful fallback for an uncaptured or capture-errored document.
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
+import { isLiveRender, mayBeLiveRender } from '../render-context';
+
 import { FileObject } from './file-resources';
+import { fileContentRevision, urlAtRevision } from './file-revision';
 import type { FilePreviewSignature } from './file-preview-stage';
 
+// One live fetch's outcome, remembered with the URL it belongs to so a
+// model swap can never serve a stale document: the getters below ignore any
+// entry whose `forUrl` no longer matches, which also lets the modifier's
+// cleanup skip tracked writes entirely (a stale blob is simply never read). A
+// refetch of the same URL after a write replaces the entry when it settles,
+// so the previous document stays on screen until then.
+interface LoadedDocument {
+  forUrl: string;
+  blobUrl: string | undefined;
+}
+
+// Upper bound on the live document fetch. Generous, because a large
+// document on a slow link is the ordinary case a reader still wants to win;
+// bounded, because a stalled fetch must eventually yield to the plain-URL
+// fallback rather than holding the loading state forever.
+const DOCUMENT_FETCH_TIMEOUT_MS = 30_000;
+
+// `loadDocument`'s arguments: the document URL, then the file's content
+// revision. The revision is never read; it is there so a write to the file
+// reruns the fetch.
+type LoadArgs = [url: string, revision: string];
+
 export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
-  // The served document URL, loaded by the native `<object>` as a plain
-  // browser fetch. `<object>`/`<embed>` loads bypass service workers (per
-  // the ServiceWorker spec), so no Authorization header can be attached:
-  // the document renders only when the realm is publicly readable. The
+  // The served document URL. `<object>`/`<embed>` loads bypass service
+  // workers (per the ServiceWorker spec), so no Authorization header can be
+  // attached to the object's own fetch — a plain URL renders only when the
+  // realm is publicly readable. In a live render the document is therefore
+  // fetched here in the component (the host auth service worker injects the
+  // realm Authorization header on this GET, the same path that lets
+  // `<img src>` load realm images) and handed to the `<object>` as a
+  // same-document blob URL; the plain URL remains the fallback when that
+  // fetch fails (an anonymous visitor on a public realm has no session to
+  // inject, and the plain URL works there). Prerender keeps the plain URL
+  // with no fetch: the snapshot needs the markup, not the bytes. The
   // realm's content negotiation keys off the request's Sec-Fetch-Dest to
-  // serve the file's bytes here rather than the host app shell.
+  // serve the file's bytes to an `<object>` rather than the host app shell.
   get resourceUrl(): string {
     return this.args.model?.resourceUrl ?? this.args.model?.url ?? '';
   }
+
+  // Changes with every write to the file while the URL stays put.
+  get revision(): string {
+    return fileContentRevision(this.args.model);
+  }
+
+  @tracked private loaded: LoadedDocument | undefined;
+  // Whether the viewer renders for someone looking at the document, decided
+  // by the frame's modifier, which knows where the viewer mounted.
+  @tracked private live: boolean | undefined;
+
+  // The one place `loaded` changes. The blob it replaces backs the `<object>`
+  // until the new entry renders, so it is released here rather than in the
+  // modifier's cleanup, which runs as soon as a write supersedes the fetch.
+  private settle(next: LoadedDocument) {
+    let previous = this.loaded?.blobUrl;
+    this.loaded = next;
+    if (previous && previous !== next.blobUrl) {
+      URL.revokeObjectURL(previous);
+    }
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    if (this.loaded?.blobUrl) {
+      URL.revokeObjectURL(this.loaded.blobUrl);
+    }
+  }
+
+  // Loading = a live fetch for the current URL has not settled yet. The
+  // `<object>` is withheld until then so a private realm never flashes the
+  // plugin's error page for the unauthenticated plain-URL load it would
+  // otherwise start immediately; a spinner holds the space so a slow fetch
+  // reads as loading rather than broken, and the fetch's own timeout bounds
+  // how long this state can last.
+  private get isLoading(): boolean {
+    return (
+      (this.live ?? mayBeLiveRender()) &&
+      !!this.resourceUrl &&
+      this.loaded?.forUrl !== this.resourceUrl
+    );
+  }
+
+  // The plain-URL fallback carries the revision, so an `<object>` that loads
+  // the document directly reloads it after a write.
+  private get objectUrl(): string {
+    let { loaded } = this;
+    return loaded?.forUrl === this.resourceUrl && loaded.blobUrl
+      ? loaded.blobUrl
+      : urlAtRevision(this.resourceUrl, this.revision);
+  }
+
+  // Lives on the wrapper that survives the loading→loaded swap, so state
+  // flips never re-run it; it re-runs when the document URL or the file's
+  // revision changes.
+  private loadDocument = modifier((element: HTMLElement, [url]: LoadArgs) => {
+    let live = isLiveRender(element);
+    let cancelled = false;
+    if (live !== this.live) {
+      // After the render that installed this modifier, which read `live`.
+      queueMicrotask(() => {
+        if (!cancelled) {
+          this.live = live;
+        }
+      });
+    }
+    if (!url || !live) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    let controller = new AbortController();
+    // A stalled fetch aborts here with `cancelled` still false, so the
+    // settle below runs with no blob and the plain URL takes over — the
+    // same fallback a failed fetch gets.
+    let timeout = setTimeout(
+      () => controller.abort(),
+      DOCUMENT_FETCH_TIMEOUT_MS,
+    );
+    void (async () => {
+      let blobUrl: string | undefined;
+      try {
+        // No `credentials: 'include'` — that makes a credentialed CORS
+        // request, illegal against the realm's wildcard
+        // `Access-Control-Allow-Origin`. The host auth service worker
+        // injects the realm `Authorization` header on this GET.
+        let response = await fetch(url, { signal: controller.signal });
+        if (response.ok) {
+          let bytes = await response.arrayBuffer();
+          if (cancelled) {
+            return;
+          }
+          blobUrl = URL.createObjectURL(
+            new Blob([bytes], { type: 'application/pdf' }),
+          );
+        }
+      } catch {
+        // Fall through: `blobUrl` stays undefined and the plain URL serves
+        // as the fallback (the public-realm anonymous case, or a timed-out
+        // fetch).
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (!cancelled) {
+        this.settle({ forUrl: url, blobUrl });
+      }
+    })();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  });
 
   get pageCount(): number | undefined {
     return this.args.model?.documentInfo?.pageCount;
@@ -51,18 +200,36 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
         </div>
       </div>
     {{else}}
-      <FileObject
-        class='pdf-object'
-        @url={{this.resourceUrl}}
-        @type='application/pdf'
-        @label={{this.title}}
-        data-test-pdf-viewer
-      />
+      <div
+        class='pdf-frame'
+        {{this.loadDocument this.resourceUrl this.revision}}
+      >
+        {{#if this.isLoading}}
+          <div class='pdf-loading' data-test-pdf-loading>
+            <LoadingIndicator />
+          </div>
+        {{else}}
+          <FileObject
+            class='pdf-object'
+            @url={{this.objectUrl}}
+            @type='application/pdf'
+            @label={{this.title}}
+            data-test-pdf-viewer
+          />
+        {{/if}}
+      </div>
     {{/if}}
 
     <style scoped>
       /* Embedded/isolated: the native viewer fills the space the shell hands it
-         and owns its own scrolling. */
+         and owns its own scrolling. The frame paints the same stage ground
+         while the authed document fetch is in flight. */
+      .pdf-frame {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        background: var(--fd-stage, var(--muted, #eceef1));
+      }
       .pdf-object {
         display: block;
         width: 100%;
@@ -70,6 +237,12 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
         min-height: 0;
         border: 0;
         background: var(--fd-stage, var(--muted, #eceef1));
+      }
+      .pdf-loading {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 100%;
       }
 
       /* Fitted: a page-shaped placeholder, not a PDF engine. It reads as "a

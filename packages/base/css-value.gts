@@ -37,7 +37,9 @@ export default class CSSValueField extends StringField {
       let fence = '`'.repeat(Math.max(1, longestRun + 1));
       let needsPad =
         value.startsWith('`') || value.endsWith('`') || /^\s|\s$/.test(value);
-      return needsPad ? `${fence} ${value} ${fence}` : `${fence}${value}${fence}`;
+      return needsPad
+        ? `${fence} ${value} ${fence}`
+        : `${fence}${value}${fence}`;
     }
     <template>{{this.text}}</template>
   };

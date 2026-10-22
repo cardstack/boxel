@@ -25,8 +25,11 @@ import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { RoomResource } from '@cardstack/host/resources/room';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
+import { setupRealmServerEndpoints } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -65,6 +68,16 @@ module('Integration | Component | RoomMessage', function (hooks) {
   });
 
   let { createAndJoinRoom } = mockMatrixUtils;
+
+  // Answering a tool call sends the operator-mode summary as the result's
+  // context, which lists the catalog realms; this module has no realms.
+  setupRealmServerEndpoints(hooks, [
+    {
+      route: '_catalog-realms',
+      getResponse: async () =>
+        new Response(JSON.stringify({ data: [] }), { status: 200 }),
+    },
+  ]);
 
   interface TestScenarioOptions {
     isStreaming: boolean;
@@ -329,6 +342,167 @@ module('Integration | Component | RoomMessage', function (hooks) {
       .doesNotHaveClass('bot-tools-only');
   });
 
+  async function setupHeldReadUrlScenario(owner: any) {
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 2,
+      minutesAgoForUpdated: 1,
+      messageContent: 'Let me look at their documentation.',
+    });
+    let scenario = testScenario as any;
+    scenario.getActiveLLMModeForMessage = () => 'act';
+    scenario.isDisplayingCode = () => false;
+    scenario.monacoSDK = { editor: { getEditors: () => [] } };
+    scenario.message.tools = [
+      new MessageTool(
+        scenario.message,
+        {
+          id: 'read-url-1',
+          name: 'readUrl',
+          arguments: {
+            url: 'https://docs.example.com/guide?section=setup',
+            reason: 'To check the setup steps for the library you asked about.',
+            description:
+              'Read web page: https://docs.example.com/guide?section=setup',
+          },
+          executedBy: AI_BOT_EXECUTOR,
+          approvalRequired: true,
+        },
+        undefined,
+        'event-1',
+        false,
+        'Approve',
+        'applying',
+        undefined,
+        owner,
+      ),
+    ];
+    return testScenario;
+  }
+
+  function sentToolResults(roomId: string) {
+    return mockMatrixUtils
+      .getRoomEvents(roomId)
+      .filter(
+        (event: any) =>
+          event.content?.commandRequestId === 'read-url-1' &&
+          event.content?.['m.relates_to']?.key,
+      ) as any[];
+  }
+
+  test('a readUrl call held for approval shows its full URL with Approve and Decline, even in act mode', async function (assert) {
+    let testScenario = await setupHeldReadUrlScenario(this.owner);
+    await renderRoomMessageComponent(testScenario);
+
+    let tool = '[data-test-tool-call-id="read-url-1"]';
+    assert.dom(tool).doesNotHaveClass('compact', 'shown in full');
+    assert
+      .dom(tool)
+      .containsText(
+        'Read web page: https://docs.example.com/guide?section=setup',
+        'the full URL, query string included',
+      );
+    assert
+      .dom(`${tool} [data-test-apply-state="ready"]`)
+      .hasText('Approve', 'approval is never automatic');
+    assert
+      .dom(`${tool} [data-test-tool-call-approval]`)
+      .containsText(
+        'The assistant asks for your approval and says: “To check the setup steps for the library you asked about.”',
+        "the assistant's reason is shown",
+      );
+    assert
+      .dom(`${tool} [data-test-tool-call-secondary-action="Decline"]`)
+      .hasText('Decline', 'Decline sits beside Approve in the header');
+    assert
+      .dom(`${tool} .code-block-header [data-test-apply-state="ready"]`)
+      .exists();
+    assert
+      .dom('[data-test-message-idx="0"]')
+      .doesNotHaveClass('bot-tools-only');
+  });
+
+  test('approving a held readUrl call sends an approved result and shows it running', async function (assert) {
+    let testScenario = await setupHeldReadUrlScenario(this.owner);
+    await renderRoomMessageComponent(testScenario);
+
+    await click(
+      '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
+    );
+    await waitUntil(() => sentToolResults(testScenario.roomId!).length > 0);
+
+    let [approval] = sentToolResults(testScenario.roomId!);
+    assert.strictEqual(approval.content['m.relates_to'].key, 'approved');
+    assert
+      .dom(
+        '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
+      )
+      .doesNotExist('an answered call offers no second approval');
+    assert.strictEqual(
+      sentToolResults(testScenario.roomId!).length,
+      1,
+      'one approval is sent',
+    );
+    assert.strictEqual(approval.content.failureReason, undefined);
+
+    let tool = (testScenario as any).message.tools[0] as MessageTool;
+    tool.toolCallStatus = 'approved';
+    await waitUntil(() =>
+      document.querySelector(
+        '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="applying"]',
+      ),
+    );
+    assert
+      .dom('[data-test-tool-call-id="read-url-1"]')
+      .hasClass('compact', 'an approved call shows as a running indicator');
+    assert.dom('[data-test-tool-call-approval]').doesNotExist();
+  });
+
+  test('an approval that fails to send offers the choice again', async function (assert) {
+    let testScenario = await setupHeldReadUrlScenario(this.owner);
+    let matrixService = this.owner.lookup('service:matrix-service') as any;
+    let originalSend = matrixService.sendToolResultEvent;
+    matrixService.sendToolResultEvent = async () => {
+      throw new Error('the homeserver is unreachable');
+    };
+    try {
+      await renderRoomMessageComponent(testScenario);
+      await click(
+        '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
+      );
+      await waitUntil(() =>
+        document.querySelector(
+          '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
+        ),
+      );
+      assert
+        .dom(
+          '[data-test-tool-call-id="read-url-1"] [data-test-tool-call-secondary-action="Decline"]',
+        )
+        .exists('Approve and Decline are offered again');
+    } finally {
+      matrixService.sendToolResultEvent = originalSend;
+    }
+  });
+
+  test('declining a held readUrl call sends an invalid result naming the decline', async function (assert) {
+    let testScenario = await setupHeldReadUrlScenario(this.owner);
+    await renderRoomMessageComponent(testScenario);
+
+    await click(
+      '[data-test-tool-call-id="read-url-1"] [data-test-tool-call-secondary-action="Decline"]',
+    );
+    await waitUntil(() => sentToolResults(testScenario.roomId!).length > 0);
+
+    let [decline] = sentToolResults(testScenario.roomId!);
+    assert.strictEqual(decline.content['m.relates_to'].key, 'invalid');
+    assert.ok(
+      decline.content.failureReason.includes(
+        'The user declined this call (Read web page: https://docs.example.com/guide?section=setup)',
+      ),
+    );
+  });
+
   test('a streaming compact tool call shows a spinner rather than the full-size "Working…" pill', async function (assert) {
     let testScenario = await setupTestScenario({
       isStreaming: true,
@@ -374,6 +548,97 @@ module('Integration | Component | RoomMessage', function (hooks) {
         'compact preparing indicator does not clip the full-size pill',
       );
     assert.dom(`${indicator} svg`).exists('a spinner is shown instead');
+  });
+
+  test('a run-realm-code call that waits for the click names each risky call and why', async function (assert) {
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 2,
+      minutesAgoForUpdated: 1,
+      messageContent: 'Running a script.',
+    });
+    let scenario = testScenario as any;
+    scenario.getActiveLLMModeForMessage = () => 'ask';
+    scenario.isDisplayingCode = () => false;
+    scenario.monacoSDK = { editor: { getEditors: () => [] } };
+    // The calls are this tab's own, so this tab offers their click.
+    scenario.message.agentId = (
+      this.owner.lookup('service:matrix-service') as MatrixService
+    ).agentId;
+    let deleteCode = `await realm.workspaces.delete('http://test-realm/testuser/old/');`;
+    let runCall = (
+      id: string,
+      code: string,
+      status: 'ready' | 'applied' | 'invalid' = 'ready',
+      failureReason?: string,
+    ) =>
+      new MessageTool(
+        scenario.message,
+        {
+          id,
+          name: 'run-realm-code_abcd',
+          arguments: { attributes: { code } },
+        },
+        undefined,
+        'event-1',
+        true,
+        'Run',
+        status,
+        undefined,
+        this.owner,
+        failureReason,
+        {
+          neverAutoExecutesFor:
+            RunRealmCodeTool.neverAutoExecutesFor.bind(RunRealmCodeTool),
+          clickReasonsFor: RunRealmCodeTool.clickReasonsFor,
+        },
+      );
+    scenario.message.tools = [
+      runCall('one-call', deleteCode),
+      runCall(
+        'two-calls',
+        [
+          `await realm.images.generate({ prompt: 'a cat' });`,
+          `await realm.fs.download('https://example.com/a.png', 'a.png');`,
+        ].join('\n'),
+      ),
+      runCall('no-calls', `await realm.fs.writeText('a.json', '{}');`),
+      runCall('applied-call', deleteCode, 'applied'),
+      runCall('invalid-call', deleteCode, 'invalid', 'Unexpected argument'),
+    ];
+    await renderRoomMessageComponent(testScenario);
+
+    let reasons = (id: string) =>
+      `[data-test-tool-call-id="${id}"] [data-test-tool-call-click-reasons]`;
+    assert.dom(`${reasons('one-call')} li`).exists({ count: 1 });
+    assert
+      .dom(
+        `${reasons('one-call')} [data-test-tool-call-click-reason="realm.workspaces.delete"]`,
+      )
+      .containsText('Deletes a workspace');
+
+    assert.dom(`${reasons('two-calls')} li`).exists({ count: 2 });
+    assert
+      .dom(
+        `${reasons('two-calls')} [data-test-tool-call-click-reason="realm.images.generate"]`,
+      )
+      .containsText('uses your credit');
+    assert
+      .dom(
+        `${reasons('two-calls')} [data-test-tool-call-click-reason="realm.fs.download"]`,
+      )
+      .containsText('outside URL');
+
+    assert.dom(reasons('no-calls')).doesNotExist();
+
+    assert
+      .dom(reasons('applied-call'))
+      .doesNotExist('a call that already ran offers no click');
+    assert
+      .dom(
+        `${reasons('invalid-call')} [data-test-tool-call-click-reason="realm.workspaces.delete"]`,
+      )
+      .exists('a call that offers Try Anyway still says what the click allows');
   });
 
   test('a message carrying only bot-executed tool calls is marked bot-tools-only', async function (assert) {

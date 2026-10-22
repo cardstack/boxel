@@ -1,9 +1,4 @@
-import {
-  FieldDef,
-  Component,
-  field,
-  contains,
-} from '../card-api';
+import { FieldDef, Component, field, contains } from '../card-api';
 import NumberField from '../number';
 import { action } from '@ember/object';
 import { formatDateTime, not } from '@cardstack/boxel-ui/helpers';

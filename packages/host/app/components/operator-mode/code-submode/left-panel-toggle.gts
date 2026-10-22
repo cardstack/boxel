@@ -169,6 +169,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
           @selectedRealmPrefix='In'
           @displayReadOnlyTag={{true}}
           @contentClass='realm-dropdown-menu'
+          @searchable={{true}}
         />
 
         <div class='realm-download'>
@@ -217,6 +218,13 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
         border-bottom: var(--boxel-border);
+      }
+      /* RestoreScrollPosition and scroll-into-view own this panel's scroll
+         position. Browser scroll anchoring would shift it when the panel's
+         content is swapped, e.g. one realm's tree replacing another's, and
+         the shifted position would then be persisted as the selected file's. */
+      .content {
+        overflow-anchor: none;
       }
       .file-browser .content {
         background-color: var(--boxel-light);

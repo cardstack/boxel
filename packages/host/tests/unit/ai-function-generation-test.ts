@@ -145,6 +145,52 @@ module('Unit | ai-function-generation-test', function (hooks) {
     });
   });
 
+  test(`the query schema declares every filter operator and the relevance sort key`, async function (assert) {
+    // A model that builds only what the schema declares must still be able to
+    // write a ranked full-text query.
+    let { SearchEntriesInput } = (await loader.import(
+      '@cardstack/base/commands/search-entry-result',
+    )) as typeof import('@cardstack/base/commands/search-entry-result');
+    let schema = generateJsonSchemaForCardType(
+      SearchEntriesInput,
+      cardApi,
+      mappings,
+    ) as any;
+    let query = schema.attributes.properties.query;
+
+    assert.deepEqual(
+      Object.keys(query.properties.filter.properties).sort(),
+      [
+        'any',
+        'contains',
+        'eq',
+        'every',
+        'in',
+        'matches',
+        'not',
+        'on',
+        'range',
+        'type',
+      ],
+      'every operator the query grammar accepts is declared',
+    );
+    assert.strictEqual(
+      query.properties.filter.properties.matches.type,
+      'string',
+      'matches takes a search string',
+    );
+    assert.ok(
+      query.properties.filter.description.includes('at most one operator'),
+      'the filter description states the one-operator rule',
+    );
+    assert.ok(
+      query.properties.sort.items.properties.by.description.includes(
+        '_matchRelevance',
+      ),
+      'the sort key description names _matchRelevance',
+    );
+  });
+
   test(`surfaces enumField options as JSON-Schema enum values`, async function (assert) {
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;

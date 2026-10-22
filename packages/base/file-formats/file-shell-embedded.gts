@@ -130,7 +130,8 @@ export class FileEmbeddedShell extends GlimmerComponent<FileEmbeddedShellSignatu
           </span>
           <span class='emb-meta'>
             {{#if this.size}}{{this.size}}{{/if}}
-            {{#if this.modified}}· modified {{this.modified}}{{/if}}
+            {{#if this.modified}}· modified
+              <span data-test-percy-hide>{{this.modified}}</span>{{/if}}
           </span>
         </div>
         {{#if @model.extension}}

@@ -1,3 +1,4 @@
+import type { CardContext, FieldFormats, CardCrudFunctions } from './card-api';
 import {
   type Box,
   type Field,
@@ -8,12 +9,10 @@ import {
   type BaseDefComponent,
   type BaseDefConstructor,
   type Theme,
-  CardContext,
   formats,
-  FieldFormats,
-  CardCrudFunctions,
 } from './card-api';
 import { isCard, isCompoundField } from './field-support';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   CardContextName,
   DefaultFormatsContextName,
@@ -23,7 +22,6 @@ import {
   isCardInstance,
   type CodeRef,
   type Permissions,
-  ResolvedCodeRef,
   CardCrudFunctionsContextName,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -170,7 +168,7 @@ export function getBoxComponent(
   opts?: {
     componentCodeRef?: CodeRef;
     // Render this component in place of the class's format slot — the
-    // declared-screenshot capture path's way of rendering a capture-only
+    // declared-capture path's way of rendering a capture-only
     // component with the full author surface. Bypasses the component cache:
     // the cache is keyed only by model, and an override render must never
     // be handed a stable format component (or poison one).
@@ -370,7 +368,7 @@ export function getBoxComponent(
                     {{#let model.value as |card|}}
                       {{! A rendered field boundary carries
                           data-card-field=<fieldName> so selector-based
-                          screenshot capture and region discovery can address
+                          capture and region discovery can address
                           fields in templates that never opted in. That is: this
                           card-as-field container and the compound-field wrapper
                           below, plus the plural wrappers in
@@ -549,6 +547,9 @@ export function getBoxComponent(
 
         .field-component-card.atom-format.display-container-false {
           display: contents;
+          /* no box of its own to paint, so the text must follow the surface
+             it sits on rather than the container's --foreground */
+          color: inherit;
         }
         .field-component-card.atom-format.display-container-true {
           display: inline-block;

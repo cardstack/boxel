@@ -10,7 +10,7 @@ export const BoxelBrandGuide = `:root {
   --chart-3: var(--cardstack-lime, #C3FC33);
   --chart-4: var(--boxel-teal, #00FFBA);
   --chart-5: var(--boxel-green, #37EB77);
-  --destructive: var(--cardstack-red, #FF5050);
+  --destructive: var(--boxel-destructive, #DC0202);
   --destructive-foreground: #F8FAFC;
   --font-mono: 'IBM Plex Mono', 'Menlo', 'Courier New', Courier, ui-monospace, monospace;
   --font-sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, ui-sans-serif, sans-serif, system-ui;
@@ -44,7 +44,8 @@ export const BoxelBrandGuide = `:root {
   --sidebar-primary-foreground: #0F172A;
   --sidebar-ring: var(--boxel-teal, #00FFBA);
   --spacing: 0.25rem;
-  --success: var(--boxel-success, #00AC3D);
+  --success: var(--boxel-success, #00892F);
+  --destructive-ink: var(--destructive);
   --tracking-normal: 0.01em;
   --brand-primary: var(--boxel-teal);
   --brand-secondary: var(--cardstack-purple);
@@ -105,7 +106,7 @@ export const BoxelBrandGuide = `:root {
   --chart-3: var(--cardstack-lime, #C3FC33);
   --chart-4: var(--boxel-teal, #00FFBA);
   --chart-5: var(--boxel-green, #37EB77);
-  --destructive: var(--cardstack-red, #FF5050);
+  --destructive: var(--boxel-destructive, #DC0202);
   --destructive-foreground: var(--boxel-light, #FFFFFF);
   --font-mono: 'IBM Plex Mono', 'Menlo', 'Courier New', Courier, ui-monospace, monospace;
   --font-sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, ui-sans-serif, sans-serif, system-ui;
@@ -139,7 +140,8 @@ export const BoxelBrandGuide = `:root {
   --sidebar-primary-foreground: #0F172A;
   --sidebar-ring: var(--boxel-teal, #00FFBA);
   --spacing: 0.25rem;
-  --success: var(--boxel-success, #00AC3D);
+  --success: var(--boxel-success, #00892F);
+  --destructive-ink: color-mix(in oklch, var(--destructive) 30%, var(--foreground));
   --tracking-normal: 0.01em;
   --brand-primary: var(--boxel-teal);
   --brand-secondary: var(--cardstack-purple);

@@ -1,0 +1,67 @@
+Pretui vendored copy of @google/model-viewer
+============================================
+
+This directory contains a redistribution of <model-viewer>, in modified form.
+
+Original work
+-------------
+  @google/model-viewer
+  Copyright 2020 Google LLC
+  Licensed under the Apache License, Version 2.0 (the "License"); you may not
+  use this file except in compliance with the License. You may obtain a copy of
+  the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+  License for the specific language governing permissions and limitations under
+  the License.
+
+  The full licence text is in ./LICENSE.
+
+  The upstream project ships no NOTICE file of its own; Apache-2.0 section
+  4(d) therefore imposes no NOTICE-propagation duty here. This file exists to
+  satisfy sections 4(a), 4(b) and 4(c).
+
+Statement of changes (Apache-2.0 section 4(b))
+----------------------------------------------
+`index.js` is not the upstream distribution. It differs as follows, and the
+same statement appears as a banner comment at the top of the file itself:
+
+  1. It is a single self-contained ES module produced by esbuild from the
+     package's TypeScript sources, rather than the upstream rollup output.
+     Its bundled dependencies (three, lit, @monogrid/gainmap-js) are inlined.
+  2. A temporary server-safe globals shim is prepended, and a matching
+     teardown is appended. Neither is part of the upstream work. The shim
+     installs stand-ins for `HTMLElement`, `document`, `customElements` and
+     related globals ONLY when they are absent — i.e. never in a browser — and
+     the footer deletes them again as soon as the library body has finished
+     evaluating. Its sole purpose is to let the Boxel realm indexer, which
+     evaluates modules outside a browser, load this module without throwing.
+  3. Minification with `--legal-comments=none` strips the per-file licence
+     headers of the original sources; the banner and this NOTICE carry the
+     attribution in their place.
+
+No functional change was made to model-viewer's own code.
+
+Bundled third-party components
+------------------------------
+  three            0.183.2   MIT              — see ./LICENSE-three
+  lit              3.3.3     BSD-3-Clause     — see ./LICENSE-lit
+  @monogrid/gainmap-js  3.4.0  MIT           — see ./LICENSE-gainmap-js
+
+  lit's BSD-3-Clause carries a no-endorsement clause in addition to the notice
+  clause: the names of the copyright holder and its contributors may not be
+  used to endorse or promote products derived from this software without prior
+  written permission.
+
+Provenance
+----------
+  Source:  local checkout at github.com/google/model-viewer
+  Commit:  297ed2bd  (`git describe --tags` → v4.3.1-12-g297ed2bd)
+  Version: 4.3.1 as declared in packages/model-viewer/package.json — the
+           commit is 12 commits AFTER the v4.3.1 tag and does not correspond
+           to any published release.
+  SPDX:    Apache-2.0, read from the checkout's own LICENSE file.

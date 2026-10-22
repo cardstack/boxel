@@ -15,6 +15,7 @@ import {
 } from './auth.ts';
 import { promptPassword as defaultPromptPassword } from './prompt.ts';
 import type { RealmAuthenticator } from './realm-authenticator.ts';
+import { realmFetch } from './realm-fetch.ts';
 
 export interface ProfileManagerDeps {
   matrixLogin?: typeof matrixLogin;
@@ -78,6 +79,16 @@ export interface Profile {
   matrixDeviceId: string;
   realmTokens?: Record<string, string>;
   realmServerToken?: string;
+  // A session signed in on the secure origin, through the browser (`boxel
+  // keys sign-in`). Only it can authorize a change to the user's keys; the
+  // `realmServerToken` above, from the CLI's ordinary sign-in, can't.
+  secureSession?: SecureSessionRecord;
+}
+
+export interface SecureSessionRecord {
+  token: string;
+  userId: string;
+  expiresAt: string;
 }
 
 export interface ProfilesConfig {
@@ -150,6 +161,12 @@ export class ProfileManager implements RealmAuthenticator {
   private matrixLoginFn: typeof matrixLogin;
   private promptPasswordFn: (question: string) => Promise<string>;
   private isTtyFn: () => boolean;
+  // Set when a profiles file exists on disk but couldn't be read as a profiles
+  // store (unparseable, or a shape we don't recognize). The manager still
+  // starts empty so `profile add` can recover, but discovery callers must be
+  // able to tell "couldn't read the store" apart from "no profiles yet" —
+  // otherwise an unreadable store reads as an absent profile.
+  private loadError: string | null = null;
 
   constructor(configDir?: string, deps?: ProfileManagerDeps) {
     this.configDir = configDir || DEFAULT_CONFIG_DIR;
@@ -169,34 +186,52 @@ export class ProfileManager implements RealmAuthenticator {
   private loadConfig(): ProfilesConfig {
     const defaultConfig: ProfilesConfig = { profiles: {}, activeProfile: null };
 
-    if (fs.existsSync(this.profilesFile)) {
-      try {
-        const data = fs.readFileSync(this.profilesFile, 'utf-8');
-        const parsed: unknown = JSON.parse(data);
+    // A missing file is the genuine "no profiles yet" case, not a load error.
+    if (!fs.existsSync(this.profilesFile)) {
+      return defaultConfig;
+    }
 
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          const candidate = parsed as Record<string, unknown>;
-          const profiles =
-            candidate.profiles &&
-            typeof candidate.profiles === 'object' &&
-            !Array.isArray(candidate.profiles)
-              ? (candidate.profiles as ProfilesConfig['profiles'])
-              : null;
-          const activeProfile =
-            candidate.activeProfile === null ||
-            typeof candidate.activeProfile === 'string'
-              ? (candidate.activeProfile as string | null)
-              : null;
+    try {
+      const data = fs.readFileSync(this.profilesFile, 'utf-8');
+      const parsed: unknown = JSON.parse(data);
 
-          if (profiles) {
-            return { profiles, activeProfile };
-          }
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const candidate = parsed as Record<string, unknown>;
+        const profiles =
+          candidate.profiles &&
+          typeof candidate.profiles === 'object' &&
+          !Array.isArray(candidate.profiles)
+            ? (candidate.profiles as ProfilesConfig['profiles'])
+            : null;
+        const activeProfile =
+          candidate.activeProfile === null ||
+          typeof candidate.activeProfile === 'string'
+            ? (candidate.activeProfile as string | null)
+            : null;
+
+        if (profiles) {
+          return { profiles, activeProfile };
         }
-      } catch {
-        // Corrupted file, start fresh
       }
+      // The file existed and parsed, but isn't a profiles store we recognize.
+      this.loadError =
+        `Profiles file at ${this.profilesFile} is not a recognizable profiles store; ` +
+        `starting with no profiles.`;
+    } catch (err) {
+      // Unreadable or unparseable. Start empty so `profile add` can recover,
+      // but remember the failure so discovery can report it.
+      this.loadError =
+        `Could not read profiles file at ${this.profilesFile}: ` +
+        `${err instanceof Error ? err.message : String(err)}`;
     }
     return defaultConfig;
+  }
+
+  // Non-null when a profiles file exists but couldn't be loaded — see
+  // `loadError`. Discovery callers (`profile list`) report it rather than
+  // presenting an unreadable store as an empty one.
+  getLoadError(): string | null {
+    return this.loadError;
   }
 
   private saveConfig(): void {
@@ -310,6 +345,9 @@ export class ProfileManager implements RealmAuthenticator {
       matrixDeviceId: auth.deviceId,
       realmTokens: urlsChanged ? undefined : existing?.realmTokens,
       realmServerToken: urlsChanged ? undefined : existing?.realmServerToken,
+      // The key-management sign-in is for this profile's realm server, so it
+      // carries over a re-authentication against the same one.
+      secureSession: urlsChanged ? undefined : existing?.secureSession,
     };
 
     this.config.profiles[matrixId] = profile;
@@ -417,6 +455,7 @@ export class ProfileManager implements RealmAuthenticator {
     if (changed) {
       profile.realmTokens = undefined;
       profile.realmServerToken = undefined;
+      profile.secureSession = undefined;
       this.saveConfig();
     }
     return changed;
@@ -451,6 +490,33 @@ export class ProfileManager implements RealmAuthenticator {
   getRealmServerToken(): string | undefined {
     let active = this.getActiveProfile();
     return active?.profile.realmServerToken;
+  }
+
+  setSecureSession(session: SecureSessionRecord): void {
+    let active = this.getActiveProfile();
+    if (!active) {
+      return;
+    }
+    active.profile.secureSession = session;
+    this.saveConfig();
+  }
+
+  // The active profile's secure session, while it lasts.
+  getSecureSession(): SecureSessionRecord | undefined {
+    let session = this.getActiveProfile()?.profile.secureSession;
+    if (!session || Date.parse(session.expiresAt) <= Date.now()) {
+      return undefined;
+    }
+    return session;
+  }
+
+  clearSecureSession(): void {
+    let active = this.getActiveProfile();
+    if (!active?.profile.secureSession) {
+      return;
+    }
+    active.profile.secureSession = undefined;
+    this.saveConfig();
   }
 
   // Return the Matrix credentials stored for a profile. Sync — reads only
@@ -654,7 +720,7 @@ export class ProfileManager implements RealmAuthenticator {
     let token = await this.getRealmTokenForUrl(url);
     if (token) {
       let headers = this.buildHeaders(input, init, token);
-      let response = await fetch(input, { ...init, headers });
+      let response = await realmFetch(input, { ...init, headers });
 
       if (response.status !== 401) {
         return response;
@@ -677,7 +743,7 @@ export class ProfileManager implements RealmAuthenticator {
       );
     }
     let headers = this.buildHeaders(input, init, token);
-    let response = await fetch(input, { ...init, headers });
+    let response = await realmFetch(input, { ...init, headers });
 
     return response;
   }

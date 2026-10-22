@@ -3,6 +3,8 @@ import { ensureTrailingSlash } from './paths.ts';
 import type { Query } from './query.ts';
 import type { RequestTimings } from './request-timings.ts';
 import { SupportedMimeType } from './router.ts';
+import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
 
 export type SearchRequestErrorCode =
   | 'missing-realms'
@@ -49,7 +51,44 @@ export async function parseSearchRequestPayload(
   }
 }
 
-export function parseRealmsFromPayload(payload: unknown): string[] {
+// The parts of a VirtualNetwork `registeredRealmURL` reads.
+interface RealmURLNetwork {
+  isRegisteredPrefix(reference: string): boolean;
+  toURL(reference: string): URL;
+  mapURL(
+    url: string,
+    direction: 'virtual-to-real' | 'real-to-virtual',
+  ): URL | undefined;
+}
+
+// The URL a realm server registers a realm under, for a realm a federated
+// request names. A federated request may name a realm by its registered
+// prefix (`@cardstack/catalog/`), by the URL it is registered under, or by the
+// URL it is served from: the server's URL mappings run from each realm's
+// registered `--fromUrl` to the URL it is served at, so mapping a served URL
+// back names the realm it registered (the base realm is registered under
+// `https://cardstack.com/base/` and served elsewhere). Anything else comes
+// back unchanged, so an unknown realm is still reported as the caller named it.
+export function registeredRealmURL(
+  virtualNetwork: RealmURLNetwork,
+  realm: string,
+): string {
+  let href = virtualNetwork.isRegisteredPrefix(realm)
+    ? virtualNetwork.toURL(realm).href
+    : realm;
+  if (!href.startsWith('http://') && !href.startsWith('https://')) {
+    return href;
+  }
+  return virtualNetwork.mapURL(href, 'real-to-virtual')?.href ?? href;
+}
+
+// `canonicalize`, when given, rewrites each realm to the form the caller keys
+// realms by (see `registeredRealmURL`); the list is then deduped, first
+// spelling first, so a realm named twice is searched once.
+export function parseRealmsFromPayload(
+  payload: unknown,
+  canonicalize?: (realm: string) => string,
+): string[] {
   let payloadRecord =
     payload && typeof payload === 'object'
       ? (payload as Record<string, unknown>)
@@ -79,7 +118,10 @@ export function parseRealmsFromPayload(payload: unknown): string[] {
     .map((realm) => realm.trim())
     .filter(Boolean)
     .map((realm) => ensureTrailingSlash(realm));
-  return realmList;
+  if (!canonicalize) {
+    return realmList;
+  }
+  return [...new Set(realmList.map((realm) => canonicalize(realm)))];
 }
 
 export async function parseRealmsFromRequest(
@@ -112,10 +154,28 @@ export type SearchOpts = {
   // every result from card+source and reads only `data[].id`). Live /
   // external callers leave it unset and receive fully-assembled documents.
   omitIncluded?: boolean;
+  // How much of each result's link graph the response carries, in the
+  // vocabulary an operation declares one in. Absent is `full`, the whole
+  // closure. `ids` answers each result's relationships and side-loads none of
+  // their targets, leaving the consumer to fetch the cards it displays; `none`
+  // answers each result's card with no relationship data at all.
+  //
+  // The endpoint settles it from its two sources — the link-shape policy,
+  // which asks for `ids` when the realm-server is shedding load, and the
+  // declaration of a named query — through `effectiveLinkStrategy`, so it is
+  // always the narrower of the two.
+  links?: LinkStrategy;
+  // Prerendered formats every row is served data-only for: the rows carry no
+  // markup for them, and a consumer renders those rows from their data. Set
+  // from the `html` declaration of a named query, and never on a render's own
+  // search, which keeps every format's markup. Absent or empty, every format's
+  // markup is served.
+  unshareableFormats?: PrerenderedHtmlFormat[];
   priority?: number;
-  // Correlation id minted by the client (the prerendered host stamps
-  // `x-boxel-logging-correlation-id` on its `_federated-search` fetch) and read back
-  // out by the request handler into opts. When present, `searchRealms`
+  // Correlation id minted by the client — a prerendering host stamps
+  // `x-boxel-logging-correlation-id` on its `_federated-search` fetch, and so
+  // does a live browser whose client-telemetry instrument is armed — and read
+  // back out by the request handler into opts. When present, `searchRealms`
   // instruments the server-side search pipeline and emits one
   // `realm:search-timing` line keyed by this id, so a client-observed
   // slow search can be joined to where the realm-server spent the time.

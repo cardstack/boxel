@@ -39,8 +39,14 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='@cardstack/skills/' \
   --toUrl='https://realms-staging.stack.cards/skills/' \
   \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl='https://realms-staging.stack.cards/pretui/' \
+  \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl='https://realms-staging.stack.cards/openrouter/' \
+  \
+  --fromUrl='https://realms-staging.stack.cards/choreo-gallery/' \
+  --toUrl='https://realms-staging.stack.cards/choreo-gallery/' \
   \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}"

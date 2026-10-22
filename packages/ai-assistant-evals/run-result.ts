@@ -1,0 +1,125 @@
+import type { RoomAnalysis } from './room-analysis.ts';
+
+// The shape of one run's JSON in the results directory, and the grade read
+// off it. Shared by the spec that writes it and run-eval.ts that turns it
+// into an EvaluationResultCard.
+
+export type Verdict =
+  | 'pass'
+  | 'model-failure'
+  | 'host-failure'
+  | 'bot-failure'
+  | 'runner-failure';
+
+export interface RunResult {
+  requestedModel: string;
+  // The picker option that was chosen, as the picker shows it.
+  modelName: string | undefined;
+  modelId: string | undefined;
+  reasoningEffort: string | null | undefined;
+  roomId: string | undefined;
+  realmUrl: string | undefined;
+  verdict: Verdict;
+  reasons: string[];
+  cardRendered: string | undefined;
+  renderedIn: 'stack' | 'preview' | undefined;
+  // The whole run, login and workspace setup included.
+  durationSeconds: number;
+  // From the first prompt to the end of the run: what the time target grades.
+  promptSeconds?: number;
+  startedAt: string;
+  endedAt: string | undefined;
+  prompts: string[];
+  // How many of the prompts were sent before the run ended.
+  promptsSent: number;
+  evalCardUrl: string | undefined;
+  sessionId: string | undefined;
+  // Cards and files copied into the workspace before the first prompt.
+  initialCards: string[];
+  initialFiles: string[];
+  // Source URLs of the skill files the room had enabled.
+  skillsUsed: string[];
+  // Skill features enabled in the room before the first prompt
+  // (EVAL_SKILL_FEATURES).
+  skillFeatures: string[];
+  // The evaluation's own time budget per prompt, when it sets one.
+  secondsPerPrompt?: number;
+  username: string;
+  stoppedBy:
+    | 'idle'
+    | 'wall-clock'
+    | 'stuck'
+    | 'stalled'
+    | 'no-reply'
+    | 'approval'
+    | 'irregularity'
+    | 'error';
+  irregularities: string[];
+  // How often a tool (listing-remix, for one) moved the assistant panel to a
+  // room of its own and the runner reopened the evaluation's room.
+  roomReturns: number;
+  // File name, next to this result, of what the workspace held when the run
+  // ended: every source file and every indexed card document.
+  workspaceSnapshot?: string;
+  analysis: RoomAnalysis | undefined;
+  screenshot: string | undefined;
+  consoleErrors: string[];
+  error?: string;
+}
+
+// The one-word answer per model. GOOD: passed and inside every benchmark.
+// ROUGH: passed, but a benchmark was missed (more turns, switches, or time
+// than a good run needs). FAIL: no card, or the run had to be stopped. Cost is
+// reported in its own column but does not grade: it tracks the model's price
+// class more than its behaviour, and an Opus run would be ROUGH for doing the
+// same work as a Sonnet run.
+export type Grade = '✅ GOOD' | '🟡 ROUGH' | '❌ FAIL';
+
+export const BENCHMARKS = {
+  maxTurns: 10,
+  maxModeSwitches: 1,
+  maxSeconds: 200,
+  // A failed call the model notices and repairs in the same run is normal
+  // with the realm runner (a script with a syntax error, a stale search
+  // string); more than this many reads as a rough run.
+  maxFailedToolCalls: 2,
+};
+
+export function grade(result: RunResult): { grade: Grade; misses: string[] } {
+  if (result.verdict !== 'pass' || !result.analysis) {
+    return { grade: '❌ FAIL', misses: [] };
+  }
+  let a = result.analysis;
+  let misses: string[] = [];
+  // Every prompt after the first gets the same turn and time budget again.
+  // An evaluation with a bigger task than hello-world sets its own time
+  // budget per prompt.
+  let prompts = Math.max(1, result.prompts.length);
+  let maxTurns = BENCHMARKS.maxTurns * prompts;
+  let maxSeconds = (result.secondsPerPrompt ?? BENCHMARKS.maxSeconds) * prompts;
+  if (a.turns > maxTurns) {
+    misses.push(`${a.turns} turns (target ≤ ${maxTurns})`);
+  }
+  let switches = Object.entries(a.toolCalls)
+    .filter(([name]) => name.startsWith('switch-submode'))
+    .reduce((sum, [, count]) => sum + count, 0);
+  if (switches > BENCHMARKS.maxModeSwitches) {
+    misses.push(
+      `${switches} mode switches (target ≤ ${BENCHMARKS.maxModeSwitches})`,
+    );
+  }
+  let seconds = result.promptSeconds ?? result.durationSeconds;
+  if (seconds > maxSeconds) {
+    misses.push(`${seconds}s (target ≤ ${maxSeconds}s)`);
+  }
+  let failures = a.failedToolCalls.length;
+  if (failures > BENCHMARKS.maxFailedToolCalls) {
+    misses.push(
+      `${failures} tool calls failed along the way (target ≤ ${BENCHMARKS.maxFailedToolCalls})`,
+    );
+  }
+  if (a.cacheMisses > 0) {
+    misses.push(`${a.cacheMisses} turn(s) missed the prompt cache`);
+  }
+  return { grade: misses.length ? '🟡 ROUGH' : '✅ GOOD', misses };
+}

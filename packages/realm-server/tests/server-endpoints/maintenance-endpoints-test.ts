@@ -10,8 +10,10 @@ import { boxelUIChecker } from '../../lib/boxel-ui-change-checker.ts';
 import {
   ensureTrailingSlash,
   fetchRealmPermissions,
+  insertPermissions,
 } from '@cardstack/runtime-common';
 import {
+  ensureMatrixAdminUser,
   grafanaSecret,
   insertUser,
   matrixRegistrationSecret,
@@ -23,6 +25,7 @@ import {
   adminImpersonateUser,
   appendRealmServerToUserAccountData,
   appendRealmToUserAccountData,
+  getMatrixAdminToken,
   loginAsMatrixAdmin,
   registerUser,
 } from '../../synapse.ts';
@@ -32,36 +35,6 @@ import {
 } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-
-// The handle-upsert-realm-user-permission flow logs in as the local
-// matrix admin to admin-impersonate the granted user and write their
-// `app.boxel.realms` account_data. CI's `register-matrix-users realms-
-// only` step only registers realm-owning users, not the synapse admin,
-// so a lazy bootstrap here ensures `@admin:localhost` exists with
-// `admin: true` before any test that needs to log in as admin runs.
-// Local dev that already has admin registered keeps the same creds.
-async function ensureMatrixAdminUser(): Promise<void> {
-  let loginResponse = await fetch(`${matrixURL.href}_matrix/client/r0/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'm.login.password',
-      user: 'admin',
-      password: 'password',
-    }),
-  });
-  if (loginResponse.ok) {
-    return;
-  }
-  await registerUser({
-    matrixURL,
-    displayname: 'admin',
-    username: 'admin',
-    password: 'password',
-    registrationSecret: matrixRegistrationSecret,
-    admin: true,
-  });
-}
 
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
@@ -1466,6 +1439,32 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
       });
 
+      test("rejects a change to the realm owner's permissions", async function (assert) {
+        let user = '@op-test-owner:localhost';
+        await insertPermissions(context.dbAdapter, testRealmURL, {
+          [user]: ['read', 'write', 'realm-owner'],
+        });
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=true&write=true`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(
+          perms[user].sort(),
+          ['read', 'realm-owner', 'write'],
+          'owner keeps realm-owner',
+        );
+      });
+
       test('rejects read=false write=false (use the delete flow to revoke)', async function (assert) {
         let user = '@op-test-revoke:localhost';
         let response = await context.request
@@ -1556,6 +1555,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           password: 'password',
           registrationSecret: matrixRegistrationSecret,
         });
+        let sharedAdminToken = await getMatrixAdminToken({
+          matrixURL,
+          adminUsername: 'admin',
+          adminPassword: 'password',
+        });
 
         let response = await context.request
           .post(
@@ -1574,6 +1578,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.true(
           response.body.appendedToAccountData,
           'response signals a fresh append',
+        );
+        // Every admin login shares one device, so a grant that logged out its
+        // admin token would revoke this one too.
+        let adminWhoami = await fetch(
+          `${matrixURL.href}_matrix/client/v3/account/whoami`,
+          { headers: { Authorization: `Bearer ${sharedAdminToken}` } },
+        );
+        assert.strictEqual(
+          adminWhoami.status,
+          200,
+          'the shared admin token is still valid after the grant',
         );
 
         // Read the user's account_data back over matrix to confirm the

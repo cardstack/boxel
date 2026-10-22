@@ -5,6 +5,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
 import { RealmIndexUpdatedListener } from '../lib/realm-index-updated-listener.ts';
+import { stubPolicyCache } from './helpers/policy-cache-stub.ts';
 
 // Minimal fake `Realm` — the listener only calls `.url` (via lookup) and
 // `.clearRealmIndexCaches()`, so that's all we need to stub.
@@ -83,6 +84,31 @@ module(basename(import.meta.filename), function () {
 
       listener.handleNotification(undefined);
       assert.ok(true, 'undefined payload did not throw');
+    });
+
+    test("handleNotification tells the process's compiled policies about a realm this process has not mounted", async function (assert) {
+      // A policy card in a realm with no `Realm` here: nothing but this
+      // listener hears that realm's index move.
+      const { cache } = stubPolicyCache({
+        orgURL: 'http://x.test/unmounted-org/',
+        educationURL: 'http://x.test/unmounted-education/',
+      });
+      await cache.get();
+      const listener = new RealmIndexUpdatedListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        lookupMountedRealm: () => undefined,
+      });
+
+      listener.handleNotification('http://x.test/unmounted-org/');
+
+      await waitFor(() =>
+        cache.stats.revalidations > 0 ? cache.stats.revalidations : undefined,
+      );
+      assert.strictEqual(
+        cache.stats.revalidations,
+        1,
+        'the policy reading from that realm is revalidated',
+      );
     });
 
     test('handleNotification ignores an empty payload', function (assert) {

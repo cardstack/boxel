@@ -45,6 +45,11 @@ interface Signature {
     fileTypeFilter?: CodeRef;
     fileFieldFilter?: Record<string, unknown>;
     selectedFile?: LocalPath;
+    // When true, a click or Space toggles a file in and out of
+    // `selectedFiles` (owned by the caller via `onFileSelected`), arrow keys
+    // and type-ahead move only the cursor, and Enter confirms the selection.
+    multiSelect?: boolean;
+    selectedFiles?: LocalPath[];
     openDirs?: LocalPath[];
     onFileSelected?: (entryPath: LocalPath) => void;
     onFileConfirmed?: (entryPath: LocalPath) => void;
@@ -68,7 +73,8 @@ export default class IndexedFileTree extends Component<Signature> {
       <TreeLevel
         @entries={{this.fileTree.entries}}
         @fileTree={{this.fileTree}}
-        @selectedFile={{if @selectedFile @selectedFile this.selectedFile}}
+        @selectedPaths={{this.selectedPaths}}
+        @multiSelect={{@multiSelect}}
         @openDirs={{this.effectiveOpenDirs}}
         @onFileSelected={{this.selectFile}}
         @onDirectorySelected={{this.toggleDirectory}}
@@ -141,6 +147,14 @@ export default class IndexedFileTree extends Component<Signature> {
     this.maskDismissed = true;
   });
 
+  private get selectedPaths(): Set<string> {
+    if (this.args.multiSelect) {
+      return new Set(this.args.selectedFiles ?? []);
+    }
+    let selected = this.args.selectedFile ?? this.selectedFile;
+    return new Set(selected ? [selected] : []);
+  }
+
   private get effectiveOpenDirs(): Set<string> {
     if (this.args.openDirs) {
       return new Set(this.args.openDirs);
@@ -211,6 +225,16 @@ export default class IndexedFileTree extends Component<Signature> {
     this.args.onFileSelected?.(entryPath);
   }
 
+  // Arrow keys and type-ahead land on an item: in single-select a file is
+  // selected as the cursor reaches it; in multi-select only the cursor moves.
+  private moveCursorTo(item: { path: string; kind: string }) {
+    if (item.kind === 'file' && !this.args.multiSelect) {
+      this.selectFile(item.path as LocalPath);
+    } else {
+      this.cursorPath = item.path;
+    }
+  }
+
   @action
   private toggleDirectory(entryPath: LocalPath) {
     let dirPath = normalizeDirPath(entryPath);
@@ -244,11 +268,7 @@ export default class IndexedFileTree extends Component<Signature> {
             ? 0
             : Math.min(currentIndex + 1, items.length - 1);
         const nextItem = items[nextIndex]!;
-        if (nextItem.kind === 'file') {
-          this.selectFile(nextItem.path as LocalPath);
-        } else {
-          this.cursorPath = nextItem.path;
-        }
+        this.moveCursorTo(nextItem);
         this.scrollPathIntoView(nextItem.path, nav);
         break;
       }
@@ -265,11 +285,7 @@ export default class IndexedFileTree extends Component<Signature> {
             ? items.length - 1
             : Math.max(currentIndex - 1, 0);
         const prevItem = items[prevIndex]!;
-        if (prevItem.kind === 'file') {
-          this.selectFile(prevItem.path as LocalPath);
-        } else {
-          this.cursorPath = prevItem.path;
-        }
+        this.moveCursorTo(prevItem);
         this.scrollPathIntoView(prevItem.path, nav);
         break;
       }
@@ -327,7 +343,9 @@ export default class IndexedFileTree extends Component<Signature> {
           (i) => i.path === this.cursorPath,
         );
         if (current?.kind === 'file') {
-          this.selectFile(current.path as LocalPath);
+          if (!this.args.multiSelect) {
+            this.selectFile(current.path as LocalPath);
+          }
           this.args.onFileConfirmed?.(current.path as LocalPath);
         } else if (current?.kind === 'directory') {
           this.toggleDirectory(current.path as LocalPath);
@@ -351,6 +369,16 @@ export default class IndexedFileTree extends Component<Signature> {
         }
         event.preventDefault();
 
+        if (key === ' ' && this.args.multiSelect) {
+          const current = this.visibleItems.find(
+            (i) => i.path === this.cursorPath,
+          );
+          if (current?.kind === 'file') {
+            this.selectFile(current.path as LocalPath);
+          }
+          break;
+        }
+
         this.typeAheadBuffer += key.toLowerCase();
 
         clearTimeout(this.typeAheadTimer);
@@ -371,13 +399,8 @@ export default class IndexedFileTree extends Component<Signature> {
         if (match) {
           const path = match.dataset.path;
           if (path) {
-            if (match.dataset.kind === 'file') {
-              // File: update selection (selectFile also sets cursorPath)
-              this.selectFile(path as LocalPath);
-            } else {
-              // Directory: just move cursor, don't expand
-              this.cursorPath = path;
-            }
+            // Directories are never expanded by type-ahead
+            this.moveCursorTo({ path, kind: match.dataset.kind ?? '' });
             this.scrollPathIntoView(path, nav);
           }
         }
@@ -391,7 +414,8 @@ interface TreeLevelSignature {
   Args: {
     entries: FileTreeNode[];
     fileTree: ReturnType<typeof fileTreeFromIndex>;
-    selectedFile?: LocalPath;
+    selectedPaths: Set<string>;
+    multiSelect?: boolean;
     openDirs: Set<string>;
     onFileSelected: (entryPath: LocalPath) => void;
     onDirectorySelected: (entryPath: LocalPath) => void;
@@ -412,6 +436,10 @@ class TreeLevel extends Component<TreeLevelSignature> {
             data-kind='file'
             title={{entry.name}}
             tabindex='-1'
+            aria-pressed={{if
+              @multiSelect
+              (if (this.isSelectedFile entry.path) 'true' 'false')
+            }}
             {{on 'click' (fn @onFileSelected entry.path)}}
             {{scrollIntoViewModifier
               (this.isSelectedFile entry.path)
@@ -419,6 +447,7 @@ class TreeLevel extends Component<TreeLevelSignature> {
               key=@scrollPositionKey
             }}
             class='file
+              {{if @multiSelect "multi-select"}}
               {{if (this.isSelectedFile entry.path) "selected"}}
               {{if (this.isCursorItem entry.path) "cursor"}}'
           >
@@ -443,7 +472,8 @@ class TreeLevel extends Component<TreeLevelSignature> {
             <TreeLevel
               @entries={{this.getChildren entry}}
               @fileTree={{@fileTree}}
-              @selectedFile={{@selectedFile}}
+              @selectedPaths={{@selectedPaths}}
+              @multiSelect={{@multiSelect}}
               @openDirs={{@openDirs}}
               @onFileSelected={{@onFileSelected}}
               @onDirectorySelected={{@onDirectorySelected}}
@@ -503,8 +533,11 @@ class TreeLevel extends Component<TreeLevelSignature> {
         background-color: var(--boxel-highlight);
       }
 
-      /* Keyboard cursor on directories: lighter active state */
-      .directory.cursor {
+      /* Keyboard cursor on directories, and on unselected files in
+         multi-select where the cursor and the selection differ: lighter
+         active state */
+      .directory.cursor,
+      .file.multi-select.cursor:not(.selected) {
         color: var(--boxel-dark);
         background-color: color-mix(
           in srgb,
@@ -542,7 +575,7 @@ class TreeLevel extends Component<TreeLevelSignature> {
 
   @action
   isSelectedFile(path: string): boolean {
-    return this.args.selectedFile === path;
+    return this.args.selectedPaths.has(path);
   }
 
   @action

@@ -149,6 +149,7 @@ async function initESLint(): Promise<any> {
           {
             sideEffectFreeModules: [
               '@cardstack/base/*',
+              // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- recognizes legacy alias imports in submitted code
               'https://cardstack.com/base/*',
               '@cardstack/boxel-ui/*',
               '@cardstack/boxel-icons/*',

@@ -4,6 +4,8 @@ import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
+import { isTesting } from '@embroider/macros';
+
 import { tracked, cached } from '@glimmer/tracking';
 
 import { task, restartableTask } from 'ember-concurrency';
@@ -33,7 +35,11 @@ import {
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import { StackItem, type StackItemType } from '@cardstack/host/lib/stack-item';
+import {
+  StackItem,
+  takesFileDeleteRoute,
+  type StackItemType,
+} from '@cardstack/host/lib/stack-item';
 
 import {
   file,
@@ -90,7 +96,11 @@ export interface CreateListingModalPayload {
 export interface OperatorModeState {
   stacks: Stack[];
   submode: Submode;
-  codePath: URL | null;
+  // The open file's identifier, with its extension: the prefix form for a
+  // module in a realm with a registered prefix (`@cardstack/base/card-api.gts`),
+  // otherwise the URL. A reader that fetches or displays the file converts it
+  // with `virtualNetwork.toURL`.
+  codePath: RealmResourceIdentifier | null;
   hostModePrimaryCard: string | null;
   hostModeStack: string[];
   aiAssistantOpen: boolean;
@@ -146,6 +156,12 @@ interface OpenFileSubscriber {
 export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
 export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
 
+// What a tool that would open code mode answers where it is not offered (see
+// `OperatorModeStateService#codeSubmodeOffered`).
+export function codeSubmodeUnavailable(url: string | null | undefined): string {
+  return `Code mode is not available${url ? ` for ${url}` : ''}: it needs read permission on the realm, which serves its modules and file tree only to a user who may read it`;
+}
+
 // Read the user's persisted AI Assistant open/closed preference. Defaults to
 // `false` for first-ever visits, so the panel is closed unless the URL state
 // (which takes precedence) or a remembered preference opens it.
@@ -187,20 +203,36 @@ export default class OperatorModeStateService extends Service {
   // and renders normally; when it pops back to the top, the stored
   // intent re-applies and the card re-expands.
   private expandedStackItems: TrackedMap<string, boolean> = new TrackedMap();
-  isStackItemExpanded(itemKey: string): boolean {
-    return this.expandedStackItems.get(itemKey) ?? false;
+  @tracked isMobileViewport = false;
+  private mobileViewportQuery: MediaQueryList | undefined;
+
+  // On a phone-width viewport only the first stack is shown, and its
+  // cards are always expanded in interact mode. Membership is read from
+  // the tracked stack rather than the untracked `item.stackIndex`,
+  // which is renumbered in place.
+  isStackItemExpanded(item: StackItem): boolean {
+    if (this.isMobileViewport) {
+      return (
+        this._state.submode === Submodes.Interact &&
+        Boolean(this._state.stacks[0]?.includes(item))
+      );
+    }
+    return this.expandedStackItems.get(item.instanceId) ?? false;
   }
-  setStackItemExpanded(itemKey: string, value: boolean) {
+  setStackItemExpanded(item: StackItem, value: boolean) {
     if (value) {
       // Only one card can be expanded at a time — clear all others so
       // the same card open in two stacks can't leave both expanded.
       this.expandedStackItems.clear();
-      this.expandedStackItems.set(itemKey, true);
+      this.expandedStackItems.set(item.instanceId, true);
     } else {
-      this.expandedStackItems.delete(itemKey);
+      this.expandedStackItems.delete(item.instanceId);
     }
     this.schedulePersist();
   }
+  private onMobileViewportChange = (event: MediaQueryListEvent) => {
+    this.isMobileViewport = event.matches;
+  };
   // True when at least one stack's TOP card has expand intent — used
   // to drive the bar's glass-morphism + .has-expanded-card class. Only
   // top cards count: when a card with expand intent gets buried under
@@ -212,10 +244,9 @@ export default class OperatorModeStateService extends Service {
   // intent kept, frost off; close C → B top again, intent fires,
   // frost back on; close B → A top again, intent fires, frost on.
   get hasAnyStackItemExpanded(): boolean {
-    if (this.expandedStackItems.size === 0) return false;
     return this._state.stacks.some((stack) => {
       const top = stack[stack.length - 1];
-      return top && this.expandedStackItems.has(top.instanceId);
+      return top && this.isStackItemExpanded(top);
     });
   }
 
@@ -254,6 +285,28 @@ export default class OperatorModeStateService extends Service {
     );
     this.moduleInspectorHistory = new TrackedObject(
       moduleInspectorHistory ? JSON.parse(moduleInspectorHistory) : {},
+    );
+
+    // Same breakpoint as the operator-mode container's phone layout. Tests
+    // don't read the window, so its size never decides their layout; they
+    // set isMobileViewport themselves.
+    this.mobileViewportQuery = isTesting()
+      ? undefined
+      : globalThis.matchMedia?.('(max-width: 30rem)');
+    if (this.mobileViewportQuery) {
+      this.isMobileViewport = this.mobileViewportQuery.matches;
+      this.mobileViewportQuery.addEventListener(
+        'change',
+        this.onMobileViewportChange,
+      );
+    }
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    this.mobileViewportQuery?.removeEventListener(
+      'change',
+      this.onMobileViewportChange,
     );
   }
 
@@ -398,7 +451,15 @@ export default class OperatorModeStateService extends Service {
     return newItem;
   }
 
+  // Deletes a card instance, or a file when the id names one (a FileDef row
+  // in a cards grid routes its delete here too). A caller that already knows
+  // which it holds calls `deleteFile` directly; this classifies for the ones
+  // that don't, such as the stack-item bulk delete.
   async deleteCard(cardId: string) {
+    if (takesFileDeleteRoute(undefined, cardId, this.store)) {
+      await this.deleteFile(cardId);
+      return;
+    }
     let cardRealmUrl = (await this.network.authedFetch(cardId)).headers.get(
       'X-Boxel-Realm-Url',
     );
@@ -424,6 +485,34 @@ export default class OperatorModeStateService extends Service {
     let cardPath = realmPaths.local(rri(`${cardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     this.recentCardsService.remove(cardId);
+  }
+
+  async deleteFile(fileId: string) {
+    // Prefer the realm registry: the header lookup below GETs the file's
+    // bytes, which can be large for media.
+    let fileRealm: string | null | undefined = this.realm.realmOf(rri(fileId));
+    if (!fileRealm) {
+      fileRealm = (await this.network.authedFetch(fileId)).headers.get(
+        'X-Boxel-Realm-Url',
+      );
+    }
+    if (!fileRealm) {
+      throw new Error(`Could not determine the realm for file "${fileId}"`);
+    }
+
+    await this.store.delete(fileId, { type: 'file-meta' });
+
+    let items: StackItem[] = [];
+    for (let stack of this._state.stacks || []) {
+      items.push(
+        ...(stack.filter((i: StackItem) => i.id === fileId) as StackItem[]),
+      );
+    }
+    for (let item of items) {
+      this.trimItemsFromStack(item);
+    }
+    let realmPaths = new RealmPaths(ri(fileRealm));
+    this.recentFilesService.removeRecentFile(realmPaths.local(rri(fileId)));
   }
 
   async copySource(fromUrl: string, toUrl: string) {
@@ -463,8 +552,8 @@ export default class OperatorModeStateService extends Service {
     if (this._state.stacks.length === 0) {
       const realmURL = this.getRealmURLFromItemId(item.id);
       const isIndexCard = isRealmIndexCardId(
-        item.id,
-        realmURL,
+        rri(item.id),
+        ri(realmURL),
         this.network.virtualNetwork,
       );
       if (isIndexCard) {
@@ -684,7 +773,7 @@ export default class OperatorModeStateService extends Service {
   get isViewingCardInCodeMode() {
     return (
       this._state.submode === Submodes.Code &&
-      this.codePathString?.endsWith('.json')
+      this._state.codePath?.endsWith('.json')
     );
   }
 
@@ -719,7 +808,7 @@ export default class OperatorModeStateService extends Service {
       }
       // Alternatively we may simply be looking at a card in code mode
       if (this.isViewingCardInCodeMode) {
-        let cardId = rri(this.codePathString!.replace(/\.json$/, ''));
+        let cardId = rri(this._state.codePath!.replace(/\.json$/, ''));
         if (!openCardsInCodeMode.includes(cardId)) {
           openCardsInCodeMode.push(cardId);
         }
@@ -744,13 +833,6 @@ export default class OperatorModeStateService extends Service {
       .filter(isCardInstance);
     return cards;
   });
-
-  get openFileURL(): string | undefined {
-    if (this._state.submode === Submodes.Code) {
-      return this._state.codePath?.href;
-    }
-    return undefined;
-  }
 
   stackIsEmpty(stackIndex: number) {
     return this._state.stacks[stackIndex].length === 0;
@@ -778,7 +860,7 @@ export default class OperatorModeStateService extends Service {
 
   async updateModuleInspectorView(view: ModuleInspectorView) {
     this._state.moduleInspector = view;
-    this.moduleInspectorHistory[this.state.codePath?.href ?? ''] = view;
+    this.moduleInspectorHistory[this._state.codePath ?? ''] = view;
     window.localStorage.setItem(
       ModuleInspectorSelections,
       JSON.stringify(this.moduleInspectorHistory),
@@ -823,11 +905,16 @@ export default class OperatorModeStateService extends Service {
 
   get codePathRelativeToRealm() {
     if (this._state.codePath && this.realmURL) {
-      let realmPath = new RealmPaths(ri(this.realmURL));
-
-      if (realmPath.inRealm(this._state.codePath)) {
+      // The realm URL is in the spelling the realm advertises, which can be a
+      // virtual alias of the URL the file is served from, so both sides are
+      // compared in RRI form.
+      let realmPath = new RealmPaths(
+        ri(this.network.virtualNetwork.unresolveURL(this.realmURL)),
+      );
+      let codePath = this._state.codePath;
+      if (realmPath.inRealm(codePath)) {
         try {
-          return realmPath.local(rri(this._state.codePath!.href));
+          return realmPath.local(codePath);
         } catch (err: any) {
           if (err.status === 404) {
             return undefined;
@@ -840,10 +927,15 @@ export default class OperatorModeStateService extends Service {
     return undefined;
   }
 
-  get codePathString(): RealmResourceIdentifier | undefined {
-    return this._state.codePath?.toString() as
-      | RealmResourceIdentifier
-      | undefined;
+  private get codePathURL(): URL | null {
+    let codePath = this._state.codePath;
+    return codePath ? this.network.virtualNetwork.toURL(codePath) : null;
+  }
+
+  private toCodePathRRI(codePath: string): RealmResourceIdentifier {
+    return this.network.virtualNetwork.unresolveURL(
+      this.network.virtualNetwork.toURL(codePath).href,
+    );
   }
 
   onFileSelected = async (entryPath: LocalPath) => {
@@ -860,13 +952,15 @@ export default class OperatorModeStateService extends Service {
         ? this.network.virtualNetwork.toURL(codePath)
         : codePath;
     let canonicalCodePath = await this.determineCanonicalCodePath(codePathURL);
-    this._state.codePath = canonicalCodePath;
+    this._state.codePath = canonicalCodePath
+      ? this.toCodePathRRI(canonicalCodePath.href)
+      : null;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
 
     moduleInspectorView =
       moduleInspectorView ??
-      this.moduleInspectorHistory[canonicalCodePath?.href ?? ''] ??
+      this.moduleInspectorHistory[this._state.codePath ?? ''] ??
       DEFAULT_MODULE_INSPECTOR_VIEW;
 
     this.updateModuleInspectorView(moduleInspectorView);
@@ -879,7 +973,9 @@ export default class OperatorModeStateService extends Service {
     moduleInspector: ModuleInspectorView,
   ) {
     if (codePath) {
-      this.moduleInspectorHistory[codePath] = moduleInspector;
+      this.moduleInspectorHistory[
+        this.network.virtualNetwork.unresolveURL(codePath)
+      ] = moduleInspector;
       window.localStorage.setItem(
         ModuleInspectorSelections,
         JSON.stringify(this.moduleInspectorHistory),
@@ -914,7 +1010,7 @@ export default class OperatorModeStateService extends Service {
     // typically used when, serving a redirect in the code path
     // solve UX issues with back button referring back to request url of redirect
     // when it should refer back to the previous code path
-    this._state.codePath = codePath;
+    this._state.codePath = codePath ? this.toCodePathRRI(codePath.href) : null;
     this.router.replaceWith('index-root', {
       queryParams: {
         operatorModeState: this.serialize(),
@@ -1036,7 +1132,7 @@ export default class OperatorModeStateService extends Service {
     let state: SerializedState = {
       stacks: [],
       submode: this._state.submode,
-      codePath: this._state.codePath?.toString(),
+      codePath: this._state.codePath ?? undefined,
       trail,
       fileView: this._state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this._state.openDirs.entries()),
@@ -1127,7 +1223,9 @@ export default class OperatorModeStateService extends Service {
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
-      codePath: rawState.codePath ? new URL(rawState.codePath) : null,
+      codePath: rawState.codePath
+        ? this.toCodePathRRI(rawState.codePath)
+        : null,
       hostModePrimaryCard: rawState.trail?.[0]?.replace(/\.json$/, '') ?? null,
       hostModeStack: new TrackedArray(
         rawState.trail
@@ -1296,6 +1394,16 @@ export default class OperatorModeStateService extends Service {
     return this.realm.info(this.realmURL);
   }
 
+  // Whether to offer code mode on `url`, or on the current realm when there is
+  // no `url` or it is the local id of a card that has no URL yet. Code mode
+  // edits a realm's modules and browses its file tree, and a realm serves
+  // those only to a caller its own permissions let read it: no policy grant
+  // reaches them. A user who reaches the realm only through grants would find
+  // its file tree and modules refused, so code mode is not offered to them.
+  codeSubmodeOffered = (url: string | undefined): boolean => {
+    return this.realm.canRead(url && !isLocalId(url) ? url : this.realmURL);
+  };
+
   getWritableRealmURL = (preferredURLs: string[] = []) => {
     // Optional `preferredURLs` argument with highest priority with fallback options below
     // Precedence rules for determining "current realm" for WRITE purposes:
@@ -1334,7 +1442,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   openFile = maybe(this, (context: object) => {
-    let codePath = this._state.codePath;
+    let codePath = this.codePathURL;
 
     if (!codePath) {
       return undefined;
@@ -1462,7 +1570,7 @@ export default class OperatorModeStateService extends Service {
     return (
       JSON.parse(
         window.localStorage.getItem(ModuleInspectorSelections) ?? '{}',
-      )[this.codePathString ?? ''] ?? DEFAULT_MODULE_INSPECTOR_VIEW
+      )[this._state.codePath ?? ''] ?? DEFAULT_MODULE_INSPECTOR_VIEW
     );
   }
 
@@ -1470,9 +1578,6 @@ export default class OperatorModeStateService extends Service {
     if (this.moduleInspectorPanel === 'preview') {
       let playgroundSelections =
         this.playgroundPanelService.playgroundSelections ?? {};
-      if (this.codePathString && playgroundSelections[this.codePathString]) {
-        return playgroundSelections[this.codePathString];
-      }
       let selectedCodeRefUrl = this.codeSemanticsService.selectedCodeRef
         ? internalKeyFor(
             this.codeSemanticsService.selectedCodeRef!,
@@ -1511,6 +1616,7 @@ export default class OperatorModeStateService extends Service {
         submode: 'workspace-chooser',
         debug: this.operatorModeController.debug,
         openCardIds: [],
+        realmPrefixes: this.realmPrefixes,
         workspaces: [...userWorkspaces, ...catalogWorkspaces],
       };
       let errorsDisplayed = this.errorDisplay.getDisplayedErrors();
@@ -1521,7 +1627,7 @@ export default class OperatorModeStateService extends Service {
     }
     if (this._state.submode === Submodes.Code) {
       codeMode = {
-        currentFile: this.codePathString,
+        currentFile: this._state.codePath ?? undefined,
       };
 
       // Add selection range information when in code mode
@@ -1538,7 +1644,7 @@ export default class OperatorModeStateService extends Service {
       if (this.isViewingCardInCodeMode) {
         codeMode.moduleInspectorPanel = 'preview';
         codeMode.previewPanelSelection = {
-          cardId: rri(this.codePathString!.replace(/\.json$/, '')),
+          cardId: rri(this._state.codePath!.replace(/\.json$/, '')),
           format: this.currentViewingFormat ?? 'isolated',
         };
       } else {
@@ -1575,6 +1681,7 @@ export default class OperatorModeStateService extends Service {
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
       openCardIds,
+      realmPrefixes: this.realmPrefixes,
       realmUrl,
       realmPermissions,
       codeMode,
@@ -1584,6 +1691,17 @@ export default class OperatorModeStateService extends Service {
       result.errorsDisplayed = errorsDisplayed;
     }
     return result;
+  }
+
+  // The identifiers in the AI context are RRIs, so the context carries the
+  // URL each realm prefix stands for: the assistant reads files by URL.
+  private get realmPrefixes(): Record<string, string> {
+    let { virtualNetwork } = this.network;
+    return Object.fromEntries(
+      virtualNetwork
+        .knownRealms()
+        .map((prefix) => [prefix, virtualNetwork.toURLHref(prefix)]),
+    );
   }
 
   private makeRemoteIdsList(

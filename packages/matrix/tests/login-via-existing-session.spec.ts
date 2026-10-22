@@ -94,9 +94,11 @@ test.describe('login_via_existing_session', () => {
       // Observe `document`, not `document.documentElement`: this init script
       // runs at document-start when documentElement can still be null, so
       // observing it would throw before the flag is set. subtree:true still
-      // catches the password field wherever it mounts.
+      // catches the sign-in fields wherever they mount.
       new MutationObserver(() => {
-        if (document.querySelector('[data-test-password-field]')) {
+        if (
+          document.querySelector('[data-test-credential-fields-frame="login"]')
+        ) {
           w.__sawPasswordForm = true;
         }
       }).observe(document, { childList: true, subtree: true });

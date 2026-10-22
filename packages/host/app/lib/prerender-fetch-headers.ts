@@ -61,14 +61,19 @@ export function jobIdHeader(): Record<string, string> {
   return j ? { [X_BOXEL_JOB_ID_HEADER]: j } : {};
 }
 
-// Per-search correlation id. Minted fresh for each `_federated-search`
-// fetch the SPA issues while rendering inside a prerender tab, and stamped
-// as `x-boxel-logging-correlation-id`. The realm-server reads it back out and keys its
+// Per-search correlation id for a render inside a prerender tab. Minted fresh
+// for each `_federated-search` fetch the SPA issues there, and stamped as
+// `x-boxel-logging-correlation-id`. The realm-server reads it back out and keys its
 // `realm:search-timing` line on it, so a search the prerender observes as
 // slow (surfaced in its `queryLoadsInFlight` diagnostics) can be joined to
 // the realm-server's stage-by-stage view of the same request. Gated on the
-// prerender context — exactly like the job-id / consuming-realm headers —
-// so live SPA traffic is unaffected and emits no server-side timing line.
+// prerender context — exactly like the job-id / consuming-realm headers.
+//
+// Live SPA traffic gets the same id from the other end: the client-telemetry
+// timing middleware in the `_federated-search` stack mints one per request
+// when it is armed, and records it on the `server-request` event for the same
+// call (see `createServerRequestTimingMiddleware`). This helper is what stamps
+// it while that instrument is dormant, as it is in a prerender tab.
 export function loggingCorrelationIdHeader(): Record<string, string> {
   let flag = (globalThis as unknown as { __boxelRenderContext?: boolean })
     .__boxelRenderContext;

@@ -1,6 +1,9 @@
+import { modifier } from 'ember-modifier';
+import { hasNothingToShow } from '@cardstack/runtime-common';
 import {
   CardDef,
   Component,
+  type CardContext,
   FieldDef,
   StringField,
   contains,
@@ -25,7 +28,13 @@ import {
   SearchCardsResult,
   SearchCardSummaryField,
 } from './commands/search-card-result';
+import {
+  SearchEntriesInput,
+  SearchEntriesResult,
+  SearchEntrySummaryField,
+} from './commands/search-entry-result';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
+import { SignedCaptureLink } from '@cardstack/boxel-host/lib/signed-capture';
 
 export type ToolCallStatus = 'applied' | 'ready' | 'applying';
 // Pre-rename spelling; new code imports `ToolCallStatus`.
@@ -43,18 +52,53 @@ export class SaveCardInput extends CardDef {
   @field card = linksTo(CardDef);
   @field realm = contains(StringField);
   @field localDir = contains(StringField);
+  // When true, the save does not block on the realm's in-flight incremental
+  // indexing: the realm indexes the write deferred and responds from the
+  // serialized document. The writer's own next card read still waits on that
+  // deferred job (the realm drains the requester's own writes on card reads),
+  // so what goes eventually-consistent is search — _search/_federated-search
+  // have no such drain — plus other users' sessions and anonymous readers.
+  // Defaults to false — an unset BooleanField reads as false — which preserves
+  // the synchronous-indexing behavior every caller relies on. The polarity is
+  // opt-in precisely so the safe default survives the field being unset.
+  //
+  // Deliberately exposed in the generated tool schema (it is not in
+  // ignoreInputFields): the description below is what the model sees.
+  @field skipIndexWait = contains(BooleanField, {
+    description:
+      'Leave unset for a normal save. Set true only to make the save return without waiting for the realm to index it — the saved card may briefly not appear in searches. Do not set this when a search for the saved card follows the save.',
+  });
 }
 
+// The copy is created like any new card, so the realm picks its path: a
+// directory named after the card's type, beneath `localDir`, holding a file
+// with a generated name. The descriptions below spell that out because models
+// otherwise pass the path they want the new file to have as `localDir`.
 export class CopyCardToRealmInput extends CardDef {
-  @field sourceCard = linksTo(CardDef);
-  @field targetRealm = contains(StringField);
-  @field localDir = contains(StringField);
+  @field sourceCard = linksTo(CardDef, {
+    description:
+      'The card to copy, as relationships.sourceCard.links.self: its id as a full URL or a realm identifier such as @cardstack/catalog/…; either works.',
+  });
+  @field targetRealm = contains(StringField, {
+    description:
+      'URL of the realm to copy the card into, ending in a slash, e.g. "https://example.com/my-realm/". The copy is written to <targetRealm><localDir>/<CardTypeName>/<generated-id>.json — see localDir.',
+  });
+  @field localDir = contains(StringField, {
+    description:
+      'Optional folder inside targetRealm to put the copy under, relative to the realm root; it must stay inside the realm, so .. segments are refused. It is not the path of the new file: the realm always adds a folder named after the card\'s type (the name its class is exported under, e.g. Incident for export class Incident; for a default export, the module file name in PascalCase, e.g. IncidentRecord for export default from incident-record.gts) and generates the file name, and neither can be chosen. Copying an Incident card with localDir "projects/acme" writes projects/acme/Incident/<generated-id>.json; leaving localDir unset writes Incident/<generated-id>.json; localDir "Incident" writes Incident/Incident/<generated-id>.json. The result\'s newCardId is the URL of the copy.',
+  });
 }
 
 export class CopyCardToStackInput extends CardDef {
-  @field sourceCard = linksTo(CardDef);
+  @field sourceCard = linksTo(CardDef, {
+    description:
+      'The card to copy, as relationships.sourceCard.links.self: its id as a full URL or a realm identifier such as @cardstack/catalog/…; either works.',
+  });
   @field targetStackIndex = contains(NumberField);
-  @field localDir = contains(StringField);
+  @field localDir = contains(StringField, {
+    description:
+      'Optional folder to put the copy under, in the realm of the card on top of the target stack, relative to the realm root; it must stay inside the realm, so .. segments are refused. It is not the path of the new file: the realm always adds a folder named after the card\'s type (the name its class is exported under, e.g. Incident for export class Incident; for a default export, the module file name in PascalCase, e.g. IncidentRecord for export default from incident-record.gts) and generates the file name, and neither can be chosen. Copying an Incident card with localDir "projects/acme" writes projects/acme/Incident/<generated-id>.json; leaving localDir unset writes Incident/<generated-id>.json. The result\'s newCardId is the URL of the copy.',
+  });
 }
 
 export class CopyCardResult extends CardDef {
@@ -187,7 +231,9 @@ export class WriteBinaryFileInput extends CardDef {
   @field path = contains(StringField);
   @field realm = contains(StringField);
   @field base64Content = contains(StringField);
-  @field contentType = contains(StringField);
+  // No content-type field: the binary-write path always posts
+  // application/octet-stream (the realm router matches binary uploads on it)
+  // and the realm infers the file type from the destination path's extension.
   @field useNonConflictingFilename = contains(BooleanField);
 }
 
@@ -207,7 +253,7 @@ export class ReadBinaryFileResult extends CardDef {
 export class DownloadFileToRealmInput extends CardDef {
   @field sourceUrl = contains(StringField); // the URL to download
   @field realm = contains(StringField); // target realm (defaults to the writable realm)
-  @field path = contains(StringField); // destination path within the realm, e.g. "Screenshots/card.png"
+  @field path = contains(StringField); // destination path within the realm, e.g. "Captures/card.png"
   @field useNonConflictingFilename = contains(BooleanField);
 }
 
@@ -229,7 +275,7 @@ export class GenerateThumbnailOutput extends CardDef {
   @field imageDefIdentifier = contains(StringField);
 }
 
-export class ScreenshotCardInput extends CardDef {
+export class CaptureInput extends CardDef {
   @field card = linksTo(CardDef);
   @field format = contains(StringField); // 'isolated' | 'embedded'
   // The capture surface, exposed one JSON-primitive field per parameter.
@@ -250,39 +296,61 @@ export class ScreenshotCardInput extends CardDef {
   @field clipY = contains(NumberField);
   @field clipWidth = contains(NumberField);
   @field clipHeight = contains(NumberField);
+  // 'png' (the default) or 'pdf'. A pdf paginates the settled render into a
+  // document and takes none of the raster geometry above.
+  @field type = contains(StringField);
+  // 'screen' (the default) or 'print'. 'print' settles the render under the
+  // card's print CSS (`@page`, `@media print`, `break-*`) — the paper layout a
+  // pdf usually wants.
+  @field media = contains(StringField);
 }
 
-// One captured image. `url` is the durable served MediaCache URL the capture
+// One capture. `url` is the durable served MediaCache URL the capture
 // persisted under — the only reference the tool returns; a re-capture rotates
-// its bytes, never the URL.
-export class ScreenshotCapture extends FieldDef {
+// its bytes, never the URL. An image carries `width`/`height`; a pdf carries
+// `pageCount` instead.
+export class Capture extends FieldDef {
   @field name = contains(StringField);
   @field url = contains(StringField);
+  @field contentType = contains(StringField);
   @field width = contains(NumberField);
   @field height = contains(NumberField);
+  @field pageCount = contains(NumberField);
 }
 
-export class ScreenshotCardOutput extends CardDef {
-  static displayName = 'Screenshot Result';
+export class CaptureOutput extends CardDef {
+  static displayName = 'Capture Result';
 
-  @field captures = containsMany(ScreenshotCapture);
+  @field captures = containsMany(Capture);
 
-  static embedded = class Embedded extends Component<
-    typeof ScreenshotCardOutput
-  > {
+  static embedded = class Embedded extends Component<typeof CaptureOutput> {
     <template>
-      <div class='screenshot-result'>
+      <div class='capture-result'>
         {{#each @model.captures as |capture|}}
           <figure class='capture'>
             {{#if capture.url}}
-              <img src={{capture.url}} alt={{capture.name}} />
-              <figcaption><a href={{capture.url}}>{{capture.url}}</a></figcaption>
+              {{#if (eq capture.contentType 'application/pdf')}}
+                {{! A pdf can't render in an <img>, and a bare anchor to a
+                    private realm's capture is refused, so the link mints a
+                    signed URL on click. }}
+                <SignedCaptureLink @url={{capture.url}}>
+                  {{capture.name}}
+                  (PDF{{#if capture.pageCount}},
+                    {{capture.pageCount}}
+                    {{if (eq capture.pageCount 1) 'page' 'pages'}}{{/if}})
+                </SignedCaptureLink>
+              {{else}}
+                <img src={{capture.url}} alt={{capture.name}} />
+              {{/if}}
+              <figcaption><a
+                  href={{capture.url}}
+                >{{capture.url}}</a></figcaption>
             {{/if}}
           </figure>
         {{/each}}
       </div>
       <style scoped>
-        .screenshot-result {
+        .capture-result {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-sm);
@@ -352,15 +420,6 @@ export class UpdatePlaygroundSelectionInput extends CardDef {
   @field fieldIndex = contains(NumberField);
 }
 
-export class ApplySearchReplaceBlockInput extends CardDef {
-  @field fileContent = contains(StringField);
-  @field codeBlock = contains(StringField);
-}
-
-export class ApplySearchReplaceBlockResult extends CardDef {
-  @field resultContent = contains(StringField);
-}
-
 export class LintAndFixInput extends CardDef {
   @field fileContent = contains(StringField);
   @field realm = contains(StringField);
@@ -374,23 +433,360 @@ export class LintAndFixResult extends CardDef {
   @field lintWarnings = containsMany(StringField); // severity 1 only
 }
 
-export class PatchCodeResultField extends FieldDef {
-  @field status = contains(StringField); // 'applied', 'failed'
-  @field failureReason = contains(StringField); // only present if status is 'failed'
+// Shows an image a tool uploaded to the room. Room media loads only through
+// the host's `loadRoomMedia`, which answers with an object URL this releases
+// once the image is gone; without it (outside the assistant's chat) the URL
+// is used as it is.
+const roomMediaSrc = modifier(
+  (
+    img: HTMLImageElement,
+    [url, loadRoomMedia]: [
+      string | undefined,
+      CardContext['loadRoomMedia'] | undefined,
+    ],
+  ) => {
+    if (!url) {
+      img.removeAttribute('src');
+      return;
+    }
+    if (!loadRoomMedia) {
+      img.src = url;
+      return;
+    }
+    let isTornDown = false;
+    let src: string | undefined;
+    loadRoomMedia(url).then(
+      (loaded) => {
+        if (isTornDown) {
+          URL.revokeObjectURL(loaded);
+          return;
+        }
+        src = loaded;
+        img.src = loaded;
+      },
+      () => {
+        // The image stays empty, and its alt text names what it was.
+      },
+    );
+    return () => {
+      isTornDown = true;
+      if (src) {
+        URL.revokeObjectURL(src);
+      }
+    };
+  },
+);
+
+function lastPathSegment(url: string | undefined): string | undefined {
+  if (!url) {
+    return undefined;
+  }
+  try {
+    let segments = new URL(url).pathname.split('/').filter(Boolean);
+    return decodeURIComponent(segments.pop() ?? url);
+  } catch {
+    return url;
+  }
 }
 
-export class PatchCodeCommandResult extends CardDef {
-  @field patchedContent = contains(StringField);
-  @field finalFileIdentifier = contains(StringField);
-  @field lintIssues = containsMany(StringField);
-  @field results = containsMany(PatchCodeResultField);
-}
-
-export class PatchCodeInput extends CardDef {
-  @field fileIdentifier = contains(StringField);
-  @field codeBlocks = containsMany(StringField);
+export class RunRealmCodeInput extends CardDef {
+  @field code = contains(StringField);
+  @field realm = contains(StringField);
   @field roomId = contains(StringField);
 }
+
+export class RealmCodeFileResult extends FieldDef {
+  @field fileUrl = contains(StringField);
+  @field status = contains(StringField);
+  @field detail = contains(StringField);
+}
+
+// A capture the assistant looked at, already uploaded to the room's media.
+// The tool result that carries it attaches the image, which is how the model
+// receives it as image input; `sourceUrl` names what was captured.
+export class AttachedImageField extends FieldDef {
+  @field name = contains(StringField);
+  @field sourceUrl = contains(StringField);
+  @field url = contains(StringField);
+  @field contentType = contains(StringField);
+  @field contentHash = contains(StringField);
+  @field contentSize = contains(NumberField);
+  @field width = contains(NumberField);
+  @field height = contains(NumberField);
+}
+
+// A `realm.ui` action the script asked for. The host does it after the
+// script finishes; `status` is 'done' or 'failed'.
+export class RealmCodeUiActionResult extends FieldDef {
+  @field action = contains(StringField);
+  @field target = contains(StringField);
+  @field status = contains(StringField);
+  @field detail = contains(StringField);
+}
+
+export class RunRealmCodeResult extends CardDef {
+  static displayName = 'Realm Code Result';
+
+  @field files = containsMany(RealmCodeFileResult);
+  @field scriptResult = contains(StringField);
+  @field uiActions = containsMany(RealmCodeUiActionResult);
+  // What the script looked at with `realm.capture`: each capture rides the tool
+  // result as an attached image, so the model sees it.
+  @field captures = containsMany(AttachedImageField);
+  // URLs of the workspaces the script created with `realm.workspaces.create`.
+  @field createdWorkspaces = containsMany(StringField);
+  // URLs of the workspaces the script deleted with `realm.workspaces.delete`.
+  @field deletedWorkspaces = containsMany(StringField);
+  // The `realm.index` calls the script made, in order, such as `reindex` or
+  // `invalidate <paths>`. The realm server does the indexing after each call.
+  @field indexActions = containsMany(StringField);
+  // What the run changed in the room with `room.*`, one line per change, made
+  // after the script finished.
+  @field roomChanges = containsMany(StringField);
+  // The card the script asked to show with `return { show: path }`, once it
+  // is open, or why it could not be shown.
+  @field shownCard = contains(StringField);
+  @field showError = contains(StringField);
+
+  // The UI actions that failed. A UI action that was done is already visible
+  // in the app, so the chat lists only these.
+  get failedUiActions(): RealmCodeUiActionResult[] {
+    return (this.uiActions ?? []).filter(
+      (uiAction) => uiAction?.status === 'failed',
+    );
+  }
+
+  // The chat shows the card only for what the run wrote or what failed: saved
+  // or deleted files, room changes, created or deleted workspaces, a failed UI
+  // action, or a card it could not show. A run that only read, looked, or
+  // opened something has nothing for the chat to show. Its script result and
+  // captures go to the model only.
+  get [hasNothingToShow](): boolean {
+    return (
+      !this.files?.length &&
+      !this.roomChanges?.length &&
+      !this.createdWorkspaces?.length &&
+      !this.deletedWorkspaces?.length &&
+      !this.failedUiActions.length &&
+      !this.showError
+    );
+  }
+
+  // What the run changed and what it looked at. The script's own result is
+  // for the model and stays out of the chat.
+  static embedded = class Embedded extends Component<
+    typeof RunRealmCodeResult
+  > {
+    <template>
+      <div class='realm-code-result'>
+        {{#if @model.files.length}}
+          <ul class='files'>
+            {{#each @model.files as |file|}}
+              <li class='file' data-test-realm-code-file={{file.fileUrl}}>
+                <span class='status'>{{file.status}}</span>
+                <a href={{file.fileUrl}}>{{file.fileUrl}}</a>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        {{#if @model.createdWorkspaces.length}}
+          <ul class='workspaces'>
+            {{#each @model.createdWorkspaces as |url|}}
+              <li class='workspace' data-test-realm-code-created-workspace>
+                <span class='status'>Created</span>
+                <a href={{url}}>{{url}}</a>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        {{#if @model.deletedWorkspaces.length}}
+          <ul class='workspaces'>
+            {{#each @model.deletedWorkspaces as |url|}}
+              <li class='workspace' data-test-realm-code-deleted-workspace>
+                <span class='status'>Deleted</span>
+                <span>{{url}}</span>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        {{#if @model.failedUiActions.length}}
+          <ul class='ui-actions'>
+            {{#each @model.failedUiActions as |uiAction|}}
+              <li
+                class='ui-action'
+                data-test-realm-code-ui-action={{uiAction.action}}
+              >
+                <span class='status'>{{uiAction.status}}</span>
+                <span>{{uiAction.action}} {{uiAction.target}}</span>
+                {{#if uiAction.detail}}
+                  <span class='status'>{{uiAction.detail}}</span>
+                {{/if}}
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        {{#if @model.roomChanges.length}}
+          <ul class='room-changes'>
+            {{#each @model.roomChanges as |change|}}
+              <li data-test-realm-code-room-change>{{change}}</li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        {{#if @model.showError}}
+          <p class='show-error' data-test-realm-code-show-error>
+            {{@model.showError}}
+          </p>
+        {{/if}}
+        {{#if @model.captures.length}}
+          <div class='captures'>
+            {{#each @model.captures as |capture|}}
+              <img
+                class='capture'
+                alt={{capture.name}}
+                title={{capture.name}}
+                {{roomMediaSrc capture.url @context.loadRoomMedia}}
+                data-test-realm-code-capture
+              />
+            {{/each}}
+          </div>
+        {{/if}}
+      </div>
+      <style scoped>
+        .realm-code-result {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-sm);
+          font: var(--boxel-font-sm);
+        }
+        .files,
+        .workspaces,
+        .room-changes,
+        .ui-actions {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .file,
+        .workspace,
+        .ui-action {
+          display: flex;
+          gap: var(--boxel-sp-xs);
+          word-break: break-all;
+        }
+        .status {
+          flex-shrink: 0;
+          color: var(--boxel-450);
+          text-transform: capitalize;
+        }
+        .show-error {
+          margin: 0;
+          word-break: break-all;
+          color: var(--boxel-error-200);
+        }
+        .captures {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xs);
+        }
+        .capture {
+          max-width: 8rem;
+          max-height: 8rem;
+          object-fit: contain;
+          border: 1px solid var(--boxel-200);
+          border-radius: var(--boxel-border-radius);
+        }
+      </style>
+    </template>
+  };
+}
+
+export class ViewVisuallyInput extends CardDef {
+  // A card instance or a file in a workspace, by URL.
+  @field url = contains(StringField);
+  @field format = contains(StringField); // 'isolated' | 'embedded'
+  // Flat JSON-primitive geometry, for the reason `CaptureInput` gives.
+  @field viewportWidth = contains(NumberField);
+  @field viewportHeight = contains(NumberField);
+  @field fullPage = contains(BooleanField);
+}
+
+export class ViewVisuallyResult extends CardDef {
+  static displayName = 'View Visually Result';
+
+  @field sourceUrl = contains(StringField);
+  @field kind = contains(StringField); // 'card' | 'file'
+  @field format = contains(StringField);
+  // Set when the attached image shows less than the capture (a full-page
+  // capture cut to its top).
+  @field note = contains(StringField);
+  @field attachedImages = containsMany(AttachedImageField);
+
+  // What the assistant saw: the captured image, and what it is an image of.
+  static embedded = class Embedded extends Component<
+    typeof ViewVisuallyResult
+  > {
+    get title() {
+      return `View of ${lastPathSegment(this.args.model.sourceUrl) ?? 'capture'}`;
+    }
+    get image() {
+      return this.args.model.attachedImages?.[0];
+    }
+    <template>
+      <figure class='view-visually-result'>
+        <h3 class='title' data-test-view-visually-title>{{this.title}}</h3>
+        {{#if this.image.url}}
+          <img
+            alt={{this.title}}
+            {{roomMediaSrc this.image.url @context.loadRoomMedia}}
+            data-test-view-visually-image
+          />
+        {{/if}}
+        <figcaption>
+          {{#if @model.sourceUrl}}
+            <a href={{@model.sourceUrl}}>{{@model.sourceUrl}}</a>
+          {{/if}}
+          {{#if @model.note}}
+            <p class='note'>{{@model.note}}</p>
+          {{/if}}
+        </figcaption>
+      </figure>
+      <style scoped>
+        .view-visually-result {
+          margin: 0;
+          padding: var(--boxel-sp-sm);
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+        .title {
+          margin: 0;
+          font: 600 var(--boxel-font-sm);
+        }
+        img {
+          max-width: 100%;
+          border: 1px solid var(--boxel-200);
+          border-radius: var(--boxel-border-radius);
+        }
+        figcaption {
+          font: var(--boxel-font-xs);
+          word-break: break-all;
+        }
+        .note {
+          margin: var(--boxel-sp-xxxs) 0 0;
+          color: var(--boxel-450);
+        }
+      </style>
+    </template>
+  };
+}
+
+// Aliases: a stored capture-card tool result adopts from `CaptureCardOutput`,
+// and realm content references these types by name.
+export { CaptureInput as CaptureCardInput, CaptureOutput as CaptureCardOutput };
 
 export class CheckCorrectnessInput extends CardDef {
   @field targetType = contains(StringField);
@@ -640,6 +1036,11 @@ export class SendRequestViaProxyInput extends CardDef {
   @field requestBody = contains(StringField);
   @field headers = contains(JsonField); // optional
   @field multipart = contains(BooleanField); // optional
+  // How long the caller is prepared to wait, in milliseconds. A tool input is
+  // a CardDef, so a deadline can only be expressed as serializable data — the
+  // host turns this into the abort signal on the request. Unset means wait
+  // indefinitely.
+  @field timeoutMs = contains(NumberField); // optional
 }
 
 export class SendRequestViaProxyResult extends CardDef {
@@ -659,6 +1060,9 @@ export {
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
   SearchCardSummaryField,
+  SearchEntriesInput,
+  SearchEntriesResult,
+  SearchEntrySummaryField,
 };
 
 export class RealmInfoField extends FieldDef {
@@ -706,6 +1110,50 @@ export class ExecuteAtomicOperationsInput extends CardDef {
 
 export class ExecuteAtomicOperationsResult extends CardDef {
   @field results = containsMany(JsonField);
+}
+
+// One invocation of one operation a card's type declares. 'payload' carries
+// the operation's params, keyed exactly as its 'params' schema names them.
+//
+// 'realm' and 'relationships' describe a card the plain 'create' mints, and
+// are read for nothing else: where it lands, and the links it is created
+// holding, as JSON:API relationship objects. An operation that runs against
+// the card at 'cardId' runs in that card's own realm, and a declared
+// operation takes the cards it links among its params.
+export class InvokeCardOperationInput extends CardDef {
+  @field cardId = contains(StringField);
+  @field operation = contains(StringField);
+  @field payload = contains(JsonField);
+  @field realm = contains(StringField);
+  @field relationships = contains(JsonField);
+  // The same opt-out `SaveCardInput.skipIndexWait` is, for a write made
+  // through an operation: the realm answers once the write is durable rather
+  // than once it is indexed. Opt-in for the same reason, so an unset field
+  // keeps the waiting behavior.
+  @field skipIndexWait = contains(BooleanField, {
+    description:
+      'Leave unset normally. Set true only to make a write return without waiting for the realm to index it — the written card may briefly not appear in searches. Do not set this when a search for the written card follows.',
+  });
+}
+
+// What an operation answers, in the two shapes an answer takes. A write
+// reports the card it wrote and the version it wrote — the card's own id, not
+// the target's, so a create reports the card it minted. A read reports the
+// document, which an author's output program may have reshaped. A delete
+// answers nothing and so fills neither: the card is gone, and the invocation
+// having succeeded is the whole of the news.
+//
+// 'cardId' rather than 'id' because CardDef already carries 'id' as the
+// instance's own identifier.
+export class InvokeCardOperationResult extends CardDef {
+  @field cardId = contains(StringField);
+  @field version = contains(StringField);
+  @field generation = contains(NumberField);
+  // True when the realm answered the write before indexing it, which is why
+  // `generation` is empty: a search may not show the write until it lands.
+  @field indexPending = contains(BooleanField);
+  @field lastModified = contains(NumberField);
+  @field document = contains(JsonField);
 }
 
 // A publish destination for a realm. 'type' is 'subdirectory' (a Boxel Space
@@ -958,4 +1406,9 @@ export class SyncOpenRouterModelsResult extends CardDef {
   @field totalModels = contains(NumberField);
   @field status = contains(StringField);
   @field errors = contains(StringField);
+}
+
+export class CreateWorkspaceInput extends CardDef {
+  @field name = contains(StringField); // display name; a random name is generated when omitted
+  @field endpoint = contains(StringField); // URL path segment (letters, digits, hyphens); derived from the name when omitted
 }

@@ -5,6 +5,7 @@ import {
 import { PREFIX_REALM_PREFIXES } from './realm-prefixes.ts';
 import { RealmPaths, ensureTrailingSlash } from './paths.ts';
 import { baseRealm } from './index.ts';
+import { isPrefixForm } from './realm-identifiers.ts';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
@@ -14,6 +15,7 @@ import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
   type ModuleLike,
+  type ShimRetryDeps,
 } from './package-shim-handler.ts';
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher.ts';
@@ -91,10 +93,11 @@ export class VirtualNetwork {
     nativeFetch = createEnvironmentAwareFetch(),
     opts?: {
       fetchHeaderTimeoutMs?: number;
-      // A timer scheduler for the fetch retry path. Defaults to the global
+      // A timer scheduler for the fetch retry path, which includes the
+      // package shim resolvers' retry backoff. Defaults to the global
       // setTimeout; the host passes a NATIVE (un-stubbed) scheduler so the
-      // header-timeout abort and retry backoff still fire during prerender,
-      // where render-timer-stub disables the global setTimeout.
+      // header-timeout abort and both retry backoffs still fire during
+      // prerender, where render-timer-stub disables the global setTimeout.
       scheduleFetchTimer?: (callback: () => void, ms: number) => unknown;
     },
   ) {
@@ -186,14 +189,59 @@ export class VirtualNetwork {
     return moduleIdentifier;
   };
 
-  private packageShimHandler = new PackageShimHandler(this.resolveImport);
+  // A shim resolver's retry backoff sleeps on the fetch timer, so during a
+  // prerender its retries run out and the resolver gives up promptly rather
+  // than waiting on a stubbed setTimeout that never fires. Giving up promptly
+  // matters even though a retried `import()` of a chunk that failed to fetch
+  // fails again in the same document: the prerender recognises that failure
+  // and moves the render to a fresh tab, which it can only do once the render
+  // has failed. The resolver's deadline runs on the same timer for the same
+  // reason: on the stubbed setTimeout it would never fire, and a resolver that
+  // never settles would park the import until the render's own timeout instead
+  // of failing with the specifier named. `clearTimeout` isn't stubbed, so it
+  // cancels the fetch timer's handle. The scheduler is read when a timer
+  // starts, since the constructor assigns it after this field.
+  private packageShimHandler = new PackageShimHandler(this.resolveImport, {
+    delay: (ms) =>
+      new Promise<void>((resolve) => {
+        this.scheduleFetchTimer(resolve, ms);
+      }),
+    scheduleTimeout: (callback, ms) => {
+      let handle = this.scheduleFetchTimer(callback, ms);
+      return () => clearTimeout(handle as ReturnType<typeof setTimeout>);
+    },
+  });
 
   shimModule(moduleIdentifier: string, module: ModuleLike) {
     this.packageShimHandler.shimModule(moduleIdentifier, module);
   }
 
-  shimAsyncModule(descriptor: ModuleDescriptor) {
-    this.packageShimHandler.shimAsyncModule(descriptor);
+  // `retryDeps` reaches the handler's retry and deadline knobs, which is how
+  // a test registers a shim through the network it is exercising instead of
+  // reaching past it to build a handler of its own.
+  shimAsyncModule(descriptor: ModuleDescriptor, retryDeps?: ShimRetryDeps) {
+    this.packageShimHandler.shimAsyncModule(descriptor, retryDeps);
+  }
+
+  // Lets a Loader serve a module shimmed on this network from its module-fetch
+  // path, whatever URL the shim is registered under. The lookup folds every
+  // spelling of the identifier (realm-prefix form, virtual alias, url-mapped
+  // alias) onto the real URL, which is the form shims for realm-mapped
+  // identifiers are keyed by, so all spellings converge on one module.
+  getShimmedModule(url: string): Promise<ModuleLike | undefined> {
+    return this.packageShimHandler.lookupModule(
+      this.toRealURLHref(url),
+      this.unresolveURL(url),
+    );
+  }
+
+  // The dependencies a shimmed module declares, for the loader to record as
+  // its consumed modules.
+  getShimmedModuleDeps(url: string): string[] {
+    return this.packageShimHandler.lookupModuleDeps(
+      this.toRealURLHref(url),
+      this.unresolveURL(url),
+    );
   }
 
   addURLMapping(from: URL, to: URL) {
@@ -427,6 +475,37 @@ export class VirtualNetwork {
   }
 
   /**
+   * The path of `identifier` below its namespace, for an identifier whose realm
+   * is not known: below `@scope/name/` for a prefix-form identifier, and below
+   * `scheme://authority` for a URL, with no leading slash.
+   *
+   * A URL's path comes back with its dot segments resolved, its query and hash
+   * dropped, and its percent-escapes decoded. A prefix-form path comes back as
+   * written. An identifier that is neither comes back as written, less any
+   * leading slash.
+   */
+  pathBelowNamespace(identifier: string): string {
+    if (isPrefixForm(identifier)) {
+      return identifier.split('/').slice(2).join('/');
+    }
+    let path: string;
+    try {
+      // Prefix forms return above, so this parses a URL or something that is
+      // neither, which the catch keeps as written.
+      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
+      path = new URL(identifier).pathname;
+    } catch {
+      return identifier.replace(/^\//, '');
+    }
+    try {
+      path = decodeURI(path);
+    } catch {
+      // A malformed escape keeps the path as written.
+    }
+    return path.replace(/^\//, '');
+  }
+
+  /**
    * Convert a URL back to its registered prefix form when one matches,
    * e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
    *
@@ -560,7 +639,19 @@ export class VirtualNetwork {
       return new URL(resolved);
     }
     // Not a registered prefix; parse as a plain URL.
-    return new URL(rri);
+    try {
+      return new URL(rri);
+    } catch {
+      // `Invalid URL` alone says neither which identifier failed nor that a
+      // prefix was looked for, and this throws from paths whose stack does not
+      // survive to the reader. Not an `Error` `cause`: this module is
+      // type-checked by packages whose lib predates it.
+      throw new Error(
+        `cannot resolve ${JSON.stringify(rri)} to a URL: it is not a URL, and ` +
+          `no registered realm prefix matches it (registered: ` +
+          `${[...this.realmMappings.keys()].join(', ')})`,
+      );
+    }
   }
 
   /**
@@ -590,6 +681,24 @@ export class VirtualNetwork {
    * same entry. `unresolveURL` alone is NOT usable as the key — it leaves a
    * virtual/url-mapped alias unchanged, so those spellings split from the RRI.
    */
+  // The key form of an identifier, for the stores that fold every spelling of
+  // one resource onto a single key. `toRealURLHref` where it resolves, and the
+  // identifier unchanged where it does not.
+  //
+  // An identifier minted from a realm prefix this network does not carry — one
+  // canonicalized by a network that had the mapping and then read by a network
+  // that never did — cannot be folded onto anything. It still needs a key, and
+  // being its own splits it from the spellings it should have joined, which
+  // costs a cache hit. Throwing instead costs the caller: these run inside
+  // tasks nobody awaits, where a throw is an unhandled rejection.
+  keyForIdentifier(id: string): string {
+    try {
+      return this.toRealURLHref(id);
+    } catch {
+      return id;
+    }
+  }
+
   toRealURLHref(id: string): string {
     let cached = this.realURLHrefCache.get(id);
     if (cached !== undefined) {

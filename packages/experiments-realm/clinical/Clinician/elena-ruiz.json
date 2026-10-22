@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "fullName": "Elena Ruiz, PharmD",
+      "role": "Clinical pharmacist",
+      "userId": "@elena.ruiz:boxel.ai",
+      "activeCaseload": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clinician",
+        "name": "Clinician"
+      }
+    }
+  }
+}

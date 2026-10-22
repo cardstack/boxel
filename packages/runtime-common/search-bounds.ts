@@ -31,9 +31,21 @@ const log = logger('search-bounds');
 //     clamping, because there the author who wrote the number is the one who
 //     sees the error. The true match count rides `meta.page.total` either way,
 //     so a caller can paginate — and can see that it got a short page.
-//   - Realms fan-out (MAX_REALMS_PER_SEARCH_REQUEST) and concurrency
-//     (SEARCH_CONCURRENCY_CAP) — client-side only, on the card `@context`
-//     surface: the host federates widely and runs its own searches freely.
+//   - Realms fan-out (MAX_REALMS_PER_SEARCH_REQUEST) — client-side only, on the
+//     card `@context` surface: the host federates widely.
+//   - Concurrency (SEARCH_CONCURRENCY_CAP, QUERY_FIELD_SEARCH_CONCURRENCY_CAP)
+//     — client-side only, and two lanes per store service rather than one
+//     ceiling. The card `@context` surface takes SEARCH_CONCURRENCY_CAP slots
+//     and query-field resolution takes QUERY_FIELD_SEARCH_CONCURRENCY_CAP of
+//     its own, so a store service has at most the sum in flight. The lanes are
+//     separate so the eager query-field fan-out, which grows with every card a
+//     page deserializes, never holds the slots a search the card asked for is
+//     waiting on. Within each lane a page's fan-out is bounded
+//     however it is spread across cards. Each store service holds its own
+//     pair, so neither is a single number across a tab. The host runs its own
+//     searches freely. Unlike the server-side bounds, neither cap can be tuned
+//     by env: the host bundle has no `process.env`, so both hold their defaults
+//     wherever they are enforced.
 //   - Time budget (SEARCH_TIME_BUDGET_MS) — server-side only: a wall-clock
 //     cutoff of the server's own work can't live anywhere else.
 //   - In-flight ceiling (SERVER_MAX_IN_FLIGHT_SEARCHES, with
@@ -44,8 +56,20 @@ const log = logger('search-bounds');
 //     decides whether a burst exhausts the heap. Enforced at admission in the
 //     realm-server's request middleware; arrivals above the ceiling wait
 //     briefly for a slot and are then shed with 429 + Retry-After.
+//   - Assembled link resources (SERVER_MAX_ASSEMBLED_LINK_RESOURCES) —
+//     server-side only, and the one bound whose polarity is inverted: every
+//     `loadLinks` assembly is held to it unless a caller opts out, because a
+//     closure is assembled by more routes than search, and a bound that must be
+//     remembered per route is a bound a new route forgets. Counted in resources
+//     rather than in bytes because the resource is what the walk schedules, so
+//     the count bounds the batched reads as well as the assembly; and the cost
+//     it stands in for is the event-loop CPU of cloning, rewriting and
+//     serializing each one, which scales with the count. Counted in resources
+//     rather than in hops because distance does not track expense: a card
+//     carrying dozens of relationships is dozens of resources one hop out.
 //
-// All bounds are exported consts, overridable via env for ops tuning.
+// All bounds are exported consts, overridable via env for ops tuning where the
+// enforcing process has an env to read (see the concurrency caps above).
 // ---------------------------------------------------------------------------
 
 const DEFAULT_MAX_SEARCH_PAGE_SIZE = 100;
@@ -54,13 +78,16 @@ const DEFAULT_SERVER_ABSOLUTE_MAX_PAGE_SIZE = 2_000;
 const DEFAULT_MAX_REALMS_PER_SEARCH_REQUEST = 2;
 const DEFAULT_SEARCH_TIME_BUDGET_MS = 30_000;
 const DEFAULT_SEARCH_CONCURRENCY_CAP = 2;
+const DEFAULT_QUERY_FIELD_SEARCH_CONCURRENCY_CAP = 2;
 const DEFAULT_SERVER_MAX_IN_FLIGHT_SEARCHES = 30;
 const DEFAULT_SEARCH_ADMISSION_WAIT_MS = 1_000;
+const DEFAULT_SERVER_MAX_ASSEMBLED_LINK_RESOURCES = 1_000;
 
 const MIN_PAGE_SIZE = 1;
 const MIN_REALMS = 1;
 const MIN_TIME_BUDGET_MS = 1_000;
 const MIN_CONCURRENCY = 1;
+const MIN_ASSEMBLED_LINK_RESOURCES = 1;
 
 // Clamp an env override to a positive integer, falling back (also clamped) when
 // the value is missing or non-numeric so a bad env var can't disable a bound.
@@ -143,23 +170,38 @@ export const SEARCH_TIME_BUDGET_MS = parsePositiveInt(
   MIN_TIME_BUDGET_MS,
 );
 
-// Max concurrent card-initiated item-leg searches. Enforced client-side on the
-// `@context` surface (see host StoreService); exported here so the client and
-// the shared contract agree on one number.
+// Max card `@context` item-leg searches one store service may have in flight at
+// once. Enforced client-side (see host StoreService); exported here so the
+// client and the shared contract agree on one number. Excess searches queue
+// rather than fail, so this bounds the concurrency and never the count.
 export const SEARCH_CONCURRENCY_CAP = parsePositiveInt(
   env.SEARCH_CONCURRENCY_CAP,
   DEFAULT_SEARCH_CONCURRENCY_CAP,
   MIN_CONCURRENCY,
 );
 
-// Max searches the realm-server process runs at once, across every caller.
-// Enforced server-side at admission (see the realm-server's
-// `search-inflight.ts`). Sized against the per-search heap cost: a few dozen
-// concurrent federated searches exhaust a 2 GB heap, so the default keeps a
-// process on the default heap alive and leaves headroom on a larger one.
-// Indexing traffic is admitted regardless of this ceiling (it is bounded
-// upstream by the prerender pool), so the effective room for interactive
-// searches is whatever indexing isn't using.
+// Max query-field resolution searches one store service may have in flight at
+// once — a lane of its own beside SEARCH_CONCURRENCY_CAP's, so the two add up
+// rather than share. Like that cap it queues the excess and bounds the
+// concurrency, never the count.
+export const QUERY_FIELD_SEARCH_CONCURRENCY_CAP = parsePositiveInt(
+  env.QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
+  DEFAULT_QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
+  MIN_CONCURRENCY,
+);
+
+// Max search admission slots the realm-server process hands out at once,
+// across every caller. Enforced server-side at admission (see the realm-server's
+// `search-inflight.ts`), before the request body is read. A request that the
+// live-search cache serves from another request's computation hands its slot
+// back as soon as the cache says so, so the slots are held by searches
+// assembling their own result document — the ones that hold heap — plus the
+// requests briefly between admission and the cache lookup. Sized so that a
+// full gate of distinct computations fits a 2 GB heap: each holds tens of MB
+// while it assembles, and a few dozen exhaust that heap. Raise it per
+// environment where the heap allows. Indexing traffic is admitted regardless
+// of this ceiling (it is bounded upstream by the prerender pool), so the
+// effective room for interactive searches is whatever indexing isn't using.
 export const SERVER_MAX_IN_FLIGHT_SEARCHES = parsePositiveInt(
   env.SERVER_MAX_IN_FLIGHT_SEARCHES,
   DEFAULT_SERVER_MAX_IN_FLIGHT_SEARCHES,
@@ -176,6 +218,274 @@ export const SEARCH_ADMISSION_WAIT_MS = parsePositiveInt(
   0,
 );
 
+// The most link targets one `loadLinks` assembly may take on, and the whole
+// bound on how far a card's transitive link closure is walked.
+//
+// Counted where a target is classified rather than where it lands, which is
+// what lets the ceiling bound the batched reads and not just the assembly. The
+// two totals differ by the targets that turn out to have nothing behind them: a
+// link whose row is missing or errored, and a cross-realm fetch that fails,
+// each spend from the ceiling and add nothing to `included[]`. So a card with
+// many broken links can report its closure clipped while carrying fewer
+// resources than the ceiling allows — the bound is on work undertaken, which is
+// the quantity that costs, and it errs toward doing less of it.
+//
+// Sized as a safety ceiling rather than as a tuning knob. On realms in use the
+// widest card's closure runs to the low hundreds of resources, and a
+// hundred-row page of the most connected type unions to about the same, so the
+// ceiling sits several times above that. It also lands near the point where one
+// assembly would hold the tens of MB of heap SERVER_MAX_IN_FLIGHT_SEARCHES
+// assumes per in-flight search, a serialized resource running a little over
+// 2 KB. So it is not expected to engage; it exists so that no single card graph
+// — authored by a person or by a model, and re-editable at any time — can make
+// one request assemble an unbounded document.
+//
+// Changing this value changes which responses are truncated and what a
+// truncated one contains, while none of the other validator inputs move, so it
+// is folded into the card+json ETag variant (see `cardJsonEtagVariant` in
+// realm.ts). A client holding a validator would otherwise be told the shape it
+// cached is still fresh across a retune.
+export const SERVER_MAX_ASSEMBLED_LINK_RESOURCES = parsePositiveInt(
+  env.SERVER_MAX_ASSEMBLED_LINK_RESOURCES,
+  DEFAULT_SERVER_MAX_ASSEMBLED_LINK_RESOURCES,
+  MIN_ASSEMBLED_LINK_RESOURCES,
+);
+
+// ---------------------------------------------------------------------------
+// The link-shape policy's tuning (see runtime-common/link-shape-policy.ts).
+//
+// These decide how much of a result's link graph a live read carries, chosen
+// from prevailing load. Admission control answers a burst against its cap by
+// refusing work; this answers sustained load by serving a cheaper
+// representation, which costs the caller a follow-up fetch rather than the
+// whole request.
+//
+// The reading the thresholds below are compared against is the time-weighted
+// mean of **search requests in flight** on one process: every admitted
+// `_search` / `_federated-search` from admission until its response ends,
+// including the ones the live-search cache answers from another request's
+// computation. It is not the admission gate's own count, which is of
+// computations — a request the cache answers hands its slot back as soon as
+// the cache decides so, while it goes on waiting for the computation it
+// joined. The two differ by a factor that tracks the cache's miss rate, and
+// that factor is not a property of the process: it was 3.1-4.5 on a staging
+// dashboard load whose readers shared eight queries (a 19% miss rate) and
+// 1.6-2.0 on production traffic (a 54% miss rate). A threshold in computation
+// units therefore denoted roughly twice as many requests on the first as on
+// the second, which is why the thresholds are in request units.
+//
+// The thresholds are absolute request counts, per replica. They are not
+// bounded by the admission cap: the cap counts computations, and the request
+// count exceeds it whenever the cache coalesces.
+//
+// The request readings below were reconstructed from the realm server's own
+// request log — each admitted `_search` / `_federated-search`, per-realm and
+// indexing-lane requests included and shed requests excluded, occupying the
+// span its logged duration covers — because they were measured on processes
+// that did not count requests themselves. That span begins before admission,
+// so it includes any time a request spent queued for a slot, which this count
+// does not; the reconstruction reads high by at most the request rate times
+// the admission wait (about 2.7 per replica on the engaged staging arm, and
+// only while the gate was full), so the same traffic reads somewhat lower on
+// the count the ladder actually uses.
+// ---------------------------------------------------------------------------
+
+// Half-life of the time-weighted mean of search requests in flight the policy
+// decides on. The measured episodes are hour-long plateaus, so the reading is
+// insensitive to this within the range tried (30s-300s moved its p90 by under
+// 12% on the saturation window). Chosen for stability rather than fit: two
+// minutes puts the reading ~90% of the way to a sustained change after about
+// seven, which is the "changes over minutes" the sticky decision needs, and it
+// flattens the bursts that reach the cap instantaneously without ever being
+// sustained — on a production window whose admission-slot samples peaked at
+// the cap of 30, the same mean over those samples peaked at 17.
+const DEFAULT_LINK_SHAPE_LOAD_HALF_LIFE_MS = 120_000;
+
+// The floor on how long a realm holds a level before it may leave it. The
+// hysteresis band below is what actually keeps production steady — this
+// changed nothing on either measured window, at either 60s or 120s. It earns
+// its place by bounding the adversarial case the band cannot: a reading driven
+// to swing the full band repeatedly can still only move a realm once per
+// interval, so the flap rate is bounded by construction rather than by how the
+// signal happens to behave.
+const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
+
+// Engage/release pairs for the two rungs.
+//
+// Each value is a **threshold on the load reading** — the time-weighted mean
+// of search requests in flight on this process, per replica — and not a
+// setting that selects a link shape. Crossing one moves a realm's rung; which
+// shape a rung then serves is fixed by the ladder, not by these. Hence the
+// `_THRESHOLD` suffix: a bare `…_ENGAGE` reads as a switch that turns a shape
+// on, which is the one thing these do not do.
+//
+// The lower rung degrades only reads that may return more than one row; the
+// upper one degrades every live read. The gap between each engage and its
+// release is the hysteresis band.
+//
+// # Each value is per replica, and the fleet size is part of the number
+//
+// The reading is fed only by the requests one process served, and the ladder
+// is a `Map` in that process's memory with no shared store. So the fleet-wide
+// load a rung corresponds to is the threshold multiplied by the number of
+// tasks. These are fitted against a **two-task** realm-server fleet, in both
+// the staging runs and the production windows below. Doubling the fleet halves
+// each replica's share of the same traffic, so it does not make the rungs more
+// sensitive — it makes them take twice the fleet-wide load to reach. A
+// threshold carried to a fleet of a different size is a different policy, and
+// the count to read is distinct containers *concurrently*, not distinct
+// container ids seen over a window, which a deployment inflates.
+//
+// # Two populations, answering two different questions
+//
+// Where the lower rung engages is fitted to the one measurement of what
+// engaging buys: a staging A/B of the same dashboard load (19 readers, one
+// writer, an unbounded derived workload, 20 minutes, two replicas) run once
+// with the rung engaging and once with it held out of reach, same build and
+// same host bundle, only the thresholds different. Engaged, median
+// `loadLinks` fell from 1,923 ms to 631 ms, handler p50 from 3,517 ms to
+// 1,995 ms, a dashboard pass's payload from 8.8 MB to 6.8 MB, and throughput
+// rose from 288 to 326 searches a minute with a quarter of the 30-second
+// cancellations. The write path did not move (median 13,679 against
+// 13,664 ms over 145 writes), and neither did mean `loadLinks` — the rung
+// makes the typical search cheaper and leaves the expensive tail where it
+// was, so no placement of it is an answer to a slow p99.
+//
+// Where the rungs sit relative to ordinary traffic is a question about
+// production, which is used here as a guard and not as the fit: a harness
+// workload reaches a given reading with far fewer, costlier requests than
+// real traffic does, so the two populations are read separately and never
+// pooled.
+//
+// # Where the lower rung sits, and why
+//
+// The engaged arm's own rung first fired on each replica at request readings
+// of 13.7 and 15.4, and its other transitions fell between 13.8 and 18.8. On
+// the first replica the reading had already passed 14 about two minutes
+// earlier, peaked at 15.1 and dipped back to 13.7 by the time that rung
+// fired; the rung is consulted only on a read, so it fires on whatever the
+// reading is when one arrives. The held-out arm — load where engaging would
+// have helped, and did not happen — read p50 14.4 and 17.2 on its two
+// replicas. 14 is the highest engage that takes both promptly: it is crossed
+// 3.5 and 4.5 minutes into the engaged arm and 4.5 and 2.2 minutes into the
+// held-out one, which it then
+// holds for 67% and 89% of the window. At 15 the held-out arm's first replica
+// spends only 31% of its window engaged; at 16, 9%.
+//
+// On production, over 304 replica-hours from mid-September at the 5s cadence
+// with both tasks covered, ordinary traffic's request reading peaks at 3.70,
+// so 14 leaves close to four times the headroom over the busiest quiet
+// window; replaying the ladder over that span degrades 0.0% of it.
+//
+// Production engages later on this rung than a computation count would have it
+// engage, and that is deliberate. Production's miss rate is higher, so the same
+// request count produces a larger computation count there: at the moments a
+// computation rung of 4 actually fired, the request reading was 6.3-9.0 on
+// production and 13.7-18.8 on the harness. Replayed over a saturation episode on production (1.5 hours, two
+// replicas), a request rung of 14 degrades 20.9% of the episode where a
+// computation rung of 4 degrades 53.7%, and a second, smaller wave in the same
+// episode, peaking at a reading of 13.1, does not engage at all. That replay
+// is open-loop — it replays a trajectory recorded while a computation ladder
+// was already degrading it — so the busy-window figures are estimates, and
+// they err low: a ladder that degrades less of an episode sees a higher
+// reading than the one replayed. The quiet-window figure is unaffected, since
+// nothing engages there.
+//
+// The release keeps the engage/release ratio of 1/2 the ladder uses at both
+// rungs, which puts it at 7. Coming off load, the reading falls under 7 within
+// 0-34 s of when the computation count's mean falls under 2 across six
+// replica-windows, so a release of 7 on requests is as prompt as a release of
+// 2 on computations. It is also not what decides how long a realm is
+// *recorded* at a degraded level after load ends: the level is evaluated only
+// on a read, so an idle realm keeps the level it had until its next reader
+// arrives, and that reader is decided against the current reading and served
+// the released shape.
+//
+// What this rung is not is a defence against the cost of any one search. The
+// reading counts requests and says nothing about what each is doing, so the
+// same number covers very different amounts of work — an expensive derived
+// workload reaches a given reading with far fewer requests than ordinary
+// traffic does. Two readings are comparable only within a similar mix.
+const DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD = 14;
+const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD = 7;
+
+// The upper rung sheds the closure from single-row reads too, which is the
+// last thing a live read has left to give up, and nothing has measured it
+// helping. So it is placed above every load it has been observed on rather
+// than against one: the sustained request reading peaked at 22.4 on the
+// engaged staging arm (reached after engaging), 20.9 on the held-out one, and
+// no higher than 23.6 on any staging load window, so 28 sits at least 19%
+// clear of all of them and load measured as beneficial at the lower rung does
+// not reach this one.
+//
+// Production's busiest recent episode read 27.5 at its peak, and that is a
+// floor rather than a prediction: it was recorded while a ladder engaging at
+// a lower request count was degrading over half the episode, and degrading
+// shortens service time, which lowers the reading. Under this ladder, which
+// degrades less of it, the same traffic would read higher and may reach
+// `all`. That is accepted: an episode at that level is one the admission gate
+// is already shedding on, which is the regime the last rung exists for. A
+// rung of 24 would have put that episode at `all` from the moment its first
+// requests were shed, even on the degrading trajectory.
+//
+// It is not placed against the onset of shedding, because that onset is not a
+// sustained reading: sheds are driven by bursts against the instantaneous
+// admission cap, and on the loads above they began at request readings from
+// 8.7 to 17.7 — inside the range where the lower rung is measured to help.
+//
+// The release keeps the ratio of 1/2, at 14, which is also the lower rung's
+// engage: a realm coming down off `all` returns to `multi-row` no earlier than
+// the reading at which it would have entered it.
+const DEFAULT_LINK_SHAPE_ALL_ENGAGE_THRESHOLD = 28;
+const DEFAULT_LINK_SHAPE_ALL_RELEASE_THRESHOLD = 14;
+
+// How often a process that is serving live reads records the decision it is
+// making, even when that decision is "no change". Without it, a policy that
+// never engages is indistinguishable from one that is not running.
+const DEFAULT_LINK_SHAPE_HEARTBEAT_MS = 60_000;
+
+export const LINK_SHAPE_LOAD_HALF_LIFE_MS = parsePositiveInt(
+  env.LINK_SHAPE_LOAD_HALF_LIFE_MS,
+  DEFAULT_LINK_SHAPE_LOAD_HALF_LIFE_MS,
+  1,
+);
+
+export const LINK_SHAPE_MIN_DWELL_MS = parsePositiveInt(
+  env.LINK_SHAPE_MIN_DWELL_MS,
+  DEFAULT_LINK_SHAPE_MIN_DWELL_MS,
+  0,
+);
+
+export const LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+  1,
+);
+
+export const LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD,
+  0,
+);
+
+export const LINK_SHAPE_ALL_ENGAGE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
+  1,
+);
+
+export const LINK_SHAPE_ALL_RELEASE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_ALL_RELEASE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_ALL_RELEASE_THRESHOLD,
+  0,
+);
+
+export const LINK_SHAPE_HEARTBEAT_MS = parsePositiveInt(
+  env.LINK_SHAPE_HEARTBEAT_MS,
+  DEFAULT_LINK_SHAPE_HEARTBEAT_MS,
+  1,
+);
+
 // The effective values the enforcement functions read. They default to the
 // exported consts (the ops-facing knobs); a test overrides them via
 // `setSearchBoundsForTests` to exercise a bound without adding realms or
@@ -185,6 +495,7 @@ let serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
 let serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
 let maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
 let timeBudgetMs = SEARCH_TIME_BUDGET_MS;
+let maxAssembledLinkResources = SERVER_MAX_ASSEMBLED_LINK_RESOURCES;
 
 // The (size, max) pairs already reported by `warnOncePerClamp`. In practice a
 // clamp is driven by an authored page size — a constant in a card definition —
@@ -202,6 +513,7 @@ export function setSearchBoundsForTests(overrides: {
   serverAbsoluteMaxPageSize?: number;
   maxRealmsPerRequest?: number;
   timeBudgetMs?: number;
+  maxAssembledLinkResources?: number;
 }): void {
   if (overrides.maxPageSize !== undefined) {
     maxPageSize = overrides.maxPageSize;
@@ -218,6 +530,9 @@ export function setSearchBoundsForTests(overrides: {
   if (overrides.timeBudgetMs !== undefined) {
     timeBudgetMs = overrides.timeBudgetMs;
   }
+  if (overrides.maxAssembledLinkResources !== undefined) {
+    maxAssembledLinkResources = overrides.maxAssembledLinkResources;
+  }
 }
 
 export function resetSearchBoundsForTests(): void {
@@ -227,6 +542,15 @@ export function resetSearchBoundsForTests(): void {
   serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
   maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
   timeBudgetMs = SEARCH_TIME_BUDGET_MS;
+  maxAssembledLinkResources = SERVER_MAX_ASSEMBLED_LINK_RESOURCES;
+}
+
+// The effective assembled-resource budget. Read through a function rather than
+// imported as a const so the test seam above reaches it — a test exercises the
+// bound by lowering it to a handful of resources instead of authoring a
+// thousand-card graph.
+export function assembledLinkResourceBudget(): number {
+  return maxAssembledLinkResources;
 }
 
 // The item leg (`fields[entry]` includes "item" / "item.<field>") is the live

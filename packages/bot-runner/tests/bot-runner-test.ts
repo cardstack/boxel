@@ -139,7 +139,9 @@ module('timeline handler', () => {
     close: async () => {},
     getColumnNames: async () => [],
     withWriteLock: async (_url, fn) => fn(undefined),
+    withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
     withUserCostLock: async (_userId, fn) => fn(),
+    withTransaction: async (fn) => fn(async () => []),
   } as DBAdapter;
 
   queuePublisher = {
@@ -272,7 +274,7 @@ module('timeline handler', () => {
             allFileContents: [
               {
                 filename: 'experiments/MyListing/listing.json',
-                contents: '{\"data\":{\"type\":\"card\"}}',
+                contents: '{"data":{"type":"card"}}',
               },
               {
                 filename: 'experiments/MyListing/readme.md',

@@ -7,15 +7,14 @@ import { tracked } from '@glimmer/tracking';
 
 import { bool, eq, or } from '@cardstack/boxel-ui/helpers';
 
+import { resetPasswordParamsFrom } from '@cardstack/host/lib/reset-password-link';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import AuthContainer from './auth-container';
 
-import ForgotPassword from './forgot-password';
+import ForgotPassword, { type ResetPasswordParams } from './forgot-password';
 import Login from './login';
 import RegisterUser from './register-user';
-
-import type { ResetPasswordParams } from './forgot-password';
 
 export type AuthMode = 'login' | 'register' | 'forgot-password';
 
@@ -46,13 +45,17 @@ export default class Auth extends Component {
   constructor(owner: Owner, args: any) {
     super(owner, args);
 
-    let sid = this.router.currentRoute?.queryParams['sid'];
-    let clientSecret = this.router.currentRoute?.queryParams['clientSecret'];
-    if (sid && clientSecret) {
-      this.resetPasswordParams = {
-        sid: sid as string,
-        clientSecret: clientSecret as string,
-      };
+    let { params, inFragment } = resetPasswordParamsFrom(
+      this.router.currentRoute?.queryParams ?? {},
+      window.location.hash,
+    );
+    this.resetPasswordParams = params;
+    if (inFragment) {
+      window.history.replaceState(
+        window.history.state,
+        '',
+        window.location.pathname + window.location.search,
+      );
     }
   }
 

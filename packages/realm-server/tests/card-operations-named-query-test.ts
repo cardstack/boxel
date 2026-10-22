@@ -1,0 +1,736 @@
+import QUnit from 'qunit';
+const { module, test } = QUnit;
+import { basename } from 'path';
+import { isResolvedCodeRef, rri } from '@cardstack/runtime-common';
+import type { CodeRef, ResolvedCodeRef } from '@cardstack/runtime-common';
+import {
+  admitsNothing,
+  isNamedQueryPayload,
+  isOperationFailure,
+  resolveNamedQuery,
+  setNamedQueryRefusalHiddenSink,
+  type NamedQueryAdmittingNothing,
+  type NamedQueryContext,
+  type NamedQueryRefusalHiddenEvent,
+  type OperationCore,
+  type OperationDefinition,
+  type ResolvedNamedQuery,
+} from '@cardstack/runtime-common/card-operations';
+import type { Definition } from '@cardstack/runtime-common/definitions';
+
+// ============================================================================
+// Resolving a named query against a type's stored definition.
+//
+// The definition cache is stubbed, so what is under test is the resolution
+// alone: which members of the request survive it, what `actor()` becomes,
+// which realms the query ends up scoped to, and what changes in a render. The
+// endpoints that call it are covered against a real realm in
+// `server-endpoints/named-query-test`.
+// ============================================================================
+
+const REALM_A = 'http://example.test/a/';
+const REALM_B = 'http://example.test/b/';
+const REPORT: ResolvedCodeRef = {
+  module: rri(`${REALM_A}report`),
+  name: 'Report',
+};
+const ANCHOR = { 'item.on': REPORT };
+
+const OPERATIONS: Record<string, OperationDefinition> = {
+  byStatus: {
+    base: 'query',
+    deterministic: true,
+    params: { status: {} as any },
+    query: {
+      filter: {
+        ...ANCHOR,
+        eq: { 'item.status': { $ref: 'params', key: 'status' } as const },
+      },
+    },
+  },
+  mine: {
+    base: 'query',
+    deterministic: true,
+    query: {
+      filter: { ...ANCHOR, eq: { 'item.owner': { $ref: 'actor' } as const } },
+    },
+  },
+  // A declaration may order a search without narrowing it.
+  newestFirst: {
+    base: 'query',
+    deterministic: true,
+    query: { sort: [{ by: 'item.createdAt', direction: 'desc' }] },
+  },
+  ranked: {
+    base: 'query',
+    deterministic: true,
+    query: {
+      filter: { ...ANCHOR, eq: { 'item.status': 'open' } },
+      sort: [{ by: 'item.rank', 'item.on': REPORT, direction: 'asc' }],
+      page: { size: 2 },
+    },
+  },
+  inA: {
+    base: 'query',
+    deterministic: true,
+    query: {
+      filter: { ...ANCHOR, eq: { 'item.status': 'open' } },
+      realms: [REALM_A],
+    },
+  },
+  // Not something the authoring decorator lets a card declare, so it can only
+  // reach a stored definition some other way; resolving one still refuses it.
+  nowhere: {
+    base: 'query',
+    deterministic: true,
+    query: { filter: { ...ANCHOR, eq: { 'item.status': 'open' } }, realms: [] },
+  },
+  // Its results carry their relationships and none of the cards behind them.
+  namesOnly: {
+    base: 'query',
+    deterministic: true,
+    links: 'ids',
+    query: { filter: { ...ANCHOR, eq: { 'item.status': 'open' } } },
+  },
+  // Not a strategy lowering would store, so it can only reach a stored
+  // definition some other way.
+  unreadable: {
+    base: 'query',
+    deterministic: true,
+    links: 'some' as never,
+    query: { filter: { ...ANCHOR, eq: { 'item.status': 'open' } } },
+  },
+  retitle: { base: 'transform', deterministic: true },
+};
+
+// `reads` is whether the caller reads the realm holding the type's module,
+// `unserved` for a module no realm on this server holds, or `throws` for a
+// realm whose permissions can't be read.
+function stubCore({
+  reads = true,
+}: { reads?: boolean | 'unserved' | 'throws' } = {}) {
+  let definition: Definition = {
+    type: 'card-def',
+    codeRef: REPORT,
+    displayName: 'Report',
+    fields: {},
+    fieldDefs: {},
+    operations: OPERATIONS,
+  } as unknown as Definition;
+  let core = {
+    realmURL: REALM_A,
+    definitionLookup: {
+      async lookupDefinition() {
+        return definition;
+      },
+      // A named query targets the type, and a type target reads its
+      // definition together with the adoption chain recorded beside it.
+      async lookupDefinitionEntry() {
+        return {
+          definition,
+          types: [`${REPORT.module}/${REPORT.name}`],
+        };
+      },
+    },
+    resolveCodeRef: (codeRef: CodeRef) =>
+      isResolvedCodeRef(codeRef) ? codeRef : undefined,
+    async readsRealmOf() {
+      if (reads === 'throws') {
+        throw new Error('permissions lookup failed');
+      }
+      return reads === 'unserved' ? undefined : { realm: REALM_A, read: reads };
+    },
+  } as unknown as OperationCore;
+  return { core };
+}
+
+const CONTEXT: NamedQueryContext = {
+  principal: { kind: 'user', user: '@caller:localhost' },
+  realms: [REALM_A, REALM_B],
+};
+
+const RENDER: NamedQueryContext = {
+  ...CONTEXT,
+  principal: { kind: 'realm-authority', user: '@caller:localhost' },
+};
+
+async function refusal(promise: Promise<unknown>) {
+  try {
+    await promise;
+  } catch (e) {
+    if (isOperationFailure(e)) {
+      return e.error;
+    }
+    throw e;
+  }
+  throw new Error('expected the named query to be refused');
+}
+
+// A resolution expected to name the query it runs, rather than to admit
+// nothing.
+async function resolves(
+  resolving: Promise<ResolvedNamedQuery | NamedQueryAdmittingNothing>,
+): Promise<ResolvedNamedQuery> {
+  let resolved = await resolving;
+  if (admitsNothing(resolved)) {
+    throw new Error('expected the named query to resolve to a query');
+  }
+  return resolved;
+}
+
+module(basename(import.meta.filename), function () {
+  test('the named form is decided by `operation` alone', function (assert) {
+    assert.true(isNamedQueryPayload({ operation: 'byStatus', on: REPORT }));
+    assert.false(
+      isNamedQueryPayload({ on: REPORT, params: {} }),
+      'a body without it is an ad-hoc query, refused there for what it carries',
+    );
+    assert.false(isNamedQueryPayload({ filter: ANCHOR }));
+  });
+
+  test('the declaration’s filter replaces the one the request carries', async function (assert) {
+    let { core } = stubCore();
+    let { query: resolved } = await resolves(
+      resolveNamedQuery(
+        core,
+        {
+          operation: 'byStatus',
+          on: REPORT,
+          params: { status: 'open' },
+          filter: { 'item.on': { module: `${REALM_A}anything`, name: 'Any' } },
+          realms: [REALM_A],
+        },
+        CONTEXT,
+      ),
+    );
+
+    assert.deepEqual(resolved.filter, {
+      ...ANCHOR,
+      eq: { 'item.status': 'open' },
+    });
+    assert.deepEqual(
+      Object.keys(resolved).sort(),
+      ['filter', 'realms'],
+      'and what it resolves to is an ad-hoc query, carrying none of the members that named it',
+    );
+  });
+
+  test('a declaration that writes no filter still drops the caller’s', async function (assert) {
+    let { core } = stubCore();
+    let { query: resolved } = await resolves(
+      resolveNamedQuery(
+        core,
+        {
+          operation: 'newestFirst',
+          on: REPORT,
+          filter: { ...ANCHOR, eq: { 'item.status': 'open' } },
+          realms: [REALM_A],
+        },
+        CONTEXT,
+      ),
+    );
+
+    assert.strictEqual(
+      resolved.filter,
+      undefined,
+      'the declaration searches everything it is scoped to, and a caller cannot narrow that into a query of its own choosing',
+    );
+    assert.deepEqual(resolved.sort, [
+      { by: 'item.createdAt', direction: 'desc' },
+    ]);
+  });
+
+  test('the rendering a caller asks for carries over onto the declaration’s filter', async function (assert) {
+    let { core } = stubCore();
+    let htmlQuery = { eq: { format: 'embedded' } };
+    let forged = {
+      ...ANCHOR,
+      eq: { 'item.status': 'closed', htmlQuery },
+    };
+
+    let { query: declared } = await resolves(
+      resolveNamedQuery(
+        core,
+        {
+          operation: 'byStatus',
+          on: REPORT,
+          params: { status: 'open' },
+          filter: forged,
+          realms: [REALM_A],
+        },
+        CONTEXT,
+      ),
+    );
+    assert.deepEqual(
+      declared.filter,
+      { ...ANCHOR, eq: { 'item.status': 'open', htmlQuery } },
+      'the binding joins the declared filter, and nothing else of the caller’s does',
+    );
+
+    let { query: unfiltered } = await resolves(
+      resolveNamedQuery(
+        core,
+        {
+          operation: 'newestFirst',
+          on: REPORT,
+          filter: forged,
+          realms: [REALM_A],
+        },
+        CONTEXT,
+      ),
+    );
+    assert.deepEqual(
+      unfiltered.filter,
+      { eq: { htmlQuery } },
+      'and a declaration with no filter carries the binding alone, which matches every row',
+    );
+  });
+
+  test('the declaration wins where it speaks, and the caller fills what it left open', async function (assert) {
+    let { core } = stubCore();
+    let callerSort = [
+      { by: 'item.rank', 'item.on': REPORT, direction: 'desc' as const },
+    ];
+    let callerMembers = {
+      sort: callerSort,
+      page: { size: 10, number: 3 },
+      fields: { entry: ['item'] },
+      cardUrls: [`${REALM_A}r1`],
+      scope: 'cards',
+      realms: [REALM_A],
+    };
+
+    let { query: declared } = await resolves(
+      resolveNamedQuery(
+        core,
+        { operation: 'ranked', on: REPORT, ...callerMembers },
+        CONTEXT,
+      ),
+    );
+    assert.deepEqual(
+      declared.sort,
+      [{ by: 'item.rank', 'item.on': REPORT, direction: 'asc' }],
+      'a declared sort stands',
+    );
+    assert.deepEqual(declared.page, { size: 2 }, 'a declared page stands');
+    assert.deepEqual(
+      declared.fields,
+      { entry: ['item'] },
+      'the caller’s fields',
+    );
+    assert.deepEqual(
+      declared.cardUrls,
+      [`${REALM_A}r1`],
+      'the caller’s cardUrls',
+    );
+    assert.strictEqual(declared.scope, 'cards', 'the caller’s scope');
+
+    let { query: open } = await resolves(
+      resolveNamedQuery(
+        core,
+        {
+          operation: 'byStatus',
+          on: REPORT,
+          params: { status: 'open' },
+          ...callerMembers,
+        },
+        CONTEXT,
+      ),
+    );
+    assert.deepEqual(
+      open.sort,
+      callerSort,
+      'no declared sort takes the caller’s',
+    );
+    assert.deepEqual(open.page, { size: 10, number: 3 }, 'and so does page');
+  });
+
+  test('actor() is the context’s user, never anything the request carries', async function (assert) {
+    let { core } = stubCore();
+    let { query: resolved } = await resolves(
+      resolveNamedQuery(
+        core,
+        {
+          operation: 'mine',
+          on: REPORT,
+          params: { actor: '@someone-else:localhost' },
+          realms: [REALM_A],
+        },
+        CONTEXT,
+      ),
+    );
+    assert.deepEqual(resolved.filter?.eq, {
+      'item.owner': '@caller:localhost',
+    });
+
+    let anonymous = await refusal(
+      resolveNamedQuery(
+        core,
+        { operation: 'mine', on: REPORT, realms: [REALM_A] },
+        { ...CONTEXT, principal: undefined },
+      ),
+    );
+    assert.strictEqual(anonymous.code, 'actor-required');
+  });
+
+  test('a declaration that names no realms searches the request’s', async function (assert) {
+    let { core } = stubCore();
+    let { query: resolved } = await resolves(
+      resolveNamedQuery(
+        core,
+        { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
+        CONTEXT,
+      ),
+    );
+    assert.deepEqual(resolved.realms, [REALM_A, REALM_B]);
+  });
+
+  test('a declaration’s own realms are narrowed to the ones the request may search', async function (assert) {
+    let { core } = stubCore();
+    let { query: both } = await resolves(
+      resolveNamedQuery(core, { operation: 'inA', on: REPORT }, CONTEXT),
+    );
+    assert.deepEqual(
+      both.realms,
+      [REALM_A],
+      'never a realm the declaration left out',
+    );
+
+    let outside = await refusal(
+      resolveNamedQuery(
+        core,
+        { operation: 'inA', on: REPORT },
+        { ...CONTEXT, realms: [REALM_B] },
+      ),
+    );
+    assert.strictEqual(outside.status, 400);
+    assert.true(/may search none of them/.test(outside.detail));
+    assert.false(
+      outside.detail.includes(REALM_A),
+      'the refusal does not name the realms a declaration is scoped to, which the caller may not be able to read',
+    );
+  });
+
+  test('a scope that resolves to no realm is refused', async function (assert) {
+    let { core } = stubCore();
+    let empty = await refusal(
+      resolveNamedQuery(core, { operation: 'nowhere', on: REPORT }, CONTEXT),
+    );
+    assert.strictEqual(empty.status, 400);
+    assert.true(
+      /names an empty list of realms/.test(empty.detail),
+      'a declared empty list is not read as every realm',
+    );
+
+    let unnamed = await refusal(
+      resolveNamedQuery(
+        core,
+        { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
+        { ...CONTEXT, realms: [] },
+      ),
+    );
+    assert.strictEqual(unnamed.status, 400);
+    assert.true(/neither does the request/.test(unnamed.detail));
+  });
+
+  test('the declaration’s link strategy travels beside the query it resolves to', async function (assert) {
+    let { core } = stubCore();
+    let narrowed = await resolves(
+      resolveNamedQuery(core, { operation: 'namesOnly', on: REPORT }, CONTEXT),
+    );
+    assert.strictEqual(narrowed.links, 'ids', 'the declaration names it');
+    assert.false(
+      'links' in narrowed.query,
+      'and the query it resolves to carries no member the search grammar does not read',
+    );
+
+    let whole = await resolves(
+      resolveNamedQuery(
+        core,
+        { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
+        CONTEXT,
+      ),
+    );
+    assert.strictEqual(
+      whole.links,
+      'full',
+      'a declaration naming none is served whole',
+    );
+
+    let unreadable = await resolves(
+      resolveNamedQuery(core, { operation: 'unreadable', on: REPORT }, CONTEXT),
+    );
+    assert.strictEqual(
+      unreadable.links,
+      'none',
+      'a stored value that names no strategy is served as the narrowest, not the widest',
+    );
+  });
+
+  test('a realm-authority principal has no actor', async function (assert) {
+    let { core } = stubCore();
+    let { query: resolved } = await resolves(
+      resolveNamedQuery(
+        core,
+        { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
+        RENDER,
+      ),
+    );
+    assert.deepEqual(
+      resolved.filter?.eq,
+      { 'item.status': 'open' },
+      'a declaration that does not compare against the caller resolves as usual',
+    );
+
+    let noActor = await refusal(
+      resolveNamedQuery(core, { operation: 'mine', on: REPORT }, RENDER),
+    );
+    assert.strictEqual(
+      noActor.code,
+      'actor-required',
+      'the render’s own identity is not an actor to compare against',
+    );
+  });
+
+  test('what the request names has to resolve to a declared query', async function (assert) {
+    let { core } = stubCore();
+    let unknown = await refusal(
+      resolveNamedQuery(core, { operation: 'everything', on: REPORT }, CONTEXT),
+    );
+    assert.strictEqual(unknown.code, 'unknown-operation');
+
+    let notAQuery = await refusal(
+      resolveNamedQuery(core, { operation: 'retitle', on: REPORT }, CONTEXT),
+    );
+    assert.strictEqual(notAQuery.code, 'invalid-params');
+
+    let noOperation = await refusal(
+      resolveNamedQuery(core, { operation: '', on: REPORT }, CONTEXT),
+    );
+    assert.true(/"operation"/.test(noOperation.detail));
+
+    let noType = await refusal(
+      resolveNamedQuery(core, { operation: 'byStatus' }, CONTEXT),
+    );
+    assert.true(/"on"/.test(noType.detail));
+
+    let listParams = await refusal(
+      resolveNamedQuery(
+        core,
+        { operation: 'byStatus', on: REPORT, params: ['open'] },
+        CONTEXT,
+      ),
+    );
+    assert.true(/"params"/.test(listParams.detail));
+  });
+  module('a caller who may not read the type’s module', function () {
+    module('what the server records', function (hooks) {
+      let events: NamedQueryRefusalHiddenEvent[];
+      hooks.beforeEach(function () {
+        events = [];
+        setNamedQueryRefusalHiddenSink((event) => events.push(event));
+      });
+      hooks.afterEach(function () {
+        setNamedQueryRefusalHiddenSink(undefined);
+      });
+
+      test('a refusal answered as no rows records what it would have told the caller', async function (assert) {
+        let { core } = stubCore({ reads: false });
+        assert.deepEqual(
+          await resolveNamedQuery(
+            core,
+            { operation: 'everything', on: REPORT },
+            { ...CONTEXT, correlationId: 'corr-1' },
+          ),
+          { admitsNothing: true },
+        );
+        assert.deepEqual(events, [
+          {
+            kind: 'named-query-refusal-hidden',
+            realmURL: REALM_A,
+            actor: '@caller:localhost',
+            operation: 'everything',
+            on: `${REPORT.module}/${REPORT.name}`,
+            status: 404,
+            code: 'unknown-operation',
+            unreadableBecause: 'not-readable',
+            moduleRealm: REALM_A,
+            correlationId: 'corr-1',
+          },
+        ]);
+      });
+
+      test('records why the module is one the caller may not read', async function (assert) {
+        await resolveNamedQuery(
+          stubCore({ reads: 'unserved' }).core,
+          { operation: 'everything', on: REPORT },
+          CONTEXT,
+        );
+        await resolveNamedQuery(
+          stubCore({ reads: false }).core,
+          { operation: 'everything', on: { type: 'ancestorOf', card: REPORT } },
+          CONTEXT,
+        );
+        assert.deepEqual(
+          events.map((event) => event.unreadableBecause),
+          ['unserved', 'unresolved'],
+        );
+        assert.strictEqual(events[0].correlationId, null);
+      });
+
+      test('a permissions lookup that fails is answered as no rows, and recorded with its error', async function (assert) {
+        let { core } = stubCore({ reads: 'throws' });
+        assert.deepEqual(
+          await resolveNamedQuery(
+            core,
+            { operation: 'everything', on: REPORT },
+            CONTEXT,
+          ),
+          { admitsNothing: true },
+        );
+        assert.strictEqual(events[0].unreadableBecause, 'lookup-failed');
+        assert.strictEqual(events[0].error, 'permissions lookup failed');
+      });
+
+      test('a reader’s refusal and a declared query record nothing', async function (assert) {
+        await refusal(
+          resolveNamedQuery(
+            stubCore().core,
+            { operation: 'everything', on: REPORT },
+            CONTEXT,
+          ),
+        );
+        await resolves(
+          resolveNamedQuery(
+            stubCore({ reads: false }).core,
+            { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
+            CONTEXT,
+          ),
+        );
+        assert.deepEqual(events, []);
+      });
+
+      test('a record that fails to write leaves the answer as it is', async function (assert) {
+        setNamedQueryRefusalHiddenSink(() => {
+          throw new Error('sink failed');
+        });
+        assert.deepEqual(
+          await resolveNamedQuery(
+            stubCore({ reads: false }).core,
+            { operation: 'everything', on: REPORT },
+            CONTEXT,
+          ),
+          { admitsNothing: true },
+        );
+      });
+    });
+
+    // Every refusal resolving gives for a request that names a type.
+    const REFUSED: Record<string, Record<string, unknown>> = {
+      'an operation the type does not declare': {
+        operation: 'everything',
+        on: REPORT,
+      },
+      'an operation that is not a query': { operation: 'retitle', on: REPORT },
+      'a query missing its params': { operation: 'byStatus', on: REPORT },
+      'params that are not an object': {
+        operation: 'byStatus',
+        on: REPORT,
+        params: ['open'],
+      },
+      'a scope that resolves to no realm': { operation: 'nowhere', on: REPORT },
+    };
+
+    test('is answered that the query admits nothing, wherever resolving refuses', async function (assert) {
+      let { core } = stubCore({ reads: false });
+      for (let [name, payload] of Object.entries(REFUSED)) {
+        assert.deepEqual(
+          await resolveNamedQuery(core, payload, CONTEXT),
+          { admitsNothing: true },
+          name,
+        );
+      }
+    });
+
+    test('is not told to sign in where a declaration compares against the caller', async function (assert) {
+      let { core } = stubCore({ reads: false });
+      assert.deepEqual(
+        await resolveNamedQuery(
+          core,
+          { operation: 'mine', on: REPORT },
+          { ...CONTEXT, principal: undefined },
+        ),
+        { admitsNothing: true },
+      );
+    });
+
+    test('a member the search grammar refuses is refused whether the operation is declared or not', async function (assert) {
+      let { core } = stubCore({ reads: false });
+      let declared = await refusal(
+        resolveNamedQuery(
+          core,
+          {
+            operation: 'byStatus',
+            on: REPORT,
+            params: { status: 'open' },
+            nonsense: true,
+          },
+          CONTEXT,
+        ),
+      );
+      let undeclared = await refusal(
+        resolveNamedQuery(
+          core,
+          { operation: 'everything', on: REPORT, nonsense: true },
+          CONTEXT,
+        ),
+      );
+      assert.strictEqual(declared.status, 400);
+      assert.deepEqual(undeclared, declared);
+    });
+
+    test('a module no realm here serves is judged as one the caller may not read', async function (assert) {
+      let { core } = stubCore({ reads: 'unserved' });
+      assert.deepEqual(
+        await resolveNamedQuery(
+          core,
+          { operation: 'everything', on: REPORT },
+          CONTEXT,
+        ),
+        { admitsNothing: true },
+      );
+    });
+
+    test('is still served a declared query that resolves', async function (assert) {
+      let { core } = stubCore({ reads: false });
+      let { query } = await resolves(
+        resolveNamedQuery(
+          core,
+          { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
+          CONTEXT,
+        ),
+      );
+      assert.deepEqual(query.filter?.eq, { 'item.status': 'open' });
+    });
+
+    test('is refused a request naming no type, as everyone is', async function (assert) {
+      let { core } = stubCore({ reads: false });
+      let noOperation = await refusal(
+        resolveNamedQuery(core, { operation: '', on: REPORT }, CONTEXT),
+      );
+      assert.true(/"operation"/.test(noOperation.detail));
+      let noType = await refusal(
+        resolveNamedQuery(core, { operation: 'byStatus' }, CONTEXT),
+      );
+      assert.true(/"on"/.test(noType.detail));
+    });
+
+    test('a caller who reads the module is refused with the detail', async function (assert) {
+      let { core } = stubCore({ reads: true });
+      for (let [name, payload] of Object.entries(REFUSED)) {
+        let refused = await refusal(resolveNamedQuery(core, payload, CONTEXT));
+        assert.strictEqual(Math.floor(refused.status / 100), 4, name);
+      }
+    });
+  });
+});

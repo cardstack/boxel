@@ -2,12 +2,14 @@ import {
   click,
   fillIn,
   settled,
+  triggerEvent,
   waitFor,
   waitUntil,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import QUnit, { module, test } from 'qunit';
+import { TrackedObject } from 'tracked-built-ins';
 
 import {
   baseRealm,
@@ -562,6 +564,86 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           `${testRealmURL}index.json`,
           'URL bar still shows the original file',
         );
+    });
+
+    test('the realm dropdown shows the selected realm name and URL in a tooltip', async function (assert) {
+      await visitOperatorMode();
+      await openNewFileModal('Card Definition');
+
+      await triggerEvent(
+        '[data-test-realm-dropdown-trigger] [data-test-realm-url-tooltip-trigger]',
+        'mouseenter',
+      );
+      assert
+        .dom('[data-test-realm-url-tooltip-label]')
+        .hasText('Test Workspace A');
+      assert.dom('[data-test-realm-url-tooltip]').hasText('test-realm/test');
+    });
+
+    test('the realm dropdown shows a truncated realm name in full in its tooltip', async function (assert) {
+      await visitOperatorMode();
+      let realmService = getService('realm') as any;
+      let realmA = realmService.realms.get(testRealmURL);
+      let previousInfo = realmA.info;
+      // Several times the dropdown's width, so it truncates whatever font loads
+      let longName =
+        'A workspace with a name far too long to fit inside the realm dropdown, no matter which font the browser renders it in, because it keeps going well past the width of the modal';
+      realmA.info = new TrackedObject({ ...previousInfo, name: longName });
+      try {
+        await openNewFileModal('Card Definition', longName);
+
+        let name = document.querySelector(
+          '[data-test-realm-dropdown-trigger] [data-test-selected-realm]',
+        ) as HTMLElement;
+        assert.ok(
+          name.scrollWidth > name.clientWidth,
+          'the name is truncated in the trigger',
+        );
+        assert
+          .dom(
+            '[data-test-realm-dropdown-trigger] [data-test-realm-url-tooltip-trigger] [data-test-selected-realm]',
+          )
+          .exists('hovering the name opens the tooltip');
+
+        await triggerEvent(
+          '[data-test-realm-dropdown-trigger] [data-test-realm-url-tooltip-trigger]',
+          'mouseenter',
+        );
+        assert.dom('[data-test-realm-url-tooltip-label]').hasText(longName);
+      } finally {
+        realmA.info = previousInfo;
+      }
+    });
+
+    test('the realm dropdown checks only the selected realm when two realms share a name', async function (assert) {
+      await visitOperatorMode();
+      let realmService = getService('realm') as any;
+      let realmB = realmService.realms.get(testRealmURL2);
+      let previousInfo = realmB.info;
+      realmB.info = new TrackedObject({
+        ...previousInfo,
+        name: 'Test Workspace A',
+      });
+      try {
+        await openNewFileModal('Card Definition');
+        await click('[data-test-realm-dropdown-trigger]');
+        await waitFor(
+          '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace A"]',
+        );
+
+        assert
+          .dom(
+            '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace A"]',
+          )
+          .exists({ count: 2 });
+        assert
+          .dom(
+            '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-selected]',
+          )
+          .exists({ count: 1 });
+      } finally {
+        realmB.info = previousInfo;
+      }
     });
 
     test('filename is auto-populated from display name', async function (assert) {
@@ -1404,12 +1486,12 @@ export class TestCard extends CardDef {
         assert.strictEqual(
           content,
           `
-import { Animal } from '${testRealmURL2}animal';
+import { Animal } from '${testPrefixRealmURL2}animal';
 import { Component } from '@cardstack/base/card-api';
 export class TestCard extends Animal {
   static displayName = "Test Card";
 }`.trim(),
-          'The source uses the resolved absolute module URL',
+          "The source imports the parent by its realm's registered prefix",
         );
         assert.strictEqual(
           url.href,

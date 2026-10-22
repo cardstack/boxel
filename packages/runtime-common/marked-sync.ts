@@ -88,43 +88,63 @@ const CODE_FENCE_PATTERN = /^(\s*)(`{3,}|~{3,})(.*)\r?$/;
 // list marker.
 const LIST_PREFIXED_CODE_FENCE_PATTERN =
   /^(\s*)(?:[-*+]|\d{1,9}[.)])\s+(`{3,}|~{3,})(.*)\r?$/;
+// Where a line sits relative to fenced code: it opens a fence, closes one,
+// is content inside one, or is ordinary prose outside any fence. Every pass
+// that rewrites prose asks this before touching a line, so fenced content
+// survives verbatim.
+type FencePosition = 'open' | 'close' | 'inside' | 'outside';
+
+class FenceTracker {
+  private inFence = false;
+  private fenceChar = '';
+  private fenceLength = 0;
+
+  // Feed the next line and learn where it sits. A fence closes only on a run
+  // of the same character at least as long as the one that opened it, with
+  // nothing after it.
+  feed(line: string): FencePosition {
+    if (this.inFence) {
+      let closeMatch = line.match(CODE_FENCE_PATTERN);
+      if (
+        closeMatch &&
+        closeMatch[2][0] === this.fenceChar &&
+        closeMatch[2].length >= this.fenceLength &&
+        closeMatch[3].trim() === ''
+      ) {
+        this.inFence = false;
+        return 'close';
+      }
+      return 'inside';
+    }
+    let openMatch =
+      line.match(CODE_FENCE_PATTERN) ??
+      line.match(LIST_PREFIXED_CODE_FENCE_PATTERN);
+    if (openMatch) {
+      this.inFence = true;
+      this.fenceChar = openMatch[2][0];
+      this.fenceLength = openMatch[2].length;
+      return 'open';
+    }
+    return 'outside';
+  }
+}
+
 // Prefix decorative bullets with a standard list marker so marked treats them
 // as list items — but never inside fenced code blocks. Fenced content must
-// survive rendering verbatim: search/replace patches are extracted back out
-// of the rendered HTML, and an inserted marker makes the patch text no longer
-// match the file it targets.
+// survive rendering verbatim: an inserted marker would change the code the
+// user sees and copies.
 //
 // Only *fenced* blocks are protected. A 4-space indented line is an indented
 // code block to marked in some contexts, but inside a list item the same
 // indentation is ordinary list content (a nested bullet); telling the two
-// apart needs block context that only the lexer has. Since the patch format
-// is always fenced, indented code blocks are left to the rewrite.
+// apart needs block context that only the lexer has, so indented code blocks
+// are left to the rewrite.
 function normalizeDecorativeBullets(markdown: string): string {
-  let inFence = false;
-  let fenceChar = '';
-  let fenceLength = 0;
+  let fences = new FenceTracker();
   return markdown
     .split('\n')
     .map((line) => {
-      if (inFence) {
-        let closeMatch = line.match(CODE_FENCE_PATTERN);
-        if (
-          closeMatch &&
-          closeMatch[2][0] === fenceChar &&
-          closeMatch[2].length >= fenceLength &&
-          closeMatch[3].trim() === ''
-        ) {
-          inFence = false;
-        }
-        return line;
-      }
-      let openMatch =
-        line.match(CODE_FENCE_PATTERN) ??
-        line.match(LIST_PREFIXED_CODE_FENCE_PATTERN);
-      if (openMatch) {
-        inFence = true;
-        fenceChar = openMatch[2][0];
-        fenceLength = openMatch[2].length;
+      if (fences.feed(line) !== 'outside') {
         return line;
       }
       return line.replace(

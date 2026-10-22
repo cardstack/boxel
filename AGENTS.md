@@ -11,6 +11,11 @@
 - pnpm is required for all scripts; use the pinned version as specified above.
 - Docker is required (Postgres, Synapse, SMTP, Stripe CLI container). Ensure the daemon is running and you can run `docker` without sudo.
 
+## Parallel agent sessions
+
+- Other sessions may be live on this machine, and — when Remote Control is enabled — on the user's other machines and in the cloud. `ListAgents` names them, labelled by kind, and `SendMessage` addresses one by name. Coordinate rather than duplicating work; the `agent-peer-collaboration` skill carries the protocol and the shared-resource rules.
+- Enabling cross-machine reachability is a human step, documented in [docs/parallel-claude-sessions.md](docs/parallel-claude-sessions.md). If a peer you expect is missing from `ListAgents`, say so instead of assuming it is gone — a session without Remote Control is simply invisible there.
+
 ## GitHub Actions failure triage helper
 
 - Use `pnpm ci:failures -- ...` to quickly summarize failed jobs and extract actionable test failures from GitHub Actions logs.
@@ -29,6 +34,8 @@
   - `--fail-on-findings` to exit non-zero when failed jobs are found
 
 ## Testing instructions by package
+
+- For how tests select elements, see [Test selectors](#test-selectors).
 
 ### packages/ai-bot
 
@@ -87,6 +94,29 @@
   ```
   This is a red herring. Just ignore this error.
 
+#### Running tests from a fresh worktree or after switching branches
+
+The instructions above assume a fully bootstrapped checkout. A fresh `git worktree`, or the shared checkout after switching to a branch based on newer `main`, is NOT bootstrapped, and the failure looks nothing like "missing dependency" — the dev server / `vite build` reports a cryptic unresolved-import error and the QUnit page hangs forever without ever booting (`window.QUnit` stays undefined). Bootstrap in this order before building or serving:
+
+```
+mise trust                    # a fresh worktree's .mise.toml is untrusted; mise silently no-ops until you do this
+mise exec -- pnpm install     # links workspace packages added since the last install (e.g. @cardstack/bxl) into packages/*/node_modules
+mise exec -- pnpm build-common-deps   # builds @cardstack/boxel-icons `dist` (consumed via its exports map, so needed even though boxel-ui is read from source)
+```
+
+Diagnosing a stuck test page fast (do this FIRST, before assuming it's a slow build):
+
+- The blocker is almost always a single unresolved import breaking the whole test module graph. Read the Vite error overlay directly instead of polling for QUnit — it names the exact import in seconds:
+  `document.querySelector('vite-error-overlay')?.shadowRoot?.querySelector('.message')?.textContent`
+- `Failed to resolve import "@cardstack/bxl"` (or any `@cardstack/*` workspace package) ⇒ run `pnpm install`.
+- `Failed to resolve import "@cardstack/boxel-icons/<icon>"` ⇒ run `pnpm build-common-deps` (its `dist` isn't built by install).
+
+Prefer the headless `vite build --mode development && pnpm exec ember test --path dist --filter "…"` path over a second live dev server: the shared `pnpm start` server is env-mode/Traefik-locked (one slug at a time) and switching the shared tree under it triggers a long Vite dep re-optimize + full reloads. The realm-server stack the tests talk to (`../realm-server && pnpm start:all`) is backend-only and can be shared across checkouts on the usual localhost ports.
+
+#### Signing a browser into a host
+
+- A local host (`https://localhost:<port>/`, `http://localhost:<port>/` or the same on `127.0.0.1`) against staging or production can use the email/password sign-in form: the secure origin lets loopback origins frame it. The `local-host-against-remote` skill covers pointing the host at the environment and a blank password frame. Any other origin that isn't the environment's own, such as a Railway deployment against staging, can't, until it is added to staging's `--secureOriginAppOrigin` by name; production lists only loopback origins. When the user wants a browser signed in without typing a password, run `boxel browse --profile <id> --host-url <host origin>` for them: it opens their default browser already signed in, as a one-time login whose token never reaches the terminal or the chat. To sign in a specific browser such as Chrome, or a browser you drive, follow the skill: `--print-url` prints the token, so its output only ever goes straight into a browser launcher or the clipboard. The `boxel-cli:browser-sign-in` skill (`packages/boxel-cli/plugin/skills/browser-sign-in/SKILL.md`) has the details.
+
 #### CSS Guidance
 
 - Use scalable units such as rem
@@ -114,12 +144,16 @@
     `MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix`
   - Run tests:
     `pnpm test`
+  - `pnpm test` starts Synapse from the `test` template, which asks for an invite code at registration. A spec that needs a Synapse configured otherwise goes under `tests/with-synapse/<template>/`, named for a template in `support/synapse/`, and runs in a pass of its own against a Synapse from that template:
+    `MATRIX_SYNAPSE_TEMPLATE=test-without-registration-token pnpm test`
+    In CI each such template needs its own `include` entry in `ci.yaml`'s `matrix-client-test` job, which runs it beside the shards. A template other than `test` differs from it only by the settings `TEMPLATE_DIFFERENCES` in `support/shard-spec-files.test.ts` declares. `pnpm test:shard-assignment` checks both.
 - Focusing on single test or module:
 - make sure to kill previously running matrix tests if they are still running before starting a new test run.
   Add `--grep` flag to command (`--grep 'it can register a user with a registration token'`)
 
 ### packages/realm-server
 
+- Unless a test module is testing the boot index itself (indexing from an empty database, `fullIndexOnStartup`, or a missing index), it indexes its realms once per module, into a template database each test starts from, not from scratch before every test. Load the `realm-server-test-setup` skill before writing or copying a module that brings up realms: it says which helper to use, and when to stay uncached.
 - Tests require the realm-server to be running:
   `pnpm start:all`
 - Run full test suite:
@@ -160,6 +194,7 @@
 ## PR Instructions
 
 - Always run `pnpm lint` in modified packages before committing
+- Every follow-up a PR defers needs a Linear ticket before the PR merges, linked from the PR description. That covers a "Not in this PR" item, a sentence like "a follow-up will…" or "a separate PR then…", and an open decision left for later. A deferral that exists only in a merged PR's description is lost: nothing tracks it, and no rule that fires on a later change will fire for work that never started.
 
 ### Pre-commit autofix hook
 
@@ -174,7 +209,7 @@ skips the autofix and is what lets trivial lint errors waste a CI run.
 
 ### Published-package commit prefixes
 
-Two packages publish to npm — `packages/boxel-cli` and `packages/bxl` — and a PR touching either must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflows read the PR title via `gh api`). A path-scoped PR-title check per package (`.github/workflows/boxel-cli-pr-title.yml`, `.github/workflows/bxl-pr-title.yml`) enforces it.
+Five packages publish to npm — `packages/boxel-cli`, `packages/bxl`, `packages/glimmer-motion`, `packages/choreo` and `packages/choreo-player` — and a PR touching any of them must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflows read the PR title via `gh api`). A path-scoped PR-title check per flow (`.github/workflows/boxel-cli-pr-title.yml`, `.github/workflows/bxl-pr-title.yml`, `.github/workflows/glimmer-motion-choreo-pr-title.yml`, `.github/workflows/choreo-player-pr-title.yml`) enforces it. glimmer-motion and choreo are one flow: they release in lockstep, so one bump from the title applies to both, and a change to either publishes both.
 
 | Prefix                                                     | Bump level (per touched surface) |
 | ---------------------------------------------------------- | -------------------------------- |
@@ -183,16 +218,26 @@ Two packages publish to npm — `packages/boxel-cli` and `packages/bxl` — and 
 | `fix:` / `perf:` / `refactor:`                             | patch                            |
 | `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none                             |
 
-Scopes are allowed: `feat(profile): …`. One title covers both packages when a PR touches both; each decides its own bump from it. Every other package in the monorepo is unaffected — a PR whose diff touches neither published package takes a plain descriptive title with no prefix.
+Scopes are allowed: `feat(profile): …`. One title covers every published package a PR touches; each flow decides its own bump from it. Every other package in the monorepo is unaffected — a PR whose diff touches no published package takes a plain descriptive title with no prefix.
 
 A bumpable prefix is necessary but not sufficient: each flow also asks whether the merge changed anything its tarball ships, so a `fix:` touching only tests or CI config publishes nothing.
 
-**Edge case:** bumping `BOXEL_SKILLS_VERSION` in `packages/boxel-cli/scripts/build-skills.ts` regenerates plugin skill content. Use `fix(skills):` (routine refresh) or `feat(skills):` (additive content), never `chore:` — a `chore:` prefix means no `plugin.json` bump, and the marketplace cache won't refresh for users. See `packages/boxel-cli/plugin/README.md` for full surface-scoping rules.
+**Boxel skills pin:** the content of cardstack/boxel-skills reaches users as its own `boxel-skills` plugin, which the `boxel-cli` plugin depends on, at the release tag pinned by the `ref` of the `boxel-skills` entry in `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`. Moving the pin means editing both refs; nothing under `packages/boxel-cli/` changes, so the PR takes a plain title and no `plugin.json` bump (Claude Code keys the boxel-skills plugin on the pinned commit). The monorepo's own readers (the Software Factory and the BXL skill suite) read the same tag from a gitignored clone that `pnpm --filter @cardstack/boxel-cli fetch:skills` makes. See `packages/boxel-cli/plugin/README.md`.
 
 ## Production-safe selectors
 
-- `data-test-*` attributes are stripped from production builds. Never use them for runtime behavior or styling in app code.
-- For production hooks, use classes or non-test `data-*` attributes (for example `data-path`, `data-kind`) and keep `data-test-*` only for tests.
+- `data-test-*` attributes are only for tests, and the host app's production build strips them: never use them for runtime behavior or styling in app or card code.
+- Runtime code that needs to find an element selects it by a non-test `data-*` attribute (for example `data-kanban-column`, `data-stack-card`), never by class: classes are only for styling. Markup a third-party library renders is found by its own attributes, ARIA roles or API, and by a class only when it offers none. Existing runtime code that queries by class is not precedent.
+
+## Test selectors
+
+- Tests select elements by `data-test-*` attributes, never by class: classes belong to styling and get renamed in CSS refactors that change no behavior. When an element has no hook, add one. Markup a third-party library renders is selected by its own attributes or ARIA roles (scoped inside a `data-test-*` hook when it renders inside one), and by a class only when it offers none.
+- Existing tests that select by class are not precedent.
+
+## UI changes
+
+- A change to a card or field template, a component defined in a realm, or their scoped styles is checked against the UI review procedure of the `boxel-ui-guidelines` skill (`references/ui-review-procedure.md`, with `references/checklist.md` and `references/theme-token-contract.md`), when writing the change and when reviewing it. The procedure runs whole, starting with its step-0 grep over each touched file. Every hit is either fixed or listed, with the reason it was left, in the report the procedure ends with.
+- The skill comes from the `boxel-skills` plugin. Without it, run `pnpm --filter @cardstack/boxel-cli fetch:skills` and read `skills/boxel-ui-guidelines/` in `packages/boxel-cli/.boxel-skills-cache/<tag>/`, where `<tag>` is the pinned `ref`.
 
 ## `.gts` file gotcha: regex literals can break content-tag
 
@@ -234,7 +279,27 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 
 ## Base realm imports
 
-- Only card definitions (files run through the card loader) can use static ESM imports from `@cardstack/base/*`. Host-side modules must load the module at runtime via `loader.import(`${baseRealm.url}...`)`. Static value imports from the HTTPS specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.
+- Only card definitions (files run through the card loader) can use static ESM imports from `@cardstack/base/*`. Host-side modules must load the module at runtime via `loader.import<typeof X>('@cardstack/base/<module>')`. Static value imports from the `@cardstack/base/` specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.
+
+## Catalog-owned definitions
+
+- Some definitions that platform code and tests depend on live in the `cardstack/boxel-catalog` repo, not in this one. Examples are the operation-permission policy cards `RealmPolicy`, `PolicyRule` and `OperationGrant`, and `PolicyPredicateField`. Boxel's tests load them from a pinned revision through `@cardstack/catalog/`. `packages/catalog/test-subset.json` lists every such file.
+- To change one, change it in boxel-catalog, then pin the new revision here. Never add a copy to `packages/base`, and never edit `packages/catalog/test-subset/` (generated from the pin) or `packages/catalog/contents/` (a clone of catalog `main`). Guards fail on each of these.
+- A change here that a catalog-owned definition must adopt (for example a new declaration option the definition should use) is not done until the boxel-catalog PR merges and the pin here is bumped. When that lands after the boxel PR, its ticket names both halves: the boxel-catalog change, and the re-pin here (`pnpm --dir packages/catalog catalog:test-subset --bump`) with the tests that assert the adopted behavior.
+- Load the `catalog-test-subset` skill for the procedure: paired branches, testing a catalog change against boxel's tests, pinning, and merge order.
+- Load `catalog-test-subset` before you move the pin in any way: editing `packages/catalog/test-subset.json`, running the sync (`catalog:test-subset`, with or without `--bump`), or setting `CATALOG_TEST_SUBSET_SOURCE`. The pin a local test needs, the pin a pushed commit needs, and the pin a merge needs are different, and the skill says which is which. A project `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses an edit to the manifest, and any shell command that names it, the sync or the variable, until the session or subagent making the call has loaded the skill.
+
+## Paired boxel / boxel-catalog pull requests
+
+- A boxel pull request and a boxel-catalog pull request that depend on each other declare the pair in **both** descriptions. Each has a line naming the other, keyed by its own merge order: the one that lands first says `Merges before:` and the other pull request, and the one that lands after it says `Merges after:` and the first. Which repository lands first depends on the change. For example, a boxel rename the catalog must follow puts `Merges before: cardstack/boxel-catalog#N` on the boxel pull request and `Merges after: cardstack/boxel#M` on the catalog one. The checks in both repositories read these lines, and a declaration the other side doesn't return fails. Each description opens with a `> [!IMPORTANT]` callout giving the merge order for the people merging, with the pairing line directly below it, outside the callout. A paired pull request targets `main`, or is stacked on an open pull request of its own repository and is retargeted to `main` once that parent merges; the check passes a stacked one with a notice, and fails it on its next run after the parent has merged. Nothing re-runs it when the parent merges, since neither repository deletes a merged branch and GitHub doesn't retarget, so retarget it to `main` then (which re-runs the check) or re-run the check by hand.
+- A change needs a pair when catalog cards must follow a boxel change (a renamed or removed host tool, base export or type they import), or when boxel's tests need a catalog change first. boxel's Lint Catalog fails a change that would leave catalog `main` broken without a paired catalog pull request that is ready to follow it.
+- Load the `catalog-pairing` skill before opening or editing a pull request in either repository that depends on the other, and whenever Lint Catalog fails. The `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses a `gh pr create`/`edit` or GitHub MCP pull request call that opens or edits a boxel-catalog pull request, or writes a `Merges before:`/`Merges after:` line, until the session has loaded the skill.
+- Production gets the catalog only from boxel-catalog's "Deploy to production". Manual Deploy [boxel] to production runs it with the catalog revision boxel pins, before its release and again after it, and anyone can run it by hand to ship catalog `main` ahead of boxel. It refuses while a catalog pull request it would deploy says `Merges after:` a boxel pull request production doesn't run. Load the `catalog-deploy` skill to deploy the catalog, or when that deploy refuses.
+
+## Architecture decision records
+
+- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `node scripts/adr-for.mts <path>...` and read the ADRs it lists. Don't silently break a MUST of an `accepted` or `proposed` ADR: follow it, or say that the change needs a superseding ADR (accepted) or an edit to the ADR's Decision (proposed). A proposed ADR's Remediation section lists code that doesn't conform yet. Leave it or fix it, but don't copy it. Cite a rule as "ADR NNN §x.y" rather than restating it.
+- When a change makes a decision that outlives its PR (ADR 001 §1.1), load the `adr` skill and draft a `proposed` ADR in the same PR. A proposed ADR may merge before the code conforms, with the gaps listed under Remediation. Only a person marks an ADR `accepted`, once those gaps are closed (ADR 001 §1.6).
 
 ## Linear Ticket Process (Reusable)
 
@@ -321,6 +386,7 @@ Scale the template to the PR. For small PRs (roughly 1-3 files, no tricky decisi
 
 - Major decisions and the "why" behind them. Edge cases handled. Be succinct (3-5 bullets typical).
 - Don't restate what the diff shows; don't recap failed attempts that aren't relevant anymore.
+- A decision that outlives the PR belongs in an ADR (`docs/adr/`); link it here instead of restating it.
 ```
 
 Skip a test-plan section — CI shows test status. Skip tool-attribution footers — commit trailers handle that.

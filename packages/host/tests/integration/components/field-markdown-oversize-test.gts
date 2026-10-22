@@ -1,5 +1,7 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import MarkdownField from '@cardstack/base/markdown';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -9,13 +11,6 @@ import {
 } from '@cardstack/runtime-common';
 import { OVERSIZED_MARKDOWN_PREVIEW_LENGTH } from '@cardstack/runtime-common/marked-sync';
 
-import {
-  CardDef,
-  contains,
-  field,
-  MarkdownField,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -26,7 +21,6 @@ import { setupRenderingTest } from '../../helpers/setup';
 // so a multi-MB field can never block the render thread.
 module('Integration | field markdown oversize', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
 

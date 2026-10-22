@@ -1,12 +1,11 @@
+import NumberField from '@cardstack/base/number';
 import { module, test } from 'qunit';
 
-import { setupBaseRealm, NumberField } from '../helpers/base-realm';
 import { renderConfiguredField } from '../helpers/field-test-helpers';
 import { setupRenderingTest } from '../helpers/setup';
 
 module('Integration | number field configuration', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   // ============================================
   // Presentation Mode Rendering Tests

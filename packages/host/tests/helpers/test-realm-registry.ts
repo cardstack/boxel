@@ -1,10 +1,17 @@
-import type { Realm } from '@cardstack/runtime-common';
+import type { Realm, RealmAction } from '@cardstack/runtime-common';
+
+import ENV from '@cardstack/host/config/environment';
 
 import type { TestRealmAdapter } from './adapter';
 
 type TestRealmRecord = {
   realm: Realm;
   adapter: TestRealmAdapter;
+  // Set for a realm that judges requests by its ACL (`enforcePermissions`):
+  // the permissions a session it accepts for `user` carries, which is what
+  // the realm computes for them from the permissions it stores. A session
+  // carrying anything else is refused.
+  sessionPermissionsFor?: (user: string) => Promise<RealmAction[]>;
 };
 
 const TEST_REALM_REGISTRY = '__cardstack_testRealmRegistry';
@@ -20,4 +27,19 @@ export function getTestRealmRegistry(): Map<string, TestRealmRecord> {
     (globalThis as any)[TEST_REALM_REGISTRY] = registry;
   }
   return registry;
+}
+
+// The realm server is mocked at ENV.realmServerURL (http://test-realm); realms
+// under that origin are served in-process via the test-realm registry and have
+// no listener on the real network. Only realms that resolve to a genuinely
+// served origin — the base and skills realms on localhost:4201 — can be reached
+// with a real fetch. A `globalThis.fetch` against an in-process realm always
+// rejects with `TypeError: Failed to fetch`; besides the noise, that rejection
+// can escape as an uncaught error and red an unrelated sibling test.
+export function isInProcessRealmURL(url: string): boolean {
+  try {
+    return new URL(url).origin === new URL(ENV.realmServerURL).origin;
+  } catch {
+    return false;
+  }
 }

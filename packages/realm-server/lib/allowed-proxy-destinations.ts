@@ -1,6 +1,12 @@
 import type { CreditStrategy } from './credit-strategies.ts';
 import { CreditStrategyFactory } from './credit-strategies.ts';
 import { type DBAdapter, logger } from '@cardstack/runtime-common';
+import {
+  PROXY_ENDPOINT_KEY_COLUMNS,
+  readProxyEndpointKey,
+  UnreadableProxyEndpointKeyError,
+  type ProxyEndpointKeyRow,
+} from './proxy-endpoint-keys.ts';
 
 const log = logger('allowed-proxy-destinations');
 
@@ -39,6 +45,30 @@ function matchesDestination(requestUrl: URL, destinationUrl: string): boolean {
   return requestPath.startsWith(`${destinationPath}/`);
 }
 
+// A system key is named by its endpoint's configured URL, which is what logs
+// and errors record in place of the value.
+// Whether two destinations can match the same request URL: one's path lies
+// under the other's on the same origin.
+export function destinationsOverlap(a: string, b: string): boolean {
+  let parse = (url: string) => {
+    try {
+      return new URL(url);
+    } catch {
+      return undefined;
+    }
+  };
+  let urlA = parse(a);
+  let urlB = parse(b);
+  if (!urlA || !urlB) {
+    return false;
+  }
+  return matchesDestination(urlA, b) || matchesDestination(urlB, a);
+}
+
+export function systemKeyName(endpointUrl: string): string {
+  return `system:${endpointUrl}`;
+}
+
 export interface AllowedProxyDestination {
   url: string;
   apiKey: string;
@@ -48,16 +78,11 @@ export interface AllowedProxyDestination {
   authParameterName?: string; // For URL parameter auth, e.g., 'key' for Google, 'api_key' for others
 }
 
-interface ProxyEndpointRow {
-  id: string;
-  url: string;
-  api_key: string;
+interface ProxyEndpointRow extends ProxyEndpointKeyRow {
   credit_strategy: string;
   supports_streaming: boolean;
   auth_method?: string;
   auth_parameter_name?: string;
-  created_at: string;
-  updated_at: string;
 }
 
 export class AllowedProxyDestinations {
@@ -71,50 +96,79 @@ export class AllowedProxyDestinations {
     this.dbAdapter = dbAdapter;
   }
 
-  private async loadFromDatabase() {
+  // Bumped by every `invalidate()`. A reload applies its rows, and extends the
+  // cache, only if no invalidation happened while it ran, so a reload that
+  // read the table before a change can't put the old rows back.
+  private generation = 0;
+
+  private async loadFromDatabase(): Promise<
+    Record<string, AllowedProxyDestination>
+  > {
     try {
       const result = await this.dbAdapter.execute(
-        'SELECT * FROM proxy_endpoints',
+        `SELECT id, url, credit_strategy, supports_streaming, auth_method,
+           auth_parameter_name, ${PROXY_ENDPOINT_KEY_COLUMNS}
+         FROM proxy_endpoints`,
       );
-
-      if (result.length === 0) {
-        this.destinations = {};
-        return;
-      }
-
-      const endpoints = result as unknown as ProxyEndpointRow[];
-      this.initializeFromEndpoints(endpoints);
+      return this.destinationsFromEndpoints(
+        result as unknown as ProxyEndpointRow[],
+      );
     } catch (error) {
       log.error(
         'Failed to load allowed proxy destinations from database:',
         error,
       );
-      this.destinations = {};
+      return {};
     }
   }
 
-  private initializeFromEndpoints(endpoints: ProxyEndpointRow[]) {
-    this.destinations = {};
+  private destinationsFromEndpoints(
+    endpoints: ProxyEndpointRow[],
+  ): Record<string, AllowedProxyDestination> {
+    const destinations: Record<string, AllowedProxyDestination> = {};
+    // Each endpoint is built on its own, so one that can't be (a sealed key
+    // that doesn't open, or a credit strategy its key doesn't satisfy) is
+    // refused while every other destination stays allowed.
     for (const endpoint of endpoints) {
-      this.destinations[endpoint.url] = {
-        url: endpoint.url,
-        apiKey: endpoint.api_key,
-        creditStrategy: CreditStrategyFactory.create(
-          endpoint.credit_strategy as 'openrouter' | 'no-credit',
-          endpoint.api_key,
-        ),
-        supportsStreaming: endpoint.supports_streaming,
-        authMethod: (endpoint.auth_method || 'header') as AuthMethod, // Default to header for backward compatibility
-        authParameterName: endpoint.auth_parameter_name,
-      };
+      try {
+        // A row with no key passes its null through.
+        const apiKey = readProxyEndpointKey(endpoint) as string;
+        destinations[endpoint.url] = {
+          url: endpoint.url,
+          apiKey,
+          creditStrategy: CreditStrategyFactory.create(
+            endpoint.credit_strategy as 'openrouter' | 'no-credit',
+            apiKey,
+            systemKeyName(endpoint.url),
+          ),
+          supportsStreaming: endpoint.supports_streaming,
+          authMethod: (endpoint.auth_method || 'header') as AuthMethod, // Default to header for backward compatibility
+          authParameterName: endpoint.auth_parameter_name,
+        };
+      } catch (error) {
+        // An unreadable key was already reported, once per sealed value.
+        if (!(error instanceof UnreadableProxyEndpointKeyError)) {
+          log.error(
+            `proxy endpoint ${endpoint.url} could not be loaded, so it is refused: ${(error as Error)?.message ?? error}`,
+          );
+        }
+      }
     }
+    return destinations;
   }
 
   private async ensureCacheValid() {
     const now = Date.now();
     if (now > this.cacheExpiry) {
-      await this.loadFromDatabase();
-      this.cacheExpiry = now + this.CACHE_DURATION;
+      const generation = this.generation;
+      const destinations = await this.loadFromDatabase();
+      if (generation === this.generation) {
+        this.destinations = destinations;
+        this.cacheExpiry = now + this.CACHE_DURATION;
+      } else {
+        // The table changed while this reload ran; read it again.
+        await this.ensureCacheValid();
+      }
     }
   }
 
@@ -157,5 +211,15 @@ export class AllowedProxyDestinations {
 
   static reset(): void {
     AllowedProxyDestinations.instance = null;
+  }
+
+  // The next lookup reloads the endpoints, so a change written by this
+  // process applies to its next request.
+  static invalidate(): void {
+    let instance = AllowedProxyDestinations.instance;
+    if (instance) {
+      instance.generation++;
+      instance.cacheExpiry = 0;
+    }
   }
 }

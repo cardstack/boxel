@@ -38,13 +38,20 @@ const DEFAULT_JANITOR_INTERVAL_MS = 30 * 60 * 1000;
 // trust model. The job-id boundary scopes the cache to a single batch; a
 // subsequent job hashes to different keys and never reuses a stale value.
 //
-// Same-realm reads are safe by construction: within an indexing batch the
-// writer touches `boxel_index_working`, not `boxel_index`, so every read of the
-// consuming realm's `boxel_index` returns identical bytes until the batch's
-// `applyBatchUpdates` swap fires. Cross-realm reads accept a looser contract —
-// within one jobId, results are pinned to the first observation regardless of
-// whether a peer realm has swapped since ("one consolidated view of the
-// realm-server's state per batch"). The bound is the job's lifetime.
+// A job's own writes never move what it reads: a pass stages its rows in
+// `boxel_index_pending` and swaps them into `boxel_index` only when it
+// commits. Other passes can: index passes of one realm run one per writer
+// lane, so another writer's pass can commit to the consuming realm's
+// `boxel_index` while this job runs. So the handler folds each searched
+// realm's generation fingerprint, and the consuming realm's, into the key
+// (see `realmGenerations`). A commit advances the realm's
+// `current_generation` in the same transaction as its swap, so a read after
+// a peer's commit hashes to a fresh key and never returns an answer from
+// before it. Within a job, then, the cache pins nothing a commit has moved
+// past, and an index pass's commit-time validation re-visits what a peer's
+// commit made stale. A searched realm with no local index (a remote
+// federation peer) has no fingerprint, so its results stay pinned to the
+// first observation for the job's lifetime.
 //
 // The handler gates entry into this cache on `x-boxel-job-id` and
 // `x-boxel-consuming-realm` both being present and well-formed; both headers
@@ -54,8 +61,9 @@ const DEFAULT_JANITOR_INTERVAL_MS = 30 * 60 * 1000;
 // Entries store the *resolved, serialized* response bytes (a `string`).
 // Concurrent same-key populates each run their own `populate` and race to
 // `INSERT ... ON CONFLICT DO NOTHING`; first write wins, and because both came
-// from the same `(jobId, query)` tuple against the same snapshot-stable
-// `boxel_index` either resolved doc is equally valid.
+// from the same `(jobId, query)` tuple at the same generations either
+// resolved doc is equally valid. A populate that raced a commit may store a
+// body newer than its key's generation, which is fresher, never staler.
 export class JobScopedSearchCache {
   readonly #dbAdapter: DBAdapter;
   readonly #ttlMs: number;
@@ -95,6 +103,12 @@ export class JobScopedSearchCache {
     query: Query;
     opts: unknown | undefined;
     populate: () => Promise<string>;
+    // Fires the moment the cache decides how it will satisfy the request, and
+    // before `populate` runs on a miss — the same contract as
+    // `LiveSearchCache`'s seam, so a caller reporting which cache answered can
+    // report it the same way for both. The per-job hit/miss tallies below are
+    // aggregates dropped at `clearJob`; this reports the individual request.
+    onOutcome?: (outcome: 'hit' | 'miss') => void;
   }): Promise<string> {
     let hash = searchRequestKeyHash(args.realms, args.query, args.opts);
     let existing = await this.#getCachedByHash(args.jobId, hash);
@@ -104,9 +118,11 @@ export class JobScopedSearchCache {
         stat.hits += 1;
         stat.lastTouchedAt = Date.now();
       }
+      args.onOutcome?.('hit');
       return existing;
     }
 
+    args.onOutcome?.('miss');
     let result = await args.populate();
     // Count the miss only after populate resolves: if it throws we count
     // nothing and never allocate a #stats entry for a jobId that produced no

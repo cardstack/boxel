@@ -162,13 +162,16 @@ export default class SyncOpenRouterModelsTool extends HostBaseTool<
     input: BaseToolModule.RealmIdentifierCard,
   ): Promise<BaseToolModule.SyncOpenRouterModelsResult> {
     let commandModule = await this.loadToolModule();
-    let realmURL = input.realmIdentifier;
-    if (!realmURL) {
+    let realmIdentifier = input.realmIdentifier;
+    if (!realmIdentifier) {
       throw new Error('realmIdentifier is required');
     }
-    if (!realmURL.endsWith('/')) {
-      realmURL += '/';
+    if (!realmIdentifier.endsWith('/')) {
+      realmIdentifier += '/';
     }
+    // The realm may be named by its registered prefix or by its URL. Requests
+    // go to its URL; references written into its cards use its prefix.
+    let realmURL = this.network.virtualNetwork.toURL(realmIdentifier);
 
     // Step 1: Fetch all models from OpenRouter API (public endpoint, no auth needed)
     let response = await fetch(OPENROUTER_MODELS_URL, {
@@ -246,7 +249,7 @@ export default class SyncOpenRouterModelsTool extends HostBaseTool<
     let processed = 0;
     for (let i = 0; i < batches.length; i++) {
       let batch = batches[i];
-      let result = await this.executeBatchWithRetry(batch, new URL(realmURL));
+      let result = await this.executeBatchWithRetry(batch, realmURL);
       if (result.ok) {
         processed += batch.length;
       } else {
@@ -333,7 +336,7 @@ export default class SyncOpenRouterModelsTool extends HostBaseTool<
     return { ok: true };
   }
 
-  private async fetchExistingSlugs(realmURL: string): Promise<Set<string>> {
+  private async fetchExistingSlugs(realmURL: URL): Promise<Set<string>> {
     let slugs = new Set<string>();
     try {
       // Listing existing cards only needs each one's id, so ask the
@@ -344,7 +347,9 @@ export default class SyncOpenRouterModelsTool extends HostBaseTool<
         {
           filter: {
             type: {
-              module: rri(new URL('openrouter-model', realmURL).href),
+              module: this.network.virtualNetwork.unresolveURL(
+                new URL('openrouter-model', realmURL).href,
+              ),
               name: 'OpenRouterModel',
             },
           },

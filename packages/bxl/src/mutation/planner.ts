@@ -1,6 +1,6 @@
 import { parseNativeJq } from '../bxl/bridge/native.ts';
 import {
-  mutationBuiltinLibraries,
+  requestContextBuiltinLibraries,
   resolveBuiltinRegistry,
   type ResolvedBuiltinRegistry,
 } from '../bxl/registry/index.ts';
@@ -467,7 +467,7 @@ function assertJsonContext(context: BxlMutationContext) {
     cleared.add(value);
   };
 
-  for (const slot of ['params', 'actor', 'instance'] as const) {
+  for (const slot of ['params', 'actor', 'instance', 'realmConfig'] as const) {
     const value = context[slot];
     if (value === undefined) continue;
     try {
@@ -510,8 +510,8 @@ function withEvaluationBudget<T>(
   const run = () =>
     withRuntimeDiagnostics(() => body(evaluate), context.prepare.runtimeLimits);
   // Scoped outside the diagnostics frame, and around every statement's
-  // evaluation, so `params`/`actor`/`instance` read this plan's context
-  // wherever in the program they appear.
+  // evaluation, so `params`/`actor`/`instance`/`realmConfig` read this plan's
+  // context wherever in the program they appear.
   const runtime = context.requestContext
     ? withRequestContext(context.requestContext, run)
     : run();
@@ -2582,7 +2582,7 @@ export function prepareBxlMutation(
   const preparedOptions = { ...options, syntax };
   const parsed = parseBxlMutationProgram(source, preparedOptions);
   const registry = resolveBuiltinRegistry(
-    mutationBuiltinLibraries(options.libraries),
+    requestContextBuiltinLibraries(options.libraries),
   );
 
   return Object.freeze({

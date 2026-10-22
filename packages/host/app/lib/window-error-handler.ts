@@ -11,6 +11,23 @@ import { serializableError } from '@cardstack/runtime-common/error';
 
 import { appendRenderTimerSummaryToStack } from '../utils/render-timer-stub';
 
+// Chrome reports a ResizeObserver callback that resizes an observed element
+// within the same frame as a window `error` event with no error object. The
+// browser has already deferred the remaining notifications to the next frame,
+// so nothing failed and the render is still good.
+const BENIGN_RESIZE_OBSERVER_MESSAGES = new Set([
+  'ResizeObserver loop completed with undelivered notifications.',
+  'ResizeObserver loop limit exceeded',
+]);
+
+export function isBenignResizeObserverError(event: Event): boolean {
+  return (
+    event instanceof ErrorEvent &&
+    !event.error &&
+    BENIGN_RESIZE_OBSERVER_MESSAGES.has(event.message)
+  );
+}
+
 export function windowErrorHandler({
   event,
   setStatusToUnusable,

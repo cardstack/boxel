@@ -19,6 +19,7 @@
     "@koa/cors": "catalog:",
     "@koa/router": "catalog:",
     "@octokit/rest": "catalog:",
+    "@opentelemetry/api": "catalog:",
     "@sentry/node": "catalog:",
     "@types/archiver": "catalog:",
     "@types/flat": "catalog:",
@@ -101,6 +102,8 @@
     "test-module": "./tests/scripts/run-qunit-with-test-pg.sh --module ${TEST_MODULE}",
     "bench:realm": "LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_REALM_LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_PRERENDER_LOG_LEVELS='*=warn,prerenderer-chrome=none' NODE_NO_WARNINGS=1 node scripts/bench-realm/bench.ts",
     "bench:realm:check": "LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_REALM_LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_PRERENDER_LOG_LEVELS='*=warn,prerenderer-chrome=none' NODE_NO_WARNINGS=1 node scripts/bench-realm/check.ts",
+    "load-harness": "NODE_NO_WARNINGS=1 node scripts/load-harness/run-load.ts",
+    "load-harness:setup": "NODE_NO_WARNINGS=1 node scripts/load-harness/setup-realm.ts",
     "migrate": "NODE_NO_WARNINGS=1 node scripts/run-migrations.ts",
     "start:matrix": "./scripts/start-matrix.sh",
     "start:smtp": "cd ../matrix && pnpm assert-smtp-running",
@@ -111,11 +114,13 @@
     "test:wait-for-servers": "WAIT_ON_TIMEOUT=900000 NODE_NO_WARNINGS=1 START_SERVER_AND_TEST_INSECURE=1 start-server-and-test 'pnpm run wait' 'https-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run wait' 'https-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http://localhost:8008|http://localhost:5001' 'test'",
     "setup:base-in-deployment": "mkdir -p /persistent/base && rsync --dry-run --itemize-changes --checksum --recursive --delete ../base/. /persistent/base/ && rsync --checksum --recursive --delete ../base/. /persistent/base/",
     "setup:experiments-in-deployment": "mkdir -p /persistent/experiments && rsync --dry-run --itemize-changes --checksum --recursive ../experiments-realm/. /persistent/experiments/ && rsync --checksum --recursive ../experiments-realm/. /persistent/experiments/",
-    "setup:catalog-in-deployment": "mkdir -p /persistent/catalog && pnpm --dir=../catalog catalog:update && pnpm --dir=../boxel-ui generate:component-specs --quiet && rsync --dry-run --itemize-changes --checksum --recursive --delete ../catalog/contents/. /persistent/catalog/ && rsync --checksum --recursive --delete ../catalog/contents/. /persistent/catalog/",
+    "setup:catalog-in-deployment": "mkdir -p /persistent/catalog",
     "setup:skills-in-deployment": "mkdir -p /persistent/skills",
+    "setup:pretui-in-deployment": "mkdir -p /persistent/pretui && rsync --dry-run --itemize-changes --checksum --recursive --delete --exclude-from=../pretui/.boxelignore --delete-excluded ../pretui/. /persistent/pretui/ && rsync --checksum --recursive --delete --exclude-from=../pretui/.boxelignore --delete-excluded ../pretui/. /persistent/pretui/",
     "setup:software-factory-in-deployment": "mkdir -p /persistent/software-factory && rsync --dry-run --itemize-changes --checksum --recursive --delete ../software-factory/realm/. /persistent/software-factory/ && rsync --checksum --recursive --delete ../software-factory/realm/. /persistent/software-factory/",
     "setup:boxel-homepage-in-deployment": "mkdir -p /persistent/boxel-homepage",
     "setup:openrouter-in-deployment": "mkdir -p /persistent/openrouter /persistent/openrouter/OpenRouterModel && rsync --dry-run --itemize-changes --checksum --recursive --delete --exclude 'OpenRouterModel/' ../openrouter-realm/. /persistent/openrouter/ && rsync --checksum --recursive --delete --exclude 'OpenRouterModel/' ../openrouter-realm/. /persistent/openrouter/",
+    "setup:choreo-gallery-in-deployment": "{ test -f ../choreo-gallery/realm/film-app/index.html || { echo 'choreo-gallery: film-app/ is not built (run pnpm --dir=packages/choreo-film-app build:realm), so the deployed realm is left as it is' >&2; exit 1; }; } && mkdir -p /persistent/choreo-gallery && rsync --dry-run --itemize-changes --checksum --recursive --delete --exclude '.boxel-sync.json' --exclude '.boxel-history/' ../choreo-gallery/realm/. /persistent/choreo-gallery/ && rsync --checksum --recursive --delete --exclude '.boxel-sync.json' --exclude '.boxel-history/' ../choreo-gallery/realm/. /persistent/choreo-gallery/",
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 node main.ts",
     "start:base": "mise run services:realm-server-base -- --workerManagerPort=4213",
     "start:test-realms": "mise run services:test-realms -- --workerManagerPort=4211",
@@ -146,11 +151,14 @@
     "check-user-pg-connections": "./scripts/check-user-pg-connections.sh",
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/sync-stripe-products.ts",
     "sync-openrouter-models": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/sync-openrouter-models.ts",
-    "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest"
+    "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest",
+    "build:secure-origin": "pnpm --dir=../secure-origin build"
   },
   "dependencies": {
+    "@aws-sdk/client-kms": "^3.1069.0",
     "@aws-sdk/client-s3": "^3.1065.0",
     "@aws-sdk/lib-storage": "^3.1065.0",
+    "@cardstack/secure-origin": "workspace:*",
     "morphdom": "^2.7.8",
     "puppeteer": "^25.0.2"
   }

@@ -24,12 +24,14 @@
     "strict": true,
     "experimentalDecorators": true,
     "resolveJsonModule": true,
+    "customConditions": ["developing:choreo"],
     "skipLibCheck": true,
     "paths": {
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
       "@cardstack/boxel-host/tools/*": ["app/tools/*"],
       "@cardstack/boxel-host/commands/*": ["app/tools/*"],
+      "@cardstack/boxel-host/lib/*": ["app/lib/*"],
       "@cardstack/base/*": [
         "../base/*.gts",
         "../base/*.ts",
@@ -49,10 +51,12 @@
   },
   "include": [
     "../base/**/*",
+    "../ai-assistant-evals/eval-realm/**/*",
     "../experiments-realm/**/*",
     "../openrouter-realm/**/*",
     "../test-realm-cards/contents/**/*",
     "app/**/*",
+    "support/**/*",
     "tests/**/*",
     "types/**/*"
   ],

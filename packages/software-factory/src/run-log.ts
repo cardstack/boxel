@@ -1160,7 +1160,10 @@ export function cardPathsFromToolCalls(
 // pulse, arrival wash) is gated on status=running.
 // ---------------------------------------------------------------------------
 
-const RUN_LOG_GTS = `import { registerDestructor } from '@ember/destroyable';
+// Exported so the parse gate can be run against the exact bytes the factory
+// seeds into a control realm. A type error here makes every run start
+// parse-red, and the module is never type-checked as part of this package.
+export const RUN_LOG_GTS = `import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
@@ -1185,7 +1188,6 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
-// @ts-expect-error import.meta is supported by the Boxel host
 const here: string = import.meta.url;
 
 function clock(value: Date | string | undefined): string {

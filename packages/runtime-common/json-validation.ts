@@ -1,5 +1,15 @@
 import { InvalidQueryError } from './invalid-query-error.ts';
 
+// Anything `JSON.parse` can produce, which is the same standard
+// `assertJSONValue` below holds a value to at run time.
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export function assertJSONValue(v: any, pointer: string[]) {
   if (v === null) {
     return;

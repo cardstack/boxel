@@ -1,0 +1,70 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Some of my recipes don't have a cuisine yet. Fill in the right cuisine for each of those, leave the ones that already have one alone, and show me one you changed.",
+      "followUpPrompts": [],
+      "successCriteria": "1. The assistant finds the recipes without a cuisine with `realm.cards.search`, or `realm.entries.search` limited to this workspace, inside a `run-realm-code` script — a filter on the `Recipe` type for an empty `cuisine` — not with a `search-cards` tool (`SearchCardsByQueryCommand`, `SearchCardsByTypeAndTitleCommand`) and not by reading every recipe file one by one.\n2. It edits the recipes it found in the same script, or in one more script, looping over the search results with `realm.fs.replace` — not one tool call per recipe.\n3. Exactly the four recipes with no cuisine are changed: Margherita Pizza (Italian), Beef Bourguignon (French), Shoyu Ramen (Japanese) and Moussaka (Greek). The four that already had a cuisine are untouched.\n4. One changed recipe is shown on screen and renders with no error boundary.\n5. It does not touch `recipe.gts`.",
+      "cardInfo": {
+        "name": "Search route: fill missing cuisines",
+        "summary": "Eight recipes are already in the workspace, four of them without a cuisine. The prompt asks to fill those in. This eval tests whether the assistant finds them with `realm.cards.search` or `realm.entries.search` in a script and edits them in a loop, rather than calling a `search-cards` tool or reading each file.",
+        "notes": "A deliberately small, one-prompt eval: the cost is a search, one or two scripts and a show-card. Its only question is which search route the model takes for a search inside one realm. Timing targets apply as for any single-prompt eval.\n\nThe definition and the recipes live under `search-route/` in this realm and are copied into the test workspace before the prompt.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../search-route/Recipe/margherita-pizza"
+        }
+      },
+      "initialCards.1": {
+        "links": {
+          "self": "../search-route/Recipe/pad-thai"
+        }
+      },
+      "initialCards.2": {
+        "links": {
+          "self": "../search-route/Recipe/chicken-tikka-masala"
+        }
+      },
+      "initialCards.3": {
+        "links": {
+          "self": "../search-route/Recipe/beef-bourguignon"
+        }
+      },
+      "initialCards.4": {
+        "links": {
+          "self": "../search-route/Recipe/guacamole"
+        }
+      },
+      "initialCards.5": {
+        "links": {
+          "self": "../search-route/Recipe/ramen"
+        }
+      },
+      "initialCards.6": {
+        "links": {
+          "self": "../search-route/Recipe/paella"
+        }
+      },
+      "initialCards.7": {
+        "links": {
+          "self": "../search-route/Recipe/moussaka"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

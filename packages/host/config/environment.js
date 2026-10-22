@@ -64,11 +64,13 @@ function environmentDefaults() {
       realmServerURL: 'https://localhost:4201/',
       realmHost: 'localhost:4201',
       iconsURL: 'http://localhost:4206',
+      secureOriginURL: 'https://localhost:4208/secure',
       matrixURL: 'http://localhost:8008',
       baseRealmURL: 'https://localhost:4201/base/',
       catalogRealmURL: 'https://localhost:4201/catalog/',
       skillsRealmURL: 'https://localhost:4201/skills/',
       openRouterRealmURL: 'https://localhost:4201/openrouter/',
+      pretuiRealmURL: 'https://localhost:4201/pretui/',
       testRealmURL: 'https://localhost:4202/test/',
     };
   }
@@ -85,11 +87,13 @@ function environmentDefaults() {
     realmServerURL: `https://${realmHost}/`,
     realmHost,
     iconsURL: `https://icons.${slug}.localhost`,
+    secureOriginURL: `https://realm-server-secure.${slug}.localhost/secure`,
     matrixURL: `https://matrix.${slug}.localhost`,
     baseRealmURL: `https://${realmHost}/base/`,
     catalogRealmURL: `https://${realmHost}/catalog/`,
     skillsRealmURL: `https://${realmHost}/skills/`,
     openRouterRealmURL: `https://${realmHost}/openrouter/`,
+    pretuiRealmURL: `https://${realmHost}/pretui/`,
     // mise-tasks/services/test-realms registers the live test realm at
     // `https://realm-test.${slug}.localhost/test/` in env mode (the
     // counterpart to standard mode's `https://localhost:4202/test/`).
@@ -164,6 +168,12 @@ module.exports = function (environment) {
     iconsURL: process.env.BOXEL_ENVIRONMENT
       ? defaults.iconsURL
       : process.env.ICONS_URL || defaults.iconsURL,
+    // The secure origin's page shell, where credentials are typed (see
+    // packages/realm-server/lib/secure-origin.ts). Same env-mode rule as
+    // iconsURL above.
+    secureOriginURL: process.env.BOXEL_ENVIRONMENT
+      ? defaults.secureOriginURL
+      : process.env.SECURE_ORIGIN_URL || defaults.secureOriginURL,
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaults.realmHost,
     publishedRealmBoxelSiteDomain:
@@ -184,6 +194,8 @@ module.exports = function (environment) {
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
       process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
+    resolvedPretuiRealmURL:
+      process.env.RESOLVED_PRETUI_REALM_URL || defaults.pretuiRealmURL,
     // The live test realm-server's /test/ realm — used by host tests
     // that load source modules from it via
     // `tests/helpers#testModuleRealm`. Derived from BOXEL_ENVIRONMENT via
@@ -225,6 +237,7 @@ module.exports = function (environment) {
       ['@cardstack/catalog/', ENV.resolvedCatalogRealmURL],
       ['@cardstack/skills/', ENV.resolvedSkillsRealmURL],
       ['@cardstack/openrouter/', ENV.resolvedOpenRouterRealmURL],
+      ['@cardstack/pretui/', ENV.resolvedPretuiRealmURL],
     ].filter(([, url]) => typeof url === 'string' && url !== ''),
   );
 
@@ -270,15 +283,11 @@ module.exports = function (environment) {
   // A test build is never such an environment — `resolvedCatalogRealmURL` is
   // cleared above — so the test-realm ids assigned there survive, and a test's
   // definitions never depend on what a running catalog holds.
+  // They name the catalog by its prefix, so the ids are the same in every
+  // environment and the realm-server serves them unchanged.
   if (ENV.resolvedCatalogRealmURL) {
-    ENV.defaultSystemCardId = new URL(
-      'SystemCard/default',
-      withTrailingSlash(ENV.resolvedCatalogRealmURL),
-    ).href;
-    ENV.defaultFieldSpecId = new URL(
-      'Spec/fields/field',
-      withTrailingSlash(ENV.resolvedCatalogRealmURL),
-    ).href;
+    ENV.defaultSystemCardId = '@cardstack/catalog/SystemCard/default';
+    ENV.defaultFieldSpecId = '@cardstack/catalog/Spec/fields/field';
   }
 
   return ENV;
@@ -318,8 +327,4 @@ function getLatestSchemaFile() {
     );
   }
   return path.join(schemaDir, latestSchemaFile);
-}
-
-function withTrailingSlash(url) {
-  return url.endsWith('/') ? url : `${url}/`;
 }

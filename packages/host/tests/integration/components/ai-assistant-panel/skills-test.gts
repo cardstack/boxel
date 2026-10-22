@@ -2,14 +2,22 @@ import { waitFor, click, fillIn, settled } from '@ember/test-helpers';
 import { waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import {
+  CardDef,
+  Component,
+  FieldDef,
+  contains,
+  linksTo,
+  linksToMany,
+  field,
+} from '@cardstack/base/card-api';
+import { CardsGrid } from '@cardstack/base/cards-grid';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import { module, skip, test } from 'qunit';
 
 import {
-  REPLACE_MARKER,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
   buildToolFunctionNameFromResolvedRef,
   rri,
   skillCardRef,
@@ -39,18 +47,6 @@ import {
   setupOperatorModeStateCleanup,
   realmConfigCardJSON,
 } from '../../../helpers';
-import {
-  CardDef,
-  Component,
-  FieldDef,
-  contains,
-  linksTo,
-  linksToMany,
-  field,
-  setupBaseRealm,
-  StringField,
-  CardsGrid,
-} from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
@@ -72,7 +68,6 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
@@ -90,14 +85,19 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     activeRealms: [testRealmURL],
     autostart: true,
     now: (() => {
-      // deterministic clock so that, for example, screenshots
+      // deterministic clock so that, for example, captures
       // have consistent content
       let clock = new Date(2024, 8, 19).getTime();
       return () => (clock += 10);
     })(),
   });
 
-  let { getRoomState, getRoomEvents, simulateRemoteMessage } = mockMatrixUtils;
+  let {
+    getRoomState,
+    getRoomEvents,
+    simulateRemoteMessage,
+    waitForToolResult,
+  } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -339,6 +339,53 @@ Instructions live in the markdown body.
     }
     return roomId;
   }
+
+  test('a room whose enabled skill card no longer exists still opens', async function (assert) {
+    // An old room can reference a skill card that was deleted or renamed
+    // after the room was created. The room must still open, and the skill
+    // menu shows the dead reference so the user can turn it off.
+    let missingSkillId = `${testRealmURL}Skill/deleted-skill`;
+    let roomId = mockMatrixUtils.createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room with a deleted skill',
+    });
+    mockMatrixUtils.setRoomState(roomId, APP_BOXEL_ROOM_SKILLS_EVENT_TYPE, {
+      enabledSkillCards: [
+        {
+          sourceUrl: missingSkillId,
+          url: 'mxc://mock-server/deleted-skill',
+          name: 'deleted-skill.json',
+          contentType: 'application/vnd.card+json',
+        },
+      ],
+      disabledSkillCards: [],
+      toolDefinitionFileDefs: [],
+    });
+
+    operatorModeStateService.restore({
+      stacks: [[]],
+      aiAssistantOpen: true,
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-room-settled]');
+    // Opening the panel starts a fresh session; enter the seeded room the way
+    // a user does when picking it from past sessions.
+    getService('ai-assistant-panel-service').enterRoom(roomId);
+    await waitFor(`[data-test-room="${roomId}"][data-test-room-settled]`);
+
+    await click('[data-test-skill-menu]');
+    await waitFor(`[data-test-skill-unavailable="${missingSkillId}"]`);
+    assert
+      .dom(`[data-test-skill-unavailable="${missingSkillId}"]`)
+      .containsText('Skill unavailable');
+    assert
+      .dom(`[data-test-skill-toggle="${missingSkillId}-on"]`)
+      .exists('the dead reference can still be toggled off');
+  });
 
   test('same skill card added twice with no changes results in no-op', async function (assert) {
     const roomId = await renderAiAssistantPanel(
@@ -592,7 +639,7 @@ Instructions live in the markdown body.
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
     await click('[data-test-skill-menu]');
-    let initialCodePath = operatorModeStateService.codePathString;
+    let initialCodePath = operatorModeStateService.state.codePath;
 
     await click(`[data-test-skill-options-button="${skillId}"]`);
     await waitFor('[data-test-boxel-menu-item-text="Open Skill Card"]');
@@ -600,14 +647,14 @@ Instructions live in the markdown body.
 
     await waitUntil(
       () =>
-        operatorModeStateService.codePathString &&
-        operatorModeStateService.codePathString !== initialCodePath &&
-        operatorModeStateService.codePathString.includes('skill'),
+        operatorModeStateService.state.codePath &&
+        operatorModeStateService.state.codePath !== initialCodePath &&
+        operatorModeStateService.state.codePath.includes('skill'),
       { timeoutMessage: 'timed out waiting for code mode to open skill card' },
     );
 
     assert.ok(
-      operatorModeStateService.codePathString?.includes('skill'),
+      operatorModeStateService.state.codePath?.includes('skill'),
       'skill definition is opened in code mode',
     );
   });
@@ -944,6 +991,7 @@ Instructions live in the markdown body.
     await click('[data-test-edit-button]');
     await click('[data-test-close-button]');
 
+    let toolCallId = '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d';
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -951,7 +999,7 @@ Instructions live in the markdown body.
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
-          id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
+          id: toolCallId,
           name: exampleSkillToolName,
           arguments: JSON.stringify({
             attributes: {
@@ -969,94 +1017,19 @@ Instructions live in the markdown body.
     // Click on the apply button, skill card will be updated since it has changed
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
-
-    const finalRoomStateSkillsJson = getRoomState(
-      roomId,
-      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-    );
-    assert.notDeepEqual(
-      finalRoomStateSkillsJson,
-      initialRoomStateSkillsJson,
-      'room state has changed',
-    );
-    // Don't assert contentHash/url for the unchanged skill card — these
-    // can change due to async linksTo relationship loading producing
-    // different serialization. sourceUrl is the stable identifier.
+    // The room's skills are re-uploaded before the tool's result event is
+    // sent, so the room state is safe to read once the event lands. A
+    // re-upload that throws still sends "applied" (the tool's effects
+    // landed); that case surfaces in the room-state assertions below and in
+    // the tool service's error log.
+    let toolResult = await waitForToolResult(roomId, toolCallId);
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === skillsIndexId,
-      ).sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === skillsIndexId,
-      ).sourceUrl,
-      'unchanged skill card is still present',
+      toolResult.content['m.relates_to']?.key,
+      'applied',
+      `tool call applied (failure reason: ${
+        toolResult.content.failureReason ?? 'none'
+      })`,
     );
-
-    assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).contentHash,
-      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).contentHash,
-      'skill card instructions have changed',
-    );
-    assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).url,
-      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).url,
-      'skill card instructions have changed',
-    );
-    assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).sourceUrl,
-      'skill card source URL has not changed',
-    );
-  });
-
-  test('updated skill card instructions result in new event and updated room state when code patch is completing', async function (assert) {
-    const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
-
-    await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
-
-    const initialRoomStateSkillsJson = getRoomState(
-      roomId,
-      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-    );
-
-    await click('[data-test-edit-button]');
-    await fillIn(
-      '[data-test-field="instructions"] textarea',
-      'Updated instructions',
-    );
-    await click('[data-test-edit-button]');
-    await click('[data-test-close-button]');
-
-    let codeBlock = `\`\`\`
-http://test-realm/test/hello.txt
-${SEARCH_MARKER}
-Hello, world!
-${SEPARATOR_MARKER}
-Hi, world!
-${REPLACE_MARKER}
-\`\`\``;
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: codeBlock,
-      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: true,
-    });
-    await settled();
-    // Click on the apply button, skill card will be updated since it has changed
-    await waitFor('[data-test-apply-code-button]');
-    await click('[data-test-apply-code-button]');
 
     const finalRoomStateSkillsJson = getRoomState(
       roomId,

@@ -77,187 +77,221 @@ export class FilePromptLoader implements PromptLoader {
  *
  * Supports:
  * - {{variable}} — simple value substitution (dot paths: {{a.b}})
- * - {{#each items}} ... {{/each}} — iterate over arrays
- * - {{#if value}} ... {{/if}} — conditional blocks
- * - {{.}} — current item in an #each block over a string array
+ * - {{#each items}} ... {{else}} ... {{/each}} — iterate over arrays; the
+ *   optional {{else}} branch renders when the array is missing or empty
+ * - {{#if value}} ... {{else}} ... {{/if}} — conditional blocks
+ * - {{.}} — current item in an #each block over an array of non-objects
+ *
+ * The template is parsed once and rendered in a single walk, so a substituted
+ * value is never parsed as template syntax. Runs of three or more newlines in
+ * the template text collapse to two and the output's edges are trimmed;
+ * substituted values are emitted exactly as given. A tag that doesn't form a
+ * block (an unclosed opener, a stray closer or {{else}}) renders as written.
  */
 export function interpolate(
   template: string,
   variables: Record<string, unknown>,
 ): string {
-  let result = template;
-
-  // Process {{#each ...}} blocks first — they recursively handle nested
-  // {{#if}} and {{#each}} blocks within their body using the item context.
-  // This must happen before top-level {{#if}} processing so that {{#if}}
-  // blocks inside {{#each}} are resolved with the correct item variables.
-  result = processEachBlocks(result, variables);
-
-  // Process remaining top-level {{#if ...}} blocks
-  result = processIfBlocks(result, variables);
-
-  // Process simple {{variable}} and {{a.b.c}} substitutions
-  result = processVariables(result, variables);
-
-  // Clean up excessive blank lines (3+ consecutive → 2)
-  result = result.replace(/\n{3,}/g, '\n\n');
-
-  return result.trim();
+  let segments: Segment[] = [];
+  renderNodes(parseTemplate(template), { variables }, segments);
+  return joinSegments(segments);
 }
 
-function processIfBlocks(
-  template: string,
-  variables: Record<string, unknown>,
-): string {
-  let result = template;
-  let prevResult: string;
+type TemplateNode = TextNode | ValueNode | BlockNode;
 
-  do {
-    prevResult = result;
-    result = replaceOutermostBlock(result, 'if', (key, body) => {
-      let value = resolvePath(key, variables);
-
-      // Split on {{else}} if present
-      let elseParts = body.split('{{else}}');
-      let trueBranch = elseParts[0];
-      let falseBranch =
-        elseParts.length > 1 ? elseParts.slice(1).join('{{else}}') : '';
-
-      if (isTruthy(value)) {
-        return processBlock(trueBranch, variables);
-      }
-      return processBlock(falseBranch, variables);
-    });
-  } while (result !== prevResult);
-
-  return result;
+interface TextNode {
+  kind: 'text';
+  text: string;
 }
 
-function processEachBlocks(
-  template: string,
-  variables: Record<string, unknown>,
-): string {
-  let result = template;
-  let prevResult: string;
-
-  do {
-    prevResult = result;
-    result = replaceOutermostBlock(result, 'each', (key, body) => {
-      let arr = resolvePath(key, variables);
-      if (!Array.isArray(arr) || arr.length === 0) {
-        return '';
-      }
-
-      return arr
-        .map((item) => {
-          if (typeof item === 'object' && item !== null) {
-            // Object item — merge into variables for nested resolution
-            let itemVars = { ...variables, ...item };
-            return processBlock(body, itemVars);
-          } else {
-            // Primitive item — replace {{.}} with the value
-            let rendered = body.replace(/\{\{\.\}\}/g, String(item));
-            return processVariables(rendered, variables);
-          }
-        })
-        .join('');
-    });
-  } while (result !== prevResult);
-
-  return result;
+interface ValueNode {
+  kind: 'value';
+  path: string;
+  source: string;
 }
 
-/**
- * Process all block types and variable substitutions in a template body.
- */
-function processBlock(
-  body: string,
-  variables: Record<string, unknown>,
-): string {
-  let result = processEachBlocks(body, variables);
-  result = processIfBlocks(result, variables);
-  result = processVariables(result, variables);
-  return result;
+interface BlockNode {
+  kind: 'block';
+  type: 'each' | 'if';
+  path: string;
+  body: TemplateNode[];
+  inverse: TemplateNode[];
 }
 
-/**
- * Find and replace the first outermost {{#type key}}...{{/type}} block,
- * correctly handling nested blocks of the same type by counting depth.
- */
-function replaceOutermostBlock(
-  template: string,
-  blockType: string,
-  handler: (key: string, body: string) => string,
-): string {
-  let openTag = `{{#${blockType} `;
-  let closeTag = `{{/${blockType}}}`;
+interface Segment {
+  text: string;
+  isValue: boolean;
+}
 
-  let startIdx = template.indexOf(openTag);
-  if (startIdx === -1) {
-    return template;
-  }
+interface Scope {
+  variables: Record<string, unknown>;
+  // The current item of an #each over non-objects, which {{.}} refers to
+  item?: { value: unknown };
+}
 
-  // Find the closing `}}` of the opening tag
-  let tagEnd = template.indexOf('}}', startIdx + openTag.length);
-  if (tagEnd === -1) {
-    return template;
-  }
-  let key = template.slice(startIdx + openTag.length, tagEnd).trim();
-  let bodyStart = tagEnd + 2; // skip `}}`
+const TAG = /\{\{(#(each|if)\s+([^}]*)|\/(each|if)|else|[^#/}][^}]*)\}\}/g;
 
-  // Walk forward to find the matching close tag, tracking nesting depth
-  let depth = 1;
-  let cursor = bodyStart;
-  while (depth > 0 && cursor < template.length) {
-    let nextOpen = template.indexOf(openTag, cursor);
-    let nextClose = template.indexOf(closeTag, cursor);
-
-    if (nextClose === -1) {
-      // No matching close tag found — leave template as-is
-      return template;
+function parseTemplate(template: string): TemplateNode[] {
+  let root: TemplateNode[] = [];
+  let open: { node: BlockNode; source: string; inElse: boolean }[] = [];
+  let children = (): TemplateNode[] => {
+    let top = open[open.length - 1];
+    return !top ? root : top.inElse ? top.node.inverse : top.node.body;
+  };
+  let pushText = (text: string) => {
+    if (text) {
+      children().push({ kind: 'text', text });
     }
+  };
 
-    if (nextOpen !== -1 && nextOpen < nextClose) {
-      // Found a nested open tag before the next close tag
-      depth++;
-      cursor = nextOpen + openTag.length;
+  let cursor = 0;
+  for (let match of template.matchAll(TAG)) {
+    pushText(template.slice(cursor, match.index));
+    cursor = match.index + match[0].length;
+
+    let [source, inner, openType, key, closeType] = match;
+    let top = open[open.length - 1];
+    if (openType) {
+      let node: BlockNode = {
+        kind: 'block',
+        type: openType as BlockNode['type'],
+        path: key.trim(),
+        body: [],
+        inverse: [],
+      };
+      children().push(node);
+      open.push({ node, source, inElse: false });
+    } else if (closeType) {
+      if (top?.node.type === closeType) {
+        open.pop();
+      } else {
+        pushText(source);
+      }
+    } else if (inner === 'else') {
+      if (top && !top.inElse) {
+        top.inElse = true;
+      } else {
+        pushText(source);
+      }
     } else {
-      // Found a close tag
-      depth--;
-      if (depth === 0) {
-        let body = template.slice(bodyStart, nextClose);
-        let replacement = handler(key, body);
-        return (
-          template.slice(0, startIdx) +
-          replacement +
-          template.slice(nextClose + closeTag.length)
-        );
-      }
-      cursor = nextClose + closeTag.length;
+      children().push({ kind: 'value', path: inner.trim(), source });
+    }
+  }
+  pushText(template.slice(cursor));
+
+  // An opener with no closer renders as written, followed by what it held
+  while (open.length > 0) {
+    let { node, source, inElse } = open.pop()!;
+    let siblings = children();
+    siblings.pop();
+    siblings.push({ kind: 'text', text: source }, ...node.body);
+    if (inElse) {
+      siblings.push({ kind: 'text', text: '{{else}}' }, ...node.inverse);
     }
   }
 
-  return template;
+  return root;
 }
 
-function processVariables(
-  template: string,
-  variables: Record<string, unknown>,
-): string {
-  return template.replace(/\{\{([^#/][^}]*)\}\}/g, (_match, key: string) => {
-    let trimmed = key.trim();
-    if (trimmed === '.') {
-      return _match; // {{.}} only resolved inside #each
+function renderNodes(nodes: TemplateNode[], scope: Scope, out: Segment[]) {
+  for (let node of nodes) {
+    if (node.kind === 'text') {
+      out.push({ text: node.text, isValue: false });
+    } else if (node.kind === 'value') {
+      renderValue(node, scope, out);
+    } else if (node.type === 'each') {
+      renderEach(node, scope, out);
+    } else {
+      let branch = isTruthy(lookup(node.path, scope))
+        ? node.body
+        : node.inverse;
+      renderNodes(branch, scope, out);
     }
-    let value = resolvePath(trimmed, variables);
-    if (value === undefined || value === null) {
-      return '';
+  }
+}
+
+function renderValue(node: ValueNode, scope: Scope, out: Segment[]) {
+  if (node.path === '.' && !scope.item) {
+    // {{.}} only means something inside an #each over non-objects
+    out.push({ text: node.source, isValue: false });
+    return;
+  }
+  let value = lookup(node.path, scope);
+  let text =
+    value === undefined || value === null
+      ? ''
+      : typeof value === 'object'
+        ? JSON.stringify(value)
+        : String(value);
+  if (text) {
+    out.push({ text, isValue: true });
+  }
+}
+
+function renderEach(node: BlockNode, scope: Scope, out: Segment[]) {
+  let items = lookup(node.path, scope);
+  if (!Array.isArray(items) || items.length === 0) {
+    renderNodes(node.inverse, scope, out);
+    return;
+  }
+  for (let item of items) {
+    let itemScope: Scope =
+      typeof item === 'object' && item !== null
+        ? // Object item — merge into variables for nested resolution
+          { variables: { ...scope.variables, ...item } }
+        : { variables: scope.variables, item: { value: item } };
+    renderNodes(node.body, itemScope, out);
+  }
+}
+
+function lookup(path: string, scope: Scope): unknown {
+  return path === '.' ? scope.item?.value : resolvePath(path, scope.variables);
+}
+
+/**
+ * Join rendered segments, collapsing runs of three or more newlines in the
+ * template text to two and trimming whitespace from the output's edges. A
+ * value ends any newline run and is never collapsed or trimmed itself.
+ */
+function joinSegments(segments: Segment[]): string {
+  let parts: Segment[] = [];
+  let newlines = 0;
+  for (let segment of segments) {
+    if (segment.isValue) {
+      parts.push(segment);
+      newlines = 0;
+      continue;
     }
-    if (typeof value === 'object') {
-      return JSON.stringify(value);
+    let text = '';
+    for (let char of segment.text) {
+      if (char !== '\n') {
+        newlines = 0;
+      } else if (++newlines > 2) {
+        continue;
+      }
+      text += char;
     }
-    return String(value);
-  });
+    parts.push({ text, isValue: false });
+  }
+
+  while (parts.length > 0 && !parts[0].isValue) {
+    let text = parts[0].text.trimStart();
+    if (text) {
+      parts[0] = { text, isValue: false };
+      break;
+    }
+    parts.shift();
+  }
+  while (parts.length > 0 && !parts[parts.length - 1].isValue) {
+    let text = parts[parts.length - 1].text.trimEnd();
+    if (text) {
+      parts[parts.length - 1] = { text, isValue: false };
+      break;
+    }
+    parts.pop();
+  }
+
+  return parts.map((part) => part.text).join('');
 }
 
 /**
@@ -463,6 +497,10 @@ export function assembleImplementPrompt(
     issue: context.issue,
     knowledge: context.knowledge,
     toolResults: toolResultsData.length > 0 ? toolResultsData : undefined,
+    // The turn prompts gate their reuse steps on this. Without it the flag is
+    // system-prompt-only: a `--no-catalog-reuse` run is told the catalog is
+    // off limits and then told it MUST produce a table of catalog modules.
+    enableCatalogReuse: context.enableCatalogReuse !== false,
   });
 }
 
