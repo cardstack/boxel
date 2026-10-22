@@ -3042,7 +3042,7 @@ module('Integration | realm', function (hooks) {
       stripScopedCSSGlimmerAttributes(
         compiledJS.replace(/"id":\s"[^"]+"/, '"id": "<id>"'),
       ),
-      compiledCard('"<id>"'),
+      compiledCard('"<id>"', '/dir/person.gts', `${testRealmURL}dir/person`),
       'compiled card is correct',
     );
   });
@@ -3064,7 +3064,7 @@ module('Integration | realm', function (hooks) {
       stripScopedCSSGlimmerAttributes(
         compiledJS.replace(/"id":\s"[^"]+"/, '"id": "<id>"'),
       ),
-      compiledCard('"<id>"'),
+      compiledCard('"<id>"', '/dir/person.gts', `${testRealmURL}dir/person`),
       'compiled card is correct',
     );
   });

@@ -515,7 +515,7 @@ module(basename(import.meta.filename), function () {
 
           assert.codeEqual(
             body,
-            compiledCard('"<id>"', '/person.gts'),
+            compiledCard('"<id>"', '/person.gts', `${testRealmHref}person`),
             'module JS is correct',
           );
         });

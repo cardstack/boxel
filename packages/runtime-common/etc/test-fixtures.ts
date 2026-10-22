@@ -30,13 +30,20 @@ export function increment() {
 }
 `.trim();
 
-export function compiledCard(id = 'null', moduleName = '/dir/person.gts') {
+// `moduleIdentifier` is the identifier the realm tags the module's exported
+// classes with: its URL without the extension, in canonical form.
+export function compiledCard(
+  id: string,
+  moduleName: string,
+  moduleIdentifier: string,
+) {
   return `
 import { contains, field, Component, CardDef } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import { setComponentTemplate } from "@ember/component";
 import { createTemplateFactory } from "@ember/template-factory";
 export class Person extends CardDef {
+  static [Symbol.for("ident")] = [${JSON.stringify(moduleIdentifier)}, "Person"];
   static displayName = 'Person';
   static {
     dt7948.g(this.prototype, "firstName", [field], function () {
