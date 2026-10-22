@@ -2637,11 +2637,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
     realms: string[] | undefined,
   ): string[] | undefined {
     let events = this.matrixService.roomResources.get(roomId)?.events ?? [];
-    if (
-      sessionSkillFeatures(events, this.matrixService.aiBotUserId).includes(
-        'catalog-reuse',
-      )
-    ) {
+    // The bot's id is derived from the signed-in user's server; with no one
+    // signed in no sender is excluded, and the bot never sends a feature command.
+    let aiBotUserId = this.matrixService.userId
+      ? this.matrixService.aiBotUserId
+      : '';
+    if (sessionSkillFeatures(events, aiBotUserId).includes('catalog-reuse')) {
       return realms;
     }
     let { virtualNetwork } = this.network;
