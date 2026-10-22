@@ -17,6 +17,7 @@ import {
 } from '../../src/shell/password-reset/reset-link.ts';
 import ResetPassword from '../../src/shell/password-reset/reset-password.gts';
 import { setupMockServers, setupPageAddress } from '../helpers/mock-servers.ts';
+import { fieldNames } from '../helpers/field-names.ts';
 import { assertEnterSubmits } from '../helpers/implicit-submission.ts';
 
 const CLI = {
@@ -121,6 +122,7 @@ module('Integration | password reset', function (hooks) {
       assert
         .dom(error('email'))
         .hasText('No account with the given email address exists');
+      assert.deepEqual(fieldNames(), { email: 'Email Address' });
       assert.dom('[data-test-reset-your-password-btn]').isDisabled();
       await fillIn('[data-test-email-field]', 'someone@example.com');
       assert.dom(error('email')).doesNotExist();
@@ -238,6 +240,14 @@ module('Integration | password reset', function (hooks) {
       await fillIn('[data-test-confirm-password-field]', 'something-else');
       await triggerEvent('[data-test-confirm-password-field]', 'blur');
       assert.dom(error('confirm-password')).hasText('Passwords do not match');
+      assert.deepEqual(
+        fieldNames(),
+        {
+          password: 'Enter New Password',
+          'confirm-password': 'Re-Enter New Password',
+        },
+        'each field is named by its label alone, with its error showing',
+      );
       assert.dom('[data-test-reset-password-btn]').isDisabled();
       assert.strictEqual(
         servers.requests('matrix').length,

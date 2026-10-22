@@ -20,6 +20,7 @@ import {
   setupPageAddress,
   type MockServers,
 } from '../helpers/mock-servers.ts';
+import { fieldNames } from '../helpers/field-names.ts';
 import { assertEnterSubmits } from '../helpers/implicit-submission.ts';
 
 const STORAGE_KEY = 'boxel-secure-session';
@@ -296,6 +297,17 @@ module('Integration | register', function (hooks) {
     await fillIn('[data-test-confirm-password-field]', 'different1');
     await triggerEvent('[data-test-confirm-password-field]', 'blur');
     assert.dom(error('confirm-password')).hasText('Passwords do not match');
+    assert.deepEqual(
+      fieldNames(),
+      {
+        name: 'Your Name',
+        email: 'Email',
+        username: 'Username',
+        password: 'Password',
+        'confirm-password': 'Confirm Password',
+      },
+      'each field is named by its label alone, with its error showing',
+    );
     assert.dom('[data-test-register-btn]').isDisabled();
     await fillIn('[data-test-name-field]', 'typing clears the error');
     assert.dom(error('name')).doesNotExist();

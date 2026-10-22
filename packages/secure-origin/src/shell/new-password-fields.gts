@@ -23,8 +23,13 @@ interface Signature {
 }
 
 const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
-  <AuthFormField @label={{@passwordLabel}} data-test-secure-field='password'>
+  <AuthFormField
+    @label={{@passwordLabel}}
+    data-test-secure-field='password'
+    as |labelId|
+  >
     <BoxelInput
+      aria-labelledby={{labelId}}
       data-test-password-field
       name='password'
       autocomplete='new-password'
@@ -46,8 +51,10 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
   <AuthFormField
     @label={{@confirmLabel}}
     data-test-secure-field='confirm-password'
+    as |labelId|
   >
     <BoxelInput
+      aria-labelledby={{labelId}}
       data-test-confirm-password-field
       name='confirm-password'
       autocomplete='new-password'

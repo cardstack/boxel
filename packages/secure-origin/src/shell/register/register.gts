@@ -407,8 +407,10 @@ export default class Register extends Component<Signature> {
             <AuthFormField
               @label='Your invite code'
               data-test-secure-field='token'
+              as |labelId|
             >
               <BoxelInput
+                aria-labelledby={{labelId}}
                 data-test-token-field
                 name='invite-code'
                 autocomplete='off'
@@ -443,8 +445,13 @@ export default class Register extends Component<Signature> {
               data-test-register-form
               {{on 'submit' this.register}}
             >
-              <AuthFormField @label='Your Name' data-test-secure-field='name'>
+              <AuthFormField
+                @label='Your Name'
+                data-test-secure-field='name'
+                as |labelId|
+              >
                 <BoxelInput
+                  aria-labelledby={{labelId}}
                   data-test-name-field
                   name='name'
                   autocomplete='name'
@@ -457,8 +464,13 @@ export default class Register extends Component<Signature> {
                   {{autofocus}}
                 />
               </AuthFormField>
-              <AuthFormField @label='Email' data-test-secure-field='email'>
+              <AuthFormField
+                @label='Email'
+                data-test-secure-field='email'
+                as |labelId|
+              >
                 <BoxelInput
+                  aria-labelledby={{labelId}}
                   data-test-email-field
                   name='email'
                   autocomplete='email'
@@ -473,8 +485,10 @@ export default class Register extends Component<Signature> {
               <AuthFormField
                 @label='Username'
                 data-test-secure-field='username'
+                as |labelId|
               >
                 <InputGroup
+                  aria-labelledby={{labelId}}
                   data-test-username-field
                   @name='username'
                   @autocomplete='username'

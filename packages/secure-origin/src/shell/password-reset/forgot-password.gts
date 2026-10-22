@@ -132,8 +132,13 @@ export default class ForgotPassword extends Component<Signature> {
             data-test-secure-title
           >Forgot your password?</span>
           <p class='info'>Enter email to receive a reset password link.</p>
-          <AuthFormField @label='Email Address' data-test-secure-field='email'>
+          <AuthFormField
+            @label='Email Address'
+            data-test-secure-field='email'
+            as |labelId|
+          >
             <BoxelInput
+              aria-labelledby={{labelId}}
               data-test-email-field
               name='email'
               autocomplete='email'
