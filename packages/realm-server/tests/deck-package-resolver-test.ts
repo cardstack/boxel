@@ -127,6 +127,24 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('reserved names', function () {
+    test('a lock that pins a Version of base is refused, not given a second copy', function (assert) {
+      let network = makeNetwork();
+      network.addRealmMapping('@cardstack/base/', 'https://base.example/base/');
+      let resolver = new DeckPackageResolver();
+      resolver.setLock({
+        imports: { 'card-api': deckRRI('@cardstack/base@1.0.0/card-api') },
+        scopes: {},
+      });
+      let resolveImport = resolveImportThroughDeck(resolver, network);
+      assert.throws(
+        () => resolveImport('card-api', `${DASHBOARD_URL}scene.js`),
+        /@cardstack/,
+        'the network refuses to map an undeclared @cardstack prefix',
+      );
+    });
+  });
+
   module('the lock', function () {
     test('accepts only exact Version RRIs as targets', function (assert) {
       let resolver = new DeckPackageResolver();
