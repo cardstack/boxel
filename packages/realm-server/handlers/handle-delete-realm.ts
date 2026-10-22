@@ -35,6 +35,8 @@ import {
   deleteRegistryRowByUrl,
 } from '../lib/realm-registry-writes.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
+import { realmEventDispatcher } from '../realm-event-dispatcher.ts';
+import { retireRealmEventRoom } from '../realm-event-rooms.ts';
 
 interface DeleteRealmJSON {
   data: {
@@ -45,6 +47,7 @@ interface DeleteRealmJSON {
 
 export default function handleDeleteRealm({
   dbAdapter,
+  matrixClient,
   realmsRootPath,
   sendEvent,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -250,6 +253,18 @@ export default function handleDeleteRealm({
       } catch (error) {
         Sentry.captureException(error);
       }
+
+      // The realm's event room has no grants left to follow, so its members
+      // are removed and the room is forgotten. Through the realm server's own
+      // matrix client, the one every realm it serves sends its events with,
+      // and so the room's creator. Best-effort and not awaited: it never
+      // rejects, and the realm is already gone.
+      void retireRealmEventRoom({
+        realmURL,
+        matrixClient,
+        dbAdapter,
+        dispatcher: realmEventDispatcher(),
+      });
 
       // CS-11156. Broadcast a bulk cache-invalidation for the source realm
       // and each removed published realm so any peer replicas that still

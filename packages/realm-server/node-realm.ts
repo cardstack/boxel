@@ -13,7 +13,9 @@ import {
   unixTime,
   type ResponseWithNodeStream,
   type TokenClaims,
+  clearRealmEventRoom,
   clearSessionRoom,
+  fetchRealmEventRoom,
   fetchRealmSessionRooms,
   isRealmServerNotInRoomError,
 } from '@cardstack/runtime-common';
@@ -62,6 +64,10 @@ import {
   type RealmEventDispatcher,
   type RealmEventSend,
 } from './realm-event-dispatcher.ts';
+import {
+  ensureRealmEventRoom,
+  syncRealmEventRoom,
+} from './realm-event-rooms.ts';
 
 const realmEventsLog = logger('realm:events');
 
@@ -438,9 +444,10 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
-  // Resolves once the event has reached every session room subscribed to the
-  // realm, or has been merged or dropped by the process's realm event line
-  // (see realm-event-dispatcher.ts). Never rejects: a failed send is logged.
+  // Resolves once the event has reached every room it goes to (see
+  // `prepareRoomSends`), or has been merged or dropped by the process's realm
+  // event line (see realm-event-dispatcher.ts). Never rejects: a failed send
+  // is logged.
   async broadcastRealmEvent(
     event: RealmEventContent,
     realmUrl: string,
@@ -465,6 +472,36 @@ export class NodeAdapter implements RealmAdapter {
       newTxnId: () => matrixClient.nextTxnId(),
       prepare: (content) =>
         this.prepareRoomSends(content, realmUrl, matrixClient, dbAdapter, opts),
+    });
+  }
+
+  async ensureRealmEventRoom(
+    realmUrl: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+    member: string,
+  ): Promise<string | undefined> {
+    return await ensureRealmEventRoom(
+      {
+        realmURL: realmUrl,
+        matrixClient,
+        dbAdapter,
+        dispatcher: this.dispatcher,
+      },
+      member,
+    );
+  }
+
+  async syncRealmEventRoom(
+    realmUrl: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+  ): Promise<void> {
+    await syncRealmEventRoom({
+      realmURL: realmUrl,
+      matrixClient,
+      dbAdapter,
+      dispatcher: this.dispatcher,
     });
   }
 
@@ -497,6 +534,32 @@ export class NodeAdapter implements RealmAdapter {
       }
       realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
       return [];
+    }
+
+    // A private realm's event goes once into the realm's own room, whose
+    // members are the users its grants name (see realm-event-rooms.ts). An
+    // event meant only for some of them, a world-readable realm's event, and
+    // a private realm's event before any host has asked for its room go to
+    // session rooms instead.
+    if (!delivery?.recipients) {
+      let realmEventRoom;
+      try {
+        realmEventRoom = await fetchRealmEventRoom(dbAdapter, realmUrl);
+      } catch (e) {
+        realmEventsLog.error('Error looking up the realm event room', e);
+        return [];
+      }
+      if (realmEventRoom.isPrivate && realmEventRoom.roomId) {
+        return [
+          this.realmEventRoomSend(
+            event,
+            realmUrl,
+            realmEventRoom.roomId,
+            matrixClient,
+            dbAdapter,
+          ),
+        ];
+      }
     }
 
     let dmRooms = await this.waitForSessionRooms(
@@ -560,6 +623,58 @@ export class NodeAdapter implements RealmAdapter {
         );
       },
     }));
+  }
+
+  private realmEventRoomSend(
+    event: RealmEventContent,
+    realmUrl: string,
+    roomId: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+  ): RealmEventSend {
+    return {
+      roomId,
+      send: async (txnId: string) => {
+        if (!matrixClient.isLoggedIn()) {
+          await matrixClient.login();
+        }
+        await matrixClient.sendEvent(
+          roomId,
+          APP_BOXEL_REALM_EVENT_TYPE,
+          event,
+          txnId,
+        );
+      },
+      onFailure: async (e: unknown) => {
+        // A stored room the server user is no longer in, as after a
+        // homeserver reset, is forgotten: the realm's events go to session
+        // rooms until a host asks for the realm's room and gets a new one.
+        if (isRealmServerNotInRoomError(e, roomId)) {
+          try {
+            let cleared = await clearRealmEventRoom(
+              dbAdapter,
+              realmUrl,
+              roomId,
+            );
+            realmEventsLog.warn(
+              `Forgetting realm event room ${roomId} of ${realmUrl}; realm server is no longer in the room`,
+              { cleared },
+            );
+            return;
+          } catch (cleanupError) {
+            realmEventsLog.error(
+              `Failed to forget realm event room ${roomId} of ${realmUrl}`,
+              cleanupError,
+            );
+          }
+        }
+        realmEventsLog.error(
+          `Unable to send event in realm event room ${roomId} for ${realmUrl}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        );
+      },
+    };
   }
 
   private async waitForSessionRooms(

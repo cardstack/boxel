@@ -14,6 +14,8 @@ import {
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
+import { realmEventDispatcher } from '../realm-event-dispatcher.ts';
+import { syncRealmEventRoom } from '../realm-event-rooms.ts';
 import {
   appendRealmServerToUserAccountData,
   appendRealmToUserAccountData,
@@ -135,6 +137,17 @@ export default function handleUpsertRealmUserPermission({
     }
     await insertPermissions(dbAdapter, new URL(normalizedRealmHref), {
       [user]: actions,
+    });
+
+    // The realm's event room holds the users its grants name, so the grant
+    // invites or removes this user. Through the realm server's own matrix
+    // client, the one every realm it serves sends its events with. Not
+    // awaited: it is paced behind the realm's events and never rejects.
+    void syncRealmEventRoom({
+      realmURL: normalizedRealmHref,
+      matrixClient,
+      dbAdapter,
+      dispatcher: realmEventDispatcher(),
     });
 
     // Push a live "your realms changed" signal so a running session re-derives

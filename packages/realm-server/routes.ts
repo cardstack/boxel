@@ -61,6 +61,7 @@ import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthroug
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
 import handleRealmAuth from './handlers/handle-realm-auth.ts';
+import handleRealmEventRooms from './handlers/handle-realm-event-rooms.ts';
 import handleSetRealmCatalog from './handlers/handle-set-realm-catalog.ts';
 import handleDelegateSession from './handlers/handle-delegate-session.ts';
 import handleWorkerRequest from './handlers/handle-worker-request.ts';
@@ -617,6 +618,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_realm-auth',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRealmAuth(args),
+  );
+  router.post(
+    '/_realm-event-rooms',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleRealmEventRooms(args),
   );
   // Shared-secret authenticated (HMAC over body + timestamp); auth is handled
   // inside the handler because the signature covers the request body.

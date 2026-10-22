@@ -48,6 +48,11 @@ const log = logger('realm:events');
 //   is the one that loses events. Events whose loss a subscriber recovers
 //   from go first (see `isCompletion`).
 //
+// - A change to who receives a realm's events (see `schedule`) takes its turn
+//   on the realm's line like an event: an invite queued before an event
+//   completes before the event is sent. It never merges, and it is never the
+//   entry the bound drops.
+//
 // The queue is in memory. A process stopping on purpose waits a bounded time
 // for it to empty (see `drain`); a process that exits any other way, or whose
 // queue outlasts that wait, does not deliver what is still queued.
@@ -70,6 +75,18 @@ export interface RealmEventBroadcast {
   // the event goes back to the head of its line and is prepared again after
   // the pause, up to `maxAttempts` times; any other rejection skips the event.
   prepare(event: RealmEventContent): Promise<RealmEventSend[]>;
+  newTxnId(): string;
+}
+
+// Work other than an event that goes out on a realm's line, such as the
+// invites and kicks that keep a private realm's event room in step with its
+// grants.
+export interface RealmLineJob {
+  realmURL: string;
+  // Resolves the sends the job makes. Runs when the job reaches the head of
+  // its realm's line, and behaves like `RealmEventBroadcast.prepare`
+  // otherwise.
+  prepare(): Promise<RealmEventSend[]>;
   newTxnId(): string;
 }
 
@@ -102,10 +119,11 @@ export interface RealmEventDispatcherStats {
 
 interface Entry {
   realmURL: string;
-  event: RealmEventContent;
+  // Undefined for a job queued through `schedule`.
+  event: RealmEventContent | undefined;
   bytes: number;
   enqueuedAt: number;
-  prepare: RealmEventBroadcast['prepare'];
+  prepare: (event: RealmEventContent | undefined) => Promise<RealmEventSend[]>;
   newTxnId: RealmEventBroadcast['newTxnId'];
   waiters: (() => void)[];
   prepareAttempts: number;
@@ -209,19 +227,17 @@ export class RealmEventDispatcher {
   // best-effort, and a failed send is reported through its `onFailure`.
   broadcast(broadcast: RealmEventBroadcast): Promise<void> {
     return new Promise<void>((resolve) => {
-      let line = this.#lines.get(broadcast.realmURL);
-      if (!line) {
-        line = { pending: [], active: undefined };
-        this.#lines.set(broadcast.realmURL, line);
-      }
+      let line = this.#lineFor(broadcast.realmURL);
       let tail = line.pending[line.pending.length - 1];
-      let merged = tail ? coalesce(tail.event, broadcast.event) : undefined;
+      let merged = tail?.event
+        ? coalesce(tail.event, broadcast.event)
+        : undefined;
       if (tail && merged) {
         let bytes = byteLength(merged);
         this.#queuedBytes += bytes - tail.bytes;
         tail.event = merged;
         tail.bytes = bytes;
-        tail.prepare = broadcast.prepare;
+        tail.prepare = (event) => broadcast.prepare(event!);
         tail.newTxnId = broadcast.newTxnId;
         tail.waiters.push(resolve);
         this.#coalesced++;
@@ -231,18 +247,51 @@ export class RealmEventDispatcher {
           event: broadcast.event,
           bytes: byteLength(broadcast.event),
           enqueuedAt: this.#now(),
-          prepare: broadcast.prepare,
+          prepare: (event) => broadcast.prepare(event!),
           newTxnId: broadcast.newTxnId,
           waiters: [resolve],
           prepareAttempts: 0,
         };
-        line.pending.push(entry);
-        this.#queuedEvents++;
-        this.#queuedBytes += entry.bytes;
+        this.#enqueue(line, entry);
       }
       this.#enforceBound();
       this.#pump();
     });
+  }
+
+  // Queues a job on its realm's line, behind the realm's events queued
+  // before it and ahead of those queued after. Resolves once its sends are
+  // done; like `broadcast`, it never rejects.
+  schedule(job: RealmLineJob): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.#enqueue(this.#lineFor(job.realmURL), {
+        realmURL: job.realmURL,
+        event: undefined,
+        bytes: JOB_BYTES,
+        enqueuedAt: this.#now(),
+        prepare: () => job.prepare(),
+        newTxnId: job.newTxnId,
+        waiters: [resolve],
+        prepareAttempts: 0,
+      });
+      this.#enforceBound();
+      this.#pump();
+    });
+  }
+
+  #lineFor(realmURL: string): Line {
+    let line = this.#lines.get(realmURL);
+    if (!line) {
+      line = { pending: [], active: undefined };
+      this.#lines.set(realmURL, line);
+    }
+    return line;
+  }
+
+  #enqueue(line: Line, entry: Entry) {
+    line.pending.push(entry);
+    this.#queuedEvents++;
+    this.#queuedBytes += entry.bytes;
   }
 
   // Resolves once nothing is queued or in flight.
@@ -306,10 +355,12 @@ export class RealmEventDispatcher {
 
   #enforceBound() {
     while (this.#queuedBytes > this.#maxQueuedBytes) {
+      // Only events are dropped, so a line holding nothing but jobs is never
+      // the one that loses an entry.
       let longest: Line | undefined;
       for (let line of this.#lines.values()) {
         if (
-          line.pending.length > 0 &&
+          line.pending.some((entry) => entry.event) &&
           (!longest || line.pending.length > longest.pending.length)
         ) {
           longest = line;
@@ -319,9 +370,12 @@ export class RealmEventDispatcher {
         return;
       }
       let index = longest.pending.findIndex(
-        (entry) => !isCompletion(entry.event),
+        (entry) => entry.event && !isCompletion(entry.event),
       );
-      let [dropped] = longest.pending.splice(Math.max(0, index), 1);
+      if (index < 0) {
+        index = longest.pending.findIndex((entry) => entry.event);
+      }
+      let [dropped] = longest.pending.splice(index, 1);
       this.#queuedEvents--;
       this.#queuedBytes -= dropped.bytes;
       this.#dropped++;
@@ -641,6 +695,10 @@ function union(
   }
   return [...new Set([...(a ?? []), ...(b ?? [])])];
 }
+
+// What a job counts against the bound: it holds no event, but a backlog of
+// them is still a backlog.
+const JOB_BYTES = 256;
 
 function byteLength(event: RealmEventContent): number {
   return Buffer.byteLength(JSON.stringify(event));

@@ -2455,6 +2455,28 @@ export interface RealmAdapter {
     opts?: RealmEventDelivery,
   ): Promise<void>;
 
+  // A private realm sends its realm events into a room of its own, whose
+  // members are the users its grants name. An adapter without these sends
+  // every realm event to session rooms.
+  //
+  // The realm's event room for a host signed in as `member`, created if need
+  // be, with `member` invited by the time it resolves. Undefined when the
+  // realm is world-readable or no grant names `member`.
+  ensureRealmEventRoom?(
+    realmUrl: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+    member: string,
+  ): Promise<string | undefined>;
+
+  // Brings the members of the realm's event room, if it has one, in step with
+  // its grants. Never rejects.
+  syncRealmEventRoom?(
+    realmUrl: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+  ): Promise<void>;
+
   // optional, set this to override _lint endpoint behavior in tests
   lintStub?(
     request: Request,
@@ -3539,6 +3561,28 @@ export class Realm {
     return sessionRoom;
   }
 
+  // The room this realm sends its realm events into, for a host signed in as
+  // `member`. Undefined when the realm is world-readable, no grant names
+  // `member`, or the adapter sends every event to session rooms.
+  async ensureRealmEventRoom(member: string): Promise<string | undefined> {
+    return await this.#adapter.ensureRealmEventRoom?.(
+      this.url,
+      this.#matrixClient,
+      this.#dbAdapter,
+      member,
+    );
+  }
+
+  // Brings the members of this realm's event room in step with its grants.
+  // Never rejects.
+  async syncRealmEventRoom(): Promise<void> {
+    await this.#adapter.syncRealmEventRoom?.(
+      this.url,
+      this.#matrixClient,
+      this.#dbAdapter,
+    );
+  }
+
   private async readinessCheck(
     request: Request,
     requestContext: RequestContext,
@@ -4409,6 +4453,10 @@ export class Realm {
   // backlog of system-priority indexing work.
   async start(opts?: { fromScratchIndexPriority?: number }) {
     this.#startedUp.fulfill((() => this.#startup(opts))());
+    // Repairs a grant change no process applied to the realm's event room,
+    // such as one made while nothing served the realm. Not awaited: it is
+    // paced with the realm's events and never rejects.
+    void this.syncRealmEventRoom();
 
     if (this.#adapter.fileWatcherEnabled) {
       await this.startFileWatcher();
@@ -16575,11 +16623,27 @@ export class Realm {
     // permission PATCHes are admin-rare so the over-invalidation is
     // negligible).
     await this.clearRealmIndexCachesAndBroadcast();
+    // The realm's event room holds the users its grants name, so a grant
+    // that names someone new invites them and a revoked one removes them.
+    // Not awaited: the invites and kicks are paced behind the realm's events.
+    void this.syncRealmEventRoom();
     // Tell each affected user their accessible-realm set changed so a running
     // session re-derives it from `_realm-auth` (which reads the permissions
     // written just above) without a reload. Nothing else notifies a grantee:
     // the index_updated broadcast above is server-to-server only.
-    await this.notifyRealmsListUpdated(Object.keys(patch));
+    //
+    // A change to the `'*'` grant also moves where the realm's events go: a
+    // private realm sends them into its event room, a world-readable one into
+    // session rooms. So every user the realm names hears of it too, and their
+    // hosts ask again which room to listen in.
+    let affected = new Set(Object.keys(patch));
+    if (affected.has('*')) {
+      for (let user of Object.keys(currentPermissions)) {
+        affected.add(user);
+      }
+    }
+    affected.delete('*');
+    await this.notifyRealmsListUpdated([...affected]);
     return await this.getRealmPermissions(request, requestContext);
   }
 

@@ -1997,6 +1997,7 @@ export * from './db-queries/db-types.ts';
 export * from './db-queries/realm-metadata-queries.ts';
 export * from './db-queries/realm-permission-queries.ts';
 export * from './db-queries/session-room-queries.ts';
+export * from './db-queries/realm-event-room-queries.ts';
 export * from './db-queries/user-queries.ts';
 export * from './send-event.ts';
 
