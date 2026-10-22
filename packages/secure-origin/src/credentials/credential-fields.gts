@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 
 import AuthFormField from '../components/auth-form-field.gts';
 import FieldContainer from '../components/field-container.gts';
-import Input from '../components/input.gts';
+import BoxelInput from '../components/input.gts';
 import ValidationHint from '../components/validation-hint.gts';
 import cn from '../helpers/cn.ts';
 import { modifier, testAttribute } from '../modifiers/modifier.ts';
@@ -141,7 +141,7 @@ export default class CredentialFields extends Component<Signature> {
       {{#each this.fields key='name' as |entry|}}
         {{#if (this.isLayout 'auth')}}
           <AuthFormField @label={{entry.field.label}}>
-            <Input
+            <BoxelInput
               id={{entry.field.id}}
               @type={{entry.field.type}}
               autocomplete={{entry.field.autocomplete}}
@@ -167,7 +167,7 @@ export default class CredentialFields extends Component<Signature> {
             @tag='label'
             class='profile-field password-settings-field'
           >
-            <Input
+            <BoxelInput
               id={{entry.field.id}}
               @type={{entry.field.type}}
               autocomplete={{entry.field.autocomplete}}
@@ -189,7 +189,7 @@ export default class CredentialFields extends Component<Signature> {
             @vertical={{true}}
             class='profile-field'
           >
-            <Input
+            <BoxelInput
               id={{entry.field.id}}
               @type={{entry.field.type}}
               autocomplete={{entry.field.autocomplete}}
