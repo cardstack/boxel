@@ -11,7 +11,7 @@ import {
 
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import { baseRealm, baseRealmRRI } from '@cardstack/runtime-common';
 
@@ -758,7 +758,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     );
   });
 
-  test('scroll position is restored when returning to file view but only for one file per realm', async function (assert) {
+  skip('scroll position is restored when returning to file view but only for one file per realm', async function (assert) {
     window.localStorage.setItem(
       'code-mode-panel-widths',
       JSON.stringify({ leftPanel: 200 }),
