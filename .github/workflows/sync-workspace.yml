@@ -72,8 +72,9 @@ on:
         description: |
           Version spec for `npm install -g @cardstack/boxel-cli`.
           Default `latest` follows the most recent published version.
-          Staging and production syncs pass `realm push --changed-since`,
-          so the version has to support it.
+          Staging and production syncs pass `realm push --changed-since`
+          and `--no-realm-events` when this version lists them. An older
+          version sends every file and announces the push to open tabs.
         type: string
         default: latest
     secrets:
@@ -286,8 +287,20 @@ jobs:
             echo "::notice::This boxel-cli has no --changed-since, so every file goes up."
           fi
 
+          # The push is indexed without announcing it to the workspace's open
+          # tabs, which pick the new content up on their next load instead of
+          # resetting mid-session. A boxel-cli without --no-realm-events
+          # rejects it, so that one announces.
+          realm_events=()
+          if grep -q -- '--no-realm-events' <<< "$push_help"; then
+            realm_events+=(--no-realm-events)
+            echo "Pushing with --no-realm-events: open tabs pick the changes up on their next load."
+          else
+            echo "::notice::This boxel-cli has no --no-realm-events, so the push is announced to open tabs."
+          fi
+
           set +e
-          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" 2>&1)
+          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" "${realm_events[@]}" 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
@@ -345,8 +358,20 @@ jobs:
             echo "::notice::This boxel-cli has no --changed-since, so every file goes up."
           fi
 
+          # The push is indexed without announcing it to the workspace's open
+          # tabs, which pick the new content up on their next load instead of
+          # resetting mid-session. A boxel-cli without --no-realm-events
+          # rejects it, so that one announces.
+          realm_events=()
+          if grep -q -- '--no-realm-events' <<< "$push_help"; then
+            realm_events+=(--no-realm-events)
+            echo "Pushing with --no-realm-events: open tabs pick the changes up on their next load."
+          else
+            echo "::notice::This boxel-cli has no --no-realm-events, so the push is announced to open tabs."
+          fi
+
           set +e
-          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" 2>&1)
+          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" "${realm_events[@]}" 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
