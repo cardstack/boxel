@@ -225,6 +225,7 @@ import {
   isModuleResource,
   executableExtensions,
   hasExecutableExtension,
+  trimExecutableExtension,
   isNode,
   logger,
   fetchRealmPermissions,
@@ -10108,7 +10109,13 @@ export class Realm {
       }
       this.#transpileCallCount += 1;
       compileStart = performance.now();
-      transpiled = await transpileJS(source, debugFilename);
+      // The module's exported classes are tagged with the identifier the
+      // loader's `identify()` gives them: the module's URL without its
+      // executable extension, in canonical (RRI) form.
+      let moduleIdentifier = this.#virtualNetwork.unresolveURL(
+        trimExecutableExtension(canonicalPath),
+      );
+      transpiled = await transpileJS(source, debugFilename, moduleIdentifier);
     } catch (err: any) {
       // A compile that fails can hold the thread as long as one that
       // succeeds, so it is recorded too. Nothing is recorded when the failure

@@ -14,6 +14,7 @@ import {
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
+import { exportIdentitySymbolKey } from './export-identity-plugin.ts';
 
 type FetchingModule = {
   state: 'fetching';
@@ -298,6 +299,31 @@ function bundledIdentityFor(
   return bundledIdentities.get(value);
 }
 
+// Exported classes compiled by the realm or bundled from base carry their
+// identity as a static member (see export-identity-plugin.ts). While that tag
+// is validated against `identify()`, a disagreement between the two throws.
+// The tag is read as an own property: a subclass inherits its parent's static
+// members, and an inherited tag names the parent, not the subclass.
+const identityTagKey = Symbol.for(exportIdentitySymbolKey);
+
+function assertMatchesIdentityTag(
+  value: Function,
+  identity: { module: string; name: string } | undefined,
+): void {
+  let tag = Object.getOwnPropertyDescriptor(value, identityTagKey)?.value as
+    | [string, string]
+    | undefined;
+  if (
+    tag &&
+    identity &&
+    (identity.module !== tag[0] || identity.name !== tag[1])
+  ) {
+    throw new Error(
+      `class ${value.name} is tagged ${tag[0]}#${tag[1]} but identify() says ${identity.module}#${identity.name}`,
+    );
+  }
+}
+
 export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
   private log = logger('loader');
@@ -578,14 +604,22 @@ export class Loader {
     if (typeof value !== 'function') {
       return undefined;
     }
-    return (
-      bundledIdentityFor(value) ?? Loader.loaders.get(value)?.identify(value)
-    );
+    let loader = Loader.loaders.get(value);
+    if (loader) {
+      return loader.identify(value);
+    }
+    // A bundled base class reached only from inside another module's chunk
+    // has no loader that recorded it; the bundled registry is all there is.
+    let identity = bundledIdentityFor(value);
+    assertMatchesIdentityTag(value, identity);
+    return identity;
   }
 
   identify(value: unknown): { module: string; name: string } | undefined {
     if (typeof value === 'function') {
-      return this.identities.get(value);
+      let identity = bundledIdentityFor(value) ?? this.identities.get(value);
+      assertMatchesIdentityTag(value, identity);
+      return identity;
     } else {
       return undefined;
     }

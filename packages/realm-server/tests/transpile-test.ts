@@ -24,6 +24,38 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  test('tags exported classes with the given module identifier', async function (assert) {
+    let transpiled = await transpileJS(
+      `
+      class Helper {}
+      export class Person {}
+      export default class {}
+      `,
+      'test-module.ts',
+      '@cardstack/catalog/person',
+    );
+    assert.codeEqual(
+      transpiled,
+      `
+      class Helper {}
+      export class Person {
+        static [Symbol.for('ident')] = ['@cardstack/catalog/person', 'Person'];
+      }
+      export default class {
+        static [Symbol.for('ident')] = ['@cardstack/catalog/person', 'default'];
+      }
+      `,
+    );
+  });
+
+  test('leaves classes untagged without a module identifier', async function (assert) {
+    let transpiled = await transpileJS(
+      `export class Person {}`,
+      'test-module.ts',
+    );
+    assert.codeEqual(transpiled, `export class Person {}`);
+  });
+
   test('can rewrite import() that has url like argument', async function (assert) {
     let transpiled = await transpileJS(
       `
