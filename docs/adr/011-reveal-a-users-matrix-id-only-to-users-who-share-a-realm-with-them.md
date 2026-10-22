@@ -73,6 +73,20 @@ search. It MUST either disable the user directory or filter it, for example
 with a module that implements `check_username_for_spam`. Presence MUST stay
 disabled.
 
+The homeserver MUST answer a profile request only when it is authenticated
+and the requester shares a room with the user
+(`require_auth_for_profile_requests` and
+`limit_profile_requests_to_users_who_share_rooms`). It MUST NOT answer profile
+requests over federation (`allow_profile_lookup_over_federation: false`).
+
+The homeserver MUST reject an invite from one end user to another unless §1.2
+lets each see the other's Matrix id, for example with a module that implements
+`user_may_invite`. It MUST NOT put the inviter's profile into an invite
+(`include_profile_data_on_invite: false`).
+
+These rules apply to every homeserver Boxel runs, including the configuration
+kept outside this repository.
+
 ## 2. Rationale
 
 The team decided that Boxel must not expose one user's Matrix username to
@@ -91,6 +105,13 @@ Synapse's user directory also returns the members of any room with a `public`
 join rule to every user on the server, whether or not they share the room.
 One public room would make its members searchable by everyone, so §1.6 turns
 the directory off as a backstop.
+
+Room membership isn't the only way to learn a Matrix id. By default, Synapse
+answers a profile request for any user, without authentication and over
+federation, so anyone can confirm that a guessed Matrix id exists. It also
+lets any user invite any other, and the invite shows the inviter's id and
+profile. Any client can call these APIs directly, so the host app's own
+behavior can't keep the rule. The homeserver has to.
 
 ## 3. Considered options
 
@@ -120,4 +141,16 @@ events, as proposed in #6906, breaks §1.3 and §1.5.
 - `packages/matrix/support/synapse/dev/homeserver.yaml`,
   `packages/matrix/support/synapse/test/homeserver.yaml` and
   `packages/matrix/support/synapse/test-without-registration-token/homeserver.yaml`
-  break §1.6. They leave the user directory at its default, which is on.
+  break §1.6. They leave the user directory, unauthenticated profile requests,
+  profile lookup over federation, and profile data in invites at their
+  defaults, which are all on.
+- `packages/runtime-common/db-queries/realm-permission-queries.ts` (its use
+  of `fetchMatrixProfile`) and
+  `packages/realm-server/middleware/multi-realm-authorization.ts`
+  (`hasMatrixProfile`) depend on what §1.6 forbids. They ask the homeserver
+  for the profile of a user they share no room with, the first without
+  authentication, to learn whether the account exists. Under §1.6 that lookup
+  fails, and a failed lookup withholds the user's `users` grant. They need
+  another way to check an account before the homeserver applies §1.6.
+- `packages/matrix/support/synapse/modules/` breaks §1.6. It has no module
+  that rejects invites between end users who don't share a realm.
