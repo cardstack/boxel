@@ -51,6 +51,11 @@ on:
         description: "Take Percy snapshots. Off by default because the quota is 10k snapshots/month and a hand-run build is usually a probe — the same reason draft PRs skip them."
         type: boolean
         default: false
+      # EXPERIMENT (not for merge)
+      experiment:
+        description: "EXPERIMENT: x = shard 16 fails after snapshots, shard 9 before tests, finalize fails in attempt 2; y = only shard 9 fails before tests"
+        type: string
+        default: ""
 
 # Pull requests: a new push cancels the run in progress for the same branch.
 # Pushes to main share one group but never cancel a run in progress: GitHub
@@ -783,6 +788,10 @@ jobs:
             stack-pid-file=/tmp/test-services.pid \
             stack-started-file=/tmp/test-services.started
 
+      - name: "EXPERIMENT: fail shard 9 before its tests in attempt 1"
+        if: ${{ inputs.experiment != '' && github.run_attempt == 1 && matrix.shardIndex == 9 }}
+        run: exit 1
+
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
           if [ "$PERCY_ENABLED" = "true" ]; then
@@ -967,6 +976,10 @@ jobs:
           path: /tmp/percy-tally.txt
           retention-days: 30
           if-no-files-found: ignore
+
+      - name: "EXPERIMENT: fail shard 16 after its snapshots in attempt 1"
+        if: ${{ inputs.experiment == 'x' && github.run_attempt == 1 && matrix.shardIndex == 16 }}
+        run: exit 1
 
       - name: Upload junit report to GitHub Actions Artifacts
         uses: ./.github/actions/upload-artifact-retry
@@ -1458,6 +1471,10 @@ jobs:
         run: |
           echo "::error::The shards attempted ${{ steps.tally.outputs.attempted }} Percy snapshot(s) and the CLI was recorded as receiving none, which is a broken tally rather than a real loss — no build reaching finalize loses every snapshot. Snapshot loss went unchecked for this build. Look first at the markers the tally counts: '[percy-snapshot] attempted ' in packages/host/tests/helpers/percy-snapshot.ts, and '] Snapshot taken: ' from the Percy CLI."
           exit 1
+
+      - name: "EXPERIMENT: fail the finalize job after the seal in attempt 2"
+        if: ${{ always() && inputs.experiment == 'x' && github.run_attempt == 2 }}
+        run: exit 1
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
