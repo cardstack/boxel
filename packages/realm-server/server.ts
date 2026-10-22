@@ -45,6 +45,10 @@ import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import type { LiveSearchCache } from './live-search-cache.ts';
 import { createSendEvent } from '@cardstack/runtime-common/send-event';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
+import {
+  createServeDeckVersion,
+  deckCollaborationPolicyFromEnvironment,
+} from './handlers/serve-deck-version.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
@@ -925,6 +929,13 @@ export class RealmServer {
       dbAdapter: this.dbAdapter,
       virtualNetwork: this.virtualNetwork,
     });
+    let serveDeckVersion = createServeDeckVersion({
+      realms: this.realms,
+      reconciler: this.reconciler,
+      dbAdapter: this.dbAdapter,
+      virtualNetwork: this.virtualNetwork,
+      deckCollaboration: deckCollaborationPolicyFromEnvironment(),
+    });
     let sendEvent = createSendEvent({
       matrixClient: this.matrixClient,
       dbAdapter: this.dbAdapter,
@@ -1055,6 +1066,7 @@ export class RealmServer {
           },
         }),
       )
+      .use(serveDeckVersion)
       .use(serveIndex)
       .use(serveFromRealm);
 
