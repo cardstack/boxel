@@ -4,14 +4,16 @@ import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 
 import { handToCli } from '../../security/cli-handoff.js';
+import type { CliCallback } from '../../security/cli-handoff.js';
+import type { Session } from '../../security/session.js';
 
 import MessagePage from './message-page.gts';
 
 interface Signature {
   Args: {
     // Only ever a value `cliCallback` returned.
-    callback: { url: string; state: string };
-    session: { token: string; user: string; expiresAt: string };
+    callback: CliCallback;
+    session: Session;
   };
 }
 

@@ -11,6 +11,7 @@ import {
   storedSession,
   storeSession,
 } from '../../security/session.js';
+import type { Session } from '../../security/session.js';
 import AuthContainer from '../../components/auth-container.gts';
 
 import MessagePage from './message-page.gts';
@@ -18,7 +19,6 @@ import SignedIn from './signed-in.gts';
 import SignInForm from './sign-in-form.gts';
 
 type State = 'starting' | 'checking' | 'signed-in' | 'signed-out';
-type Session = { token: string; user: string; expiresAt: string };
 
 declare global {
   interface Window {

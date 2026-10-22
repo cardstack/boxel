@@ -8,6 +8,8 @@ const LOOPBACK_CALLBACK_PATH = '/callback';
 const STATE = /^[A-Za-z0-9_-]{16,128}$/;
 const LOOPBACK_CALLBACK = /^http:\/\/127\.0\.0\.1:([0-9]{1,5})\/callback$/;
 
+/** @typedef {{ url: string, state: string }} CliCallback */
+
 // The CLI waiting for a session: the loopback port it listens on and the
 // state value it expects back. Anything else is refused, so a page can only
 // ever hand a session to a listener on this machine.

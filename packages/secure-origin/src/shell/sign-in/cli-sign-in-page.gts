@@ -6,13 +6,12 @@ import { trackedObject } from '@ember/reactive/collections';
 
 import { cliCallback } from '../../security/cli-handoff.js';
 import { readConfig } from '../../security/session.js';
+import type { Session } from '../../security/session.js';
 import AuthContainer from '../../components/auth-container.gts';
 
 import CliHandoff from './cli-handoff.gts';
 import IncompleteCliLink from './incomplete-cli-link.gts';
 import SignInForm from './sign-in-form.gts';
-
-type Session = { token: string; user: string; expiresAt: string };
 
 export default class CliSignInPage extends Component {
   <template>
