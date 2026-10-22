@@ -115,11 +115,15 @@
       ]
     },
     "shared.css": {
-      "bytes": 17137,
+      "bytes": 17156,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/2672b6a8df.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/2a4b56d7da.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -136,10 +140,6 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/927d417b70.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/9286c1ab72.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -720,7 +720,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 16053,
+      "bytes": 17665,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -745,12 +745,12 @@
       ]
     },
     "shell.js": {
-      "bytes": 32943,
+      "bytes": 33460,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/cli-handoff.js",
-          "size": 1068
+          "size": 1515
         },
         {
           "package": "@cardstack/secure-origin",
@@ -760,7 +760,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/dom.js",
-          "size": 6229
+          "size": 6264
         },
         {
           "package": "@cardstack/secure-origin",
@@ -810,7 +810,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/google-callback.gts",
-          "size": 3287
+          "size": 3523
         },
         {
           "package": "@cardstack/secure-origin",

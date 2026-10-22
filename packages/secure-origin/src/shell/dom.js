@@ -122,17 +122,22 @@ export function title(attributes, ...children) {
 }
 
 // The app's AuthContainer: the logo top left and the page's content in a
-// centred column. Replaces whatever the page showed.
+// centred column. Replaces whatever the page showed. The page sits in a
+// `plain-page` root, which `shell.css` scopes its rules to.
 export function renderPage(root, ...content) {
   root.replaceChildren(
     h(
       'div',
-      { class: 'auth', 'data-test-secure-page': true },
-      h('div', { class: 'logo', 'aria-hidden': 'true' }, boxelIcon()),
+      { class: 'plain-page' },
       h(
         'div',
-        { class: 'container' },
-        h('div', { class: 'content' }, ...content),
+        { class: 'auth', 'data-test-secure-page': true },
+        h('div', { class: 'logo', 'aria-hidden': 'true' }, boxelIcon()),
+        h(
+          'div',
+          { class: 'container' },
+          h('div', { class: 'content' }, ...content),
+        ),
       ),
     ),
   );
