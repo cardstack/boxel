@@ -1,6 +1,6 @@
 ---
 name: secure-session
-description: Operate and diagnose sessions signed in on the secure origin — the `secureSession` claim on a realm-server session, the `secure_sessions` table behind it, how the secure window and `boxel keys sign-in` get one (a password checked by a Matrix user-interactive auth check the realm server drives through `account/3pid/add`, or the realm server's own Google sign-in returning to the secure origin), and what it gates (minting key write tickets). Use when a user can't sign in to the secure window or the CLI's `boxel keys sign-in`, when a key write ticket is refused with "issued only to a session signed in on the secure origin", when reading `secure_sessions`, when Synapse's admin credentials or the Google client change, when a password change or reset should have ended a secure session, or when changing `lib/secure-session.ts`, `lib/google-sign-in.ts`, `handlers/handle-secure-session.ts`, `packages/secure-origin/src/shell/sign-in.js`, `packages/secure-origin/src/shell/password-reset.js` or the credential fields' `set-password`.
+description: Operate and diagnose sessions signed in on the secure origin — the `secureSession` claim on a realm-server session, the `secure_sessions` table behind it, how the secure window and `boxel keys sign-in` get one (a password checked by a Matrix user-interactive auth check the realm server drives through `account/3pid/add`, or the realm server's own Google sign-in returning to the secure origin), and what it gates (minting key write tickets). Use when a user can't sign in to the secure window or the CLI's `boxel keys sign-in`, when a key write ticket is refused with "issued only to a session signed in on the secure origin", when reading `secure_sessions`, when Synapse's admin credentials or the Google client change, when a password change or reset should have ended a secure session, or when changing `lib/secure-session.ts`, `lib/google-sign-in.ts`, `handlers/handle-secure-session.ts`, `packages/secure-origin/src/shell/sign-in/`, `packages/secure-origin/src/shell/password-reset.js` or the credential fields' `set-password`.
 ---
 
 # Secure sessions (operators)
@@ -12,7 +12,7 @@ that keep it out of card code's reach, are ADR 005
 read it before changing what a secure session gates or how one signs in. The
 code is `packages/realm-server/lib/secure-session.ts` and
 `handlers/handle-secure-session.ts`; the window's side is
-`packages/secure-origin/src/security/session.js` and `packages/secure-origin/src/shell/sign-in.js`.
+`packages/secure-origin/src/security/session.js` and the sign-in components in `packages/secure-origin/src/shell/sign-in/`.
 
 ## The claim and what it gates
 

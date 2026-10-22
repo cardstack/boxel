@@ -79,6 +79,8 @@ export default defineConfig(({ mode }) => ({
       ],
       generatorOpts: { compact: false },
     }),
+    // The pages' build alone: the tests' development build loads modules
+    // the pages never ship, and its page is not one of the origin's.
     ...(mode === 'development'
       ? []
       : [

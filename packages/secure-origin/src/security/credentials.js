@@ -263,6 +263,7 @@ export function mayStart({ form, appOrigin, appOrigins, framed }) {
 // - `requestSubmit()`: submits the form the fields are in, which lets a
 //   password manager see it go.
 // - `onChange()`: called whenever what the fields show changes.
+// - `rendered()`: resolves once the fields show the last change.
 // - `fetch` and `endSessions`: where the Matrix requests, and the realm
 //   server's request that ends a changed password's sessions, go.
 export class CredentialFrame {
@@ -277,6 +278,7 @@ export class CredentialFrame {
    *   measure?: () => number,
    *   requestSubmit?: () => void,
    *   onChange?: () => void,
+   *   rendered?: () => Promise<unknown>,
    *   fetch?: (url: URL, init: RequestInit) => Promise<Response>,
    *   endSessions?: (credentials: { username: string, password: string }) => Promise<void>,
    * }} options
@@ -291,6 +293,7 @@ export class CredentialFrame {
     measure = () => 0,
     requestSubmit = () => {},
     onChange = () => {},
+    rendered = () => Promise.resolve(),
     fetch = globalThis.fetch.bind(globalThis),
     endSessions = (credentials) =>
       endSessionsForNewPassword(readRealmServer(), credentials),
@@ -304,6 +307,7 @@ export class CredentialFrame {
     this.measure = measure;
     this.requestSubmit = requestSubmit;
     this.onChange = onChange;
+    this.rendered = rendered;
     this.fetch = fetch;
     this.endSessions = endSessions;
 
@@ -458,7 +462,9 @@ export class CredentialFrame {
           'narrow';
         this.applyStyle(message);
         this.onChange();
-        this.sendSize();
+        // Measured once the layout the styles choose is drawn, so the app is
+        // never sent the height of a layout part-way through changing.
+        this.rendered().then(() => this.sendSize());
         break;
       case 'context': {
         let username = String(message.username ?? '');

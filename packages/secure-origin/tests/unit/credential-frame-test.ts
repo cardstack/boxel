@@ -36,9 +36,11 @@ function harness(
   {
     respond = () => ({ status: 200, body: {} }),
     height = () => 100,
+    rendered = () => Promise.resolve(),
   }: {
     respond?: (path: string, body: any) => { status: number; body: unknown };
     height?: () => number;
+    rendered?: () => Promise<unknown>;
   } = {},
 ): Harness {
   let parent = {};
@@ -56,6 +58,7 @@ function harness(
     applyStyle: (message) => styled.push(message),
     measure: height,
     requestSubmit: () => submitted.count++,
+    rendered,
     fetch: async (url, init) => {
       let body = JSON.parse(String(init.body));
       requests.push({
@@ -429,6 +432,28 @@ module('Unit | credential frame protocol', function () {
       assert.deepEqual(h.sentOfType('size'), [
         { type: 'size', height: 100 },
         { type: 'size', height: 120.25 },
+      ]);
+    });
+
+    test('measures itself for the styles the app sends once they are drawn', async function (assert) {
+      let height = 164;
+      let draw: () => void = () => {};
+      let drawn = new Promise<void>((resolve) => (draw = resolve));
+      let h = harness('change-password', {
+        height: () => height,
+        rendered: () => drawn,
+      });
+      h.receive({
+        type: 'style',
+        properties: { '--credential-layout': 'narrow' },
+      });
+      // The narrow layout's height, which the page has not drawn yet.
+      height = 140.25;
+      assert.deepEqual(h.sentOfType('size'), [], 'nothing before it is drawn');
+      draw();
+      await drawn;
+      assert.deepEqual(h.sentOfType('size'), [
+        { type: 'size', height: 140.25 },
       ]);
     });
   });
