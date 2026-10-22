@@ -83,6 +83,7 @@ export default defineConfig(({ mode }) => ({
       ? []
       : [
           importAllowlist(),
+          layerOrderFirst(),
           buildRecord({
             mode:
               process.env.SECURE_ORIGIN_BUILD_RECORD === 'check'
