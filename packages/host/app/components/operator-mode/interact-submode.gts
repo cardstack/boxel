@@ -157,12 +157,15 @@ export default class InteractSubmode extends Component {
     if (document.body.classList.contains('has-modal')) return;
 
     if (usesEscape(event.target)) {
-      let el = event.target as HTMLElement;
-      // Field inside a stack card: peel the focus off first so a
-      // second Escape can fall through to exit edit / close.
-      if (el.closest('[data-stack-card]')) {
+      // Field inside a stack card: move focus out to the card, so a
+      // second Escape can fall through to exit edit / close, and the
+      // keyboard stays in the card.
+      let card = (event.target as Element).closest<HTMLElement>(
+        '[data-stack-item]',
+      );
+      if (card) {
         event.preventDefault();
-        el.blur();
+        card.focus({ preventScroll: true });
         return;
       }
       // Field outside any stack card (search sheet, AI assistant, etc.):

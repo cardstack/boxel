@@ -687,39 +687,36 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
         .doesNotExist('a second Escape from view mode closes the item');
     });
 
-    test('Escape from a focused field in an edit-mode card blurs first, then exits edit, then closes', async function (assert) {
+    test('Escape from a focused field in an edit-mode card moves focus to the card, then exits edit, then closes', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'edit' }]],
       });
 
+      let card = `[data-test-stack-card="${testRealmURL}Person/fadhlan"]`;
       let fieldInput = '[data-test-field="firstName"] input';
       await focus(fieldInput);
       assert.dom(fieldInput).isFocused('field is focused at the start');
 
-      // Step 1: Escape from inside the field blurs it (edit mode preserved).
+      // Step 1: Escape from inside the field moves focus to the card (edit
+      // mode preserved).
       await triggerKeyEvent(fieldInput, 'keydown', 'Escape');
       assert
-        .dom(fieldInput)
-        .isNotFocused('first Escape blurred the field but kept edit mode');
+        .dom(card)
+        .isFocused('first Escape moved focus from the field to the card');
       assert
-        .dom(
-          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
-        )
-        .exists('card is still in edit mode after the field blur');
+        .dom(`${card} [data-test-card-format="edit"]`)
+        .exists('card is still in edit mode after the first Escape');
 
-      // Step 2: With nothing focused, Escape exits edit mode.
-      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+      // Step 2: With focus on the card, Escape exits edit mode.
+      await triggerKeyEvent(card, 'keydown', 'Escape');
       assert
-        .dom(
-          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
-        )
+        .dom(`${card} [data-test-card-format="isolated"]`)
         .exists('second Escape returned the card to view mode');
+      assert.dom(card).isFocused('the card keeps focus in view mode');
 
       // Step 3: A third Escape closes the item.
-      await triggerKeyEvent(document.body, 'keydown', 'Escape');
-      assert
-        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
-        .doesNotExist('third Escape closed the item');
+      await triggerKeyEvent(card, 'keydown', 'Escape');
+      assert.dom(card).doesNotExist('third Escape closed the item');
     });
 
     test('Escape on a checkbox in an edit-mode card exits edit mode', async function (assert) {
