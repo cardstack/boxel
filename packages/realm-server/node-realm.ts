@@ -1,5 +1,6 @@
 import type {
   RealmAdapter,
+  RealmEventDelivery,
   Kind,
   FileRef,
   DBAdapter,
@@ -445,6 +446,7 @@ export class NodeAdapter implements RealmAdapter {
     realmUrl: string,
     matrixClient: MatrixClient,
     dbAdapter: DBAdapter,
+    opts?: RealmEventDelivery,
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
     const eventWithRealmURL: RealmEventContent = {
@@ -462,7 +464,7 @@ export class NodeAdapter implements RealmAdapter {
       event: eventWithRealmURL,
       newTxnId: () => matrixClient.nextTxnId(),
       prepare: (content) =>
-        this.prepareRoomSends(content, realmUrl, matrixClient, dbAdapter),
+        this.prepareRoomSends(content, realmUrl, matrixClient, dbAdapter, opts),
     });
   }
 
@@ -471,6 +473,7 @@ export class NodeAdapter implements RealmAdapter {
     realmUrl: string,
     matrixClient: MatrixClient,
     dbAdapter: DBAdapter,
+    delivery?: RealmEventDelivery,
   ): Promise<RealmEventSend[]> {
     if (dbAdapter.isClosed) {
       return [];
@@ -502,6 +505,12 @@ export class NodeAdapter implements RealmAdapter {
       this.lastLookupFoundNoRooms ? 0 : undefined,
     );
     this.lastLookupFoundNoRooms = Object.keys(dmRooms).length === 0;
+    if (delivery?.recipients) {
+      let recipients = new Set(delivery.recipients);
+      dmRooms = Object.fromEntries(
+        Object.entries(dmRooms).filter(([userId]) => recipients.has(userId)),
+      );
+    }
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
 

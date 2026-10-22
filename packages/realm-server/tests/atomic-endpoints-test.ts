@@ -1140,6 +1140,202 @@ module(basename(import.meta.filename), function () {
           }
         });
 
+        test('a write that changes nothing announces its index event only to its own writer', async function (assert) {
+          let source = `
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
+              export class Place extends CardDef {
+                static displayName = 'Place';
+                @field name = contains(StringField);
+              }
+              `.trim();
+          let doc = (op: 'add' | 'update') => ({
+            'atomic:operations': [
+              {
+                op,
+                href: 'place-modules/place-silent.gts',
+                data: {
+                  type: 'source',
+                  attributes: { content: source },
+                  meta: {},
+                },
+              },
+            ],
+          });
+          let post = (op: 'add' | 'update', clientRequestId?: string) => {
+            let req = request
+              .post('/_atomic')
+              .set('Accept', SupportedMimeType.JSONAPI)
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+              );
+            if (clientRequestId) {
+              req = req.set('X-Boxel-Client-Request-Id', clientRequestId);
+            }
+            return req.send(JSON.stringify(doc(op)));
+          };
+
+          let addResponse = await post('add');
+          assert.strictEqual(addResponse.status, 201, 'initial write succeeds');
+          // The initial write's own index event lands before the broadcasts
+          // below are recorded.
+          await testRealm.incrementalIndexing();
+
+          let broadcasts: {
+            event: RealmEventContent;
+            recipients: string[] | undefined;
+          }[] = [];
+          let originalBroadcast =
+            testRealmAdapter.broadcastRealmEvent.bind(testRealmAdapter);
+          testRealmAdapter.broadcastRealmEvent = (async (
+            event,
+            realmUrl,
+            matrixClient,
+            dbAdapter,
+            opts,
+          ) => {
+            broadcasts.push({ event, recipients: opts?.recipients });
+            return originalBroadcast(
+              event,
+              realmUrl,
+              matrixClient,
+              dbAdapter,
+              opts,
+            );
+          }) as RealmAdapter['broadcastRealmEvent'];
+          let indexEvents = () =>
+            broadcasts.filter(
+              ({ event }) =>
+                event.eventName === 'index' &&
+                'indexType' in event &&
+                event.indexType === 'incremental',
+            );
+
+          try {
+            let anonymous = await post('update');
+            assert.strictEqual(anonymous.status, 201, 'no-op write succeeds');
+            assert.deepEqual(
+              broadcasts.map(({ event }) => event.eventName),
+              [],
+              'a no-op write that names no request id broadcasts nothing',
+            );
+
+            let identified = await post('update', 'test-noop-request');
+            assert.strictEqual(identified.status, 201, 'no-op write succeeds');
+            let events = indexEvents();
+            assert.strictEqual(
+              events.length,
+              1,
+              'a no-op write that names a request id announces its index event once',
+            );
+            assert.strictEqual(
+              (events[0]?.event as { clientRequestId?: string | null })
+                .clientRequestId,
+              'test-noop-request',
+              'the event carries the request id',
+            );
+            assert.deepEqual(
+              events[0]?.recipients,
+              ['user'],
+              "the event goes to the writer's own session room only",
+            );
+            assert.strictEqual(
+              broadcasts.length,
+              1,
+              'no initiation or file update event goes out for a no-op write',
+            );
+
+            // A module that changes ahead of a byte-identical instance runs
+            // an index pass of its own, and that pass is every subscriber's
+            // news even though the instance changed nothing.
+            let instance = JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { name: 'Silent' },
+                meta: {
+                  adoptsFrom: {
+                    module: './place-modules/place-silent',
+                    name: 'Place',
+                  },
+                },
+              },
+            });
+            let mixed = (moduleSource: string) => ({
+              'atomic:operations': [
+                {
+                  op: 'update',
+                  href: 'place-modules/place-silent.gts',
+                  data: {
+                    type: 'source',
+                    attributes: { content: moduleSource },
+                    meta: {},
+                  },
+                },
+                {
+                  op: 'add',
+                  href: 'place-silent-1.json',
+                  data: {
+                    type: 'source',
+                    attributes: { content: instance },
+                    meta: {},
+                  },
+                },
+              ],
+            });
+            let send = (body: object) =>
+              request
+                .post('/_atomic')
+                .set('Accept', SupportedMimeType.JSONAPI)
+                .set(
+                  'Authorization',
+                  `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+                )
+                .send(JSON.stringify(body));
+            assert.strictEqual(
+              (await send(mixed(source))).status,
+              201,
+              'the instance is written beside the unchanged module',
+            );
+            await testRealm.incrementalIndexing();
+
+            broadcasts = [];
+            let changedSource = source.replace(
+              "static displayName = 'Place';",
+              "static displayName = 'Silent Place';",
+            );
+            let mixedBody = mixed(changedSource);
+            mixedBody['atomic:operations'][1].op = 'update';
+            assert.strictEqual(
+              (await send(mixedBody)).status,
+              201,
+              'the module changes and the instance does not',
+            );
+            await testRealm.incrementalIndexing();
+            let flushEvents = indexEvents();
+            assert.strictEqual(
+              flushEvents.length,
+              1,
+              "the module flush's pass is announced",
+            );
+            assert.strictEqual(
+              flushEvents[0]?.recipients,
+              undefined,
+              'to every subscriber',
+            );
+            assert.true(
+              (
+                flushEvents[0]?.event as { invalidations?: string[] }
+              ).invalidations?.some((url) =>
+                url.includes('place-modules/place-silent'),
+              ),
+              'naming the module the flush invalidated',
+            );
+          } finally {
+            testRealmAdapter.broadcastRealmEvent = originalBroadcast;
+          }
+        });
+
         test('waitForIndex write preserves compound field values backed by an unexported FieldDef', async function (assert) {
           let logSource = `
               import {

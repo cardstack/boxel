@@ -2347,6 +2347,14 @@ export interface WriteOptions {
   onDurable?: () => void;
 }
 
+// Who a realm event is delivered to. By default it goes to every session room
+// subscribed to the realm (see `fetchRealmSessionRooms`). `recipients` narrows
+// that to the named matrix users' session rooms, for an event that concerns
+// only them; a recipient with no subscribed session room receives nothing.
+export interface RealmEventDelivery {
+  recipients?: string[];
+}
+
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
@@ -2444,6 +2452,7 @@ export interface RealmAdapter {
     realmUrl: string,
     matrixClient: MatrixClient,
     dbAdapter: DBAdapter,
+    opts?: RealmEventDelivery,
   ): Promise<void>;
 
   // optional, set this to override _lint endpoint behavior in tests
@@ -4164,6 +4173,9 @@ export class Realm {
       // False for a writer that asked not to announce its write (see
       // `WriteOptions.broadcastRealmEvents`).
       broadcastRealmEvents?: boolean;
+      // Narrows delivery to these matrix users' session rooms (see
+      // `RealmEventDelivery`). Absent, every subscriber receives the event.
+      recipients?: string[];
     },
   ): void {
     // A pass indexed alongside other publishes is announced once, by the
@@ -4254,7 +4266,10 @@ export class Realm {
       versions = versionsOnlyThisWriterChanged(passes, versions);
       content = this.#withCoalescedWrites(content, coalescedWrites);
     }
-    this.broadcastRealmEvent(withVersionsIfItFits(content, versions));
+    this.broadcastRealmEvent(
+      withVersionsIfItFits(content, versions),
+      opts?.recipients ? { recipients: opts.recipients } : undefined,
+    );
   }
 
   // `coalescedWrites` on a shared pass's event, as much of it as fits.
@@ -5793,9 +5808,26 @@ export class Realm {
         });
       }
     } else {
-      // Nothing changed on disk (e.g., every file's content was already what
-      // the caller staged). Preserve the pre-existing always-broadcast
-      // behavior.
+      // Nothing changed on disk: every file's content was already what the
+      // caller staged.
+      //
+      // A module flush that ran ahead of byte-identical instances is the only
+      // pass that can stand behind this event, and what it invalidated is
+      // owed to every subscriber like any other pass — unless it was shared
+      // with a writer that announces it, whose event already carries these
+      // invalidations, so `passes` goes along and this broadcast stands down.
+      //
+      // Without such a pass the request changed nothing anyone else could be
+      // holding, so it is not announced to every subscriber of the realm: a
+      // public realm has a session room for every user, and a bulk writer
+      // re-sending unchanged content would cost each of them an event per
+      // request. The one party that can still be waiting on it is the writer,
+      // whose client may key a wait on the event carrying its request id. So
+      // a request that named an id hears it back in its writer's own session
+      // room, and one that named none hears nothing. A request admitted
+      // without a user — an anonymous write to a world-writable realm — names
+      // no room to narrow to, so its event goes to every subscriber as the
+      // only way to reach a writer that may be waiting on it.
       //
       // The versions are still reported, and they are still the file's own: a
       // write that found the bytes it staged already there left the file
@@ -5806,21 +5838,28 @@ export class Realm {
       // whatever a mid-loop flush put there, and usually nothing at all. That
       // is why the member is documented as describing what the request wrote
       // rather than as a companion to the list beside it.
-      //
-      // A module flush that ran ahead of these byte-identical instances is the
-      // only pass behind this broadcast, and when it was shared with a writer
-      // that announces it, that writer's event already carries this one's
-      // invalidations — so `passes` goes along, and this broadcast stands down.
-      this.broadcastIncrementalInvalidationEvent([...invalidations], {
-        clientRequestId,
-        ...(clientAuthored ? { clientAuthored } : {}),
-        versions,
-        generation: indexGeneration,
-        invalidatedTypes: invalidatedTypes.value,
-        passes,
-        ownChanges,
-        broadcastRealmEvents,
-      });
+      let passOwed =
+        invalidations.size > 0 ||
+        passes.some((pass) => pass !== undefined && !pass.announcedByPeer);
+      if (passOwed || clientRequestId) {
+        this.broadcastIncrementalInvalidationEvent([...invalidations], {
+          clientRequestId,
+          ...(clientAuthored ? { clientAuthored } : {}),
+          versions,
+          generation: indexGeneration,
+          invalidatedTypes: invalidatedTypes.value,
+          passes,
+          ownChanges,
+          broadcastRealmEvents,
+          ...(!passOwed && initiatingUser
+            ? { recipients: [initiatingUser] }
+            : {}),
+        });
+      } else {
+        this.#log.debug(
+          `not broadcasting index event for ${this.url}: the write changed nothing and named no request id`,
+        );
+      }
     }
     // A mixed batch whose instances all turned out to be byte-identical
     // leaves the flush's deferred set with no later pass to fold it into.
@@ -17651,12 +17690,16 @@ export class Realm {
     });
   }
 
-  private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
+  private async broadcastRealmEvent(
+    event: RealmEventContent,
+    delivery?: RealmEventDelivery,
+  ): Promise<void> {
     this.#adapter.broadcastRealmEvent(
       event,
       this.url,
       this.#matrixClient,
       this.#dbAdapter,
+      delivery,
     );
   }
 

@@ -2020,6 +2020,7 @@ export { RealmAuthDataSource } from './realm-auth-data-source.ts';
 export type {
   Kind,
   RealmAdapter,
+  RealmEventDelivery,
   FileRef,
   RealmIndexCounts,
   RealmInfo,
