@@ -47,6 +47,8 @@ export default config as {
   iconsURL: string;
   secureOriginURL: string;
   autoSaveDelayMs: number;
+  autoSaveQuietPeriodMs: number;
+  autoSaveMaxWaitMs: number;
   monacoDebounceMs: number;
   monacoCursorDebounceMs: number;
   serverEchoDebounceMs: number;
