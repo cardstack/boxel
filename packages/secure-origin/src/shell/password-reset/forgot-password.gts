@@ -12,7 +12,7 @@ import {
   clientSecret as newClientSecret,
   requestEmailToken,
 } from '../../security/matrix.js';
-import type { CliCallback } from '../cli-links.ts';
+import type { CliCallback } from '../../security/cli-handoff.js';
 import { resetLink } from './reset-link.ts';
 
 // The first page of resetting a forgotten password (`forgot-password`),

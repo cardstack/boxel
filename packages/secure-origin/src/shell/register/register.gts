@@ -21,15 +21,15 @@ import {
   type Account,
   type Outcome,
   Registration,
-  type Session,
   usernameError,
 } from '../../security/registration.ts';
 import {
   matrixServerName,
   readConfig,
+  type Session,
   storeSession,
 } from '../../security/session.js';
-import type { CliCallback } from '../cli-links.ts';
+import type { CliCallback } from '../../security/cli-handoff.js';
 import NewPasswordFields from '../new-password-fields.gts';
 import { NewPassword } from '../new-password.ts';
 import CliHandoff from '../sign-in/cli-handoff.gts';

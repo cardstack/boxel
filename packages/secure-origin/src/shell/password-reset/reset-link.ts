@@ -1,4 +1,5 @@
-import { type CliCallback, cliFrom } from '../cli-links.ts';
+import type { CliCallback } from '../../security/cli-handoff.js';
+import { cliFrom } from '../cli-links.ts';
 import { cliParams, modeURL } from '../urls.js';
 
 // The link a password reset email carries, and reading it where it lands.

@@ -1,13 +1,8 @@
-import { cliCallback } from '../security/cli-handoff.js';
+import { type CliCallback, cliCallback } from '../security/cli-handoff.js';
 import { cliParams, modeURL } from './urls.js';
 
 // The CLI a page of the shell signs in for, as the `port` and `state` query
 // or fragment parameters name it, and the sign-in page that carries it on.
-
-export interface CliCallback {
-  url: string;
-  state: string;
-}
 
 // The CLI the parameters name: none when they name no CLI, and `invalid`
 // when they name one incompletely, which a page refuses rather than signing

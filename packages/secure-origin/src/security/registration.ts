@@ -19,7 +19,7 @@ import {
   requestEmailToken,
   setDisplayName,
 } from './matrix.js';
-import { signInWithPassword } from './session.js';
+import { type Session, signInWithPassword } from './session.js';
 
 // How often the registration asks whether the email has been validated.
 export const EMAIL_POLL_INTERVAL_MS = 1000;
@@ -128,12 +128,6 @@ export interface RegistrationOptions {
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
-
-export interface Session {
-  token: string;
-  user: string;
-  expiresAt: string;
 }
 
 export class Registration {
