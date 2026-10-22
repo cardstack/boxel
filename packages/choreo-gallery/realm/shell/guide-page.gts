@@ -134,16 +134,23 @@ export class GuidePage extends Component<Signature> {
       }
 
       /* the sections stay in view beside a long guide, under the site's
-         sticky bar, and scroll on their own when they are taller than it */
+         sticky bar, and scroll on their own when they are taller than it.
+         The links bleed left past the column to hang the current guide's
+         bar in the gutter, so the scroll box pads out by as much as they
+         bleed (and gives the focus rings room), and a matching negative
+         margin keeps the links where the column puts them. */
       .guide-nav {
+        --_guide-nav-bleed: 12px;
         position: sticky;
-        top: 96px;
+        top: calc(96px - var(--_guide-nav-bleed));
         display: flex;
         flex-direction: column;
         gap: 18px;
         max-height: calc(100dvh - 120px);
         overflow-y: auto;
         overscroll-behavior: contain;
+        padding: var(--_guide-nav-bleed);
+        margin: calc(-1 * var(--_guide-nav-bleed));
         font-size: 13px;
         line-height: 1.4;
       }
@@ -216,7 +223,7 @@ export class GuidePage extends Component<Signature> {
       }
 
       .guide-section a[aria-current='page'] {
-        border-left-color: var(--ember);
+        border-left-color: var(--ember-ink);
         background: rgba(var(--surface-tint-rgb), 0.05);
       }
 
@@ -285,11 +292,12 @@ export class GuidePage extends Component<Signature> {
           position: static;
           max-height: none;
           overflow: visible;
+          margin: 0;
           flex-direction: row;
           flex-wrap: wrap;
           align-items: center;
           justify-content: space-between;
-          padding-bottom: 16px;
+          padding: 0 0 16px;
           border-bottom: 1px solid var(--line);
         }
 
