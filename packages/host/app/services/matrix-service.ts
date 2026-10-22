@@ -63,6 +63,11 @@ import {
   REALMS_LIST_UPDATED_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
+  APP_BOXEL_DASHBOARD_EVENT_TYPE,
+  type AppBoxelDashboardContent,
+  type DashboardPin,
+  type DashboardPinFormat,
+  MAX_DASHBOARD_PINS_PER_WORKSPACE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   DEFAULT_FALLBACK_MODELS,
@@ -258,6 +263,7 @@ export default class MatrixService extends Service {
 
   @tracked private storage: Storage | undefined;
   @tracked workspaceFavorites: string[] = [];
+  @tracked dashboardState: AppBoxelDashboardContent = {};
 
   profile = getMatrixProfile(this, () => this.userId);
 
@@ -545,6 +551,11 @@ export default class MatrixService extends Service {
               this.realmServer.setUserCatalogRealmIdentifiers(
                 (e.event.content.realms as string[] | undefined) ?? [],
               );
+              break;
+            // Onboarding progress and pins follow the user across tabs.
+            case APP_BOXEL_DASHBOARD_EVENT_TYPE:
+              this.dashboardState =
+                (e.event.content as AppBoxelDashboardContent | undefined) ?? {};
               break;
           }
         },
@@ -1200,6 +1211,102 @@ export default class MatrixService extends Service {
     this.workspaceFavorites = newFavorites;
   }
 
+  // Dashboard writes run one at a time, each reading the server copy and
+  // applying its change to that, so neither a write from another tab nor an
+  // overlapping one from this tab is lost.
+  private dashboardWrites: Promise<unknown> = Promise.resolve();
+
+  // Applies `change` to the stored dashboard state: an object of fields to
+  // set, or a function from the stored state to those fields.
+  public updateDashboardState(
+    change:
+      | Partial<AppBoxelDashboardContent>
+      | ((
+          stored: AppBoxelDashboardContent,
+        ) => Partial<AppBoxelDashboardContent>),
+  ): Promise<void> {
+    let write = this.dashboardWrites.then(async () => {
+      let stored =
+        ((await this.client.getAccountDataFromServer(
+          APP_BOXEL_DASHBOARD_EVENT_TYPE,
+        )) as AppBoxelDashboardContent | null) ?? {};
+      let changes = typeof change === 'function' ? change(stored) : change;
+      let next = { ...stored, ...changes };
+      await this.client.setAccountData(APP_BOXEL_DASHBOARD_EVENT_TYPE, next);
+      this.dashboardState = next;
+    });
+    // A failed write mustn't stall the ones queued behind it; its caller
+    // still sees the failure.
+    this.dashboardWrites = write.catch(() => undefined);
+    return write;
+  }
+
+  pinnedCardsFor(realmURL: string): DashboardPin[] {
+    return this.dashboardState.pinnedCards?.[realmURL] ?? [];
+  }
+
+  isCardPinned(realmURL: string, cardId: string): boolean {
+    return this.pinnedCardsFor(realmURL).some((pin) => pin.cardId === cardId);
+  }
+
+  // Pins land at the end of the tile in the default fitted format; the tile
+  // lets the user switch an individual pin to another format.
+  canPinTo(realmURL: string): boolean {
+    return (
+      this.pinnedCardsFor(realmURL).length < MAX_DASHBOARD_PINS_PER_WORKSPACE
+    );
+  }
+
+  // Pins show only on a favorite's tile, so pinning a card also favorites its
+  // workspace; otherwise the pin would be stored and shown nowhere. Unstarring
+  // later keeps the pins for when the workspace is starred again.
+  async pinCard(realmURL: string, cardId: string): Promise<void> {
+    if (this.isCardPinned(realmURL, cardId) || !this.canPinTo(realmURL)) {
+      return;
+    }
+    await this.updatePinnedCards(realmURL, (pins) =>
+      pins.some((pin) => pin.cardId === cardId) ||
+      pins.length >= MAX_DASHBOARD_PINS_PER_WORKSPACE
+        ? pins
+        : [...pins, { cardId, format: 'fitted' }],
+    );
+    await this.addWorkspaceFavorite(realmURL);
+  }
+
+  async unpinCard(realmURL: string, cardId: string): Promise<void> {
+    await this.updatePinnedCards(realmURL, (pins) =>
+      pins.filter((pin) => pin.cardId !== cardId),
+    );
+  }
+
+  async setPinFormat(
+    realmURL: string,
+    cardId: string,
+    format: DashboardPinFormat,
+  ): Promise<void> {
+    await this.updatePinnedCards(realmURL, (pins) =>
+      pins.map((pin) => (pin.cardId === cardId ? { ...pin, format } : pin)),
+    );
+  }
+
+  // Changes one workspace's pins as stored on the server, leaving every
+  // other workspace's pins as stored there.
+  private async updatePinnedCards(
+    realmURL: string,
+    change: (pins: DashboardPin[]) => DashboardPin[],
+  ) {
+    await this.updateDashboardState((stored) => {
+      let pinnedCards = { ...(stored.pinnedCards ?? {}) };
+      let pins = change(pinnedCards[realmURL] ?? []);
+      if (pins.length) {
+        pinnedCards[realmURL] = pins;
+      } else {
+        delete pinnedCards[realmURL];
+      }
+      return { pinnedCards };
+    });
+  }
+
   // Replaces the public realms the user added to the Catalogs section of their
   // dashboard.
   public async setUserCatalogRealms(realmURLs: string[]): Promise<void> {
@@ -1306,19 +1413,27 @@ export default class MatrixService extends Service {
         }
         if (isTesting())
           console.warn('[start-phase] getAccountData(realm-servers,favorites)');
-        let [realmServersData, favoritesData, catalogRealmsData] =
-          await Promise.all([
-            this.client.getAccountDataFromServer(
-              APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
-            ) as Promise<{ realmServers: string[] } | null>,
-            this.client.getAccountDataFromServer(
-              APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
-            ) as Promise<{ favorites: string[] } | null>,
-            this.client.getAccountDataFromServer(
-              APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
-            ) as Promise<{ realms: string[] } | null>,
-          ]);
+        let [
+          realmServersData,
+          favoritesData,
+          catalogRealmsData,
+          dashboardData,
+        ] = await Promise.all([
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+          ) as Promise<{ realmServers: string[] } | null>,
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+          ) as Promise<{ favorites: string[] } | null>,
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
+          ) as Promise<{ realms: string[] } | null>,
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_DASHBOARD_EVENT_TYPE,
+          ) as Promise<AppBoxelDashboardContent | null>,
+        ]);
         this.workspaceFavorites = favoritesData?.favorites ?? [];
+        this.dashboardState = dashboardData ?? {};
 
         // Boot assembles the realm list from trusted servers via
         // `_realm-auth`. The transition fallback below reads the legacy

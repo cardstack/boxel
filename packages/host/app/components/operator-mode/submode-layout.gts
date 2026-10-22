@@ -47,6 +47,7 @@ import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
 
 import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
+import NavRail from './workspace-chooser/nav-rail';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type MatrixService from '../../services/matrix-service';
@@ -106,11 +107,11 @@ type PanelWidths = {
 
 const COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM = 46;
 const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 23;
+const NAV_RAIL_DISMISS_DELAY_MS = 250;
 
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
-  @tracked private topBarCenterElement: Element | null = null;
   @tracked private currentWindowWidth = 0;
 
   private get topBarButtonsCollapsed(): boolean {
@@ -150,11 +151,6 @@ export default class SubmodeLayout extends Component<Signature> {
   private storeExpandedCardHeaderElement(element: Element) {
     this.operatorModeStateService.expandedCardHeaderElement =
       element as HTMLElement;
-  }
-
-  @action
-  private storeTopBarCenterElement(element: Element) {
-    this.topBarCenterElement = element;
   }
 
   @action
@@ -393,6 +389,65 @@ export default class SubmodeLayout extends Component<Signature> {
       !this.operatorModeStateService.workspaceChooserOpened;
   }
 
+  // The dashboard's nav rail is summoned from the wordmark below the wide
+  // breakpoint (at and above it, it stays as a sidebar): hover or focus opens
+  // it; leaving the wordmark and the rail closes it after a grace period.
+  @tracked private isNavRailOpen = false;
+
+  private get isWorkspaceButtonDisabled() {
+    return (
+      !this.workspaceChooserOpened && this.isToggleWorkspaceChooserDisabled
+    );
+  }
+
+  @action private summonNavRail() {
+    if (!this.workspaceChooserOpened) {
+      return;
+    }
+    this.navRailDismissTask.cancelAll();
+    this.isNavRailOpen = true;
+  }
+
+  // Tabbing away from the wordmark, anywhere but into the rail, lets the
+  // rail go as the pointer leaving it does.
+  @action private onWorkspaceButtonFocusOut(event: Event) {
+    let next = (event as FocusEvent).relatedTarget as HTMLElement | null;
+    if (!next?.closest('[data-nav-rail]')) {
+      this.scheduleNavRailDismiss();
+    }
+  }
+
+  @action private scheduleNavRailDismiss() {
+    if (this.isNavRailOpen) {
+      this.navRailDismissTask.perform();
+    }
+  }
+
+  @action private dismissNavRail() {
+    this.navRailDismissTask.cancelAll();
+    this.isNavRailOpen = false;
+  }
+
+  private navRailDismissTask = restartableTask(async () => {
+    await timeout(NAV_RAIL_DISMISS_DELAY_MS);
+    this.isNavRailOpen = false;
+  });
+
+  // With no stack to return to, the chooser can't close, so the wordmark
+  // toggles the nav rail instead — the way in for keyboard and touch.
+  @action private onWorkspaceButtonClick() {
+    if (this.workspaceChooserOpened && this.isToggleWorkspaceChooserDisabled) {
+      if (this.isNavRailOpen) {
+        this.dismissNavRail();
+      } else {
+        this.summonNavRail();
+      }
+      return;
+    }
+    this.dismissNavRail();
+    this.toggleWorkspaceChooser();
+  }
+
   @action private toggleProfileSettings() {
     this.operatorModeStateService.toggleProfileSettings();
 
@@ -464,26 +519,34 @@ export default class SubmodeLayout extends Component<Signature> {
       >
         <ResizablePanel class='main-panel'>
           <div class='submode-layout-top-bar'>
-            <IconButton
-              @icon={{BoxelIconWithText}}
-              @width='160px'
-              @height='40px'
-              disabled={{this.isToggleWorkspaceChooserDisabled}}
-              class={{cn
-                'workspace-button'
-                workspace-button--dark=(not this.workspaceChooserOpened)
-                workspace-button--chooser-open=this.workspaceChooserOpened
-              }}
-              {{on 'click' this.toggleWorkspaceChooser}}
-              data-workspace-chooser-toggle
-              data-test-workspace-chooser-toggle
-            />
-            {{#if this.workspaceChooserOpened}}
-              <div
-                class='submode-layout-top-bar-center'
-                {{captureElement this.storeTopBarCenterElement}}
-              ></div>
-            {{/if}}
+            {{! The wrapper, not the button, listens for the pointer: the button
+                can be disabled, and disabled buttons don't fire mouse events. }}
+            <div
+              class='workspace-button-wrapper'
+              {{on 'mouseenter' this.summonNavRail}}
+              {{on 'mouseleave' this.scheduleNavRailDismiss}}
+              {{on 'focusout' this.onWorkspaceButtonFocusOut}}
+            >
+              <IconButton
+                @icon={{BoxelIconWithText}}
+                @width='160px'
+                @height='40px'
+                disabled={{this.isWorkspaceButtonDisabled}}
+                aria-expanded={{if
+                  this.workspaceChooserOpened
+                  (if this.isNavRailOpen 'true' 'false')
+                }}
+                class={{cn
+                  'workspace-button'
+                  workspace-button--dark=(not this.workspaceChooserOpened)
+                  workspace-button--chooser-open=this.workspaceChooserOpened
+                }}
+                {{on 'click' this.onWorkspaceButtonClick}}
+                {{on 'focus' this.summonNavRail}}
+                data-workspace-chooser-toggle
+                data-test-workspace-chooser-toggle
+              />
+            </div>
             {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
@@ -530,8 +593,20 @@ export default class SubmodeLayout extends Component<Signature> {
             </button>
           </div>
           {{#if this.workspaceChooserOpened}}
-            <WorkspaceChooser
-              @topBarCenterElement={{this.topBarCenterElement}}
+            <WorkspaceChooser />
+            {{! Nearing the left edge summons the rail, as the wordmark does. }}
+            <div
+              class='nav-rail-edge'
+              aria-hidden='true'
+              data-test-nav-rail-edge
+              {{on 'mouseenter' this.summonNavRail}}
+              {{on 'mouseleave' this.scheduleNavRailDismiss}}
+            ></div>
+            <NavRail
+              @isSummoned={{this.isNavRailOpen}}
+              @onPointerEnter={{this.summonNavRail}}
+              @onPointerLeave={{this.scheduleNavRailDismiss}}
+              @onDismiss={{this.dismissNavRail}}
             />
           {{/if}}
 
@@ -685,30 +760,6 @@ export default class SubmodeLayout extends Component<Signature> {
         gap: var(--operator-mode-spacing);
       }
 
-      .submode-layout-top-bar-center {
-        /* Narrow default: stay in flow as a flex child. `flex: 1` reserves the
-           middle track between the workspace button and the profile controls,
-           so the content can neither slide under those controls nor intercept
-           clicks meant for them — it just sits on the one line between them. */
-        flex: 1;
-        display: flex;
-        justify-content: center;
-        min-width: 0;
-      }
-      /* Wider top bars have room to center the content within the whole bar
-         rather than only within the asymmetric middle track (the 160px
-         workspace button makes the flex track off-centre). Take it out of flow
-         and pin it to the bar's centre; the breakpoint is high enough that the
-         centred content clears the workspace button on the left. */
-      @container (min-width: 60rem) {
-        .submode-layout-top-bar-center {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-        }
-      }
-
       /* Slot for the expanded stack-item's CardHeader pill. When a
          card is expanded, stack-item portals its CardHeader here via
          the in-element block helper. The slot grows to take available
@@ -763,6 +814,31 @@ export default class SubmodeLayout extends Component<Signature> {
         border-radius: 50%;
         box-shadow: var(--submode-bar-item-box-shadow);
         z-index: var(--host-profile-z-index);
+      }
+
+      /* A strip along the left edge, under the rail, that summons it while
+         it isn't a standing sidebar (below 80rem, as in nav-rail.gts). */
+      .nav-rail-edge {
+        position: absolute;
+        top: calc(
+          var(--operator-mode-top-bar-item-height) + 2 *
+            var(--operator-mode-spacing)
+        );
+        bottom: 0;
+        left: 0;
+        width: var(--operator-mode-spacing);
+        z-index: var(--host-nav-rail-z-index);
+      }
+      /* Not where the rail stands anyway, nor on a phone or a touch screen,
+         where a strip over the page would only swallow taps. */
+      @media (min-width: 80rem), (max-width: 30rem), (hover: none) {
+        .nav-rail-edge {
+          display: none;
+        }
+      }
+      .workspace-button-wrapper {
+        display: flex;
+        flex-shrink: 0;
       }
 
       .workspace-button {

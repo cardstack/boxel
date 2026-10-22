@@ -159,6 +159,41 @@ export const APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE =
 // The public realms a user has added to the Catalogs section of their
 // dashboard, alongside the operator-chosen catalogs every user sees.
 export const APP_BOXEL_CATALOG_REALMS_EVENT_TYPE = 'app.boxel.catalog-realms';
+// The user's own dashboard state: onboarding progress and the cards they
+// pinned to each workspace tile.
+export const APP_BOXEL_DASHBOARD_EVENT_TYPE = 'app.boxel.dashboard';
+
+// The formats a pinned card can show on its workspace tile. Every one but
+// `edit` renders from the index's prerendered HTML; `edit` renders the live
+// card, so it loads the card's code.
+export type DashboardPinFormat = 'fitted' | 'embedded' | 'isolated' | 'edit';
+
+// A workspace tile lays out at most four pins: one fills it, two split it,
+// three or four make a grid.
+export const MAX_DASHBOARD_PINS_PER_WORKSPACE = 4;
+
+export interface DashboardPin {
+  cardId: string;
+  format: DashboardPinFormat;
+}
+
+// The agents the dashboard's Agents section sets up: coding agents that
+// build through the Boxel plugin, and Boxel's own assistant.
+export type DashboardAgent = 'claude' | 'codex' | 'grok' | 'boxel';
+
+export interface AppBoxelDashboardContent {
+  onboardingDismissed?: boolean;
+  agentCommandCopied?: boolean;
+  // The agent whose onboarding the Agents section shows, picked there or
+  // from the rail.
+  agent?: DashboardAgent;
+  // How many of the Agents section's setup steps the user has copied
+  // through. Nothing can see the agent's chat, so copying a step is what
+  // counts as doing it.
+  agentSetupDone?: number;
+  // Realm URL → the cards pinned to that workspace's tile, in pin order.
+  pinnedCards?: Record<string, DashboardPin[]>;
+}
 export const APP_BOXEL_SYSTEM_CARD_EVENT_TYPE = 'app.boxel.system-card';
 export const APP_BOXEL_REALM_EVENT_TYPE = 'app.boxel.realm-event';
 export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';

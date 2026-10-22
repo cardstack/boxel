@@ -16,6 +16,8 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import DeselectIcon from '@cardstack/boxel-icons/deselect';
 import Maximize from '@cardstack/boxel-icons/maximize';
+import Pin from '@cardstack/boxel-icons/pin';
+import PinOff from '@cardstack/boxel-icons/pin-off';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 import { dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
@@ -64,6 +66,10 @@ import {
   getMenuItems,
   baseCardRef,
 } from '@cardstack/runtime-common';
+import {
+  MAX_DASHBOARD_PINS_PER_WORKSPACE,
+  type DashboardPinFormat,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import {
   stackItemTypeToStoreReadType,
@@ -86,6 +92,7 @@ import DeleteModal from './delete-modal';
 import OperatorModeOverlays from './operator-mode-overlays';
 
 import type CardService from '../../services/card-service';
+import type MatrixService from '../../services/matrix-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
@@ -123,6 +130,16 @@ export interface StackItemRenderedCardForOverlayActions extends RenderedCardForO
   stackItem: StackItem;
 }
 
+const DASHBOARD_PIN_FORMATS: {
+  format: DashboardPinFormat;
+  label: string;
+}[] = [
+  { format: 'fitted', label: 'Fitted' },
+  { format: 'embedded', label: 'Embedded' },
+  { format: 'isolated', label: 'Isolated' },
+  { format: 'edit', label: 'Edit' },
+];
+
 export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
@@ -133,6 +150,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   declare private cardCrudFunctions: CardCrudFunctions;
 
   @service declare private cardService: CardService;
+  @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -714,7 +732,60 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
     }
 
+    // Pin items sit with the other non-destructive actions, above Delete.
+    let firstDangerous = items.findIndex((item) => item.dangerous);
+    items.splice(
+      firstDangerous > -1 ? firstDangerous : items.length,
+      0,
+      ...this.dashboardPinMenuItems,
+    );
+
     return items;
+  }
+
+  // Pins put a card on its workspace's tile on the dashboard. Once pinned,
+  // the card also offers the format its tile shows it in.
+  private get dashboardPinMenuItems(): MenuItem[] {
+    let cardId = this.card?.id;
+    let realmURL = cardId ? this.realm.realmOf(rri(cardId)) : undefined;
+    if (!cardId || !realmURL) {
+      return [];
+    }
+    let pin = this.matrixService
+      .pinnedCardsFor(realmURL)
+      .find((candidate) => candidate.cardId === cardId);
+    if (!pin) {
+      return [
+        this.matrixService.canPinTo(realmURL)
+          ? new MenuItem({
+              label: 'Pin to Dashboard',
+              icon: Pin,
+              action: () => this.matrixService.pinCard(realmURL, cardId),
+            })
+          : new MenuItem({
+              label: `Pin to Dashboard (${MAX_DASHBOARD_PINS_PER_WORKSPACE} pinned — unpin one first)`,
+              icon: Pin,
+              action: () => undefined,
+              disabled: true,
+            }),
+      ];
+    }
+    return [
+      new MenuItem({
+        label: 'Unpin from Dashboard',
+        icon: PinOff,
+        action: () => this.matrixService.unpinCard(realmURL, cardId),
+      }),
+      ...DASHBOARD_PIN_FORMATS.map(
+        ({ format, label }) =>
+          new MenuItem({
+            label: `Show on Dashboard as ${label}`,
+            checked: pin.format === format,
+            action: () =>
+              this.matrixService.setPinFormat(realmURL, cardId, format),
+          }),
+      ),
+    ];
   }
 
   @cached

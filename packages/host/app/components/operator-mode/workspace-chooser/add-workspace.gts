@@ -19,6 +19,7 @@ import {
   FieldContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
+import { and } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -182,6 +183,8 @@ interface Signature {
   Element: HTMLButtonElement;
   Args: {
     isSelected?: boolean;
+    // Whether the keyboard cursor is showing; the ring waits for it.
+    selectionActive?: boolean;
     navIndex?: number;
   };
 }
@@ -236,15 +239,14 @@ export default class AddWorkspace extends Component<Signature> {
     <ItemContainer
       {{on 'click' (fn this.setIsModalOpen true)}}
       {{focusWhenSelected @isSelected}}
-      class='container {{if @isSelected "is-selected"}}'
+      class='container {{if (and @isSelected @selectionActive) "is-selected"}}'
       title='Create a New Workspace'
       data-nav-index={{@navIndex}}
       data-test-add-workspace
       data-test-add-workspace-selected={{if @isSelected 'selected'}}
     >
       <div class='content'>
-        <IconPlus width='32px' height='32px' role='presentation' class='icon' />
-        <br />
+        <IconPlus width='20px' height='20px' role='presentation' class='icon' />
         New Workspace
       </div>
     </ItemContainer>
@@ -267,6 +269,7 @@ export default class AddWorkspace extends Component<Signature> {
     <style scoped>
       .container {
         border-style: none;
+        border-radius: 1rem;
         background: transparent;
         display: flex;
         justify-content: center;
@@ -279,8 +282,11 @@ export default class AddWorkspace extends Component<Signature> {
         stroke: none;
       }
       .content {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
         color: var(--boxel-light);
-        text-align: center;
+        font: 600 var(--boxel-font-sm);
       }
       .content .icon {
         color: var(--boxel-highlight);

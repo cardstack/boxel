@@ -16,7 +16,7 @@ const WorkspaceChooserItemContainer: TemplateOnlyComponent<Signature> =
       .workspace {
         min-width: var(--workspace-chooser-tile-width);
         width: var(--workspace-chooser-tile-width);
-        height: 10.375rem;
+        height: var(--workspace-chooser-tile-height);
         display: flex;
         flex-direction: column;
         border-radius: var(--boxel-border-radius-xl);
@@ -41,8 +41,10 @@ const WorkspaceChooserItemContainer: TemplateOnlyComponent<Signature> =
           rgba(255 255 255 / 40%)
         );
       }
+      /* The tile carries the keyboard cursor; its selection ring shows it,
+         so focus draws no outline of its own. */
       .workspace:focus-visible {
-        outline-offset: -1px;
+        outline: none;
       }
       .workspace.is-selected::after {
         border-color: var(--boxel-teal);

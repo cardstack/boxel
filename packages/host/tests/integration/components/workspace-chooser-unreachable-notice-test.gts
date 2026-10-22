@@ -59,9 +59,7 @@ module(
     test('shows a notice naming the unreachable server, then clears it after a successful retry', async function (assert) {
       await renderComponent(
         class TestDriver extends GlimmerComponent {
-          <template>
-            <WorkspaceChooser @topBarCenterElement={{null}} />
-          </template>
+          <template><WorkspaceChooser /></template>
         },
       );
 
