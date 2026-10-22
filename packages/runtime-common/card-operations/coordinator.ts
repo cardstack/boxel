@@ -176,6 +176,8 @@ export interface BatchCore {
       waitForIndex?: boolean;
       // See `CommitBatchOptions.indexWaitBudgetMs`.
       indexWaitBudgetMs?: number;
+      // See `CommitBatchOptions.broadcastRealmEvents`.
+      broadcastRealmEvents?: boolean;
       initiatingUser?: string | null;
       // Where the commit stamps the stages it owns. The durable write, the
       // index enqueue, the wait for the worker and the invalidation that
@@ -295,6 +297,11 @@ export interface CommitBatchOptions {
   // drain ahead of staging is what the batch's serialization resolves
   // against.
   indexWaitBudgetMs?: number;
+  // When false, the batch is written and indexed as usual but announces
+  // nothing to the realm's subscribers. For writers replacing a realm's
+  // content out of band, whose subscribers pick it up on their next load
+  // rather than mid-session. Absent, the batch announces as any write does.
+  broadcastRealmEvents?: boolean;
   // A caller's own precondition, run inside the write lock and before
   // anything is staged. It exists because a precondition evaluated before
   // `commitBatch` is not binding: the lock is acquired here, so a request
@@ -2422,6 +2429,9 @@ async function commitStaged(
       ...(opts.indexWaitBudgetMs === undefined
         ? {}
         : { indexWaitBudgetMs: opts.indexWaitBudgetMs }),
+      ...(opts.broadcastRealmEvents === undefined
+        ? {}
+        : { broadcastRealmEvents: opts.broadcastRealmEvents }),
       // The batch's index job is tagged with the user whose request produced
       // it, the same as every other write path, so a reader draining its own
       // writes waits for this job rather than returning ahead of it.

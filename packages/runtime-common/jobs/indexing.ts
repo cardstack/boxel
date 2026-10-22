@@ -768,6 +768,8 @@ export function makeIncrementalArgsWithCallerMetadata(
     // See CoalescedCaller.
     clientAuthored?: string[] | null;
     announcesPass?: boolean;
+    // See IncrementalArgs.realmEvents. Absent, the pass announces.
+    realmEvents?: boolean;
   },
 ): IncrementalArgs {
   let waiterId = uuidv4();
@@ -789,6 +791,7 @@ export function makeIncrementalArgsWithCallerMetadata(
     deferPrerenderHtml: args.deferPrerenderHtml === true,
     carriedPrerenderHtmlChanges: args.carriedPrerenderHtmlChanges ?? [],
     readsOwnWrite: args.readsOwnWrite === true,
+    realmEvents: caller?.realmEvents !== false,
   };
 }
 

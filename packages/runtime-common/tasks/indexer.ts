@@ -110,6 +110,13 @@ export interface IncrementalArgs extends WorkerArgs {
   // `chooseIncrementalCoalesceDecision`. Non-optional for the same reason
   // `deferPrerenderHtml` is.
   readsOwnWrite: boolean;
+  // Whether anything this pass does is announced to the realm's subscribers
+  // on behalf of the writes behind it: the `prerender_html` event of the
+  // render job it spawns, and its own `incremental` event when no publisher
+  // waits on it (a follow-up pass). False only when every write behind the
+  // job asked for no realm events, so OR-merged. Read as true when absent, as
+  // on a job enqueued by a realm server predating the field.
+  realmEvents: boolean;
 }
 
 // An invalidation set an index pass computed but deliberately did not enqueue
@@ -295,6 +302,7 @@ function parseIncrementalArgsForCoalesce(
     deferPrerenderHtml,
     carriedPrerenderHtmlChanges,
     readsOwnWrite,
+    realmEvents,
   } = args;
   if (
     typeof realmURL !== 'string' ||
@@ -319,6 +327,7 @@ function parseIncrementalArgsForCoalesce(
       ? (carriedPrerenderHtmlChanges as IncrementalChange[])
       : [],
     readsOwnWrite: readsOwnWrite === true,
+    realmEvents: realmEvents !== false,
   };
 }
 
@@ -398,6 +407,9 @@ function chooseIncrementalCoalesceDecision(
           // enough to make that true of the merged job.
           readsOwnWrite:
             existingArgs.readsOwnWrite || incomingArgs.readsOwnWrite,
+          // OR, because one write that announces is enough for the pass to
+          // announce what it does.
+          realmEvents: existingArgs.realmEvents || incomingArgs.realmEvents,
         },
       },
     };
@@ -432,7 +444,12 @@ function chooseIncrementalCoalesceDecision(
       if (!existingArgs) {
         continue;
       }
-      if (incrementalChangesCover(existingArgs.changes, incomingArgs.changes)) {
+      if (
+        incrementalChangesCover(existingArgs.changes, incomingArgs.changes) &&
+        // A running job's args can no longer change, so a publish that
+        // announces cannot ride on one whose render job won't.
+        (existingArgs.realmEvents || !incomingArgs.realmEvents)
+      ) {
         return { type: 'join', jobId: candidate.id };
       }
     }
@@ -557,10 +574,12 @@ function spawningIndexPassFor(
 // The args of the follow-up job a pass's commit enqueues when peer commits
 // keep leaving its rows stale (see `CommitValidation.followUpJobArgs`). No
 // publisher waits on it, so it carries no callers, and it announces its own
-// pass when it lands (see `incrementalIndex`).
+// pass when it lands (see `incrementalIndex`) — unless the writes behind the
+// pass it follows asked for no realm events, which it inherits.
 function followUpIncrementalArgs(
   realmURL: string,
   realmUsername: string,
+  realmEvents: boolean,
 ): (
   changes: IncrementalChange[],
   ignoreData: Record<string, string>,
@@ -574,6 +593,7 @@ function followUpIncrementalArgs(
     deferPrerenderHtml: false,
     carriedPrerenderHtmlChanges: [],
     readsOwnWrite: false,
+    realmEvents,
   });
 }
 
@@ -683,7 +703,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           );
         });
       },
-      followUpJobArgs: followUpIncrementalArgs(realmURL, realmUsername),
+      followUpJobArgs: followUpIncrementalArgs(realmURL, realmUsername, true),
       auth,
       fetch: _fetch,
       prerenderer,
@@ -846,6 +866,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           // Incremental: no realm-wide sweep — its cost is O(realm module
           // count), deliberately not paid on incrementals.
           preWarm: false,
+          announce: args.realmEvents !== false,
           // The writer's own render lane, the one the bulk-write render hold
           // names, so another writer's render work neither waits behind this
           // one nor merges into it.
@@ -856,7 +877,11 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           );
         });
       },
-      followUpJobArgs: followUpIncrementalArgs(realmURL, realmUsername),
+      followUpJobArgs: followUpIncrementalArgs(
+        realmURL,
+        realmUsername,
+        args.realmEvents !== false,
+      ),
       auth,
       fetch: _fetch,
       prerenderer,
@@ -891,13 +916,20 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       // replica drops the index-derived caches a publisher's realm would have
       // dropped after its own pass. The event names no types, so every live
       // query re-runs rather than trusting a set nothing bounded.
-      reportRealmEvent?.({
-        eventName: 'index',
-        indexType: 'incremental',
-        invalidations: invalidations.map((href) => href.replace(/\.json$/, '')),
-        ...(generation !== undefined ? { generation } : {}),
-        realmURL,
-      });
+      // The replicas drop their caches whatever the writes asked; only the
+      // announcement to hosts is withheld from a pass following writes that
+      // asked for no realm events.
+      if (args.realmEvents !== false) {
+        reportRealmEvent?.({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: invalidations.map((href) =>
+            href.replace(/\.json$/, ''),
+          ),
+          ...(generation !== undefined ? { generation } : {}),
+          realmURL,
+        });
+      }
       await notifyRealmIndexUpdated(dbAdapter, realmURL);
     }
     reportStatus(jobInfo, 'finish');

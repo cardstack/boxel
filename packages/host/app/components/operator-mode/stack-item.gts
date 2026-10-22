@@ -84,6 +84,7 @@ import CardError from './card-error';
 import DeleteModal from './delete-modal';
 
 import OperatorModeOverlays from './operator-mode-overlays';
+import FollowFocus from './stack-focus';
 
 import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
@@ -657,6 +658,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.card ? this.card.cardTitle : undefined;
   }
 
+  // The name a screen reader gives the card's region, which has one while
+  // the card loads or fails to load too.
+  private get regionLabel() {
+    return (
+      this.headerTitle ||
+      this.headerType ||
+      (this.cardResource?.isLoaded ? 'Card' : 'Loading card')
+    );
+  }
+
   private get moreOptionsMenuItemsForErrorCard() {
     if (this.isBuried) {
       return undefined;
@@ -916,6 +927,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return Boolean(this.cardError);
   }
 
+  // Focus entering a card makes it the one keyboard shortcuts such as Escape
+  // act on, so they follow the card the user is in.
+  private markInteracted = () => {
+    this.args.item.markInteracted();
+  };
+
+  private isTopCardNow = () => this.isTopCard;
+
   private setupItemEl = (el: HTMLElement) => {
     this.itemEl = el;
     this.trackOpeningAnimation();
@@ -977,7 +996,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
       {{! In order to support scrolling cards into view
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
+      {{! present while the card loads too, so the item can take focus as it opens }}
+      data-stack-item={{@item.instanceId}}
+      {{! focusable, though no Tab stop: the card takes focus as it opens, and a
+      click anywhere in it makes it the card Escape acts on }}
+      tabindex='-1'
+      role='region'
+      aria-label={{this.regionLabel}}
       style={{this.styleForStackedCard}}
+      {{on 'focusin' this.markInteracted}}
+      {{! the card takes focus as it opens and hands it back as it closes }}
+      {{FollowFocus item=@item stack=@stackItems isTopCard=this.isTopCardNow}}
       {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer
@@ -1140,8 +1169,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
               />
             {{/if}}
           {{/let}}
+          {{! A buried card's content is covered: inert keeps focus and Tab out
+          of it, while its header stays the control that closes the cards
+          above it. }}
           <div
             class='stack-item-content'
+            inert={{this.isBuried}}
             {{keepScrollWhileBuried buried=this.isBuried}}
             data-test-stack-item-content
           >
@@ -1218,6 +1251,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
         transition:
           margin-top var(--boxel-transition),
           width var(--boxel-transition);
+      }
+      /* the card takes focus as it opens, as focus is handed back to it, and
+         as it is clicked. A ring shows where the keyboard brought focus, so a
+         keyboard user can see where it is; a click draws none */
+      .item:focus {
+        outline: none;
+      }
+      .item:focus-visible {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline-offset: -2px;
       }
       .item.opening-animation {
         animation: scaleIn 0.2s forwards;
