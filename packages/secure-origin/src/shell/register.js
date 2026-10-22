@@ -35,14 +35,14 @@ import {
   register,
   requestEmailToken,
   setDisplayName,
-} from './matrix.js';
+} from '../security/matrix.js';
 import { newPasswordFields } from './password-fields.js';
 import {
   matrixServerName,
   readConfig,
   signInWithPassword,
   storeSession,
-} from './session.js';
+} from '../security/session.js';
 import {
   asSentence,
   cliCallback,

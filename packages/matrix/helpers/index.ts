@@ -425,6 +425,30 @@ export async function getMonacoContent(page: Page): Promise<string> {
   );
 }
 
+// Logged before a test looks at the email, so that if the email pane is
+// still blank the output shows whether the email's document, stylesheets,
+// images and fonts had loaded.
+async function logEmailFrameState(emailPage: Page) {
+  try {
+    let frame = await (
+      await emailPage.locator('.messageview iframe').elementHandle()
+    )?.contentFrame();
+    let state = await frame?.evaluate(() => ({
+      readyState: document.readyState,
+      fonts: document.fonts.status,
+      stylesheets: [
+        ...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
+      ].map((link) => `${link.href} ${link.sheet ? 'loaded' : 'pending'}`),
+      images: [...document.images].map(
+        (image) => `${image.src} ${image.complete ? 'complete' : 'pending'}`,
+      ),
+    }));
+    console.log(`email frame state: ${JSON.stringify(state ?? 'no frame')}`);
+  } catch (e) {
+    console.log(`email frame state unavailable: ${e}`);
+  }
+}
+
 export async function validateEmail(
   appPage: Page,
   email: string,
@@ -467,6 +491,7 @@ export async function validateEmail(
   await expect(
     emailPage.locator('.messageview .messageviewheader'),
   ).toContainText(`To:${email}`);
+  await logEmailFrameState(emailPage);
 
   if (opts?.onEmailPage) {
     await opts.onEmailPage(emailPage);
@@ -525,6 +550,7 @@ export async function validateEmailForResetPassword(
   await expect(
     emailPage.locator('.messageview .messageviewheader'),
   ).toContainText(`To:${email}`);
+  await logEmailFrameState(emailPage);
 
   if (opts?.onEmailPage) {
     await opts.onEmailPage(emailPage);

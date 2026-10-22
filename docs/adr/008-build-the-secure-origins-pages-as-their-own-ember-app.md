@@ -3,14 +3,18 @@ status: proposed
 date: 2026-10-20
 scope:
   - packages/secure-origin/**
-  - packages/realm-server/secure-origin/**
   - packages/realm-server/lib/secure-origin.ts
   - packages/realm-server/realm-server.Dockerfile
+  - packages/realm-server/scripts/start-staging.sh
+  - packages/realm-server/scripts/start-production.sh
   - packages/realm-server/tests/helpers/index.ts
+  - packages/realm-server/tests/scripts/run-qunit-with-test-pg.sh
+  - packages/realm-server/tests/secure-origin-policy-test.ts
+  - packages/boxel-cli/tests/scripts/run-integration-with-test-pg.sh
   - packages/matrix/support/isolated-realm-server.ts
+  - packages/matrix/tests/global.setup.ts
   - mise-tasks/services/realm-server
   - mise-tasks/test-services/**
-  - .github/workflows/*secure-origin*
   - packages/host/app/components/matrix/auth-*.gts
   - packages/host/app/components/matrix/login.gts
   - packages/host/app/components/matrix/register-user.gts
@@ -73,6 +77,12 @@ The pages MAY use boxel-ui's `variables.css`, `theme.css` and typeface,
 served as files, so their tokens are the app's. They MUST NOT load any other
 boxel-ui file.
 
+The package's components SHOULD follow the host's CSS conventions, so the
+pages look and change like the app's screens. Each component SHOULD style
+itself with scoped CSS (`<style scoped>`, compiled by `glimmer-scoped-css`), as
+the host's components do. Styles SHOULD use boxel-ui's CSS variables for
+color, spacing and type, and scalable units such as `rem`.
+
 ### 1.5. The policy stays as it is
 
 The build output MUST run under the secure origin's Content Security Policy
@@ -119,6 +129,14 @@ The host SHOULD render its own sign-in, registration and password-reset
 screens from the package's presentational components, so that one
 implementation serves both origins. The host MAY import from the package. The
 package MUST NOT import from the host (§1.3).
+
+### 1.10. TypeScript
+
+The package's code SHOULD be TypeScript: components in `.gts` files, and
+other modules, scripts, tests and build configuration in `.ts` files. Its
+TypeScript MUST use only erasable syntax, so that Node runs the package's
+scripts and tests without a compile step. The package's build compiles its
+`.ts` and `.gts` files. The package's lint MUST type-check them.
 
 ## 2. Rationale
 
@@ -188,15 +206,6 @@ screens still needs the same change in the package.
 
 ## 6. Remediation
 
-- `packages/realm-server/secure-origin/index.html`, `shell.js`, `shell.css`,
-  `sign-in.js`, `sign-in-copy.js`, `register.js`, `password-reset.js`,
-  `password-fields.js` and `dom.js` break §1.1. They are served as written,
-  not built from `packages/secure-origin`.
-- `packages/realm-server/secure-origin/credentials.html` and
-  `credentials.css` break §1.1, for the same reason.
-- `packages/realm-server/secure-origin/credentials.js`, `matrix.js`,
-  `session.js`, `redact.js` and `app-origins.js` break §1.1 and §1.6. They
-  are served as written, and they are not in `packages/secure-origin/src/security/`.
-- `packages/realm-server/lib/secure-origin.ts` (`SHELL_ASSETS`,
-  `CREDENTIALS_ASSETS`) breaks §1.1 and §1.7. It serves fixed source files,
-  not the package's build output read through a manifest.
+- `packages/secure-origin/src/security/credentials.js` breaks §1.6. It
+  renders the credential fields itself when it loads, so it can't be tested
+  without rendering.

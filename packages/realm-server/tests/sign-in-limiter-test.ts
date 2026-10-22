@@ -5,7 +5,7 @@ import { SignInLimiter } from '../lib/sign-in-limiter.ts';
 import {
   relativeTime,
   tooManyFailedAttempts,
-} from '../secure-origin/sign-in-copy.js';
+} from '@cardstack/secure-origin/shell/sign-in-copy.js';
 
 module(basename(import.meta.filename), function () {
   module('sign-in limiter', function () {

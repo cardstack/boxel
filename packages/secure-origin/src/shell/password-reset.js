@@ -31,9 +31,9 @@ import {
   clientSecret as newClientSecret,
   requestEmailToken,
   resetPassword,
-} from './matrix.js';
+} from '../security/matrix.js';
 import { newPasswordFields } from './password-fields.js';
-import { endSessionsForNewPassword, readConfig } from './session.js';
+import { endSessionsForNewPassword, readConfig } from '../security/session.js';
 import {
   cliCallback,
   cliParams,
