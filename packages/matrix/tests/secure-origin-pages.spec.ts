@@ -490,8 +490,11 @@ test.describe('The secure origin’s pages', () => {
     let taken = await createSubscribedUser('secure-taken');
     let secure = await openSecurePage(page, 'mode=register');
     let usernameField = '[data-test-secure-field="username"]';
+    // A field's error, under its input, or under the username's input group.
     let error = (field: string) =>
-      secure.locator(`${field} [data-test-boxel-input-error-message]`);
+      secure.locator(
+        `${field} :is([data-test-boxel-input-error-message], [data-test-boxel-input-group-error-message])`,
+      );
 
     await secure.getByLabel('Your Name').focus();
     await secure.getByLabel('Your Name').blur();
