@@ -48,6 +48,45 @@ export class MatrixRequestError extends Error {
   }
 }
 
+// Builds the error for a non-2xx answer. A proxy in front of synapse answers a
+// timeout or an unreachable upstream with an HTML page, not a matrix error, so
+// the body is read as text and kept out of the message unless it is JSON.
+async function matrixRequestError(
+  response: Response,
+  message: string,
+): Promise<MatrixRequestError> {
+  let body = await response.text().catch(() => '');
+  let detail: string;
+  let retryAfterMs: number | undefined;
+  try {
+    let json = JSON.parse(body);
+    detail = JSON.stringify(json);
+    if (typeof json?.retry_after_ms === 'number') {
+      retryAfterMs = json.retry_after_ms;
+    }
+  } catch {
+    detail = `non-JSON body (${body.length} bytes)`;
+  }
+  if (retryAfterMs === undefined) {
+    let seconds = Number(response.headers.get('Retry-After') ?? NaN);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      retryAfterMs = seconds * 1000;
+    }
+  }
+  return new MatrixRequestError(
+    `${message}: status ${response.status} - ${detail}`,
+    response.status,
+    retryAfterMs,
+  );
+}
+
+// How long a login or a room send waits for synapse to answer. A request
+// synapse accepts but never answers would otherwise wait out the HTTP client's
+// own headers timeout (minutes), holding up everything queued behind it. When
+// it fires the request rejects with a `TimeoutError`, which a caller can retry:
+// a send retried with the same transaction id is not stored twice.
+const MATRIX_WRITE_TIMEOUT_MS = 30_000;
+
 export interface MatrixAccess {
   accessToken: string;
   deviceId: string;
@@ -196,19 +235,18 @@ export class MatrixClient {
           type: 'm.login.password',
           device_id: SERVER_MATRIX_DEVICE_ID,
         }),
+        signal: AbortSignal.timeout(MATRIX_WRITE_TIMEOUT_MS),
       },
       false,
     );
 
-    let json = await response.json();
-
     if (!response.ok) {
-      throw new Error(
-        `Unable to login to matrix ${this.matrixURL.href} as user ${
-          this.username
-        }: status ${response.status} - ${JSON.stringify(json)}`,
+      throw await matrixRequestError(
+        response,
+        `Unable to login to matrix ${this.matrixURL.href} as user ${this.username}`,
       );
     }
+    let json = await response.json();
     let {
       access_token: accessToken,
       device_id: deviceId,
@@ -367,35 +405,16 @@ export class MatrixClient {
     let response = await this.request(
       `_matrix/client/v3/rooms/${roomId}/send/${type}/${txnId}`,
       'PUT',
-      { body: JSON.stringify(content) },
+      {
+        body: JSON.stringify(content),
+        signal: AbortSignal.timeout(MATRIX_WRITE_TIMEOUT_MS),
+      },
     );
 
     if (!response.ok) {
-      // A proxy in front of synapse answers a timeout or an unreachable
-      // upstream with an HTML page, not a matrix error, so the body is read as
-      // text and kept out of the message unless it is JSON.
-      let body = await response.text().catch(() => '');
-      let detail: string;
-      let retryAfterMs: number | undefined;
-      try {
-        let json = JSON.parse(body);
-        detail = JSON.stringify(json);
-        if (typeof json?.retry_after_ms === 'number') {
-          retryAfterMs = json.retry_after_ms;
-        }
-      } catch {
-        detail = `non-JSON body (${body.length} bytes)`;
-      }
-      if (retryAfterMs === undefined) {
-        let seconds = Number(response.headers.get('Retry-After') ?? NaN);
-        if (Number.isFinite(seconds) && seconds >= 0) {
-          retryAfterMs = seconds * 1000;
-        }
-      }
-      throw new MatrixRequestError(
-        `Unable to send room event '${type}' to room ${roomId}: status ${response.status} - ${detail}`,
-        response.status,
-        retryAfterMs,
+      throw await matrixRequestError(
+        response,
+        `Unable to send room event '${type}' to room ${roomId}`,
       );
     }
     let json = (await response.json()) as { event_id: string };

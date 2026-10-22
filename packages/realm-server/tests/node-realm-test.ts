@@ -205,6 +205,46 @@ module(basename(import.meta.filename), function (hooks) {
       'an overloaded homeserver does not clear the session room',
     );
   });
+
+  test('logs in again after a login synapse answers as overloaded, rather than skip the event', async function (assert) {
+    await insertSessionForAlice();
+
+    let logins = 0;
+    let sent: string[] = [];
+    let matrixClient = {
+      login: async () => {
+        logins++;
+        if (logins === 1) {
+          throw new MatrixRequestError(
+            `Unable to login to matrix: status 502 - non-JSON body (150 bytes)`,
+            502,
+          );
+        }
+      },
+      getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn-1',
+      sendEvent: async (roomId: string) => {
+        sent.push(roomId);
+        return '$event';
+      },
+    } as unknown as MatrixClient;
+
+    let adapter = new NodeAdapter(
+      '/tmp',
+      false,
+      new RealmEventDispatcher({ initialBackoffMs: 1 }),
+    );
+    await adapter.broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.strictEqual(logins, 2, 'the login is tried again after a pause');
+    assert.deepEqual(sent, [staleRoomId], 'the event still reaches the room');
+  });
 });
 
 module(`${basename(import.meta.filename)} | file stat probing`, function () {

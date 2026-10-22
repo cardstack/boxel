@@ -56,6 +56,7 @@ import type {
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { createJWT, verifyJWT } from './jwt.ts';
 import {
+  isBackPressure,
   realmEventDispatcher,
   type RealmEventDispatcher,
   type RealmEventSend,
@@ -486,6 +487,11 @@ export class NodeAdapter implements RealmAdapter {
         return [];
       }
     } catch (e) {
+      // An overloaded or unreachable homeserver is back-pressure: the
+      // dispatcher pauses and prepares the event again rather than skip it.
+      if (isBackPressure(e)) {
+        throw e;
+      }
       realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
       return [];
     }

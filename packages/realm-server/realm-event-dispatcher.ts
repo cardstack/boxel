@@ -48,8 +48,9 @@ const log = logger('realm:events');
 //   is the one that loses events. Events whose loss a subscriber recovers
 //   from go first (see `isCompletion`).
 //
-// The queue is in memory, so a process that exits with events queued does not
-// deliver them.
+// The queue is in memory. A process stopping on purpose waits a bounded time
+// for it to empty (see `drain`); a process that exits any other way, or whose
+// queue outlasts that wait, does not deliver what is still queued.
 
 export interface RealmEventSend {
   roomId: string;
@@ -65,7 +66,9 @@ export interface RealmEventBroadcast {
   event: RealmEventContent;
   // Resolves the sends the event fans out to. Runs when the event reaches the
   // head of its realm's line, with the event as merged by then, so the rooms
-  // are the ones subscribed at send time.
+  // are the ones subscribed at send time. When it rejects with back-pressure
+  // the event goes back to the head of its line and is prepared again after
+  // the pause, up to `maxAttempts` times; any other rejection skips the event.
   prepare(event: RealmEventContent): Promise<RealmEventSend[]>;
   newTxnId(): string;
 }
@@ -105,6 +108,7 @@ interface Entry {
   prepare: RealmEventBroadcast['prepare'];
   newTxnId: RealmEventBroadcast['newTxnId'];
   waiters: (() => void)[];
+  prepareAttempts: number;
 }
 
 interface PendingSend {
@@ -131,6 +135,14 @@ export function isBackPressure(error: unknown): boolean {
   let status = (error as { status?: unknown } | undefined)?.status;
   if (typeof status === 'number') {
     return BACK_PRESSURE_STATUSES.has(status);
+  }
+  // A request given a deadline rejects with a TimeoutError (or an AbortError,
+  // depending on the runtime) when the host does not answer in time.
+  if (
+    error instanceof Error &&
+    (error.name === 'TimeoutError' || error.name === 'AbortError')
+  ) {
+    return true;
   }
   // fetch rejects with a TypeError when it cannot reach the host at all
   // (connection refused or reset, DNS failure, socket closed mid-response).
@@ -222,6 +234,7 @@ export class RealmEventDispatcher {
           prepare: broadcast.prepare,
           newTxnId: broadcast.newTxnId,
           waiters: [resolve],
+          prepareAttempts: 0,
         };
         line.pending.push(entry);
         this.#queuedEvents++;
@@ -238,6 +251,21 @@ export class RealmEventDispatcher {
       return;
     }
     await new Promise<void>((resolve) => this.#idleWaiters.push(resolve));
+  }
+
+  // Resolves true once nothing is queued or in flight, or false if that takes
+  // longer than `timeoutMs`. A process stopping on purpose waits on this so the
+  // events it has queued are not lost with it.
+  async drain(timeoutMs: number): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    });
+    try {
+      return await Promise.race([this.idle().then(() => true), timedOut]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   takeStats(): RealmEventDispatcherStats {
@@ -405,9 +433,18 @@ export class RealmEventDispatcher {
     this.#queuedBytes -= entry.bytes;
     let active: Active = { entry, ready: undefined, outstanding: 0 };
     line.active = active;
+    entry.prepareAttempts++;
+    let startedAt = this.#now();
     entry
       .prepare(entry.event)
-      .catch((e) => {
+      .catch((e: unknown) => {
+        if (isBackPressure(e)) {
+          this.#backPressure++;
+          this.#pauseFor(e, startedAt);
+          if (entry.prepareAttempts < this.#maxAttempts) {
+            return undefined;
+          }
+        }
         log.error(
           `Unable to resolve the rooms for a realm event in ${entry.realmURL}; skipping it`,
           e,
@@ -415,6 +452,16 @@ export class RealmEventDispatcher {
         return [];
       })
       .then((sends) => {
+        if (!sends) {
+          // Back to the head of the line, to be prepared again once the
+          // pause is over.
+          line.active = undefined;
+          line.pending.unshift(entry);
+          this.#queuedEvents++;
+          this.#queuedBytes += entry.bytes;
+          this.#pump();
+          return;
+        }
         active.ready = sends.map((send) => ({
           send,
           txnId: entry.newTxnId(),

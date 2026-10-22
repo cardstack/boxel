@@ -106,8 +106,9 @@ realmEventsQueued=… realmEventQueuedKB=… realmEventQueueAgeMs=… realmEvent
 waited, which is the delay a browser sees on top of the send itself. A burst
 that drains keeps it low however deep the queue gets, so it, not the depth, is
 what the "Realm Server Realm Event Backlog" alert reads. When it climbs, the
-next field to read is `realmEventBackPressure`, the count of sends in the window
-that synapse or the proxy in front of it answered with 429, 502, 503 or 504:
+next field to read is `realmEventBackPressure`. It counts the sends and logins in
+the window that synapse, or the proxy in front of it, answered with 429, 502,
+503 or 504, did not answer within 30 seconds, or could not be reached for:
 
 - Nonzero: synapse is overloaded, and the queue is pausing to let it recover.
   Look at synapse CPU and at what is writing in bulk.
@@ -119,6 +120,11 @@ that synapse or the proxy in front of it answered with 429, 502, 503 or 504:
 `REALM_EVENT_MAX_QUEUED_BYTES` (default 64 MiB). The realm with the longest
 backlog loses its oldest queued event, preferring one that isn't the completion
 of an indexing pass (`incremental` or `full`).
+
+The queue is in memory. A server stopping on purpose waits up to 10 seconds for
+it to empty before closing its database. If it is not empty by then, the server
+logs `realm events still undelivered at shutdown` with the counts it is giving
+up on.
 
 The counters (`realmEventSends`, `realmEventFailedSends`,
 `realmEventBackPressure`, `realmEventsCoalesced`, `realmEventsDropped`) cover

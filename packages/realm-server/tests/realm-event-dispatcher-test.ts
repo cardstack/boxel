@@ -383,6 +383,93 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(h.dispatcher.takeStats().queuedEvents, 0);
   });
 
+  test('retries a send that outlived its deadline, with the same transaction id', async function (assert) {
+    let attempts: string[] = [];
+    let h = harness({ initialBackoffMs: 1 });
+    await h.broadcast(
+      REALM_A,
+      incremental(REALM_A, 'card'),
+      ['!r1'],
+      async ({ txnId }) => {
+        attempts.push(txnId);
+        if (attempts.length === 1) {
+          throw new DOMException('timed out', 'TimeoutError');
+        }
+      },
+    );
+    assert.deepEqual(attempts, ['txn-0', 'txn-0']);
+    assert.deepEqual(h.failures, []);
+  });
+
+  test('prepares an event again after its rooms could not be resolved for back-pressure', async function (assert) {
+    let h = harness({ initialBackoffMs: 20 });
+    h.releaseAll();
+    let prepares = 0;
+    let startedAt = Date.now();
+    let delivered: string[] = [];
+    await h.dispatcher.broadcast({
+      realmURL: REALM_A,
+      event: incremental(REALM_A, 'card'),
+      newTxnId: () => 'txn',
+      prepare: async () => {
+        prepares++;
+        if (prepares === 1) {
+          throw new MatrixRequestError('status 503 - non-JSON body', 503);
+        }
+        return [
+          {
+            roomId: '!r1',
+            send: async () => {
+              delivered.push('!r1');
+            },
+            onFailure: async () => undefined,
+          },
+        ];
+      },
+    });
+    assert.strictEqual(prepares, 2);
+    assert.deepEqual(delivered, ['!r1']);
+    assert.true(Date.now() - startedAt >= 18, 'it waits out the pause first');
+    let stats = h.dispatcher.takeStats();
+    assert.strictEqual(stats.backPressure, 1);
+    assert.strictEqual(stats.queuedEvents, 0);
+  });
+
+  test('skips an event whose rooms stay unresolvable for back-pressure past maxAttempts', async function (assert) {
+    let h = harness({ maxAttempts: 3, initialBackoffMs: 1 });
+    h.releaseAll();
+    let prepares = 0;
+    await h.dispatcher.broadcast({
+      realmURL: REALM_A,
+      event: incremental(REALM_A, 'card'),
+      newTxnId: () => 'txn',
+      prepare: async () => {
+        prepares++;
+        throw new MatrixRequestError('status 502 - non-JSON body', 502);
+      },
+    });
+    await h.broadcast(REALM_A, incremental(REALM_A, 'next'));
+    assert.strictEqual(prepares, 3);
+    assert.strictEqual(h.started.length, 1, 'the next event still goes out');
+  });
+
+  test('drain resolves true once the queue empties, and false if it outlasts the wait', async function (assert) {
+    let h = harness();
+    assert.true(await h.dispatcher.drain(10), 'an empty queue is drained');
+
+    let delivered = h.broadcast(REALM_A, incremental(REALM_A, 'card'));
+    await h.settle();
+    assert.false(
+      await h.dispatcher.drain(20),
+      'a send still outstanding outlasts the wait',
+    );
+
+    let drained = h.dispatcher.drain(1000);
+    h.releaseAll();
+    assert.true(await drained);
+    await delivered;
+  });
+
   test('keeps realms taking turns while the rate limit holds sends back', async function (assert) {
     let h = harness({ sendsPerSecond: 100, maxInFlight: 2 });
     h.releaseAll();
@@ -516,6 +603,11 @@ module(basename(import.meta.filename), function () {
         assert.false(isBackPressure(new MatrixRequestError('x', status)));
       }
       assert.true(isBackPressure(new TypeError('fetch failed')));
+      assert.true(
+        isBackPressure(new DOMException('timed out', 'TimeoutError')),
+        'a request that outlived its deadline',
+      );
+      assert.true(isBackPressure(new DOMException('aborted', 'AbortError')));
       assert.false(isBackPressure(new Error('boom')));
     });
   });
