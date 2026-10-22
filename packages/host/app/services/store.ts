@@ -247,7 +247,29 @@ const queryFieldSeedFromSearchSymbol = Symbol.for(
   'cardstack-query-field-seed-from-search',
 );
 
-type PersistOptions = CreateOptions & { clientRequestId?: string };
+type PersistOptions = CreateOptions & {
+  clientRequestId?: string;
+  // Lets the save's request outlive the page, for a save sent as it closes.
+  keepalive?: true;
+};
+
+// A card's edits waiting for typing to pause before they are saved.
+type PendingAutoSave = {
+  instance: CardDef;
+  firstChangeAt: number;
+  timer: ReturnType<typeof setTimeout> | undefined;
+  isImmediate: boolean;
+  keepalive: boolean;
+  // Sent, and waiting for the card's previous save to settle before it starts.
+  isSending: boolean;
+  waiterToken: unknown;
+  // The reference count entry, and the map it lives in, that this save holds.
+  holdKey: string;
+  heldIn: ReferenceCount;
+};
+
+// The browser refuses a `keepalive` request whose body is over 64 KiB.
+const KEEPALIVE_BODY_LIMIT = 64 * 1024;
 
 // Which of a store service's search concurrency lanes a throttled search takes:
 // the card `@context` surface's, or query-field resolution's.
@@ -493,17 +515,66 @@ export default class StoreService extends Service implements StoreInterface {
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
-  private autoSaveQueues = new Map<string, { isImmediate?: true }[]>();
+  // An edited card waits here, keyed by local id, until typing pauses (see
+  // `doAutoSave`). The entry leaves this map when its save starts, so an edit
+  // made while that save runs schedules the next one.
+  #pendingAutoSaves = new Map<string, PendingAutoSave>();
+  // The running save of each card, keyed by local id. A card's saves run one
+  // at a time, each after the previous one settles.
   private autoSavePromises = new Map<string, Promise<void>>();
+  // How many of a reference count's references are held by pending or running
+  // saves rather than by something showing the card.
+  #autoSaveHolds = new Map<string, number>();
+  // Cards whose last real reference was dropped while a save held them. Their
+  // teardown runs when the last hold is released.
+  #teardownAfterSave = new Set<string>();
 
   constructor(owner: Owner) {
     super(owner);
     this.store = this.createCardStore();
     this.session.register(this);
     this.ready = this.setup();
+    let removePageListeners = this.#listenForLeavingThePage();
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);
+      removePageListeners();
+      // The owner is gone, so there is nothing left to send a save with.
+      for (let pending of this.#pendingAutoSaves.values()) {
+        if (!pending.isSending) {
+          clearTimeout(pending.timer);
+          waiter.endAsync(pending.waiterToken);
+        }
+      }
+      this.#pendingAutoSaves.clear();
     });
+  }
+
+  // A save waiting for typing to pause holds an edit that exists only in this
+  // tab, so anything that can end the tab's chance to send it sends it now:
+  // focus leaving a field, the page being hidden (which precedes closing or
+  // backgrounding a tab on every supported browser), and `pagehide`, the last
+  // event a closing page gets. Only `visibilitychange` is dependable;
+  // `pagehide` is best effort, since a save is serialized asynchronously and
+  // the page may be gone before its request goes out.
+  #listenForLeavingThePage(): () => void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+      return () => {};
+    }
+    let onFocusOut = () => this.#sendPendingAutoSaves();
+    let onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        this.#sendPendingAutoSaves();
+      }
+    };
+    let onPageHide = () => this.#sendPendingAutoSaves({ keepalive: true });
+    document.addEventListener('focusout', onFocusOut);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      document.removeEventListener('focusout', onFocusOut);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', onPageHide);
+    };
   }
 
   protected renderContextBlocksPersistence() {
@@ -546,12 +617,18 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   resetState() {
+    // Pending saves go out before the state they would be lost with is
+    // replaced. Each one holds its own instance, so it completes against the
+    // card it was made from.
+    this.#sendPendingAutoSaves();
     clearInterval(this.gcInterval);
     this.subscriptions = new Map();
     this.cardInvalidationSubscribers = new Map();
     this.cardReloadSubscribers = new Set();
     this.onSaveSubscriber = undefined;
     this.referenceCount = new Map();
+    this.#autoSaveHolds = new Map();
+    this.#teardownAfterSave = new Set();
     this.newReferencePromises = [];
     this.autoSaveStates = new TrackedMap();
     this.fileReadIds.clear();
@@ -565,8 +642,6 @@ export default class StoreService extends Service implements StoreInterface {
     this.searchCache = new Map();
     this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
-    this.autoSaveQueues = new Map();
-    this.autoSavePromises = new Map();
     this.store = this.createCardStore();
     this.ready = this.setup();
   }
@@ -638,8 +713,12 @@ export default class StoreService extends Service implements StoreInterface {
     storeLogger.info(
       `resetting store cache; leaving identity epoch #${this.#identityEpoch}`,
     );
+    // As in `resetState`: send pending saves before their state is replaced.
+    this.#sendPendingAutoSaves();
     if (!opts?.preserveReferences) {
       this.referenceCount = new Map();
+      this.#autoSaveHolds = new Map();
+      this.#teardownAfterSave = new Set();
     }
     this.cardApiCache = undefined;
     this.autoSaveStates = new TrackedMap();
@@ -655,8 +734,6 @@ export default class StoreService extends Service implements StoreInterface {
     this.searchCache = new Map();
     this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
-    this.autoSaveQueues = new Map();
-    this.autoSavePromises = new Map();
     this.store = this.createCardStore();
   }
 
@@ -784,6 +861,20 @@ export default class StoreService extends Service implements StoreInterface {
     storeLogger.debug(
       `dropping reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
+    // Once only pending or running saves still hold the card, nothing is
+    // showing it, so its pending save goes out now rather than when the
+    // timer fires. The save's hold keeps the instance subscribed and safe from
+    // garbage collection until the save lands; releasing that hold is what
+    // brings the count to zero.
+    let autoSaveHolds = this.#autoSaveHolds.get(id) ?? 0;
+    if (autoSaveHolds > 0 && currentReferenceCount <= autoSaveHolds) {
+      this.#teardownAfterSave.add(id);
+      for (let [localId, pending] of this.#pendingAutoSaves) {
+        if (pending.holdKey === id) {
+          this.#sendAutoSave(localId);
+        }
+      }
+    }
     if (currentReferenceCount <= 0) {
       if (currentReferenceCount < 0) {
         let message = `current reference count for ${id} is negative: ${this.referenceCount.get(id)}`;
@@ -2227,8 +2318,35 @@ export default class StoreService extends Service implements StoreInterface {
     await Promise.allSettled(this.newReferencePromises);
   }
 
-  async flushSaves() {
-    await Promise.allSettled(this.autoSavePromises.values());
+  // Sends every save still waiting for typing to pause, then waits for all
+  // saves to settle, including any that edits made meanwhile scheduled. With
+  // `timeoutMs`, gives up waiting after that long; the saves carry on.
+  async flushSaves(opts?: { timeoutMs?: number }) {
+    let flush = async () => {
+      while (
+        this.#pendingAutoSaves.size > 0 ||
+        this.autoSavePromises.size > 0
+      ) {
+        this.#sendPendingAutoSaves();
+        await Promise.allSettled([...this.autoSavePromises.values()]);
+      }
+    };
+    if (opts?.timeoutMs === undefined) {
+      await flush();
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      flush(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, opts.timeoutMs);
+      }),
+    ]);
+    clearTimeout(timer);
+  }
+
+  get hasUnsavedEdits(): boolean {
+    return this.#pendingAutoSaves.size > 0 || this.autoSavePromises.size > 0;
   }
 
   getReferenceCount(id: string) {
@@ -4014,56 +4132,163 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     let autoSaveState = this.initOrGetAutoSaveState(instance);
-    let queueName = instance.id ?? instance[localIdSymbol];
-    let autoSaveQueue = this.autoSaveQueues.get(queueName);
-    if (!autoSaveQueue) {
-      autoSaveQueue = [];
-      this.autoSaveQueues.set(queueName, autoSaveQueue);
-    }
-    autoSaveQueue.push({ ...opts });
-    autoSaveState.isSaving = true;
     autoSaveState.lastSaveError = undefined;
-    this.drainAutoSaveQueue(queueName);
+    let localId = instance[localIdSymbol];
+    let pending = this.#pendingAutoSaves.get(localId);
+    if (!pending) {
+      pending = {
+        instance,
+        firstChangeAt: Date.now(),
+        timer: undefined,
+        isImmediate: false,
+        keepalive: false,
+        isSending: false,
+        waiterToken: waiter.beginAsync(undefined, `pendingAutoSave ${localId}`),
+        ...this.#holdForAutoSave(instance),
+      };
+      this.#pendingAutoSaves.set(localId, pending);
+    }
+    if (opts?.isImmediate) {
+      pending.isImmediate = true;
+    }
+    if (pending.isSending) {
+      // Its save has been sent and is waiting for the card's previous save;
+      // it serializes the card when it starts, so it carries this edit too.
+      return;
+    }
+    if (pending.isImmediate) {
+      this.#sendAutoSave(localId);
+      return;
+    }
+    // Saved once typing pauses for the quiet period, and no later than the
+    // maximum wait after the first unsaved edit, so typing without a pause is
+    // still saved regularly.
+    let { autoSaveQuietPeriodMs, autoSaveMaxWaitMs } = this.environmentService;
+    let wait = Math.max(
+      0,
+      Math.min(
+        autoSaveQuietPeriodMs,
+        pending.firstChangeAt + autoSaveMaxWaitMs - Date.now(),
+      ),
+    );
+    clearTimeout(pending.timer);
+    pending.timer = setTimeout(() => this.#sendAutoSave(localId), wait);
+    this.calculateLastSavedMsg(autoSaveState, { hasPendingSave: true });
   }
 
-  private async drainAutoSaveQueue(queueName: string) {
-    let waiterLabel = `drainAutoSaveQueue ${queueName}`;
-    return await this.withTestWaiters(waiterLabel, async () => {
-      await this.autoSavePromises.get(queueName);
+  #sendPendingAutoSaves(opts?: { keepalive?: true }) {
+    for (let localId of [...this.#pendingAutoSaves.keys()]) {
+      this.#sendAutoSave(localId, opts);
+    }
+  }
 
-      let instance = this.peek(queueName);
-      if (!isCardInstance(instance)) {
-        return;
-      }
-      await this.inflightCardMutations.get(instance[localIdSymbol]);
-
-      let done: () => void;
-      this.autoSavePromises.set(
-        queueName,
-        new Promise<void>((r) => (done = r)),
-      );
-      let autoSaves = [...(this.autoSaveQueues.get(queueName) ?? [])];
-      this.autoSaveQueues.set(queueName, []);
-      if (autoSaves && autoSaves.length > 0) {
-        // favor isImmediate saves
-        let isImmediate = Boolean(autoSaves.find((a) => a.isImmediate));
-        try {
-          await this.trackingSaveState(instance, queueName, () =>
-            this.saveInstance(
-              instance,
-              isImmediate ? { isImmediate } : undefined,
-            ),
-          );
-        } catch {
-          // Swallowed on purpose: an autosave is not something a caller awaited,
-          // so a throw here has nowhere to go but an unhandled rejection. The
-          // error is already logged in CardService and recorded on the save
-          // state for the indicator to surface. `add()` awaits its own save and
-          // therefore lets the throw propagate.
+  // Sends a card's pending save without waiting for typing to pause. It still
+  // runs after the card's previous save, so a card never has two saves in
+  // flight.
+  #sendAutoSave(localId: string, opts?: { keepalive?: true }) {
+    let pending = this.#pendingAutoSaves.get(localId);
+    if (!pending) {
+      return;
+    }
+    if (opts?.keepalive) {
+      pending.keepalive = true;
+    }
+    clearTimeout(pending.timer);
+    pending.timer = undefined;
+    if (pending.isSending) {
+      return;
+    }
+    pending.isSending = true;
+    let { instance } = pending;
+    let previous = this.autoSavePromises.get(localId);
+    let run: Promise<void> | undefined;
+    run = (async () => {
+      try {
+        await previous;
+        await this.inflightCardMutations.get(localId);
+        // From here an edit schedules a new save: this one serializes the card
+        // as it is now.
+        if (this.#pendingAutoSaves.get(localId) === pending) {
+          this.#pendingAutoSaves.delete(localId);
         }
+        let autoSaveState = this.initOrGetAutoSaveState(instance);
+        autoSaveState.isSaving = true;
+        await this.trackingSaveState(instance, localId, () =>
+          this.saveInstance(instance, {
+            ...(pending.isImmediate ? { isImmediate: true as const } : {}),
+            ...(pending.keepalive ? { keepalive: true as const } : {}),
+          }),
+        );
+      } catch {
+        // Swallowed on purpose: an autosave is not something a caller awaited,
+        // so a throw here has nowhere to go but an unhandled rejection. The
+        // error is already logged in CardService and recorded on the save
+        // state for the indicator to surface. `add()` awaits its own save and
+        // therefore lets the throw propagate.
+      } finally {
+        if (this.#pendingAutoSaves.get(localId) === pending) {
+          this.#pendingAutoSaves.delete(localId);
+        }
+        if (this.autoSavePromises.get(localId) === run) {
+          this.autoSavePromises.delete(localId);
+        }
+        this.#releaseAutoSaveHold(pending);
+        waiter.endAsync(pending.waiterToken);
       }
-      done!();
-    });
+    })();
+    this.autoSavePromises.set(localId, run);
+  }
+
+  // A pending or running save holds a reference to its card, so the garbage
+  // collector keeps the instance and `dropReference` keeps it subscribed
+  // until the save lands, even after the last thing showing it is gone.
+  #holdForAutoSave(
+    instance: CardDef,
+  ): Pick<PendingAutoSave, 'holdKey' | 'heldIn'> {
+    let holdKey = asURL(
+      instance.id ?? instance[localIdSymbol],
+      this.network.virtualNetwork,
+    );
+    this.referenceCount.set(
+      holdKey,
+      (this.referenceCount.get(holdKey) ?? 0) + 1,
+    );
+    this.#autoSaveHolds.set(
+      holdKey,
+      (this.#autoSaveHolds.get(holdKey) ?? 0) + 1,
+    );
+    return { holdKey, heldIn: this.referenceCount };
+  }
+
+  #releaseAutoSaveHold(pending: PendingAutoSave) {
+    // A store reset since the hold was taken started its reference counts
+    // over, and the hold is not in them.
+    if (pending.heldIn !== this.referenceCount) {
+      return;
+    }
+    let { holdKey } = pending;
+    let holds = (this.#autoSaveHolds.get(holdKey) ?? 0) - 1;
+    if (holds > 0) {
+      this.#autoSaveHolds.set(holdKey, holds);
+    } else {
+      this.#autoSaveHolds.delete(holdKey);
+    }
+    // Only a card whose last real reference went while the save held it is
+    // torn down here, as `dropReference` would have done. A card nothing ever
+    // referenced keeps its save state, as it would without the hold.
+    if (this.#teardownAfterSave.has(holdKey)) {
+      if (holds <= 0) {
+        this.#teardownAfterSave.delete(holdKey);
+      }
+      this.dropReference(holdKey);
+      return;
+    }
+    let count = (this.referenceCount.get(holdKey) ?? 0) - 1;
+    if (count > 0) {
+      this.referenceCount.set(holdKey, count);
+    } else {
+      this.referenceCount.delete(holdKey);
+    }
   }
 
   // Runs a save and folds its outcome into the instance's `AutoSaveState` —
@@ -4072,8 +4297,8 @@ export default class StoreService extends Service implements StoreInterface {
   // itself the same way regardless of which path issued it; before this was
   // factored out, only the queue updated the indicator.
   //
-  // `isSaving` is expected to already be true: the queue sets it when work is
-  // enqueued, which is earlier than this runs.
+  // `isSaving` is set by the caller: the autosave path sets it as its save
+  // starts, after any wait for typing to pause.
   private async trackingSaveState(
     instance: CardDef,
     stateKey: string,
@@ -4082,7 +4307,10 @@ export default class StoreService extends Service implements StoreInterface {
     let autoSaveState = this.initOrGetAutoSaveState(instance);
     try {
       let maybeError = await save();
-      autoSaveState.hasUnsavedChanges = false;
+      // An edit made while this save ran is in a newer pending save.
+      autoSaveState.hasUnsavedChanges = this.#pendingAutoSaves.has(
+        instance[localIdSymbol],
+      );
       autoSaveState.lastSaved = Date.now();
       autoSaveState.lastSavedErrorMsg = undefined;
       autoSaveState.lastSaveError =
@@ -4094,7 +4322,9 @@ export default class StoreService extends Service implements StoreInterface {
       throw error;
     } finally {
       autoSaveState.isSaving = false;
-      this.calculateLastSavedMsg(autoSaveState);
+      this.calculateLastSavedMsg(autoSaveState, {
+        hasPendingSave: this.#pendingAutoSaves.has(instance[localIdSymbol]),
+      });
       // A card saved under its local id gains a remote id during the save, so
       // republish the same state object under that id — otherwise a later
       // lookup by remote id would mint a fresh, empty state.
@@ -4124,18 +4354,24 @@ export default class StoreService extends Service implements StoreInterface {
     return autoSaveState;
   }
 
-  private async saveInstance(instance: CardDef, opts?: { isImmediate?: true }) {
+  private async saveInstance(
+    instance: CardDef,
+    opts?: { isImmediate?: true; keepalive?: true },
+  ) {
     if (this.renderContextBlocksPersistence()) {
       // we skip saving when rendering cards in headless chrome
       return;
     }
-    if (opts?.isImmediate) {
-      return await this.persistAndUpdate(instance);
+    let persistOpts = opts?.keepalive
+      ? { keepalive: true as const }
+      : undefined;
+    if (opts?.isImmediate || opts?.keepalive) {
+      return await this.persistAndUpdate(instance, persistOpts);
     } else {
       // these saves can happen so fast that we'll make sure to wait at
       // least 500ms for human consumption
       let [result] = await Promise.all([
-        this.persistAndUpdate(instance),
+        this.persistAndUpdate(instance, persistOpts),
         delay(500),
       ]);
       return result;
@@ -4148,9 +4384,14 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
     let url = resolveDocUrl(doc.data.id, opts?.realm, opts?.localDir);
+    let body = JSON.stringify(doc, null, 2);
     let json = await this.cardService.fetchJSON(url, {
       method: isSaved ? 'PATCH' : 'POST',
-      body: JSON.stringify(doc, null, 2),
+      body,
+      ...(opts?.keepalive &&
+      new TextEncoder().encode(body).length <= KEEPALIVE_BODY_LIMIT
+        ? { keepalive: true }
+        : {}),
       headers: {
         'Content-Type': SupportedMimeType.CardJson,
         // Marks a write issued by a headless command, which makes the realm
@@ -4179,12 +4420,17 @@ export default class StoreService extends Service implements StoreInterface {
     return json;
   }
 
-  private calculateLastSavedMsg(autoSaveState: AutoSaveState) {
+  private calculateLastSavedMsg(
+    autoSaveState: AutoSaveState,
+    opts?: { hasPendingSave?: boolean },
+  ) {
     let savedMessage: string | undefined;
     if (autoSaveState.lastSaveError) {
       savedMessage = `Failed to save: ${this.getErrorMessage(
         autoSaveState.lastSaveError,
       )}`;
+    } else if (opts?.hasPendingSave) {
+      savedMessage = 'Unsaved changes';
     } else if (autoSaveState.lastSaved) {
       savedMessage = `Saved ${formatDistanceToNow(autoSaveState.lastSaved, {
         addSuffix: true,
@@ -4254,6 +4500,7 @@ export default class StoreService extends Service implements StoreInterface {
               localDir: opts?.localDir,
               clientRequestId: opts?.clientRequestId,
               skipIndexWait: opts?.skipIndexWait,
+              keepalive: opts?.keepalive,
             });
 
             let api = await this.cardService.getAPI();

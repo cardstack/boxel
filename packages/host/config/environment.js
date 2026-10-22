@@ -143,6 +143,10 @@ module.exports = function (environment) {
       : process.env.MATRIX_URL || defaults.matrixURL,
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
+    // A card edit is saved once typing pauses for this long, and at least this
+    // often while typing goes on without a pause.
+    autoSaveQuietPeriodMs: 1500,
+    autoSaveMaxWaitMs: 10000,
     monacoDebounceMs: 500,
     monacoCursorDebounceMs: 200,
     serverEchoDebounceMs: 5000,
@@ -252,6 +256,7 @@ module.exports = function (environment) {
     ENV.APP.rootElement = '#ember-testing';
     ENV.APP.autoboot = false;
     ENV.autoSaveDelayMs = 0;
+    ENV.autoSaveQuietPeriodMs = 0;
     ENV.monacoDebounceMs = 0;
     ENV.monacoCursorDebounceMs = 0;
     ENV.realmServerURL = 'http://test-realm';

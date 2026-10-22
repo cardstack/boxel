@@ -171,6 +171,8 @@ const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 // so a persistently-down server doesn't spin forever.
 const UNREACHABLE_RETRY_INTERVAL_MS = 10_000;
 const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
+// How long logout waits for pending card saves before signing out anyway.
+const LOGOUT_SAVE_FLUSH_TIMEOUT_MS = 5_000;
 
 const realmEventsLogger = logger('realm:events');
 
@@ -759,6 +761,13 @@ export default class MatrixService extends Service {
     skipIndexTransition?: true;
     serverLogoutAuth?: LoginResponse;
   }) {
+    // Card edits still waiting to be saved are sent while the session can
+    // still authenticate them, with a bound so a slow realm can't hold up
+    // signing out. Nothing to send keeps logout synchronous up to the network
+    // logout below.
+    if (this.store.hasUnsavedEdits) {
+      await this.store.flushSaves({ timeoutMs: LOGOUT_SAVE_FLUSH_TIMEOUT_MS });
+    }
     // Which session to revoke server-side, decoupled from `this._client`. During
     // an account switch the live client has already been rewritten to the
     // incoming account's token by loginWithToken(), and the outgoing account was
