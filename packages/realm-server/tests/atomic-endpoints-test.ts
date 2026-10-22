@@ -1644,6 +1644,86 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('an ignore-file write sent with X-Boxel-Realm-Events: none reindexes the realm without any realm event', async function (assert) {
+          let auth = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+          let writeIgnoreFile = async (
+            content: string,
+            headers: Record<string, string>,
+          ) => {
+            let pending = request
+              .post('/.boxelignore')
+              .set('Accept', SupportedMimeType.CardSource)
+              .set('Content-Type', 'text/plain;charset=UTF-8')
+              .set('Authorization', auth);
+            for (let [name, value] of Object.entries(headers)) {
+              pending = pending.set(name, value);
+            }
+            let response = await pending.send(content);
+            assert.strictEqual(response.status, 204);
+          };
+
+          let [{ max: jobsBefore }] = (await dbAdapter.execute(
+            'SELECT coalesce(max(id), 0) AS max FROM jobs',
+          )) as { max: number }[];
+          let events = recordRealmEvents();
+          await writeIgnoreFile('quiet-ignored.json\n', {
+            'X-Boxel-Realm-Events': 'none',
+          });
+          // The write's own pass, then the from-scratch pass it starts.
+          await testRealm.indexing();
+          await testRealm.indexing();
+          // The reindex announces right after its pass settles.
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          assert.deepEqual(
+            eventKinds(events),
+            [],
+            'neither the write nor the reindex it started sent a realm event',
+          );
+          // What the worker would announce is carried by the jobs the pass
+          // spawned: its render job and any follow-up pass.
+          let spawned = (await dbAdapter.execute(
+            `SELECT job_type, args FROM jobs
+             WHERE id > $1
+               AND job_type IN ('from-scratch-index', 'prerender_html')
+             ORDER BY id`,
+            { bind: [jobsBefore] },
+          )) as {
+            job_type: string;
+            args: { realmEvents?: boolean; announce?: boolean };
+          }[];
+          let reindex = spawned.find(
+            ({ job_type }) => job_type === 'from-scratch-index',
+          );
+          assert.ok(reindex, 'the ignore-file write started a reindex');
+          assert.false(
+            reindex?.args.realmEvents,
+            'the reindex announces nothing',
+          );
+          assert.deepEqual(
+            spawned
+              .filter(({ job_type }) => job_type === 'prerender_html')
+              .map(({ args }) => args.announce),
+            spawned
+              .filter(({ job_type }) => job_type === 'prerender_html')
+              .map(() => false),
+            'no render job the passes spawned announces',
+          );
+
+          await writeIgnoreFile('loud-ignored.json\n', {});
+          await waitUntil(
+            async () => eventKinds(events).includes('index:full'),
+            {
+              timeout: 30000,
+              timeoutMessage: () =>
+                `no full index event; saw ${JSON.stringify(eventKinds(events))}`,
+            },
+          );
+          assert.ok(
+            eventKinds(events).includes('index:full'),
+            'an ignore-file write without the header announces the reindex',
+          );
+        });
+
         test('removing several files at once sends one initiation', async function (assert) {
           await postAtomic(peopleBatch(['gone-a', 'gone-b', 'gone-c']));
           await testRealm.incrementalIndexing();

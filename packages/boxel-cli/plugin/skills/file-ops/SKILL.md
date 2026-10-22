@@ -66,6 +66,7 @@ Write a file to a realm (reads content from STDIN or --file)
 - `--realm <realm-url>` — The realm URL to write to
 - `--file <filepath>` — Read content from a local file instead of STDIN
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+- `--no-realm-events` — Index the write without announcing it to open tabs, which pick it up on their next load (for deploys)
 - `--json` — Output raw JSON response
 
 ### `boxel file list`
@@ -125,5 +126,6 @@ Force realm re-indexing of one or more files by making a semantically-neutral ed
 ## Pitfalls
 
 - `boxel file write` reads content from stdin by default. Pipe in or use `--file` — don't expect interactive prompting.
+- `boxel file write --no-realm-events` follows the same rule as `realm push --no-realm-events`: use it for a deploy into a shared realm, never for a write someone with the realm open needs to see. See [Pushing without realm events](../realm-sync/SKILL.md#pushing-without-realm-events---no-realm-events) in `/boxel-cli:realm-sync`.
 - File paths are realm-relative (e.g., `BlogPost/my-post.json`), not absolute URLs. The realm URL goes in `--realm`.
 - `delete` is unrecoverable from the CLI. Confirm intent before running, especially against production realms.

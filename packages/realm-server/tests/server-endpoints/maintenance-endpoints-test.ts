@@ -704,6 +704,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             // coalesce can refuse to attach this kind of publish to an
             // already-running same-realm from-scratch.
             clearLastModified: true,
+            // An operator's reindex announces nothing to the realm's
+            // subscribers.
+            realmEvents: false,
           },
           'realm args are correct',
         );
@@ -818,6 +821,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             realmURL,
             realmUsername: owner,
             clearLastModified: true,
+            realmEvents: false,
           },
           'job args target the evicted realm',
         );
@@ -985,7 +989,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                 job_type: string;
                 concurrency_group: string;
                 timeout: number;
-                args: { realmUrls: string[] };
+                args: { realmUrls: string[]; realmEvents?: boolean };
               }
             | undefined;
           assert.ok(reindexJob, 'full-reindex job exists');
@@ -1007,6 +1011,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             assert.ok(
               reindexJob.args.realmUrls.includes(testRealmURL.href),
               'job args still include mounted realms',
+            );
+            assert.false(
+              reindexJob.args.realmEvents,
+              "a deploy's reindex announces nothing to any realm's subscribers",
             );
           }
 
@@ -1214,12 +1222,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         let jobs = finalJobs.slice(2) as {
           job_type: string;
           concurrency_group: string;
-          args: { realmUrls: string[] };
+          args: { realmUrls: string[]; realmEvents?: boolean };
         }[];
         assert.strictEqual(
           jobs[0].job_type,
           'full-reindex',
           'job type is correct',
+        );
+        assert.false(
+          jobs[0].args.realmEvents,
+          "an operator's full reindex announces nothing to any realm's subscribers",
         );
         assert.strictEqual(
           jobs[0].concurrency_group,
