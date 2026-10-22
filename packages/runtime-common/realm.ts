@@ -424,7 +424,7 @@ import type {
   SharedIndexPass,
 } from './tasks/indexer.ts';
 import { isCodeRef, isRelativePath, moduleFrom } from './code-ref.ts';
-import { merge } from 'lodash-es';
+import { isEqual, merge } from 'lodash-es';
 import { inferContentType } from './infer-content-type.ts';
 import {
   fileContentToText,
@@ -1212,6 +1212,16 @@ const GRANTABLE_BYTES = { coarseReadOnly: true, grantableBytes: true } as const;
 // serve extends a name as it does for a reader, so the name a module is
 // imported by reaches it, and the gate judges the module it resolved to. The
 // card+source read reads the name exactly as named, so it reaches no redirect.
+// Whether two JSON texts hold the same value, whatever their whitespace or
+// key order. Text that doesn't parse holds no value to compare.
+function sameJSON(a: string, b: string): boolean {
+  try {
+    return isEqual(JSON.parse(a), JSON.parse(b));
+  } catch {
+    return false;
+  }
+}
+
 function namesGrantableBytes(localPath: LocalPath): boolean {
   return localPath.slice(localPath.lastIndexOf('/') + 1) !== '';
 }
@@ -5256,15 +5266,19 @@ export class Realm {
         urls = [];
       }
 
+      // The document this write stores, when the write re-serializes a card.
+      // The unchanged-file check below compares a stored card with it by
+      // JSON value rather than by bytes.
+      let serializedCard: LooseSingleCardDocument | undefined;
       if (typeof content === 'string') {
         try {
           let doc = JSON.parse(content);
           if (isCardResource(doc.data) && options?.serializeFile) {
-            let serialized = await this.fileSerialization(
+            serializedCard = await this.fileSerialization(
               { data: merge(doc.data, { meta: { realmURL: this.url } }) },
               url,
             );
-            content = JSON.stringify(serialized, null, 2);
+            content = JSON.stringify(serializedCard, null, 2);
           }
         } catch (e: any) {
           if (
@@ -5296,12 +5310,31 @@ export class Realm {
         (stored.size === undefined ||
           stored.size === computeContentSize(content));
       let unchanged: { lastModified: number } | undefined;
-      if (couldMatch && typeof content === 'string') {
+      if (
+        stored &&
+        typeof content === 'string' &&
+        (couldMatch || serializedCard)
+      ) {
         let existingFile = await readFileAsText(path, (p) =>
           this.#adapter.openFile(p),
         );
         if (existingFile?.content === content) {
           unchanged = existingFile;
+        } else if (
+          existingFile &&
+          serializedCard &&
+          sameJSON(existingFile.content, content)
+        ) {
+          // A stored card can hold exactly the JSON this write stores and
+          // still differ in bytes: a trailing newline, indentation, or keys
+          // in another order, as a source checkout lays them out. None of
+          // that is content, so the stored card is kept byte for byte, and
+          // the result below reports its own bytes rather than the ones this
+          // write would have stored. Any difference in the JSON itself — a
+          // reference spelled another way, a field the definition no longer
+          // declares — is content, and the write goes ahead.
+          unchanged = existingFile;
+          content = existingFile.content;
         }
       } else if (
         couldMatch &&
@@ -5354,6 +5387,12 @@ export class Realm {
           contentHash: unchangedHash,
           contentSize: computeContentSize(content),
         });
+        // The module flush above has already run for this file if it was
+        // owed. Recording the file's kind keeps the next instance from
+        // running it again over no URLs, which would replace the flush's
+        // parked prerender set with an empty one and leave the changed
+        // module's dependents unrendered.
+        lastWriteType = currentWriteType ?? lastWriteType;
         continue;
       }
       // From the open above rather than from a read, which a file whose
