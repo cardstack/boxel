@@ -1,10 +1,12 @@
 // A Matrix server for the security modules' tests, answering the requests
 // `src/security/matrix.js` makes through a stubbed `fetch`. The modules find
 // the server from the page's markup, so a `document` naming it is stubbed
-// too.
+// too. Requests to the realm server (`REALM_SERVER_URL`) are answered by the
+// handlers registered under `realm-server:<path>`.
 
 const MATRIX_URL = 'https://matrix.test/';
 const CLIENT_API = `${MATRIX_URL}_matrix/client/v3/`;
+export const REALM_SERVER_URL = 'https://realm-server.test/';
 
 export interface MatrixRequest {
   path: string;
@@ -64,10 +66,14 @@ export function fakeMatrix(): FakeMatrix {
   };
   globals.fetch = async (input: URL | string, init: RequestInit = {}) => {
     let url = new URL(String(input));
-    if (!url.href.startsWith(CLIENT_API)) {
-      throw new TypeError(`fetch to ${url.href}, which is not the Matrix API`);
+    let path: string;
+    if (url.href.startsWith(CLIENT_API)) {
+      path = url.href.slice(CLIENT_API.length).split('?')[0];
+    } else if (url.href.startsWith(REALM_SERVER_URL)) {
+      path = `realm-server:${url.href.slice(REALM_SERVER_URL.length).split('?')[0]}`;
+    } else {
+      throw new TypeError(`fetch to ${url.href}, which no fake serves`);
     }
-    let path = url.href.slice(CLIENT_API.length).split('?')[0];
     let headers = (init.headers ?? {}) as Record<string, string>;
     let body = init.body ? JSON.parse(String(init.body)) : {};
     seen.push({

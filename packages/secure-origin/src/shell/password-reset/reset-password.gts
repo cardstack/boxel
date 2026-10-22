@@ -13,7 +13,8 @@ import { navigation } from '../navigation.js';
 import NewPasswordFields from '../new-password-fields.gts';
 import { NewPassword } from '../new-password.ts';
 import { cliParams, modeURL } from '../urls.js';
-import { type ResetLink, signInURL } from './reset-link.ts';
+import { signInURL } from '../cli-links.ts';
+import type { ResetLink } from './reset-link.ts';
 
 // Where a password reset link lands (`reset-password`), once it was
 // confirmed at the Matrix server: the new password is set here. Setting it
@@ -97,6 +98,7 @@ export default class ResetPassword extends Component<Signature> {
           class='title'
           role='heading'
           aria-level='1'
+          data-test-secure-title
           data-test-reset-password-success
         >Your password is now reset</span>
         <p class='info'>Your password has been successfully reset. You can use
@@ -116,7 +118,12 @@ export default class ResetPassword extends Component<Signature> {
           data-test-reset-password-form
           {{on 'submit' this.submit}}
         >
-          <span class='title' role='heading' aria-level='1'>Reset your password</span>
+          <span
+            class='title'
+            role='heading'
+            aria-level='1'
+            data-test-secure-title
+          >Reset your password</span>
           <NewPasswordFields
             @password={{this.password}}
             @passwordLabel='Enter New Password'

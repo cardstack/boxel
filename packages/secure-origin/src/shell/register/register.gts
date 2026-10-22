@@ -21,14 +21,15 @@ import {
   type Account,
   type Outcome,
   Registration,
+  type Session,
   usernameError,
 } from '../../security/registration.ts';
 import {
   matrixServerName,
   readConfig,
-  signInWithPassword,
   storeSession,
 } from '../../security/session.js';
+import type { CliCallback } from '../cli-links.ts';
 import NewPasswordFields from '../new-password-fields.gts';
 import { NewPassword } from '../new-password.ts';
 import CliHandoff from '../sign-in/cli-handoff.gts';
@@ -43,11 +44,11 @@ import { modeURL } from '../urls.js';
 // link lands on `verify-email`, and this page, still waiting, carries on by
 // itself.
 //
-// Once the account exists, the page signs in to Boxel with the new password,
-// passing the invite code along. That sign-in is the account's first, so the
-// realm server sets the account up as the app's first sign-in does, and the
-// user ends signed in here, or, when a CLI started the sign-in, with the
-// session handed to the CLI.
+// Once the account exists, `Registration` signs it in to Boxel with the new
+// password, passing the invite code along. That sign-in is the account's
+// first, so the realm server sets the account up as the app's first sign-in
+// does, and the user ends signed in here, or, when a CLI started the sign-in,
+// with the session handed to the CLI.
 //
 // The password, the invite code and every other field are typed into, and
 // sent from, this page. Nothing goes to the app page.
@@ -60,17 +61,6 @@ type Page =
   | 'sign-in-failed'
   | 'signed-in'
   | 'cli-handoff';
-
-interface CliCallback {
-  url: string;
-  state: string;
-}
-
-interface Session {
-  token: string;
-  user: string;
-  expiresAt: string;
-}
 
 interface Signature {
   Args: {
@@ -89,8 +79,6 @@ export default class Register extends Component<Signature> {
   private password = new NewPassword();
   private registration: Registration | undefined;
   private availabilityCheck = 0;
-  // The account the registration made, which the page signs in to.
-  private accountUser = '';
 
   private state = trackedObject({
     page: 'form' as Page,
@@ -316,7 +304,6 @@ export default class Register extends Component<Signature> {
   private async finish(account: Account) {
     this.state.page = 'creating';
     await this.registration!.setUp(account);
-    this.accountUser = account.user_id;
     await this.signIn();
   }
 
@@ -326,12 +313,10 @@ export default class Register extends Component<Signature> {
   private async signIn() {
     let session: Session;
     try {
-      session = await signInWithPassword(this.config, {
-        username: this.accountUser,
-        password: this.registration!.details.password,
-        client: this.args.cli ? 'cli' : 'window',
-        registrationToken: this.registration!.token,
-      });
+      session = await this.registration!.signIn(
+        this.config,
+        this.args.cli ? 'cli' : 'window',
+      );
     } catch (e) {
       this.state.signInError = asSentence((e as Error).message);
       this.state.page = 'sign-in-failed';
@@ -382,6 +367,7 @@ export default class Register extends Component<Signature> {
             class='title'
             role='heading'
             aria-level='1'
+            data-test-secure-title
             data-test-email-validation
           >Please check your email to complete registration</span>
           <ul class='email-validation-instruction'>
@@ -412,8 +398,12 @@ export default class Register extends Component<Signature> {
             data-test-token-page
             {{on 'submit' this.sendToken}}
           >
-            <span class='title' role='heading' aria-level='1'>Boxel is currently
-              invite-only.<br />Enter your invite code here.</span>
+            <span
+              class='title'
+              role='heading'
+              aria-level='1'
+              data-test-secure-title
+            >Boxel is currently invite-only.<br />Enter your invite code here.</span>
             <AuthFormField
               @label='Your invite code'
               data-test-secure-field='token'
@@ -442,8 +432,12 @@ export default class Register extends Component<Signature> {
           </form>
         {{else}}
           <div class='registration-page' data-test-register-page>
-            <span class='title' role='heading' aria-level='1'>Create a Boxel
-              Account</span>
+            <span
+              class='title'
+              role='heading'
+              aria-level='1'
+              data-test-secure-title
+            >Create a Boxel Account</span>
             <form
               novalidate
               data-test-register-form

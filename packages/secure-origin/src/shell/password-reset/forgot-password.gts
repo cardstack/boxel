@@ -12,7 +12,8 @@ import {
   clientSecret as newClientSecret,
   requestEmailToken,
 } from '../../security/matrix.js';
-import { type CliCallback, resetLink } from './reset-link.ts';
+import type { CliCallback } from '../cli-links.ts';
+import { resetLink } from './reset-link.ts';
 
 // The first page of resetting a forgotten password (`forgot-password`),
 // drawn and worded as the app's is: it asks the Matrix server to email a
@@ -32,9 +33,11 @@ export default class ForgotPassword extends Component<Signature> {
     email: '',
     emailError: undefined as string | undefined,
     sending: false,
+    // The address the link was sent to, once it was.
     sentTo: undefined as string | undefined,
   });
-  // The address the link was sent to, once it was.
+  // The validation session the link is sent for, and how many times it has
+  // been sent; a resend reuses the session.
   private clientSecret = '';
   private sendAttempt = 0;
 
@@ -101,6 +104,7 @@ export default class ForgotPassword extends Component<Signature> {
           class='title'
           role='heading'
           aria-level='1'
+          data-test-secure-title
           data-test-email-validation
         >Please check your email to reset your password</span>
         <ul class='email-validation-instruction'>
@@ -121,8 +125,12 @@ export default class ForgotPassword extends Component<Signature> {
           data-test-forgot-password-form
           {{on 'submit' this.submit}}
         >
-          <span class='title' role='heading' aria-level='1'>Forgot your
-            password?</span>
+          <span
+            class='title'
+            role='heading'
+            aria-level='1'
+            data-test-secure-title
+          >Forgot your password?</span>
           <p class='info'>Enter email to receive a reset password link.</p>
           <AuthFormField @label='Email Address' data-test-secure-field='email'>
             <BoxelInput

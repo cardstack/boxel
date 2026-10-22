@@ -13,6 +13,7 @@ import {
   fakeMatrix,
   type FakeMatrix,
   interactiveAuth,
+  REALM_SERVER_URL,
 } from './helpers/fake-matrix.ts';
 
 const DETAILS = {
@@ -22,6 +23,39 @@ const DETAILS = {
   password: 'a-password-1',
   nextLink: 'https://secure.test/secure/?mode=verify-email',
 };
+
+const CONFIG = { realmServerURL: new URL(REALM_SERVER_URL) };
+
+// Sets the new account up and signs it in to Boxel, and returns what the
+// sign-in sent the realm server.
+async function setUpAndSignIn(
+  registration: Registration,
+  account: { user_id: string; access_token: string },
+) {
+  matrix.on(
+    `profile/${encodeURIComponent(account.user_id)}/displayname`,
+    () => ({}),
+  );
+  matrix.on('logout', () => ({}));
+  matrix.on('realm-server:_secure-session', () => ({
+    status: 201,
+    body: {
+      data: {
+        attributes: {
+          token: 'secure-1',
+          user: account.user_id,
+          expiresAt: 'x',
+        },
+      },
+    },
+  }));
+  await registration.setUp(account);
+  let session = await registration.signIn(CONFIG, 'window');
+  assert.equal(session.token, 'secure-1');
+  let [request] = matrix.requests('realm-server:_secure-session');
+  return (request.body.data as { attributes: Record<string, unknown> })
+    .attributes;
+}
 
 let matrix: FakeMatrix;
 beforeEach(() => {
@@ -133,9 +167,21 @@ test('registers with an invite code, polling until the email is validated', asyn
     step: 'account',
     account: { user_id: '@ada:localhost', access_token: 'reg-token' },
   });
-  assert.equal(registration.token, 'good-code');
   assert.equal(awaiting, 2, 'the page heard the registration waiting twice');
   assert.deepEqual(delays, [1000], 'it waited between polls, not before');
+  assert.deepEqual(
+    await setUpAndSignIn(registration, {
+      user_id: '@ada:localhost',
+      access_token: 'reg-token',
+    }),
+    {
+      username: '@ada:localhost',
+      password: 'a-password-1',
+      client: 'window',
+      registrationToken: 'good-code',
+    },
+    "the account's first sign-in records the accepted invite code",
+  );
 
   let registers = matrix.requests('register');
   for (let request of registers) {
@@ -174,10 +220,21 @@ test('registers with no invite step when the server asks for none', async () => 
     step: 'account',
     account: { user_id: '@ada:localhost', access_token: 'reg-token' },
   });
-  assert.equal(registration.token, undefined);
   assert.deepEqual(
     matrix.requests('register').map((r) => (r.body.auth as any)?.type),
     [undefined, 'm.login.email.identity', 'm.login.dummy'],
+  );
+  assert.deepEqual(
+    await setUpAndSignIn(registration, {
+      user_id: '@ada:localhost',
+      access_token: 'reg-token',
+    }),
+    {
+      username: '@ada:localhost',
+      password: 'a-password-1',
+      client: 'window',
+    },
+    'no invite code to record',
   );
 });
 
@@ -278,6 +335,13 @@ test('setting the account up names it and signs out the registration session', a
   assert.deepEqual(name.body, { displayname: 'Ada Lovelace' });
   let [logout] = matrix.requests('logout');
   assert.equal(logout.authorization, 'Bearer reg-token');
+});
+
+test('signing in before an account exists is refused', async () => {
+  await assert.rejects(
+    new Registration(DETAILS).signIn(CONFIG, 'window'),
+    /no account/,
+  );
 });
 
 test('setting the account up lets a failure go', async () => {

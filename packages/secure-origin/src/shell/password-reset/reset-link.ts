@@ -1,4 +1,4 @@
-import { cliCallback } from '../../security/cli-handoff.js';
+import { type CliCallback, cliFrom } from '../cli-links.ts';
 import { cliParams, modeURL } from '../urls.js';
 
 // The link a password reset email carries, and reading it where it lands.
@@ -14,30 +14,6 @@ import { cliParams, modeURL } from '../urls.js';
 // server, which ends every secure session it has, and the CLI listener the
 // reset began from, if any, so that signing in afterwards hands it the
 // session.
-
-export interface CliCallback {
-  url: string;
-  state: string;
-}
-
-// The CLI a page of the reset was opened for: none when the parameters name
-// no CLI, and `invalid` when they name one incompletely.
-export function cliFrom(params: URLSearchParams): {
-  cli?: CliCallback;
-  invalid?: true;
-} {
-  if (!params.has('port') && !params.has('state')) {
-    return {};
-  }
-  let cli = cliCallback(params);
-  return cli ? { cli } : { invalid: true };
-}
-
-export function signInURL(cli?: CliCallback, username?: string | null) {
-  return cli
-    ? modeURL('cli-sign-in', cliParams(cli, username ?? undefined))
-    : modeURL('sign-in');
-}
 
 // Where the reset link lands: `reset-password`, with the client secret, the
 // email address and the CLI's listener in the fragment.

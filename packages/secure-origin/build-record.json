@@ -790,7 +790,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 45594,
+      "bytes": 45850,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -805,7 +805,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/registration.ts",
-          "size": 4188
+          "size": 4516
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/cli-links.ts",
+          "size": 344
         },
         {
           "package": "@cardstack/secure-origin",
@@ -825,7 +830,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/forgot-password.gts",
-          "size": 5113
+          "size": 5177
         },
         {
           "package": "@cardstack/secure-origin",
@@ -835,22 +840,22 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/reset-link.ts",
-          "size": 988
+          "size": 690
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/reset-password.gts",
-          "size": 4983
+          "size": 5057
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/register/modes.ts",
-          "size": 614
+          "size": 511
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/register/register.gts",
-          "size": 16299
+          "size": 16186
         },
         {
           "package": "@cardstack/secure-origin",

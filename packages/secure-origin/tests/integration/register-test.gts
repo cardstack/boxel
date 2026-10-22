@@ -20,6 +20,7 @@ import {
   setupPageAddress,
   type MockServers,
 } from '../helpers/mock-servers.ts';
+import { assertEnterSubmits } from '../helpers/implicit-submission.ts';
 import { setupVisiblePage } from '../helpers/visible-page.ts';
 
 const STORAGE_KEY = 'boxel-secure-session';
@@ -117,11 +118,20 @@ module('Integration | register', function (hooks) {
     assert.dom('[data-test-password-valid]').hasText('password is valid');
     assert.dom('[data-test-passwords-match]').hasText('passwords match');
     assert.dom('[data-test-register-btn]').isNotDisabled();
-    // Enter in the last field submits the form.
+    assertEnterSubmits(
+      assert,
+      '[data-test-register-form]',
+      '[data-test-register-btn]',
+    );
     await triggerEvent('[data-test-register-form]', 'submit');
 
     await waitFor('[data-test-token-field]');
     assert.dom('[data-test-token-field]').isFocused();
+    assertEnterSubmits(
+      assert,
+      '[data-test-token-page]',
+      '[data-test-next-btn]',
+    );
     await fillIn('[data-test-token-field]', INVITE_CODE);
     await click('[data-test-next-btn]');
 

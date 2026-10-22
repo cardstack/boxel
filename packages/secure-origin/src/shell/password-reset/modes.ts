@@ -2,7 +2,8 @@ import { renderComponent } from '@ember/renderer';
 
 import IncompleteCliLink from '../sign-in/incomplete-cli-link.gts';
 import ForgotPassword from './forgot-password.gts';
-import { cliFrom, signInURL, takeResetLink } from './reset-link.ts';
+import { cliFrom, signInURL } from '../cli-links.ts';
+import { takeResetLink } from './reset-link.ts';
 import ResetPassword from './reset-password.gts';
 
 // The shell's `forgot-password` and `reset-password` modes.

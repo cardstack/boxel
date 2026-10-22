@@ -17,6 +17,7 @@ import {
 } from '../../src/shell/password-reset/reset-link.ts';
 import ResetPassword from '../../src/shell/password-reset/reset-password.gts';
 import { setupMockServers, setupPageAddress } from '../helpers/mock-servers.ts';
+import { assertEnterSubmits } from '../helpers/implicit-submission.ts';
 import { setupVisiblePage } from '../helpers/visible-page.ts';
 
 const CLI = {
@@ -57,6 +58,11 @@ module('Integration | password reset', function (hooks) {
       assert.dom('[data-test-email-field]').isFocused();
       assert.dom('[data-test-reset-your-password-btn]').isDisabled();
       await fillIn('[data-test-email-field]', 'someone@example.com');
+      assertEnterSubmits(
+        assert,
+        '[data-test-forgot-password-form]',
+        '[data-test-reset-your-password-btn]',
+      );
       await triggerEvent('[data-test-forgot-password-form]', 'submit');
       await waitFor('[data-test-email-validation]');
       assert
@@ -182,6 +188,11 @@ module('Integration | password reset', function (hooks) {
       }));
       await render(<template><ResetPassword @link={{LINK}} /></template>);
       assert.dom('[data-test-password-field]').isFocused();
+      assertEnterSubmits(
+        assert,
+        '[data-test-reset-password-form]',
+        '[data-test-reset-password-btn]',
+      );
       await fillIn('[data-test-password-field]', NEW_PASSWORD);
       await fillIn('[data-test-confirm-password-field]', NEW_PASSWORD);
       await click('[data-test-reset-password-btn]');

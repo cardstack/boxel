@@ -2,8 +2,9 @@
 // the secure origin. It asks for the email validation link, then follows the
 // stages the server asks for: an invite code where the server requires one,
 // and the email validation, which it polls for until the link in the email is
-// followed. Once the account exists, it sets the account's display name and
-// signs the registration's own Matrix session out.
+// followed. Once the account exists, it sets the account's display name,
+// signs the registration's own Matrix session out, and signs the new account
+// in to Boxel with its password and invite code.
 //
 // The password and the invite code are held here, and sent from here, for
 // as long as the registration runs. The page that draws the registration
@@ -18,6 +19,7 @@ import {
   requestEmailToken,
   setDisplayName,
 } from './matrix.js';
+import { signInWithPassword } from './session.js';
 
 // How often the registration asks whether the email has been validated.
 export const EMAIL_POLL_INTERVAL_MS = 1000;
@@ -128,11 +130,19 @@ function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+export interface Session {
+  token: string;
+  user: string;
+  expiresAt: string;
+}
+
 export class Registration {
-  readonly details: RegistrationDetails;
+  private details: RegistrationDetails;
   // The invite code the server accepted, which the account's first sign-in
   // records.
-  token: string | undefined;
+  private token: string | undefined;
+  // The account the registration made, once it has.
+  private account: Account | undefined;
   private clientSecret = newClientSecret();
   private sid: string | undefined;
   private sendAttempt = 0;
@@ -203,12 +213,31 @@ export class Registration {
   // out. Neither is needed for the account to be signed in to, so a failure
   // of either is let go.
   async setUp(account: Account): Promise<void> {
+    this.account = account;
     await setDisplayName(
       account.user_id,
       account.access_token,
       this.details.name,
     ).catch(() => undefined);
     await logout(account.access_token).catch(() => undefined);
+  }
+
+  // The new account's first sign-in to Boxel, with its password and the
+  // invite code it registered with, which this sign-in records. A failure is
+  // thrown, and the sign-in may be tried again.
+  async signIn(
+    config: { realmServerURL: URL },
+    client: 'window' | 'cli',
+  ): Promise<Session> {
+    if (!this.account) {
+      throw new Error('the registration has made no account to sign in to');
+    }
+    return (await signInWithPassword(config, {
+      username: this.account.user_id,
+      password: this.details.password,
+      client,
+      registrationToken: this.token,
+    })) as Session;
   }
 
   // Makes the registration request with `auth` for the stage at hand, and
