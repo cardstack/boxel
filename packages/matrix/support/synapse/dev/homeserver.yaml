@@ -1,6 +1,11 @@
 server_name: "localhost"
 pid_file: /data/homeserver.pid
 public_baseurl: "http://localhost:8008"
+# Rooms are created as room version 10. Room version 12 rejects a room
+# creator listed in power_level_content_override.users, which the host's
+# room creation sends, and its room IDs carry no server name. The deployed
+# homeserver config pins the same version.
+default_room_version: "10"
 listeners:
   - port: 8008
     tls: false

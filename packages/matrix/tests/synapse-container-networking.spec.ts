@@ -141,11 +141,11 @@ test.describe('Synapse container networking', () => {
   test('a bind conflict names the port and the containers holding it', () => {
     const message = formatHostPortConflict(
       8008,
-      'boxel-synapse (matrixdotorg/synapse:v1.126.0)\nother (alpine:3)',
+      'boxel-synapse (matrixdotorg/synapse:v1.163.0)\nother (alpine:3)',
     );
 
     expect(message).toContain('8008');
-    expect(message).toContain('boxel-synapse (matrixdotorg/synapse:v1.126.0)');
+    expect(message).toContain('boxel-synapse (matrixdotorg/synapse:v1.163.0)');
     expect(message).toContain('other (alpine:3)');
   });
 

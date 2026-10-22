@@ -52,7 +52,7 @@ jobs:
           # scripts/pg-container.sh, .devcontainer/claude-web-setup.sh, and
           # .github/actions/warm-test-images/action.yml.
           images=(
-            "synapse:v1.126.0=matrixdotorg/synapse:v1.126.0"
+            "synapse:v1.163.0=matrixdotorg/synapse:v1.163.0"
             "smtp4dev:v3.1=rnwood/smtp4dev:v3.1"
             "postgres:16.3=postgres:16.3"
             "mock-oauth2-server:4.0.1=ghcr.io/navikt/mock-oauth2-server:4.0.1"

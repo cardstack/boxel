@@ -158,7 +158,7 @@ if docker info >/dev/null 2>&1; then
   # packages/matrix/support/synapse/index.ts, packages/matrix/docker/smtp4dev.ts,
   # .github/workflows/mirror-test-images.yml and
   # .github/actions/warm-test-images/action.yml; bump them together.
-  for image in postgres:16.3 matrixdotorg/synapse:v1.126.0 rnwood/smtp4dev:v3.1; do
+  for image in postgres:16.3 matrixdotorg/synapse:v1.163.0 rnwood/smtp4dev:v3.1; do
     docker pull "$image" || echo "Pre-pull of $image failed; it will be pulled at first stack start." >&2
   done
 else

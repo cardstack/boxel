@@ -511,7 +511,7 @@ export async function synapseStart(
         // caching it (it must match the version pinned there):
         // .github/workflows/mirror-test-images.yml and
         // .github/actions/warm-test-images/action.yml.
-        image: 'matrixdotorg/synapse:v1.126.0',
+        image: 'matrixdotorg/synapse:v1.163.0',
         containerName,
         dockerParams,
         applicationParams: ['run'],
