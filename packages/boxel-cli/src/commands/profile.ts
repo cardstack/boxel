@@ -573,9 +573,11 @@ async function addProfileViaBrowser(
     // Undefined for a new profile, which addProfileWithAuth names by default.
     displayName = manager.getProfile(auth.userId)?.displayName;
   }
-  // A secure session the profile already had is replaced, so it is ended
-  // rather than left to run out its week.
-  let replaced = manager.getProfile(auth.userId)?.secureSession;
+  // A secure session the profile had is ended, on the realm server that
+  // issued it, when saving the profile replaces it or drops it (as moving the
+  // profile to another realm server does), rather than left to run out its
+  // week.
+  let previous = manager.getProfile(auth.userId);
   await manager.addProfileWithAuth(
     auth.userId,
     matrixAuth,
@@ -583,8 +585,11 @@ async function addProfileViaBrowser(
     realmServerUrl,
     secureSession,
   );
-  if (secureSession && replaced && replaced.token !== secureSession.token) {
-    await ctx.secureSignOut(realmServerUrl, replaced.token).catch(() => {});
+  let kept = manager.getProfile(auth.userId)?.secureSession;
+  if (previous?.secureSession && kept?.token !== previous.secureSession.token) {
+    await ctx
+      .secureSignOut(previous.realmServerUrl, previous.secureSession.token)
+      .catch(() => {});
   }
   if (secureSession) {
     console.log(

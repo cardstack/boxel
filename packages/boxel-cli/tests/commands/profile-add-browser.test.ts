@@ -215,6 +215,49 @@ describe('boxel profile add through the browser', () => {
       );
     });
 
+    it('ends the secure session a profile drops on moving to another realm server, on the server that issued it', async () => {
+      await manager.addProfileWithAuth(
+        matrixId,
+        authFor(matrixId, 'old-token'),
+        'Example Name',
+        'https://other-realm.example.test/',
+        { ...secureSession, token: 'other-server-session' },
+      );
+      let { deps: d } = deps({ tty: false });
+      await addProfile(manager, environment, true, d);
+
+      expect(manager.getProfile(matrixId)!.secureSession).toBeUndefined();
+      expect(d.secureSignOut).toHaveBeenCalledWith(
+        'https://other-realm.example.test/',
+        'other-server-session',
+      );
+    });
+
+    it('ends a replaced secure session on the server that issued it', async () => {
+      await manager.addProfileWithAuth(
+        matrixId,
+        authFor(matrixId, 'old-token'),
+        'Example Name',
+        'https://other-realm.example.test/',
+        { ...secureSession, token: 'other-server-session' },
+      );
+      let { deps: d } = deps({
+        tty: false,
+        secureOrigin: SECURE_ORIGIN,
+        browserLogin: async () => ({ ...authFor(matrixId), secureSession }),
+      });
+      await addProfile(manager, environment, true, d);
+
+      expect(manager.getProfile(matrixId)!.secureSession).toEqual(
+        secureSession,
+      );
+      expect(d.secureSignOut).toHaveBeenCalledTimes(1);
+      expect(d.secureSignOut).toHaveBeenCalledWith(
+        'https://other-realm.example.test/',
+        'other-server-session',
+      );
+    });
+
     it('keeps the secure session a profile had when the sign-in brings none', async () => {
       let kept = { ...secureSession, token: 'kept-secure-session' };
       await manager.addProfileWithAuth(
