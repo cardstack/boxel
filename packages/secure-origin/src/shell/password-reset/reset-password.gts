@@ -9,6 +9,7 @@ import {
   endSessionsForNewPassword,
   readConfig,
 } from '../../security/session.js';
+import { navigation } from '../navigation.js';
 import NewPasswordFields from '../new-password-fields.gts';
 import { NewPassword } from '../new-password.ts';
 import { cliParams, modeURL } from '../urls.js';
@@ -44,6 +45,10 @@ export default class ResetPassword extends Component<Signature> {
   private get signInURL() {
     return signInURL(this.args.link.cli);
   }
+
+  private goToSignIn = () => {
+    navigation.assign(this.signInURL);
+  };
 
   private submit = async (event: Event) => {
     event.preventDefault();
@@ -99,8 +104,8 @@ export default class ResetPassword extends Component<Signature> {
         <div class='button-wrapper'>
           <AuthButton
             data-test-back-to-login-btn
-            @as='anchor'
-            @href={{this.signInURL}}
+            type='button'
+            {{on 'click' this.goToSignIn}}
             @variant='primary'
           >Sign In to Boxel</AuthButton>
         </div>

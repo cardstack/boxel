@@ -35,7 +35,7 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
       @errorMessage={{@password.passwordError}}
       @onInput={{@password.setPassword}}
       @onBlur={{@password.checkPassword}}
-      {{autofocus @autofocus}}
+      {{autofocus (if @autofocus true false)}}
     />
     {{#if @hints}}
       {{#if @password.passwordValid}}

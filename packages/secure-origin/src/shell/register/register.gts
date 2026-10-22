@@ -14,6 +14,7 @@ import InputGroup, {
 import LoadingIndicator from '../../components/loading-indicator.gts';
 import ValidationHint from '../../components/validation-hint.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
+import { navigation } from '../navigation.js';
 import { autofocus } from '../../modifiers/autofocus.ts';
 import { isUsernameAvailable } from '../../security/matrix.js';
 import {
@@ -171,6 +172,10 @@ export default class Register extends Component<Signature> {
       this.state.usernameAvailable
     );
   }
+
+  private goToSignIn = () => {
+    navigation.assign(this.args.signInURL);
+  };
 
   private setName = (value: string) => {
     this.state.name = value;
@@ -530,8 +535,8 @@ export default class Register extends Component<Signature> {
                 <div>or</div>
                 <AuthButton
                   data-test-cancel-btn
-                  @as='anchor'
-                  @href={{@signInURL}}
+                  type='button'
+                  {{on 'click' this.goToSignIn}}
                   @variant='secondary'
                 >Login with an existing account</AuthButton>
               </div>

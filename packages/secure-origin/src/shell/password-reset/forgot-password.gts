@@ -6,6 +6,7 @@ import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
 import AuthFormField from '../../components/auth-form-field.gts';
 import BoxelInput from '../../components/input.gts';
+import { navigation } from '../navigation.js';
 import { autofocus } from '../../modifiers/autofocus.ts';
 import {
   clientSecret as newClientSecret,
@@ -42,6 +43,10 @@ export default class ForgotPassword extends Component<Signature> {
       this.state.sending || !this.state.email || Boolean(this.state.emailError)
     );
   }
+
+  private goToSignIn = () => {
+    navigation.assign(this.args.signInURL);
+  };
 
   private setEmail = (value: string) => {
     this.state.email = value;
@@ -143,8 +148,8 @@ export default class ForgotPassword extends Component<Signature> {
             <div>or</div>
             <AuthButton
               data-test-cancel-reset-password-btn
-              @as='anchor'
-              @href={{@signInURL}}
+              type='button'
+              {{on 'click' this.goToSignIn}}
               @variant='secondary'
             >Back to login</AuthButton>
           </div>
