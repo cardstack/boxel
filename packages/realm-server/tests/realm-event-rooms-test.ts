@@ -380,14 +380,37 @@ module(basename(import.meta.filename), function () {
         });
     }
 
-    // Read as the realm's own matrix user, the room's creator.
-    async function membershipOf(roomId: string, userId: string) {
-      let asRealm = await loginAs('@test_realm:localhost');
-      let response = await asRealm(
+    // The grantee joins the room, which only an invite allows, and then reads
+    // other users' memberships from its state as a member.
+    async function joinAsMember(roomId: string) {
+      let asMember = await loginAs(member);
+      let join = await asMember(`join/${encodeURIComponent(roomId)}`, {
+        method: 'POST',
+        body: '{}',
+      });
+      if (!join.ok) {
+        throw new Error(
+          `${member} could not join ${roomId}: ${join.status} ${await join.text()}`,
+        );
+      }
+      return asMember;
+    }
+
+    async function membershipOf(
+      asMember: Awaited<ReturnType<typeof loginAs>>,
+      roomId: string,
+      userId: string,
+    ) {
+      let response = await asMember(
         `rooms/${encodeURIComponent(roomId)}/state/m.room.member/${encodeURIComponent(userId)}`,
       );
       if (response.status === 404) {
         return undefined;
+      }
+      if (!response.ok) {
+        throw new Error(
+          `Unable to read the membership of ${userId} in ${roomId}: ${response.status} ${await response.text()}`,
+        );
       }
       return ((await response.json()) as { membership?: string }).membership;
     }
@@ -397,10 +420,11 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(first.status, 200, 'HTTP 200 status');
       let roomId = first.body.rooms[testRealmHref];
       assert.ok(roomId, 'the realm has an event room');
+      let asMember = await joinAsMember(roomId);
       assert.strictEqual(
-        await membershipOf(roomId, member),
-        'invite',
-        'the grantee is invited by the time the answer arrives',
+        await membershipOf(asMember, roomId, member),
+        'join',
+        'the grantee was invited by the time the answer arrived, so it could join',
       );
 
       let second = await realmEventRooms([testRealmHref]);
@@ -514,27 +538,33 @@ module(basename(import.meta.filename), function () {
       let roomId: string = (await realmEventRooms([testRealmHref])).body.rooms[
         testRealmHref
       ];
-      assert.strictEqual(await membershipOf(roomId, newcomer), undefined);
+      let asMember = await joinAsMember(roomId);
+      assert.strictEqual(
+        await membershipOf(asMember, roomId, newcomer),
+        undefined,
+      );
 
       let granted = await patchPermissions({ [newcomer]: ['read'] });
       assert.strictEqual(granted.status, 200, 'the grant succeeds');
       await waitUntil(
-        async () => (await membershipOf(roomId, newcomer)) === 'invite',
+        async () =>
+          (await membershipOf(asMember, roomId, newcomer)) === 'invite',
         { timeout: 10_000, timeoutMessage: 'the grantee was never invited' },
       );
 
       let revoked = await patchPermissions({ [newcomer]: [] });
       assert.strictEqual(revoked.status, 200, 'the revocation succeeds');
       await waitUntil(
-        async () => (await membershipOf(roomId, newcomer)) === 'leave',
+        async () =>
+          (await membershipOf(asMember, roomId, newcomer)) === 'leave',
         {
           timeout: 10_000,
           timeoutMessage: 'the revoked user was never removed',
         },
       );
       assert.strictEqual(
-        await membershipOf(roomId, member),
-        'invite',
+        await membershipOf(asMember, roomId, member),
+        'join',
         'the remaining grantee is still a member',
       );
     });
@@ -543,16 +573,23 @@ module(basename(import.meta.filename), function () {
       let roomId: string = (await realmEventRooms([testRealmHref])).body.rooms[
         testRealmHref
       ];
+      let asMember = await joinAsMember(roomId);
       // Written straight to the table, the way a grant reaches a realm that
       // no process is serving.
       await insertPermissions(dbAdapter, new URL(testRealmHref), {
         [newcomer]: ['read'],
       });
-      assert.strictEqual(await membershipOf(roomId, newcomer), undefined);
+      assert.strictEqual(
+        await membershipOf(asMember, roomId, newcomer),
+        undefined,
+      );
 
       await testRealm.syncRealmEventRoom();
 
-      assert.strictEqual(await membershipOf(roomId, newcomer), 'invite');
+      assert.strictEqual(
+        await membershipOf(asMember, roomId, newcomer),
+        'invite',
+      );
     });
   });
 });

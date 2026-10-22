@@ -500,7 +500,7 @@ export class RealmEventDispatcher {
           }
         }
         log.error(
-          `Unable to resolve the rooms for a realm event in ${entry.realmURL}; skipping it`,
+          `Unable to resolve the sends for a realm event or job in ${entry.realmURL}; skipping it`,
           e,
         );
         return [];
