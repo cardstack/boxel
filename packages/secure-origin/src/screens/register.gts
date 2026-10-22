@@ -110,8 +110,8 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
           as |labelId|
         >
           <InputGroup
-            aria-labelledby={{labelId}}
             data-test-username-field
+            @labelledBy={{labelId}}
             @name='username'
             @autocomplete='username'
             @state={{@usernameState}}
