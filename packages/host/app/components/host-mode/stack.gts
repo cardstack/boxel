@@ -5,6 +5,11 @@ import Component from '@glimmer/component';
 
 import { modifier } from 'ember-modifier';
 
+import {
+  focusIfConnected,
+  usesEscape,
+} from '@cardstack/host/utils/stack-item-focus';
+
 import HostModeStackItem from './stack-item';
 
 interface Signature {
@@ -14,27 +19,6 @@ interface Signature {
     isNarrow?: boolean;
     close?: (cardId: string) => void;
   };
-}
-
-function isTextEntry(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  let tag = target.tagName;
-  return (
-    tag === 'INPUT' ||
-    tag === 'TEXTAREA' ||
-    tag === 'SELECT' ||
-    target.isContentEditable
-  );
-}
-
-function focusIfConnected(element: Element | null | undefined): boolean {
-  if (element instanceof HTMLElement && element.isConnected) {
-    element.focus({ preventScroll: true });
-    return document.activeElement === element;
-  }
-  return false;
 }
 
 export default class HostModeStack extends Component<Signature> {
@@ -89,7 +73,7 @@ export default class HostModeStack extends Component<Signature> {
       !(event instanceof KeyboardEvent) ||
       event.key !== 'Escape' ||
       event.defaultPrevented ||
-      isTextEntry(event.target)
+      usesEscape(event.target)
     ) {
       return;
     }

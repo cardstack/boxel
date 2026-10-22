@@ -19,6 +19,9 @@ on:
       - "packages/choreo-gallery/**"
       - "packages/eslint-plugin-boxel/**"
       - "packages/realm-server/**"
+      # The dev realm server the host's tests use serves the secure origin
+      # from this package's build.
+      - "packages/secure-origin/**"
       - "packages/runtime-common/**"
       - ".github/workflows/ci-host.yaml"
       - "package.json"

@@ -398,6 +398,9 @@ jobs:
   # holds the deploy-production group until every one of its jobs finishes,
   # and the republish can wait hours on the realm's index. As its own run, it
   # neither holds up the next deploy nor turns this one red when it fails.
+  # It runs on main whichever ref the deploy ran on: the role that reads the
+  # writer's password trusts only main, and what it publishes is the realm's
+  # content on the server, which doesn't depend on the deploy's ref.
   republish-choreo-gallery:
     name: Start the Choreo gallery's republish
     needs: [release]
@@ -413,5 +416,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh workflow run republish-choreo-gallery.yml \
-            --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" --ref main \
             -f environment=production

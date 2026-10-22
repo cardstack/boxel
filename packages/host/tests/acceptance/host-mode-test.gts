@@ -1149,6 +1149,39 @@ module('Acceptance | host mode tests', function (hooks) {
     }
   });
 
+  test('when host mode is narrow, the primary card fits the screen', async function (assert) {
+    let testRoot = document.querySelector<HTMLElement>('#ember-testing')!;
+    let originalWidth = testRoot.style.width;
+    testRoot.style.width = '400px';
+
+    try {
+      await visit('/test/Pet/mango.json');
+      await waitFor('[data-test-host-mode-narrow]');
+      await waitFor('[data-test-host-mode-card]');
+
+      let content = document.querySelector<HTMLElement>(
+        '[data-test-host-mode-content]',
+      )!;
+      let card = document.querySelector<HTMLElement>(
+        '[data-test-host-mode-card]',
+      )!;
+      let style = getComputedStyle(content);
+      let innerWidth =
+        content.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight);
+      // offsetWidth rounds to whole pixels while the gutter is fractional,
+      // so compare unrounded widths with a sub-pixel allowance
+      let cardWidth = card.getBoundingClientRect().width;
+      assert.ok(
+        cardWidth <= innerWidth + 0.5,
+        `the card stays inside host mode's gutter (${cardWidth} of ${innerWidth})`,
+      );
+    } finally {
+      testRoot.style.width = originalWidth;
+    }
+  });
+
   test('stack state persists in query parameter', async function (assert) {
     let hostModeStackValue = encodeURIComponent(
       JSON.stringify([`${testHostModeRealmURL}index`]),

@@ -97,9 +97,24 @@ export interface SyncOptions {
    * default.
    */
   waitForIndex?: boolean;
+  /**
+   * When false, every write this sync sends carries
+   * `X-Boxel-Realm-Events: none`, so the realm indexes the changes without
+   * announcing them to its subscribers. Open tabs pick the new content up on
+   * their next load instead of resetting mid-session. For pushes that replace
+   * a realm's content wholesale, such as a deploy. On by default.
+   */
+  realmEvents?: boolean;
+  /** Files per /_atomic request. Defaults to ATOMIC_BATCH_SIZE. */
+  atomicBatchSize?: number;
 }
 
 const REMOTE_CONCURRENCY = 10;
+// Files per /_atomic request. The realm answers only once it has written the
+// whole request, so one request for a whole realm (thousands of files) can
+// outlast even the longer wait realmFetch allows.
+export const ATOMIC_BATCH_SIZE = 500;
+const MODULE_EXTENSIONS = /\.(gts|ts|gjs|js)$/;
 
 // Directories that should always be skipped during local file traversal,
 // regardless of .gitignore / .boxelignore content.
@@ -149,6 +164,16 @@ export abstract class RealmSyncBase {
     }
     const cleanDir = dir.replace(/^\/+|\/+$/g, '');
     return `${this.normalizedRealmUrl}${cleanDir}/`;
+  }
+
+  // Headers for a request that writes or removes a file, with the realm-event
+  // opt-out added when this sync asked for it.
+  protected writeHeaders(
+    headers: Record<string, string>,
+  ): Record<string, string> {
+    return this.options.realmEvents === false
+      ? { ...headers, 'X-Boxel-Realm-Events': 'none' }
+      : headers;
   }
 
   protected buildFileUrl(relativePath: string): string {
@@ -444,10 +469,10 @@ export abstract class RealmSyncBase {
 
     const response = await this.authenticator.authedRealmFetch(url, {
       method: 'POST',
-      headers: {
+      headers: this.writeHeaders({
         'Content-Type': 'text/plain;charset=UTF-8',
         Accept: SupportedMimeType.CardSource,
-      },
+      }),
       body: content,
     });
 
@@ -474,9 +499,9 @@ export abstract class RealmSyncBase {
 
     const response = await this.authenticator.authedRealmFetch(url, {
       method: 'POST',
-      headers: {
+      headers: this.writeHeaders({
         'Content-Type': SupportedMimeType.OctetStream,
-      },
+      }),
       body: bytes,
     });
 
@@ -485,17 +510,20 @@ export abstract class RealmSyncBase {
     }
   }
 
-  // Batched upload via the realm's /_atomic endpoint. Returns the set of
-  // paths the server reported as written plus an optional error payload
-  // when the whole batch was rejected. The atomic endpoint validates
-  // every operation first (existence checks for add/update), so a 409 on
-  // any `add` or a 404 on any `update` causes the whole batch to fail
-  // with no side effects on the realm.
+  // Batched upload via the realm's /_atomic endpoint. Text files go in
+  // requests of `atomicBatchSize`, one after another. The endpoint validates
+  // every operation in a request first (existence checks for add/update), so
+  // a 409 on any `add` or a 404 on any `update` rejects that request with no
+  // side effects; the requests before it have already been written, and the
+  // ones after it are not sent. Returns the paths the server reported as
+  // written, the paths of a request that got no answer (they may or may not
+  // have been written), and an error payload when the upload stopped.
   protected async uploadFilesAtomic(
     files: Map<string, string>,
     addPaths: Set<string>,
   ): Promise<{
     succeeded: string[];
+    unanswered: string[];
     error?: {
       status: number;
       perFile: UploadFailure[];
@@ -507,14 +535,14 @@ export abstract class RealmSyncBase {
     );
 
     if (entries.length === 0) {
-      return { succeeded: [] };
+      return { succeeded: [], unanswered: [] };
     }
 
     if (this.options.dryRun) {
       for (const [relativePath] of entries) {
         console.log(`[DRY RUN] Would upload ${relativePath}`);
       }
-      return { succeeded: [] };
+      return { succeeded: [], unanswered: [] };
     }
 
     // The /_atomic endpoint embeds each file's content inside a JSON
@@ -540,10 +568,12 @@ export abstract class RealmSyncBase {
     ]);
 
     const succeeded = [...textOutcome.succeeded, ...binaryOutcome.succeeded];
+    const unanswered = textOutcome.unanswered;
 
     if (textOutcome.fatal) {
       return {
         succeeded,
+        unanswered,
         error: {
           status: textOutcome.fatal.status,
           perFile: [...textOutcome.failed, ...binaryOutcome.failed],
@@ -555,6 +585,7 @@ export abstract class RealmSyncBase {
     if (binaryOutcome.failed.length > 0) {
       return {
         succeeded,
+        unanswered,
         error: {
           status: binaryOutcome.failed[0].status,
           perFile: binaryOutcome.failed,
@@ -563,7 +594,7 @@ export abstract class RealmSyncBase {
       };
     }
 
-    return { succeeded };
+    return { succeeded, unanswered };
   }
 
   // Fan out the per-file octet-stream POSTs for the binary slice of an
@@ -630,22 +661,63 @@ export abstract class RealmSyncBase {
     return { succeeded, failed };
   }
 
-  // POST the text slice of a mixed batch to /_atomic and decode the
-  // result. `fatal` is set when the server rejected the whole batch
-  // (non-201) — callers map that to a top-level error message; `failed`
-  // carries the per-operation errors the server returned alongside.
+  // POST the text slice of a mixed batch to /_atomic, `atomicBatchSize`
+  // files per request, one request at a time. Modules go first: the realm
+  // indexes each request as it lands, and an instance that lands before the
+  // module it adopts from indexes as an error. A rejected or unanswered
+  // request stops the upload.
   private async uploadTextAtomic(
     textEntries: Array<[string, string]>,
     addPaths: Set<string>,
   ): Promise<{
     succeeded: string[];
+    unanswered: string[];
     failed: UploadFailure[];
     fatal?: { status: number; message: string };
   }> {
-    if (textEntries.length === 0) {
-      return { succeeded: [], failed: [] };
+    const batchSize = this.options.atomicBatchSize ?? ATOMIC_BATCH_SIZE;
+    const ordered = [...textEntries].sort(
+      ([a], [b]) =>
+        Number(!MODULE_EXTENSIONS.test(a)) - Number(!MODULE_EXTENSIONS.test(b)),
+    );
+    const succeeded: string[] = [];
+    for (let i = 0; i < ordered.length; i += batchSize) {
+      const batch = ordered.slice(i, i + batchSize);
+      const outcome = await this.postTextAtomic(batch, addPaths);
+      succeeded.push(...outcome.succeeded);
+      if (outcome.fatal) {
+        const notSent = ordered.length - i - batch.length;
+        const fate = outcome.unanswered
+          ? `${batch.length} may or may not have been written`
+          : `${batch.length} rejected`;
+        return {
+          succeeded,
+          unanswered: outcome.unanswered ? batch.map(([rel]) => rel) : [],
+          failed: outcome.failed,
+          fatal: {
+            status: outcome.fatal.status,
+            message: `${outcome.fatal.message} (${succeeded.length} of ${ordered.length} text file(s) written, ${fate}, ${notSent} not sent)`,
+          },
+        };
+      }
     }
+    return { succeeded, unanswered: [], failed: [] };
+  }
 
+  // POST one batch to /_atomic and decode the result. `fatal` is set when
+  // the server rejected the whole batch (non-201) — callers map that to a
+  // top-level error message; `failed` carries the per-operation errors the
+  // server returned alongside. `unanswered` means the request got no
+  // response at all, so the batch may or may not have been written.
+  private async postTextAtomic(
+    textEntries: Array<[string, string]>,
+    addPaths: Set<string>,
+  ): Promise<{
+    succeeded: string[];
+    failed: UploadFailure[];
+    unanswered?: boolean;
+    fatal?: { status: number; message: string };
+  }> {
     const operations = await Promise.all(
       textEntries.map(async ([relativePath, localPath]) => {
         const content = await fs.readFile(localPath, 'utf8');
@@ -666,14 +738,30 @@ export abstract class RealmSyncBase {
     const url = this.options.waitForIndex
       ? `${this.normalizedRealmUrl}_atomic?waitForIndex=true`
       : `${this.normalizedRealmUrl}_atomic`;
-    const response = await this.authenticator.authedRealmFetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        Accept: 'application/vnd.api+json',
-      },
-      body: JSON.stringify({ 'atomic:operations': operations }),
-    });
+    let response: Response;
+    try {
+      response = await this.authenticator.authedRealmFetch(url, {
+        method: 'POST',
+        headers: this.writeHeaders({
+          'Content-Type': 'application/vnd.api+json',
+          Accept: 'application/vnd.api+json',
+        }),
+        body: JSON.stringify({ 'atomic:operations': operations }),
+      });
+    } catch (err) {
+      // fetch reports a timeout or a dropped connection as "fetch failed",
+      // with what happened in its cause.
+      const cause = err instanceof Error ? err.cause : undefined;
+      const reason =
+        (err instanceof Error ? err.message : String(err)) +
+        (cause instanceof Error ? `: ${cause.message}` : '');
+      return {
+        succeeded: [],
+        failed: [],
+        unanswered: true,
+        fatal: { status: 500, message: `Atomic upload failed: ${reason}` },
+      };
+    }
 
     const hrefToRelative = new Map(
       textEntries.map(([rel]) => [this.buildFileUrl(rel), rel]),
@@ -804,9 +892,9 @@ export abstract class RealmSyncBase {
     try {
       response = await this.authenticator.authedRealmFetch(url, {
         method: 'DELETE',
-        headers: {
+        headers: this.writeHeaders({
           Accept: SupportedMimeType.CardSource,
-        },
+        }),
         signal: AbortSignal.timeout(DELETE_TIMEOUT_MS),
       });
     } catch (error) {

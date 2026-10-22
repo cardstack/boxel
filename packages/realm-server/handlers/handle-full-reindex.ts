@@ -8,6 +8,9 @@ import { setContextResponse } from '../middleware/index.ts';
 import { getFullReindexRealmUrls } from '../lib/full-reindex-realm-urls.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 
+// An operator's reindex of every realm. None of the realms' users asked for
+// it, so no realm's pass announces anything to its subscribers (see
+// `fromScratchAnnounces`).
 export default function handleFullReindex({
   dbAdapter,
   queue,
@@ -25,6 +28,7 @@ export default function handleFullReindex({
       priority: systemInitiatedPriority,
       args: {
         realmUrls,
+        realmEvents: false,
       },
     });
     await setContextResponse(

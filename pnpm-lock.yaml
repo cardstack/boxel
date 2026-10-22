@@ -1304,6 +1304,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      undici:
+        specifier: 'catalog:'
+        version: 7.30.0
       uuid:
         specifier: 'catalog:'
         version: 9.0.1
@@ -3658,6 +3661,9 @@ importers:
       '@aws-sdk/lib-storage':
         specifier: ^3.1065.0
         version: 3.1069.0(@aws-sdk/client-s3@3.1069.0)
+      '@cardstack/secure-origin':
+        specifier: workspace:*
+        version: link:../secure-origin
       morphdom:
         specifier: ^2.7.8
         version: 2.7.8
@@ -4317,6 +4323,76 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+
+  packages/secure-origin:
+    dependencies:
+      '@babel/runtime':
+        specifier: 'catalog:'
+        version: 7.29.7
+      '@glimmer/component':
+        specifier: ^2.0.0
+        version: 2.1.1(supports-color@8.1.1)
+      decorator-transforms:
+        specifier: 'catalog:'
+        version: 2.4.0(@babel/core@7.29.7(supports-color@8.1.1))
+      ember-source:
+        specifier: 'catalog:'
+        version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1)
+    devDependencies:
+      '@babel/core':
+        specifier: 'catalog:'
+        version: 7.29.7(supports-color@8.1.1)
+      '@babel/plugin-transform-runtime':
+        specifier: ^7.29.0
+        version: 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+      '@babel/plugin-transform-typescript':
+        specifier: 'catalog:'
+        version: 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+      '@embroider/core':
+        specifier: ^4.6.3
+        version: 4.6.7(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/macros':
+        specifier: ^1.20.5
+        version: 1.21.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/vite':
+        specifier: ^1.7.10
+        version: 1.7.13(@embroider/core@4.6.7(@glint/template@1.7.7)(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@8.0.16(@types/node@24.13.2)(terser@5.49.0)(yaml@2.9.0))
+      '@glint/ember-tsc':
+        specifier: 'catalog:'
+        version: 1.5.0(supports-color@8.1.1)(typescript@5.9.3)
+      '@glint/template':
+        specifier: 'catalog:'
+        version: 1.7.7
+      '@rollup/plugin-babel':
+        specifier: 'catalog:'
+        version: 6.1.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/babel__core@7.20.5)(rollup@4.62.0)(supports-color@8.1.1)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      babel-plugin-ember-template-compilation:
+        specifier: 'catalog:'
+        version: 2.4.1
+      concurrently:
+        specifier: 'catalog:'
+        version: 8.2.2
+      ember-template-lint:
+        specifier: 'catalog:'
+        version: 7.9.3
+      eslint:
+        specifier: 'catalog:'
+        version: 8.57.1(supports-color@8.1.1)
+      glimmer-scoped-css:
+        specifier: 'catalog:'
+        version: 0.9.0(supports-color@8.1.1)
+      prettier:
+        specifier: 'catalog:'
+        version: 3.8.4
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: ^8.0.10
+        version: 8.0.16(@types/node@24.13.2)(terser@5.49.0)(yaml@2.9.0)
 
   packages/skills-realm: {}
 

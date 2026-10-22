@@ -1,5 +1,6 @@
 import type {
   RealmAdapter,
+  RealmEventDelivery,
   Kind,
   FileRef,
   DBAdapter,
@@ -55,6 +56,12 @@ import type {
 } from '@cardstack/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { createJWT, verifyJWT } from './jwt.ts';
+import {
+  isBackPressure,
+  realmEventDispatcher,
+  type RealmEventDispatcher,
+  type RealmEventSend,
+} from './realm-event-dispatcher.ts';
 
 const realmEventsLog = logger('realm:events');
 
@@ -88,10 +95,20 @@ function lastModifiedSeconds(stat: Stats): number {
 export class NodeAdapter implements RealmAdapter {
   private realmDir: string;
   private enableFileWatcher?: boolean;
+  private dispatcher: RealmEventDispatcher;
+  // Set when the realm's last room lookup found no session rooms. The lookup
+  // waits and retries only when this is clear, so a realm nobody has open
+  // pays the wait once rather than on every queued event.
+  private lastLookupFoundNoRooms = false;
 
-  constructor(realmDir: string, enableFileWatcher?: boolean) {
+  constructor(
+    realmDir: string,
+    enableFileWatcher?: boolean,
+    dispatcher: RealmEventDispatcher = realmEventDispatcher(),
+  ) {
     this.realmDir = realmDir;
     this.enableFileWatcher = enableFileWatcher;
+    this.dispatcher = dispatcher;
   }
 
   get dir(): string {
@@ -421,11 +438,15 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
+  // Resolves once the event has reached every session room subscribed to the
+  // realm, or has been merged or dropped by the process's realm event line
+  // (see realm-event-dispatcher.ts). Never rejects: a failed send is logged.
   async broadcastRealmEvent(
     event: RealmEventContent,
     realmUrl: string,
     matrixClient: MatrixClient,
     dbAdapter: DBAdapter,
+    opts?: RealmEventDelivery,
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
     const eventWithRealmURL: RealmEventContent = {
@@ -438,6 +459,27 @@ export class NodeAdapter implements RealmAdapter {
       );
       return;
     }
+    await this.dispatcher.broadcast({
+      realmURL: realmUrl,
+      event: eventWithRealmURL,
+      newTxnId: () => matrixClient.nextTxnId(),
+      prepare: (content) =>
+        this.prepareRoomSends(content, realmUrl, matrixClient, dbAdapter, opts),
+    });
+  }
+
+  private async prepareRoomSends(
+    event: RealmEventContent,
+    realmUrl: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+    delivery?: RealmEventDelivery,
+  ): Promise<RealmEventSend[]> {
+    if (dbAdapter.isClosed) {
+      return [];
+    }
+    // A logged-in client reuses its session; this logs in only on the first
+    // broadcast, or after the session was revoked.
     try {
       await matrixClient.login();
       if (!matrixClient.getUserId()) {
@@ -445,26 +487,49 @@ export class NodeAdapter implements RealmAdapter {
           'Matrix client has no user ID after login, unable to broadcast realm event',
           event,
         );
-        return;
+        return [];
       }
     } catch (e) {
+      // An overloaded or unreachable homeserver is back-pressure: the
+      // dispatcher pauses and prepares the event again rather than skip it.
+      if (isBackPressure(e)) {
+        throw e;
+      }
       realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
-      return;
+      return [];
     }
 
-    let dmRooms = await this.waitForSessionRooms(dbAdapter, realmUrl);
+    let dmRooms = await this.waitForSessionRooms(
+      dbAdapter,
+      realmUrl,
+      this.lastLookupFoundNoRooms ? 0 : undefined,
+    );
+    this.lastLookupFoundNoRooms = Object.keys(dmRooms).length === 0;
+    if (delivery?.recipients) {
+      let recipients = new Set(delivery.recipients);
+      dmRooms = Object.fromEntries(
+        Object.entries(dmRooms).filter(([userId]) => recipients.has(userId)),
+      );
+    }
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
 
-    for (let userId of Object.keys(dmRooms)) {
-      let roomId = dmRooms[userId];
-      try {
+    return Object.entries(dmRooms).map(([userId, roomId]) => ({
+      roomId,
+      send: async (txnId: string) => {
+        // A send can start while a revoked session is being replaced, when
+        // the client holds no token; wait for the new one rather than fail.
+        if (!matrixClient.isLoggedIn()) {
+          await matrixClient.login();
+        }
         await matrixClient.sendEvent(
           roomId,
           APP_BOXEL_REALM_EVENT_TYPE,
-          eventWithRealmURL,
+          event,
+          txnId,
         );
-      } catch (e) {
+      },
+      onFailure: async (e: unknown) => {
         if (isRealmServerNotInRoomError(e, roomId)) {
           try {
             let cleared = await clearSessionRoom(dbAdapter, userId, roomId);
@@ -483,15 +548,18 @@ export class NodeAdapter implements RealmAdapter {
               e,
             );
           }
-          continue;
+          return;
         }
+        // The error's message carries the status and the homeserver's answer,
+        // which is all a failed send has to say; its stack is the same for
+        // every room.
         realmEventsLog.error(
-          `Unable to send event in room ${roomId} for user ${userId}`,
-          event,
-          e,
+          `Unable to send event in room ${roomId} for user ${userId}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
         );
-      }
-    }
+      },
+    }));
   }
 
   private async waitForSessionRooms(

@@ -1,3 +1,5 @@
+import { execFileSync } from 'child_process';
+import { join } from 'path';
 import {
   synapseStart,
   synapseStop,
@@ -19,6 +21,12 @@ import {
 import { synapseTemplateOf } from '../support/shard-spec-files.ts';
 
 export default async function setup() {
+  // Every realm server the specs start serves a secure origin, which is
+  // served from the secure origin's build, so the build comes first.
+  execFileSync('pnpm', ['build'], {
+    cwd: join(import.meta.dirname, '..', '..', 'secure-origin'),
+    stdio: 'inherit',
+  });
   await smtpStart();
   // Start the mock OIDC provider before Synapse and expose its issuer, so
   // cfgDirFromTemplate keeps the Google OIDC block (gated on MOCK_OAUTH2_ISSUER)

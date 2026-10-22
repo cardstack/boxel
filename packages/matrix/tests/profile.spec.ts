@@ -1,8 +1,9 @@
 import { expect, test } from './fixtures.ts';
-import type { Page } from '@playwright/test';
+import type { Frame, Page, Request, Response } from '@playwright/test';
 import {
   credentialFields,
   login,
+  logout,
   validateEmail,
   assertLoggedOut,
   assertLoggedIn,
@@ -42,32 +43,73 @@ test.describe('Profile', () => {
     await page.locator('[data-test-settings-button]').click();
   }
 
-  async function logoutFromProfileSettings(page: Page) {
-    await page.locator('[data-test-profile-icon-button]').click();
-    await page.locator('[data-test-signout-button]').click();
-  }
-
-  async function signInFromLoggedOutState(
+  // Signs out and back in. If a step before the sign-in click fails, the error
+  // also lists what happened to the login form since sign-out: the first
+  // attempt of a failing test records no trace, so the error is the only place
+  // that sequence survives.
+  async function signOutAndBackIn(
     page: Page,
     username: string,
     password: string,
   ) {
-    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await expect(async () => {
-      await credentialFields(page)
-        .locator('[data-test-username-field]')
-        .fill(username);
-      await credentialFields(page)
-        .locator('[data-test-password-field]')
-        .fill(password);
-      await expect(
-        credentialFields(page).locator('[data-test-username-field]'),
-      ).toHaveValue(username);
-      await expect(
-        credentialFields(page).locator('[data-test-password-field]'),
-      ).toHaveValue(password);
-      await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
-    }).toPass({ timeout: 15_000 });
+    let start = Date.now();
+    let events: string[] = [];
+    let note = (event: string) =>
+      events.push(`+${Date.now() - start}ms ${event}`);
+    // The login form asks Synapse for its login flows when it is constructed,
+    // so each of these requests is the form being built.
+    let onRequest = (request: Request) => {
+      if (
+        request.method() === 'GET' &&
+        request.url().endsWith('/_matrix/client/v3/login')
+      ) {
+        note('login form built');
+      }
+    };
+    let onResponse = (response: Response) => {
+      if (response.url().endsWith('/_matrix/client/v3/logout')) {
+        note(`matrix logout answered ${response.status()}`);
+      }
+    };
+    let onNavigated = (frame: Frame) => {
+      if (frame === page.mainFrame()) {
+        note(`navigated to ${frame.url()}`);
+      }
+    };
+    page.on('request', onRequest);
+    page.on('response', onResponse);
+    page.on('framenavigated', onNavigated);
+    try {
+      note('signing out');
+      await logout(page);
+      await assertLoggedOut(page);
+      await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+      note('filling the sign-in form');
+      await expect(async () => {
+        await credentialFields(page)
+          .locator('[data-test-username-field]')
+          .fill(username);
+        await credentialFields(page)
+          .locator('[data-test-password-field]')
+          .fill(password);
+        await expect(
+          credentialFields(page).locator('[data-test-username-field]'),
+        ).toHaveValue(username);
+        await expect(
+          credentialFields(page).locator('[data-test-password-field]'),
+        ).toHaveValue(password);
+        await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+      }).toPass({ timeout: 15_000 });
+    } catch (e) {
+      if (e instanceof Error) {
+        e.message += `\n\nSince sign-out:\n${events.join('\n')}`;
+      }
+      throw e;
+    } finally {
+      page.off('request', onRequest);
+      page.off('response', onResponse);
+      page.off('framenavigated', onNavigated);
+    }
     await page.locator('[data-test-login-btn]').click();
   }
 
@@ -385,10 +427,7 @@ test.describe('Profile', () => {
     ).toBe(403);
     await page.locator('[data-test-confirm-cancel-button]').click();
 
-    await logoutFromProfileSettings(page);
-    await assertLoggedOut(page);
-
-    await signInFromLoggedOutState(page, user.username, 'newpass123!');
+    await signOutAndBackIn(page, user.username, 'newpass123!');
     await assertLoggedIn(page, {
       userId: user.credentials.userId,
       displayName: user.username,
@@ -477,10 +516,7 @@ test.describe('Profile', () => {
     ).toContainText('Settings');
     await page.locator('[data-test-confirm-cancel-button]').click();
 
-    await logoutFromProfileSettings(page);
-    await assertLoggedOut(page);
-
-    await signInFromLoggedOutState(page, user.username, 'newpass123!');
+    await signOutAndBackIn(page, user.username, 'newpass123!');
     await assertLoggedIn(page, {
       userId: user.credentials.userId,
       displayName: user.username,
@@ -547,10 +583,7 @@ test.describe('Profile', () => {
     ).toContainText('Settings');
     await page.locator('[data-test-confirm-cancel-button]').click();
 
-    await logoutFromProfileSettings(page);
-    await assertLoggedOut(page);
-
-    await signInFromLoggedOutState(page, user.username, 'newpass123!');
+    await signOutAndBackIn(page, user.username, 'newpass123!');
     await assertLoggedIn(page, {
       userId: user.credentials.userId,
       displayName: user.username,

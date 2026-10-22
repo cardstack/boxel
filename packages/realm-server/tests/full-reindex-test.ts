@@ -188,6 +188,25 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a sweep that announces nothing enqueues passes that announce nothing', async function (assert) {
+    const sourceRealmURL = 'http://example.com/source/';
+    await insertPermissions(dbAdapter, new URL(sourceRealmURL), {
+      '@owner:localhost': ['read', 'realm-owner'],
+    });
+
+    let reindex = buildFullReindexTask();
+    await reindex({ realmUrls: [sourceRealmURL], realmEvents: false });
+
+    let jobs = (await dbAdapter.execute('select * from jobs')) as {
+      args: { realmURL: string; realmEvents?: boolean };
+    }[];
+    assert.strictEqual(jobs.length, 1, 'a from-scratch job was enqueued');
+    assert.false(
+      jobs[0].args.realmEvents,
+      "the realm's pass announces nothing to its subscribers",
+    );
+  });
+
   test('enqueues the base realm above the system tier, every other realm at it', async function (assert) {
     const sourceRealmURL = 'http://example.com/source/';
 

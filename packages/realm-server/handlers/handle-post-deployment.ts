@@ -45,6 +45,9 @@ export default function handlePostDeployment({
     ) {
       let realmUrls = await getFullReindexRealmUrls(dbAdapter);
 
+      // A deploy's reindex: no realm's users asked for it, so no realm's pass
+      // announces anything to its subscribers (see
+      // `fromScratchAnnounces`).
       await queue.publish<void>({
         jobType: `full-reindex`,
         concurrencyGroup: `full-reindex-group`,
@@ -52,6 +55,7 @@ export default function handlePostDeployment({
         priority: systemInitiatedPriority,
         args: {
           realmUrls,
+          realmEvents: false,
         },
       });
 
