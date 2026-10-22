@@ -216,14 +216,14 @@ module('Acceptance | dashboard', function (hooks) {
       assert.deepEqual(
         matrixService.dashboardState.agentSetup,
         { claude: 2, grok: 1 },
-        "another tab's write still applies while an echo is pending",
+        "another tab's write, stored before the second write, applies while an echo is pending",
       );
 
       await mockMatrixUtils.releaseDashboardEcho(1);
       assert.deepEqual(
         matrixService.dashboardState.agentSetup,
         { codex: 2, claude: 2 },
-        "the second write's own echo applies as the sync order has it",
+        "the second write's echo applies, since the server stored it last",
       );
     });
 

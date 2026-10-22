@@ -1,4 +1,3 @@
-import { isPlainObject } from '../is-plain-object.ts';
 import {
   OperationFailure,
   type OperationLoweringIssueCode,
@@ -262,6 +261,10 @@ function hasOwn(
   return (
     record !== undefined && Object.prototype.hasOwnProperty.call(record, key)
   );
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 // ---------------------------------------------------------------------------

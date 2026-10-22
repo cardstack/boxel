@@ -636,6 +636,9 @@ export default class SubmodeLayout extends Component<Signature> {
          dashboard is shown; the child fills it. */
       .workspace-overlay {
         display: grid;
+        /* Tracks no bigger than the overlay, so a tall chooser scrolls inside
+           it instead of growing past it. */
+        grid-template: minmax(0, 1fr) / minmax(0, 1fr);
         position: absolute;
         height: 100%;
         width: 100%;

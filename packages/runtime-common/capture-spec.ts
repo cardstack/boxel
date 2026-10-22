@@ -1,4 +1,3 @@
-import { isPlainObject } from './is-plain-object.ts';
 import { computeMediaCacheKey } from './media-cache.ts';
 import { CAPTURE_SERVING_PREFIX } from './paths.ts';
 
@@ -345,6 +344,10 @@ const CAPTURE_REQUEST_CLIP_FIELDS = new Set(['x', 'y', 'width', 'height']);
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 type OverrideFieldsParse =
