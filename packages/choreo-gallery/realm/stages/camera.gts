@@ -780,7 +780,7 @@ export class Camera extends Component {
       .cam-grade-dock .cam-heart.is-active {
         background: var(--primary);
         border-color: transparent;
-        color: #fff;
+        color: var(--primary-foreground);
         box-shadow: 0 4px 14px
           color-mix(in srgb, var(--primary) 45%, transparent);
       }
@@ -827,7 +827,7 @@ export class Camera extends Component {
       }
 
       .cam-heart.is-active {
-        color: #fff;
+        color: var(--primary-foreground);
         background: var(--primary);
         border-color: transparent;
         box-shadow: 0 4px 14px

@@ -494,13 +494,14 @@ export class HideHeader extends Component {
         display: grid;
         place-items: center;
         background: var(--primary);
+        color: var(--primary-foreground);
         border-color: transparent;
       }
 
       .composer-send svg {
         width: 14px;
         height: 14px;
-        fill: #140c0a;
+        fill: currentColor;
       }
 
       @container (max-width: 420px) {

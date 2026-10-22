@@ -760,16 +760,17 @@ export class Hang extends Component {
 
       .hang-turn {
         border-radius: 999px;
-        color: #fff;
         padding: 5px 11px;
       }
 
       .hang-turn.is-red {
         background: var(--primary);
+        color: var(--primary-foreground);
       }
 
       .hang-turn.is-blue {
         background: var(--azure);
+        color: #fff;
       }
 
       .hang-tally,

@@ -541,7 +541,7 @@ export class Escort extends Component {
         background: var(--primary);
         box-shadow: 0 2px 6px
           rgba(var(--shadow-rgb), calc(0.5 * var(--shadow-a)));
-        color: #fff;
+        color: var(--primary-foreground);
         font-family: var(--font-mono);
         font-size: clamp(9px, 2.2cqw, 10.5px);
         line-height: 1;

@@ -1338,7 +1338,7 @@ export class BuildOrder extends Component {
 
       .bo-row.is-on {
         background: var(--primary);
-        color: #fff;
+        color: var(--primary-foreground);
       }
 
       .bo-no {
