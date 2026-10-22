@@ -30,7 +30,6 @@ module('Acceptance | dashboard', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [realmURL],
     dashboardState: {
-      version: 1,
       agent: 'codex',
       agentSetup: { codex: 2 },
     },
@@ -57,7 +56,6 @@ module('Acceptance | dashboard', function (hooks) {
 
       let matrixService = getService('matrix-service') as MatrixService;
       assert.deepEqual(matrixService.dashboardState, {
-        version: 1,
         agent: 'codex',
         agentSetup: { codex: 2 },
       });
@@ -67,7 +65,6 @@ module('Acceptance | dashboard', function (hooks) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       await mockMatrixUtils.setDashboardStateFromAnotherDevice({
-        version: 1,
         onboardingDismissed: 'yes',
         agent: 'clippy',
         agentSetup: { claude: 2, clippy: 5, codex: -1, grok: 1.5 },
@@ -76,7 +73,6 @@ module('Acceptance | dashboard', function (hooks) {
 
       let matrixService = getService('matrix-service') as MatrixService;
       assert.deepEqual(matrixService.dashboardState, {
-        version: 1,
         agentSetup: { claude: 2 },
       });
     });
@@ -85,23 +81,20 @@ module('Acceptance | dashboard', function (hooks) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       await mockMatrixUtils.setDashboardStateFromAnotherDevice({
-        version: 1,
         onboardingDismissed: true,
       });
       await settled();
 
       let matrixService = getService('matrix-service') as MatrixService;
       assert.deepEqual(matrixService.dashboardState, {
-        version: 1,
         onboardingDismissed: true,
       });
     });
 
-    test('a write keeps stored fields, including ones this version does not know', async function (assert) {
+    test('a write keeps stored fields, including ones this app does not know', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       await mockMatrixUtils.setDashboardStateFromAnotherDevice({
-        version: 1,
         agent: 'grok',
         agentSetup: { grok: 3 },
         futureField: 'kept',
@@ -114,16 +107,14 @@ module('Acceptance | dashboard', function (hooks) {
       assert.deepEqual(
         mockMatrixUtils.getDashboardState(),
         {
-          version: 1,
           agent: 'grok',
           agentSetup: { grok: 3 },
           futureField: 'kept',
           onboardingDismissed: true,
         },
-        'the stored copy keeps the other write, including fields this version does not know',
+        'the stored copy keeps the other write, including fields this app does not know',
       );
       assert.deepEqual(matrixService.dashboardState, {
-        version: 1,
         onboardingDismissed: true,
         agent: 'grok',
         agentSetup: { grok: 3 },
@@ -163,7 +154,6 @@ module('Acceptance | dashboard', function (hooks) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       await mockMatrixUtils.setDashboardStateFromAnotherDevice({
-        version: 1,
         agentSetup: { codex: 2, gemini: 4 },
       });
       await settled();
@@ -174,7 +164,7 @@ module('Acceptance | dashboard', function (hooks) {
       assert.deepEqual(
         (mockMatrixUtils.getDashboardState() as any).agentSetup,
         { codex: 2, gemini: 4, claude: 1 },
-        'the stored copy keeps every agent, including ones this version does not know',
+        'the stored copy keeps every agent, including ones this app does not know',
       );
       assert.deepEqual(matrixService.dashboardState.agentSetup, {
         codex: 2,
@@ -194,21 +184,6 @@ module('Acceptance | dashboard', function (hooks) {
       await assert.rejects(failed, /boom/);
       await next;
       assert.strictEqual(matrixService.dashboardState.agent, 'boxel');
-    });
-
-    test('does not overwrite state stored by a newer version', async function (assert) {
-      await visitOperatorMode({ workspaceChooserOpened: true });
-
-      let newer = { version: 2, agent: 'codex', futureField: 'kept' };
-      await mockMatrixUtils.setDashboardStateFromAnotherDevice(newer);
-      await settled();
-
-      let matrixService = getService('matrix-service') as MatrixService;
-      await assert.rejects(
-        matrixService.updateDashboardState({ agent: 'claude' }),
-        /newer version/,
-      );
-      assert.deepEqual(mockMatrixUtils.getDashboardState(), newer);
     });
 
     test('a write queued before logout does not reach the next session', async function (assert) {

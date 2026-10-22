@@ -16,7 +16,7 @@ import {
   timeout,
 } from 'ember-concurrency';
 import window from 'ember-window-mock';
-import { cloneDeep, isPlainObject } from 'lodash-es';
+import { cloneDeep } from 'lodash-es';
 
 import { Filter } from 'matrix-js-sdk';
 import {
@@ -45,6 +45,11 @@ import {
 } from '@cardstack/runtime-common';
 
 import { getPromptParts } from '@cardstack/runtime-common/ai';
+import {
+  type AppBoxelDashboardContent,
+  mergeDashboardContent,
+  parseDashboardContent,
+} from '@cardstack/runtime-common/dashboard-state';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -64,9 +69,6 @@ import {
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
   APP_BOXEL_DASHBOARD_EVENT_TYPE,
-  APP_BOXEL_DASHBOARD_VERSION,
-  type AppBoxelDashboardContent,
-  parseDashboardContent,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   DEFAULT_FALLBACK_MODELS,
@@ -1209,12 +1211,14 @@ export default class MatrixService extends Service {
     this.workspaceFavorites = newFavorites;
   }
 
-  // Dashboard writes run one at a time, each applying its change to the latest
-  // synced copy (once the first sync is done, the SDK reads account data from
-  // its sync store, not the server). setAccountData resolves only after its
-  // write has synced back, so a queued write always sees the one before it. A
-  // write from another tab that hasn't synced here yet can still be
-  // overwritten: account data has no compare-and-set.
+  // Dashboard writes run one at a time, each reading the key from the server,
+  // applying its change and writing it back, so a write always sees the one
+  // queued before it. They don't go through the sync store or wait for their
+  // sync echo, which resolves on any event of the type and never arrives if
+  // sync stops. A write from another tab can still be overwritten: account
+  // data has no compare-and-set. An earlier write's echo can arrive after a
+  // later write has been shown, showing the earlier value until the later
+  // write's echo follows.
   private dashboardWrites: Promise<unknown> = Promise.resolve();
   // Bumped by resetState() so a write queued before logout never lands in
   // the next session.
@@ -1229,52 +1233,46 @@ export default class MatrixService extends Service {
           stored: AppBoxelDashboardContent,
         ) => Partial<AppBoxelDashboardContent>),
   ): Promise<void> {
-    let client = this.client;
     let session = this.dashboardSession;
+    let userId = this._client?.getUserId();
+    // The client of the session this write was queued in, or nothing once that
+    // session has ended: logged out, or switched to another account, which logs
+    // in on the same client before logging the old account out.
+    let sessionClient = () =>
+      session === this.dashboardSession && this._client?.getUserId() === userId
+        ? this._client
+        : undefined;
     let write = this.dashboardWrites.then(async () => {
-      let raw = await client.getAccountDataFromServer(
-        APP_BOXEL_DASHBOARD_EVENT_TYPE,
-      );
-      // Logged out meanwhile: drop the write. It resolves rather than rejects,
-      // since its caller belonged to the session that ended.
-      if (session !== this.dashboardSession) {
-        return;
-      }
-      // Fields this version doesn't know are written back untouched, so an
-      // older tab doesn't erase what a newer one stored.
-      let stored: Record<string, unknown> = isPlainObject(raw)
-        ? (raw as Record<string, unknown>)
-        : {};
-      if (
-        typeof stored.version === 'number' &&
-        stored.version > APP_BOXEL_DASHBOARD_VERSION
-      ) {
-        throw new Error(
-          `Dashboard state was stored by a newer version of the app (version ${stored.version})`,
+      // A write whose session ended is dropped. It resolves rather than
+      // rejects, even when the ending cut off its request, since its caller
+      // belonged to that session.
+      try {
+        let client = sessionClient();
+        if (!client) {
+          return;
+        }
+        let stored = await client.fetchAccountData(
+          APP_BOXEL_DASHBOARD_EVENT_TYPE,
         );
-      }
-      let changes =
-        typeof change === 'function'
-          ? change(parseDashboardContent(stored))
-          : change;
-      let next: Record<string, unknown> = {
-        ...stored,
-        ...changes,
-        version: APP_BOXEL_DASHBOARD_VERSION,
-      };
-      // Merged per agent, so setting one agent's progress keeps the others',
-      // including agents this version doesn't know.
-      if (changes.agentSetup) {
-        next.agentSetup = {
-          ...(isPlainObject(stored.agentSetup)
-            ? (stored.agentSetup as Record<string, unknown>)
-            : {}),
-          ...changes.agentSetup,
-        };
-      }
-      await client.setAccountData(APP_BOXEL_DASHBOARD_EVENT_TYPE, next);
-      if (session === this.dashboardSession) {
-        this.dashboardState = parseDashboardContent(next);
+        client = sessionClient();
+        if (!client) {
+          return;
+        }
+        let changes =
+          typeof change === 'function'
+            ? change(parseDashboardContent(stored))
+            : change;
+        let next = mergeDashboardContent(stored, changes);
+        await client.setAccountDataRaw(APP_BOXEL_DASHBOARD_EVENT_TYPE, next);
+        // Shown right away; the account-data listener then applies whatever
+        // syncs after it, including a newer write from another tab.
+        if (sessionClient()) {
+          this.dashboardState = parseDashboardContent(next);
+        }
+      } catch (e) {
+        if (sessionClient()) {
+          throw e;
+        }
       }
     });
     // A failed write must not stall the ones queued behind it; its caller

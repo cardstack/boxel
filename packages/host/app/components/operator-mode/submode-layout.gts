@@ -385,15 +385,15 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.operatorModeStateService.workspaceChooserOpened;
   }
 
+  private set workspaceChooserOpened(workspaceChooserOpened: boolean) {
+    this.operatorModeStateService.workspaceChooserOpened =
+      workspaceChooserOpened;
+  }
+
   // Read at render time rather than once at module load, so a test can turn
   // the flag on for its module.
   private get isDashboardV2Enabled() {
     return Boolean(ENV.featureFlags?.DASHBOARD_V2);
-  }
-
-  private set workspaceChooserOpened(workspaceChooserOpened: boolean) {
-    this.operatorModeStateService.workspaceChooserOpened =
-      workspaceChooserOpened;
   }
 
   @action private toggleWorkspaceChooser() {

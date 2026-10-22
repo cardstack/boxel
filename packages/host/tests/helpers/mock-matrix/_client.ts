@@ -1,5 +1,7 @@
 import type Owner from '@ember/owner';
 
+import { waitForPromise } from '@ember/test-waiters';
+
 import { getService } from '@universal-ember/test-support';
 
 import { MatrixEvent } from 'matrix-js-sdk';
@@ -280,6 +282,38 @@ export class MockClient implements ExtendedClient {
         type: type as string,
         content: data as unknown as Record<string, unknown>,
       }),
+    );
+    return Promise.resolve({});
+  }
+
+  fetchAccountData(type: string): Promise<unknown> {
+    return this.getAccountDataFromServer(type as any);
+  }
+
+  // Resolves once the server has the write, before it syncs back, as in the
+  // SDK. The echo is waited on so settled() covers it.
+  setAccountDataRaw<K extends keyof MatrixSDK.AccountDataEvents>(
+    type: K,
+    data: MatrixSDK.AccountDataEvents[K] | Record<string, never>,
+  ): Promise<{}> {
+    if (type !== APP_BOXEL_DASHBOARD_EVENT_TYPE) {
+      throw new Error(
+        'Support for raw writes of this event type is not yet implemented in this mock.',
+      );
+    }
+    this.sdkOpts.dashboardState = data as any;
+    waitForPromise(
+      new Promise<void>((resolve) =>
+        setTimeout(() => {
+          this.emitEvent(
+            new MatrixEvent({
+              type: type as string,
+              content: data as unknown as Record<string, unknown>,
+            }),
+          );
+          resolve();
+        }),
+      ),
     );
     return Promise.resolve({});
   }

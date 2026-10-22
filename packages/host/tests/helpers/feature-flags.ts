@@ -12,6 +12,10 @@ export function setupFeatureFlag(hooks: NestedHooks, flag: FeatureFlag) {
     ENV.featureFlags[flag] = true;
   });
   hooks.afterEach(function () {
-    ENV.featureFlags![flag] = previous;
+    if (previous === undefined) {
+      delete ENV.featureFlags![flag];
+    } else {
+      ENV.featureFlags![flag] = previous;
+    }
   });
 }

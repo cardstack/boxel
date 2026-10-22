@@ -1889,6 +1889,7 @@ export * from './constants.ts';
 export * from './helpers/const.ts';
 export * from './document.ts';
 export * from './matrix-constants.ts';
+export * from './dashboard-state.ts';
 export * from './session-token.ts';
 export * from './matrix-client.ts';
 export * from './anonymous-access.ts';

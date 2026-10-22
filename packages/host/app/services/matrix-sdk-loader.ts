@@ -156,6 +156,7 @@ export type ExtendedClient = Pick<
   | 'sendReadReceipt'
   | 'sendStateEvent'
   | 'setAccountData'
+  | 'setAccountDataRaw'
   | 'setDisplayName'
   | 'setPowerLevel'
   | 'setRoomName'
@@ -178,6 +179,7 @@ export type ExtendedClient = Pick<
     ): Promise<MatrixSDK.IRequestTokenResponse>;
     createRealmSession(realmURL: URL): Promise<string>;
     hashMessageWithSecret(message: string): Promise<string>;
+    fetchAccountData(eventType: string): Promise<unknown>;
   };
 
 async function hashMessageWithSecret(
@@ -232,6 +234,25 @@ async function requestEmailToken(
   }
 }
 
+// Reads account data from the server even after the initial sync, when the
+// SDK's getAccountDataFromServer answers from its sync store instead.
+async function fetchAccountData(
+  this: MatrixSDK.MatrixClient,
+  eventType: string,
+): Promise<unknown> {
+  let path = `/user/${encodeURIComponent(
+    this.getSafeUserId(),
+  )}/account_data/${encodeURIComponent(eventType)}`;
+  try {
+    return await this.http.authedRequest('GET' as MatrixSDK.Method, path);
+  } catch (e: any) {
+    if (e?.data?.errcode === 'M_NOT_FOUND') {
+      return null;
+    }
+    throw e;
+  }
+}
+
 function extendedClient({
   client,
   fetch,
@@ -257,6 +278,8 @@ function extendedClient({
           return requestEmailToken.bind(extendedTarget, fetch);
         case 'createRealmSession':
           return createRealmSession.bind(extendedTarget, fetch);
+        case 'fetchAccountData':
+          return fetchAccountData.bind(target);
         case 'getJoinedRooms':
           return getJoinedRoomsWithCache.bind(null, target);
         case 'uploadCards':
