@@ -10,6 +10,7 @@ import {
   heapTelemetry,
   formatHeapTelemetry,
 } from './prerender/heap-telemetry.ts';
+import { realmEventDispatcher } from './realm-event-dispatcher.ts';
 
 // Periodically samples the realm-server process's event-loop health, in-flight
 // search count, and heap usage, emitting a `realm:health` line every interval.
@@ -93,6 +94,13 @@ export function startHealthSampler(
     // overlapping compiles each count their whole span, so `total` can exceed
     // the window. Read it beside `eventLoopLagMs`, not instead of it.
     let compiles = takeModuleCompileStats();
+    // The realm event line toward synapse. `realmEventQueueAgeMs` is how long
+    // the oldest event still waiting to start has waited — the delay a
+    // subscriber sees on top of the send itself — and is the number to alert
+    // on: a queue that drains keeps it near zero however deep the burst.
+    // `realmEventBackPressure` counts sends synapse (or the proxy in front of
+    // it) answered as overloaded in this window.
+    let realmEvents = realmEventDispatcher().takeStats();
     log.info(
       `eventLoopLagMs(mean/p99/max)=${meanLagMs.toFixed(0)}/${p99LagMs.toFixed(0)}/${maxLagMs.toFixed(0)} ` +
         `inFlightSearch=${inFlightSearch} searchRequests=${searchRequests} ` +
@@ -105,6 +113,16 @@ export function startHealthSampler(
           : '') +
         `transpiles=${compiles.count} ` +
         `transpileMs(total/max)=${compiles.totalMs.toFixed(0)}/${compiles.maxMs.toFixed(0)} ` +
+        `realmEventsQueued=${realmEvents.queuedEvents} ` +
+        `realmEventQueuedKB=${(realmEvents.queuedBytes / 1024).toFixed(0)} ` +
+        `realmEventQueueAgeMs=${realmEvents.oldestQueuedMs.toFixed(0)} ` +
+        `realmEventSendsInFlight=${realmEvents.sendsInFlight} ` +
+        `realmEventSends=${realmEvents.sends} ` +
+        `realmEventSendMs(mean/max)=${realmEvents.sendMsMean.toFixed(0)}/${realmEvents.sendMsMax.toFixed(0)} ` +
+        `realmEventFailedSends=${realmEvents.failedSends} ` +
+        `realmEventBackPressure=${realmEvents.backPressure} ` +
+        `realmEventsCoalesced=${realmEvents.coalesced} ` +
+        `realmEventsDropped=${realmEvents.dropped} ` +
         `${formatHeapTelemetry(heap)}`,
     );
   }, intervalMs);

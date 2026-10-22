@@ -99,6 +99,10 @@ if [ -n "$START_SUBMISSION" ]; then
   sh "$SCRIPTS_DIR/setup-submission-realm.sh" "$SUBMISSION_REALM_PATH"
 fi
 
+# The secure origin's pages are served from their build, which the realm
+# server reads once, at startup.
+pnpm build:secure-origin || exit 1
+
 if [ -n "$ENV_MODE" ]; then
   WORKER_MANAGER_ARG="--workerManagerUrl=${WORKER_MGR_URL}"
 else
