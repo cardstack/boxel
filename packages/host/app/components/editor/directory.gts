@@ -48,6 +48,7 @@ export default class Directory extends Component<Args> {
             >
               <button
                 data-test-file={{entryPath}}
+                data-test-file-selected={{this.isSelectedFile entryPath}}
                 title={{entry.name}}
                 {{on 'click' (fn this.selectFile entryPath)}}
                 {{scrollIntoViewModifier
