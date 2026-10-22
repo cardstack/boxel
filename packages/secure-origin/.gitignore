@@ -1,3 +1,4 @@
 /dist/
 /dist-lint/
 .eslintcache
+/dist-tests/

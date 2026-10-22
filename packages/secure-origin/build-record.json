@@ -33,7 +33,7 @@
       "bytes": 963
     },
     "credentials.js": {
-      "bytes": 16417,
+      "bytes": 16478,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -43,12 +43,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/credentials/credential-fields.gts",
-          "size": 5711
+          "size": 5696
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/credentials/main.ts",
-          "size": 1094
+          "size": 1121
         },
         {
           "package": "@cardstack/secure-origin",
@@ -63,7 +63,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/credentials.js",
-          "size": 12169
+          "size": 12261
         },
         {
           "package": "@cardstack/secure-origin",
@@ -160,7 +160,7 @@
       ]
     },
     "shared.js": {
-      "bytes": 268063,
+      "bytes": 271341,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -520,7 +520,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/runloop/index.js",
-          "size": 1371
+          "size": 1429
         },
         {
           "package": "ember-source@6.10.1",
@@ -660,7 +660,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/index-DaCZcoCY.js",
-          "size": 61672
+          "size": 61897
         },
         {
           "package": "ember-source@6.10.1",
@@ -745,7 +745,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 33564,
+      "bytes": 33543,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -825,7 +825,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/sign-in-form.gts",
-          "size": 6820
+          "size": 6804
         },
         {
           "package": "@cardstack/secure-origin",

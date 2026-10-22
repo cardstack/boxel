@@ -206,6 +206,4 @@ screens still needs the same change in the package.
 
 ## 6. Remediation
 
-- `packages/secure-origin/src/security/credentials.js` breaks §1.6. It
-  renders the credential fields itself when it loads, so it can't be tested
-  without rendering.
+No gaps are known.

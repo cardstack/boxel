@@ -19,8 +19,14 @@ const macros = buildMacros();
 // placeholder base, named in the build's manifest, that the realm server
 // replaces with that path. File names carry no hash: every response on the
 // origin is `no-store`, and fixed names keep the build record readable.
-export default defineConfig({
-  base: '/__SECURE_ORIGIN_BASE__/',
+//
+// The component tests are built in development mode (`pnpm test:components`),
+// into dist-tests, with tests/index.html as one more entry, served from the
+// root. That build is never served on the origin, so the import allowlist and
+// the build record, which describe what the origin serves, see only a
+// production build of the pages.
+export default defineConfig(({ mode }) => ({
+  base: mode === 'development' ? '/' : '/__SECURE_ORIGIN_BASE__/',
   plugins: [
     // A component's `<style scoped>` is compiled into a stylesheet of its own,
     // which the build emits as a file, never as inline style the policy would
@@ -73,12 +79,20 @@ export default defineConfig({
       ],
       generatorOpts: { compact: false },
     }),
-    importAllowlist(),
-    layerOrderFirst(),
-    buildRecord({
-      mode:
-        process.env.SECURE_ORIGIN_BUILD_RECORD === 'check' ? 'check' : 'write',
-    }),
+    // The pages' build alone: the tests' development build loads modules
+    // the pages never ship, and its page is not one of the origin's.
+    ...(mode === 'development'
+      ? []
+      : [
+          importAllowlist(),
+          layerOrderFirst(),
+          buildRecord({
+            mode:
+              process.env.SECURE_ORIGIN_BUILD_RECORD === 'check'
+                ? 'check'
+                : 'write',
+          }),
+        ]),
   ],
   build: {
     modulePreload: { polyfill: false },
@@ -90,6 +104,7 @@ export default defineConfig({
         shell: 'index.html',
         credentials: 'credentials.html',
         session: 'src/security/session.js',
+        ...(mode === 'development' ? { tests: 'tests/index.html' } : {}),
       },
       preserveEntrySignatures: 'exports-only',
       output: {
@@ -117,4 +132,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
