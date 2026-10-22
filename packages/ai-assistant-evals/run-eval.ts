@@ -271,6 +271,19 @@ async function createResultCard(
           ...(a && a.realmCodeWrites + a.toolWrites
             ? [`${a.realmCodeWrites + a.toolWrites} realm write(s)`]
             : []),
+          ...(a?.firstWriteTurn
+            ? [`first write on turn ${a.firstWriteTurn}`]
+            : []),
+          ...(a && Object.keys(a.realmActions ?? {}).length
+            ? [
+                `realm actions: ${Object.entries(a.realmActions)
+                  .map(([name, count]) => `${name}×${count}`)
+                  .join(', ')}`,
+              ]
+            : []),
+          ...(a?.coldPromptTokens !== undefined
+            ? [`cold prompt ${a.coldPromptTokens} tokens`]
+            : []),
           ...(result.cardRendered
             ? [`rendered ${result.cardRendered} in the ${result.renderedIn}`]
             : []),

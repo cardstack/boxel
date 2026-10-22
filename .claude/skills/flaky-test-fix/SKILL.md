@@ -5,14 +5,14 @@ description: Investigate and fix a flaky test reported by a CI failure URL (e.g.
 
 # Flaky Test Fix
 
-A flaky test reported by a CI URL is a request for four things, done in order: **prior-art search → worktree → root-cause fix → diagnostic logging**. Do not paper over the failure with a retry, an increased timeout, or a `skip`/`todo` unless the failure genuinely cannot be diagnosed without more data — and if so, lead with the diagnostics and say so explicitly.
+A flaky test reported by a CI URL is a request for five things, done in order: **prior-art search → Linear issue → worktree → root-cause fix → diagnostic logging**. Do not paper over the failure with a retry, an increased timeout, or a `skip`/`todo` unless the failure genuinely cannot be diagnosed without more data — and if so, lead with the diagnostics and say so explicitly.
 
 ## Why this protocol
 
 Flaky tests are uncertain by nature. A fix that looks correct in local repro often does not address the real race / ordering / resource issue that triggers it in CI. Two safeguards counter that:
 
 - **Prior-art search** catches the common case where the same test has been "fixed" before. Without that context you risk re-doing a fix that already proved insufficient, or undoing an intentional accommodation.
-- **Diagnostic logging bundled with the fix** means that if the fix misses the real root cause, the *next* CI failure produces enough signal to diagnose it — instead of burning another CI cycle staring at the same opaque output.
+- **Diagnostic logging bundled with the fix** means that if the fix misses the real root cause, the _next_ CI failure produces enough signal to diagnose it — instead of burning another CI cycle staring at the same opaque output.
 
 ## Procedure
 
@@ -28,17 +28,30 @@ git log --oneline -- <path/to/test/file>
 
 If you find a prior PR, read its description, diff, and review thread before designing your fix. You may be looking at a regression, a partial fix, or a class of flakiness someone has already characterized. Surface any prior attempts early so the reporter can weigh in if the new fix should look materially different from the last.
 
-### 2. Work in a worktree off `origin/main`
+### 2. Create a Linear issue for the flaky test
+
+Unless the reporter already names a ticket, recommend a Linear issue that tracks the flake, and create it once they agree. Search Linear for the test name first: an existing issue for the same flake is updated, not duplicated. Give a new issue these settings, and set the state of an existing issue too:
+
+- **Team:** Cardstack Engineering (`CS`)
+- **Project:** Bugs to Fix for Launch
+- **Priority:** none
+- **Cycle:** the team's current cycle
+- **Assignee:** the current user (`me`)
+- **State:** In Progress
+
+Put the CI failure URL, the failure signature, and any prior attempts from step 1 in the description. Name the branch with the issue's `cs-<id>-` prefix, so that Linear links the PR to the issue.
+
+### 3. Work in a worktree off `origin/main`
 
 Spawn a fresh git worktree based on `origin/main` (not the current branch) and do all the work there — never in the main checkout — unless an active ticket-specific override says otherwise. Prefer launching an Agent with `isolation: "worktree"` for this.
 
-### 3. Attempt a real fix for the root cause
+### 4. Attempt a real fix for the root cause
 
 Diagnose the actual race, ordering, or resource issue and fix that. If a prior attempt exists, explicitly account for why this fix will succeed where the previous one didn't — or why it is complementary rather than a repeat.
 
-### 4. Add diagnostic logging alongside the fix
+### 5. Add diagnostic logging alongside the fix
 
-Add logging that would make the *next* failure diagnosable if this fix turns out not to catch the root cause. The logging is insurance: it stays in even when the fix looks obviously right. Aim it at the uncertain part — the timing, the ordering, the shared resource state — so a future CI failure prints the signal you wished you'd had this time.
+Add logging that would make the _next_ failure diagnosable if this fix turns out not to catch the root cause. The logging is insurance: it stays in even when the fix looks obviously right. Aim it at the uncertain part — the timing, the ordering, the shared resource state — so a future CI failure prints the signal you wished you'd had this time.
 
 ## When the failure isn't fixable yet
 

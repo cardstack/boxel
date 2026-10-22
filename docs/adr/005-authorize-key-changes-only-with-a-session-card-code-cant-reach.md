@@ -13,7 +13,7 @@ scope:
   - packages/realm-server/handlers/handle-secure-session.ts
   - packages/realm-server/handlers/handle-user-keys.ts
   - packages/realm-server/utils/jwt.ts
-  - packages/realm-server/secure-origin/**
+  - packages/secure-origin/**
   - packages/boxel-cli/src/commands/keys/**
   - packages/boxel-cli/src/lib/secure-session.ts
   - packages/host/app/services/realm-server.ts

@@ -59,10 +59,10 @@
   "devEngines": {
     "runtime": {
       "name": "node",
-      "version": "24.17.0"
+      "version": "24.22.1"
     }
   },
   "volta": {
-    "node": "24.17.0"
+    "node": "24.22.1"
   }
 }
