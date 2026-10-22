@@ -85,16 +85,18 @@ const Button: TemplateOnlyComponent<Signature> = <template>
         {{yield}}
       </a>
     {{else}}
+      {{! type='button' comes before ...attributes, so it is only the default:
+          a caller's type='submit' wins. }}
       <button
         class={{classNames}}
         aria-label={{if @loading 'loading'}}
+        {{! 'true', not the raw boolean: Glimmer renders a bare true as
+            aria-disabled="", which ARIA reads as false. }}
         aria-disabled={{if @disabled 'true'}}
         disabled={{@disabled}}
         data-test-boxel-button
-        ...attributes
         type='button'
-        {{! 'true', not the raw boolean: Glimmer renders a bare true as
-            aria-disabled="", which ARIA reads as false. }}
+        ...attributes
       >
         {{#if @loading}}
           <LoadingIndicator
