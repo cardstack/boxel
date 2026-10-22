@@ -15,6 +15,7 @@ import {
 } from './dependency-tracker.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import { exportIdentitySymbolKey } from './export-identity-plugin.ts';
+import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler.ts';
 
 type FetchingModule = {
   state: 'fetching';
@@ -308,7 +309,8 @@ function bundledIdentityFor(
 
 // Exported classes compiled by the realm or bundled from base carry their
 // identity as a static member (see export-identity-plugin.ts). While that tag
-// is validated against `identify()`, a disagreement between the two throws.
+// is validated against `identify()`, a disagreement between the two throws, as
+// does a class `identify()` knows that carries no tag.
 // The tag is read as an own property: a subclass inherits its parent's static
 // members, and an inherited tag names the parent, not the subclass.
 //
@@ -334,16 +336,18 @@ function recordExportName(value: Function, name: string): void {
   names.add(name);
 }
 
-// The real URL a spelling of a module resolves to, or undefined for one that
-// resolves to none (a prefix nothing registered), which then matches nothing.
+// The real URL a spelling of a module resolves to. A bare package specifier
+// (`@cardstack/boxel-host/tools/x`) is no URL and no registered prefix; the
+// loader keys a shimmed package under the packages origin, so it resolves
+// there, as `resolveImport` resolves it.
 function realURLHref(
   virtualNetwork: VirtualNetwork,
   moduleIdentifier: string,
-): string | undefined {
+): string {
   try {
     return virtualNetwork.toRealURLHref(moduleIdentifier);
   } catch {
-    return undefined;
+    return new URL(moduleIdentifier, PACKAGES_FAKE_ORIGIN).href;
   }
 }
 
@@ -355,7 +359,16 @@ function assertMatchesIdentityTag(
   let tag = Object.getOwnPropertyDescriptor(value, identityTagKey)?.value as
     | [string, string]
     | undefined;
-  if (!tag || !identity) {
+  if (!identity) {
+    return;
+  }
+  if (!tag) {
+    // Only class syntax is tagged; an exported function has no tag to carry.
+    if (Function.prototype.toString.call(value).startsWith('class')) {
+      throw new Error(
+        `class ${value.name} has no identity tag but identify() says ${identity.module}#${identity.name}`,
+      );
+    }
     return;
   }
   let [module, name] = tag;
@@ -363,7 +376,7 @@ function assertMatchesIdentityTag(
     identity.module === module ||
     (virtualNetwork !== undefined &&
       realURLHref(virtualNetwork, identity.module) ===
-        (realURLHref(virtualNetwork, module) ?? null));
+        realURLHref(virtualNetwork, module));
   let sameName =
     identity.name === name || (exportNames.get(value)?.has(name) ?? false);
   if (!sameModule || !sameName) {
