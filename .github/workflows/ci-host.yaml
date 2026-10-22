@@ -553,9 +553,10 @@ jobs:
     #
     # Pushes to main take on-demand instances (`spot=false`). A spot reclaim
     # kills every shard on the reclaimed instance type at once, and RunsOn's
-    # retry then re-runs only those shards, whose Percy build holds their
-    # snapshots alone; main's builds are auto-approved into the baseline, so
-    # main is where a partial build does harm. Pull requests stay on spot.
+    # retry then re-runs those shards. The re-run completes the run's Percy
+    # build, but on main a build completed by a re-run is rejected (see the
+    # finalize job), so a reclaim on main costs that commit its baseline
+    # build. Pull requests stay on spot.
     runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-host-test-{1}/{2}{3}', github.run_id, matrix.shardIndex, vars.HOST_TEST_RUNS_ON, (github.event_name == 'push' && github.ref == 'refs/heads/main') && '/spot=false' || '') || 'ubuntu-latest' }}
     # Without this a wedged shard inherits GitHub's 360-minute default and
     # holds a runner for six hours doing nothing, which starves the pool for
@@ -1141,6 +1142,55 @@ jobs:
       # Per-shard counts of snapshots attempted vs snapshots the Percy CLI
       # actually received. Any shortfall means this build is missing a
       # snapshot it was supposed to carry — see the tally step in host-test.
+      # Which host shards ran in this attempt, and whether an earlier attempt
+      # already sealed the Percy build. A job that "Re-run failed jobs" carries
+      # over from an earlier attempt keeps that attempt's start time (its
+      # `run_attempt` field reports the new attempt, so it cannot tell them
+      # apart). If the API cannot answer, `ran_shards` is `unknown` and the
+      # steps below fall back to their most cautious reading.
+      - name: Find the host shards this attempt ran
+        id: attempt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          api="repos/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          this_attempt=${{ github.run_attempt }}
+          query() {
+            local try out
+            for try in 1 2 3; do
+              if out=$(gh api --paginate "$@" 2>/dev/null); then
+                printf '%s\n' "$out"
+                return 0
+              fi
+              sleep $((try * 5))
+            done
+            return 1
+          }
+          ran_shards=unknown
+          sealed_before=false
+          if start=$(query "$api/attempts/$this_attempt" --jq .run_started_at) \
+            && jobs=$(query "$api/attempts/$this_attempt/jobs?per_page=100" --jq '.jobs[] | "\(.started_at) \(.name)"'); then
+            ran_shards=$(printf '%s\n' "$jobs" \
+              | awk -v start="$start" '$1 >= start && $2 == "Host" && $3 == "Tests" { n = $4; gsub(/[(,]/, "", n); print n }' \
+              | sort -n | tr '\n' ' ' | sed 's/ $//')
+          fi
+          for ((a = 1; a < this_attempt; a++)); do
+            if ! sealed=$(query "$api/attempts/$a/jobs?per_page=100" --jq '.jobs[] | select(.name == "Finalise Percy") | .steps[] | select(.name == "Finalise Percy") | .conclusion'); then
+              ran_shards=unknown
+              break
+            fi
+            if printf '%s\n' "$sealed" | grep -qx success; then
+              sealed_before=true
+            fi
+          done
+          if [ "$ran_shards" = unknown ]; then
+            echo "::warning::Could not read this run's jobs from the GitHub API, so the Percy tallies are read without knowing which shards ran in this attempt."
+          fi
+          echo "Attempt $this_attempt ran host shards: [${ran_shards}]; an earlier attempt sealed the Percy build: $sealed_before"
+          echo "ran_shards=$ran_shards" >> "$GITHUB_OUTPUT"
+          echo "sealed_before=$sealed_before" >> "$GITHUB_OUTPUT"
+
       - name: Download Percy snapshot tallies
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         continue-on-error: true
@@ -1156,24 +1206,41 @@ jobs:
           taken=0
           shards=0
           expected=0
-          # The Percy build collects every attempt's snapshots, so each shard
-          # counts once, from the latest attempt that uploaded its tally. The
-          # attempt and shard come from the artifact's directory name,
-          # percy-tally-<attempt>-<shard>.
-          tally_files=()
-          seen=" "
-          while read -r attempt shard f; do
-            case "$seen" in *" $shard "*) continue ;; esac
-            seen="$seen$shard "
-            tally_files+=("$f")
-          done < <(
+          this_attempt=${{ github.run_attempt }}
+          ran_shards="${{ steps.attempt.outputs.ran_shards }}"
+          sealed_before="${{ steps.attempt.outputs.sealed_before }}"
+          ran() { case " $ran_shards " in *" $1 "*) return 0 ;; esac; return 1; }
+          # Every tally as "<attempt> <shard> <attempted> <path>", newest
+          # attempt first. The attempt and shard come from the artifact's
+          # directory name, percy-tally-<attempt>-<shard>.
+          index=$(
             for f in /tmp/percy-tallies/percy-tally-*/percy-tally.txt; do
               [ -f "$f" ] || continue
               rest=${f#/tmp/percy-tallies/percy-tally-}
               rest=${rest%/percy-tally.txt}
-              echo "${rest%%-*} ${rest#*-} $f"
+              a=$(sed -n 's/^attempted=//p' "$f")
+              echo "${rest%%-*} ${rest#*-} ${a:-0} $f"
             done | sort -k1,1nr
           )
+          # Each shard counts once. A shard that ran in this attempt counts
+          # only this attempt's tally: if that upload failed, the shard is
+          # missing rather than standing in for itself with a count from a run
+          # that did not produce these snapshots. A shard carried over from an
+          # earlier attempt counts its latest tally, because its snapshots are
+          # in the open build. After a seal, this attempt started a new build,
+          # so earlier tallies belong to another build and none of them count.
+          tally_files=()
+          seen=" "
+          while read -r attempt shard _ f; do
+            [ -n "$f" ] || continue
+            case "$seen" in *" $shard "*) continue ;; esac
+            if [ "$ran_shards" != unknown ] && [ "$attempt" -lt "$this_attempt" ] \
+              && { [ "$sealed_before" = true ] || ran "$shard"; }; then
+              continue
+            fi
+            seen="$seen$shard "
+            tally_files+=("$f")
+          done <<< "$index"
           # download-artifact puts each artifact in a directory named for it,
           # except when the pattern matches only one: that one is extracted
           # straight into the path.
@@ -1214,17 +1281,35 @@ jobs:
           echo "attempted=$attempted" >> "$GITHUB_OUTPUT"
           echo "taken=$taken" >> "$GITHUB_OUTPUT"
           echo "marker_broken=$marker_broken" >> "$GITHUB_OUTPUT"
-          # In a later attempt, an earlier attempt of this run either left
-          # the build open because a shard failed, and this attempt re-ran it,
-          # or sealed a build and this one started a new build. Percy keeps the
-          # first copy of a snapshot name, so in the first case the build can
-          # still hold a snapshot that shard took in the failed attempt, of a
-          # render that may be why the test failed. The two cases are not told
-          # apart: on `main` a re-run is rare, and rejecting a complete
-          # re-run build only means the next run's build becomes the baseline.
+          # Percy keeps the first copy of a snapshot name. When a re-run adds
+          # to a build an earlier attempt left open, that build can still hold
+          # a snapshot a re-run shard took in the attempt where it failed, of a
+          # render that may be why the test failed. So the flag is set when a
+          # shard that ran in this attempt also ran earlier and took snapshots
+          # there, or ran earlier without leaving a tally (it was killed or
+          # cancelled, and may have uploaded some). A shard that failed before
+          # it took any snapshot, such as a stack that would not boot, leaves
+          # a tally of zero and does not set it. After a seal this attempt
+          # started a new build, which is flagged only when it holds fewer
+          # shards than the suite has. Without the jobs API, every later
+          # attempt is flagged.
           completed_by_rerun=false
-          if [ "${{ github.run_attempt }}" -gt 1 ]; then
-            completed_by_rerun=true
+          if [ "$this_attempt" -gt 1 ]; then
+            if [ "$ran_shards" = unknown ]; then
+              completed_by_rerun=true
+            elif [ "$sealed_before" = true ]; then
+              ran_count=$(echo $ran_shards | wc -w | tr -d ' ')
+              if [ -n "$ran_shards" ] && [ "$ran_count" -lt "$expected" ]; then
+                completed_by_rerun=true
+              fi
+            else
+              for s in $ran_shards; do
+                earlier=$(printf '%s\n' "$index" | awk -v s="$s" -v now="$this_attempt" '$2 == s && $1 < now { found = 1; if ($3 > 0) took = 1 } END { print (found ? (took ? "took" : "none") : "missing") }')
+                if [ "$earlier" != none ]; then
+                  completed_by_rerun=true
+                fi
+              done
+            fi
           fi
           echo "completed_by_rerun=$completed_by_rerun" >> "$GITHUB_OUTPUT"
           # The tally upload does not fail its shard (see host-test), so a
@@ -1236,7 +1321,9 @@ jobs:
           # run. On main this is the one case where a lost snapshot can reach
           # the baseline unrejected; rejecting on a missing tally would fail
           # builds on the same infrastructure noise this exists to absorb.
-          if [ "$shards" -eq 0 ]; then
+          if [ -z "$ran_shards" ] && [ "$sealed_before" = true ]; then
+            : # A re-run of this job alone; finalize is skipped, see below.
+          elif [ "$shards" -eq 0 ]; then
             echo "::notice::No Percy snapshot tallies were uploaded, so snapshot loss could not be assessed for this build. Either no shard got far enough to write one, which fails host-test and leaves the build open, or every tally upload failed."
           elif [ "$shards" -lt "$expected" ]; then
             echo "::warning::Only $shards of $expected Percy snapshot tallies were uploaded, so snapshot loss on the other $((expected - shards)) shard(s) could not be assessed for this build. A failed tally upload does not fail its shard; look for a failed 'Upload Percy snapshot tally' step on the shards with no tally."
@@ -1246,9 +1333,17 @@ jobs:
       # sealing a partial snapshot set. "Re-run failed jobs" reuses the run's
       # nonce, so the shards that run again add their snapshots to that build,
       # and the attempt in which every shard has passed seals it.
+      #
+      # When no host shard ran in this attempt and an earlier attempt already
+      # sealed the build, this is a re-run of this job alone (for example
+      # after the reject step failed). Finalizing again would make Percy
+      # start a new build under the same nonce and seal it empty, and on a
+      # pull request that empty build would become the commit's Percy status.
       - name: Finalise Percy
         id: finalize
-        if: ${{ needs.host-test.result == 'success' }}
+        if: >-
+          needs.host-test.result == 'success'
+          && !(steps.attempt.outputs.ran_shards == '' && steps.attempt.outputs.sealed_before == 'true')
         run: |
           set -eo pipefail
           npx percy build:finalize 2>&1 | tee /tmp/percy-finalize.log
@@ -1266,6 +1361,11 @@ jobs:
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}
+
+      - name: Note that the Percy build was already sealed
+        if: ${{ needs.host-test.result == 'success' && steps.attempt.outputs.ran_shards == '' && steps.attempt.outputs.sealed_before == 'true' }}
+        run: |
+          echo "::notice::No host shard ran in attempt ${{ github.run_attempt }}, and an earlier attempt already sealed this run's Percy build, so finalize was skipped. Finalizing again would create an empty Percy build."
 
       - name: Note that the Percy build was left open
         if: ${{ needs.host-test.result != 'success' }}
@@ -1292,14 +1392,14 @@ jobs:
       # exits non-zero when either is missing — so the step runs only when
       # both are present and otherwise skips itself rather than failing the
       # job.
-      # Both triggers are scoped to `main`. Rejecting exists to stop a build becoming a baseline, and
-      # only `main` builds are auto-approved into that role — so on a PR a
-      # reject protects nothing. It also cannot be undone (the reviews
-      # endpoint answers 409 for any later action on a rejected build), and it
-      # would take the snapshots that *did* upload out of review along with
-      # the missing one. Losing a snapshot is far more common than losing a
-      # shard, so applying it to PRs too would block review on a large share
-      # of builds for no protective gain.
+      # Both triggers are scoped to `main`. Rejecting exists to stop a build
+      # becoming a baseline, and only `main` builds are auto-approved into
+      # that role, so on a pull request a reject protects nothing. It also
+      # cannot be undone (the reviews endpoint answers 409 for any later
+      # action on a rejected build), and it would take every snapshot out of
+      # review, including the ones the reject is not about. On a pull request
+      # a reviewer sees the build and can judge a snapshot that looks wrong;
+      # on `main` nobody does before it becomes the baseline.
       - name: Reject the Percy build when its snapshot set is incomplete
         if: >-
           (steps.tally.outputs.lost != '0' || steps.tally.outputs.completed_by_rerun == 'true')
