@@ -5,6 +5,7 @@ import {
   cliCallback,
   handoffFields,
   handToCli,
+  isCliCallback,
 } from '../src/security/cli-handoff.js';
 import {
   asSentence,
@@ -119,6 +120,45 @@ describe('handToCli', () => {
     );
     assert.deepEqual(appended, [form], 'the form is in the page');
     assert.equal(submitted, 1, 'it is submitted once');
+  });
+});
+
+describe('a hand-off target that is not the loopback listener', () => {
+  const session = { token: 't', user: '@u:example.test', expiresAt: 'x' };
+
+  test('every callback cliCallback makes is one', () => {
+    for (let port of ['1', '51234', '65535']) {
+      assert.ok(isCliCallback(cliCallback(params({ port, state: STATE }))));
+    }
+  });
+
+  test('is refused before anything is posted', () => {
+    let created = 0;
+    let doc = {
+      createElement() {
+        created++;
+        return {};
+      },
+      body: { append() {} },
+    } as unknown as Document;
+    for (let callback of [
+      { url: 'https://evil.example/callback', state: STATE },
+      { url: 'http://127.0.0.1.evil.example:51234/callback', state: STATE },
+      { url: 'http://localhost:51234/callback', state: STATE },
+      { url: 'http://127.0.0.1:51234/elsewhere', state: STATE },
+      { url: 'http://127.0.0.1:51234/callback?x=1', state: STATE },
+      { url: 'http://127.0.0.1:70000/callback', state: STATE },
+      { url: 'http://127.0.0.1:51234/callback', state: 'short' },
+      { url: 'http://127.0.0.1:51234/callback' },
+      undefined,
+    ]) {
+      assert.throws(
+        () => handToCli(callback as any, session, doc),
+        /names no listener on this machine/,
+        JSON.stringify(callback),
+      );
+    }
+    assert.equal(created, 0, 'no form is made');
   });
 });
 

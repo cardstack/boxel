@@ -21,7 +21,6 @@ import {
   type MockServers,
 } from '../helpers/mock-servers.ts';
 import { assertEnterSubmits } from '../helpers/implicit-submission.ts';
-import { setupVisiblePage } from '../helpers/visible-page.ts';
 
 const STORAGE_KEY = 'boxel-secure-session';
 const PASSWORD = 'mypassword1!';
@@ -85,7 +84,6 @@ async function fillRegistration(password = PASSWORD) {
 
 module('Integration | register', function (hooks) {
   setupRenderingTest(hooks);
-  setupVisiblePage(hooks);
   setupPageAddress(hooks);
   let servers = setupMockServers(hooks);
   let submitted = setupFormSubmits(hooks);

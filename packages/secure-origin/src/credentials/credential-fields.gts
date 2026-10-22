@@ -96,6 +96,17 @@ export default class CredentialFields extends Component<Signature> {
   private input = (name: string) => (value: string) =>
     this.frame.input(name, value);
 
+  // A value can reach a field with no `input` event, from a filler that sets
+  // it and dispatches only `change`. The frame takes it from `change` too,
+  // but only when it differs from what the frame holds, so the `change` that
+  // follows typing doesn't clear an error.
+  private change = (name: string) => (event: Event) => {
+    let { value } = event.target as HTMLInputElement;
+    if (value !== this.frame.value(name)) {
+      this.frame.input(name, value);
+    }
+  };
+
   private blur = (name: string) => () => this.frame.blur(name);
 
   private keydown = (event: Event) => {
@@ -152,6 +163,7 @@ export default class CredentialFields extends Component<Signature> {
               @errorMessage={{entry.error}}
               @onInput={{this.input entry.name}}
               @onBlur={{this.blur entry.name}}
+              @onChange={{this.change entry.name}}
               name={{entry.field.inputName}}
               {{on 'keydown' this.keydown}}
               {{testAttribute entry.field.testId}}
@@ -178,6 +190,7 @@ export default class CredentialFields extends Component<Signature> {
               @errorMessage={{entry.error}}
               @onInput={{this.input entry.name}}
               @onBlur={{this.blur entry.name}}
+              @onChange={{this.change entry.name}}
               name={{entry.field.inputName}}
               {{on 'keydown' this.keydown}}
               {{testAttribute entry.field.testId}}
@@ -200,6 +213,7 @@ export default class CredentialFields extends Component<Signature> {
               @errorMessage={{entry.error}}
               @onInput={{this.input entry.name}}
               @onBlur={{this.blur entry.name}}
+              @onChange={{this.change entry.name}}
               name={{entry.field.inputName}}
               {{on 'keydown' this.keydown}}
               {{testAttribute entry.field.testId}}

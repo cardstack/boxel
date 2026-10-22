@@ -18,7 +18,6 @@ import {
 import ResetPassword from '../../src/shell/password-reset/reset-password.gts';
 import { setupMockServers, setupPageAddress } from '../helpers/mock-servers.ts';
 import { assertEnterSubmits } from '../helpers/implicit-submission.ts';
-import { setupVisiblePage } from '../helpers/visible-page.ts';
 
 const CLI = {
   url: 'http://127.0.0.1:4567/callback',
@@ -31,7 +30,6 @@ const error = (name: string) =>
 
 module('Integration | password reset', function (hooks) {
   setupRenderingTest(hooks);
-  setupVisiblePage(hooks);
   setupPageAddress(hooks);
   let servers = setupMockServers(hooks);
   let assigned: string[] = [];

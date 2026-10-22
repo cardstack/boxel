@@ -114,10 +114,6 @@ module('Integration | sign-in', function (hooks) {
   }
 
   hooks.beforeEach(function () {
-    // The suite's build holds every page's styles, the credential fields'
-    // too, which hide the document until the app has styled it; a hidden
-    // element can't take focus.
-    document.documentElement.classList.add('styled');
     originalURL = window.location.href;
     navigations = [];
     handoffs = [];
@@ -141,7 +137,6 @@ module('Integration | sign-in', function (hooks) {
   });
 
   hooks.afterEach(function () {
-    document.documentElement.classList.remove('styled');
     server?.restore();
     server = undefined;
     Object.assign(navigation, originalNavigation);
@@ -580,6 +575,28 @@ module('Integration | sign-in', function (hooks) {
       await waitUntil(() => handoffs.length > 0);
       assert.strictEqual(handoffs[0].action, 'http://127.0.0.1:51234/callback');
       assert.strictEqual(localStorage.getItem('boxel-secure-session'), null);
+    });
+
+    test('a CLI sign-in whose kept listener is not on this machine goes nowhere', async function (assert) {
+      pendingGoogleSignIn({
+        client: 'cli',
+        cli: { url: 'https://evil.example/callback', state: STATE },
+      });
+      serve(exchanges(SIGNED_IN));
+      visitShell('?state=google-state&code=a-code', '/secure/google-callback');
+      await render(GoogleCallback);
+      await waitFor('[data-test-secure-error]');
+      assert.strictEqual(handoffs.length, 0, 'nothing is posted');
+      assert.strictEqual(
+        localStorage.getItem('boxel-secure-session'),
+        null,
+        'nor kept as the window’s own session',
+      );
+      assert
+        .dom('[data-test-secure-error]')
+        .hasText(
+          'This sign-in link is not complete. Run the command in your terminal again to get a new link.',
+        );
     });
 
     test('a failed exchange says so, and starts again where the sign-in began', async function (assert) {

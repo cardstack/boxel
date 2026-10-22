@@ -1,6 +1,6 @@
 ---
 name: secure-session
-description: Operate and diagnose sessions signed in on the secure origin — the `secureSession` claim on a realm-server session, the `secure_sessions` table behind it, how the secure window and `boxel keys sign-in` get one (a password checked by a Matrix user-interactive auth check the realm server drives through `account/3pid/add`, or the realm server's own Google sign-in returning to the secure origin), and what it gates (minting key write tickets). Use when a user can't sign in to the secure window or the CLI's `boxel keys sign-in`, when a key write ticket is refused with "issued only to a session signed in on the secure origin", when reading `secure_sessions`, when Synapse's admin credentials or the Google client change, when a password change or reset should have ended a secure session, or when changing `lib/secure-session.ts`, `lib/google-sign-in.ts`, `handlers/handle-secure-session.ts`, `packages/secure-origin/src/shell/sign-in/`, `packages/secure-origin/src/shell/password-reset.js` or the credential fields' `set-password`.
+description: Operate and diagnose sessions signed in on the secure origin — the `secureSession` claim on a realm-server session, the `secure_sessions` table behind it, how the secure window and `boxel keys sign-in` get one (a password checked by a Matrix user-interactive auth check the realm server drives through `account/3pid/add`, or the realm server's own Google sign-in returning to the secure origin), and what it gates (minting key write tickets). Use when a user can't sign in to the secure window or the CLI's `boxel keys sign-in`, when a key write ticket is refused with "issued only to a session signed in on the secure origin", when reading `secure_sessions`, when Synapse's admin credentials or the Google client change, when a password change or reset should have ended a secure session, or when changing `lib/secure-session.ts`, `lib/google-sign-in.ts`, `handlers/handle-secure-session.ts`, `packages/secure-origin/src/shell/sign-in/`, `packages/secure-origin/src/shell/password-reset/`, `packages/secure-origin/src/security/registration.ts` or the credential fields' `set-password`.
 ---
 
 # Secure sessions (operators)
@@ -139,7 +139,8 @@ out, with `registrationToken`, the invite code it registered with, recorded on
 its realm-server user. That is how an account created on the secure origin's
 `register` page signs in for the first time: the page registers with the Matrix
 server itself, signs that registration's Matrix session out, and signs in here
-with the new password.
+with the new password (`Registration#signIn` in
+`packages/secure-origin/src/security/registration.ts`).
 
 Failed password sign-ins are limited per account (`lib/sign-in-limiter.ts`)
 with the Matrix server's default limit on failed logins to the app

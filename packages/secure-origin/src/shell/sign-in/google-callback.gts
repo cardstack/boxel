@@ -10,6 +10,7 @@ import {
   readConfig,
   storeSession,
 } from '../../security/session.js';
+import { isCliCallback } from '../../security/cli-handoff.js';
 import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
 import LoadingIndicator from '../../components/loading-indicator.gts';
@@ -143,7 +144,18 @@ export default class GoogleCallback extends Component {
       return;
     }
     let { session, resume } = result;
-    if (resume?.client === 'cli' && resume.cli) {
+    if (resume?.client === 'cli') {
+      // A session signed in for the CLI goes to the CLI's listener or
+      // nowhere: never kept as this window's own.
+      if (!isCliCallback(resume.cli)) {
+        this.page.state = {
+          name: 'failed',
+          error:
+            'This sign-in link is not complete. Run the command in your terminal again to get a new link.',
+          startAgain: modeURL('sign-in'),
+        };
+        return;
+      }
       this.page.state = {
         name: 'handing-to-cli',
         callback: resume.cli,
