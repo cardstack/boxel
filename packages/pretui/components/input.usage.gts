@@ -2,7 +2,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
-import { Input } from './input';
+import { Input as PretuiInput } from './input';
 import { Field } from './field';
 import { Select } from './select';
 
@@ -71,17 +71,17 @@ export class InputUsage extends Component {
     >
       <:example>
         <Field @label={{this.label}} as |controlId|>
-          <Input
+          <PretuiInput
             @controlId={{controlId}}
             @value={{this.value}}
             @type={{this.type}}
-            placeholder={{this.placeholder}}
+            @placeholder={{this.placeholder}}
             @invalid={{this.invalid}}
-            disabled={{this.disabled}}
-            readonly={{this.readonly}}
+            @disabled={{this.disabled}}
+            @readonly={{this.readonly}}
             @helperText={{this.helperText}}
             @errorMessage={{this.errorMessage}}
-            required={{this.required}}
+            @required={{this.required}}
             @optional={{this.optionalArg}}
             @onInput={{this.setValue}}
           />
@@ -92,11 +92,11 @@ export class InputUsage extends Component {
         {{! Input and Select share one field style; disabled applies to both }}
         <div class='pretui-demo-pair' data-test-input-select-pair>
           <Field @label='Input' as |controlId|>
-            <Input
+            <PretuiInput
               @controlId={{controlId}}
               @type={{this.type}}
-              placeholder={{this.placeholder}}
-              disabled={{this.disabled}}
+              @placeholder={{this.placeholder}}
+              @disabled={{this.disabled}}
             />
           </Field>
           <Field @label='Select' as |controlId|>

@@ -173,6 +173,7 @@ export default class BoxelInput extends Component<Signature> {
           class={{cn
             'boxel-input'
             has-validation=this.hasValidation
+            has-validation-icon=(bool this.validationIcon)
             invalid=this.isInvalid
             search=this.isSearch
             loading=(eq @state 'loading')
@@ -285,7 +286,9 @@ export default class BoxelInput extends Component<Signature> {
             --boxel-input-height,
             var(--boxel-form-control-height)
           );
-          padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+          padding-block: var(--boxel-sp-xs);
+          padding-inline: var(--boxel-sp-sm)
+            var(--boxel-input-padding-inline-end, 0);
           background-color: var(--background);
           color: var(--foreground);
           border: 1px solid var(--border);
@@ -304,7 +307,7 @@ export default class BoxelInput extends Component<Signature> {
         }
 
         /* keep text out from under the validation icon */
-        .boxel-input.has-validation {
+        .boxel-input.has-validation-icon {
           padding-inline-end: var(--_icon-full-length);
         }
 
@@ -415,9 +418,8 @@ export default class BoxelInput extends Component<Signature> {
           color: var(--search-input-color);
           padding-top: var(--boxel-sp-3xs);
           padding-bottom: var(--boxel-sp-3xs);
-          /* to account for the icon being on the left */
-          padding-right: unset;
-          padding-left: var(--boxel-sp-2xl); /* leave room for icon */
+          /* leave room for the icon at the start */
+          padding-inline-start: var(--boxel-sp-2xl);
         }
 
         .boxel-input--bottom-flat {

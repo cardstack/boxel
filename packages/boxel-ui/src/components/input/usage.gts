@@ -243,6 +243,11 @@ export default class InputUsage extends Component {
           @description='Border color on hover (defaults to currentColor)'
         />
         <Css.Basic
+          @name='--boxel-input-padding-inline-end'
+          @type='padding'
+          @description='End inset while no validation icon shows (defaults to 0)'
+        />
+        <Css.Basic
           @name='--boxel-input-disabled-opacity'
           @type='opacity'
           @description='Opacity of a disabled field (defaults to 0.5)'

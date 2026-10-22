@@ -167,17 +167,16 @@ export class Field extends Component<FieldSignature> {
         }
         /* boxel-ui-wrapped controls: the invalid dress travels through the
            token channel — repoint the wrapper's --border/--background and the
-           inner BoxelInput re-dresses itself; no CSS reaches boxel markup. */
-        /* Input's edge is the -ink, as on Autocomplete: the fill hue misses
-           the 3:1 a field boundary needs. Textarea shares Input's wrapper
-           class but keeps the dress below. */
-        .pretui-fieldw[data-invalid] :deep(.pretui-inputwrap:not(.pretui-textareawrap)) {
-          --border: var(--destructive-ink);
-        }
-        .pretui-fieldw[data-invalid] :deep(.pretui-textareawrap),
+           inner BoxelInput re-dresses itself; no CSS reaches boxel markup.
+           A control sets --pretui-invalid-border/-background on its wrapper
+           to choose its own dress. */
+        .pretui-fieldw[data-invalid] :deep(.pretui-inputwrap),
         .pretui-fieldw[data-invalid] :deep(.pretui-boxelwrap) {
-          --border: var(--destructive);
-          --background: color-mix(in oklch, var(--destructive) 4%, var(--field));
+          --border: var(--pretui-invalid-border, var(--destructive));
+          --background: var(
+            --pretui-invalid-background,
+            color-mix(in oklch, var(--destructive) 4%, var(--field))
+          );
         }
       }
     </style>

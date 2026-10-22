@@ -95,15 +95,15 @@
       ]
     },
     "shared.css": {
-      "bytes": 4698,
+      "bytes": 5016,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/51537f9ada.css"
+          "module": "src/components/43ad77275b.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/8b735c7b1e.css"
+          "module": "src/components/51537f9ada.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -115,12 +115,12 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/e6384ada8e.css"
+          "module": "src/components/e1da427584.css"
         }
       ]
     },
     "shared.js": {
-      "bytes": 263176,
+      "bytes": 263287,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -150,7 +150,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/input.gts",
-          "size": 2951
+          "size": 3075
         },
         {
           "package": "@cardstack/secure-origin",
