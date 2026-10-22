@@ -58,6 +58,7 @@ jobs:
       bench-amd: ${{ steps.filter.outputs.bench-amd }}
       bench-realm: ${{ steps.filter.outputs.bench-realm }}
       deployed-realms: ${{ steps.filter.outputs.deployed-realms }}
+      secure-origin: ${{ steps.filter.outputs.secure-origin }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
@@ -155,6 +156,9 @@ jobs:
             # deploy even when it touches no other boxel package. The gallery
             # realm's film app is built from choreo-film-app, which compiles
             # choreo and glimmer-motion from source.
+            secure-origin:
+              - *shared
+              - 'packages/secure-origin/**'
             deployed-realms:
               - 'packages/choreo-gallery/realm/**'
               - 'packages/choreo-film-app/**'
@@ -661,6 +665,25 @@ jobs:
   # golden fixtures. It compiles glimmer-motion and Choreo from source through
   # the `developing:choreo` export condition. Then the realm build `pnpm push`
   # makes, so a change that breaks it fails here rather than at deploy.
+  # The secure origin's pages: the credential frame's protocol and the
+  # components each page draws, run in Chrome against a development build of
+  # the package with its tests entry.
+  secure-origin-test:
+    name: Secure Origin Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.secure-origin == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: secure-origin-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run test suite
+        run: pnpm test:components
+        working-directory: packages/secure-origin
+
   choreo-film-app-test:
     name: Choreo Film App Tests
     needs: [change-check]

@@ -47,7 +47,7 @@
       "bytes": 715
     },
     "credentials.js": {
-      "bytes": 277262,
+      "bytes": 277257,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -77,7 +77,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/input.gts",
-          "size": 3766
+          "size": 3771
         },
         {
           "package": "@cardstack/secure-origin",
@@ -97,7 +97,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/credentials/credential-fields.gts",
-          "size": 5685
+          "size": 5696
         },
         {
           "package": "@cardstack/secure-origin",
@@ -547,7 +547,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/index-DaCZcoCY.js",
-          "size": 61674
+          "size": 61672
         },
         {
           "package": "ember-source@6.10.1",
