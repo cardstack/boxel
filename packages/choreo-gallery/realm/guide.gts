@@ -50,7 +50,7 @@ class Summary extends Component<typeof Guide> {
   <template>
     <ChoreoRoot class='guide-summary'>
       <p class='guide-summary-kicker'>Choreo guide</p>
-      <p class='guide-summary-title'>{{@model.cardTitle}}</p>
+      <h3 class='guide-summary-title'>{{@model.cardTitle}}</h3>
       {{#if @model.cardDescription}}
         <p class='guide-summary-lede'>{{@model.cardDescription}}</p>
       {{/if}}
@@ -63,10 +63,6 @@ class Summary extends Component<typeof Guide> {
         height: 100%;
         padding: 16px 18px;
         overflow: hidden;
-      }
-
-      .guide-summary p {
-        margin: 0;
       }
 
       .guide-summary-kicker {
@@ -92,6 +88,32 @@ class Summary extends Component<typeof Guide> {
         font-size: 13px;
         line-height: 1.5;
         color: var(--ink-dim);
+      }
+
+      /* the smaller fitted sizes keep the title, and drop the lede and
+         then the kicker as they run out of height */
+      @container fitted-card (height < 115px) {
+        .guide-summary-lede {
+          display: none;
+        }
+      }
+
+      @container fitted-card (height < 65px) {
+        .guide-summary {
+          justify-content: center;
+          padding: 6px 12px;
+        }
+
+        .guide-summary-kicker {
+          display: none;
+        }
+
+        .guide-summary-title {
+          overflow: hidden;
+          font-size: 0.95rem;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
       }
     </style>
   </template>
