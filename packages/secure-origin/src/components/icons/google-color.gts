@@ -1,6 +1,5 @@
 // boxel-ui's GoogleColor icon: Google's "G". The paths are boxel-ui's own,
-// copied in; the realm server's `secure-origin-test.ts` checks them against
-// boxel-ui's.
+// copied in.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 interface Signature {

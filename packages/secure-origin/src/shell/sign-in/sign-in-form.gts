@@ -1,9 +1,7 @@
-// The app's sign-in page: the Google button when this server offers Google,
-// then an email address or username and a password, the link to reset a
-// forgotten password, and the link to create an account. Everything here is
+// The app's sign-in page on the secure origin: the sign-in screen with an
+// email address or username and a password typed into it. Everything here is
 // typed into, and sent from, this window; a session it signs in is handed to
 // `@onSignedIn`, never to the page that opened the window.
-import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
@@ -15,11 +13,10 @@ import {
 } from '../../security/session.js';
 import type { Session } from '../../security/session.js';
 import type { CliCallback } from '../../security/cli-handoff.js';
-import AuthButton from '../../components/auth-button.gts';
 import AuthFormField from '../../components/auth-form-field.gts';
-import Button from '../../components/button.gts';
-import GoogleColor from '../../components/icons/google-color.gts';
 import BoxelInput from '../../components/input.gts';
+import { bool } from '../../helpers/truth-helpers.ts';
+import SignInScreen from '../../screens/sign-in.gts';
 import { navigation } from '../navigation.js';
 import { asSentence, signInFailed } from '../sign-in-copy.js';
 import { cliParams, modeURL } from '../urls.js';
@@ -41,36 +38,18 @@ interface Signature {
 
 export default class SignInForm extends Component<Signature> {
   <template>
-    <span
-      class='title'
-      role='heading'
-      aria-level='1'
-      data-test-secure-title
-      data-test-secure-sign-in-title
-    >Sign in to your Boxel Account</span>
-    {{#if this.state.google}}
-      <p class='subtitle' data-test-secure-sign-in-subtitle>Use Google to get
-        started in one tap - we'll create your Boxel account if you don't have
-        one yet.</p>
-    {{/if}}
-    <form novalidate data-test-secure-sign-in-form {{on 'submit' this.submit}}>
-      {{#if this.state.google}}
-        <AuthButton
-          type='button'
-          class='google-button'
-          @disabled={{this.state.startingGoogle}}
-          @loading={{this.state.startingGoogle}}
-          data-test-secure-google
-          {{on 'click' this.startGoogle}}
-        >
-          <GoogleColor class='google-g' aria-hidden='true' />
-          Continue with Google
-        </AuthButton>
-        <div class='divider' aria-hidden='true'>
-          <span class='divider-label' data-test-secure-divider-label>or use your
-            email</span>
-        </div>
-      {{/if}}
+    <SignInScreen
+      @google={{bool this.state.google}}
+      @googleSubtitle={{bool this.state.google}}
+      @startingGoogle={{this.state.startingGoogle}}
+      @submitDisabled={{this.submitDisabled}}
+      @submitting={{this.state.submitting}}
+      @error={{this.state.error}}
+      @onSubmit={{this.submit}}
+      @onGoogle={{this.startGoogle}}
+      @onForgotPassword={{this.forgotPassword}}
+      @onRegister={{this.register}}
+    >
       <AuthFormField
         @label='Email Address or Username'
         data-test-secure-field='username'
@@ -98,113 +77,7 @@ export default class SignInForm extends Component<Signature> {
           {{autofocus this.focusPassword}}
         />
       </AuthFormField>
-      <Button
-        type='button'
-        class='forgot-password'
-        @kind='link-muted'
-        @size='extra-small'
-        data-test-secure-forgot-password
-        {{on 'click' this.forgotPassword}}
-      >Forgot password?</Button>
-      <AuthButton
-        type='submit'
-        @variant='primary'
-        @disabled={{this.submitDisabled}}
-        @loading={{this.state.submitting}}
-        data-test-secure-password-submit
-      >Sign In</AuthButton>
-      {{#if this.state.error}}
-        <div class='error' role='alert' data-test-secure-error>
-          {{this.state.error}}
-        </div>
-      {{/if}}
-      <p class='register-prompt'>
-        <span
-          class='register-prompt-text'
-          data-test-secure-register-prompt
-        >Don't have an account?</span>
-        <Button
-          type='button'
-          class='register-link'
-          @kind='link-primary'
-          data-test-secure-register
-          {{on 'click' this.register}}
-        >Create a new Boxel account</Button>
-      </p>
-    </form>
-
-    <style scoped>
-      form {
-        display: flex;
-        flex-direction: column;
-      }
-      .title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-        margin-bottom: var(--boxel-sp-sm);
-        padding: 0;
-      }
-      .subtitle {
-        margin: 0 0 var(--boxel-sp-lg);
-        color: var(--foreground);
-        font: var(--boxel-font-sm);
-        line-height: 1.4;
-      }
-      .forgot-password {
-        --host-outline-offset: 2px;
-        margin-top: var(--boxel-sp-4xs);
-        margin-bottom: var(--boxel-sp-lg);
-        margin-left: auto;
-      }
-      .google-button {
-        margin-top: var(--boxel-sp-sm);
-        gap: var(--boxel-sp-xs);
-      }
-      .google-g {
-        width: 1.125rem;
-        height: 1.125rem;
-        flex-shrink: 0;
-      }
-      .divider {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        margin: var(--boxel-sp-lg) 0 var(--boxel-sp-xs);
-      }
-      .divider::before,
-      .divider::after {
-        content: '';
-        flex: 1;
-        height: 1px;
-        background-color: rgba(255, 255, 255, 0.18);
-      }
-      .divider-label {
-        color: var(--muted-foreground);
-        font: 600 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-lg);
-        text-transform: uppercase;
-      }
-      .error {
-        color: var(--boxel-error-100);
-        padding: 0;
-        font: 500 var(--boxel-font-xs);
-        margin: var(--boxel-sp-2xs) auto 0 auto;
-      }
-      .register-prompt {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: var(--boxel-sp-3xs);
-        margin: var(--boxel-sp) 0 0;
-        font: 500 var(--boxel-font-sm);
-      }
-      .register-prompt-text {
-        color: var(--muted-foreground);
-      }
-      .register-link {
-        --host-outline-offset: 2px;
-      }
-    </style>
+    </SignInScreen>
   </template>
 
   private state = trackedObject({

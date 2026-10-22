@@ -192,9 +192,9 @@ keep it readable without knowing the framework, and testable on its own.
 
 Until the package exists, a new secure-origin screen waits for it, since
 adding one to the plain pages would add a gap. That orders new secure-window
-screens, such as key management, after the package scaffold. Until the host
-renders its screens from the package (§1.9), a change to the host's sign-in
-screens still needs the same change in the package.
+screens, such as key management, after the package scaffold. The host renders
+its sign-in screens from the package (§1.9), so a change to them is made once,
+in the package, and reaches both origins.
 
 ## 5. Sources
 

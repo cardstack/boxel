@@ -4,12 +4,12 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import AuthButton from '@cardstack/secure-origin/components/auth-button.gts';
+import AuthContainer from '@cardstack/secure-origin/components/auth-container.gts';
+import Button from '@cardstack/secure-origin/components/button.gts';
+import GoogleColor from '@cardstack/secure-origin/components/icons/google-color.gts';
 import { dropTask, restartableTask } from 'ember-concurrency';
-
 import window from 'ember-window-mock';
-
-import { Button } from '@cardstack/boxel-ui/components';
-import { GoogleColor } from '@cardstack/boxel-ui/icons';
 
 import {
   CLI_AUTH_TIMEOUT_MS,
@@ -22,8 +22,6 @@ import { CredentialFields } from '@cardstack/host/lib/credential-fields';
 import { resetPasswordParamsFrom } from '@cardstack/host/lib/reset-password-link';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import AuthButton from './auth-button';
-import AuthContainer from './auth-container';
 import CredentialFieldsFrame from './credential-fields';
 import ForgotPassword from './forgot-password';
 import RegisterUser from './register-user';

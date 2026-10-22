@@ -1,9 +1,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import AuthContainer from '@cardstack/secure-origin/components/auth-container.gts';
 
-import AuthContainer from './auth-container';
+import { Button } from '@cardstack/boxel-ui/components';
 
 interface Signature {
   Args: {

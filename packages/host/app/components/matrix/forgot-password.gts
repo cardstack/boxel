@@ -1,17 +1,20 @@
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import {
+  ForgotPasswordForm,
+  ResetEmailSent,
+  ResetPasswordDone,
+  ResetPasswordForm,
+} from '@cardstack/secure-origin/screens/password-reset.gts';
 import { restartableTask } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -22,8 +25,6 @@ import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import AuthButton from './auth-button';
-import AuthFormField from './auth-form-field';
 import CredentialFieldsFrame from './credential-fields';
 
 import type { AuthMode } from './auth';
@@ -50,131 +51,36 @@ export default class ForgotPassword extends Component<Signature> {
     {{#if
       (or (eq this.state.type 'initial') (eq this.state.type 'validateEmail'))
     }}
-      <span class='title'>Forgot your password?</span>
-      <p class='info'>Enter email to receive a reset password link.</p>
-      <AuthFormField @label='Email Address'>
-        <BoxelInput
-          data-test-email-field
-          type='text'
-          name='email'
-          autocomplete='email'
-          @errorMessage={{this.emailError}}
-          @state={{this.emailInputState}}
-          @value={{this.email}}
-          @onInput={{this.setEmail}}
-        />
-      </AuthFormField>
-      <div class='button-wrapper'>
-        <AuthButton
-          data-test-reset-your-password-btn
-          @variant='primary'
-          @disabled={{this.isForgotPasswordBtnDisabled}}
-          @loading={{this.sendEmailValidationTask.isRunning}}
-          {{on 'click' this.sendEmailValidation}}
-        >Reset Your Password</AuthButton>
-        <div>or</div>
-        <AuthButton
-          data-test-cancel-reset-password-btn
-          @variant='secondary'
-          {{on 'click' (fn @setMode 'login')}}
-        >Back to login</AuthButton>
-      </div>
+      <ForgotPasswordForm
+        @email={{this.email}}
+        @emailError={{this.emailError}}
+        @submitDisabled={{this.isForgotPasswordBtnDisabled}}
+        @submitting={{this.sendEmailValidationTask.isRunning}}
+        @onEmailInput={{this.setEmail}}
+        @onSubmit={{this.sendEmailValidation}}
+        @onSignIn={{fn @setMode 'login'}}
+      />
     {{else if (eq this.state.type 'waitForEmailValidation')}}
-      <span class='title' data-test-email-validation>Please check your email to
-        reset your password</span>
-      <ul class='email-validation-instruction'>
-        {{! @glint-ignore Property 'email' should be exist on 'waitForEmailValidation' type }}
-        <li>We've sent an email to <b>{{this.state.email}}</b></li>
-        <li>Click on the link within the email to reset your password</li>
-      </ul>
-      <AuthButton
-        data-test-resend-validation-btn
-        @variant='primary'
-        @disabled={{this.sendEmailValidationTask.isRunning}}
-        @loading={{this.sendEmailValidationTask.isRunning}}
-        {{on 'click' this.resendEmailValidation}}
-      >Resend Email</AuthButton>
+      <ResetEmailSent
+        @email={{this.sentTo}}
+        @resending={{this.sendEmailValidationTask.isRunning}}
+        @onResend={{this.resendEmailValidation}}
+      />
     {{else if (eq this.state.type 'resetPassword')}}
-      <span class='title'>Reset your password</span>
-      <CredentialFieldsFrame @form='reset' @fields={{this.credentials}} />
-      <div class='button-wrapper'>
-        <AuthButton
-          data-test-reset-password-btn
-          @variant='primary'
-          @disabled={{this.isResetPasswordBtnDisabled}}
-          @loading={{this.resetPassword.isRunning}}
-          {{on 'click' (perform this.resetPassword)}}
-        >Reset Password</AuthButton>
-      </div>
-      {{#if this.isResetPasswordParamsError}}
-        <span class='error' data-test-reset-password-error>Unable to reset your
-          password due to invalid password reset parameters. Please restart the
-          password reset flow by going back to
-          <a href='#' {{on 'click' this.returnToInitialForm}}>forgot password
-            form</a>
-          and try again.</span>
-      {{else if this.error}}
-        <span class='error' data-test-reset-password-error>{{this.error}}</span>
-      {{/if}}
+      <ResetPasswordForm
+        @submitDisabled={{this.isResetPasswordBtnDisabled}}
+        @submitting={{this.resetPassword.isRunning}}
+        @paramsError={{this.isResetPasswordParamsError}}
+        @forgotPasswordURL='#'
+        @onForgotPassword={{this.returnToInitialForm}}
+        @error={{this.error}}
+        @onSubmit={{this.submitNewPassword}}
+      >
+        <CredentialFieldsFrame @form='reset' @fields={{this.credentials}} />
+      </ResetPasswordForm>
     {{else if (eq this.state.type 'resetPasswordSuccess')}}
-      <span class='title' data-test-reset-password-success>Your password is now
-        reset</span>
-      <p class='info'>Your password has been successfully reset. You can use the
-        link below to sign into your Boxel account with your new password.</p>
-      <div class='button-wrapper'>
-        <AuthButton
-          data-test-back-to-login-btn
-          @variant='primary'
-          {{on 'click' this.returnToLogin}}
-        >Sign In to Boxel</AuthButton>
-      </div>
+      <ResetPasswordDone @onSignIn={{this.returnToLogin}} />
     {{/if}}
-
-    <style scoped>
-      .title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-        margin-bottom: var(--boxel-sp);
-      }
-      .info {
-        margin-top: 0;
-        margin-bottom: var(--boxel-sp-sm);
-        letter-spacing: var(--boxel-lsp);
-        line-height: 20px;
-        color: var(--foreground);
-      }
-      .button-wrapper {
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        margin-top: var(--boxel-sp-lg);
-        gap: var(--boxel-sp-sm);
-        color: var(--muted-foreground);
-      }
-      .email-validation-instruction {
-        padding: 0;
-        list-style-position: inside;
-        margin-top: 0;
-        margin-bottom: var(--boxel-sp);
-        color: var(--foreground);
-      }
-      .email-validation-instruction li {
-        margin-bottom: var(--boxel-sp-sm);
-      }
-      .error {
-        color: var(--boxel-error-100);
-        padding: 0;
-        font: 500 var(--boxel-font-xs);
-        margin: var(--boxel-sp-2xs) auto 0 auto;
-        text-align: center;
-      }
-      .error a {
-        color: var(--boxel-highlight);
-        text-decoration: underline;
-      }
-    </style>
   </template>
 
   @tracked private error: string | undefined;
@@ -229,12 +135,18 @@ export default class ForgotPassword extends Component<Signature> {
     this.emailError = undefined;
   }
 
-  private get emailInputState() {
-    return this.emailError ? 'invalid' : 'initial';
+  // The address the reset link was sent to.
+  private get sentTo() {
+    return this.state.type === 'waitForEmailValidation' ? this.state.email : '';
   }
 
   @action
-  private sendEmailValidation() {
+  private sendEmailValidation(ev: Event) {
+    ev.preventDefault();
+    // Enter in the email field submits the form whatever the button's state.
+    if (this.isForgotPasswordBtnDisabled) {
+      return;
+    }
     if (!this.email) {
       throw new Error(
         `bug: should never get here: reset password button disabled when no email`,
@@ -364,6 +276,15 @@ export default class ForgotPassword extends Component<Signature> {
       throw e;
     }
   });
+
+  @action
+  private submitNewPassword(ev: Event) {
+    ev.preventDefault();
+    if (this.isResetPasswordBtnDisabled) {
+      return;
+    }
+    this.resetPassword.perform();
+  }
 
   @action
   private returnToInitialForm() {
