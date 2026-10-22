@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Kara O'Neill",
+      "status": "Member",
+      "paceSeconds": 297,
+      "neighbourhood": "Manhattan Valley",
+      "since": "Jan 2024",
+      "runs": 51,
+      "longestKm": 42.2,
+      "bio": "Three marathons with the club. Writes the weekly email when Lena forgets."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/lighthouse-long"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

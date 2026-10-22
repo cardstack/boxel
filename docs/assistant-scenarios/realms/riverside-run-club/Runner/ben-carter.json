@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Ben Carter",
+      "status": "Member",
+      "paceSeconds": 342,
+      "neighbourhood": "Harlem",
+      "since": "Feb 2025",
+      "runs": 24,
+      "longestKm": 16.0,
+      "bio": "Started with the walk-run group last winter. Now runs the full River Loop without stopping."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/river-loop"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

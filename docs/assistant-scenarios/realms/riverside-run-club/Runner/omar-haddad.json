@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Omar Haddad",
+      "status": "Member",
+      "paceSeconds": 335,
+      "neighbourhood": "Hamilton Heights",
+      "since": "June 2021",
+      "runs": 41,
+      "longestKm": 21.1,
+      "bio": "Ran with us every week through 2022. Back this spring after a knee, easing in."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/bridge-to-bridge"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

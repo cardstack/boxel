@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Iris Tanaka",
+      "status": "Member",
+      "paceSeconds": 289,
+      "neighbourhood": "Upper West Side",
+      "since": "Apr 2024",
+      "runs": 33,
+      "longestKm": 25.0,
+      "bio": "Track runner in college. Will happily lead the fast group if asked."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/cathedral-steps"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

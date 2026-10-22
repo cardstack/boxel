@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Noah Fischer",
+      "status": "Member",
+      "paceSeconds": 358,
+      "neighbourhood": "Upper West Side",
+      "since": "May 2025",
+      "runs": 14,
+      "longestKm": 10.0,
+      "bio": "New this year. Comes when his shifts allow."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/river-loop"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

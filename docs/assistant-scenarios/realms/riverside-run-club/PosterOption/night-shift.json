@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Night Shift",
+      "tagline": "Headlamps, city lights, the river at your shoulder.",
+      "accent": "#5b8cff",
+      "ground": "#0d1522",
+      "ink": "#f4f1ea",
+      "mood": "Electric",
+      "when": "Tue 7 pm · the Boathouse"
+    },
+    "relationships": {
+      "route": {
+        "links": {
+          "self": "../Route/bridge-to-bridge"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../poster",
+        "name": "PosterOption"
+      }
+    }
+  }
+}

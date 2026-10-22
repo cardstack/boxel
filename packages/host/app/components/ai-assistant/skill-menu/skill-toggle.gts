@@ -236,6 +236,7 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
         display: inline-grid;
         grid-template-columns: minmax(0, 1fr) auto;
         border: 1px solid var(--boxel-400);
+        --boxel-pill-border-radius: var(--round-row, 8px);
         height: var(--pill-height, 1.875rem);
         overflow: hidden;
       }

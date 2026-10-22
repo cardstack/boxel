@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Hudson Harvest 10K",
+      "date": "2026-11-08",
+      "distance": "10K",
+      "borough": "Manhattan",
+      "startLine": "Riverside Park at 103rd St",
+      "organiser": "West Side Running Collective",
+      "feeUsd": 45,
+      "kidsRace": true,
+      "kidsFeeUsd": 10,
+      "website": "hudson-harvest-10k.example.org"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../race",
+        "name": "Race"
+      }
+    }
+  }
+}

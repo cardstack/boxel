@@ -44,15 +44,26 @@ export function registerBeacon(name: string, element: Element): () => void {
 }
 
 /**
- * Measure every live beacon, in the same window the region measures `final`.
+ * Measure the live beacons, in the same window the region measures `final`.
  *
  * Re-measured every pass, never cached: the trash can move without the list
  * rendering at all — a header that hides, a column that resizes, a scroll.
+ *
+ * A region passes the names its score asked for: a page can claim hundreds of
+ * beacons (every chip a sheet may open from), and measuring each one in every
+ * region on every pass cost seconds of layout reads in a long transcript.
+ * Without `names`, every claimed beacon is measured.
  */
-export function measureBeacons(root: DOMRect): Map<string, Bounds> {
+export function measureBeacons(
+  root: DOMRect,
+  names?: Iterable<string>,
+): Map<string, Bounds> {
   const out = new Map<string, Bounds>();
-  for (const [name, el] of registry) {
-    if (!el.isConnected) {
+  const wanted = names
+    ? [...names].map((name) => [name, registry.get(name)] as const)
+    : [...registry];
+  for (const [name, el] of wanted) {
+    if (!el?.isConnected) {
       continue;
     }
     out.set(name, measureBounds(el, root));

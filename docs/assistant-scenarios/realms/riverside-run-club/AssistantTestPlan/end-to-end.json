@@ -1,0 +1,304 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Assistant end-to-end cases",
+      "intro": "Cases the recorded tour leaves out, kept so they can be run by hand now and automated later. Each one names its setup, the prompt in this realm's own cards, what to click, and what the panel must show. Reset the tour before a run.",
+      "cases": [
+        {
+          "code": "A1",
+          "area": "Asking and approving",
+          "title": "Download a file through its gate",
+          "setup": "",
+          "say": "Download a photo of the Hudson at night from the web into Assets/ for the Night Shift poster",
+          "then": "Scroll the row out of view, then approve from the dock",
+          "expect": "The script waits with the click reason for realm.fs.download. Once the row is scrolled away, the gate moves to the composer dock and Approve there runs it; the file lands in Assets/.",
+          "shows": "ToolGate, click reasons, gate dock",
+          "needs": ""
+        },
+        {
+          "code": "A2",
+          "area": "Asking and approving",
+          "title": "Three calls waiting at once",
+          "setup": "Ask mode",
+          "say": "Set Lena to Coach, Omar to Lapsed and the plan's send day to Thursday",
+          "then": "Approve all three from the dock",
+          "expect": "Three calls wait in their rows; the dock gathers them into one form with \"Approve 3\". Each row then shows its field change.",
+          "shows": "ToolGate, gate stack, bulk approve, field changes",
+          "needs": ""
+        },
+        {
+          "code": "A3",
+          "area": "Asking and approving",
+          "title": "A question waits while you read elsewhere",
+          "setup": "",
+          "say": "Which poster should we use?",
+          "then": "Scroll up before answering, then press Jump in the composer",
+          "expect": "The composer says a question is waiting, with Jump; Jump brings the question back into view.",
+          "shows": "AgentQuestion, gate stack, JumpChip",
+          "needs": ""
+        },
+        {
+          "code": "A4",
+          "area": "Asking and approving",
+          "title": "Another member approves a held call",
+          "setup": "A second member in the room; Ask mode",
+          "say": "Put Night Shift and Lime on the plan",
+          "then": "The second member approves the held update with a reaction",
+          "expect": "The held row shows the other member's reaction and runs on it; the row's status says who approved.",
+          "shows": "Reactions, ToolGate, approval by reaction",
+          "needs": "A second Boxel account in the session"
+        },
+        {
+          "code": "A5",
+          "area": "Asking and approving",
+          "title": "An image that spends credit",
+          "setup": "Ask mode; also try the panel at 320, 440 and 680 px",
+          "say": "Make a cover image for the relaunch",
+          "then": "Approve in the row",
+          "expect": "The script waits with the click reason \"Generates images, which uses your credit\". After approval the cover is written to Assets/ and shown in the row.",
+          "shows": "ToolGate, click reasons, capture thumbnail",
+          "needs": ""
+        },
+        {
+          "code": "A6",
+          "area": "Asking and approving",
+          "title": "Delete through its gate",
+          "setup": "",
+          "say": "Delete the Trail Mix poster",
+          "then": "Approve in the row; restore Trail Mix afterwards",
+          "expect": "The script waits with the click reason for realm.fs.delete; after approval the row lists the deleted file, struck.",
+          "shows": "ToolGate, click reasons, deleted-file line",
+          "needs": ""
+        },
+        {
+          "code": "F1",
+          "area": "Failures and recovery",
+          "title": "An invalid value, with Fix",
+          "setup": "",
+          "say": "Set Tom's status to Elite",
+          "then": "",
+          "expect": "The call is refused as invalid (Elite is not a status) and the row offers Fix.",
+          "shows": "ToolRow invalid state, Fix action",
+          "needs": ""
+        },
+        {
+          "code": "F2",
+          "area": "Failures and recovery",
+          "title": "An error after a write, with Undo 2",
+          "setup": "",
+          "say": "Mark Iris and Ben as Regular, then read the missing Club/nowhere.json",
+          "then": "",
+          "expect": "The script writes two runners, then throws on the read. The row says it failed after writing and offers \"Undo 2\".",
+          "shows": "ToolRow failed state, receipt Undo N, change table",
+          "needs": ""
+        },
+        {
+          "code": "F3",
+          "area": "Failures and recovery",
+          "title": "Undo twice",
+          "setup": "",
+          "say": "",
+          "then": "Press Undo on F2's row, then press it again",
+          "expect": "The first Undo restores both runners; the second is refused as already undone, and the row says so.",
+          "shows": "receipt Undo, refusal line",
+          "needs": ""
+        },
+        {
+          "code": "F4",
+          "area": "Failures and recovery",
+          "title": "A failed read, retried",
+          "setup": "",
+          "say": "Read the plan before you change anything",
+          "then": "",
+          "expect": "The first read fails on a wrong path with one red line and Details; the retry succeeds, and the first row folds to \"retried below\".",
+          "shows": "ToolRow failed, ToolReceiptActions Retry and Details, retried below",
+          "needs": "A director section that reads a wrong path first"
+        },
+        {
+          "code": "F5",
+          "area": "Failures and recovery",
+          "title": "Refused web sources, then a fallback",
+          "setup": "",
+          "say": "Find a chili recipe for the relaunch party",
+          "then": "",
+          "expect": "Pages that can't be read are marked refused in the row's steps; the one that reads supplies the ingredients in the answer.",
+          "shows": "ToolPlan steps, refused line, web.read",
+          "needs": ""
+        },
+        {
+          "code": "R1",
+          "area": "Runs and reconnection",
+          "title": "Reconnecting after a reload",
+          "setup": "",
+          "say": "Also find what kids' races near Riverside Park charge",
+          "then": "Reload the page while the background run is working",
+          "expect": "After the reload the run row reads reconnecting, then running, and the result is delivered into the thread.",
+          "shows": "background run, reconnecting state, delivered line",
+          "needs": ""
+        },
+        {
+          "code": "R2",
+          "area": "Runs and reconnection",
+          "title": "Reindex, then cancel",
+          "setup": "",
+          "say": "Reindex this realm, then cancel it",
+          "then": "",
+          "expect": "The index operation's row shows it running, then cancelled.",
+          "shows": "index operation row, cancelled state",
+          "needs": ""
+        },
+        {
+          "code": "R3",
+          "area": "Runs and reconnection",
+          "title": "A message sent while it works",
+          "setup": "",
+          "say": "Who are our regulars?",
+          "then": "While it works, send \"Also list the coaches\"",
+          "expect": "The second message waits under the composer as queued, then lands as its own turn once the first finishes.",
+          "shows": "QueuedNote, steering, UserBubble",
+          "needs": ""
+        },
+        {
+          "code": "T1",
+          "area": "Transcript and scroll",
+          "title": "Reading while a long reply streams",
+          "setup": "",
+          "say": "Write a long report on the club's attendance",
+          "then": "Scroll up while it streams, then press the new-messages chip",
+          "expect": "The transcript stays where you are reading; a chip counts what arrived below, and pressing it jumps to the end.",
+          "shows": "StickToBottom, JumpChip",
+          "needs": ""
+        },
+        {
+          "code": "T2",
+          "area": "Transcript and scroll",
+          "title": "A folded turn opens in place",
+          "setup": "After several turns",
+          "say": "",
+          "then": "Scroll up, open a folded turn, then close it",
+          "expect": "Earlier turns are folded to one line; opening one grows it in place and closing it shrinks it, with no jump.",
+          "shows": "CollapsedTurn, motion",
+          "needs": ""
+        },
+        {
+          "code": "T3",
+          "area": "Transcript and scroll",
+          "title": "Compaction",
+          "setup": "A long session",
+          "say": "",
+          "then": "Keep the session going until it compacts",
+          "expect": "A compaction chip marks the point; the session continues after it.",
+          "shows": "CompactionChip",
+          "needs": "A session long enough to compact"
+        },
+        {
+          "code": "T4",
+          "area": "Transcript and scroll",
+          "title": "Session preparation",
+          "setup": "",
+          "say": "",
+          "then": "Start a new session from the tour environment's button and watch before sending anything",
+          "expect": "The panel shows the session getting ready, step by step, and nothing reaches the model until it finishes.",
+          "shows": "SessionPrep",
+          "needs": ""
+        },
+        {
+          "code": "T5",
+          "area": "Transcript and scroll",
+          "title": "Three panel widths",
+          "setup": "",
+          "say": "",
+          "then": "Resize the panel to 320, 440 and 680 px with a finished tour on screen",
+          "expect": "Rows, change tables, question choices and cards in replies reflow at each width without horizontal scroll.",
+          "shows": "ToolRow, ToolChangeTable, AgentQuestion, CardEmbed",
+          "needs": ""
+        },
+        {
+          "code": "S1",
+          "area": "Search and cards",
+          "title": "A catalog search with its matches",
+          "setup": "",
+          "say": "Search the catalog for a card I could reuse for a race-day schedule",
+          "then": "",
+          "expect": "The search row lists its matches with type, place and a fit meter, three shown and \"N more\".",
+          "shows": "FoundEntries, fit meter",
+          "needs": "The installed skills to list the search-entries tool; today the assistant often searches through a script instead"
+        },
+        {
+          "code": "S2",
+          "area": "Search and cards",
+          "title": "Quick Look from a pill",
+          "setup": "",
+          "say": "Who are our regulars?",
+          "then": "Click a runner's pill in the answer, then Escape",
+          "expect": "Quick Look opens the runner's isolated card over the whole window; Escape puts it back.",
+          "shows": "CardPills, QuickLook",
+          "needs": ""
+        },
+        {
+          "code": "S3",
+          "area": "Search and cards",
+          "title": "Three calls fold into a group",
+          "setup": "",
+          "say": "Read the River Loop, Boathouse 5K and Park Tempo route cards one at a time",
+          "then": "",
+          "expect": "Three calls to one tool fold into one group row, ×3, while each runs on its own.",
+          "shows": "ToolGroup",
+          "needs": ""
+        },
+        {
+          "code": "K1",
+          "area": "Code",
+          "title": "A call's arguments",
+          "setup": "",
+          "say": "",
+          "then": "Open any finished script row and its call",
+          "expect": "The row's body shows the call's arguments as a code block, folded after six lines.",
+          "shows": "CodeBlock",
+          "needs": ""
+        },
+        {
+          "code": "K2",
+          "area": "Code",
+          "title": "Fix with AI from the editor",
+          "setup": "Code mode, plan.gts open",
+          "say": "",
+          "then": "Select a few lines in the editor and ask \"Explain this\"",
+          "expect": "The selection rides with the message as a pill on the user bubble, and the answer refers to those lines.",
+          "shows": "UserBubble attachments, code mode",
+          "needs": ""
+        },
+        {
+          "code": "G1",
+          "area": "Regressions",
+          "title": "A typed answer keeps its row folded",
+          "setup": "",
+          "say": "When should the invite go out?",
+          "then": "Type \"Wednesday evening\" in the question's own field and press Enter",
+          "expect": "The answer is taken and the row stays folded, showing the pick, the same as picking a listed option. (Today the row opens to the call's raw JSON.)",
+          "shows": "AgentQuestion, ToolRow",
+          "needs": "The fix in progress on its own branch"
+        }
+      ]
+    },
+    "relationships": {
+      "tour": {
+        "links": {
+          "self": "../TourScript/assistant-tour"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../test-plan",
+        "name": "AssistantTestPlan"
+      }
+    }
+  }
+}

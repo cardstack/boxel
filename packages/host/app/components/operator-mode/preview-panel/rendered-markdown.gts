@@ -17,6 +17,7 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import LinkOffIcon from '@cardstack/boxel-icons/link-off';
+import { beacon } from '@cardstack/choreo';
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { modifier } from 'ember-modifier';
@@ -45,10 +46,17 @@ import {
 } from '@cardstack/runtime-common/marked-sync';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import { cardRefLabel } from '@cardstack/host/lib/reply-furniture';
 
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext, CardDef, FileDef } from '@cardstack/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  FileDef,
+  Format,
+} from '@cardstack/base/card-api';
+import type { ComponentLike } from '@glint/template';
 
 type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
 type SlotState = 'resolved' | 'loading' | 'unresolved';
@@ -71,7 +79,7 @@ interface RenderSlot {
   card?: CardDef; // present when refType === 'card' && state === 'resolved'
   file?: FileDef; // present when refType === 'file' && state === 'resolved'
   url?: string; // present when state === 'loading' | 'unresolved'
-  typeName?: string; // present when state === 'unresolved'
+  typeName?: string; // present when state === 'unresolved': the ref's name
 }
 
 function resolveUrl(raw: string, baseUrl: string | undefined): string {
@@ -106,6 +114,17 @@ interface Signature {
   Args: {
     content: string | null | undefined;
     cardReferenceBaseUrl?: string | null;
+    /** the assistant's Quick Look: when given, each card or file this
+     * renders publishes its box as the beacon `<prefix>:<id>` (the place
+     * the Quick Look sheet comes out of) and takes keyboard focus, so
+     * Space or Enter can open it */
+    lookKeyPrefix?: string;
+    /** draws a card the content shows as a block, in place of the bare
+     * CardRenderer: the assistant gives its cards a hat and a menu */
+    blockCard?: ComponentLike<{ Args: { card: CardDef; format: Format } }>;
+    /** an inline card still loading shows a name taken from its URL, in
+     * place of a bare placeholder, so its width holds when the card lands */
+    loadingLabels?: boolean;
   };
 }
 
@@ -130,10 +149,18 @@ export default class RenderedMarkdown extends Component<Signature> {
     } as CardContext;
   }
 
+  private lookKey = (id: string | undefined) =>
+    this.args.lookKeyPrefix && id ? `${this.args.lookKeyPrefix}:${id}` : '';
+
   @tracked renderSlots: RenderSlot[] = [];
   @tracked private loadedCards = new Map<string, CardDef>();
   @tracked private loadedFiles = new Map<string, FileDef>();
   private _modifierHasRun = false;
+  // Recomputes the slots from the cards loaded so far; set by the slot
+  // modifier. The loads call it when they land: the modifier is not re-run
+  // for a new map on its own every time, and a slot left "broken" by an
+  // earlier pass would stay that way.
+  private refreshSlots: (() => void) | undefined;
 
   // ── HTML rendering ──
 
@@ -185,6 +212,15 @@ export default class RenderedMarkdown extends Component<Signature> {
     );
   }
 
+  // A card the store already holds, for a ref this renderer has not loaded
+  // itself yet
+  private cachedCard(url: string): CardDef | undefined {
+    let cached = this.store.peek(url);
+    return cached && !isCardErrorJSONAPI(cached)
+      ? (cached as CardDef)
+      : undefined;
+  }
+
   private loadReferencedCards = task({ restartable: true }, async () => {
     let urls = this.cardReferenceUrls;
     if (!urls.length) return;
@@ -203,6 +239,7 @@ export default class RenderedMarkdown extends Component<Signature> {
       }),
     );
     this.loadedCards = cards;
+    this.refreshSlots?.();
   });
 
   private loadReferencedFiles = task({ restartable: true }, async () => {
@@ -225,6 +262,7 @@ export default class RenderedMarkdown extends Component<Signature> {
       }),
     );
     this.loadedFiles = files;
+    this.refreshSlots?.();
   });
 
   // ── Slot capture modifier ──
@@ -306,7 +344,8 @@ export default class RenderedMarkdown extends Component<Signature> {
               continue;
             }
           } else {
-            let card = cardsByUrl.get(resolvedUrl);
+            let card =
+              cardsByUrl.get(resolvedUrl) ?? this.cachedCard(resolvedUrl);
             if (card) {
               slots.push({
                 element: el,
@@ -342,10 +381,13 @@ export default class RenderedMarkdown extends Component<Signature> {
               format,
               style,
               url: rawUrl,
+              // the card's own name from its id, so two broken refs to the
+              // same type still read apart; the type only when the id says
+              // nothing
               typeName:
                 refType === 'file'
                   ? fileNameFromUrl(rawUrl)
-                  : cardTypeName(rawUrl),
+                  : cardRefLabel(rawUrl) || cardTypeName(rawUrl),
             });
           }
         }
@@ -383,6 +425,7 @@ export default class RenderedMarkdown extends Component<Signature> {
       };
 
       scheduleUpdate();
+      this.refreshSlots = scheduleUpdate;
 
       if (typeof MutationObserver === 'undefined') return;
 
@@ -417,6 +460,10 @@ export default class RenderedMarkdown extends Component<Signature> {
                   {{if slot.style "markdown-bfm-card-slot--fitted"}}'
                 style={{slot.style}}
                 data-test-markdown-bfm-inline-file
+                data-card-ref={{slot.file.id}}
+                data-card-ref-kind='file'
+                tabindex={{if @lookKeyPrefix '0'}}
+                {{beacon (this.lookKey slot.file.id)}}
                 {{this.cardContext.cardComponentModifier
                   cardId=slot.file.id
                   format='data'
@@ -436,6 +483,10 @@ export default class RenderedMarkdown extends Component<Signature> {
                   {{if slot.style "markdown-bfm-card-slot--fitted"}}'
                 style={{slot.style}}
                 data-test-markdown-bfm-block-file
+                data-card-ref={{slot.file.id}}
+                data-card-ref-kind='file'
+                tabindex={{if @lookKeyPrefix '0'}}
+                {{beacon (this.lookKey slot.file.id)}}
                 {{this.cardContext.cardComponentModifier
                   cardId=slot.file.id
                   format='data'
@@ -461,6 +512,10 @@ export default class RenderedMarkdown extends Component<Signature> {
                 {{if slot.style "markdown-bfm-card-slot--fitted"}}'
               style={{slot.style}}
               data-test-markdown-bfm-inline-card
+              data-card-ref={{slot.card.id}}
+              data-card-ref-kind='card'
+              tabindex={{if @lookKeyPrefix '0'}}
+              {{beacon (this.lookKey slot.card.id)}}
               {{this.cardContext.cardComponentModifier
                 card=slot.card
                 format='data'
@@ -480,6 +535,10 @@ export default class RenderedMarkdown extends Component<Signature> {
                 {{if slot.style "markdown-bfm-card-slot--fitted"}}'
               style={{slot.style}}
               data-test-markdown-bfm-block-card
+              data-card-ref={{slot.card.id}}
+              data-card-ref-kind='card'
+              tabindex={{if @lookKeyPrefix '0'}}
+              {{beacon (this.lookKey slot.card.id)}}
               {{this.cardContext.cardComponentModifier
                 card=slot.card
                 format='data'
@@ -487,11 +546,15 @@ export default class RenderedMarkdown extends Component<Signature> {
                 fieldName=undefined
               }}
             >
-              <CardRenderer
-                @card={{slot.card}}
-                @format={{slot.format}}
-                @displayContainer={{false}}
-              />
+              {{#if @blockCard}}
+                <@blockCard @card={{slot.card}} @format={{slot.format}} />
+              {{else}}
+                <CardRenderer
+                  @card={{slot.card}}
+                  @format={{slot.format}}
+                  @displayContainer={{false}}
+                />
+              {{/if}}
             </div>
           {{/if}}
         {{else if (eq slot.state 'loading')}}
@@ -501,7 +564,7 @@ export default class RenderedMarkdown extends Component<Signature> {
                 class='markdown-bfm-loading markdown-bfm-loading--inline'
                 aria-hidden='true'
                 data-test-markdown-bfm-loading-inline
-              />
+              >{{#if @loadingLabels}}{{cardRefLabel slot.url}}{{/if}}</span>
             {{else}}
               <span
                 class='markdown-bfm-loading markdown-bfm-loading--inline-embed markdown-bfm-loading--{{slot.format}}'

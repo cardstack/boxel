@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Lena Ruiz",
+      "status": "Coach",
+      "paceSeconds": 278,
+      "neighbourhood": "Morningside Heights",
+      "since": "March 2019",
+      "runs": 212,
+      "longestKm": 42.2,
+      "bio": "Founded the Tuesday tempo. Sets the pace groups and keeps everyone honest about the warm-up."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/river-loop"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

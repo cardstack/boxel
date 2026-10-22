@@ -1,0 +1,101 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "The assistant tour",
+      "intro": "Thirteen prompts that take the Boxel assistant through a running club's autumn relaunch: searching, asking, approving, changing cards and code.",
+      "setup": "1. Open the AI assistant and start a new session.\n2. Open **Environment / Riverside tour environment** in this realm and press its add-to-assistant button. It starts a session with the Realm Runner tools and the Riverside tour director skill.\n3. Pick **GPT-5.6 Luna** and **Act** mode.\n4. Open the relaunch plan below on the stack, in Interact mode.",
+      "reset": "Say **Reset the tour** in a new session. The director writes the plan back to Draft and every runner to their first status.",
+      "steps": [
+        {
+          "say": "Who are our regulars?",
+          "click": "",
+          "shows": "A script reads the last four sessions with its steps checked off; the answer names each regular as a pill."
+        },
+        {
+          "say": "Find flat routes under 8 km, and any races in November",
+          "click": "",
+          "shows": "Two searches with their matches; route and race cards in the answer."
+        },
+        {
+          "say": "Which poster should we use?",
+          "click": "Pick Night Shift",
+          "shows": "The question offers the three posters as cards."
+        },
+        {
+          "say": "Pick an accent colour",
+          "click": "Pick Lime",
+          "shows": "Swatches; the row keeps your pick."
+        },
+        {
+          "say": "When should the invite go out?",
+          "click": "Something else: Wednesday evening",
+          "shows": "Options with a field for your own answer."
+        },
+        {
+          "say": "Put all of that on the plan",
+          "click": "Press Update in the row",
+          "shows": "The change waits for your click, then lists each field old to new. The plan on the stack takes the lime."
+        },
+        {
+          "say": "Mark everyone who ran 3 of the last 4 sessions as Regular",
+          "click": "",
+          "shows": "One script changes six runners; the change table lists each card it touched."
+        },
+        {
+          "say": "Should the relaunch run be a 5K, a 10K or a relay? Recommend one",
+          "click": "Go with 5K",
+          "shows": "A recommendation with its reason and how sure it is."
+        },
+        {
+          "say": "Check the regulars' paces and ask me which group leads the 5K",
+          "click": "Switch to Ask first, press Run in the row, then pick a group",
+          "shows": "The script waits for your click, then asks you a question in its row and notes the answer on the plan."
+        },
+        {
+          "say": "What do the races near Riverside Park charge for bibs?",
+          "click": "",
+          "shows": "A background run delivers a table with numbered sources."
+        },
+        {
+          "say": "Check kids' race fees borough by borough",
+          "click": "Scroll up while it runs, then press Stop at the second borough",
+          "shows": "Its steps follow you into the cap; Stop ends it where it was."
+        },
+        {
+          "say": "Open the poster's code and give it a border in the plan's accent",
+          "click": "Undo on the row",
+          "shows": "Code mode, the diff, the turn's changes, and Undo."
+        },
+        {
+          "say": "Sum it up",
+          "click": "Click the plan card in the answer, then Escape",
+          "shows": "A short table and the plan as a card; Quick Look over the window."
+        }
+      ]
+    },
+    "relationships": {
+      "plan": {
+        "links": {
+          "self": "../RelaunchPlan/autumn"
+        }
+      },
+      "club": {
+        "links": {
+          "self": "../Club/riverside"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../tour-script",
+        "name": "TourScript"
+      }
+    }
+  }
+}

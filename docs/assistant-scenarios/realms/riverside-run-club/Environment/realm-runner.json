@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../tour-environment",
+        "name": "TourEnvironment"
+      }
+    },
+    "attributes": {
+      "cardInfo": {
+        "name": "Riverside tour environment",
+        "summary": "The Realm Runner tools plus the Riverside tour director, installed into a new assistant session in one click."
+      },
+      "title": "Riverside tour environment",
+      "version": "POC v30 \u00b7 QuickJS immutable write receipts",
+      "status": "staging experiment",
+      "executionModel": "\u226410s foreground \u00b7 longer work in a Worker"
+    }
+  }
+}

@@ -15,6 +15,7 @@ import {
 
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 
+import { aiBotUserId } from '@cardstack/host/components/ai-assistant/panel';
 import RoomMessage, {
   STREAMING_TIMEOUT_MINUTES,
 } from '@cardstack/host/components/matrix/room-message';
@@ -112,7 +113,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
 
     let message = {
       author: {
-        userId: '@aibot:localhost',
+        userId: aiBotUserId,
         displayName: 'AI Assistant',
         name: 'AI Assistant',
       },
@@ -211,12 +212,18 @@ module('Integration | Component | RoomMessage', function (hooks) {
 
     assert
       .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
-      .hasClass('ai-avatar-animated');
+      .doesNotHaveClass(
+        'ai-avatar-animated',
+        'the animated mark belongs to the cap by the message box alone',
+      );
     assert.dom('[data-test-card-error]').doesNotExist();
     assert.dom('[data-test-alert-action-button="Wait longer"]').doesNotExist();
     assert
-      .dom('[data-test-ai-message-content] span.streaming-text')
+      .dom('[data-test-ai-message-content] [data-test-ai-bot-markdown]')
       .includesText('Hello,');
+    assert
+      .dom('[data-test-ai-message-content] [data-test-pretui-markdown-caret]')
+      .exists('a streaming answer shows the caret');
   });
 
   test('it does not show a timeout error when the message is not the last assistant message', async function (assert) {
@@ -229,7 +236,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
       extraMessages: [
         {
           author: {
-            userId: '@aibot:localhost',
+            userId: aiBotUserId,
             displayName: 'AI Assistant',
             name: 'AI Assistant',
           },
@@ -247,11 +254,9 @@ module('Integration | Component | RoomMessage', function (hooks) {
     });
     await renderRoomMessageComponent(testScenario);
 
-    await waitUntil(() => {
-      return document
-        .querySelector('[data-test-message-idx="0"] [data-test-ai-avatar]')
-        ?.classList.contains('ai-avatar-animated');
-    });
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-ai-message-content]')
+      .includesText('Earlier response');
     assert.dom('[data-test-card-error]').doesNotExist();
   });
 
@@ -327,12 +332,15 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert.dom('[data-test-tool-call-id="bot-tool-1"]').hasClass('compact');
     assert
       .dom(
-        '[data-test-tool-call-id="bot-tool-1"] [data-test-apply-state="applied"]',
+        '[data-test-tool-call-id="bot-tool-1"] [data-test-tool-call-apply="applied"]',
       )
       .exists();
     assert
       .dom('[data-test-tool-call-id="bot-tool-1"]')
-      .containsText('Read file: pirate-speak/SKILL.md');
+      .containsText(
+        'Read the pirate speak skill',
+        'a skill read names the skill',
+      );
 
     assert
       .dom('[data-test-tool-call-id="host-tool-1"]')
@@ -380,6 +388,12 @@ module('Integration | Component | RoomMessage', function (hooks) {
     return testScenario;
   }
 
+  function sentReactions(roomId: string) {
+    return mockMatrixUtils
+      .getRoomEvents(roomId)
+      .filter((event: any) => event.type === 'm.reaction') as any[];
+  }
+
   function sentToolResults(roomId: string) {
     return mockMatrixUtils
       .getRoomEvents(roomId)
@@ -403,53 +417,66 @@ module('Integration | Component | RoomMessage', function (hooks) {
         'the full URL, query string included',
       );
     assert
-      .dom(`${tool} [data-test-apply-state="ready"]`)
-      .hasText('Approve', 'approval is never automatic');
+      .dom(`${tool} [data-test-tool-call-apply="ready"]`)
+      .exists('approval is never automatic');
+    assert
+      .dom(
+        `${tool} [data-test-tool-call-approval] [data-test-pretui-tool-gate-action="apply"]`,
+      )
+      .hasText('Approve');
     assert
       .dom(`${tool} [data-test-tool-call-approval]`)
       .containsText(
-        'The assistant asks for your approval and says: “To check the setup steps for the library you asked about.”',
-        "the assistant's reason is shown",
+        'To check the setup steps for the library you asked about.',
+        "the assistant's reason is the gate's question",
       );
     assert
-      .dom(`${tool} [data-test-tool-call-secondary-action="Decline"]`)
-      .hasText('Decline', 'Decline sits beside Approve in the header');
-    assert
-      .dom(`${tool} .code-block-header [data-test-apply-state="ready"]`)
-      .exists();
+      .dom(
+        `${tool} [data-test-tool-call-approval] [data-test-pretui-tool-gate-action="decline"]`,
+      )
+      .hasText('Decline', 'Decline sits beside Approve');
     assert
       .dom('[data-test-message-idx="0"]')
       .doesNotHaveClass('bot-tools-only');
   });
 
-  test('approving a held readUrl call sends an approved result and shows it running', async function (assert) {
+  test('approving a held readUrl call sends an approved result and a 👍 on its message', async function (assert) {
     let testScenario = await setupHeldReadUrlScenario(this.owner);
     await renderRoomMessageComponent(testScenario);
 
     await click(
-      '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
+      '[data-test-tool-call-id="read-url-1"] [data-test-pretui-tool-gate-action="apply"]',
     );
-    await waitUntil(() => sentToolResults(testScenario.roomId!).length > 0);
+    await waitUntil(() => sentReactions(testScenario.roomId!).length > 0);
 
-    let [approval] = sentToolResults(testScenario.roomId!);
-    assert.strictEqual(approval.content['m.relates_to'].key, 'approved');
+    let [approval] = sentReactions(testScenario.roomId!);
+    assert.deepEqual(approval.content['m.relates_to'], {
+      rel_type: 'm.annotation',
+      event_id: 'event-1',
+      key: '👍',
+    });
     assert
       .dom(
-        '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
+        '[data-test-tool-call-id="read-url-1"] [data-test-tool-call-apply="ready"]',
       )
       .doesNotExist('an answered call offers no second approval');
     assert.strictEqual(
-      sentToolResults(testScenario.roomId!).length,
+      sentReactions(testScenario.roomId!).length,
       1,
       'one approval is sent',
     );
-    assert.strictEqual(approval.content.failureReason, undefined);
+    let [result] = sentToolResults(testScenario.roomId!);
+    assert.strictEqual(
+      result?.content['m.relates_to'].key,
+      'approved',
+      'the result is the answer ai-bot acts on; the reaction is the one people see',
+    );
 
     let tool = (testScenario as any).message.tools[0] as MessageTool;
     tool.toolCallStatus = 'approved';
     await waitUntil(() =>
       document.querySelector(
-        '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="applying"]',
+        '[data-test-tool-call-id="read-url-1"] [data-test-tool-call-apply="applying"]',
       ),
     );
     assert
@@ -468,16 +495,16 @@ module('Integration | Component | RoomMessage', function (hooks) {
     try {
       await renderRoomMessageComponent(testScenario);
       await click(
-        '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
+        '[data-test-tool-call-id="read-url-1"] [data-test-pretui-tool-gate-action="apply"]',
       );
       await waitUntil(() =>
         document.querySelector(
-          '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
+          '[data-test-tool-call-id="read-url-1"] [data-test-tool-call-apply="ready"]',
         ),
       );
       assert
         .dom(
-          '[data-test-tool-call-id="read-url-1"] [data-test-tool-call-secondary-action="Decline"]',
+          '[data-test-tool-call-id="read-url-1"] [data-test-pretui-tool-gate-action="decline"]',
         )
         .exists('Approve and Decline are offered again');
     } finally {
@@ -485,19 +512,21 @@ module('Integration | Component | RoomMessage', function (hooks) {
     }
   });
 
-  test('declining a held readUrl call sends an invalid result naming the decline', async function (assert) {
+  test('declining a held readUrl call sends an invalid result and a 👎 on its message', async function (assert) {
     let testScenario = await setupHeldReadUrlScenario(this.owner);
     await renderRoomMessageComponent(testScenario);
 
     await click(
-      '[data-test-tool-call-id="read-url-1"] [data-test-tool-call-secondary-action="Decline"]',
+      '[data-test-tool-call-id="read-url-1"] [data-test-pretui-tool-gate-action="decline"]',
     );
-    await waitUntil(() => sentToolResults(testScenario.roomId!).length > 0);
+    await waitUntil(() => sentReactions(testScenario.roomId!).length > 0);
 
-    let [decline] = sentToolResults(testScenario.roomId!);
-    assert.strictEqual(decline.content['m.relates_to'].key, 'invalid');
+    let [decline] = sentReactions(testScenario.roomId!);
+    assert.strictEqual(decline.content['m.relates_to'].key, '👎');
+    let [result] = sentToolResults(testScenario.roomId!);
+    assert.strictEqual(result?.content['m.relates_to'].key, 'invalid');
     assert.ok(
-      decline.content.failureReason.includes(
+      result?.content.failureReason.includes(
         'The user declined this call (Read web page: https://docs.example.com/guide?section=setup)',
       ),
     );
@@ -537,17 +566,15 @@ module('Integration | Component | RoomMessage', function (hooks) {
     ];
     await renderRoomMessageComponent(testScenario);
 
-    let indicator =
-      '[data-test-tool-call-id="bot-tool-1"] [data-test-apply-state="preparing"]';
+    let row =
+      '[data-test-tool-call-id="bot-tool-1"] [data-test-pretui-tool-row]';
     assert.dom('[data-test-tool-call-id="bot-tool-1"]').hasClass('compact');
-    assert.dom(indicator).exists();
     assert
-      .dom(indicator)
-      .doesNotContainText(
-        'Working',
-        'compact preparing indicator does not clip the full-size pill',
-      );
-    assert.dom(`${indicator} svg`).exists('a spinner is shown instead');
+      .dom(row)
+      .hasAttribute('data-state', 'streaming', 'the call is still arriving');
+    assert
+      .dom(row)
+      .doesNotContainText('Working', 'no full-size "Working…" pill');
   });
 
   test('a run-realm-code call that waits for the click names each risky call and why', async function (assert) {
@@ -609,23 +636,23 @@ module('Integration | Component | RoomMessage', function (hooks) {
     await renderRoomMessageComponent(testScenario);
 
     let reasons = (id: string) =>
-      `[data-test-tool-call-id="${id}"] [data-test-tool-call-click-reasons]`;
-    assert.dom(`${reasons('one-call')} li`).exists({ count: 1 });
+      `[data-test-tool-call-id="${id}"] [data-test-tool-call-click-reason]`;
+    assert.dom(reasons('one-call')).exists({ count: 1 });
     assert
       .dom(
-        `${reasons('one-call')} [data-test-tool-call-click-reason="realm.workspaces.delete"]`,
+        `[data-test-tool-call-id="one-call"] [data-test-tool-call-click-reason="realm.workspaces.delete"]`,
       )
       .containsText('Deletes a workspace');
 
-    assert.dom(`${reasons('two-calls')} li`).exists({ count: 2 });
+    assert.dom(reasons('two-calls')).exists({ count: 2 });
     assert
       .dom(
-        `${reasons('two-calls')} [data-test-tool-call-click-reason="realm.images.generate"]`,
+        `[data-test-tool-call-id="two-calls"] [data-test-tool-call-click-reason="realm.images.generate"]`,
       )
       .containsText('uses your credit');
     assert
       .dom(
-        `${reasons('two-calls')} [data-test-tool-call-click-reason="realm.fs.download"]`,
+        `[data-test-tool-call-id="two-calls"] [data-test-tool-call-click-reason="realm.fs.download"]`,
       )
       .containsText('outside URL');
 
@@ -636,7 +663,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
       .doesNotExist('a call that already ran offers no click');
     assert
       .dom(
-        `${reasons('invalid-call')} [data-test-tool-call-click-reason="realm.workspaces.delete"]`,
+        `[data-test-tool-call-id="invalid-call"] [data-test-tool-call-click-reason="realm.workspaces.delete"]`,
       )
       .exists('a call that offers Try Anyway still says what the click allows');
   });
@@ -679,14 +706,19 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert.dom('[data-test-message-idx="0"]').hasClass('bot-tools-only');
   });
 
-  function followUpMessage(minutesAgoForCreated: number, author?: object) {
+  // An assistant's message takes its header from the room's turn head; a
+  // person's bubble carries its own name and time, so these read the
+  // reader's messages.
+  const testUser = {
+    userId: '@testuser:localhost',
+    displayName: 'Test User',
+    name: 'Test User',
+  };
+
+  function followUpMessage(minutesAgoForCreated: number) {
     let now = Date.now();
     return {
-      author: author ?? {
-        userId: '@aibot:localhost',
-        displayName: 'AI Assistant',
-        name: 'AI Assistant',
-      },
+      author: testUser,
       body: 'And one more thing…',
       created: new Date(now - minutesAgoForCreated * 60 * 1000),
       updated: new Date(now - minutesAgoForCreated * 60 * 1000),
@@ -700,22 +732,10 @@ module('Integration | Component | RoomMessage', function (hooks) {
     };
   }
 
-  test('it hides the timestamp header when the previous message has the same author less than 2 minutes earlier', async function (assert) {
-    let testScenario = await setupTestScenario({
-      isStreaming: false,
-      minutesAgoForCreated: 5,
-      minutesAgoForUpdated: 5,
-      messageContent: 'First response',
-      renderIndex: 1,
-      extraMessages: [followUpMessage(4)],
-    });
-    await renderRoomMessageComponent(testScenario);
+  let header =
+    '[data-test-message-idx="1"] [data-test-pretui-user-bubble-author]';
 
-    assert.dom('[data-test-message-idx="1"]').hasClass('meta-hidden');
-    assert.dom('[data-test-message-idx="1"] time').doesNotExist();
-  });
-
-  test('it shows the timestamp header when the previous message is from a different author', async function (assert) {
+  test('it hides the name and time when the previous message has the same author less than 2 minutes earlier', async function (assert) {
     let testScenario = await setupTestScenario({
       isStreaming: false,
       minutesAgoForCreated: 5,
@@ -724,29 +744,38 @@ module('Integration | Component | RoomMessage', function (hooks) {
       renderIndex: 1,
       extraMessages: [followUpMessage(4)],
     });
-    (testScenario as any).message.author = {
-      userId: '@testuser:localhost',
-      displayName: 'Test User',
-      name: 'Test User',
-    };
+    (testScenario as any).message.author = testUser;
     await renderRoomMessageComponent(testScenario);
 
-    assert.dom('[data-test-message-idx="1"]').doesNotHaveClass('meta-hidden');
-    assert.dom('[data-test-message-idx="1"] time').exists();
+    assert.dom(header).doesNotExist();
   });
 
-  test('it shows the timestamp header when the previous message from the same author is more than 2 minutes older', async function (assert) {
+  test('it shows the name and time when the previous message is from a different author', async function (assert) {
     let testScenario = await setupTestScenario({
       isStreaming: false,
       minutesAgoForCreated: 5,
       minutesAgoForUpdated: 5,
-      messageContent: 'First response',
+      messageContent: 'An answer',
       renderIndex: 1,
-      extraMessages: [followUpMessage(2)],
+      extraMessages: [followUpMessage(4)],
     });
     await renderRoomMessageComponent(testScenario);
 
-    assert.dom('[data-test-message-idx="1"]').doesNotHaveClass('meta-hidden');
-    assert.dom('[data-test-message-idx="1"] time').exists();
+    assert.dom(header).exists();
+  });
+
+  test('it shows the name and time when the previous message from the same author is more than 2 minutes older', async function (assert) {
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 5,
+      minutesAgoForUpdated: 5,
+      messageContent: 'A user question',
+      renderIndex: 1,
+      extraMessages: [followUpMessage(2)],
+    });
+    (testScenario as any).message.author = testUser;
+    await renderRoomMessageComponent(testScenario);
+
+    assert.dom(header).exists();
   });
 });

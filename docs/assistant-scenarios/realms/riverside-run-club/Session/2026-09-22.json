@@ -1,0 +1,55 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "date": "2026-09-22",
+      "kind": "Hills",
+      "startTime": "7:00 am",
+      "weather": "Drizzle, 16 °C",
+      "note": "Six climbs. Wet steps, so we walked the last two down."
+    },
+    "relationships": {
+      "route": {
+        "links": {
+          "self": "../Route/cathedral-steps"
+        }
+      },
+      "attendees.0": {
+        "links": {
+          "self": "../Runner/lena-ruiz"
+        }
+      },
+      "attendees.1": {
+        "links": {
+          "self": "../Runner/tom-okafor"
+        }
+      },
+      "attendees.2": {
+        "links": {
+          "self": "../Runner/ben-carter"
+        }
+      },
+      "attendees.3": {
+        "links": {
+          "self": "../Runner/jonah-weiss"
+        }
+      },
+      "attendees.4": {
+        "links": {
+          "self": "../Runner/omar-haddad"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../session",
+        "name": "Session"
+      }
+    }
+  }
+}

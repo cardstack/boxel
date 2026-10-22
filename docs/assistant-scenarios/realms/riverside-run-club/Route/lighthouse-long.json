@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Lighthouse Long Run",
+      "distanceKm": 16.0,
+      "climbM": 64,
+      "surface": "Paved",
+      "lighting": "Daylight only",
+      "meetingPoint": "the 79th Street Boathouse",
+      "path": "M6 54 C 30 54, 26 34, 44 30 S 70 36, 80 22 S 98 4, 114 6",
+      "accent": "#ffb547",
+      "notes": "The Sunday long run to the Little Red Lighthouse and back. Water at 96th and at the turn."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../route",
+        "name": "Route"
+      }
+    }
+  }
+}

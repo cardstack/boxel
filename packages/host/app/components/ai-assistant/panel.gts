@@ -7,6 +7,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import HistoryIcon from '@cardstack/boxel-icons/history';
+import { AgentMark } from '@cardstack/pretui/components/agent-mark';
 
 import { restartableTask } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
@@ -27,14 +28,14 @@ import ENV from '@cardstack/host/config/environment';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 
-import NewSession from '../ai-assistant/new-session';
+import type ToolService from '@cardstack/host/services/tool-service';
 
+import NewSession from '../ai-assistant/new-session';
 import AiAssistantPastSessionsList from '../ai-assistant/past-sessions';
 import RenameSession from '../ai-assistant/rename-session';
 import Room from '../matrix/room';
 import DeleteModal from '../operator-mode/delete-modal';
 
-import assistantIcon from './ai-assist-icon.webp';
 import FallbackBanner from './fallback-banner';
 import NewSessionButton from './new-session-button';
 
@@ -50,10 +51,13 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     onClose: () => void;
-    resizeHandle: WithBoundArgs<
+    resizeHandle?: WithBoundArgs<
       typeof ResizeHandle,
       'groupId' | 'orientation' | 'registerResizeHandle'
     >;
+    // show this room instead of the current one: the assistant board shows
+    // several sessions side by side, each in a panel of its own
+    roomId?: string;
     selectedCardRef?: ResolvedCodeRef;
   };
 }
@@ -77,16 +81,23 @@ export default class AiAssistantPanel extends Component<Signature> {
         data-test-room-has-messages={{if this.roomResource.messages true false}}
         data-test-room-is-empty={{if this.roomResource.messages false true}}
         style={{cssVar chat-top-clearance=this.chatTopClearanceCss}}
+        data-assistant-room={{this.roomId}}
         ...attributes
       >
-        <@resizeHandle class='ai-assistant-panel-resize-handle' />
+        {{#if @resizeHandle}}
+          <@resizeHandle class='ai-assistant-panel-resize-handle' />
+        {{/if}}
         <div class='panel-header-container'>
           <header class='panel-header'>
-            <img
-              alt='AI Assistant'
-              src={{assistantIcon}}
-              width='20'
-              height='20'
+            {{! the assistant's own mark, still: the animated mark belongs to
+                the cap by the message box alone, so the panel shows one
+                thing working at a time }}
+            <AgentMark
+              class='panel-agent-mark'
+              @working={{false}}
+              @size={{20}}
+              aria-label='AI Assistant'
+              data-test-agent-mark={{if this.isAssistantWorking 'working'}}
             />
             {{#let
               (if this.roomResource.name this.roomResource.name 'Assistant')
@@ -114,7 +125,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 @icon={{HistoryIcon}}
                 @label='Past Sessions'
                 @size='extra-small'
-                @variant='highlight-icon'
+                @variant='ghost'
                 @width='14'
                 @height='14'
                 @loading={{pastSessionsLoading}}
@@ -132,7 +143,7 @@ export default class AiAssistantPanel extends Component<Signature> {
               @width='18'
               @height='18'
               @label='close ai assistant'
-              @variant='highlight-icon'
+              @variant='ghost'
               class='button'
               {{on 'click' @onClose}}
               data-test-close-ai-assistant
@@ -172,10 +183,10 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{else if this.isReady}}
           {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
           {{#if this.roomResource}}
-            {{#if this.matrixService.currentRoomId}}
+            {{#if this.roomId}}
               <Room
                 class='room'
-                @roomId={{this.matrixService.currentRoomId}}
+                @roomId={{this.roomId}}
                 @roomResource={{this.roomResource}}
                 @monacoSDK={{this.monacoSDK}}
                 @selectedCardRef={{@selectedCardRef}}
@@ -188,6 +199,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             @color='var(--boxel-light)'
           />
         {{/if}}
+
       </div>
     </Velcro>
 
@@ -217,16 +229,161 @@ export default class AiAssistantPanel extends Component<Signature> {
         --ai-assistant-menu-hover-background: var(--boxel-700);
       }
 
-      .left-border {
-        border-left: 1px solid var(--boxel-600);
-      }
-
       .ai-assistant-panel {
+        /* Theme bridge: Pret UI components (StickToBottom, MarkdownStream,
+           ToolRow, Thinking, DiffBlock…) read the kit's semantic tokens.
+           The panel is dark, so map them onto Boxel values that read on
+           --boxel-ai-purple; without this they fall back to light-theme
+           literals. Everything Pret UI inside the panel inherits these. */
+        /* the assistant visual system (pretui/docs/assistant-visual-
+           system.md): a tested ink ladder, four states, four type sizes,
+           a 4 px space scale and three radii. Components read these roles;
+           this block is the Boxel dark theme's values for them. */
+        /* ink-1 ≥ 12:1, ink-2 ≥ 7:1, ink-3 ≥ 4.5:1 at 11 px, on the panel,
+           its cards and its insets */
+        --foreground: #f7f8fa;
+        --ink-2: #c9c4d6;
+        --ink-3: #a8a2ba;
+        --ai-assistant-ink: var(--foreground);
+        --pretui-toolrow-settled-ink: var(--ink-2);
+        --muted-foreground: var(--ink-2);
+        --subtle-foreground: var(--ink-3);
+        --state-live: var(--boxel-highlight);
+        --state-attention: #f0b44c;
+        --state-failed: #f07272;
+        /* type: reading, UI, caption, heading, display, data */
+        --type-read: 14px;
+        --leading-read: 22px;
+        --type-ui: 12.5px;
+        --leading-ui: 18px;
+        --type-caption: 11px;
+        --leading-caption: 16px;
+        --type-head: 17px;
+        --leading-head: 24px;
+        --type-display: 22px;
+        --leading-display: 28px;
+        --type-data: 12px;
+        --leading-data: 18px;
+        /* old names, for one release */
+        --text-ui-xs: var(--type-caption);
+        --text-ui-sm: var(--type-caption);
+        --text-ui-md: var(--type-ui);
+        --text-ui: var(--type-ui);
+        /* space, radius, measure */
+        --step-4: 4px;
+        --step-8: 8px;
+        --step-12: 12px;
+        --step-16: 16px;
+        --step-24: 24px;
+        --step-32: 32px;
+        --step-48: 48px;
+        --round-chip: 4px;
+        --round-row: 8px;
+        --round-surface: 12px;
+        --measure-read: 68ch;
+        --card: color-mix(
+          in oklch,
+          var(--boxel-light) 6%,
+          var(--boxel-ai-purple)
+        );
+        --inset: color-mix(
+          in oklch,
+          var(--boxel-light) 9%,
+          var(--boxel-ai-purple)
+        );
+        --muted: var(--inset);
+        --hover: color-mix(
+          in oklch,
+          var(--boxel-light) 12%,
+          var(--boxel-ai-purple)
+        );
+        --border: color-mix(in oklch, var(--boxel-light) 10%, transparent);
+        --border-strong: color-mix(
+          in oklch,
+          var(--boxel-light) 20%,
+          transparent
+        );
+        --pretui-shadow-hairline: 0 0 0 1px var(--border);
+        /* the card is darker than the inset here, so a segmented pill gets
+           its own lighter face, and labels on a card face read light */
+        --card-foreground: var(--foreground);
+        --pretui-highlight-pill: color-mix(
+          in oklch,
+          var(--boxel-light) 18%,
+          var(--boxel-ai-purple)
+        );
+        --pretui-seg-active-ink: var(--foreground);
+        /* the reader's bubble takes the kit's default: it steps back on
+           --inset with ink-1 text, not white */
+        /* the assistant's own icon for Pret UI's AgentMark: still when
+           settled, animated while it works */
+        --pretui-agent-icon: image-set(
+          url('./ai-assist-icon.webp') 1x,
+          url('./ai-assist-icon@2x.webp') 2x,
+          url('./ai-assist-icon@3x.webp') 3x
+        );
+        --pretui-agent-icon-working: url('./ai-assist-icon-animated.webp');
+        --pretui-agent-glyph: '';
+        /* the diff's code well: deeper than the panel, as the board draws it */
+        --pretui-code-well: color-mix(
+          in oklch,
+          black 28%,
+          color-mix(in oklch, var(--boxel-light) 6%, var(--boxel-ai-purple))
+        );
+        --ring: var(--boxel-highlight);
+        --primary: var(--boxel-highlight);
+        --pretui-primary-ink: var(--boxel-highlight);
+        --pretui-link: var(--boxel-highlight);
+        --success: var(--boxel-highlight);
+        --success-ink: var(--boxel-highlight);
+        --destructive: var(--boxel-danger);
+        --pretui-destructive-ink: color-mix(
+          in oklch,
+          var(--boxel-danger) 55%,
+          var(--boxel-light)
+        );
+        /* amber is the panel's one "needs you" colour: the row's gate, its
+           ring and the composer cap's waiting dot all speak it; teal is
+           spent only on the moment's one primary action */
+        --pretui-attention: var(--state-attention);
+        --pretui-attention-ink: var(--state-attention);
+        /* the message box: a tinted light, raised on the dark panel, so it
+           is the one thing that reads as "yours to write in"; its status is
+           a dark cap on its top edge */
+        --ai-composer-surface: color-mix(
+          in oklch,
+          var(--boxel-ai-purple) 5%,
+          var(--boxel-light)
+        );
+        --ai-composer-well: color-mix(
+          in oklch,
+          var(--boxel-ai-purple) 12%,
+          var(--boxel-light)
+        );
+        --ai-composer-cap-surface: color-mix(
+          in oklch,
+          var(--boxel-light) 9%,
+          var(--boxel-ai-purple)
+        );
+        --ai-composer-cap-edge: color-mix(
+          in oklch,
+          var(--boxel-light) 16%,
+          var(--boxel-ai-purple)
+        );
+        --ai-composer-attention: var(--pretui-attention);
+        --font-mono: var(--boxel-monospace-font-family);
+        --pretui-code-string: #a8e6a1;
+        --pretui-code-number: #f7b07a;
+        --pretui-code-keyword: #d7a6ff;
+        --pretui-code-name: #8fc7ff;
+        --pretui-code-comment: var(--boxel-450);
+
         --ai-assistant-panel-header-height: 4.5rem;
         --ai-assistant-panel-top-gradient-start-proportion: 0.6;
-        --ai-assistant-panel-padding: var(--boxel-sp-sm);
+        /* the spine: the transcript's marks and text edge sit 16 in */
+        --ai-assistant-panel-padding: var(--step-16, 16px);
 
-        --ai-assistant-panel-bottom-gradient-height: var(--boxel-sp-xl);
+        --ai-assistant-panel-bottom-gradient-height: var(--step-16, 16px);
 
         --top-gradient-hidden: linear-gradient(
           to bottom,
@@ -290,8 +447,12 @@ export default class AiAssistantPanel extends Component<Signature> {
         padding: var(--ai-assistant-panel-padding);
 
         display: grid;
-        grid-template-columns: 20px auto 20px 20px 20px;
-        gap: var(--boxel-sp-xxxs);
+        grid-template-columns: 20px minmax(0, 1fr) repeat(3, 1.75rem);
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+        /* the header's actions are quiet: teal is spent on the moment's one
+           primary action, down in the composer */
+        color: #c9c4d6;
       }
 
       .panel-title-text {
@@ -300,8 +461,8 @@ export default class AiAssistantPanel extends Component<Signature> {
         padding-right: var(--boxel-sp-xl);
         padding-left: 2px;
         color: var(--boxel-light);
-        font: 700 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-sm);
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: 0;
         overflow: hidden;
         white-space: nowrap;
         display: -webkit-box;
@@ -335,18 +496,41 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       .button {
         --host-outline-offset: 2px;
-        transform: translateY(-1px);
+        position: relative;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 0.5rem;
+        color: inherit;
+      }
+      .button:hover,
+      .button[aria-expanded='true'] {
+        color: var(--boxel-light);
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-light) 10%,
+          transparent
+        );
       }
       .button :deep(svg) {
-        stroke-width: 2.5;
+        stroke-width: 2;
       }
       .button :deep(.loading-icon) {
         width: 16px;
         height: 16px;
       }
 
-      .has-other-active-sessions {
-        animation: cycle-color-to-background 1s ease-in infinite alternate;
+      /* another session has news: a teal dot on Past Sessions, not a
+         blinking icon */
+      .has-other-active-sessions::after {
+        content: '';
+        position: absolute;
+        top: 0.25rem;
+        right: 0.25rem;
+        width: 0.4375rem;
+        height: 0.4375rem;
+        border-radius: 50%;
+        background: var(--boxel-highlight);
+        box-shadow: 0 0 0 2px var(--boxel-ai-purple);
       }
 
       .loading-new-session {
@@ -361,16 +545,6 @@ export default class AiAssistantPanel extends Component<Signature> {
           --chat-top-clearance,
           calc(var(--ai-assistant-panel-header-height) * 0.5)
         );
-      }
-
-      @keyframes cycle-color-to-background {
-        100% {
-          color: color-mix(
-            in oklab,
-            var(--boxel-highlight),
-            var(--boxel-ai-purple) 75%
-          );
-        }
       }
 
       .session-error {
@@ -404,6 +578,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private monacoService: MonacoService;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
+  @service declare private toolService: ToolService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
@@ -477,9 +652,26 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.isFallbackBannerDismissed = true;
   }
 
+  private get roomId() {
+    return this.args.roomId ?? this.matrixService.currentRoomId;
+  }
+
+  // The assistant is answering, or a call it made is still running.
+  private get isAssistantWorking() {
+    let messages = this.roomResource?.messages ?? [];
+    let last = messages[messages.length - 1];
+    let streaming =
+      last?.author.userId === aiBotUserId &&
+      !last.isStreamingFinished &&
+      !last.isCanceled;
+    return Boolean(
+      streaming || this.toolService.currentlyExecutingToolRequestIds.size,
+    );
+  }
+
   private get roomResource() {
-    return this.matrixService.currentRoomId
-      ? this.matrixService.roomResources.get(this.matrixService.currentRoomId)
+    return this.roomId
+      ? this.matrixService.roomResources.get(this.roomId)
       : undefined;
   }
 
@@ -514,7 +706,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private get isReady() {
     return Boolean(
-      this.matrixService.currentRoomId &&
+      this.roomId &&
       this.maybeMonacoSDK &&
       !this.aiAssistantPanelService.loadingRooms &&
       this.aiAssistantPanelService.isCreateRoomIdle,

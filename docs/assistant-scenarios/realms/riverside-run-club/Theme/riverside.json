@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Riverside",
+        "summary": "Night running on a river: ink, warm paper, one signal colour, every route drawn as a line."
+      },
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Inter+Tight:wght@400..800&family=JetBrains+Mono:wght@400..700&display=swap"
+      ],
+      "cssVariables": ":root {\n  --background: #f4f1ea;\n  --foreground: #0d1522;\n  --card: #f4f1ea;\n  --card-foreground: #0d1522;\n  --primary: #0d1522;\n  --primary-foreground: #f4f1ea;\n  --secondary: #e2ddd2;\n  --secondary-foreground: #0d1522;\n  --muted: #e9e4d9;\n  --muted-foreground: #67707d;\n  --accent: #c6f432;\n  --accent-foreground: #0d1522;\n  --border: #d9d3c7;\n  --ring: #0d1522;\n  --radius: 10px;\n  --font-sans: 'Inter Tight', 'Inter', system-ui, sans-serif;\n  --font-serif: 'Archivo', 'Inter Tight', system-ui, sans-serif;\n  --font-mono: 'JetBrains Mono', ui-monospace, monospace;\n}"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/card-api",
+        "name": "Theme"
+      }
+    }
+  }
+}

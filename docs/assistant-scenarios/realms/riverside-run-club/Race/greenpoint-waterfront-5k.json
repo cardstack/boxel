@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Greenpoint Waterfront 5K",
+      "date": "2026-11-29",
+      "distance": "5K",
+      "borough": "Brooklyn",
+      "startLine": "Transmitter Park",
+      "organiser": "North Brooklyn Runners",
+      "feeUsd": 32,
+      "kidsRace": false,
+      "kidsFeeUsd": null,
+      "website": "greenpoint-waterfront-5k.example.org"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../race",
+        "name": "Race"
+      }
+    }
+  }
+}

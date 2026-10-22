@@ -42,21 +42,16 @@ export default class LLMSelect extends Component<Signature> {
       ...attributes
     >
       <:headerDetail>
+        {{! the trigger names the model only: its provider and its cost
+            are in the list, where models are compared, and on hover }}
         <div class='selected-llm-wrapper'>
           <span
             class='selected-llm'
+            title={{this.fullLabel}}
             data-test-llm-select-selected={{@selected}}
           >
-            {{this.displayName}}
+            {{this.shortName}}
           </span>
-          {{#if this.selectedCostTierLabel}}
-            <span
-              class='llm-cost'
-              data-test-llm-cost-selected={{this.selectedCostTierLabel}}
-            >
-              {{this.selectedCostTierLabel}}
-            </span>
-          {{/if}}
         </div>
       </:headerDetail>
       <:content>
@@ -119,7 +114,10 @@ export default class LLMSelect extends Component<Signature> {
         white-space: nowrap;
         min-width: 0;
         color: var(--boxel-dark);
-        font: 700 var(--boxel-font-xs);
+        font-family: var(--boxel-font-family);
+        font-size: var(--type-ui, 12.5px);
+        line-height: var(--leading-ui, 18px);
+        font-weight: 600;
       }
 
       /* Cost tier chip ($…$$$$ / Free). Deliberately muted and distinct from
@@ -127,8 +125,11 @@ export default class LLMSelect extends Component<Signature> {
       .llm-cost {
         flex-shrink: 0;
         color: var(--boxel-450);
-        font: 600 var(--boxel-font-xs);
-        letter-spacing: 0.03em;
+        font-family: var(--boxel-font-family);
+        font-size: var(--type-caption, 11px);
+        line-height: var(--leading-caption, 16px);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
       }
 
       .llm-list {
@@ -136,12 +137,12 @@ export default class LLMSelect extends Component<Signature> {
         padding: 0;
         margin: 0;
         display: grid;
-        gap: var(--boxel-sp-3xs);
+        gap: var(--step-4, 4px);
       }
 
       .llm-option {
         background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
+        border-radius: var(--round-row, 8px);
         border: 1px solid var(--boxel-400);
       }
 
@@ -165,7 +166,10 @@ export default class LLMSelect extends Component<Signature> {
         background: none;
         border: none;
         color: var(--boxel-dark);
-        font: 500 var(--boxel-font-xs);
+        font-family: var(--boxel-font-family);
+        font-size: var(--type-ui, 12.5px);
+        line-height: var(--leading-ui, 18px);
+        font-weight: 400;
         cursor: pointer;
 
         display: flex;
@@ -201,6 +205,18 @@ export default class LLMSelect extends Component<Signature> {
 
   private get displayName() {
     return this.selectedOption?.name;
+  }
+
+  // "OpenAI: GPT-6 Luna" reads "GPT-6 Luna" in the trigger
+  private get shortName() {
+    let name = this.displayName ?? '';
+    return name.replace(/^[^:]{1,24}:\s*/, '');
+  }
+
+  private get fullLabel() {
+    return [this.displayName, this.selectedCostTierLabel]
+      .filter(Boolean)
+      .join(' · ');
   }
 
   private get selectedCostTierLabel() {

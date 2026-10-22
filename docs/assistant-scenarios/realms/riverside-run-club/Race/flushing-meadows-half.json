@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Flushing Meadows Half",
+      "date": "2026-11-15",
+      "distance": "Half",
+      "borough": "Queens",
+      "startLine": "Unisphere",
+      "organiser": "Queens Distance Club",
+      "feeUsd": 85,
+      "kidsRace": false,
+      "kidsFeeUsd": null,
+      "website": "flushing-meadows-half.example.org"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../race",
+        "name": "Race"
+      }
+    }
+  }
+}

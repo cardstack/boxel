@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Maya Patel",
+      "status": "Member",
+      "paceSeconds": 327,
+      "neighbourhood": "Lincoln Square",
+      "since": "Aug 2022",
+      "runs": 26,
+      "longestKm": 21.1,
+      "bio": "Runs to the club from work. Asks about the after-run coffee more than the route."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/bridge-to-bridge"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

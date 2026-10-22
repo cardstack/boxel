@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "River Loop",
+      "distanceKm": 6.4,
+      "climbM": 12,
+      "surface": "Paved",
+      "lighting": "Lit after dark",
+      "meetingPoint": "the 79th Street Boathouse",
+      "path": "M14 44 C 10 24, 30 10, 54 14 S 96 8, 108 22 S 96 50, 70 46 S 30 56, 14 44 Z",
+      "accent": "#7fd4b8",
+      "notes": "The club route. North along the water to the Grant's Tomb turn, back on the upper path. Flat, wide, and busy with cyclists after six."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../route",
+        "name": "Route"
+      }
+    }
+  }
+}

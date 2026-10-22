@@ -74,9 +74,9 @@ export default class AiAssistantChatInput extends Component<Signature> {
         grid-template-columns: auto 1fr auto;
         align-items: center;
         min-height: 54px;
-        gap: var(--boxel-sp-xxs);
-        padding: 0 var(--boxel-sp-sm);
-        background-color: var(--boxel-light);
+        gap: var(--step-4, 4px);
+        padding: 0 var(--step-12, 12px);
+        background-color: transparent;
         border-top-left-radius: var(--chat-input-area-border-radius);
         border-top-right-radius: var(--chat-input-area-border-radius);
 
@@ -118,9 +118,12 @@ export default class AiAssistantChatInput extends Component<Signature> {
         max-height: 150px;
         overflow-y: auto;
 
-        font: var(--boxel-font-sm);
+        /* the entry reads at the reading size, 14 on 22 */
+        font-family: var(--boxel-font-family);
+        font-size: var(--type-read, 14px);
+        line-height: var(--leading-read, 22px);
         font-weight: 400;
-        letter-spacing: var(--boxel-lsp-xs);
+        letter-spacing: normal;
 
         grid-area: 1 / 1 / 2 / 2;
       }
@@ -149,20 +152,24 @@ export default class AiAssistantChatInput extends Component<Signature> {
       }
 
       .chat-input::placeholder {
-        color: var(--boxel-400);
+        color: var(--boxel-500);
       }
       .chat-input:hover:not(:disabled) {
         border-color: transparent;
       }
+      /* Send is the box's one primary: solid teal while there is something
+         to send, a quiet grey well until then */
       .send-button {
-        width: var(--boxel-icon-med);
-        height: var(--boxel-icon-med);
-        border-radius: var(--boxel-border-radius-sm);
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--round-row, 8px);
         margin-top: 2px;
+        background-color: var(--boxel-highlight);
+        color: var(--boxel-dark);
       }
       .send-button:disabled {
         color: var(--boxel-450);
-        background-color: var(--boxel-300);
+        background-color: var(--ai-composer-well, var(--boxel-200));
         pointer-events: none;
       }
       .send-button :deep(svg) {

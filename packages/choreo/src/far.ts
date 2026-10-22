@@ -103,11 +103,33 @@ export function setBeforeMeasure(fn: () => void) {
   beforeMeasure = fn;
 }
 
+/**
+ * SETTLE: state that the pass implies but that is not markup, settled after
+ * this pass's mounts and before any region measures. A scroll owner holds
+ * its anchor here (StickToBottom's scroll anchoring protocol): a scroll
+ * position is state, so it lands in the same pass as the change that moved
+ * it, and every region measures the page as the reader will see it. An
+ * element the scroll kept still then reads as not moved and gets no motion;
+ * only what really moved on screen does.
+ *
+ * Settlers run in registration order. Returns the unregister function.
+ */
+const settlers = new Set<() => void>();
+export function registerSettle(fn: () => void): () => void {
+  settlers.add(fn);
+  return () => {
+    settlers.delete(fn);
+  };
+}
+
 function runBarrier() {
   booked = false;
   const hosts = [...intents];
   intents.clear();
   beforeMeasure();
+  for (const settle of [...settlers]) {
+    settle();
+  }
   const passes: Pass[] = [];
   for (const host of hosts) {
     const pass = host.measurePass();

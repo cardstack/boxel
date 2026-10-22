@@ -1115,10 +1115,12 @@ module('Acceptance | Tools tests', function (hooks) {
     // can exceed CI's browser_disconnect_timeout.
     await settled();
     assert
-      .dom('[data-test-message-idx="0"] .tool-description')
+      .dom('[data-test-message-idx="0"] [data-test-pretui-tool-row-title]')
       .containsText('Switching to code submode');
 
-    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+    );
 
     // check we're in code mode
     await waitFor('[data-test-submode-switcher=code]', { timeout: 5000 });
@@ -1196,12 +1198,14 @@ module('Acceptance | Tools tests', function (hooks) {
     // Click on the apply button
     await waitFor('[data-test-message-idx="0"]');
     assert
-      .dom('[data-test-message-idx="0"] .tool-description')
+      .dom('[data-test-message-idx="0"] [data-test-pretui-tool-row-title]')
       .containsText('Finding and opening Hassan card');
     assert
       .dom('[data-test-message-idx="0"] [data-test-tool-call-apply]')
       .containsText('Search');
-    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+    );
     assert
       .dom(
         '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
@@ -1311,7 +1315,9 @@ module('Acceptance | Tools tests', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-tool-call-apply]')
       .exists('the verified read-skill tool offers approval, not auto-run');
 
-    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+    );
     await waitFor('[data-test-submode-switcher=code]', { timeout: 5000 });
     assert.dom('[data-test-submode-switcher=code]').exists();
 
@@ -1374,7 +1380,7 @@ module('Acceptance | Tools tests', function (hooks) {
     });
     await settled();
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="invalid"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="invalid"]')
       .exists('the tool call is invalid');
     assert
       .dom('[data-test-boxel-alert="warning"]')
@@ -1435,7 +1441,7 @@ module('Acceptance | Tools tests', function (hooks) {
     // Click on the apply button
     await waitFor('[data-test-message-idx="0"]');
     assert
-      .dom('[data-test-message-idx="0"] .tool-description')
+      .dom('[data-test-message-idx="0"] [data-test-pretui-tool-row-title]')
       .containsText('Finding and opening Hassan card');
   });
 
@@ -1477,13 +1483,13 @@ module('Acceptance | Tools tests', function (hooks) {
 
     await waitFor('[data-test-message-idx="0"]');
     assert
-      .dom('[data-test-message-idx="0"] .tool-description')
+      .dom('[data-test-message-idx="0"] [data-test-pretui-tool-row-title]')
       .containsText(description);
     assert
       .dom(
-        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+        '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
       )
-      .exists();
+      .exists('a preparing call reads as streaming in its row');
   });
 
   test('ShowCard command added from a skill, can be automatically executed when agentId matches', async function (assert) {
@@ -1548,7 +1554,7 @@ module('Acceptance | Tools tests', function (hooks) {
     // has requireApproval set to false.
     await settled();
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists(describeToolResult(roomId, toolCallId));
 
     assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
@@ -1641,7 +1647,9 @@ module('Acceptance | Tools tests', function (hooks) {
       });
       await settled();
       assert
-        .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+        .dom(
+          '[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]',
+        )
         .exists(describeToolResult(roomId, 'view-visually-handoff'));
 
       let result = getRoomEvents(roomId)
@@ -1705,7 +1713,7 @@ module('Acceptance | Tools tests', function (hooks) {
     });
     await settled();
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists(describeToolResult(roomId, 'realm-viewer-request'));
 
     let result = getRoomEvents(roomId)
@@ -1784,7 +1792,7 @@ module('Acceptance | Tools tests', function (hooks) {
     // anyway would have switched the submode by now.
     await settled();
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="ready"]')
       .exists();
 
     assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
@@ -1824,8 +1832,8 @@ module('Acceptance | Tools tests', function (hooks) {
     });
     await waitFor('[data-test-message-idx="0"]');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply]')
-      .exists({ count: 2 });
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-id]')
+      .exists({ count: 2 }, 'each requested call has its row');
   });
 
   test('LLM mode event controls auto-apply of switch-submode command with timestamp checking', async function (assert) {
@@ -1850,7 +1858,11 @@ module('Acceptance | Tools tests', function (hooks) {
     );
 
     // Default should be 'ask'
-    assert.dom('[data-test-llm-mode-option="ask"]').hasClass('selected');
+    assert
+      .dom(
+        '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="ask"]',
+      )
+      .isChecked();
 
     // Simulate a switch-submode command message from the bot (requires approval)
     let commandId = 'switch-submode-cmd-1';
@@ -1881,15 +1893,21 @@ module('Acceptance | Tools tests', function (hooks) {
     await settled();
     // In 'ask' mode, the apply button should be visible and not auto-applied
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="ready"]')
       .exists('Apply button is shown in ask mode');
     assert
-      .dom('[data-test-apply-state="applied"]')
+      .dom('[data-test-tool-call-apply="applied"]')
       .doesNotExist('Command is not auto-applied in ask mode');
 
     // Switch to 'act' mode
-    await click('[data-test-llm-mode-option="act"]');
-    assert.dom('[data-test-llm-mode-option="act"]').hasClass('selected');
+    await click(
+      '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+    );
+    assert
+      .dom(
+        '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+      )
+      .isChecked();
     let llmModeState = getRoomState(matrixRoomId, APP_BOXEL_LLM_MODE, '');
     assert.strictEqual(llmModeState?.mode, 'act', 'LLM mode updates to act');
 
@@ -1919,15 +1937,21 @@ module('Acceptance | Tools tests', function (hooks) {
 
     await settled();
     assert
-      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="1"] [data-test-tool-call-apply="applied"]')
       .exists(
         `Command is auto-applied in act mode: ${describeToolResult(matrixRoomId, commandId2)}`,
       );
 
     // Now test that commands sent BEFORE switching to act mode are NOT auto-applied
     // Switch back to 'ask' mode
-    await click('[data-test-llm-mode-option="ask"]');
-    assert.dom('[data-test-llm-mode-option="ask"]').hasClass('selected');
+    await click(
+      '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="ask"]',
+    );
+    assert
+      .dom(
+        '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="ask"]',
+      )
+      .isChecked();
 
     // Simulate a command message from the bot (this should NOT be auto-applied)
     let commandId3 = 'switch-submode-cmd-3';
@@ -1956,24 +1980,30 @@ module('Acceptance | Tools tests', function (hooks) {
     await settled();
     // In 'ask' mode, the apply button should be visible and not auto-applied
     assert
-      .dom('[data-test-message-idx="2"] [data-test-apply-state="ready"]')
+      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply="ready"]')
       .exists('Apply button is shown in ask mode');
     assert
-      .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply="applied"]')
       .doesNotExist('Command is not auto-applied in ask mode');
 
     // Now switch to 'act' mode again - the previous command should still NOT
     // be auto-applied. The click settles, which includes the mode event's
     // round trip and any tool drain it causes.
-    await click('[data-test-llm-mode-option="act"]');
-    assert.dom('[data-test-llm-mode-option="act"]').hasClass('selected');
+    await click(
+      '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+    );
+    assert
+      .dom(
+        '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+      )
+      .isChecked();
 
     // The command from message idx 2 should still not be auto-applied because it was sent before act mode
     assert
-      .dom('[data-test-message-idx="2"] [data-test-apply-state="ready"]')
+      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply="ready"]')
       .exists('Apply button is still shown for command sent before act mode');
     assert
-      .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply="applied"]')
       .doesNotExist('Command sent before act mode is not auto-applied');
 
     // Simulate a new command message from the bot AFTER switching to act mode
@@ -2002,7 +2032,7 @@ module('Acceptance | Tools tests', function (hooks) {
 
     await settled();
     assert
-      .dom('[data-test-message-idx="3"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="3"] [data-test-tool-call-apply="applied"]')
       .exists(
         `New command sent after act mode is auto-applied: ${describeToolResult(matrixRoomId, commandId4)}`,
       );
@@ -2058,7 +2088,7 @@ module('Acceptance | Tools tests', function (hooks) {
     });
     await settled();
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="invalid"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="invalid"]')
       .exists('the tool call is invalid');
     assert
       .dom('[data-test-boxel-alert="warning"]')
@@ -2140,12 +2170,15 @@ module('Acceptance | Tools tests', function (hooks) {
     });
     await settled();
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists(describeToolResult(roomId, toolCallId));
     assert.dom('[data-test-boxel-alert="warning"]').doesNotExist();
     assert
       .dom('[data-test-message-idx="0"] [data-test-tool-code-block]')
-      .containsText('Show card', 'the pill label falls back to the tool name');
+      .containsText(
+        'Showed card',
+        'the row title falls back to the tool name, settled',
+      );
 
     let message = toolResultFor(roomId, toolCallId)!;
     assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
@@ -2207,7 +2240,7 @@ module('Acceptance | Tools tests', function (hooks) {
     });
     await settled();
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="invalid"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="invalid"]')
       .exists('the tool call is invalid');
     // The CI flake mode for this test is that the warning reads "No command
     // for the name X was found" (skill not yet loaded) instead of the
@@ -2326,7 +2359,9 @@ module('Acceptance | Tools tests', function (hooks) {
   }
 
   async function applyLinkEcho(roomId: string) {
-    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+    );
     await waitUntil(() => linkEchoResult(roomId), {
       timeout: 5000,
       timeoutMessage: 'timed out waiting for the link-echo result',
@@ -2594,7 +2629,7 @@ module('Acceptance | Tools tests', function (hooks) {
         1,
         'applied command result event was dispatched after retry',
       );
-      assert.dom('[data-test-apply-state="applied"]').exists();
+      assert.dom('[data-test-tool-call-apply="applied"]').exists();
     });
   });
 });

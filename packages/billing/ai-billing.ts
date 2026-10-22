@@ -5,6 +5,7 @@ import {
 } from './billing-queries.ts';
 import {
   type DBAdapter,
+  CREDITS_PER_USD,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
   logger,
   delay,
@@ -13,7 +14,6 @@ import * as Sentry from '@sentry/node';
 
 const log = logger('ai-billing');
 
-const CREDITS_PER_USD = 1000;
 const MAX_FETCH_ATTEMPTS = 10;
 const MAX_FETCH_RUNTIME_MS = 10 * 60 * 1000; // 10 minutes
 const INITIAL_BACKOFF_MS = 1000;

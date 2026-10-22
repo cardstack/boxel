@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Sean Doyle",
+      "status": "Member",
+      "paceSeconds": 366,
+      "neighbourhood": "Inwood",
+      "since": "Mar 2025",
+      "runs": 9,
+      "longestKm": 8.2,
+      "bio": "Lives at the far end of Bridge to Bridge, so often runs it the other way to meet us."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/bridge-to-bridge"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

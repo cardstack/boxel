@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Ferry Terminal Dash",
+      "date": "2026-12-06",
+      "distance": "5K",
+      "borough": "Staten Island",
+      "startLine": "St George Terminal",
+      "organiser": "Island Striders",
+      "feeUsd": 30,
+      "kidsRace": true,
+      "kidsFeeUsd": 8,
+      "website": "staten-island-ferry-dash.example.org"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../race",
+        "name": "Race"
+      }
+    }
+  }
+}

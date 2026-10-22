@@ -1,5 +1,8 @@
 // Pretui — CompactionChip: a marker that earlier context was compacted, expandable to what was kept.
 import Component from '@glimmer/component';
+import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
+import ListFilterIcon from '@cardstack/boxel-icons/list-filter';
+import XIcon from '@cardstack/boxel-icons/x';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
@@ -18,12 +21,15 @@ import { Collapse } from '../internal/agentic-chat';
 
 export interface CompactionChipSignature {
   Args: {
-    /** 'running' while compacting, 'done' once the summary exists */
-    state?: 'running' | 'done';
+    /** 'running' while compacting, 'done' once the summary exists,
+     * 'failed' when it could not be made (the history is kept as it was) */
+    state?: 'running' | 'done' | 'failed';
     /** label while running (default 'Compacting long history') */
     runningLabel?: string;
     /** label once settled (default 'History compacted') */
     doneLabel?: string;
+    /** label when it failed (default 'Could not compact history') */
+    failedLabel?: string;
     /** how many messages were condensed */
     messageCount?: number;
     /** how many tool calls were condensed */
@@ -49,16 +55,23 @@ export class CompactionChip extends Component<CompactionChipSignature> {
 
   private panelId = guidFor(this) + '-summary';
 
-  get state(): 'running' | 'done' {
+  get state(): 'running' | 'done' | 'failed' {
     return this.args.state ?? 'done';
   }
   get running(): boolean {
     return this.state === 'running';
   }
+  get failed(): boolean {
+    return this.state === 'failed';
+  }
   get label(): string {
-    return this.running
-      ? (this.args.runningLabel ?? 'Compacting long history')
-      : (this.args.doneLabel ?? 'History compacted');
+    if (this.running) {
+      return this.args.runningLabel ?? 'Compacting long history';
+    }
+    if (this.failed) {
+      return this.args.failedLabel ?? 'Could not compact history';
+    }
+    return this.args.doneLabel ?? 'History compacted';
   }
   /** the condensed-counts line, assembled as text so it reads in greyscale */
   get counts(): string | undefined {
@@ -74,7 +87,7 @@ export class CompactionChip extends Component<CompactionChipSignature> {
     return parts.length ? parts.join(' · ') + ' condensed' : undefined;
   }
   get expandable(): boolean {
-    return !this.running;
+    return this.state === 'done';
   }
   get expanded(): boolean {
     return (
@@ -108,38 +121,30 @@ export class CompactionChip extends Component<CompactionChipSignature> {
             data-test-pretui-compaction-toggle
             {{on 'click' this.toggle}}
           >
-            <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'>
-              <path
-                d='M4 8h16M7 12h10M10 16h4'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-                stroke-linecap='round'
-              />
-            </svg>
+            <ListFilterIcon width='13' height='13' aria-hidden='true' />
             <span class='pretui-compaction-label'>{{this.label}}</span>
             {{#if this.counts}}
               <span class='pretui-compaction-counts'>{{this.counts}}</span>
             {{/if}}
-            <svg
+            <ChevronDownIcon
               class='pretui-compaction-chev'
-              viewBox='0 0 24 24'
+              width='13'
+              height='13'
               aria-hidden='true'
-              focusable='false'
-            >
-              <path
-                d='M6 9l6 6 6-6'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2.2'
-                stroke-linecap='round'
-                stroke-linejoin='round'
-              />
-            </svg>
+            />
           </button>
         {{else}}
           <span class='pretui-compaction-chip' role='status'>
-            <Spinner @size={{11}} />
+            {{#if this.failed}}
+              <XIcon
+                class='pretui-compaction-failed'
+                width='11'
+                height='11'
+                aria-hidden='true'
+              />
+            {{else}}
+              <Spinner @size={{11}} />
+            {{/if}}
             <span class='pretui-compaction-label'>{{this.label}}</span>
           </span>
         {{/if}}
@@ -167,13 +172,26 @@ export class CompactionChip extends Component<CompactionChipSignature> {
         .pretui-compaction {
           display: flex;
           flex-direction: column;
-          gap: 4px;
-          font-size: var(--text-ui-sm, 11.5px);
+          gap: var(--step-4, 4px);
+          font-size: var(--type-ui, 12.5px);
+          line-height: var(--leading-ui, 18px);
         }
         .pretui-compaction-marker {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: var(--step-8, 8px);
+        }
+        /* a failure colours its mark, not its words */
+        .pretui-compaction[data-state='failed'] .pretui-compaction-chip {
+          color: var(--foreground);
+        }
+        .pretui-compaction-failed {
+          font-size: var(--type-caption, 11px);
+          line-height: 1;
+          color: var(
+            --state-failed,
+            var(--pretui-destructive-ink, var(--destructive))
+          );
         }
         .pretui-compaction-rule {
           flex: 1;
@@ -184,20 +202,24 @@ export class CompactionChip extends Component<CompactionChipSignature> {
         .pretui-compaction-chip {
           display: inline-flex;
           align-items: center;
-          gap: 7px;
+          gap: var(--step-8, 8px);
           min-height: 26px;
-          padding: 0 10px;
+          padding: 0 var(--step-12, 12px);
           border: 0;
-          border-radius: 999px;
+          border-radius: var(--round-row, 8px);
           background: var(--inset, var(--boxel-100));
           box-shadow: var(
             --pretui-shadow-hairline,
             0 0 0 1px var(--border)
           );
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--muted-foreground);
-          flex: none;
+          font-size: var(--type-ui, 12.5px);
+          line-height: var(--leading-ui, 18px);
+          color: var(--ink-2, var(--muted-foreground));
+          /* shrinks between its rules, so a narrow panel truncates the
+             label instead of pushing the chip past the edge */
+          flex: 0 1 auto;
+          min-width: 0;
           max-width: 100%;
         }
         button.pretui-compaction-chip {
@@ -218,7 +240,7 @@ export class CompactionChip extends Component<CompactionChipSignature> {
           color: var(--ink-3, var(--boxel-400));
         }
         .pretui-compaction-label {
-          font-weight: 500;
+          font-weight: 400;
           min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -237,17 +259,16 @@ export class CompactionChip extends Component<CompactionChipSignature> {
           transform: rotate(180deg);
         }
         .pretui-compaction-summary {
-          margin: 4px auto 0;
-          max-width: 62ch;
-          padding: 9px 12px;
-          border-radius: 10px;
+          margin: var(--step-4, 4px) auto 0;
+          max-inline-size: var(--measure-read, 68ch);
+          padding: var(--step-8, 8px) var(--step-12, 12px);
+          border-radius: var(--round-row, 8px);
           background: var(--inset, var(--boxel-100));
           box-shadow: var(
             --pretui-shadow-hairline,
             0 0 0 1px var(--border)
           );
-          color: var(--muted-foreground);
-          line-height: 1.6;
+          color: var(--ink-2, var(--muted-foreground));
         }
         .pretui-compaction-summary p {
           margin: 0;

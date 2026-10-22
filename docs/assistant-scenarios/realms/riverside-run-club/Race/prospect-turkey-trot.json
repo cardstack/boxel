@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Prospect Park Turkey Trot",
+      "date": "2026-11-26",
+      "distance": "5K",
+      "borough": "Brooklyn",
+      "startLine": "Grand Army Plaza",
+      "organiser": "Brooklyn Road Runners",
+      "feeUsd": 35,
+      "kidsRace": true,
+      "kidsFeeUsd": 12,
+      "website": "prospect-turkey-trot.example.org"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../race",
+        "name": "Race"
+      }
+    }
+  }
+}

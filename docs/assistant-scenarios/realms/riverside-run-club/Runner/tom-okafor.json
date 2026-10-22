@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Tom Okafor",
+      "status": "Member",
+      "paceSeconds": 316,
+      "neighbourhood": "Manhattan Valley",
+      "since": "Jan 2025",
+      "runs": 29,
+      "longestKm": 21.1,
+      "bio": "Joined for the social runs, stayed for the hills. Brings oranges to the long run."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/boathouse-5k"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

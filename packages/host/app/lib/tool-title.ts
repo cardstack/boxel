@@ -1,0 +1,158 @@
+// The assistant describes a call before it runs, in the first person: "I'll
+// add the missing import". As a title the "I'll" is noise, so a title keeps
+// only what is being done.
+const FIRST_PERSON =
+  /^(?:i['’]ll|i will|i['’]m going to|i am going to|let me|i['’]m|i am|now i['’]ll|next,? i['’]ll)\s+(?:go ahead and\s+|now\s+)?/i;
+
+export function plainTitle(text: string): string {
+  let plain = text
+    .trim()
+    .replace(FIRST_PERSON, '')
+    .replace(/[.…]+$/, '');
+  return plain ? plain[0]!.toUpperCase() + plain.slice(1) : text;
+}
+
+// The past tense of the verbs assistants lead a call's description with.
+// Regular verbs take -ed by rule; these are the ones that don't, or that the
+// rule would spell wrong.
+const PAST: Record<string, string> = {
+  build: 'Built',
+  buy: 'Bought',
+  choose: 'Chose',
+  do: 'Did',
+  draw: 'Drew',
+  find: 'Found',
+  get: 'Got',
+  give: 'Gave',
+  keep: 'Kept',
+  leave: 'Left',
+  make: 'Made',
+  put: 'Put',
+  read: 'Read',
+  run: 'Ran',
+  send: 'Sent',
+  set: 'Set',
+  show: 'Showed',
+  take: 'Took',
+  write: 'Wrote',
+  try: 'Tried',
+  copy: 'Copied',
+  apply: 'Applied',
+  identify: 'Identified',
+  verify: 'Verified',
+  modify: 'Modified',
+  stop: 'Stopped',
+  plan: 'Planned',
+  map: 'Mapped',
+  add: 'Added',
+  check: 'Checked',
+  fix: 'Fixed',
+  look: 'Looked',
+  drop: 'Dropped',
+  tag: 'Tagged',
+  ship: 'Shipped',
+};
+
+function pastOf(word: string): string | undefined {
+  let lower = word.toLowerCase();
+  if (PAST[lower]) {
+    return PAST[lower];
+  }
+  // a gerund ("Asking the user…") names the same act
+  let stem = lower.endsWith('ing') ? lower.slice(0, -3) : lower;
+  if (PAST[stem]) {
+    return PAST[stem];
+  }
+  if (!/^[a-z]{3,}$/.test(stem) || /(ed|ly|s)$/.test(stem)) {
+    return undefined;
+  }
+  let past = stem.endsWith('e') ? `${stem}d` : `${stem}ed`;
+  return past[0]!.toUpperCase() + past.slice(1);
+}
+
+// The clauses that say why or how, which a settled title can do without:
+// "…cover image after your approval because it uses credit".
+const TAIL =
+  /\s+(?:because|so that|so it|so the|after your|before your|once you|using (?:one|a|the)? ?run-realm-code|with run-realm-code|via |in one script|in a single script|for (?:your|the user's) (?:review|approval))\b.*$/i;
+
+/** A settled call's title: what it did, in the past tense, without the why.
+ * "Replace the third relaunch note with two bullets" reads "Replaced the
+ * third relaunch note with two bullets". A title whose lead word is the
+ * row's verb drops it, since the verb label already says it: "Read file:
+ * SKILL.md" under READ reads "SKILL.md". */
+export function settledTitle(text: string, verb?: string): string {
+  let plain = plainTitle(text).replace(TAIL, '');
+  let [first, ...rest] = plain.split(/\s+/);
+  if (!first) {
+    return plain;
+  }
+  if (verb && first.replace(/:$/, '').toLowerCase() === verb.toLowerCase()) {
+    let tail = rest.join(' ').replace(/^(?:file|files|card|cards):\s*/i, '');
+    if (tail) {
+      // a path keeps its own case
+      return /^[\w.-]+[/.]/.test(tail)
+        ? tail
+        : tail[0]!.toUpperCase() + tail.slice(1);
+    }
+  }
+  let past = pastOf(first.replace(/:$/, ''));
+  if (!past) {
+    return plain;
+  }
+  // "Opened the code and add a border": the second act is past too
+  let tail = rest
+    .join(' ')
+    .replace(
+      new RegExp(`(\\band|\\bthen|,) (${SECOND_VERBS.join('|')})\\b`, 'gi'),
+      (_m, joiner: string, word: string) =>
+        `${joiner} ${pastOf(word)!.toLowerCase()}`,
+    );
+  return tail ? `${past} ${tail}` : past;
+}
+
+// The verbs a description joins with "and": only these are re-tensed, so a
+// noun after "and" is left alone.
+const SECOND_VERBS = [
+  'add',
+  'ask',
+  'copy',
+  'delete',
+  'download',
+  'drop',
+  'move',
+  'rename',
+  'stop',
+  'tag',
+  'apply',
+  'build',
+  'check',
+  'collect',
+  'compare',
+  'create',
+  'draft',
+  'extract',
+  'fetch',
+  'find',
+  'fix',
+  'gather',
+  'generate',
+  'list',
+  'make',
+  'mark',
+  'open',
+  'prepare',
+  'pull',
+  'read',
+  'remove',
+  'replace',
+  'report',
+  'return',
+  'run',
+  'save',
+  'search',
+  'set',
+  'show',
+  'summarize',
+  'update',
+  'write',
+];
