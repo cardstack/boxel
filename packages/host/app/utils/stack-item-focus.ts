@@ -18,3 +18,16 @@ export function focusIfConnected(element: Element | null | undefined): boolean {
   }
   return false;
 }
+
+// Whether keystrokes into the target enter text: a text-like input, a
+// textarea or an editable contenteditable. Checkboxes, radios, buttons,
+// ranges and selects don't.
+export function isTextEntry(target: EventTarget | null): boolean {
+  return target instanceof Element && target.matches(':read-write');
+}
+
+// Whether the target has its own use for Escape: a text entry, or a select,
+// whose list Escape closes.
+export function usesEscape(target: EventTarget | null): boolean {
+  return isTextEntry(target) || target instanceof HTMLSelectElement;
+}

@@ -722,6 +722,25 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
         .doesNotExist('third Escape closed the item');
     });
 
+    test('Escape on a checkbox in an edit-mode card exits edit mode', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'edit' }]],
+      });
+      let checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.setAttribute('data-test-checkbox', '');
+      find('[data-test-stack-card]')?.append(checkbox);
+      await focus('[data-test-checkbox]');
+
+      await triggerKeyEvent('[data-test-checkbox]', 'keydown', 'Escape');
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('Escape returned the card to view mode');
+    });
+
     test('Ctrl+E toggles edit mode even while focus is in a field', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'edit' }]],

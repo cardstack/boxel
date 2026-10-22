@@ -10,6 +10,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import {
   focusIfConnected,
   focusedElement,
+  isTextEntry,
 } from '@cardstack/host/utils/stack-item-focus';
 
 import type { ArgsFor, NamedArgs } from 'ember-modifier';
@@ -53,9 +54,7 @@ function keepsFocus(
   if (stack.some((other) => other !== item && other.instanceId === holder)) {
     return false;
   }
-  return Boolean(
-    active.matches(':read-write') || active.closest('[data-holds-focus]'),
-  );
+  return isTextEntry(active) || Boolean(active.closest('[data-holds-focus]'));
 }
 
 // Focus moves once the render is done. Focusing an element fires blur and

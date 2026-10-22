@@ -65,6 +65,7 @@ import {
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
+import { usesEscape } from '@cardstack/host/utils/stack-item-focus';
 
 import consumeContext from '../../helpers/consume-context';
 
@@ -127,14 +128,6 @@ interface CardToDelete {
   isFile?: boolean;
 }
 
-function isInteractiveTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  let tag = target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  if (target.isContentEditable) return true;
-  return false;
-}
-
 export default class InteractSubmode extends Component {
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
@@ -163,7 +156,7 @@ export default class InteractSubmode extends Component {
     // A modal owns Escape regardless of where focus is.
     if (document.body.classList.contains('has-modal')) return;
 
-    if (isInteractiveTarget(event.target)) {
+    if (usesEscape(event.target)) {
       let el = event.target as HTMLElement;
       // Field inside a stack card: peel the focus off first so a
       // second Escape can fall through to exit edit / close.
