@@ -275,7 +275,9 @@ export class CheckpointManager {
     const sourceTag = `[${source}]`;
     const fullMessage = `${prefix} ${sourceTag} ${message}${description ? '\n\n' + description : ''}`;
 
-    await this.git('commit', '-m', fullMessage);
+    // The message goes on stdin: a push of a few thousand files lists every
+    // one, which outgrows the 128 KB Linux allows a single argument (E2BIG).
+    await this.spawnGit(['commit', '-F', '-'], () => false, fullMessage);
 
     const hash = (await this.git('rev-parse', 'HEAD')).trim();
     const shortHash = hash.substring(0, 7);
@@ -669,6 +671,7 @@ export class CheckpointManager {
   private spawnGit(
     args: string[],
     isAnswer: (code: number | null) => boolean,
+    input?: string,
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       const child = spawn(
@@ -690,6 +693,9 @@ export class CheckpointManager {
       });
 
       child.on('error', (err) => reject(err));
+      // A git that exits before reading its input reports through `close`.
+      child.stdin.on('error', () => {});
+      child.stdin.end(input);
 
       child.on('close', (code) => {
         if (code !== 0 && !isAnswer(code)) {
