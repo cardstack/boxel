@@ -7,6 +7,7 @@ import { modifier } from 'ember-modifier';
 
 import type { GuideSection } from '../lib/guide-index';
 import { realmFile } from '../lib/realm-url';
+import { theaterView } from '../lib/theater';
 import { SiteFrame } from './site-frame';
 
 interface Signature {
@@ -60,7 +61,7 @@ export class GuidePage extends Component<Signature> {
 
   <template>
     <SiteFrame @home={{this.home}}>
-      <div class='guide-page'>
+      <div class='guide-page' {{theaterView}}>
         <div class='guide-layout' data-guide={{@current}}>
           <nav
             class='guide-nav {{if this.navOpen "is-open"}}'
@@ -134,7 +135,8 @@ export class GuidePage extends Component<Signature> {
       }
 
       /* the sections stay in view beside a long guide, under the site's
-         sticky bar, and scroll on their own when they are taller than it.
+         sticky bar, and scroll on their own when they are taller than what
+         the viewer can see of the card: `--view-h`, from `theaterView`.
          The links bleed left past the column to hang the current guide's
          bar in the gutter, so the scroll box pads out by as much as they
          bleed (and gives the focus rings room), and a matching negative
@@ -146,7 +148,7 @@ export class GuidePage extends Component<Signature> {
         display: flex;
         flex-direction: column;
         gap: 18px;
-        max-height: calc(100dvh - 120px);
+        max-height: calc(var(--view-h, 100dvh) - 120px);
         overflow-y: auto;
         overscroll-behavior: contain;
         padding: var(--_guide-nav-bleed);
