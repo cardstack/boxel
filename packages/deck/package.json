@@ -1,0 +1,61 @@
+{
+  "name": "@cardstack/deck",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deck protocol core, vendored from cardstack/deck. See DECK_SOURCE; fixes land upstream.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts",
+    "./resolve": "./src/resolve.ts",
+    "./rri": "./src/rri.ts",
+    "./import-map-pack": "./src/import-map-pack.ts",
+    "./inherit": "./src/inherit.ts",
+    "./classify": "./src/classify.ts",
+    "./pack-mode": "./src/pack-mode.ts",
+    "./pack-hermetic": "./src/pack-hermetic.ts",
+    "./tree-hash": "./src/tree-hash.ts",
+    "./canonical-zip": "./src/canonical-zip.ts",
+    "./packlist": "./src/packlist.ts",
+    "./pack": "./src/pack.ts",
+    "./store": "./src/store.ts",
+    "./object-store": "./src/object-store.ts",
+    "./signature": "./src/signature.ts",
+    "./keyring": "./src/keyring.ts",
+    "./import-map": "./src/import-map.ts",
+    "./package-json": "./src/package-json.ts",
+    "./vendor": "./src/vendor.ts",
+    "./source-graph": "./src/source-graph.ts",
+    "./es-lexer": "./src/es-lexer.ts",
+    "./lock": "./src/lock.ts",
+    "./verify-links": "./src/verify-links.ts",
+    "./fork": "./src/fork.ts",
+    "./tree": "./src/tree.ts",
+    "./merge": "./src/merge.ts",
+    "./offer": "./src/offer.ts",
+    "./deck-scan": "./src/deck-scan.ts",
+    "./repository": "./src/repository.ts",
+    "./repository-store": "./src/repository-store.ts",
+    "./repository-merge": "./src/repository-merge.ts",
+    "./review": "./src/review.ts",
+    "./review-store": "./src/review-store.ts",
+    "./repository-workflow": "./src/repository-workflow.ts"
+  },
+  "scripts": {
+    "test": "node tests/index.ts",
+    "lint": "pnpm run lint:types && pnpm run lint:vendored",
+    "lint:types": "ember-tsc --noEmit",
+    "lint:vendored": "node ../../scripts/deck-sync.mjs check"
+  },
+  "dependencies": {
+    "semver": "^7.7.0"
+  },
+  "devDependencies": {
+    "@glint/ember-tsc": "catalog:",
+    "@types/node": "catalog:",
+    "@types/qunit": "catalog:",
+    "@types/semver": "^7.7.0",
+    "qunit": "catalog:",
+    "typescript": "catalog:"
+  }
+}
