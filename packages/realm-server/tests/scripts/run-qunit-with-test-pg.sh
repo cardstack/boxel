@@ -3,6 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# The test helpers start secure origins in-process, served from the pages'
+# build, so the build comes first.
+pnpm --dir="${SCRIPT_DIR}/../../../secure-origin" build
+
 "${SCRIPT_DIR}/prepare-test-pg.sh"
 trap '"${SCRIPT_DIR}/stop-test-pg.sh" >/dev/null 2>&1 || true' EXIT INT TERM
 

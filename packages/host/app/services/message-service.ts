@@ -112,8 +112,11 @@ export default class MessageService extends Service {
     if (!realmURL) {
       return;
     }
+    // A callback can unsubscribe while the event is delivered, which removes
+    // it from this list; iterating a copy keeps that from skipping the next
+    // callback.
     let callbacks = this.listenerCallbacks.get(this.keyFor(realmURL));
-    callbacks?.forEach((cb) => {
+    [...(callbacks ?? [])].forEach((cb) => {
       cb(event);
     });
   }

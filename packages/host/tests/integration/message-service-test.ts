@@ -88,6 +88,28 @@ module('Integration | message-service | realm subscriptions', function (hooks) {
     }
   });
 
+  test('a subscriber that unsubscribes while it hears an event does not keep the next subscriber from hearing it', function (assert) {
+    let messageService = getService('message-service');
+    let heard: string[] = [];
+    let unsubscribeFirst: () => void = messageService.subscribe(
+      testRealmURL,
+      () => {
+        heard.push('first');
+        unsubscribeFirst();
+      },
+    );
+    let unsubscribeSecond = messageService.subscribe(testRealmURL, () => {
+      heard.push('second');
+    });
+    try {
+      messageService.relayRealmEvent(indexEvent(testRealmURL));
+      assert.deepEqual(heard, ['first', 'second']);
+    } finally {
+      unsubscribeFirst();
+      unsubscribeSecond();
+    }
+  });
+
   test('a realm named by a registered prefix hears events keyed by its URL', function (assert) {
     let { virtualNetwork } = getService('network');
     virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
