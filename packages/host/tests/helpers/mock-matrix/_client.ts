@@ -1025,9 +1025,9 @@ export class MockClient implements ExtendedClient {
         // Filters on is_dm, room_types and not_room_types, the filters the
         // host's lists use.
         let dmRooms = (await this.getAccountDataFromServer('m.direct')) ?? {};
+        // getRoomState answers with the state event's content.
         let roomType = (roomId: string): string =>
-          this.serverState.getRoomState(roomId, 'm.room.create', '')?.content
-            ?.type;
+          this.serverState.getRoomState(roomId, 'm.room.create', '')?.type;
         let roomsInRange = this.serverState.rooms
           .filter((r) =>
             list.filters?.is_dm

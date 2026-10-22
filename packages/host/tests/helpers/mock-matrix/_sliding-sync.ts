@@ -103,7 +103,8 @@ export class MockSlidingSync extends SlidingSync {
     // type, and to the AI room list only when that list doesn't exclude it.
     let roomType = (() => {
       try {
-        return serverState?.getRoomState?.(roomId, 'm.room.create', '')?.content
+        // getRoomState answers with the state event's content.
+        return serverState?.getRoomState?.(roomId, 'm.room.create', '')
           ?.type as string | undefined;
       } catch {
         return undefined;
