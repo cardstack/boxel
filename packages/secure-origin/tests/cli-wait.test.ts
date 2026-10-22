@@ -17,5 +17,8 @@ test('the CLI wait the pages state is the one the CLI enforces', async () => {
     ),
   );
   let stated = /stops waiting after\s+([^.]+)\./.exec(source)?.[1];
-  assert.equal(stated, describeDuration(CLI_AUTH_TIMEOUT_MS));
+  assert.equal(
+    stated?.replace(/\s+/g, ' '),
+    describeDuration(CLI_AUTH_TIMEOUT_MS),
+  );
 });
