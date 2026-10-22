@@ -108,6 +108,12 @@ import {
 
 import { isSkillCard } from '../lib/file-def-manager';
 import { pickableModelIds, usedLLMsFromEvents } from '../lib/pickable-models';
+import {
+  appRootURL,
+  clearRedirectGuard,
+  secureSignOutURL,
+  signInOnSecureOrigin,
+} from '../lib/secure-sign-in';
 import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
 import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
 import { skillsIndexId } from '../lib/utils';
@@ -230,6 +236,10 @@ export default class MatrixService extends Service {
   @service declare private localPersistenceService: LocalPersistenceService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
+  // Set while a sign-out the user asked for is on its way to the secure
+  // origin, so the signed-out page says so rather than sending them to sign
+  // in.
+  @tracked isSigningOutToSecureOrigin = false;
   // "Post-login boot completed" now lives on SessionService as the single
   // tracked authority (`session.isAuthenticated`). MatrixService is its only
   // writer (via setPostLoginCompleted); everyone else reads it.
@@ -870,6 +880,23 @@ export default class MatrixService extends Service {
         this.resetState();
       }
     }
+  }
+
+  // The sign-out the user asks for. With sign-in on the secure origin, the app
+  // signs out of its own session first, exactly as `logout()` always does
+  // (the service worker's realm tokens included, so the next user's images
+  // never carry them), and then sends the user to the secure origin to end
+  // its session too. That page comes back to the app's root, signed out, and
+  // the full navigation drops any card code that was running.
+  async signOut() {
+    if (!signInOnSecureOrigin()) {
+      await this.logout();
+      return;
+    }
+    this.isSigningOutToSecureOrigin = true;
+    clearRedirectGuard();
+    await this.logout();
+    window.location.replace(secureSignOutURL(appRootURL()));
   }
 
   // A loginToken next to a session stored in this browser means "switch to the

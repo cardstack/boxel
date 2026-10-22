@@ -312,6 +312,12 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             publishedRealmDomainOverrides:
               process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
               config.publishedRealmDomainOverrides,
+            // Read here, per deployment, so turning sign-in on the secure
+            // origin on or off needs no host rebuild.
+            signInOnSecureOrigin:
+              process.env.SIGN_IN_ON_SECURE_ORIGIN === undefined
+                ? Boolean(config.signInOnSecureOrigin)
+                : process.env.SIGN_IN_ON_SECURE_ORIGIN === 'true',
           });
           return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
         },
