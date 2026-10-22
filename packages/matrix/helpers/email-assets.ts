@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import type { BrowserContext } from '@playwright/test';
+import type { BrowserContext, Frame, Request } from '@playwright/test';
+import { mailHost } from './index.ts';
 
 // The Synapse email and validation-page templates
 // (support/synapse/templates/_base.html) load web fonts and the Boxel logo
@@ -48,17 +49,46 @@ const ASSETS: Record<string, { file: string; contentType: string }> = {
   },
 };
 
+const SYNAPSE_PAGE = /^https?:\/\/[^/]+\/_(matrix|synapse)\//;
+
+// The route is on the whole browser context, so host pages that load from these
+// hosts reach it too, such as a card theme's web font. Only requests from the
+// mail client (and the email in its iframe) or a page Synapse serves come from
+// the templates.
+function isFromEmailTemplate(request: Request): boolean {
+  let frame: Frame | null;
+  try {
+    frame = request.frame();
+  } catch {
+    // service worker requests have no frame
+    return false;
+  }
+  for (; frame; frame = frame.parentFrame()) {
+    let url = frame.url();
+    if (url.startsWith(mailHost) || SYNAPSE_PAGE.test(url)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function routeEmailAssets(context: BrowserContext) {
   await context.route(
     (url) => EXTERNAL_HOSTS.includes(url.hostname),
     async (route) => {
-      let url = route.request().url();
+      let request = route.request();
+      let url = request.url();
       let asset = ASSETS[url];
       if (!asset) {
+        if (!isFromEmailTemplate(request)) {
+          // Not the templates' request: leave it to the network as before.
+          await route.fallback();
+          return;
+        }
         // A template now asks for something not stored here. Answer quickly
         // so nothing waits on the network, and say so in the test output.
         console.warn(
-          `email asset not stored locally, answering 404: ${url} (add it to helpers/email-assets.ts)`,
+          `email template asset not stored locally, answering 404: ${url} (add it to helpers/email-assets.ts)`,
         );
         await route.fulfill({ status: 404, body: '' });
         return;
