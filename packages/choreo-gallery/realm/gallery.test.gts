@@ -537,7 +537,7 @@ module('Choreo gallery | theme', function (hooks) {
     );
   });
 
-  test('the kickers’ type is the theme’s eyebrow role', async function (assert) {
+  test('the theme’s eyebrow role reaches the gallery', async function (assert) {
     await renderThemedGallery(
       await galleryTheme((attributes) => {
         attributes.typography.eyebrow.fontSize = '13px';
