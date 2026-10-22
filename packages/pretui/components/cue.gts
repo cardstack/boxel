@@ -1,7 +1,6 @@
 // Pretui — Cue: the signage primitive behind Field's label and message line.
 import Component from '@glimmer/component';
 import { guidFor } from '@ember/object/internals';
-import { cssStyle } from '../pretui-css';
 import { resolveTone } from '../pretui-primitives';
 import type { PretuiToneArg } from '../pretui-primitives';
 
@@ -14,12 +13,12 @@ import type { PretuiToneArg } from '../pretui-primitives';
 // Sketched from boxel-surface's orphaned `Accessory` (exported with three
 // aliases and zero consumers anywhere in that package — mined as a design,
 // not as proven code). Three things fixed on the way in:
-//   · its colours lived in a separate global stylesheet the component did
+//   · its colors lived in a separate global stylesheet the component did
 //     not ship, so it rendered unstyled unless the host imported one. This
 //     carries its own `<style scoped>` and reads only tokens.
 //   · its four tones differed ONLY by hex — no glyph, no text prefix — which
-//     is colour-only signalling. Every non-neutral tone here also carries a
-//     glyph, so it survives greyscale.
+//     is color-only signaling. Every non-neutral tone here also carries a
+//     glyph, so it survives grayscale.
 //   · its generated id silently collided when two accessories shared a
 //     `labelFor` and a `kind`. Here the id is per-instance and unique, and
 //     `@id` is how a caller pins a value it needs to reference.
@@ -48,13 +47,6 @@ const CUE_GLYPHS: Record<CueTone, string> = {
   success: '✓',
   warning: '!',
   danger: '✕',
-};
-const CUE_HUES: Record<CueTone, string> = {
-  neutral: 'var(--muted-foreground)',
-  info: 'var(--pretui-info, var(--primary))',
-  success: 'var(--success, var(--boxel-success))',
-  warning: 'var(--warning, var(--boxel-warning))',
-  danger: 'var(--destructive)',
 };
 
 export interface CueSignature {
@@ -108,9 +100,6 @@ export class Cue extends Component<CueSignature> {
   get live() {
     return this.kind === 'status' ? 'polite' : undefined;
   }
-  get style() {
-    return cssStyle('--pretui-cue-hue', CUE_HUES[this.tone]);
-  }
   <template>
     <span
       class='pretui-cue'
@@ -118,7 +107,6 @@ export class Cue extends Component<CueSignature> {
       data-kind={{this.kind}}
       data-position={{if @position @position 'block-end'}}
       data-tone={{this.tone}}
-      style={{this.style}}
       role={{this.role}}
       aria-live={{this.live}}
       aria-hidden={{if @decorative 'true'}}
@@ -134,25 +122,50 @@ export class Cue extends Component<CueSignature> {
     <style scoped>
       @layer PretComponent {
         /* chrome, never a surface: no background, no elevation, no border */
+        /* the message size matches Input's helper and error rows; the 1rem
+           line-height is the row Field reserves for it */
         .pretui-cue {
           display: inline-flex;
           align-items: center;
-          gap: 4px;
+          gap: var(--boxel-sp-4xs);
           min-width: 0;
-          font-size: var(--text-ui-sm, 11.5px);
-          line-height: 16px;
-          color: var(--pretui-cue-hue, var(--muted-foreground));
+          font-size: var(--boxel-font-size-2xs);
+          line-height: 1rem;
+          color: var(--muted-foreground);
+        }
+        /* a tone's text is its -ink; its glyph is the fill with the paired
+           -foreground */
+        .pretui-cue[data-tone='info'] {
+          color: var(--info-ink);
+          --pretui-cue-fill: var(--info);
+          --pretui-cue-on-fill: var(--info-foreground);
+        }
+        .pretui-cue[data-tone='success'] {
+          color: var(--success-ink);
+          --pretui-cue-fill: var(--success);
+          --pretui-cue-on-fill: var(--success-foreground);
+        }
+        .pretui-cue[data-tone='warning'] {
+          color: var(--warning-ink);
+          --pretui-cue-fill: var(--warning);
+          --pretui-cue-on-fill: var(--warning-foreground);
+        }
+        .pretui-cue[data-tone='danger'] {
+          color: var(--destructive-ink);
+          --pretui-cue-fill: var(--destructive);
+          --pretui-cue-on-fill: var(--destructive-foreground);
         }
         .pretui-cue[data-kind='label'] {
-          font-size: var(--text-ui, 12px);
-          font-weight: 500;
+          font-size: var(--boxel-ui-label-font-size);
+          font-weight: var(--boxel-ui-label-font-weight);
+          line-height: var(--boxel-ui-label-line-height);
           color: var(--foreground);
         }
         .pretui-cue[data-kind='error'],
         .pretui-cue[data-tone='danger'] {
           font-weight: 500;
         }
-        /* the second, non-colour channel the source lacked */
+        /* the second, non-color channel the source lacked */
         .pretui-cue-glyph {
           display: inline-grid;
           place-items: center;
@@ -162,19 +175,19 @@ export class Cue extends Component<CueSignature> {
           border-radius: 50%;
           font-size: 0.75em;
           font-weight: 700;
-          background: var(--pretui-cue-hue, var(--muted-foreground));
-          color: var(--pretui-on-neutral, var(--boxel-light));
+          background-color: var(--pretui-cue-fill);
+          color: var(--pretui-cue-on-fill);
         }
         /* logical edges: the inline pair sit on the control's reading start /
            end, the block pair above / below. RTL comes free. */
         .pretui-cue[data-position='inline-start'] {
-          margin-inline-end: var(--space-2, 6px);
+          margin-inline-end: var(--boxel-sp-2xs);
         }
         .pretui-cue[data-position='inline-end'] {
-          margin-inline-start: var(--space-2, 6px);
+          margin-inline-start: var(--boxel-sp-2xs);
         }
         .pretui-cue[data-position='block-start'] {
-          margin-block-end: var(--space-1, 4px);
+          margin-block-end: var(--boxel-sp-4xs);
         }
       }
     </style>

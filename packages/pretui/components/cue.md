@@ -47,7 +47,7 @@ Where it is thinner: no icon slot, no dismissal, and no multi-line structure —
 
 ## Theming
 
-Tone resolves through the kit's shared semantic hues; position and kind are structural.
+A neutral cue is `--muted-foreground` text. Each other tone's text is its `-ink` (`--info-ink`, `--success-ink`, `--warning-ink`, `--destructive-ink`), and its glyph is the tone's fill with the paired `-foreground`. Text is `--boxel-font-size-2xs` on a 1rem line, and a `'label'` cue reads the label role (`--boxel-ui-label-*`) in `--foreground`. Position and kind are structural.
 
 There is no cue-specific palette, which is what keeps an error beside a field the same red as an error anywhere else in the theme.
 
