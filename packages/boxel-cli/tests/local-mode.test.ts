@@ -51,11 +51,11 @@ describe.skipIf(!dist)('local-mode `boxel test`', () => {
   // Everything the mounts have to get right to render one card, end to end:
   // the CLI serves the workspace, base and Pret UI realms itself, the host
   // resolves `@cardstack/base/` and `@cardstack/pretui/` onto that server, and
-  // the browser loads a card whose module the mount serves. The card GET behind that render resolves a
-  // definition for the instance's type and walks its field tree, so it needs
-  // each mounted module to name an owning realm and to be modellable. Failing
-  // either, the GET 500s and the stack item renders the error card — which is
-  // what the fixture's own assertions catch.
+  // the browser loads a card whose module the mount serves. The card GET
+  // behind that render resolves a definition for the instance's type and walks
+  // its field tree, so it needs each mounted module to name an owning realm
+  // and to be modellable. Failing either, the GET 500s and the stack item
+  // renders the error card — which is what the fixture's own assertions catch.
   it(
     'renders a card whose module is served from a local mount',
     async () => {
