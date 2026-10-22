@@ -2,7 +2,7 @@
 // frame knows, framed by a page on one of the app origins the realm server
 // lists, and wires the fields' protocol (`src/security/credentials.js`) to the
 // page: the messages, the styles the app sends, and the fields' size.
-import { renderComponent } from '@ember/renderer';
+import { renderComponent, renderSettled } from '@ember/renderer';
 
 import {
   CredentialFrame,
@@ -44,6 +44,7 @@ function start(appOrigin: string) {
     measure: () => fieldsForm()?.getBoundingClientRect().height ?? 0,
     requestSubmit: () => fieldsForm()?.requestSubmit(),
     onChange: changes.bump,
+    rendered: renderSettled,
   });
   window.addEventListener('message', (event) => frame.receive(event));
   renderComponent(CredentialFields, {
