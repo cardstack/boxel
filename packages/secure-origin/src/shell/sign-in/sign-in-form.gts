@@ -13,6 +13,8 @@ import {
   googleSignInConfig,
   signInWithPassword,
 } from '../../security/session.js';
+import type { Session } from '../../security/session.js';
+import type { CliCallback } from '../../security/cli-handoff.js';
 import AuthButton from '../../components/auth-button.gts';
 import AuthFormField from '../../components/auth-form-field.gts';
 import Button from '../../components/button.gts';
@@ -25,8 +27,6 @@ import { cliParams, modeURL } from '../urls.js';
 import { autofocus } from '../../modifiers/autofocus.ts';
 
 type Config = ReturnType<typeof import('../../security/session.js').readConfig>;
-type Session = { token: string; user: string; expiresAt: string };
-type CliCallback = { url: string; state: string };
 
 interface Signature {
   Args: {

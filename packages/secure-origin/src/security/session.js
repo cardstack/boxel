@@ -86,6 +86,10 @@ async function request(url, { method = 'POST', body, token, signal } = {}) {
   return json;
 }
 
+// A secure session: the token that authorizes its requests, the Matrix user
+// it is for, and when it ends.
+/** @typedef {{ token: string, user: string, expiresAt: string }} Session */
+
 // Signs in with a password. `client` is 'window' for this window's own
 // session, 'cli' for a session handed to the CLI. `registrationToken` is the
 // invite code an account just created here registered with, which its first

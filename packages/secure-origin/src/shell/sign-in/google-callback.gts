@@ -11,6 +11,8 @@ import {
   storeSession,
 } from '../../security/session.js';
 import { isCliCallback } from '../../security/cli-handoff.js';
+import type { Session } from '../../security/session.js';
+import type { CliCallback } from '../../security/cli-handoff.js';
 import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
 import LoadingIndicator from '../../components/loading-indicator.gts';
@@ -21,9 +23,6 @@ import { modeURL, startURL } from '../urls.js';
 import CliHandoff from './cli-handoff.gts';
 import MessagePage from './message-page.gts';
 import SignedIn from './signed-in.gts';
-
-type Session = { token: string; user: string; expiresAt: string };
-type CliCallback = { url: string; state: string };
 
 type State =
   | { name: 'signing-in' }
