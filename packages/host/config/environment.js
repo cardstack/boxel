@@ -214,7 +214,10 @@ module.exports = function (environment) {
         ? `${normalized}/`
         : `${normalized}/test/`;
     })(),
-    featureFlags: {},
+    featureFlags: {
+      DECK_COLLABORATION:
+        process.env.BOXEL_DECK_COLLABORATION_ENABLED === 'true',
+    },
   };
 
   // Where each `@cardstack/…` prefix realm is served. This answers a different
@@ -259,7 +262,10 @@ module.exports = function (environment) {
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
     ENV.sqlSchema = sqlSchema;
-    ENV.featureFlags = {};
+    ENV.featureFlags = {
+      DECK_COLLABORATION:
+        process.env.BOXEL_DECK_COLLABORATION_ENABLED === 'true',
+    };
 
     // Neither the catalog nor the OpenRouter realm belongs to a test's realm
     // list: a test's definitions and search results must come from its own
