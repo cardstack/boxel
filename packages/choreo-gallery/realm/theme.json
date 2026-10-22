@@ -4,16 +4,219 @@
     "attributes": {
       "cardInfo": {
         "name": "Choreo",
-        "summary": "The gallery's type: Syne and Archivo for display, IBM Plex for text and code. Its palette is declared by the gallery itself."
+        "summary": "The gallery's palette and type: warm charcoal and cream grounds with an ember accent, Syne and Archivo for display, IBM Plex for text and code. Dark is the gallery's default scheme."
       },
-      "cssImports": [
+      "customCssImports": [
         "https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@600;700;800&display=swap"
+      ],
+      "rootVariables": {
+        "background": "#f2ece1",
+        "foreground": "#211d18",
+        "card": "#f7f3ec",
+        "cardForeground": "#211d18",
+        "canvas": "#efe9df",
+        "inset": "#e2dccf",
+        "mutedForeground": "#5e564b",
+        "subtleForeground": "#6d6458",
+        "primary": "#ff3b1f",
+        "primaryInk": "#bf2e00",
+        "border": "color-mix(in srgb, var(--foreground) 10%, transparent)",
+        "borderStrong": "color-mix(in srgb, var(--foreground) 18%, transparent)",
+        "ring": "#bf2e00",
+        "fontSans": "'IBM Plex Sans', 'Helvetica Neue', sans-serif",
+        "fontMono": "'IBM Plex Mono', ui-monospace, monospace"
+      },
+      "darkModeVariables": {
+        "background": "#2e2924",
+        "foreground": "#f3ece3",
+        "card": "#3a342e",
+        "cardForeground": "#f3ece3",
+        "canvas": "#2a2521",
+        "inset": "#221e1a",
+        "mutedForeground": "#d2c9bf",
+        "subtleForeground": "#b8aea3",
+        "primary": "#ff3b1f",
+        "primaryInk": "#ff7a4e",
+        "border": "color-mix(in srgb, var(--foreground) 9%, transparent)",
+        "borderStrong": "color-mix(in srgb, var(--foreground) 16%, transparent)",
+        "ring": "#ff6a3a"
+      },
+      "typography": {
+        "eyebrow": {
+          "fontFamily": "'IBM Plex Mono', ui-monospace, monospace",
+          "fontSize": "11px",
+          "fontWeight": "400",
+          "letterSpacing": "0.18em"
+        }
+      },
+      "brandColorPalette": [
+        {
+          "name": "Ember Hot",
+          "value": "#ff6a3a"
+        },
+        {
+          "name": "Copper",
+          "value": "#e4a35a"
+        },
+        {
+          "name": "Iris",
+          "value": "#9667f7"
+        },
+        {
+          "name": "Steel",
+          "value": "#8b969c"
+        },
+        {
+          "name": "Teal",
+          "value": "#4fb8a6"
+        },
+        {
+          "name": "Azure",
+          "value": "#6ea8f0"
+        },
+        {
+          "name": "Glow",
+          "value": "rgba(255, 59, 31, 0.38)"
+        },
+        {
+          "name": "Mark Tail Dark",
+          "value": "rgba(255, 59, 31, 0.35)"
+        },
+        {
+          "name": "Mark Orbit Dark",
+          "value": "rgba(139, 150, 156, 0.75)"
+        }
+      ],
+      "customCssVariables": [
+        {
+          "name": "ink-soft",
+          "value": "#47423a",
+          "darkValue": "#e6dfd6"
+        },
+        {
+          "name": "copper-ink",
+          "value": "#905824",
+          "darkValue": "var(--copper)"
+        },
+        {
+          "name": "iris-ink",
+          "value": "#7334f5",
+          "darkValue": "#af8bf9"
+        },
+        {
+          "name": "steel-ink",
+          "value": "#5e686e",
+          "darkValue": "#96a0a5"
+        },
+        {
+          "name": "hot-ink",
+          "value": "#a02600",
+          "darkValue": "#ff9370"
+        },
+        {
+          "name": "syn-string",
+          "value": "#a24f00",
+          "darkValue": "#ffb36a"
+        },
+        {
+          "name": "bg-spot",
+          "value": "#fbf8f3",
+          "darkValue": "#443c35"
+        },
+        {
+          "name": "ph-card-top",
+          "value": "var(--bg-spot)",
+          "darkValue": "#3d362f"
+        },
+        {
+          "name": "ph-card-bot",
+          "value": "var(--inset)",
+          "darkValue": "#322c27"
+        },
+        {
+          "name": "ph-go-top",
+          "value": "var(--bg-spot)",
+          "darkValue": "#4a4139"
+        },
+        {
+          "name": "ph-go-bot",
+          "value": "var(--inset)",
+          "darkValue": "#2c2722"
+        },
+        {
+          "name": "ph-receipt-top",
+          "value": "var(--bg-spot)",
+          "darkValue": "#403830"
+        },
+        {
+          "name": "ph-receipt-bot",
+          "value": "var(--inset)",
+          "darkValue": "#2e2924"
+        },
+        {
+          "name": "ph-row",
+          "value": "var(--inset)",
+          "darkValue": "rgba(0, 0, 0, 0.16)"
+        },
+        {
+          "name": "ph-groove",
+          "value": "var(--inset)",
+          "darkValue": "rgba(0, 0, 0, 0.22)"
+        },
+        {
+          "name": "ph-btn",
+          "value": "var(--inset)",
+          "darkValue": "rgba(0, 0, 0, 0.26)"
+        },
+        {
+          "name": "shadow-rgb",
+          "value": "72, 56, 44",
+          "darkValue": "0, 0, 0"
+        },
+        {
+          "name": "shadow-a",
+          "value": "0.3",
+          "darkValue": "1"
+        },
+        {
+          "name": "surface-tint-rgb",
+          "value": "33, 29, 24",
+          "darkValue": "255, 255, 255"
+        },
+        {
+          "name": "mark-tail",
+          "value": "rgba(255, 59, 31, 0.5)",
+          "darkValue": "var(--mark-tail-dark)"
+        },
+        {
+          "name": "mark-orbit",
+          "value": "rgba(94, 104, 110, 0.85)",
+          "darkValue": "var(--mark-orbit-dark)"
+        },
+        {
+          "name": "gradient-tail",
+          "value": "var(--copper)",
+          "darkValue": "var(--foreground)"
+        },
+        {
+          "name": "lightbox-ring",
+          "value": "rgba(33, 29, 24, 0.12)",
+          "darkValue": "rgba(0, 0, 0, 0.5)"
+        },
+        {
+          "name": "font-display",
+          "value": "'Syne', 'Avenir Next', sans-serif"
+        },
+        {
+          "name": "font-display-alt",
+          "value": "'Archivo', 'Avenir Next Condensed', sans-serif"
+        }
       ]
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/card-api",
-        "name": "Theme"
+        "module": "https://cardstack.com/base/brand-guide",
+        "name": "default"
       }
     }
   }

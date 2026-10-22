@@ -26,7 +26,7 @@ export const CodeBox: TOC<Signature> = <template>
   <style scoped>
     .sample {
       margin-top: 22px;
-      border: 1px solid var(--line);
+      border: 1px solid var(--border);
       border-radius: 18px;
       overflow: hidden;
       /* the same faint light veil as a demo's own stage */
@@ -36,11 +36,12 @@ export const CodeBox: TOC<Signature> = <template>
     .sample-label {
       margin: 0;
       padding: 10px 16px 0;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      letter-spacing: 0.14em;
+      font-family: var(--boxel-eyebrow-font-family);
+      font-weight: var(--boxel-eyebrow-font-weight);
+      font-size: calc(var(--boxel-eyebrow-font-size) * 10 / 11);
+      letter-spacing: calc(var(--boxel-eyebrow-letter-spacing) * 14 / 18);
       text-transform: uppercase;
-      color: var(--eyebrow);
+      color: var(--primary-ink);
     }
 
     pre {
@@ -53,7 +54,7 @@ export const CodeBox: TOC<Signature> = <template>
       font-family: var(--font-mono);
       font-size: 12px;
       line-height: 1.55;
-      color: var(--ink);
+      color: var(--foreground);
       white-space: pre;
       -webkit-user-select: text;
       user-select: text;

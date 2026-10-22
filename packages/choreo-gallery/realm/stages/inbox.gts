@@ -398,14 +398,14 @@ export class Inbox extends Component {
         text-align: right;
         font-size: 13px;
         font-weight: 600;
-        color: rgba(var(--ink-rgb), 0.72);
+        color: color-mix(in srgb, var(--foreground) 72%, transparent);
       }
 
       .inbox-trash svg {
         width: 19px;
         height: 19px;
         fill: none;
-        stroke: rgba(var(--ink-rgb), 0.5);
+        stroke: color-mix(in srgb, var(--foreground) 50%, transparent);
         stroke-width: 1.5;
         stroke-linecap: round;
         stroke-linejoin: round;
@@ -470,7 +470,7 @@ export class Inbox extends Component {
         border-radius: 8px;
         border: 1px solid rgba(var(--surface-tint-rgb), 0.12);
         background: rgba(var(--surface-tint-rgb), 0.06);
-        color: rgba(var(--ink-rgb), 0.62);
+        color: color-mix(in srgb, var(--foreground) 62%, transparent);
         font: inherit;
         cursor: pointer;
         /* hidden until the row is hovered, but never display:none — the row is a
@@ -549,12 +549,12 @@ export class Inbox extends Component {
         font-size: 10px;
         font-variant-numeric: tabular-nums;
         letter-spacing: 0.02em;
-        color: rgba(var(--ink-rgb), 0.4);
+        color: color-mix(in srgb, var(--foreground) 40%, transparent);
       }
 
       .mail-copy small {
         font-size: 12px;
-        color: rgba(var(--ink-rgb), 0.5);
+        color: color-mix(in srgb, var(--foreground) 50%, transparent);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

@@ -1399,7 +1399,7 @@ export class Mockup extends Component {
       );
       /**
        * THE SET FOLLOWS THE PAGE. The backdrop is painted from the
-       * gallery's own `--bg`, so the shot sits in light and dark without
+       * gallery's own `--canvas`, so the shot sits in light and dark without
        * a second palette — and it is repainted when the visitor flips the
        * theme, because a dark cyc behind a light page reads as a hole.
        */
@@ -2283,7 +2283,7 @@ export class Mockup extends Component {
           12px/1.4 ui-monospace,
           monospace;
       }
-      /* THE PLATTER IS THE APP'S OWN SURFACE. --bg is the recessed
+      /* THE PLATTER IS THE APP'S OWN SURFACE. --canvas is the recessed
            canvas the gallery already uses for a camera stage, so the demo
            sits in light and dark without a second palette — and the WebGL
            set fades in over it rather than replacing it. */
@@ -2291,7 +2291,7 @@ export class Mockup extends Component {
         position: absolute;
         inset: 0;
         overflow: hidden;
-        background: var(--bg, #2a2521);
+        background: var(--canvas, #2a2521);
         touch-action: none;
       }
       .mg-bloom {
@@ -2626,7 +2626,7 @@ export class Mockup extends Component {
 
       /* ONE CONTROL STYLE, and it is the site's own: the pill, the hairline
            and the mono 11px that the top nav and the speed control already
-           use (--line / --ink-dim / --bg-spot). A demo that invents its own
+           use (--border / --muted-foreground / --bg-spot). A demo that invents its own
            buttons reads as a different product bolted into the page. */
       .mg-seg,
       .mg-transport {
@@ -2647,10 +2647,10 @@ export class Mockup extends Component {
         all: unset;
         cursor: pointer;
         padding: 7px 12px;
-        border: 1px solid var(--line, #ffffff17);
+        border: 1px solid var(--border, #ffffff17);
         border-radius: 999px;
-        background: var(--bg-elev, #00000066);
-        color: var(--ink-dim, #d2c9bf);
+        background: var(--card, #00000066);
+        color: var(--muted-foreground, #d2c9bf);
         font-family: var(--font-mono, ui-monospace, monospace);
         font-size: 11px;
         line-height: 1;
@@ -2766,7 +2766,7 @@ export class Mockup extends Component {
         bottom: -12px;
         text-align: center;
         font: 9px/1 var(--font-mono, ui-monospace, monospace);
-        color: var(--ink-faint, #b8aea3);
+        color: var(--subtle-foreground, #b8aea3);
         letter-spacing: 0.04em;
         pointer-events: none;
       }

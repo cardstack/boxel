@@ -351,10 +351,10 @@ const VIEW: Record<Key, TypeScale> = {
  * theme's grey travelling across a dark card.
  */
 const INK: Record<Key, { edit: string; view: string }> = {
-  dob: { edit: '--ink', view: '--ink-faint' },
-  email: { edit: '--ink', view: '--ink-faint' },
-  name: { edit: '--ink', view: '--ink' },
-  title: { edit: '--ink', view: '--ink-dim' },
+  dob: { edit: '--foreground', view: '--subtle-foreground' },
+  email: { edit: '--foreground', view: '--subtle-foreground' },
+  name: { edit: '--foreground', view: '--foreground' },
+  title: { edit: '--foreground', view: '--muted-foreground' },
 };
 
 /** writing: every field the same, because a form's values are one kind of thing */
@@ -841,7 +841,11 @@ export class InlineEdit extends Component {
 
   private readInk(el: HTMLElement) {
     const style = getComputedStyle(el);
-    for (const token of ['--ink', '--ink-dim', '--ink-faint']) {
+    for (const token of [
+      '--foreground',
+      '--muted-foreground',
+      '--subtle-foreground',
+    ]) {
       this.ink.set(
         token,
         style.getPropertyValue(token).trim() || 'currentColor',
@@ -1261,9 +1265,9 @@ export class InlineEdit extends Component {
         grid-template-areas: var(--ie-areas);
         grid-template-columns: minmax(0, 1fr);
         padding: var(--ie-pad);
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 16px;
-        background: var(--bg-elev);
+        background: var(--card);
       }
       .ie-card[data-mode='view'] {
         height: var(--ie-height-view);
@@ -1354,7 +1358,7 @@ export class InlineEdit extends Component {
       }
 
       .ie-initials {
-        font-family: 'Archivo', var(--font), sans-serif;
+        font-family: 'Archivo', var(--font-sans), sans-serif;
         font-size: 28px;
         font-weight: 700;
         font-stretch: 87.5%;
@@ -1373,7 +1377,7 @@ export class InlineEdit extends Component {
         left: var(--ie-kicker-view);
         translate: 0 -50%;
         white-space: nowrap;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.16em;
@@ -1381,13 +1385,13 @@ export class InlineEdit extends Component {
       }
       .ie-card[data-mode='edit'] .ie-kicker {
         left: var(--ie-kicker-edit);
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-weight: 700;
       }
       .ie-rule {
         grid-area: rule;
         height: 1px;
-        background: var(--line);
+        background: var(--border);
       }
       .ie-label {
         /* under its own platter, which is painted over it: the label rises out
@@ -1395,7 +1399,7 @@ export class InlineEdit extends Component {
         z-index: 0;
         align-self: end;
         padding-bottom: 4px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-family: var(--font-mono);
         font-size: 9.5px;
         letter-spacing: 0.14em;
@@ -1423,7 +1427,7 @@ export class InlineEdit extends Component {
 
       .ie-card[data-mode='edit'] .ie-plate {
         border-color: rgb(28 22 18 / 22%);
-        background: var(--bg);
+        background: var(--canvas);
         cursor: text;
       }
       .ie[data-off~='clip'] .ie-plate {
@@ -1446,9 +1450,9 @@ export class InlineEdit extends Component {
         translate: 0 -50%;
         height: var(--ie-line);
         white-space: nowrap;
-        font-family: 'Archivo', var(--font), sans-serif;
+        font-family: 'Archivo', var(--font-sans), sans-serif;
         font-stretch: 87.5%;
-        color: var(--ink);
+        color: var(--foreground);
         letter-spacing: -0.01em;
         line-height: var(--ie-line);
         visibility: hidden;
@@ -1462,7 +1466,7 @@ export class InlineEdit extends Component {
         translate: 0 -50%;
         height: var(--ie-line);
         white-space: nowrap;
-        font-family: 'Archivo', var(--font), sans-serif;
+        font-family: 'Archivo', var(--font-sans), sans-serif;
         font-stretch: 87.5%;
         letter-spacing: -0.01em;
         line-height: var(--ie-line);
@@ -1475,14 +1479,14 @@ export class InlineEdit extends Component {
       }
 
       .ie-value[data-value='title'] {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 15px;
         font-weight: 500;
       }
 
       .ie-value[data-value='email'],
       .ie-value[data-value='dob'] {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-size: 13px;
         font-weight: 500;
       }
@@ -1504,8 +1508,8 @@ export class InlineEdit extends Component {
         padding: 0 11px;
         border: 0;
         background: transparent;
-        color: var(--ink);
-        font-family: 'Archivo', var(--font), sans-serif;
+        color: var(--foreground);
+        font-family: 'Archivo', var(--font-sans), sans-serif;
         font-size: 17px;
         font-weight: 400;
         font-stretch: 87.5%;

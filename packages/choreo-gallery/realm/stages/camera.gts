@@ -513,7 +513,7 @@ export class Camera extends Component {
       }
 
       /* The library IS the demo container, edge to edge — no chrome around the
-         glass. Both themes get their own canvas via --bg on `.stage-wrap`. */
+         glass. Both themes get their own canvas via --canvas on `.stage-wrap`. */
       .cam {
         position: absolute;
         inset: 0;
@@ -534,13 +534,13 @@ export class Camera extends Component {
       .cam-hud {
         padding: 5px 10px;
         border-radius: 999px;
-        border: 1px solid var(--line-strong);
-        background: color-mix(in srgb, var(--bg-elev) 82%, transparent);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--card) 82%, transparent);
         backdrop-filter: blur(8px);
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.12em;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         pointer-events: none;
         font-variant-numeric: tabular-nums;
       }
@@ -652,7 +652,7 @@ export class Camera extends Component {
 
       /* the take number: a glass chip on the print, Syne like a cover title.
          Dark glass over a photograph in BOTH themes — same reason .lightbox-body
-         names its own white instead of inheriting --ink. */
+         names its own white instead of inheriting --foreground. */
       .cam-no {
         position: absolute;
         bottom: 8px;
@@ -707,8 +707,8 @@ export class Camera extends Component {
         min-width: 0;
         padding: 10px 12px 11px 14px;
         border-radius: 14px;
-        border: 1px solid var(--line-strong);
-        background: color-mix(in srgb, var(--bg-elev) 86%, transparent);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--card) 86%, transparent);
         backdrop-filter: blur(12px);
         box-shadow: 0 10px 24px
           rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
@@ -739,14 +739,14 @@ export class Camera extends Component {
         font-weight: 700;
         letter-spacing: -0.03em;
         line-height: 1.2;
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .cam-exp {
         font-family: var(--font-mono);
         font-size: 11px;
         letter-spacing: 0.04em;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-variant-numeric: tabular-nums;
       }
 
@@ -764,9 +764,9 @@ export class Camera extends Component {
         width: 32px;
         height: 32px;
         padding: 0;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         background: rgba(var(--surface-tint-rgb), 0.08);
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         box-shadow: none;
         cursor: pointer;
       }
@@ -778,7 +778,7 @@ export class Camera extends Component {
       }
 
       .cam-grade-dock .cam-heart.is-active {
-        background: var(--ember);
+        background: var(--primary);
         border-color: transparent;
         color: #fff;
         box-shadow: 0 4px 14px rgba(255, 59, 31, 0.45);
@@ -787,9 +787,9 @@ export class Camera extends Component {
       /* an X that is ON reads reversed — ink chip, paper glyph — with the same
          conviction as the heart's ember fill; a 12% tint read as "not pressed" */
       .cam-grade-dock .cam-pass.is-active {
-        background: var(--ink);
+        background: var(--foreground);
         border-color: transparent;
-        color: var(--bg);
+        color: var(--canvas);
       }
 
       /* heart and X: the same job as `.cam-no`, the other end of the frame.
@@ -827,7 +827,7 @@ export class Camera extends Component {
 
       .cam-heart.is-active {
         color: #fff;
-        background: var(--ember);
+        background: var(--primary);
         border-color: transparent;
         box-shadow: 0 4px 14px rgba(255, 59, 31, 0.5);
       }

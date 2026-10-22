@@ -155,10 +155,10 @@ export class PreferencePicker<T extends string> extends Component<
         width: 112px;
         height: 34px;
         padding: 0 12px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 999px;
-        background: var(--bg-well);
-        color: var(--ink);
+        background: var(--inset);
+        color: var(--foreground);
         font-size: 12px;
         cursor: pointer;
         list-style: none;
@@ -175,7 +175,7 @@ export class PreferencePicker<T extends string> extends Component<
 
       .header-picker-chevron {
         margin-left: auto;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .header-picker-menu {
@@ -185,9 +185,9 @@ export class PreferencePicker<T extends string> extends Component<
         z-index: 200;
         width: 270px;
         padding: 14px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 16px;
-        background: var(--bg);
+        background: var(--canvas);
         box-shadow: 0 12px 40px
           rgba(var(--shadow-rgb), calc(0.27 * var(--shadow-a)));
       }
@@ -195,7 +195,7 @@ export class PreferencePicker<T extends string> extends Component<
       .header-picker-label {
         display: block;
         margin-bottom: 10px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-size: 12px;
       }
 
@@ -204,7 +204,7 @@ export class PreferencePicker<T extends string> extends Component<
         grid-template-columns: repeat(3, 1fr);
         gap: 3px;
         padding: 3px;
-        background: var(--bg-well);
+        background: var(--inset);
         border-radius: 999px;
       }
 
@@ -212,16 +212,16 @@ export class PreferencePicker<T extends string> extends Component<
         border: 0;
         border-radius: 999px;
         padding: 9px 4px;
-        /* --ink-dim, not faint: the track is --bg-well, the darkest ground */
-        color: var(--ink-dim);
+        /* --muted-foreground, not faint: the track is --inset, the darkest ground */
+        color: var(--muted-foreground);
         background: transparent;
         font-size: 12px;
         cursor: pointer;
       }
 
       .header-picker-segments button[aria-checked='true'] {
-        color: var(--ink);
-        background: var(--line-strong);
+        color: var(--foreground);
+        background: var(--border-strong);
       }
 
       /* A NARROW BAR HAS NO ROOM BESIDE THE PILL. Hung from the pill, the

@@ -233,7 +233,7 @@ class Embedded extends Component<typeof GalleryDemo> {
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        background: var(--bg-elev);
+        background: var(--card);
       }
 
       .tile-stage {
@@ -241,7 +241,7 @@ class Embedded extends Component<typeof GalleryDemo> {
         height: 360px;
         container-name: platter;
         container-type: size;
-        background: var(--bg);
+        background: var(--canvas);
       }
 
       /* a stage nobody can see, or one waiting to be asked to move, holds
@@ -256,15 +256,16 @@ class Embedded extends Component<typeof GalleryDemo> {
         flex-direction: column;
         gap: 6px;
         padding: 16px 18px 18px;
-        border-top: 1px solid var(--line);
+        border-top: 1px solid var(--border);
       }
 
       .tile-group {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        letter-spacing: 0.16em;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        font-size: calc(var(--boxel-eyebrow-font-size) * 10 / 11);
+        letter-spacing: calc(var(--boxel-eyebrow-letter-spacing) * 16 / 18);
         text-transform: uppercase;
-        color: var(--eyebrow);
+        color: var(--primary-ink);
       }
 
       .tile-title {
@@ -275,7 +276,7 @@ class Embedded extends Component<typeof GalleryDemo> {
       }
 
       .tile-lede {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 0.92rem;
       }
 
@@ -289,7 +290,7 @@ class Embedded extends Component<typeof GalleryDemo> {
 
       .tile-lab {
         padding: 16px 18px 18px;
-        border-top: 1px solid var(--line);
+        border-top: 1px solid var(--border);
       }
     </style>
   </template>
@@ -430,7 +431,7 @@ class Fitted extends Component<typeof GalleryDemo> {
             rgba(var(--surface-tint-rgb), 0.02),
             transparent 40%
           ),
-          var(--bg-elev);
+          var(--card);
       }
 
       /* a NAMED size container, so a stage can ask about the platter
@@ -447,7 +448,7 @@ class Fitted extends Component<typeof GalleryDemo> {
             rgba(255, 59, 31, 0.08),
             transparent 62%
           ),
-          var(--bg);
+          var(--canvas);
       }
 
       /* A tile nobody can see, or one waiting to be asked to move, holds
@@ -469,20 +470,21 @@ class Fitted extends Component<typeof GalleryDemo> {
       .tile.is-roomy .tile-meta {
         gap: 6px;
         padding: 16px 18px 16px;
-        border-top: 1px solid var(--line);
+        border-top: 1px solid var(--border);
         background: rgba(var(--surface-tint-rgb), 0.015);
       }
 
       .tile-group {
-        font-family: var(--font-mono);
-        font-size: 9px;
-        letter-spacing: 0.16em;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        font-size: calc(var(--boxel-eyebrow-font-size) * 9 / 11);
+        letter-spacing: calc(var(--boxel-eyebrow-letter-spacing) * 16 / 18);
         text-transform: uppercase;
-        color: var(--eyebrow);
+        color: var(--primary-ink);
       }
 
       .tile.is-roomy .tile-group {
-        font-size: 10px;
+        font-size: calc(var(--boxel-eyebrow-font-size) * 10 / 11);
       }
 
       .tile-badge {
@@ -493,8 +495,9 @@ class Fitted extends Component<typeof GalleryDemo> {
         font-family: var(--font-mono);
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ember-ink);
-        border: 1px solid color-mix(in srgb, var(--ember-ink) 55%, transparent);
+        color: var(--primary-ink);
+        border: 1px solid
+          color-mix(in srgb, var(--primary-ink) 55%, transparent);
         border-radius: 3px;
         vertical-align: middle;
       }
@@ -537,7 +540,7 @@ class Fitted extends Component<typeof GalleryDemo> {
 
       @media (hover: hover) {
         .tile:hover .tile-title {
-          color: var(--ember-ink);
+          color: var(--primary-ink);
         }
       }
 
@@ -555,7 +558,7 @@ class Fitted extends Component<typeof GalleryDemo> {
       }
 
       .tile-lede {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 0.92rem;
       }
 

@@ -215,8 +215,8 @@ export class HideHeader extends Component {
             rgba(255, 59, 31, 0.08),
             transparent 55%
           ),
-          var(--bg-well);
-        border: 1px solid var(--line-strong);
+          var(--inset);
+        border: 1px solid var(--border-strong);
         box-shadow: 0 22px 50px
           rgba(var(--shadow-rgb), calc(0.4 * var(--shadow-a)));
       }
@@ -241,7 +241,7 @@ export class HideHeader extends Component {
         gap: 10px;
         height: 68px;
         padding: 0 12px;
-        background: rgba(var(--bg-rgb), 0.82);
+        background: color-mix(in srgb, var(--canvas) 82%, transparent);
         /* its own corners, because the frame's cannot reach it: a backdrop-filter
            makes this its own containing block, and an ancestor's overflow:hidden
            stops clipping it — so the bar sat square inside a 26px radius. One less
@@ -251,15 +251,15 @@ export class HideHeader extends Component {
            the layer keeps the fade from stuttering against it */
         will-change: transform, opacity;
         backdrop-filter: blur(18px);
-        border-bottom: 1px solid var(--line);
+        border-bottom: 1px solid var(--border);
       }
 
       .chat-back {
         width: 18px;
         height: 18px;
         flex: none;
-        border-left: 2px solid var(--ink);
-        border-bottom: 2px solid var(--ink);
+        border-left: 2px solid var(--foreground);
+        border-bottom: 2px solid var(--foreground);
         transform: rotate(45deg);
         margin: 0 4px 0 6px;
         opacity: 0.85;
@@ -281,7 +281,7 @@ export class HideHeader extends Component {
         color: #140c0a;
         background:
           radial-gradient(circle at 30% 25%, #fff6, transparent 42%),
-          linear-gradient(160deg, var(--ember-hot), var(--ember));
+          linear-gradient(160deg, var(--ember-hot), var(--primary));
       }
 
       .chat-pip {
@@ -328,7 +328,7 @@ export class HideHeader extends Component {
         height: 32px;
         border-radius: 50%;
         background: var(--bg-spot);
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         display: grid;
         place-items: center;
       }
@@ -336,7 +336,7 @@ export class HideHeader extends Component {
       .chat-icon svg {
         width: 15px;
         height: 15px;
-        fill: var(--ink-dim);
+        fill: var(--muted-foreground);
       }
 
       .thread {
@@ -354,12 +354,12 @@ export class HideHeader extends Component {
         padding: 4px 10px;
         border-radius: 999px;
         background: var(--bg-spot);
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .bubble {
@@ -368,7 +368,7 @@ export class HideHeader extends Component {
         padding: 9px 12px;
         border-radius: 18px 18px 18px 6px;
         background: var(--bg-spot);
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         font-size: 13.5px;
         line-height: 1.4;
       }
@@ -379,7 +379,7 @@ export class HideHeader extends Component {
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.06em;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .bubble.is-me {
@@ -387,14 +387,14 @@ export class HideHeader extends Component {
         border-radius: 18px 18px 6px 18px;
         background: linear-gradient(
           180deg,
-          color-mix(in srgb, var(--ember) 20%, var(--bg-spot)),
-          color-mix(in srgb, var(--ember) 10%, var(--bg-well))
+          color-mix(in srgb, var(--primary) 20%, var(--bg-spot)),
+          color-mix(in srgb, var(--primary) 10%, var(--inset))
         );
         border-color: rgba(255, 59, 31, 0.28);
       }
 
       .bubble.is-me small {
-        color: rgba(var(--ink-rgb), 0.45);
+        color: color-mix(in srgb, var(--foreground) 45%, transparent);
         text-align: right;
       }
 
@@ -406,7 +406,7 @@ export class HideHeader extends Component {
         padding: 8px;
         border-radius: 16px;
         background: var(--bg-spot);
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
       }
 
       .clip-plate {
@@ -416,7 +416,7 @@ export class HideHeader extends Component {
         flex: none;
         background:
           radial-gradient(circle at 30% 25%, #fff5, transparent 36%),
-          linear-gradient(160deg, #ffb36a, var(--ember));
+          linear-gradient(160deg, #ffb36a, var(--primary));
       }
 
       .clip-copy {
@@ -431,7 +431,7 @@ export class HideHeader extends Component {
       }
 
       .clip-copy small {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 11px;
       }
 
@@ -441,8 +441,8 @@ export class HideHeader extends Component {
         gap: 8px;
         flex: none;
         padding: 10px 12px 12px;
-        background: rgba(var(--bg-rgb), 0.94);
-        border-top: 1px solid var(--line);
+        background: color-mix(in srgb, var(--canvas) 94%, transparent);
+        border-top: 1px solid var(--border);
       }
 
       .composer-add,
@@ -453,14 +453,14 @@ export class HideHeader extends Component {
         flex: none;
         position: relative;
         background: var(--bg-spot);
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
       }
 
       .composer-add::before,
       .composer-add::after {
         content: '';
         position: absolute;
-        background: var(--ink-dim);
+        background: var(--muted-foreground);
       }
 
       .composer-add::before {
@@ -484,16 +484,16 @@ export class HideHeader extends Component {
         padding: 0 14px;
         display: flex;
         align-items: center;
-        color: var(--ink-faint);
-        background: var(--bg-well);
-        border: 1px solid var(--line);
+        color: var(--subtle-foreground);
+        background: var(--inset);
+        border: 1px solid var(--border);
         font-size: 13px;
       }
 
       .composer-send {
         display: grid;
         place-items: center;
-        background: var(--ember);
+        background: var(--primary);
         border-color: transparent;
       }
 

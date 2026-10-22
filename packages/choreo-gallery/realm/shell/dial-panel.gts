@@ -280,10 +280,10 @@ export class DialPanel extends Component<Signature> {
       }
 
       .dial-spike-btn {
-        background: rgba(var(--ink-rgb), 0.08);
+        background: color-mix(in srgb, var(--foreground) 8%, transparent);
         border: 0;
         border-radius: 6px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         cursor: pointer;
         font-family: var(--font-mono);
         font-size: 10px;
@@ -292,7 +292,7 @@ export class DialPanel extends Component<Signature> {
       }
 
       .dial-spike-btn:hover {
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       /* dialkit's theme is dark-only: every token in it is a white-on-black
@@ -333,7 +333,7 @@ export class DialPanel extends Component<Signature> {
       }
 
       .dial-spike :deep(.dialkit-folder-header:hover) {
-        background: rgba(var(--ink-rgb), 0.05);
+        background: color-mix(in srgb, var(--foreground) 5%, transparent);
       }
 
       /* a nested folder's rows are already inside one .dialkit-folder-inner,
@@ -353,10 +353,10 @@ export class DialPanel extends Component<Signature> {
 
       .dial-tune {
         align-items: center;
-        background: rgba(var(--ink-rgb), 0.07);
+        background: color-mix(in srgb, var(--foreground) 7%, transparent);
         border: 1px solid transparent;
         border-radius: 999px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         cursor: pointer;
         display: inline-flex;
         font-family: var(--font-mono);
@@ -371,8 +371,8 @@ export class DialPanel extends Component<Signature> {
       }
 
       .dial-tune:hover {
-        background: rgba(var(--ink-rgb), 0.13);
-        color: var(--ink);
+        background: color-mix(in srgb, var(--foreground) 13%, transparent);
+        color: var(--foreground);
       }
 
       /* the ACTIVE preset, which is the one the store is writing your edits
@@ -386,19 +386,19 @@ export class DialPanel extends Component<Signature> {
 
       .dial-tune.is-save {
         border-style: dashed;
-        border-color: rgba(var(--ink-rgb), 0.22);
+        border-color: color-mix(in srgb, var(--foreground) 22%, transparent);
         background: transparent;
       }
 
       .dial-tune-x {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-size: 12px;
         line-height: 1;
         opacity: 0.5;
       }
 
       .dial-tune-x:hover {
-        color: var(--ember-ink);
+        color: var(--primary-ink);
         opacity: 1;
       }
 
@@ -407,10 +407,10 @@ export class DialPanel extends Component<Signature> {
       }
 
       .dial-tune-input {
-        background: rgba(var(--ink-rgb), 0.1);
+        background: color-mix(in srgb, var(--foreground) 10%, transparent);
         border: 1px solid rgba(230, 163, 90, 0.42);
         border-radius: 999px;
-        color: var(--ink);
+        color: var(--foreground);
         font-family: var(--font-mono);
         font-size: 10px;
         outline: none;

@@ -56,7 +56,7 @@ export const ChoreoMark = <template>
       stroke-width='2.2'
       stroke-linecap='round'
     />
-    <circle cx={{BEAD.cx}} cy={{BEAD.cy}} r={{BEAD.r}} fill='var(--ember)' />
+    <circle cx={{BEAD.cx}} cy={{BEAD.cy}} r={{BEAD.r}} fill='var(--primary)' />
     <path
       d={{ORBIT}}
       fill='none'

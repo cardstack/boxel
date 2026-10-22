@@ -1869,7 +1869,7 @@ export class LongTake extends Component {
         bottom: -12px;
         text-align: center;
         font: 9px/1 var(--font-mono, ui-monospace, monospace);
-        color: var(--ink-faint, #b8aea3);
+        color: var(--subtle-foreground, #b8aea3);
         letter-spacing: 0.04em;
         pointer-events: none;
       }

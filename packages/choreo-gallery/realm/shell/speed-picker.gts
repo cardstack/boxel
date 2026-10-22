@@ -132,16 +132,16 @@ export class SpeedPicker extends Component {
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .speeds-track {
         display: inline-flex;
         padding: 2px;
         gap: 2px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 999px;
-        background: rgba(var(--bg-rgb), 0.5);
+        background: color-mix(in srgb, var(--canvas) 50%, transparent);
       }
 
       .speed {
@@ -152,7 +152,7 @@ export class SpeedPicker extends Component {
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.08em;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         cursor: pointer;
         transition:
           color 0.16s var(--ease),
@@ -161,13 +161,13 @@ export class SpeedPicker extends Component {
 
       @media (hover: hover) {
         .speed:hover {
-          color: var(--ink-dim);
+          color: var(--muted-foreground);
         }
       }
 
       .speed.is-on {
-        background: rgba(var(--ink-rgb), 0.08);
-        color: var(--ink);
+        background: color-mix(in srgb, var(--foreground) 8%, transparent);
+        color: var(--foreground);
       }
     </style>
   </template>

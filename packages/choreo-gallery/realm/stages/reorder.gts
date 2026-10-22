@@ -149,8 +149,8 @@ export class ReorderList extends Component {
         top: 14px;
         right: 14px;
         z-index: 3;
-        border: 1px solid var(--line-strong);
-        background: rgba(var(--bg-rgb), 0.72);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--canvas) 72%, transparent);
         backdrop-filter: blur(8px);
         border-radius: 999px;
         padding: 7px 12px;
@@ -158,12 +158,12 @@ export class ReorderList extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {
         .replay:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -187,7 +187,7 @@ export class ReorderList extends Component {
         gap: 10px;
         border-radius: 16px;
         background: var(--bg-spot);
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         padding: 10px 12px;
         cursor: grab;
         touch-action: none;
@@ -207,7 +207,7 @@ export class ReorderList extends Component {
         align-self: stretch;
         min-height: 22px;
         border-radius: 2px;
-        background: var(--hue, var(--ember));
+        background: var(--hue, var(--primary));
         flex: none;
       }
 
@@ -221,7 +221,7 @@ export class ReorderList extends Component {
         height: 16px;
         background: radial-gradient(
             circle,
-            var(--ink-faint) 1.1px,
+            var(--subtle-foreground) 1.1px,
             transparent 1.3px
           )
           0 0 / 5px 6px;
@@ -237,7 +237,7 @@ export class ReorderList extends Component {
 
       .track small,
       .track em {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 11px;
       }
 

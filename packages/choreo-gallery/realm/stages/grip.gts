@@ -712,9 +712,9 @@ export class Grip extends Component {
     </div>
     <style scoped>
       .chip {
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         background: transparent;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         border-radius: 999px;
         padding: 7px 12px;
         font-family: var(--font-mono);
@@ -724,15 +724,15 @@ export class Grip extends Component {
       }
 
       .chip.is-on {
-        color: var(--ink);
-        border-color: var(--line-strong);
+        color: var(--foreground);
+        border-color: var(--border-strong);
         background: var(--bg-spot);
       }
 
       @media (hover: hover) {
         .chip:hover {
-          color: var(--ink);
-          border-color: var(--line-strong);
+          color: var(--foreground);
+          border-color: var(--border-strong);
           background: var(--bg-spot);
         }
       }
@@ -787,7 +787,7 @@ export class Grip extends Component {
       }
 
       .tp-tally {
-        color: var(--ink);
+        color: var(--foreground);
         font-family: var(--font-mono);
         font-size: 12px;
         letter-spacing: 0.04em;
@@ -799,7 +799,7 @@ export class Grip extends Component {
       }
 
       .tp-note {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         flex: 1;
         font-size: 11px;
         overflow: hidden;
@@ -840,7 +840,7 @@ export class Grip extends Component {
       }
 
       .tp-empty {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-size: 11px;
         padding: 6px 2px;
       }
@@ -850,8 +850,8 @@ export class Grip extends Component {
          read the lift as a scroll. */
       .tp-card {
         align-items: stretch;
-        background: var(--bg-elev);
-        border: 1px solid var(--line);
+        background: var(--card);
+        border: 1px solid var(--border);
         border-radius: 8px;
         display: grid;
         grid-template-columns: 26px minmax(0, 1fr);
@@ -861,7 +861,7 @@ export class Grip extends Component {
       }
 
       .tp-card.is-open {
-        border-color: var(--line-strong);
+        border-color: var(--border-strong);
       }
 
       /* Carried: over the tables, not under them. The rail and the tables are
@@ -876,7 +876,7 @@ export class Grip extends Component {
          height, so nothing below it reflows and the list you are dragging out of
          stays still. */
       .tp-card.tp-lift {
-        border-color: var(--line-strong);
+        border-color: var(--border-strong);
         box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
         cursor: grabbing;
         max-width: 190px;
@@ -910,9 +910,9 @@ export class Grip extends Component {
          is precisely the boundary `dragListener=false` draws in the code. */
       .tp-grip {
         align-items: center;
-        background: rgba(var(--ink-rgb), 0.04);
+        background: color-mix(in srgb, var(--foreground) 4%, transparent);
         border: 0;
-        border-right: 1px solid var(--line);
+        border-right: 1px solid var(--border);
         cursor: grab;
         display: grid;
         padding: 0;
@@ -921,7 +921,7 @@ export class Grip extends Component {
       }
 
       .tp-grip:hover {
-        background: rgba(var(--ink-rgb), 0.08);
+        background: color-mix(in srgb, var(--foreground) 8%, transparent);
       }
 
       .tp-grip:active {
@@ -935,7 +935,7 @@ export class Grip extends Component {
       }
 
       .tp-dots i {
-        background: var(--ink-faint);
+        background: var(--subtle-foreground);
         border-radius: 50%;
         height: 3px;
         opacity: 0.75;
@@ -980,10 +980,10 @@ export class Grip extends Component {
       /* The visible way in. A tap on the card opens it too, but a tap is something
          you have to already know about. */
       .tp-edit {
-        background: rgba(var(--ink-rgb), 0.07);
+        background: color-mix(in srgb, var(--foreground) 7%, transparent);
         border: 0;
         border-radius: 5px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         cursor: pointer;
         flex: none;
         font-family: var(--font-mono);
@@ -993,7 +993,7 @@ export class Grip extends Component {
       }
 
       .tp-edit:hover {
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       /* The half of the card that could not exist under `drag=true`: six checkboxes
@@ -1014,10 +1014,10 @@ export class Grip extends Component {
          and shrinks with the column it happens to be in reads as a different control
          each time, and the eye stops trusting the tick. */
       .tp-pill {
-        background: rgba(var(--ink-rgb), 0.06);
+        background: color-mix(in srgb, var(--foreground) 6%, transparent);
         border: 1px solid transparent;
         border-radius: 999px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         cursor: pointer;
         font-family: var(--font-mono);
         font-size: 10px;
@@ -1031,7 +1031,7 @@ export class Grip extends Component {
       }
 
       .tp-pill:hover {
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .tp-pill.is-on {
@@ -1048,10 +1048,10 @@ export class Grip extends Component {
       }
 
       .tp-field {
-        background: rgba(var(--ink-rgb), 0.06);
-        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--foreground) 6%, transparent);
+        border: 1px solid var(--border);
         border-radius: 5px;
-        color: var(--ink);
+        color: var(--foreground);
         flex: 1;
         font-size: 11px;
         min-width: 120px;
@@ -1059,7 +1059,7 @@ export class Grip extends Component {
       }
 
       .tp-field:focus {
-        border-color: var(--line-strong);
+        border-color: var(--border-strong);
       }
 
       /* the site's focus ring, held close: the field sits in a dense card */
@@ -1068,7 +1068,7 @@ export class Grip extends Component {
       }
 
       .tp-phone {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-family: var(--font-mono);
         font-size: 10.5px;
         user-select: text;
@@ -1093,8 +1093,8 @@ export class Grip extends Component {
          question actually being asked. Three identical lit boxes tell you nothing at
          the moment you are choosing between them. */
       .tp-table {
-        background: rgba(var(--ink-rgb), 0.03);
-        border: 1px dashed var(--line-strong);
+        background: color-mix(in srgb, var(--foreground) 3%, transparent);
+        border: 1px dashed var(--border-strong);
         border-radius: 8px;
         padding: 7px 9px;
         transition:
@@ -1134,7 +1134,7 @@ export class Grip extends Component {
       }
 
       .tp-table-head {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         display: flex;
         font-family: var(--font-mono);
         font-size: 10px;
@@ -1144,7 +1144,7 @@ export class Grip extends Component {
       }
 
       .tp-table-head small {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .tp-seats {
@@ -1159,8 +1159,8 @@ export class Grip extends Component {
 
       .tp-seat {
         align-items: center;
-        background: var(--bg-elev);
-        border: 1px solid var(--line);
+        background: var(--card);
+        border: 1px solid var(--border);
         border-radius: 999px;
         cursor: grab;
         display: inline-flex;
@@ -1174,14 +1174,14 @@ export class Grip extends Component {
       }
 
       .tp-seat.tp-lift {
-        border-color: var(--line-strong);
+        border-color: var(--border-strong);
         box-shadow: 0 10px 22px rgba(0, 0, 0, 0.3);
         position: relative;
         z-index: 5;
       }
 
       .tp-wrong {
-        color: var(--ember);
+        color: var(--primary);
         font-family: var(--font-mono);
         font-size: 10px;
         margin: 5px 0 0;

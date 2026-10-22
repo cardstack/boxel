@@ -294,15 +294,15 @@ export class DemoPage extends Component<Signature> {
         font-size: 11px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         text-decoration: underline;
-        text-decoration-color: var(--line-strong);
+        text-decoration-color: var(--border-strong);
         text-underline-offset: 3px;
       }
 
       @media (hover: hover) {
         .back:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -319,7 +319,7 @@ export class DemoPage extends Component<Signature> {
         white-space: nowrap;
         font-weight: 400;
         letter-spacing: 0.08em;
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       @media (hover: hover) {
@@ -333,18 +333,19 @@ export class DemoPage extends Component<Signature> {
         align-items: center;
         gap: 10px;
         margin: 0;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        letter-spacing: 0.18em;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        font-size: var(--boxel-eyebrow-font-size);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--eyebrow);
+        color: var(--primary-ink);
       }
 
       .kicker::before {
         content: '';
         width: 18px;
         height: 1px;
-        background: var(--ember);
+        background: var(--primary);
         box-shadow: 0 0 12px var(--glow);
       }
 
@@ -356,8 +357,9 @@ export class DemoPage extends Component<Signature> {
         font-family: var(--font-mono);
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ember-ink);
-        border: 1px solid color-mix(in srgb, var(--ember-ink) 55%, transparent);
+        color: var(--primary-ink);
+        border: 1px solid
+          color-mix(in srgb, var(--primary-ink) 55%, transparent);
         border-radius: 3px;
         vertical-align: middle;
       }
@@ -374,7 +376,7 @@ export class DemoPage extends Component<Signature> {
       .lede {
         max-width: 38rem;
         margin: 0;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 1.125rem;
       }
 
@@ -429,7 +431,7 @@ export class DemoPage extends Component<Signature> {
         container-name: platter;
         container-type: inline-size;
         min-height: min(72vh, 680px);
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 22px;
         /* clip, not hidden: a hidden box is still a scroll container, and
            would scroll to reveal a focused control a demo's transform has
@@ -441,7 +443,7 @@ export class DemoPage extends Component<Signature> {
             rgba(255, 59, 31, 0.1),
             transparent 60%
           ),
-          var(--bg);
+          var(--canvas);
       }
 
       /* A FILM IS A WIDE FRAME. Towers is composed for a picture about
@@ -613,7 +615,7 @@ export class DemoPage extends Component<Signature> {
         gap: 34px;
         margin-top: 40px;
         padding-top: 30px;
-        border-top: 1px solid var(--line);
+        border-top: 1px solid var(--border);
         font-size: 15px;
         line-height: 1.72;
       }
@@ -627,11 +629,12 @@ export class DemoPage extends Component<Signature> {
 
       .demo-body :deep(.dive-kicker) {
         margin: 0;
-        font-family: var(--font-mono);
-        font-size: 10px;
-        letter-spacing: 0.18em;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        font-size: calc(var(--boxel-eyebrow-font-size) * 10 / 11);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--eyebrow);
+        color: var(--primary-ink);
       }
 
       .demo-body :deep(.dive-head h2) {
@@ -649,7 +652,7 @@ export class DemoPage extends Component<Signature> {
         margin: 0;
         font-size: 15px;
         line-height: 1.65;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .demo-body :deep(.dd) {
@@ -667,18 +670,18 @@ export class DemoPage extends Component<Signature> {
         font-family: var(--font-mono);
         font-size: 11px;
         letter-spacing: 0.06em;
-        color: var(--eyebrow);
+        color: var(--primary-ink);
       }
 
       .demo-body :deep(.dd-fn::after) {
         flex: 1;
         height: 1px;
-        background: var(--line);
+        background: var(--border);
         content: '';
       }
 
       .demo-body :deep(.dd-fn span) {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .demo-body :deep(.dd h3) {
@@ -702,7 +705,7 @@ export class DemoPage extends Component<Signature> {
 
       .demo-body :deep(.dd-col p) {
         margin: 0;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .demo-body :deep(.dd-col strong) {
@@ -732,7 +735,7 @@ export class DemoPage extends Component<Signature> {
       .demo-body :deep(.dd-fig) {
         margin: 2px 0 0;
         padding: 16px 16px 13px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 16px;
         /* a light tint, capped at 4%: a dark tint over an already dark page
            does not read as a surface of its own */
@@ -745,16 +748,16 @@ export class DemoPage extends Component<Signature> {
         max-width: 76ch;
         margin-top: 13px;
         padding-top: 11px;
-        border-top: 1px solid var(--line);
+        border-top: 1px solid var(--border);
         font-family: var(--font-mono);
         font-size: 11px;
         line-height: 1.6;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .demo-body :deep(.dd-fig figcaption b) {
         font-weight: 500;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       /* Capped, so a drawing stays subordinate to the prose it explains. At full
@@ -771,37 +774,37 @@ export class DemoPage extends Component<Signature> {
       }
 
       .demo-body :deep(.dg-plate) {
-        fill: var(--bg);
-        stroke: var(--line);
+        fill: var(--canvas);
+        stroke: var(--border);
       }
 
       .demo-body :deep(.dg-box) {
-        fill: var(--bg-elev);
-        stroke: var(--line-strong);
+        fill: var(--card);
+        stroke: var(--border-strong);
       }
 
       .demo-body :deep(.dg-boxcop) {
-        fill: var(--bg-elev);
+        fill: var(--card);
         stroke: var(--copper);
       }
 
       .demo-body :deep(.dg-hot) {
         fill: rgba(255, 59, 31, 0.16);
-        stroke: var(--ember);
+        stroke: var(--primary);
       }
 
       .demo-body :deep(.dg-band) {
-        fill: rgba(var(--ink-rgb), 0.04);
+        fill: color-mix(in srgb, var(--foreground) 4%, transparent);
       }
 
       .demo-body :deep(.dg-rule) {
         fill: none;
-        stroke: var(--line-strong);
+        stroke: var(--border-strong);
       }
 
       .demo-body :deep(.dg-hair) {
         fill: none;
-        stroke: var(--line);
+        stroke: var(--border);
       }
 
       .demo-body :deep(.dg-cop) {
@@ -811,7 +814,7 @@ export class DemoPage extends Component<Signature> {
 
       .demo-body :deep(.dg-emberline) {
         fill: none;
-        stroke: var(--ember);
+        stroke: var(--primary);
       }
 
       .demo-body :deep(.dg-hotline) {
@@ -822,7 +825,7 @@ export class DemoPage extends Component<Signature> {
 
       .demo-body :deep(.dg-inkline) {
         fill: none;
-        stroke: var(--ink);
+        stroke: var(--foreground);
         stroke-width: 1.6;
       }
 
@@ -839,23 +842,23 @@ export class DemoPage extends Component<Signature> {
       }
 
       .demo-body :deep(.dg-faintdot) {
-        fill: var(--ink-faint);
+        fill: var(--subtle-foreground);
       }
 
       .demo-body :deep(.dg-arrow) {
-        fill: var(--ink-faint);
+        fill: var(--subtle-foreground);
       }
 
       .demo-body :deep(.dg-hand) {
-        fill: var(--ink);
-        stroke: var(--bg);
+        fill: var(--foreground);
+        stroke: var(--canvas);
         stroke-width: 0.8;
       }
 
       .demo-body :deep(.dg-t) {
         font-family: var(--font-mono);
         font-size: 11px;
-        fill: var(--ink);
+        fill: var(--foreground);
       }
 
       /* a hot label most often sits in a .dg-hot box */
@@ -864,11 +867,11 @@ export class DemoPage extends Component<Signature> {
       }
 
       .demo-body :deep(.dg-t.is-dim) {
-        fill: var(--ink-dim);
+        fill: var(--muted-foreground);
       }
 
       .demo-body :deep(.dg-t.is-faint) {
-        fill: var(--ink-faint);
+        fill: var(--subtle-foreground);
       }
 
       .demo-body :deep(.dg-t.is-cop) {
@@ -879,14 +882,14 @@ export class DemoPage extends Component<Signature> {
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 1.4px;
-        fill: var(--ink-faint);
+        fill: var(--subtle-foreground);
       }
 
       .demo-body :deep(.dg-h) {
         font-family: var(--font-display);
         font-size: 15px;
         font-weight: 700;
-        fill: var(--ink);
+        fill: var(--foreground);
       }
 
       .demo-body :deep(.dg-h.is-hot) {
@@ -900,7 +903,7 @@ export class DemoPage extends Component<Signature> {
       .walk-note {
         max-width: 68ch;
         margin: 26px 0 10px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 14px;
         line-height: 1.6;
       }
@@ -919,12 +922,12 @@ export class DemoPage extends Component<Signature> {
         font-size: 11px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .pager > :deep(a) {
         text-decoration: underline;
-        text-decoration-color: var(--line-strong);
+        text-decoration-color: var(--border-strong);
         text-underline-offset: 3px;
         min-width: 0;
         max-width: 48%;
@@ -935,7 +938,7 @@ export class DemoPage extends Component<Signature> {
 
       @media (hover: hover) {
         .pager > :deep(a:hover) {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 

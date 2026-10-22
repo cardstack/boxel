@@ -340,7 +340,7 @@ export class GalleryGrid extends Component<Signature> {
         grid-template-columns: minmax(0, 1fr);
         gap: 28px;
         padding-bottom: 56px;
-        border-bottom: 1px solid var(--line);
+        border-bottom: 1px solid var(--border);
         margin-bottom: 40px;
       }
 
@@ -351,18 +351,19 @@ export class GalleryGrid extends Component<Signature> {
         align-items: center;
         gap: 10px;
         margin: 0;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        letter-spacing: 0.18em;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        font-size: var(--boxel-eyebrow-font-size);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--eyebrow);
+        color: var(--primary-ink);
       }
 
       .kicker::before {
         content: '';
         width: 18px;
         height: 1px;
-        background: var(--ember);
+        background: var(--primary);
         box-shadow: 0 0 12px var(--glow);
         /* drawn, not just present: the rule runs out from the left as the
            page arrives */
@@ -413,15 +414,15 @@ export class GalleryGrid extends Component<Signature> {
         letter-spacing: -0.02em;
         font-style: normal;
         color: transparent;
-        /* the tail fades toward --gradient-tail, which is --ink in dark mode
-           and copper in light, where fading to --ink would turn muddy.
+        /* the tail fades toward --gradient-tail, which is --foreground in dark mode
+           and copper in light, where fading to --foreground would turn muddy.
            The bright accents are a deliberate brand treatment in both
            themes. On light cream they fall under the 3:1 large-text
            minimum (ember-hot 2.4:1, copper about 1.8:1, lower under the
            page's ember glow). That is a brand choice, not a WCAG pass:
            the word is display-size heading text, and forced-colors modes
            repaint it in CanvasText without the gradient.
-           The -ink stops (--ember-ink to --copper-ink) would clear 3:1
+           The -ink stops (--primary-ink to --copper-ink) would clear 3:1
            in light but read too dull for the hero. */
         background: linear-gradient(
           120deg,
@@ -436,21 +437,21 @@ export class GalleryGrid extends Component<Signature> {
       .lede {
         max-width: 38rem;
         margin: 0;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 1.125rem;
       }
 
       .lede a {
-        color: var(--ink);
+        color: var(--foreground);
         text-decoration: underline;
-        text-decoration-color: var(--line-strong);
+        text-decoration-color: var(--border-strong);
         text-underline-offset: 3px;
       }
 
       @media (hover: hover) {
         .lede a:hover {
-          color: var(--ember-ink);
-          text-decoration-color: var(--ember-ink);
+          color: var(--primary-ink);
+          text-decoration-color: var(--primary-ink);
         }
       }
 
@@ -468,9 +469,9 @@ export class GalleryGrid extends Component<Signature> {
       }
 
       .chip {
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         background: transparent;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         border-radius: 999px;
         padding: 7px 12px;
         font-family: var(--font-mono);
@@ -481,19 +482,19 @@ export class GalleryGrid extends Component<Signature> {
 
       @media (hover: hover) {
         .chip:hover {
-          color: var(--ink);
-          border-color: var(--line-strong);
+          color: var(--foreground);
+          border-color: var(--border-strong);
           background: var(--bg-spot);
         }
       }
 
       .chip.is-on {
-        border-color: var(--line-strong);
+        border-color: var(--border-strong);
         background: var(--bg-spot);
         box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.35);
         /* full ink: the raised ground and the ember ring say selected, and
-           --ember-ink falls under 4.5:1 on --bg-spot in the dark palette */
-        color: var(--ink);
+           --primary-ink falls under 4.5:1 on --bg-spot in the dark palette */
+        color: var(--foreground);
       }
 
       /* the tell waits until the row is under the pointer, then says what
@@ -506,7 +507,7 @@ export class GalleryGrid extends Component<Signature> {
         border: 1px solid transparent;
         border-radius: 999px;
         background: none;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.14em;
@@ -535,7 +536,7 @@ export class GalleryGrid extends Component<Signature> {
 
         .filter-tell:hover {
           color: var(--copper-ink);
-          border-color: var(--line-strong);
+          border-color: var(--border-strong);
         }
       }
 
@@ -549,17 +550,17 @@ export class GalleryGrid extends Component<Signature> {
 
       .filter-tell.is-on {
         color: var(--copper-ink);
-        border-color: var(--line-strong);
+        border-color: var(--border-strong);
       }
 
       .filter-tell-mark {
         font-size: 11px;
         letter-spacing: 0;
-        color: var(--ember-ink);
+        color: var(--primary-ink);
       }
 
       .filter-code {
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 16px;
         background: rgba(var(--surface-tint-rgb), 0.03);
         overflow: hidden;
@@ -568,11 +569,12 @@ export class GalleryGrid extends Component<Signature> {
       .sample-label {
         margin: 0;
         padding: 14px 18px 0;
-        font-family: var(--font-mono);
-        font-size: 10px;
-        letter-spacing: 0.14em;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        font-size: calc(var(--boxel-eyebrow-font-size) * 10 / 11);
+        letter-spacing: calc(var(--boxel-eyebrow-letter-spacing) * 14 / 18);
         text-transform: uppercase;
-        color: var(--eyebrow);
+        color: var(--primary-ink);
       }
 
       .filter-code pre {
@@ -585,7 +587,7 @@ export class GalleryGrid extends Component<Signature> {
         font-family: var(--font-mono);
         font-size: 12px;
         line-height: 1.55;
-        color: var(--ink);
+        color: var(--foreground);
         white-space: pre;
         -webkit-user-select: text;
         user-select: text;
@@ -605,19 +607,19 @@ export class GalleryGrid extends Component<Signature> {
         position: relative;
         min-width: 0;
         height: 540px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 18px;
         /* the tile inside rounds its focus ring to this box's inner edge */
         --tile-radius: 17px;
         overflow: hidden;
-        background: var(--bg-elev);
+        background: var(--card);
         cursor: pointer;
         transition: border-color 180ms var(--ease);
       }
 
       @media (hover: hover) {
         .card:hover {
-          border-color: var(--line-strong);
+          border-color: var(--border-strong);
         }
       }
 

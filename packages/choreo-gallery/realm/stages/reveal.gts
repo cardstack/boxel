@@ -223,8 +223,8 @@ export class Reveal extends Component {
         top: 14px;
         right: 14px;
         z-index: 3;
-        border: 1px solid var(--line-strong);
-        background: rgba(var(--bg-rgb), 0.72);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--canvas) 72%, transparent);
         backdrop-filter: blur(8px);
         border-radius: 999px;
         padding: 7px 12px;
@@ -232,12 +232,12 @@ export class Reveal extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {
         .replay:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -260,9 +260,9 @@ export class Reveal extends Component {
         flex-direction: column;
         gap: 8px;
         padding: 14px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 18px;
-        background: var(--bg-elev);
+        background: var(--card);
         scrollbar-width: thin;
       }
 
@@ -274,7 +274,7 @@ export class Reveal extends Component {
         flex: none;
         padding: 13px 12px;
         border-radius: 12px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         background: var(--bg-spot);
         overflow: hidden;
       }
@@ -283,7 +283,7 @@ export class Reveal extends Component {
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.14em;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .pour b {
@@ -328,8 +328,8 @@ export class Reveal extends Component {
         font-size: 10px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--ink-faint);
-        border-bottom: 1px solid var(--line);
+        color: var(--subtle-foreground);
+        border-bottom: 1px solid var(--border);
       }
 
       .pours-legend {
@@ -341,7 +341,7 @@ export class Reveal extends Component {
         font-size: 9px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .key-pour,
@@ -349,7 +349,7 @@ export class Reveal extends Component {
         width: 8px;
         height: 8px;
         border-radius: 2px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
       }
 
       .key-pour {

@@ -1150,7 +1150,7 @@ export class Playhead extends Component {
         width: 288px;
         max-width: 100%;
         padding: 14px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 16px;
         background: linear-gradient(
           180deg,
@@ -1166,7 +1166,7 @@ export class Playhead extends Component {
         align-items: baseline;
         justify-content: space-between;
         padding-bottom: 12px;
-        border-bottom: 1px solid var(--line);
+        border-bottom: 1px solid var(--border);
       }
 
       .ph-kicker {
@@ -1174,7 +1174,7 @@ export class Playhead extends Component {
         font-size: 10px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .ph-sum {
@@ -1182,7 +1182,7 @@ export class Playhead extends Component {
         font-size: 20px;
         font-weight: 700;
         font-variant-numeric: tabular-nums;
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .ph-legend {
@@ -1191,7 +1191,7 @@ export class Playhead extends Component {
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .ph-seg {
@@ -1200,7 +1200,7 @@ export class Playhead extends Component {
         width: 260px;
         max-width: 100%;
         padding: 3px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 10px;
         /* a recessed groove relative to .ph-app's own surface, not a neutral
            black veil — black-over-a-light-card reads as flat grey once .ph-app
@@ -1217,7 +1217,7 @@ export class Playhead extends Component {
         width: 127px;
         height: 30px;
         border-radius: 8px;
-        background: linear-gradient(180deg, var(--ember-hot), var(--ember));
+        background: linear-gradient(180deg, var(--ember-hot), var(--primary));
         box-shadow: 0 4px 14px rgba(255, 59, 31, 0.35);
       }
 
@@ -1231,7 +1231,7 @@ export class Playhead extends Component {
         font: inherit;
         font-size: 12px;
         font-weight: 500;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         cursor: pointer;
         transition: color 0.18s var(--ease);
       }
@@ -1247,11 +1247,11 @@ export class Playhead extends Component {
         width: 100%;
         margin-top: 12px;
         padding: 10px 10px 10px 12px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 10px;
         background: var(--ph-row);
         font: inherit;
-        color: var(--ink);
+        color: var(--foreground);
         text-align: left;
         cursor: pointer;
       }
@@ -1266,7 +1266,7 @@ export class Playhead extends Component {
       .ph-row-copy small {
         font-family: var(--font-mono);
         font-size: 10px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .ph-switch {
@@ -1276,7 +1276,7 @@ export class Playhead extends Component {
         height: 24px;
         padding: 3px;
         border-radius: 12px;
-        background: rgba(var(--ink-rgb), 0.1);
+        background: color-mix(in srgb, var(--foreground) 10%, transparent);
       }
 
       /* the "on" colour is its own element rather than a class, because a class is
@@ -1285,7 +1285,7 @@ export class Playhead extends Component {
         position: absolute;
         inset: 0;
         border-radius: 12px;
-        background: linear-gradient(180deg, var(--ember-hot), var(--ember));
+        background: linear-gradient(180deg, var(--ember-hot), var(--primary));
         /* dark until the score (or a live hand) lights it — the wrap starts off,
            and the rest pose must not depend on the run's frame-0 pin landing
            (same rule as .ph-receipt above) */
@@ -1307,13 +1307,13 @@ export class Playhead extends Component {
         width: 100%;
         height: 40px;
         margin-top: 12px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 10px;
         background: linear-gradient(180deg, var(--ph-go-top), var(--ph-go-bot));
         font: inherit;
         font-size: 13px;
         font-weight: 600;
-        color: var(--ink);
+        color: var(--foreground);
         cursor: pointer;
       }
 
@@ -1326,7 +1326,7 @@ export class Playhead extends Component {
         width: 232px;
         max-width: 100%;
         padding: 20px 18px 16px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 16px;
         background: linear-gradient(
           180deg,
@@ -1393,19 +1393,19 @@ export class Playhead extends Component {
       .ph-receipt small {
         font-family: var(--font-mono);
         font-size: 10px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .ph-done {
         width: 100%;
         height: 32px;
         margin-top: 8px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 8px;
         background: none;
         font: inherit;
         font-size: 12px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         cursor: pointer;
       }
 
@@ -1478,12 +1478,12 @@ export class Playhead extends Component {
         flex: none;
         place-items: center;
         height: 28px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 8px;
         background: var(--ph-btn);
         font: inherit;
         font-size: 11px;
-        color: var(--ink);
+        color: var(--foreground);
         cursor: pointer;
         transition:
           opacity 0.2s var(--ease),
@@ -1504,7 +1504,7 @@ export class Playhead extends Component {
         line-height: 1;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .ph-play:disabled {
@@ -1529,13 +1529,13 @@ export class Playhead extends Component {
       }
 
       .ph-rail {
-        background: var(--line-strong);
+        background: var(--border-strong);
       }
 
       .ph-fill {
         /* scaleX from a motion value, so the bar is repainted without a render */
         transform-origin: left center;
-        background: linear-gradient(90deg, var(--ember), var(--copper));
+        background: linear-gradient(90deg, var(--primary), var(--copper));
       }
 
       .ph-mark {
@@ -1545,7 +1545,7 @@ export class Playhead extends Component {
         width: 2px;
         height: 10px;
         border-radius: 1px;
-        background: var(--ink-faint);
+        background: var(--subtle-foreground);
         transform: translate(-1px, -50%);
       }
 
@@ -1596,7 +1596,7 @@ export class Playhead extends Component {
         font-size: 10px;
         font-variant-numeric: tabular-nums;
         text-align: right;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       /* live: the timeline is showing a position in a score that is no longer what
@@ -1608,7 +1608,7 @@ export class Playhead extends Component {
       }
 
       .ph-transport.is-off .ph-rewind {
-        border-color: var(--ember);
+        border-color: var(--primary);
         color: var(--ember-hot);
       }
 
@@ -1622,7 +1622,7 @@ export class Playhead extends Component {
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.04em;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         text-align: center;
       }
 

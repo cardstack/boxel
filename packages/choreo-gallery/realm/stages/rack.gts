@@ -1287,7 +1287,7 @@ export class Rack extends Component {
 
       .rk-axis {
         position: absolute;
-        background: var(--line);
+        background: var(--border);
         opacity: 0;
       }
 
@@ -1312,7 +1312,7 @@ export class Rack extends Component {
         font-size: 9px;
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         opacity: 0;
         white-space: nowrap;
       }
@@ -1336,7 +1336,7 @@ export class Rack extends Component {
         top: 266px;
         transform: translateX(-50%);
         font-size: 9px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       /* The board: fifteen-by-fifteen is wider than this stage, so it is thirteen
@@ -1390,7 +1390,7 @@ export class Rack extends Component {
         text-transform: none;
         letter-spacing: 0.04em;
         font-size: 9px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .rk-key {
@@ -1403,7 +1403,7 @@ export class Rack extends Component {
         font-size: 9px;
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         opacity: 0;
         white-space: nowrap;
       }
@@ -1501,7 +1501,7 @@ export class Rack extends Component {
         font-size: 9px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         white-space: nowrap;
         transition:
           color 0.18s ease,
@@ -1526,7 +1526,7 @@ export class Rack extends Component {
 
       @media (hover: hover) {
         .rk-notch:hover {
-          color: var(--ink-dim);
+          color: var(--muted-foreground);
         }
       }
 

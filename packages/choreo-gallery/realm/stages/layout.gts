@@ -112,9 +112,9 @@ export class LayoutToggle extends Component {
     </LayoutGroup>
     <style scoped>
       .chip {
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         background: transparent;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         border-radius: 999px;
         padding: 7px 12px;
         font-family: var(--font-mono);
@@ -124,15 +124,15 @@ export class LayoutToggle extends Component {
       }
 
       .chip.is-on {
-        color: var(--ink);
-        border-color: var(--line-strong);
+        color: var(--foreground);
+        border-color: var(--border-strong);
         background: var(--bg-spot);
       }
 
       @media (hover: hover) {
         .chip:hover {
-          color: var(--ink);
-          border-color: var(--line-strong);
+          color: var(--foreground);
+          border-color: var(--border-strong);
           background: var(--bg-spot);
         }
       }
@@ -170,8 +170,8 @@ export class LayoutToggle extends Component {
         top: 14px;
         right: 14px;
         z-index: 3;
-        border: 1px solid var(--line-strong);
-        background: rgba(var(--bg-rgb), 0.72);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--canvas) 72%, transparent);
         backdrop-filter: blur(8px);
         border-radius: 999px;
         padding: 7px 12px;
@@ -179,12 +179,12 @@ export class LayoutToggle extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {
         .replay:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -272,7 +272,7 @@ export class LayoutToggle extends Component {
       }
 
       .record-meta small {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: clamp(10px, 2.6cqw, 12px);
       }
 

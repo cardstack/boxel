@@ -1084,10 +1084,10 @@ export class Drift extends Component {
       }
 
       .dial-spike-btn {
-        background: rgba(var(--ink-rgb), 0.08);
+        background: color-mix(in srgb, var(--foreground) 8%, transparent);
         border: 0;
         border-radius: 6px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         cursor: pointer;
         font-family: var(--font-mono);
         font-size: 10px;
@@ -1096,7 +1096,7 @@ export class Drift extends Component {
       }
 
       .dial-spike-btn:hover {
-        color: var(--ink);
+        color: var(--foreground);
       }
       .choreo-site[data-theme='light'] .drift-rail-fit {
         background: rgba(247, 243, 236, 0.82);
@@ -1127,7 +1127,7 @@ export class Drift extends Component {
            the camera clamps to the walls, so this is the void beyond them and should
            not read as more asphalt */
         background: #2b2622;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 12px;
         cursor: crosshair;
         overflow: hidden;
@@ -1193,7 +1193,7 @@ export class Drift extends Component {
         color: rgba(230, 163, 90, 0.85);
       }
       .drift-car {
-        background: var(--ember);
+        background: var(--primary);
         border-radius: 5px;
         box-shadow: 0 3px 10px rgba(0, 0, 0, 0.42);
         height: 22px;
@@ -1299,7 +1299,7 @@ export class Drift extends Component {
 
       .drift-note {
         bottom: 10px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 11px;
         left: 12px;
         margin: 0;
@@ -1352,9 +1352,9 @@ export class Drift extends Component {
       .drift-tab {
         backdrop-filter: blur(8px);
         background: rgba(20, 17, 15, 0.72);
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 999px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         cursor: pointer;
         font-family: var(--font-mono);
         font-size: 10px;
@@ -1368,7 +1368,7 @@ export class Drift extends Component {
       }
 
       .drift-tab:hover {
-        color: var(--ink);
+        color: var(--foreground);
       }
       .drift-rail-fit {
         backdrop-filter: blur(14px);
@@ -1394,8 +1394,8 @@ export class Drift extends Component {
       }
 
       .drift-board {
-        background: rgba(var(--ink-rgb), 0.04);
-        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--foreground) 4%, transparent);
+        border: 1px solid var(--border);
         border-radius: 10px;
         /* room at the bottom for the bin, which is positioned rather than laid out
            and would otherwise sit on top of the last row */
@@ -1405,7 +1405,7 @@ export class Drift extends Component {
 
       .drift-board-head {
         align-items: center;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         display: flex;
         font-family: var(--font-mono);
         font-size: 10px;
@@ -1429,7 +1429,7 @@ export class Drift extends Component {
 
       .drift-lap {
         align-items: center;
-        background: rgba(var(--ink-rgb), 0.06);
+        background: color-mix(in srgb, var(--foreground) 6%, transparent);
         border-radius: 6px;
         display: flex;
         font-family: var(--font-mono);
@@ -1440,7 +1440,7 @@ export class Drift extends Component {
       }
 
       .drift-lap b {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-size: 10px;
         width: 10px;
       }
@@ -1455,13 +1455,13 @@ export class Drift extends Component {
       }
 
       .drift-empty {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-size: 11px;
         margin: 0;
       }
       .drift-bin {
         bottom: 4px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-family: var(--font-mono);
         font-size: 9px;
         letter-spacing: 0.06em;
@@ -1489,13 +1489,13 @@ export class Drift extends Component {
       .drift-race {
         backdrop-filter: blur(8px);
         background: rgba(20, 17, 15, 0.72);
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         bottom: 34px;
         left: 12px;
         position: absolute;
         z-index: 3;
         border-radius: 999px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         cursor: pointer;
         flex: none;
         font-family: var(--font-mono);
@@ -1509,7 +1509,7 @@ export class Drift extends Component {
       }
 
       .drift-race:hover {
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .drift-race.is-on {

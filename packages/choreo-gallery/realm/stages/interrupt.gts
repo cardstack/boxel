@@ -167,9 +167,9 @@ export class Interrupt extends Component {
       .rail {
         height: 46px;
         padding: 0 6px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 999px;
-        background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
+        background: linear-gradient(180deg, var(--bg-spot), var(--inset));
       }
 
       /* four equal slots, so a puck's home is decided by which slot it is rendered
@@ -201,7 +201,7 @@ export class Interrupt extends Component {
          hairline rather than a full border, so it disappears under the puck's own
          box-shadow instead of competing with it */
       .slot:not(:first-child) {
-        border-left: 1px solid var(--line);
+        border-left: 1px solid var(--border);
       }
 
       /* the end slots round off to follow .rail's own pill cap — a plain
@@ -258,7 +258,7 @@ export class Interrupt extends Component {
       .puck.is-spring {
         background:
           radial-gradient(circle at 32% 28%, #fff8, transparent 44%),
-          linear-gradient(160deg, var(--ember-hot), var(--ember));
+          linear-gradient(160deg, var(--ember-hot), var(--primary));
       }
 
       .puck.is-tween {
@@ -276,14 +276,14 @@ export class Interrupt extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .rail-name em {
         font-style: normal;
         letter-spacing: 0.04em;
         text-transform: none;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .choreo-site:not([data-theme='light']) .rail {

@@ -110,8 +110,8 @@ export class Trail extends Component {
         top: 14px;
         right: 14px;
         z-index: 3;
-        border: 1px solid var(--line-strong);
-        background: rgba(var(--bg-rgb), 0.72);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--canvas) 72%, transparent);
         backdrop-filter: blur(8px);
         border-radius: 999px;
         padding: 7px 12px;
@@ -119,12 +119,12 @@ export class Trail extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {
         .replay:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -141,7 +141,7 @@ export class Trail extends Component {
         width: min(88%, 320px);
         min-height: 48px;
         padding: 8px 12px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 16px;
         background: var(--bg-spot);
       }
@@ -153,7 +153,7 @@ export class Trail extends Component {
       }
 
       .crumb-sep {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-size: 14px;
       }
 
@@ -168,7 +168,7 @@ export class Trail extends Component {
       }
 
       .crumb-btn.is-tip {
-        color: var(--ink);
+        color: var(--foreground);
         pointer-events: none;
       }
 
@@ -180,7 +180,7 @@ export class Trail extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       @container (max-width: 420px) {
@@ -192,8 +192,8 @@ export class Trail extends Component {
 
       /* ---- dark: the surfaces the light-mode sweep flattened ----
        *
-       * Adding light mode introduced --bg-well (#070605) and pointed a lot of demo
-       * surfaces at it. It is darker than --bg itself, and darker than every literal
+       * Adding light mode introduced --inset (#070605) and pointed a lot of demo
+       * surfaces at it. It is darker than --canvas itself, and darker than every literal
        * it replaced (#0a0908, #100e0c, #0d0b0a, #16130f …), so demos that used to sit
        * a shade ABOVE the page became holes cut into it — and neighbouring tones that
        * were deliberately different (.sub-tile vs .sub-tile.is-on) collapsed onto one

@@ -1156,9 +1156,9 @@ export class BuildOrder extends Component {
       .bo-plate {
         position: absolute;
         inset: 0;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 20px;
-        background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
+        background: linear-gradient(180deg, var(--bg-spot), var(--inset));
         box-shadow: 0 20px 46px
           rgba(var(--shadow-rgb), calc(0.5 * var(--shadow-a)));
       }
@@ -1227,7 +1227,7 @@ export class BuildOrder extends Component {
        and Pop would fling it off the arc. */
 
       .bo-bead {
-        fill: var(--ember);
+        fill: var(--primary);
         transform-box: fill-box;
         transform-origin: 50% 50%;
       }
@@ -1256,14 +1256,14 @@ export class BuildOrder extends Component {
         font-weight: 800;
         letter-spacing: -0.02em;
         line-height: 1;
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .bo-tag {
         font-family: var(--font-mono);
         font-size: clamp(7px, 2.3cqh, 9px);
         letter-spacing: 0.2em;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .bo-rule-box {
@@ -1275,7 +1275,7 @@ export class BuildOrder extends Component {
 
       .bo-rule {
         fill: none;
-        stroke: var(--ember);
+        stroke: var(--primary);
         stroke-width: 2;
         stroke-linecap: round;
       }
@@ -1288,11 +1288,11 @@ export class BuildOrder extends Component {
         min-width: 0;
         min-height: 0;
         max-height: 100%;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 14px;
         /* same device-chrome treatment as .ph-app — a neutral black veil read as
          flat grey once its card turned light */
-        background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
+        background: linear-gradient(180deg, var(--bg-spot), var(--inset));
         box-shadow: 0 18px 44px
           rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
         overflow: hidden;
@@ -1302,12 +1302,12 @@ export class BuildOrder extends Component {
         flex: none;
         margin: 0;
         padding: 8px 10px;
-        border-bottom: 1px solid var(--line);
+        border-bottom: 1px solid var(--border);
         font-family: var(--font-mono);
         font-size: 9px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .bo-list {
@@ -1331,20 +1331,20 @@ export class BuildOrder extends Component {
         border-radius: 6px;
         background: none;
         font: inherit;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         text-align: left;
         cursor: pointer;
       }
 
       .bo-row.is-on {
-        background: var(--ember);
+        background: var(--primary);
         color: #fff;
       }
 
       .bo-no {
         font-family: var(--font-mono);
         font-size: 9px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         text-align: right;
       }
 
@@ -1358,7 +1358,7 @@ export class BuildOrder extends Component {
       .bo-fx {
         font-family: var(--font-mono);
         font-size: 9px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         white-space: nowrap;
       }
 
@@ -1373,7 +1373,7 @@ export class BuildOrder extends Component {
         grid-template-columns: 1fr 1fr;
         gap: 7px 8px;
         padding: 9px 10px 10px;
-        border-top: 1px solid var(--line);
+        border-top: 1px solid var(--border);
       }
 
       .bo-field {
@@ -1392,24 +1392,24 @@ export class BuildOrder extends Component {
         font-size: 8px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .bo-field select {
         width: 100%;
         height: 22px;
         padding: 0 4px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 6px;
-        background: var(--bg-well);
+        background: var(--inset);
         font: inherit;
         font-size: 10px;
-        color: var(--ink);
+        color: var(--foreground);
         cursor: pointer;
       }
 
       .bo-field select:disabled {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         cursor: default;
       }
 
@@ -1419,9 +1419,9 @@ export class BuildOrder extends Component {
         justify-content: space-between;
         height: 22px;
         padding: 0 2px 0 7px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 6px;
-        background: var(--bg-well);
+        background: var(--inset);
       }
 
       .bo-step b {
@@ -1429,7 +1429,7 @@ export class BuildOrder extends Component {
         font-size: 10px;
         font-weight: 500;
         font-variant-numeric: tabular-nums;
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .bo-arrows {
@@ -1445,7 +1445,7 @@ export class BuildOrder extends Component {
         padding: 0;
         border: 0;
         background: none;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 7px;
         line-height: 9px;
         cursor: pointer;
@@ -1489,7 +1489,7 @@ export class BuildOrder extends Component {
         display: block;
         height: 3px;
         border-radius: 2px;
-        background: rgba(var(--ink-rgb), 0.07);
+        background: color-mix(in srgb, var(--foreground) 7%, transparent);
       }
 
       .bo-bar {
@@ -1503,7 +1503,7 @@ export class BuildOrder extends Component {
       }
 
       .bo-bar.is-on {
-        background: linear-gradient(90deg, var(--ember), var(--copper));
+        background: linear-gradient(90deg, var(--primary), var(--copper));
         opacity: 1;
       }
 
@@ -1514,7 +1514,7 @@ export class BuildOrder extends Component {
         position: absolute;
         z-index: 1;
         width: 1px;
-        background: rgba(var(--ink-rgb), 0.28);
+        background: color-mix(in srgb, var(--foreground) 28%, transparent);
         pointer-events: none;
       }
 
@@ -1530,7 +1530,7 @@ export class BuildOrder extends Component {
         /* ember, not white: white reads on the dark card and vanishes on the
          light one, and the head already wears an ember halo — one colour for
          the whole playhead, legible on either ground */
-        background: var(--ember);
+        background: var(--primary);
         box-shadow: 0 0 7px var(--glow);
         pointer-events: none;
       }
@@ -1543,7 +1543,7 @@ export class BuildOrder extends Component {
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: var(--ember);
+        background: var(--primary);
         box-shadow: 0 0 0 3px rgba(255, 59, 31, 0.26);
       }
 
@@ -1583,12 +1583,12 @@ export class BuildOrder extends Component {
         place-items: center;
         width: 22px;
         height: 22px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 7px;
-        background: var(--bg-well);
+        background: var(--inset);
         font: inherit;
         font-size: 9px;
-        color: var(--ink);
+        color: var(--foreground);
         cursor: pointer;
       }
 
@@ -1596,7 +1596,7 @@ export class BuildOrder extends Component {
         font-family: var(--font-mono);
         font-size: 9px;
         font-variant-numeric: tabular-nums;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .bo-spacer {
@@ -1607,19 +1607,19 @@ export class BuildOrder extends Component {
         flex: none;
         height: 22px;
         padding: 0 9px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 7px;
-        background: var(--bg-well);
+        background: var(--inset);
         font-family: var(--font-mono);
         font-size: 9px;
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         cursor: pointer;
       }
 
       .bo-chip.is-on {
-        border-color: var(--ember);
+        border-color: var(--primary);
         color: var(--ember-hot);
       }
 

@@ -199,9 +199,9 @@ export class DragWell extends Component {
     </div>
     <style scoped>
       .chip {
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         background: transparent;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         border-radius: 999px;
         padding: 7px 12px;
         font-family: var(--font-mono);
@@ -211,15 +211,15 @@ export class DragWell extends Component {
       }
 
       .chip.is-on {
-        color: var(--ink);
-        border-color: var(--line-strong);
+        color: var(--foreground);
+        border-color: var(--border-strong);
         background: var(--bg-spot);
       }
 
       @media (hover: hover) {
         .chip:hover {
-          color: var(--ink);
-          border-color: var(--line-strong);
+          color: var(--foreground);
+          border-color: var(--border-strong);
           background: var(--bg-spot);
         }
       }
@@ -273,7 +273,7 @@ export class DragWell extends Component {
         overflow: hidden;
         border: 2px solid rgba(255, 215, 168, 0.28);
         border-radius: 22px;
-        background: var(--bg-well);
+        background: var(--inset);
         touch-action: none;
         box-shadow: 0 22px 50px
           rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
@@ -294,7 +294,7 @@ export class DragWell extends Component {
         pointer-events: none;
         position: absolute;
         inset: 10px;
-        border: 1px solid rgba(var(--ink-rgb), 0.22);
+        border: 1px solid color-mix(in srgb, var(--foreground) 22%, transparent);
         border-radius: 8px;
       }
 
@@ -325,7 +325,7 @@ export class DragWell extends Component {
         left: -14%;
         width: 204%;
         height: 152%;
-        color: var(--ink);
+        color: var(--foreground);
         cursor: grab;
         touch-action: none;
         user-select: none;
@@ -358,7 +358,7 @@ export class DragWell extends Component {
         font-size: 10px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: rgba(var(--ink-rgb), 0.72);
+        color: color-mix(in srgb, var(--foreground) 72%, transparent);
       }
 
       .still-slate b {
@@ -374,7 +374,7 @@ export class DragWell extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .lock {

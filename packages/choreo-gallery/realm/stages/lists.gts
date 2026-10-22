@@ -121,9 +121,9 @@ export class Lists extends Component {
            it grows and shrinks instead of jumping. */
         min-height: 132px;
         padding: 12px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 14px;
-        background: var(--bg-elev);
+        background: var(--card);
       }
 
       .list-head {
@@ -131,17 +131,17 @@ export class Lists extends Component {
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         margin-bottom: 4px;
       }
 
       .list-name {
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 10px;
         padding: 8px 10px;
         background: var(--bg-spot);
-        color: var(--ink);
-        font: 13px var(--font);
+        color: var(--foreground);
+        font: 13px var(--font-sans);
         text-align: left;
         cursor: pointer;
       }
