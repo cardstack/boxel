@@ -49,7 +49,6 @@ export default config as {
   autoSaveDelayMs: number;
   monacoDebounceMs: number;
   monacoCursorDebounceMs: number;
-  serverEchoDebounceMs: number;
   loginMessageTimeoutMs: number;
   minSaveTaskDurationMs: number;
   cardRenderTimeout: number;

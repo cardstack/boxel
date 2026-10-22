@@ -30,6 +30,10 @@ interface Signature {
 
 const { monacoDebounceMs, monacoCursorDebounceMs } = config;
 
+// Saves that can still be in flight at once; older ones have come back or
+// been superseded.
+const MAX_SENT_CONTENT = 20;
+
 export type MonacoEditorOptions =
   MonacoSDK.editor.IStandaloneEditorConstructionOptions;
 
@@ -39,9 +43,12 @@ export default class Monaco extends Modifier<Signature> {
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
   private lastReadOnly: boolean | undefined;
-  // Set when the user edits in monaco. Unset until then, so content that
-  // arrives soon after the editor opens is shown rather than taken for an echo.
-  private lastModified: number | undefined;
+  // Content this editor sent through contentChanged that has not come back as
+  // the content arg yet. A save comes back as exactly the text that was sent,
+  // so an incoming value found here is an echo of our own save and is not
+  // applied: applying it would replace newer typing and move the cursor. Any
+  // other incoming value is a change from somewhere else and is applied.
+  private sentContent: string[] = [];
   private lastCursorPosition: MonacoSDK.Position | undefined;
   private waiterManager = createMonacoWaiterManager();
   private onDispose: (() => void) | undefined;
@@ -68,14 +75,12 @@ export default class Monaco extends Modifier<Signature> {
       if (language && language !== this.lastLanguage) {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
-      if (
-        content !== this.model.getValue() &&
-        // ignore realm event echoes of our own saves by not processing content changes
-        // within serverEchoDebounceMs of the last monaco change in memory
-        (this.lastModified === undefined ||
-          Date.now() >=
-            this.lastModified + this.monacoService.serverEchoDebounceMs)
-      ) {
+      let sentIndex = this.sentContent.lastIndexOf(content);
+      if (sentIndex !== -1) {
+        // Saves come back in the order they were sent, so the ones sent before
+        // this one won't come back now.
+        this.sentContent = this.sentContent.slice(sentIndex + 1);
+      } else if (content !== this.model.getValue()) {
         this.lastContent = content;
         this.model.setValue(content);
       }
@@ -204,10 +209,13 @@ export default class Monaco extends Modifier<Signature> {
       if (this.lastContent === content) {
         return;
       }
-      this.lastModified = Date.now();
       await timeout(monacoDebounceMs);
       if (this.model) {
         this.lastContent = this.model.getValue();
+        this.sentContent = [
+          ...this.sentContent.slice(-(MAX_SENT_CONTENT - 1)),
+          this.lastContent,
+        ];
         contentChanged(this.lastContent);
       }
     },
