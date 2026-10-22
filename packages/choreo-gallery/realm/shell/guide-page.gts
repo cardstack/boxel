@@ -256,10 +256,10 @@ export class GuidePage extends Component<Signature> {
         --markdown-heading-font-family: var(--font-display);
         --markdown-heading-font-weight: 700;
         --markdown-heading-scroll-margin: 96px;
-        --markdown-h1-font-size: clamp(32px, 5vw, 46px);
+        --markdown-h1-font-size: clamp(32px, 5cqi, 46px);
         --markdown-h1-line-height: 1.08;
         --markdown-h1-margin-block: 0 24px;
-        --markdown-h2-font-size: clamp(22px, 3.2vw, 28px);
+        --markdown-h2-font-size: clamp(22px, 3.2cqi, 28px);
         --markdown-h2-line-height: 1.18;
         --markdown-h2-margin-block: 48px 12px;
         --markdown-h3-font-size: 19px;
