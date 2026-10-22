@@ -6,7 +6,6 @@ import * as os from 'os';
 import { execFileSync } from 'child_process';
 import { pushCommand } from '../../src/commands/realm/push.ts';
 import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
-import { ATOMIC_BATCH_SIZE } from '../../src/lib/realm-sync-base.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -699,52 +698,61 @@ describe('realm push (integration)', () => {
     expect(await remoteFileExists(realmUrl, 'c.gts')).toBe(true);
   });
 
-  it('splits a large upload into several /_atomic requests', async () => {
-    // In-process so the /_atomic requests can be counted.
+  it('splits an upload into /_atomic requests, modules first', async () => {
+    // In-process so the /_atomic requests can be read.
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();
-    let count = ATOMIC_BATCH_SIZE + 1;
-    for (let i = 0; i < count; i++) {
-      writeLocalFile(localDir, `notes/note-${i}.md`, `# Note ${i}\n`);
-    }
+    writeLocalFile(localDir, 'a.md', '# A\n');
+    writeLocalFile(localDir, 'b.md', '# B\n');
+    writeLocalFile(localDir, 'z.gts', 'export const z = 1;\n');
 
     let profileManager = reloadProfile(home);
     let realFetch = profileManager.authedRealmFetch.bind(profileManager);
-    let atomicPosts = 0;
+    let requests: string[][] = [];
     let fetchSpy = vi
       .spyOn(profileManager, 'authedRealmFetch')
       .mockImplementation(async (input, init) => {
         let url = typeof input === 'string' ? input : (input as URL).href;
         if (init?.method === 'POST' && url.includes('/_atomic')) {
-          atomicPosts++;
+          let body = JSON.parse(String(init.body)) as {
+            'atomic:operations': Array<{ href: string }>;
+          };
+          requests.push(
+            body['atomic:operations'].map((op) => op.href.split('/').pop()!),
+          );
         }
         return realFetch(input, init);
       });
 
     try {
-      await pushCommand(localDir, realmUrl, { profileManager });
+      await pushCommand(localDir, realmUrl, {
+        profileManager,
+        atomicBatchSize: 2,
+      });
     } finally {
       fetchSpy.mockRestore();
     }
 
-    expect(atomicPosts).toBe(2);
-    expect(Object.keys(readManifest(localDir).files)).toHaveLength(count);
-    expect(await fetchRemoteFile(realmUrl, 'notes/note-0.md')).toBe(
-      '# Note 0\n',
-    );
-    expect(await fetchRemoteFile(realmUrl, `notes/note-${count - 1}.md`)).toBe(
-      `# Note ${count - 1}\n`,
-    );
+    expect(requests).toHaveLength(2);
+    expect(requests[0][0]).toBe('z.gts');
+    expect(requests.flat().sort()).toEqual(['a.md', 'b.md', 'z.gts']);
+    expect(Object.keys(readManifest(localDir).files).sort()).toEqual([
+      'a.md',
+      'b.md',
+      'z.gts',
+    ]);
+    expect(await fetchRemoteFile(realmUrl, 'b.md')).toBe('# B\n');
   });
 
-  it('records the batches that landed when a later /_atomic request gets no answer', async () => {
+  it('keeps a request that got no answer retryable, and skips --delete after it', async () => {
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();
-    let count = ATOMIC_BATCH_SIZE + 1;
-    for (let i = 0; i < count; i++) {
-      writeLocalFile(localDir, `notes/note-${i}.md`, `# Note ${i}\n`);
-    }
+    writeLocalFile(localDir, 'a.md', '# A\n');
+    writeLocalFile(localDir, 'b.md', '# B\n');
+    writeLocalFile(localDir, 'c.md', '# C\n');
+    await writeRemoteFile(realmUrl, 'stale.md', '# Stale\n');
 
+    // The second request is written by the realm, but its answer is lost.
     let profileManager = reloadProfile(home);
     let realFetch = profileManager.authedRealmFetch.bind(profileManager);
     let atomicPosts = 0;
@@ -752,13 +760,14 @@ describe('realm push (integration)', () => {
       .spyOn(profileManager, 'authedRealmFetch')
       .mockImplementation(async (input, init) => {
         let url = typeof input === 'string' ? input : (input as URL).href;
+        let response = await realFetch(input, init);
         if (init?.method === 'POST' && url.includes('/_atomic')) {
           atomicPosts++;
           if (atomicPosts === 2) {
             throw new TypeError('fetch failed');
           }
         }
-        return realFetch(input, init);
+        return response;
       });
     let exitCode: number | undefined;
     let exitSpy = vi.spyOn(process, 'exit').mockImplementation(((
@@ -769,16 +778,79 @@ describe('realm push (integration)', () => {
     }) as never);
 
     try {
-      await pushCommand(localDir, realmUrl, { profileManager });
+      await pushCommand(localDir, realmUrl, {
+        profileManager,
+        atomicBatchSize: 2,
+        delete: true,
+      });
     } finally {
       fetchSpy.mockRestore();
       exitSpy.mockRestore();
     }
 
     expect(exitCode).toBe(2);
-    expect(Object.keys(readManifest(localDir).files)).toHaveLength(
-      ATOMIC_BATCH_SIZE,
-    );
+    expect(await remoteFileExists(realmUrl, 'stale.md')).toBe(true);
+    expect(Object.keys(readManifest(localDir).files)).toHaveLength(3);
+
+    // The next push re-sends the unanswered file as an update, not an add
+    // the realm would refuse.
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
+    expect(await fetchRemoteFile(realmUrl, 'c.md')).toBe('# C\n');
+  });
+
+  it('keeps the files a rejected request stopped retryable', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    for (let name of ['a', 'b', 'c']) {
+      writeLocalFile(localDir, `${name}.md`, `# ${name} 1\n`);
+    }
+    let first = await runPush(localDir, realmUrl);
+    expect(first.ok, first.stderr).toBe(true);
+    for (let name of ['a', 'b', 'c']) {
+      writeLocalFile(localDir, `${name}.md`, `# ${name} 2\n`);
+    }
+    writeLocalFile(localDir, 'd.md', '# d 1\n');
+
+    // The first request is refused, so nothing after it is sent.
+    let profileManager = reloadProfile(home);
+    let realFetch = profileManager.authedRealmFetch.bind(profileManager);
+    let fetchSpy = vi
+      .spyOn(profileManager, 'authedRealmFetch')
+      .mockImplementation(async (input, init) => {
+        let url = typeof input === 'string' ? input : (input as URL).href;
+        if (init?.method === 'POST' && url.includes('/_atomic')) {
+          return new Response('Unavailable', { status: 503 });
+        }
+        return realFetch(input, init);
+      });
+    let exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined as never) as never);
+
+    try {
+      await pushCommand(localDir, realmUrl, {
+        profileManager,
+        atomicBatchSize: 2,
+      });
+    } finally {
+      fetchSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+
+    // Files the realm has stay known; the new file the realm doesn't have
+    // stays out, so the next push adds it.
+    let files = readManifest(localDir).files;
+    expect(Object.keys(files).sort()).toEqual(['a.md', 'b.md', 'c.md']);
+
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
+    for (let name of ['a', 'b', 'c']) {
+      expect(await fetchRemoteFile(realmUrl, `${name}.md`)).toBe(
+        `# ${name} 2\n`,
+      );
+    }
+    expect(await fetchRemoteFile(realmUrl, 'd.md')).toBe('# d 1\n');
   });
 
   it('--changed-since uploads only the files git changed since the revision, with no manifest', async () => {

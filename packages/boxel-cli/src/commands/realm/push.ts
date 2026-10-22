@@ -289,7 +289,11 @@ class RealmPusher extends RealmSyncBase {
       }
     }
 
-    if (this.pushOptions.deleteRemote) {
+    if (this.pushOptions.deleteRemote && uploadFailed) {
+      // Deleting after a partial upload would leave the realm matching
+      // neither the old local state nor the new one.
+      console.error('Skipping --delete because the upload did not complete');
+    } else if (this.pushOptions.deleteRemote) {
       const filesToDelete = new Set(initialRemoteFiles.keys());
       const skippedDeleteArtifacts: string[] = [];
 
@@ -332,17 +336,19 @@ class RealmPusher extends RealmSyncBase {
     }
 
     // Refresh mtimes and save the manifest even on partial failure —
-    // newManifest.files only contains files the server actually wrote
-    // (unchanged carry-overs + succeeded uploads), so persisting it
-    // is always safe and avoids re-uploading text files that landed.
-    // Files --changed-since skipped have no mtime yet, even when nothing
-    // uploads, and a later push needs one to notice a realm-side edit.
+    // newManifest.files holds the files the server wrote (unchanged
+    // carry-overs + succeeded uploads) with their hashes, so persisting it
+    // avoids re-uploading text files that landed. Files --changed-since
+    // skipped have no mtime yet, even when nothing uploads, and a later push
+    // needs one to notice a realm-side edit.
     if (
       !this.options.dryRun &&
       (filesToUpload.size > 0 || changedSince !== undefined)
     ) {
+      let remoteNow: Set<string> = new Set(initialRemoteFiles.keys());
       try {
         const freshMtimes = await this.getRemoteMtimes();
+        remoteNow = new Set(freshMtimes.keys());
         for (const rel of Object.keys(newManifest.files)) {
           const mtime = freshMtimes.get(rel);
           if (mtime !== undefined) {
@@ -351,6 +357,16 @@ class RealmPusher extends RealmSyncBase {
         }
       } catch (error) {
         console.warn('Could not refresh remote mtimes after upload:', error);
+      }
+      // A file this push didn't confirm writing (rejected, never sent, or in
+      // a request that got no answer) is recorded with a hash no file has
+      // when the realm has it, so the next push re-sends it as an update
+      // rather than an add the realm would refuse. One the realm doesn't
+      // have stays out of the manifest and goes as an add.
+      for (const rel of filesToUpload.keys()) {
+        if (newManifest.files[rel] === undefined && remoteNow.has(rel)) {
+          newManifest.files[rel] = '';
+        }
       }
     }
 
@@ -393,6 +409,7 @@ export interface PushCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
   force?: boolean;
+  atomicBatchSize?: number;
   /**
    * Git revisions the realm's files may hold. Only files that differ from any
    * of them in the local git checkout, files git doesn't track, and files the
@@ -509,6 +526,7 @@ export async function pushCommand(
         deleteRemote: options.delete,
         dryRun: options.dryRun,
         force: options.force,
+        atomicBatchSize: options.atomicBatchSize,
         changedSince,
       },
       authenticator,
