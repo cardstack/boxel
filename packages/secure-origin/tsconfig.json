@@ -17,5 +17,5 @@
     "skipLibCheck": true,
     "types": ["node", "ember-source/types"]
   },
-  "include": ["build", "tests", "src", "vite.config.ts"]
+  "include": ["build", "tests", "src", "types", "vite.config.ts"]
 }
