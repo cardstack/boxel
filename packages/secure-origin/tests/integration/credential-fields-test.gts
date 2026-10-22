@@ -317,21 +317,23 @@ module('Integration | credential fields', function (hooks) {
   module('sizing and theming', function () {
     test('reports the height of the fields, and again when it changes', async function (assert) {
       let { sent, receive } = await renderForm('reset');
-      receive({ type: 'style', properties: {} });
       let sizes = () => sent.filter((message) => message.type === 'size');
-      let first = sizes()[0];
-      assert.strictEqual(
-        first.height,
+      let formHeight = () =>
         document.getElementById('credential-fields')!.getBoundingClientRect()
-          .height,
-        'the height of the form',
-      );
+          .height;
+      receive({ type: 'style', properties: {} });
+      // The frame measures itself once the styles are drawn, so the report
+      // arrives after this message is handled.
+      await waitUntil(() => sizes().length > 0);
+      let first = sizes().at(-1);
+      assert.strictEqual(first.height, formHeight(), 'the height of the form');
       await fillIn('[data-test-password-field]', 'short');
       await blur('[data-test-password-field]');
-      await waitUntil(() => sizes().length > 1);
-      assert.true(
-        sizes().at(-1).height > first.height,
-        'grows with an error message',
+      await waitUntil(() => sizes().at(-1).height > first.height);
+      assert.strictEqual(
+        sizes().at(-1).height,
+        formHeight(),
+        'grows with an error message, to the height of the form',
       );
     });
 
