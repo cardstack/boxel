@@ -1427,6 +1427,9 @@ export default class MatrixService extends Service {
           console.warn(
             '[start-phase] getAccountData(realm-servers,favorites,catalog-realms,dashboard)',
           );
+        // A write queued while this read is in flight has already shown a
+        // newer state than the read returns.
+        let dashboardStateBeforeRead = this.dashboardState;
         let [
           realmServersData,
           favoritesData,
@@ -1445,7 +1448,9 @@ export default class MatrixService extends Service {
           this.fetchDashboardStateAtBoot(),
         ]);
         this.workspaceFavorites = favoritesData?.favorites ?? [];
-        this.dashboardState = parseDashboardContent(dashboardData);
+        if (this.dashboardState === dashboardStateBeforeRead) {
+          this.dashboardState = parseDashboardContent(dashboardData);
+        }
 
         // Boot assembles the realm list from trusted servers via
         // `_realm-auth`. The transition fallback below reads the legacy
