@@ -214,11 +214,7 @@ export default class InteractSubmode extends Component {
   // though B was opened more recently. Format changes count as
   // interactions (see StackItem.markInteracted), so this picks A.
   private get mostRecentlyInteractedStackItem(): StackItem | undefined {
-    let topItems = this.operatorModeStateService.topMostStackItems();
-    if (topItems.length === 0) return undefined;
-    return topItems.reduce((a, b) =>
-      b.lastInteractedAt > a.lastInteractedAt ? b : a,
-    );
+    return this.operatorModeStateService.mostRecentlyInteractedTopItem();
   }
 
   get stacks() {

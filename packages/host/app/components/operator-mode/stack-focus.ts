@@ -58,16 +58,6 @@ function keepsFocus(
   );
 }
 
-// The top card Escape acts on: the one the user most recently interacted
-// with.
-function escapeTarget(topItems: StackItem[]): StackItem | undefined {
-  return topItems.length > 0
-    ? topItems.reduce((a, b) =>
-        b.lastInteractedAt > a.lastInteractedAt ? b : a,
-      )
-    : undefined;
-}
-
 // Focus moves once the render is done. Focusing an element fires blur and
 // focusout on the one that had focus, and a handler there may change state
 // the render has already read.
@@ -155,7 +145,7 @@ function handBackFocus(operatorModeStateService: OperatorModeStateService) {
     .find((stack) => stacks.includes(stack) && stack.length > 0);
   let target = stack
     ? stack[stack.length - 1]
-    : escapeTarget(operatorModeStateService.topMostStackItems());
+    : operatorModeStateService.mostRecentlyInteractedTopItem();
   if (target) {
     focusIfConnected(
       document.querySelector(`[data-stack-item="${target.instanceId}"]`),
