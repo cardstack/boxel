@@ -89,6 +89,7 @@
     "super-fast-md5": "catalog:",
     "tracked-built-ins": "catalog:",
     "typescript": "catalog:",
+    "undici": "catalog:",
     "uuid": "catalog:",
     "yaml": "catalog:"
   },

@@ -221,6 +221,13 @@ class RealmPusher extends RealmSyncBase {
           newManifest.files[rel] = hash;
         }
       }
+      // A request that got no answer may have been written. Recording these
+      // with a hash no file has keeps them known to the manifest, so the next
+      // push re-sends them as updates where the realm has them, instead of as
+      // adds the realm would refuse with 409.
+      for (const rel of result.unanswered) {
+        newManifest.files[rel] = '';
+      }
 
       if (result.error) {
         uploadFailed = true;
@@ -240,7 +247,11 @@ class RealmPusher extends RealmSyncBase {
       }
     }
 
-    if (this.pushOptions.deleteRemote) {
+    if (this.pushOptions.deleteRemote && uploadFailed) {
+      // Deleting after a partial upload would leave the realm matching
+      // neither the old local state nor the new one.
+      console.error('Skipping --delete because the upload did not complete');
+    } else if (this.pushOptions.deleteRemote) {
       const filesToDelete = new Set(initialRemoteFiles.keys());
       const skippedDeleteArtifacts: string[] = [];
 
@@ -339,6 +350,7 @@ export interface PushCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
   force?: boolean;
+  atomicBatchSize?: number;
   profileManager?: ProfileManager;
   /**
    * Pre-resolved realm secret seed for administrative access. When set, the
@@ -432,6 +444,7 @@ export async function pushCommand(
         deleteRemote: options.delete,
         dryRun: options.dryRun,
         force: options.force,
+        atomicBatchSize: options.atomicBatchSize,
       },
       authenticator,
     );

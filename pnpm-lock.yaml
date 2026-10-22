@@ -1304,6 +1304,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      undici:
+        specifier: 'catalog:'
+        version: 7.30.0
       uuid:
         specifier: 'catalog:'
         version: 9.0.1

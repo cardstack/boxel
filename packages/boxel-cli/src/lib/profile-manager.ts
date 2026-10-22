@@ -15,6 +15,7 @@ import {
 } from './auth.ts';
 import { promptPassword as defaultPromptPassword } from './prompt.ts';
 import type { RealmAuthenticator } from './realm-authenticator.ts';
+import { realmFetch } from './realm-fetch.ts';
 
 export interface ProfileManagerDeps {
   matrixLogin?: typeof matrixLogin;
@@ -719,7 +720,7 @@ export class ProfileManager implements RealmAuthenticator {
     let token = await this.getRealmTokenForUrl(url);
     if (token) {
       let headers = this.buildHeaders(input, init, token);
-      let response = await fetch(input, { ...init, headers });
+      let response = await realmFetch(input, { ...init, headers });
 
       if (response.status !== 401) {
         return response;
@@ -742,7 +743,7 @@ export class ProfileManager implements RealmAuthenticator {
       );
     }
     let headers = this.buildHeaders(input, init, token);
-    let response = await fetch(input, { ...init, headers });
+    let response = await realmFetch(input, { ...init, headers });
 
     return response;
   }
