@@ -91,8 +91,8 @@ const Button: TemplateOnlyComponent<Signature> = <template>
         aria-disabled={{if @disabled 'true'}}
         disabled={{@disabled}}
         data-test-boxel-button
-        ...attributes
         type='button'
+        ...attributes
         {{! 'true', not the raw boolean: Glimmer renders a bare true as
             aria-disabled="", which ARIA reads as false. }}
       >
