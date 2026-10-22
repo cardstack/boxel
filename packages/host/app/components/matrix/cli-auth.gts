@@ -114,6 +114,9 @@ export default class CliAuth extends Component {
             <code>boxel profile add</code>
             again.</p>
         {{/if}}
+        {{! The secure origin's sign-in screen with this page's own heading
+            and test attributes, drawn from the same components; a change to
+            the sign-in screen's controls or styles is made here too. }}
         <form data-test-cli-auth-form {{on 'submit' this.submitPassword}}>
           {{#if this.googleSsoAvailable}}
             <AuthButton

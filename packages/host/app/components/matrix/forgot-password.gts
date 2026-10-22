@@ -143,10 +143,6 @@ export default class ForgotPassword extends Component<Signature> {
   @action
   private sendEmailValidation(ev: Event) {
     ev.preventDefault();
-    // Enter in the email field submits the form whatever the button's state.
-    if (this.isForgotPasswordBtnDisabled) {
-      return;
-    }
     if (!this.email) {
       throw new Error(
         `bug: should never get here: reset password button disabled when no email`,
@@ -280,9 +276,6 @@ export default class ForgotPassword extends Component<Signature> {
   @action
   private submitNewPassword(ev: Event) {
     ev.preventDefault();
-    if (this.isResetPasswordBtnDisabled) {
-      return;
-    }
     this.resetPassword.perform();
   }
 

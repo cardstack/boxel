@@ -343,11 +343,6 @@ export default class RegisterUser extends Component<Signature> {
   @action
   private sendToken(ev: Event) {
     ev.preventDefault();
-    // Enter in the invite code field submits the form whatever the button's
-    // state.
-    if (this.isNextButtonDisabled) {
-      return;
-    }
     if (this.state.type !== 'askForToken') {
       throw new Error(
         `invalid state: cannot sendToken() in state ${this.state.type}`,
