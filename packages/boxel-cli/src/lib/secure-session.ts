@@ -37,11 +37,13 @@ async function realmServerRequest(
     token,
     body,
     fetchFn = fetch,
+    signal,
   }: {
     method?: string;
     token?: string;
     body?: unknown;
     fetchFn?: typeof fetch;
+    signal?: AbortSignal;
   } = {},
 ): Promise<any> {
   let url = new URL(path, ensureTrailingSlash(realmServerUrl));
@@ -56,6 +58,7 @@ async function realmServerRequest(
     method,
     headers,
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...(signal ? { signal } : {}),
   });
   if (!response.ok) {
     let text = await response.text().catch(() => '');
@@ -98,18 +101,24 @@ export async function fetchSecureOriginUrl(
   return url;
 }
 
+// How long `boxel profile add` waits to learn where to sign in before it
+// opens the host app's page instead.
+const SECURE_ORIGIN_CHECK_TIMEOUT_MS = 10 * 1000;
+
 // The secure origin to sign a new profile in on (`boxel profile add`), when
 // the realm server has one whose pages can: it says so with `cliAuth` in
 // `_secure-origin`. Undefined otherwise, including when the realm server has
-// no secure origin, predates it, or can't be reached, and the CLI then signs
-// in on the host app's own page instead.
+// no secure origin, predates it, or doesn't answer in time, and the CLI then
+// signs in on the host app's own page instead.
 export async function secureOriginForProfiles(
   realmServerUrl: string,
   fetchFn: typeof fetch = fetch,
+  timeoutMs = SECURE_ORIGIN_CHECK_TIMEOUT_MS,
 ): Promise<string | undefined> {
   try {
     let json = await realmServerRequest(realmServerUrl, '_secure-origin', {
       fetchFn,
+      signal: AbortSignal.timeout(timeoutMs),
     });
     let { url, cliAuth } = json?.data?.attributes ?? {};
     return cliAuth === true && typeof url === 'string' ? url : undefined;
