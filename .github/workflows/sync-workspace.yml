@@ -286,8 +286,17 @@ jobs:
             echo "::notice::This boxel-cli has no --changed-since, so every file goes up."
           fi
 
+          # The push is indexed without announcing it to the workspace's open
+          # tabs, which pick the new content up on their next load instead of
+          # resetting mid-session. A boxel-cli without --no-realm-events
+          # rejects it, so that one announces.
+          realm_events=()
+          if grep -q -- '--no-realm-events' <<< "$push_help"; then
+            realm_events+=(--no-realm-events)
+          fi
+
           set +e
-          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" 2>&1)
+          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" "${realm_events[@]}" 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
@@ -345,8 +354,17 @@ jobs:
             echo "::notice::This boxel-cli has no --changed-since, so every file goes up."
           fi
 
+          # The push is indexed without announcing it to the workspace's open
+          # tabs, which pick the new content up on their next load instead of
+          # resetting mid-session. A boxel-cli without --no-realm-events
+          # rejects it, so that one announces.
+          realm_events=()
+          if grep -q -- '--no-realm-events' <<< "$push_help"; then
+            realm_events+=(--no-realm-events)
+          fi
+
           set +e
-          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" 2>&1)
+          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" "${realm_events[@]}" 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
