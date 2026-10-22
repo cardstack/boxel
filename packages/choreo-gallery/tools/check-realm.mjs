@@ -12,6 +12,8 @@
  *   guides' index lists each guide once, and each guide's pager names its
  *   neighbours in that order. Each guide, and the index, has its page: a
  *   `Guide` card beside its Markdown that links it and the index.
+ * - Every card instance in the realm links the gallery's theme card, which
+ *   carries the palette and the type every gallery component reads.
  * - Every card a realm doc embeds (`::card[…]`) is a card instance in the
  *   realm, and every demo has a guide that embeds it.
  * - The docs and design records in the realm link only to files and
@@ -353,6 +355,41 @@ for (const { file, slug, doc } of demos) {
 console.log(
   `${demos.length} demos are well formed, linked from the index, and have guide embeds and complete teaching lessons.`,
 );
+
+// ---- the theme -----------------------------------------------------------
+
+/** every card instance in the realm, outside the media and the film app */
+function instanceFiles(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      return ['asset', 'film-app'].includes(entry.name)
+        ? []
+        : instanceFiles(file);
+    }
+    return entry.name.endsWith('.json') && readJSON(file).data?.meta?.adoptsFrom
+      ? [file]
+      : [];
+  });
+}
+const themeFile = path.join(realm, 'theme.json');
+// realm.json is the realm's own config card, which no gallery page renders
+const instances = instanceFiles(realm).filter(
+  (file) => ![themeFile, path.join(realm, 'realm.json')].includes(file),
+);
+const unthemed = instances.filter((file) => {
+  const link =
+    readJSON(file).data.relationships?.['cardInfo.theme']?.links?.self;
+  return (
+    !link || path.resolve(path.dirname(file), `${link}.json`) !== themeFile
+  );
+});
+assert.deepEqual(
+  unthemed.map((file) => path.relative(realm, file)),
+  [],
+  'Card instances that do not link ./theme.json, so render without the gallery palette',
+);
+console.log(`${instances.length} card instances link the gallery's theme.`);
 
 // ---- the docs ------------------------------------------------------------
 
