@@ -2,7 +2,7 @@
 // which the URL names with `port` and `state`. Signed in, the session goes to
 // that listener and nowhere else; this window keeps none of it.
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { trackedObject } from '@ember/reactive/collections';
 
 import { cliCallback } from '../../security/cli-handoff.js';
 import { readConfig } from '../../security/session.js';
@@ -17,8 +17,11 @@ type Session = { token: string; user: string; expiresAt: string };
 export default class CliSignInPage extends Component {
   <template>
     {{#if this.callback}}
-      {{#if this.session}}
-        <CliHandoff @callback={{this.callback}} @session={{this.session}} />
+      {{#if this.state.session}}
+        <CliHandoff
+          @callback={{this.callback}}
+          @session={{this.state.session}}
+        />
       {{else}}
         <AuthContainer>
           <SignInForm
@@ -39,9 +42,9 @@ export default class CliSignInPage extends Component {
   private params = new URL(window.location.href).searchParams;
   private callback = cliCallback(this.params);
   private username = this.params.get('user') ?? '';
-  @tracked private session: Session | undefined;
+  private state = trackedObject({ session: undefined as Session | undefined });
 
   private signedIn = (session: Session) => {
-    this.session = session;
+    this.state.session = session;
   };
 }

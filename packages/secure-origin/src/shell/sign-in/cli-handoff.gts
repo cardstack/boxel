@@ -1,5 +1,6 @@
 // Hands a session to the CLI waiting on its loopback port, once, as soon as
 // the page is drawn, and says so while the browser navigates there.
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 
 import { handToCli } from '../../security/cli-handoff.js';
@@ -19,7 +20,7 @@ export default class CliHandoff extends Component<Signature> {
     <MessagePage @heading='Returning to your terminal…' @info='One moment.' />
   </template>
 
-  constructor(owner: unknown, args: Signature['Args']) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     handToCli(args.callback, args.session);
   }

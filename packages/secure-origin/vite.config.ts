@@ -6,6 +6,7 @@ import { defineConfig } from 'vite';
 
 import { buildRecord } from './build/build-record.ts';
 import { importAllowlist } from './build/import-allowlist.ts';
+import { layerOrderFirst } from './build/layer-order.ts';
 
 const macros = buildMacros();
 
@@ -73,6 +74,7 @@ export default defineConfig({
       generatorOpts: { compact: false },
     }),
     importAllowlist(),
+    layerOrderFirst(),
     buildRecord({
       mode:
         process.env.SECURE_ORIGIN_BUILD_RECORD === 'check' ? 'check' : 'write',
@@ -94,6 +96,24 @@ export default defineConfig({
         entryFileNames: '[name].js',
         chunkFileNames: '[name].js',
         assetFileNames: '[name][extname]',
+        // Chunks the pages share get fixed names, so the build record and the
+        // files the realm server serves don't change name with whichever
+        // module sorts first. `shared` holds Ember and the components the
+        // pages are built from; `layers` holds only the order of the pages'
+        // cascade layers (`src/styles/layers.css`), which every entry imports
+        // and `layerOrderFirst` links ahead of the page's other stylesheets.
+        manualChunks(id) {
+          if (id.split('?')[0].endsWith('/src/styles/layers.css')) {
+            return 'layers';
+          }
+          if (
+            id.includes('/node_modules/') ||
+            /\/src\/(components|helpers|modifiers)\//.test(id)
+          ) {
+            return 'shared';
+          }
+          return undefined;
+        },
       },
     },
   },
