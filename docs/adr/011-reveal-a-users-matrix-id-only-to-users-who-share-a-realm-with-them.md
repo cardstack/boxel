@@ -132,6 +132,11 @@ behavior can't keep the rule. The homeserver has to.
   a change to this ADR.
 - **Let users share rooms, and hide the members.** Synapse can't hide members
   from each other, and the timeline still carries every join.
+- **Fork or reimplement Synapse to control what it reveals.** A homeserver of
+  our own could stop listing a room's members and leave other users' joins out
+  of each member's timeline, so end users could share a room without seeing
+  each other. That is a large, ongoing undertaking, and it isn't planned now.
+  If Boxel takes it on, a change to this ADR can relax §1.5.
 
 ## 4. Consequences
 
