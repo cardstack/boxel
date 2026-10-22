@@ -574,7 +574,7 @@ const PlayheadNotes: TOC<object> = <template>
       font-size: 10px;
       letter-spacing: 0.14em;
       text-transform: uppercase;
-      color: var(--primary);
+      color: var(--primary-ink);
     }
   </style>
 </template>;

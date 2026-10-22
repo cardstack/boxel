@@ -787,7 +787,7 @@ export class Hang extends Component {
       }
 
       .hang-standing b.is-red {
-        color: var(--primary);
+        color: var(--primary-ink);
       }
 
       .hang-standing b.is-blue {
@@ -931,7 +931,7 @@ export class Hang extends Component {
       .hang-ghost[data-call='off the end'],
       .hang-ghost[data-call='too soft'] {
         border-color: var(--ember-hot);
-        color: var(--ember-hot);
+        color: var(--hot-ink);
         font-size: 8px;
       }
 

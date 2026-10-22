@@ -790,7 +790,7 @@ export class DemoPage extends Component<Signature> {
 
       .demo-body :deep(.dg-hot) {
         fill: color-mix(in srgb, var(--primary) 16%, transparent);
-        stroke: var(--primary);
+        stroke: var(--primary-ink);
       }
 
       .demo-body :deep(.dg-band) {
@@ -814,7 +814,7 @@ export class DemoPage extends Component<Signature> {
 
       .demo-body :deep(.dg-emberline) {
         fill: none;
-        stroke: var(--primary);
+        stroke: var(--primary-ink);
       }
 
       .demo-body :deep(.dg-hotline) {

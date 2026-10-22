@@ -441,7 +441,7 @@ export class Escort extends Component {
       }
 
       .esc-bay.is-here .esc-bay-tally {
-        color: var(--ember-hot);
+        color: var(--hot-ink);
         opacity: 1;
       }
 
@@ -487,7 +487,7 @@ export class Escort extends Component {
         font-family: var(--font-mono);
         font-size: clamp(8.5px, 2cqw, 10.5px);
         letter-spacing: 0.02em;
-        color: var(--primary);
+        color: var(--primary-ink);
       }
 
       .esc-card-mass {
@@ -589,7 +589,7 @@ export class Escort extends Component {
       }
 
       .esc-note-key {
-        color: var(--primary);
+        color: var(--primary-ink);
       }
 
       .esc-note-dot {

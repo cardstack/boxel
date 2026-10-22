@@ -300,7 +300,7 @@ export class Reveal extends Component {
       }
 
       .pour.is-hot small {
-        color: var(--ember-hot);
+        color: var(--hot-ink);
       }
 
       /* the readout, drawn: the bar fills to the pour's share of the crucible

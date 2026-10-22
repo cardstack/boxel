@@ -161,7 +161,7 @@ export class Trail extends Component {
         border: 0;
         padding: 4px 2px;
         background: transparent;
-        color: var(--ember-hot);
+        color: var(--hot-ink);
         font-family: var(--font-display);
         font-size: 1.05rem;
         letter-spacing: -0.03em;

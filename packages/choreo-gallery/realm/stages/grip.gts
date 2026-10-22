@@ -740,7 +740,7 @@ export class Grip extends Component {
       .chip.is-on {
         box-shadow: inset 0 0 0 1px
           color-mix(in srgb, var(--primary) 35%, transparent);
-        color: var(--ember-hot);
+        color: var(--hot-ink);
       }
 
       .ex {
@@ -1183,7 +1183,7 @@ export class Grip extends Component {
       }
 
       .tp-wrong {
-        color: var(--primary);
+        color: var(--primary-ink);
         font-family: var(--font-mono);
         font-size: 10px;
         margin: 5px 0 0;

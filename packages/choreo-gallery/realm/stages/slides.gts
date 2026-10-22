@@ -372,7 +372,7 @@ export class Slides extends Component {
         font-style: normal;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ember-hot);
+        color: var(--hot-ink);
       }
 
       /* 1 — the title card: a small mark, everything centred */

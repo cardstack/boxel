@@ -150,7 +150,7 @@ export class Parallax extends Component {
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ember-hot);
+        color: var(--hot-ink);
       }
 
       .story p {

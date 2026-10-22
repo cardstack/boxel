@@ -1362,7 +1362,7 @@ export class Playhead extends Component {
         padding: 8px;
         border-radius: 50%;
         background: color-mix(in srgb, var(--primary) 16%, transparent);
-        color: var(--ember-hot);
+        color: var(--hot-ink);
         fill: none;
         stroke: currentColor;
         stroke-width: 2;
@@ -1611,7 +1611,7 @@ export class Playhead extends Component {
 
       .ph-transport.is-off .ph-rewind {
         border-color: var(--primary);
-        color: var(--ember-hot);
+        color: var(--hot-ink);
       }
 
       .ph-note {

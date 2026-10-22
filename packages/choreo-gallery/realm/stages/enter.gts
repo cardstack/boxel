@@ -194,7 +194,7 @@ export class Enter extends Component {
 
       .banner-app em {
         font-style: normal;
-        color: var(--ember-hot);
+        color: var(--hot-ink);
       }
 
       .banner strong {

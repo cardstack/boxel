@@ -227,7 +227,7 @@ export class DragWell extends Component {
       .chip.is-on {
         box-shadow: inset 0 0 0 1px
           color-mix(in srgb, var(--primary) 35%, transparent);
-        color: var(--ember-hot);
+        color: var(--hot-ink);
       }
 
       .ex {

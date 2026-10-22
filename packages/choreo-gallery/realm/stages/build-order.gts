@@ -1275,7 +1275,7 @@ export class BuildOrder extends Component {
 
       .bo-rule {
         fill: none;
-        stroke: var(--primary);
+        stroke: var(--primary-ink);
         stroke-width: 2;
         stroke-linecap: round;
       }
@@ -1453,7 +1453,7 @@ export class BuildOrder extends Component {
 
       @media (hover: hover) {
         .bo-arrows button:hover {
-          color: var(--ember-hot);
+          color: var(--hot-ink);
         }
       }
 
@@ -1621,7 +1621,7 @@ export class BuildOrder extends Component {
 
       .bo-chip.is-on {
         border-color: var(--primary);
-        color: var(--ember-hot);
+        color: var(--hot-ink);
       }
 
       @container (min-width: 620px) {
