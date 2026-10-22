@@ -40,12 +40,24 @@ export function buildRecord({
   mode = 'write',
 }: { mode?: 'write' | 'check' } = {}): Plugin {
   let base: string;
+  // Each chunk's stylesheets, by the name of the stylesheet the chunk's CSS
+  // is written to. Read as chunks render: a chunk holding only CSS, like
+  // `layers`, is gone from the bundle by the time it is written, and its
+  // stylesheet is listed among its importers'.
+  let stylesheetModules = new Map<string, string[]>();
   return {
     name: 'secure-origin-build-record',
     apply: 'build',
     enforce: 'post',
     configResolved(config) {
       base = config.base;
+    },
+    buildStart() {
+      stylesheetModules.clear();
+    },
+    renderChunk(_code, chunk) {
+      stylesheetModules.set(`${chunk.name}.css`, chunk.moduleIds.filter(isCss));
+      return null;
     },
     generateBundle(_options, bundle) {
       let entries = entryDocuments(bundle);
@@ -62,7 +74,7 @@ export function buildRecord({
       });
 
       let record = `${JSON.stringify(
-        { entries, files: describeFiles(bundle, loaded) },
+        { entries, files: describeFiles(bundle, loaded, stylesheetModules) },
         null,
         2,
       )}\n`;
@@ -129,24 +141,8 @@ function entryDocuments(bundle: Bundle): Record<string, string[]> {
 function describeFiles(
   bundle: Bundle,
   loaded: Set<string>,
+  stylesheetModules: Map<string, string[]>,
 ): Record<string, FileRecord> {
-  let stylesheetSources = new Map<string, Map<string, ModuleName>>();
-  for (let output of Object.values(bundle)) {
-    if (output.type !== 'chunk') {
-      continue;
-    }
-    let sources = Object.keys(output.modules)
-      .filter((id) => id.split('?')[0].endsWith('.css'))
-      .map(moduleName);
-    for (let css of output.viteMetadata?.importedCss ?? []) {
-      let known = stylesheetSources.get(css) ?? new Map();
-      for (let source of sources) {
-        known.set(`${source.package} ${source.module}`, source);
-      }
-      stylesheetSources.set(css, known);
-    }
-  }
-
   let files: Record<string, FileRecord> = {};
   for (let fileName of [...loaded].sort()) {
     let output = bundle[fileName];
@@ -164,16 +160,23 @@ function describeFiles(
           }))
           .sort(byModule),
       };
-    } else if (stylesheetSources.has(fileName)) {
+    } else if (stylesheetModules.has(fileName)) {
       files[fileName] = {
         bytes,
-        sources: [...stylesheetSources.get(fileName)!.values()].sort(byModule),
+        sources: stylesheetModules
+          .get(fileName)!
+          .map(moduleName)
+          .sort(byModule),
       };
     } else {
       files[fileName] = { bytes };
     }
   }
   return files;
+}
+
+function isCss(id: string): boolean {
+  return id.split('?')[0].endsWith('.css');
 }
 
 function moduleName(id: string): ModuleName {

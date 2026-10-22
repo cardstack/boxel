@@ -11,7 +11,7 @@ import MessagePage from './message-page.gts';
 
 interface Signature {
   Args: {
-    // Only ever a value `cliCallback` returned.
+    // A value `isCliCallback` accepts; `handToCli` refuses anything else.
     callback: CliCallback;
     session: Session;
   };
