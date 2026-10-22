@@ -57,9 +57,9 @@ const compiler = {
 // their identity.
 export const TRANSPILE_VERSION = 2;
 
-// `moduleIdentifier` is the module's canonical identifier, the form a code ref
-// to one of its exports carries. When given, every exported class is tagged
-// with it (see export-identity-plugin.ts).
+// `moduleIdentifier` names the module, by URL for a realm module. When given,
+// every exported class is tagged with it (see export-identity-plugin.ts); the
+// tag is canonicalized where it is read.
 export async function transpileJS(
   content: string,
   debugFilename: string,

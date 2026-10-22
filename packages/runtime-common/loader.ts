@@ -315,14 +315,34 @@ function bundledIdentityFor(
 // members, and an inherited tag names the parent, not the subclass.
 //
 // Two differences are not disagreements:
-// - The module spelled differently: an RRI prefix, a URL alias and the real
-//   URL all name one module. `identify()` answers in the spelling the module
-//   was imported under, which a prefix registered after the module was
-//   compiled, or an alias the importer used, can make differ from the tag's.
+// - The module spelled differently: a URL alias and the real URL name one
+//   module. `identify()` answers in the spelling the importer used, the tag
+//   in canonical form.
 // - A class its module exports under several names: `identify()` takes the
 //   first in key order, the tag the first in source order. Either is a name
 //   the module exports the class under.
 const identityTagKey = Symbol.for(exportIdentitySymbolKey);
+
+// The identity a class's tag gives it, in the form a code ref carries. A tag
+// records its module as compiled — a realm module by its URL — and the module
+// is canonicalized when the tag is read: the realm prefix that spells it may be
+// registered after the module was compiled.
+function identityFromTag(
+  value: Function,
+  virtualNetwork: VirtualNetwork | undefined,
+): { module: string; name: string } | undefined {
+  let tag = Object.getOwnPropertyDescriptor(value, identityTagKey)?.value as
+    | [string, string]
+    | undefined;
+  if (!tag) {
+    return undefined;
+  }
+  let [module, name] = tag;
+  return {
+    module: virtualNetwork ? virtualNetwork.unresolveURL(module) : module,
+    name,
+  };
+}
 
 // Every name the module `identify()` credits with a class exports it under.
 const exportNames = new WeakMap<Function, Set<string>>();
@@ -356,13 +376,11 @@ function assertMatchesIdentityTag(
   identity: { module: string; name: string } | undefined,
   virtualNetwork: VirtualNetwork | undefined,
 ): void {
-  let tag = Object.getOwnPropertyDescriptor(value, identityTagKey)?.value as
-    | [string, string]
-    | undefined;
   if (!identity) {
     return;
   }
-  if (!tag) {
+  let tagged = identityFromTag(value, virtualNetwork);
+  if (!tagged) {
     // Only class syntax is tagged; an exported function has no tag to carry.
     if (Function.prototype.toString.call(value).startsWith('class')) {
       throw new Error(
@@ -371,7 +389,7 @@ function assertMatchesIdentityTag(
     }
     return;
   }
-  let [module, name] = tag;
+  let { module, name } = tagged;
   let sameModule =
     identity.module === module ||
     (virtualNetwork !== undefined &&
@@ -381,7 +399,7 @@ function assertMatchesIdentityTag(
     identity.name === name || (exportNames.get(value)?.has(name) ?? false);
   if (!sameModule || !sameName) {
     throw new Error(
-      `class ${value.name} is tagged ${tag[0]}#${tag[1]} but identify() says ${identity.module}#${identity.name}`,
+      `class ${value.name} is tagged ${module}#${name} but identify() says ${identity.module}#${identity.name}`,
     );
   }
 }
