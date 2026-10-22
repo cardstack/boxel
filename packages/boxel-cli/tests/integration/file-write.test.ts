@@ -256,7 +256,9 @@ describe('file write (integration)', () => {
     expect(await (await readBack('silent.gts')).text()).toContain('s = 1');
   });
 
-  it('--no-realm-events writes the file', async () => {
+  // The header itself is checked in-process above; this checks that the CLI
+  // accepts the flag and still writes.
+  it('accepts --no-realm-events and writes the file', async () => {
     let res = await runBoxel(
       [
         'file',

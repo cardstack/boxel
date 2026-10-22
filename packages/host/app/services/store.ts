@@ -2565,10 +2565,12 @@ export default class StoreService extends Service implements StoreInterface {
     if (event.indexType === 'full') {
       // A full reindex carries no per-file invalidation list, so there is
       // nothing to reload by name. A realm that reindexes on request does
-      // broadcast the URLs it visited as an incremental event first, but one
-      // reindexing at startup announces itself with this event alone — so this
-      // can be the only word a card being held as awaiting-index ever gets
-      // that the row it is waiting for now exists.
+      // broadcast the URLs it visited as an incremental event first, but a
+      // realm building a brand-new index at startup announces itself with
+      // this event alone — so this can be the only word a card being held as
+      // awaiting-index ever gets that the row it is waiting for now exists.
+      // A realm reindexing an existing index at startup, as on a deploy,
+      // announces nothing.
       let reloadsTriggered = this.reloadAwaitingIndexInstances(event.realmURL);
       // Report the pass as a thin realm-event so the dashboard still sees it.
       telemetry?.recordEvent({

@@ -1930,9 +1930,10 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        test('full-reindex: a merged sweep announces when either sweep does, and is silent when both are', async function (assert) {
+        test('full-reindex: sweeps merge only with sweeps that make the same choice about announcing', async function (assert) {
           let publishSweep = (
             from: typeof publisher,
+            realmUrl: string,
             realmEvents: boolean | undefined,
           ) =>
             from.publish<void>({
@@ -1941,31 +1942,61 @@ module(basename(import.meta.filename), function () {
               timeout: FULL_REINDEX_JOB_TIMEOUT_SEC,
               priority: 0,
               args: {
-                realmUrls: ['http://example.com/a/'],
+                realmUrls: [realmUrl],
                 ...(realmEvents === undefined ? {} : { realmEvents }),
               },
             });
-          let pendingRealmEvents = async () => {
-            let rows = (await adapter.execute(
-              `SELECT args FROM jobs
-               WHERE job_type = 'full-reindex' AND status = 'unfulfilled'`,
-            )) as { args: { realmEvents?: boolean } }[];
-            assert.strictEqual(rows.length, 1, 'one pending sweep');
-            return rows[0].args.realmEvents;
-          };
+          let pendingSweeps = async () =>
+            (await adapter.execute(
+              `SELECT id, args FROM jobs
+               WHERE job_type = 'full-reindex' AND status = 'unfulfilled'
+               ORDER BY id`,
+            )) as {
+              id: number;
+              args: { realmUrls: string[]; realmEvents?: boolean };
+            }[];
 
-          await publishSweep(publisher, false);
-          await publishSweep(publisher2, false);
-          assert.false(
-            await pendingRealmEvents(),
-            'two silent sweeps merge into a silent sweep',
+          let silent = await publishSweep(
+            publisher,
+            'http://example.com/a/',
+            false,
+          );
+          let secondSilent = await publishSweep(
+            publisher2,
+            'http://example.com/b/',
+            false,
+          );
+          assert.strictEqual(
+            secondSilent.id,
+            silent.id,
+            'two silent sweeps merge',
           );
 
-          await publishSweep(publisher2, undefined);
+          let announcing = await publishSweep(
+            publisher2,
+            'http://example.com/c/',
+            undefined,
+          );
           assert.notStrictEqual(
-            await pendingRealmEvents(),
-            false,
-            'a sweep that announces makes the merged sweep announce',
+            announcing.id,
+            silent.id,
+            'a sweep that announces does not merge into a silent one',
+          );
+
+          let sweeps = await pendingSweeps();
+          assert.deepEqual(
+            sweeps.map(({ args }) => ({
+              realmUrls: [...args.realmUrls].sort(),
+              realmEvents: args.realmEvents,
+            })),
+            [
+              {
+                realmUrls: ['http://example.com/a/', 'http://example.com/b/'],
+                realmEvents: false,
+              },
+              { realmUrls: ['http://example.com/c/'], realmEvents: undefined },
+            ],
+            "each sweep keeps its own realms' choice",
           );
         });
       },

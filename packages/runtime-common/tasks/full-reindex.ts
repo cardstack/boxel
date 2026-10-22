@@ -60,8 +60,13 @@ function chooseFullReindexCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates } = context;
+  // A sweep merges only with one that makes the same choice about announcing:
+  // its realms' passes either all announce or all don't, and a merged sweep
+  // would impose one sweep's choice on the other's realms.
   let twin = candidates.find(
-    (candidate) => candidate.jobType === incoming.jobType,
+    (candidate) =>
+      candidate.jobType === incoming.jobType &&
+      announcesSweep(candidate.args) === announcesSweep(incoming.args),
   );
   if (!twin) {
     return { type: 'insert' };
@@ -72,20 +77,17 @@ function chooseFullReindexCoalesceDecision(
   let merged = [
     ...new Set([...getRealmUrls(twin.args), ...getRealmUrls(incoming.args)]),
   ];
-  let { realmEvents: _realmEvents, ...args } = {
-    ...(isObjectLike(twin.args) ? twin.args : {}),
-    ...(isObjectLike(incoming.args) ? incoming.args : {}),
-    realmUrls: merged,
-  } as JSONTypes.Object;
-  // One sweep that announces is enough for the merged sweep to announce.
-  let announces = announcesSweep(twin.args) || announcesSweep(incoming.args);
   return {
     type: 'join',
     jobId: twin.id,
     update: {
       priority: Math.max(twin.priority, incoming.priority),
       timeout: Math.max(twin.timeout, incoming.timeout),
-      args: announces ? args : { ...args, realmEvents: false },
+      args: {
+        ...(isObjectLike(twin.args) ? twin.args : {}),
+        ...(isObjectLike(incoming.args) ? incoming.args : {}),
+        realmUrls: merged,
+      },
     },
   };
 }

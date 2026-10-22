@@ -1251,6 +1251,9 @@ module(basename(import.meta.filename), function () {
             assert.strictEqual(response.status, 204);
           };
 
+          let [{ max: jobsBefore }] = (await dbAdapter.execute(
+            'SELECT coalesce(max(id), 0) AS max FROM jobs',
+          )) as { max: number }[];
           let events = recordRealmEvents();
           await writeIgnoreFile('quiet-ignored.json\n', {
             'X-Boxel-Realm-Events': 'none',
@@ -1264,6 +1267,35 @@ module(basename(import.meta.filename), function () {
             eventKinds(events),
             [],
             'neither the write nor the reindex it started sent a realm event',
+          );
+          // What the worker would announce is carried by the jobs the pass
+          // spawned: its render job and any follow-up pass.
+          let spawned = (await dbAdapter.execute(
+            `SELECT job_type, args FROM jobs
+             WHERE id > $1
+               AND job_type IN ('from-scratch-index', 'prerender_html')
+             ORDER BY id`,
+            { bind: [jobsBefore] },
+          )) as {
+            job_type: string;
+            args: { realmEvents?: boolean; announce?: boolean };
+          }[];
+          let reindex = spawned.find(
+            ({ job_type }) => job_type === 'from-scratch-index',
+          );
+          assert.ok(reindex, 'the ignore-file write started a reindex');
+          assert.false(
+            reindex?.args.realmEvents,
+            'the reindex announces nothing',
+          );
+          assert.deepEqual(
+            spawned
+              .filter(({ job_type }) => job_type === 'prerender_html')
+              .map(({ args }) => args.announce),
+            spawned
+              .filter(({ job_type }) => job_type === 'prerender_html')
+              .map(() => false),
+            'no render job the passes spawned announces',
           );
 
           await writeIgnoreFile('loud-ignored.json\n', {});
