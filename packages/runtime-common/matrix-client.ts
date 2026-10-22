@@ -315,8 +315,11 @@ export class MatrixClient {
   }
 
   // The room a world-readable realm sends its realm events into. Any user on
-  // the homeserver may join it, and a member sees only what is sent after
-  // they join. Only this client's user, the one the realm sends its realm
+  // the homeserver may join it. A member can read the room's history, so a
+  // host that is still joining when an event is sent still receives it; the
+  // host ignores events from before it started, and the retention policy
+  // bounds how far back the history goes. The events are about a realm anyone
+  // can read. Only this client's user, the one the realm sends its realm
   // events as, may send in it or change its state. A realm server's realms
   // share that user, so a member can't forge a realm event either way.
   async createRealmEventRoom(realmURL: string): Promise<string> {
@@ -330,7 +333,7 @@ export class MatrixClient {
           {
             type: 'm.room.history_visibility',
             state_key: '',
-            content: { history_visibility: 'joined' },
+            content: { history_visibility: 'shared' },
           },
           {
             type: 'm.room.retention',

@@ -767,6 +767,12 @@ export default class RealmServerService
     this.realmEventRoomsPending.clear();
     try {
       await this.login();
+      // TODO(ADR 004 §1.7–1.9): every realm is asked about at the home realm
+      // server, which answers only for its own realms. That holds while the
+      // host serves realms from its home server alone (see
+      // `assertOwnRealmServer`). Once realms come from several servers, ask
+      // each server about its own realms with that server's session, and
+      // join the rooms through that server's homeserver.
       let response = await this.network.fetch(
         `${this.url.href}_realm-event-rooms`,
         {
