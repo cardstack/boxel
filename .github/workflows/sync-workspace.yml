@@ -10,8 +10,8 @@ name: Sync to Boxel workspace (reusable)
 #
 # Each push to staging or production is recorded as a GitHub deployment
 # to that environment in the caller's repository, and uploads only the
-# files that changed since a revision the workspace may hold (see "Find
-# the revisions the workspace may hold" below). The caller's token needs
+# files that changed since a revision the workspace may hold (see the
+# realm-deployment/start action). The caller's token needs
 # `deployments: write`, so a caller that declares a `permissions:` block
 # has to grant it.
 #
@@ -121,84 +121,17 @@ jobs:
       - name: Install Boxel CLI
         run: npm install -g @cardstack/boxel-cli@${{ inputs.boxel-cli-version }}
 
-      # The newest deployment to the environment that succeeded names a
-      # revision the workspace holds in full. Each deployment recorded after
-      # it failed or never finished, so the workspace may hold part of its
-      # revision. The push skips a file only when it's unchanged against every
-      # one of these, so a file any of them may have written is sent again.
-      # With no successful deployment among the last 30, or a revision the
-      # checkout's history doesn't reach, the push sends every file. This runs
-      # before this run records its own deployment.
-      - name: Find the revisions the workspace may hold
+      # Finds the revisions the workspace may hold and records this sync as a
+      # deployment to the environment. `$/` resolves the action in this
+      # repository at the revision of this workflow the caller runs, where a
+      # `./` path would resolve against the caller's checkout.
+      - name: Start the deployment
         if: github.event_name == 'push' || (github.event_name == 'release' && inputs.enable-release-sync)
-        id: baseline
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ENVIRONMENT: ${{ github.event_name == 'release' && 'production' || 'staging' }}
-        run: |
-          revisions=""
-          succeeded=false
-          for row in $(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=$ENVIRONMENT&per_page=30" --jq '.[] | "\(.id):\(.sha)"'); do
-            id="${row%%:*}"
-            sha="${row#*:}"
-            case " $revisions " in
-              *" $sha "*) ;;
-              *) revisions="$revisions $sha" ;;
-            esac
-            if [ "$(gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses?per_page=100" --jq 'any(.[]; .state == "success")')" = "true" ]; then
-              succeeded=true
-              break
-            fi
-          done
-
-          if [ "$succeeded" != "true" ]; then
-            echo "::notice title=workspace sync::No successful $ENVIRONMENT deployment is recorded, so this sync sends every file."
-            revisions=""
-          fi
-          for revision in $revisions; do
-            if ! git cat-file -e "$revision^{commit}" 2>/dev/null; then
-              echo "::warning title=workspace sync::$revision, which the $ENVIRONMENT workspace may hold, isn't in this checkout's history, so this sync sends every file."
-              revisions=""
-              break
-            fi
-          done
-
-          echo "The $ENVIRONMENT workspace may hold:${revisions:- (unknown)}"
-          {
-            echo "environment=$ENVIRONMENT"
-            echo "revisions=${revisions# }"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Record the deployment
-        if: steps.baseline.outcome == 'success'
         id: deployment
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          ENVIRONMENT: ${{ steps.baseline.outputs.environment }}
-          WORKSPACE_URL: ${{ steps.baseline.outputs.environment == 'production' && inputs.production-workspace-url || inputs.staging-workspace-url }}
+        uses: $/.github/actions/realm-deployment/start
         with:
-          script: |
-            const { data } = await github.rest.repos.createDeployment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: context.sha,
-              environment: process.env.ENVIRONMENT,
-              description: `Sync to ${process.env.WORKSPACE_URL}`,
-              required_contexts: [],
-              auto_merge: false,
-              transient_environment: false,
-              production_environment: process.env.ENVIRONMENT === 'production',
-            });
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: data.id,
-              state: 'in_progress',
-              environment_url: process.env.WORKSPACE_URL,
-              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-            });
-            core.setOutput('id', String(data.id));
-            core.setOutput('url', process.env.WORKSPACE_URL);
+          environment: ${{ github.event_name == 'release' && 'production' || 'staging' }}
+          realm-url: ${{ github.event_name == 'release' && inputs.production-workspace-url || inputs.staging-workspace-url }}
 
       - name: Dry-run sync for PR
         if: github.event_name == 'pull_request' && github.event.action != 'closed' && inputs.enable-pr-dry-run
@@ -254,7 +187,7 @@ jobs:
           MATRIX_USERNAME: ${{ secrets.staging-matrix-username }}
           BOXEL_PASSWORD: ${{ secrets.staging-matrix-password }}
           WORKSPACE_URL: ${{ inputs.staging-workspace-url }}
-          REVISIONS: ${{ steps.baseline.outputs.revisions }}
+          PUSH_ARGS: ${{ steps.deployment.outputs.push-args }}
         run: |
           if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
             DOMAIN="boxel.ai"
@@ -274,33 +207,12 @@ jobs:
           echo ""
 
           # Skips files unchanged against every revision the workspace may
-          # hold. With none, every file goes up.
-          # A boxel-cli without --changed-since rejects it, so that one sends
-          # every file.
-          changed_since=()
-          push_help=$(boxel realm push --help 2>&1 || true)
-          if grep -q -- '--changed-since' <<< "$push_help"; then
-            for revision in $REVISIONS; do
-              changed_since+=(--changed-since "$revision")
-            done
-          elif [ -n "$REVISIONS" ]; then
-            echo "::notice::This boxel-cli has no --changed-since, so every file goes up."
-          fi
-
-          # The push is indexed without announcing it to the workspace's open
-          # tabs, which pick the new content up on their next load instead of
-          # resetting mid-session. A boxel-cli without --no-realm-events
-          # rejects it, so that one announces.
-          realm_events=()
-          if grep -q -- '--no-realm-events' <<< "$push_help"; then
-            realm_events+=(--no-realm-events)
-            echo "Pushing with --no-realm-events: open tabs pick the changes up on their next load."
-          else
-            echo "::notice::This boxel-cli has no --no-realm-events, so the push is announced to open tabs."
-          fi
+          # hold, and doesn't announce the push to open tabs, when the
+          # boxel-cli supports it (see realm-deployment/start).
+          read -ra push_args <<< "$PUSH_ARGS"
 
           set +e
-          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" "${realm_events[@]}" 2>&1)
+          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${push_args[@]}" 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
@@ -324,7 +236,7 @@ jobs:
           MATRIX_USERNAME: ${{ secrets.production-matrix-username }}
           BOXEL_PASSWORD: ${{ secrets.production-matrix-password }}
           WORKSPACE_URL: ${{ inputs.production-workspace-url }}
-          REVISIONS: ${{ steps.baseline.outputs.revisions }}
+          PUSH_ARGS: ${{ steps.deployment.outputs.push-args }}
         run: |
           if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
             DOMAIN="boxel.ai"
@@ -345,33 +257,12 @@ jobs:
           echo ""
 
           # Skips files unchanged against every revision the workspace may
-          # hold. With none, every file goes up.
-          # A boxel-cli without --changed-since rejects it, so that one sends
-          # every file.
-          changed_since=()
-          push_help=$(boxel realm push --help 2>&1 || true)
-          if grep -q -- '--changed-since' <<< "$push_help"; then
-            for revision in $REVISIONS; do
-              changed_since+=(--changed-since "$revision")
-            done
-          elif [ -n "$REVISIONS" ]; then
-            echo "::notice::This boxel-cli has no --changed-since, so every file goes up."
-          fi
-
-          # The push is indexed without announcing it to the workspace's open
-          # tabs, which pick the new content up on their next load instead of
-          # resetting mid-session. A boxel-cli without --no-realm-events
-          # rejects it, so that one announces.
-          realm_events=()
-          if grep -q -- '--no-realm-events' <<< "$push_help"; then
-            realm_events+=(--no-realm-events)
-            echo "Pushing with --no-realm-events: open tabs pick the changes up on their next load."
-          else
-            echo "::notice::This boxel-cli has no --no-realm-events, so the push is announced to open tabs."
-          fi
+          # hold, and doesn't announce the push to open tabs, when the
+          # boxel-cli supports it (see realm-deployment/start).
+          read -ra push_args <<< "$PUSH_ARGS"
 
           set +e
-          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" "${realm_events[@]}" 2>&1)
+          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${push_args[@]}" 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
@@ -389,23 +280,13 @@ jobs:
 
       # A sync that failed partway leaves the deployment marked failed, so
       # the next sync still compares against its revision.
-      - name: Finish the deployment record
-        if: always() && steps.deployment.outputs.id
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          DEPLOYMENT_ID: ${{ steps.deployment.outputs.id }}
-          WORKSPACE_URL: ${{ steps.deployment.outputs.url }}
-          SYNC_OUTCOME: ${{ steps.baseline.outputs.environment == 'production' && steps.sync_production.outcome || steps.sync_staging.outcome }}
+      - name: Finish the deployment
+        if: always() && steps.deployment.outputs.deployment-id
+        uses: $/.github/actions/realm-deployment/finish
         with:
-          script: |
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: Number(process.env.DEPLOYMENT_ID),
-              state: process.env.SYNC_OUTCOME === 'success' ? 'success' : 'failure',
-              environment_url: process.env.WORKSPACE_URL,
-              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-            });
+          deployment-id: ${{ steps.deployment.outputs.deployment-id }}
+          outcome: ${{ github.event_name == 'release' && steps.sync_production.outcome || steps.sync_staging.outcome }}
+          realm-url: ${{ github.event_name == 'release' && inputs.production-workspace-url || inputs.staging-workspace-url }}
 
       - name: Compute report fields
         if: ${{ !cancelled() }}

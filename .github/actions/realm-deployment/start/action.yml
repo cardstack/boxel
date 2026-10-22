@@ -1,0 +1,115 @@
+name: Start a realm deployment
+description: |
+  Prepares a `boxel realm push` from a git checkout and records it as a GitHub
+  deployment. It finds the revisions the realm may hold, from the deployments
+  recorded for the environment, builds the push arguments that skip files
+  unchanged against all of them, and records an in-progress deployment for
+  this run. realm-deployment/finish marks that deployment succeeded or failed.
+
+  Run it after the checkout (with `fetch-depth: 0`, so the history reaches
+  those revisions) and the boxel-cli install, and inside a concurrency group
+  for the environment: two overlapping syncs could finish out of order and
+  leave the realm holding the older revision while the newer deployment is
+  recorded as the one it got. It has to run before the push, so the
+  deployment it records isn't among the revisions it reads.
+
+  The caller splices `push-args` into the push:
+
+    read -ra push_args <<< "$PUSH_ARGS"
+    boxel realm push . "$REALM_URL" --delete "${push_args[@]}"
+
+  The token needs `deployments: write`.
+
+inputs:
+  environment:
+    description: The deployment environment, such as `staging` or `production`.
+    required: true
+  realm-url:
+    description: The realm the push writes to, recorded as the environment URL.
+    required: true
+  description:
+    description: The deployment's description. Empty describes it by the realm URL.
+    default: ""
+  ref:
+    description: The revision being deployed. Empty is the commit the run is for.
+    default: ""
+  payload:
+    description: A JSON object recorded as the deployment's payload.
+    default: "{}"
+  known-revision:
+    description: |
+      A revision the realm is known to hold, compared against along with the
+      recorded deployments. With it, the push compares against it even when no
+      recorded deployment succeeded.
+    default: ""
+  require-revisions:
+    description: |
+      When true, fail instead of sending every file when there is no revision
+      to compare against or the boxel-cli has no `--changed-since`. Nothing is
+      recorded then.
+    default: "false"
+  repository-path:
+    description: The checkout the push sends, where the revisions have to be.
+    default: "."
+  token:
+    description: "A token with `deployments: write` on the repository."
+    default: ${{ github.token }}
+
+outputs:
+  revisions:
+    description: Space-separated revisions the realm may hold. Empty when unknown.
+    value: ${{ steps.revisions.outputs.revisions }}
+  push-args:
+    description: Space-separated arguments for `boxel realm push`.
+    value: ${{ steps.revisions.outputs.push-args }}
+  deployment-id:
+    description: The recorded deployment, for realm-deployment/finish.
+    value: ${{ steps.deployment.outputs.id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Find the revisions the realm may hold
+      id: revisions
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        KNOWN_REVISION: ${{ inputs.known-revision }}
+        REQUIRE_REVISIONS: ${{ inputs.require-revisions }}
+        REPOSITORY_PATH: ${{ inputs.repository-path }}
+      run: bash "$GITHUB_ACTION_PATH/../start.sh"
+
+    - name: Record the deployment
+      id: deployment
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        ENVIRONMENT: ${{ inputs.environment }}
+        REALM_URL: ${{ inputs.realm-url }}
+        DESCRIPTION: ${{ inputs.description }}
+        REF: ${{ inputs.ref }}
+        PAYLOAD: ${{ inputs.payload }}
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+          const { data } = await github.rest.repos.createDeployment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: process.env.REF || context.sha,
+            environment: process.env.ENVIRONMENT,
+            description: process.env.DESCRIPTION || `Sync to ${process.env.REALM_URL}`,
+            payload: JSON.parse(process.env.PAYLOAD),
+            required_contexts: [],
+            auto_merge: false,
+            transient_environment: false,
+            production_environment: process.env.ENVIRONMENT === 'production',
+          });
+          await github.rest.repos.createDeploymentStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            deployment_id: data.id,
+            state: 'in_progress',
+            environment_url: process.env.REALM_URL,
+            log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+          });
+          core.setOutput('id', String(data.id));
