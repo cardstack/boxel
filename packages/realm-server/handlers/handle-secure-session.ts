@@ -15,6 +15,7 @@ import {
   googleSignInStart,
   isSecureSession,
   matrixServerName,
+  mintLoginToken,
   SecureSessionError,
   signInWithGoogle,
   signInWithPassword,
@@ -335,6 +336,27 @@ export function handleCheckSecureSession({
       );
     }
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
+  });
+}
+
+// POST /_secure-session/login-token: a single-use Matrix login token for the
+// presented secure session's user, which the secure origin's page hands to
+// the app or the CLI by navigating there with it. Answered only for the secure
+// origin, and only for a session signed in there: 401 `signed-out` otherwise,
+// and 429 `rate-limited`, with when to try again, when the Matrix server has
+// minted one for the user within the minute.
+export function handleMintLoginToken(args: CreateRoutesArgs): Handler {
+  return secureSessionHandler(async (ctxt) => {
+    requireSecureOrigin(ctxt, args.secureOriginURL);
+    await sendJSON(ctxt, 201, {
+      data: {
+        type: 'login-token',
+        attributes: await mintLoginToken(
+          deps(args),
+          ctxt.state.token as RealmServerTokenClaim | undefined,
+        ),
+      },
+    });
   });
 }
 
