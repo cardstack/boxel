@@ -102,6 +102,11 @@ module('Acceptance | Choreo gallery | guide pages', function (hooks) {
     assert.dom('[data-test-file-download]').doesNotExist('no Download');
     assert.dom('[data-test-file-copy-link]').doesNotExist('no Copy link');
     assert.strictEqual(getPageTitle(), 'Getting Started', 'the page title');
+    assert.notStrictEqual(
+      getComputedStyle(document.querySelector(`${article} p`)!).maxWidth,
+      'none',
+      'its prose runs at a reading measure',
+    );
   });
 
   test("the guides' sections run down the side, with the guide marked", async function (assert) {

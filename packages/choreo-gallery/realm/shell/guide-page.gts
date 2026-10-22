@@ -236,8 +236,10 @@ export class GuidePage extends Component<Signature> {
       }
 
       /* The guide's Markdown in the gallery's type and palette, through the
-         renderer's styling contract. Code blocks keep a dark surface in
-         either theme: the renderer sets their text light. */
+         renderer's styling contract. Its text runs at a reading measure,
+         while its live demos and code keep the column's width. Code blocks
+         keep a dark surface in either theme: the renderer sets their text
+         light. */
       .guide-article {
         min-width: 0;
         max-width: 820px;
@@ -247,6 +249,7 @@ export class GuidePage extends Component<Signature> {
         --markdown-font-family: var(--font);
         --markdown-font-size: 16px;
         --markdown-line-height: 1.7;
+        --markdown-prose-max-width: 68ch;
         --markdown-heading-font-family: var(--font-display);
         --markdown-heading-font-weight: 700;
         --markdown-heading-scroll-margin: 96px;
