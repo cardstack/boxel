@@ -30,6 +30,7 @@ import {
   type Saved,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
+import { sessionSkillFeatures } from '@cardstack/runtime-common/ai/debug';
 
 import {
   generateImage,
@@ -49,7 +50,9 @@ import {
   type RequestedRoomChanges,
 } from '../lib/realm-runner/room-actions';
 import runRealmCode from '../lib/realm-runner/runner';
+import { canonicalRealmIdentifier } from '../lib/realm-utils';
 import { loadSkillSource } from '../lib/skill-tools';
+import { catalogRealmURL } from '../lib/utils';
 import {
   captureDeadline,
   captureForAgent,
@@ -1875,9 +1878,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (reference, base) =>
         this.network.virtualNetwork.resolveURL(reference, base).href,
       (id) => this.readCard(id),
-      (query, realms) => {
+      async (query, realms) => {
         this.assertKnownRealmIdentifiers(realms);
-        return this.store.searchEntries(query, realms);
+        let searchable = this.searchableRealms(roomId, realms);
+        if (searchable?.length === 0) {
+          // An empty list would make the store search every realm.
+          return { data: [], meta: { page: { total: 0 } } };
+        }
+        return await this.store.searchEntries(query, searchable);
       },
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
@@ -2620,6 +2628,31 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return virtualNetwork.isRegisteredPrefix(realm)
       ? virtualNetwork.toURL(realm).href
       : new URL(realm).href;
+  }
+
+  // The catalog is searched only in a room that enabled the catalog-reuse
+  // feature; elsewhere it is left out of every entry search, whether the
+  // script named it or relied on the default of every readable realm.
+  private searchableRealms(
+    roomId: string,
+    realms: string[] | undefined,
+  ): string[] | undefined {
+    let events = this.matrixService.roomResources.get(roomId)?.events ?? [];
+    if (
+      !catalogRealmURL ||
+      sessionSkillFeatures(events, this.matrixService.aiBotUserId).includes(
+        'catalog-reuse',
+      )
+    ) {
+      return realms;
+    }
+    let { virtualNetwork } = this.network;
+    let catalog = canonicalRealmIdentifier(virtualNetwork, catalogRealmURL);
+    return (
+      realms?.length ? realms : this.realmServer.availableRealmIdentifiers
+    ).filter(
+      (realm) => canonicalRealmIdentifier(virtualNetwork, realm) !== catalog,
+    );
   }
 
   // A scoped identifier the host has no mapping for would reach the realm

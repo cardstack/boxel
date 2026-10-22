@@ -1923,14 +1923,14 @@ return { total, incomplete, urls: entries.map((entry) => entry.url) };`,
       await command.execute({
         realm: testRealmURL,
         roomId: '!room:example.com',
-        code: `await realm.entries.search({}, { realms: ['@cardstack/catalog/', ${JSON.stringify(
-          virtualNetwork.toURL('@cardstack/catalog/').href,
+        code: `await realm.entries.search({}, { realms: ['@cardstack/base/', ${JSON.stringify(
+          virtualNetwork.toURL('@cardstack/base/').href,
         )}] });`,
       });
 
       assert.deepEqual(
         sentRealms,
-        [['@cardstack/catalog/']],
+        [['@cardstack/base/']],
         'the prefix goes out as given, and its URL, naming the same realm, is dropped',
       );
 
@@ -1945,6 +1945,72 @@ return { total, incomplete, urls: entries.map((entry) => entry.url) };`,
         sentRealms[1],
         ['@cardstack/base/'],
         'the base prefix goes out as given',
+      );
+    } finally {
+      virtualNetwork.unmount(spy);
+    }
+  });
+
+  test('realm.entries.search leaves the catalog out unless the room enabled catalog-reuse', async function (assert) {
+    await getService('matrix-service').ready;
+    let roomId = mockMatrixUtils.createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'catalog-reuse',
+    });
+    let { virtualNetwork } = getService('network');
+    let sentRealms: string[][] = [];
+    let spy = async (request: Request) => {
+      if (new URL(request.url).pathname.endsWith('/_federated-search')) {
+        sentRealms.push(JSON.parse(await request.clone().text()).realms);
+      }
+      return null;
+    };
+    virtualNetwork.mount(spy, { prepend: true });
+    try {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+      let search = (code: string) =>
+        command.execute({ realm: testRealmURL, roomId, code });
+
+      await search(
+        `return await realm.entries.search({}, { realms: ['@cardstack/catalog/'] });`,
+      );
+      await search(
+        `await realm.entries.search({}, { realms: ['@cardstack/catalog/', realm.current.url] });`,
+      );
+      await search(`await realm.entries.search({});`);
+      assert.strictEqual(
+        sentRealms.length,
+        2,
+        'a search of the catalog alone is answered empty, without a request',
+      );
+      assert.deepEqual(
+        sentRealms[0],
+        [testRealmURL],
+        'a named catalog is dropped',
+      );
+      assert.notOk(
+        sentRealms[1].some(
+          (realm) =>
+            realm === '@cardstack/catalog/' ||
+            realm === virtualNetwork.toURL('@cardstack/catalog/').href,
+        ),
+        'the default realms leave the catalog out',
+      );
+
+      mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
+        msgtype: 'm.text',
+        body: 'boxel-debug:feature:enable:catalog-reuse',
+      });
+      await settled();
+      await search(
+        `await realm.entries.search({}, { realms: ['@cardstack/catalog/'] });`,
+      );
+      assert.deepEqual(
+        sentRealms[2],
+        ['@cardstack/catalog/'],
+        'with the feature on, the catalog is searched',
       );
     } finally {
       virtualNetwork.unmount(spy);
