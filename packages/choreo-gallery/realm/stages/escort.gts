@@ -540,7 +540,11 @@ export class Escort extends Component {
         border-radius: 50%;
         background: var(--primary);
         box-shadow: 0 2px 6px
-          rgba(var(--shadow-rgb), calc(0.5 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.5 * var(--shadow-a) * 100%),
+            transparent
+          );
         color: var(--primary-foreground);
         font-family: var(--font-mono);
         font-size: clamp(9px, 2.2cqw, 10.5px);
@@ -570,7 +574,11 @@ export class Escort extends Component {
          that opted out, at rgba(…, 0.8) under opacity 0.72: an effective 0.58 ink
          where light mode's darkest is 0.18. */
       .choreo-site[data-theme='light'] .esc-rail {
-        --esc-cast: rgba(var(--shadow-rgb), calc(1.6 * var(--shadow-a)));
+        --esc-cast: color-mix(
+          in srgb,
+          var(--shadow-ink) calc(1.6 * var(--shadow-a) * 100%),
+          transparent
+        );
       }
 
       .esc-note {

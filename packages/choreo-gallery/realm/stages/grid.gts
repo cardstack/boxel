@@ -180,7 +180,11 @@ export class ReorderGrid extends Component {
         cursor: grab;
         touch-action: none;
         box-shadow: 0 10px 22px
-          rgba(var(--shadow-rgb), calc(0.32 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.32 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       /* a grip appears on hover: these rearrange, and nothing said so before you
@@ -223,7 +227,11 @@ export class ReorderGrid extends Component {
       @media (hover: hover) {
         .cover:hover {
           box-shadow: 0 14px 30px
-            rgba(var(--shadow-rgb), calc(0.42 * var(--shadow-a)));
+            color-mix(
+              in srgb,
+              var(--shadow-ink) calc(0.42 * var(--shadow-a) * 100%),
+              transparent
+            );
         }
       }
 

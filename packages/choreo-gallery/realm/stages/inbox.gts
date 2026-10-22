@@ -427,8 +427,9 @@ export class Inbox extends Component {
         font: inherit;
         padding: 10px 13px 10px 10px;
         border-radius: 14px;
-        background: rgba(var(--surface-tint-rgb), 0.055);
-        border: 1px solid rgba(var(--surface-tint-rgb), 0.08);
+        background: color-mix(in srgb, var(--surface-tint) 5.5%, transparent);
+        border: 1px solid
+          color-mix(in srgb, var(--surface-tint) 8%, transparent);
         color: inherit;
       }
 
@@ -438,8 +439,12 @@ export class Inbox extends Component {
 
       @media (hover: hover) {
         .mail:hover {
-          background: rgba(var(--surface-tint-rgb), 0.09);
-          border-color: rgba(var(--surface-tint-rgb), 0.14);
+          background: color-mix(in srgb, var(--surface-tint) 9%, transparent);
+          border-color: color-mix(
+            in srgb,
+            var(--surface-tint) 14%,
+            transparent
+          );
         }
       }
 
@@ -468,8 +473,9 @@ export class Inbox extends Component {
         display: grid;
         place-items: center;
         border-radius: 8px;
-        border: 1px solid rgba(var(--surface-tint-rgb), 0.12);
-        background: rgba(var(--surface-tint-rgb), 0.06);
+        border: 1px solid
+          color-mix(in srgb, var(--surface-tint) 12%, transparent);
+        background: color-mix(in srgb, var(--surface-tint) 6%, transparent);
         color: color-mix(in srgb, var(--foreground) 62%, transparent);
         font: inherit;
         cursor: pointer;

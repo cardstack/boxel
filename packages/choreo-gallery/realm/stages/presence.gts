@@ -265,7 +265,11 @@ const ModeColumn = <template>
       background: var(--bg-spot);
       border: 1px solid var(--border-strong);
       box-shadow: 0 14px 30px
-        rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
+        color-mix(
+          in srgb,
+          var(--shadow-ink) calc(0.45 * var(--shadow-a) * 100%),
+          transparent
+        );
     }
 
     .toast.is-fail {

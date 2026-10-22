@@ -299,7 +299,11 @@ export class Lightbox extends Component {
         /* radius is declared on the element — see photoStyle() in
          stages/lightbox.gts, so it can be scale-corrected */
         box-shadow: 0 12px 28px
-          rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.35 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .shot.is-open {

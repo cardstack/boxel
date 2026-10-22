@@ -35,7 +35,7 @@ The names with no slot keep their gallery names, but the theme declares them now
 - **`customCssVariables`** (a light and a dark value):
   - the other inks: `ink-soft`, `copper-ink`, `iris-ink`, `steel-ink`, `hot-ink`, `syn-string`;
   - surfaces: `bg-spot`, the playhead surfaces `ph-*`;
-  - shadows and tints: `shadow-rgb`, `shadow-a`, `surface-tint-rgb`;
+  - shadows and tints: `shadow-ink`, `shadow-a`, `surface-tint`;
   - the mark and gradient: `mark-tail`, `mark-orbit`, `gradient-tail`, `lightbox-ring`;
   - the display faces `font-display` and `font-display-alt`.
 - **What stays on `ChoreoRoot`:** layout and motion constants (`--ease`, `--page`) and `--wash`, which is composed from the palette.

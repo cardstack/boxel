@@ -288,7 +288,11 @@ export class Subdivision extends Component {
         background: rgb(243 236 227 / 42%);
         border: 1px solid var(--bg-spot);
         box-shadow: 0 2px 8px
-          rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.55 * var(--shadow-a) * 100%),
+            transparent
+          );
         transition:
           background 120ms ease,
           scale 140ms ease;

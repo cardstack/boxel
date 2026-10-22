@@ -1579,7 +1579,11 @@ export class Presentation extends Component {
         border-radius: 16px;
         background: var(--inset);
         box-shadow: 0 12px 30px
-          rgba(var(--shadow-rgb), calc(0.32 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.32 * var(--shadow-a) * 100%),
+            transparent
+          );
         container-type: inline-size;
       }
 
@@ -2205,7 +2209,11 @@ export class Presentation extends Component {
           #2a0c08 100%
         );
         box-shadow: -8px 0 24px
-          rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.3 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .pres-hed,

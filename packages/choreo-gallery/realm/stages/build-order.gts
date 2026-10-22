@@ -1160,7 +1160,11 @@ export class BuildOrder extends Component {
         border-radius: 20px;
         background: linear-gradient(180deg, var(--bg-spot), var(--inset));
         box-shadow: 0 20px 46px
-          rgba(var(--shadow-rgb), calc(0.5 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.5 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .bo-art {
@@ -1294,7 +1298,11 @@ export class BuildOrder extends Component {
          flat grey once its card turned light */
         background: linear-gradient(180deg, var(--bg-spot), var(--inset));
         box-shadow: 0 18px 44px
-          rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.45 * var(--shadow-a) * 100%),
+            transparent
+          );
         overflow: hidden;
       }
 

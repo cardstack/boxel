@@ -277,7 +277,11 @@ export class DragWell extends Component {
         background: var(--inset);
         touch-action: none;
         box-shadow: 0 22px 50px
-          rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.45 * var(--shadow-a) * 100%),
+            transparent
+          );
         transition:
           border-color 1.5s var(--ease),
           box-shadow 1.5s var(--ease);

@@ -171,9 +171,9 @@
           "darkValue": "rgba(0, 0, 0, 0.26)"
         },
         {
-          "name": "shadow-rgb",
-          "value": "72, 56, 44",
-          "darkValue": "0, 0, 0"
+          "name": "shadow-ink",
+          "value": "#48382c",
+          "darkValue": "#000000"
         },
         {
           "name": "shadow-a",
@@ -181,9 +181,9 @@
           "darkValue": "1"
         },
         {
-          "name": "surface-tint-rgb",
-          "value": "33, 29, 24",
-          "darkValue": "255, 255, 255"
+          "name": "surface-tint",
+          "value": "#211d18",
+          "darkValue": "#ffffff"
         },
         {
           "name": "mark-tail",

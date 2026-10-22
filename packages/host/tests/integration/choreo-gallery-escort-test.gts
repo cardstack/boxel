@@ -50,11 +50,13 @@ const castAlpha = () => {
   const { backgroundImage } = getComputedStyle(
     find('[data-test-escort-shadow]')!,
   );
-  const rgba =
-    /rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*\)/.exec(
+  // the cast's first stop, as rgba() or, for a color-mix() on a theme
+  // variable, as color(srgb r g b / a)
+  const alpha =
+    /rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*\)|color\(srgb\s+[\d.]+\s+[\d.]+\s+[\d.]+\s*\/\s*([\d.]+)\s*\)/.exec(
       backgroundImage,
     );
-  return rgba ? Number(rgba[1]) : 1;
+  return alpha ? Number(alpha[1] ?? alpha[2]) : 1;
 };
 
 /** the gallery root, where the palette — and the theme — is declared */

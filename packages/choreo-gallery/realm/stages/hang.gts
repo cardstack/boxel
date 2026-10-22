@@ -823,19 +823,19 @@ export class Hang extends Component {
       }
 
       .hang-zone:nth-child(1) {
-        background: rgba(var(--shadow-rgb), 0.04);
+        background: color-mix(in srgb, var(--shadow-ink) 4%, transparent);
       }
 
       .hang-zone:nth-child(2) {
-        background: rgba(var(--shadow-rgb), 0.07);
+        background: color-mix(in srgb, var(--shadow-ink) 7%, transparent);
       }
 
       .hang-zone:nth-child(3) {
-        background: rgba(var(--shadow-rgb), 0.1);
+        background: color-mix(in srgb, var(--shadow-ink) 10%, transparent);
       }
 
       .hang-zone:nth-child(4) {
-        background: rgba(var(--shadow-rgb), 0.14);
+        background: color-mix(in srgb, var(--shadow-ink) 14%, transparent);
       }
 
       .hang-zone i {
@@ -850,7 +850,7 @@ export class Hang extends Component {
         top: 6px;
       }
       .hang-pen {
-        background: rgba(var(--shadow-rgb), 0.05);
+        background: color-mix(in srgb, var(--shadow-ink) 5%, transparent);
         border-right: 2px solid var(--border-strong);
         bottom: 0;
         left: 0;
@@ -861,7 +861,12 @@ export class Hang extends Component {
       .hang-puck {
         align-items: center;
         border-radius: 50%;
-        box-shadow: 0 4px 12px -4px rgba(var(--shadow-rgb), var(--shadow-a));
+        box-shadow: 0 4px 12px -4px
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(var(--shadow-a) * 100%),
+            transparent
+          );
         color: #fff;
         display: flex;
         font-family: var(--font-mono);

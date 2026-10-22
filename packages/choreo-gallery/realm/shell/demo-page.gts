@@ -739,7 +739,7 @@ export class DemoPage extends Component<Signature> {
         border-radius: 16px;
         /* a light tint, capped at 4%: a dark tint over an already dark page
            does not read as a surface of its own */
-        background: rgba(var(--surface-tint-rgb), 0.04);
+        background: color-mix(in srgb, var(--surface-tint) 4%, transparent);
         /* a wide drawing scrolls inside its own box rather than the page */
         overflow-x: auto;
       }

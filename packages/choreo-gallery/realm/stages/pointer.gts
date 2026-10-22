@@ -195,7 +195,7 @@ export class FollowPointer extends Component {
             color-mix(in srgb, var(--primary) 16%, transparent),
             transparent 60%
           ),
-          rgba(var(--surface-tint-rgb), 0.14);
+          color-mix(in srgb, var(--surface-tint) 14%, transparent);
       }
 
       .no-select,

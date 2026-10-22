@@ -563,7 +563,7 @@ export class GalleryGrid extends Component<Signature> {
       .filter-code {
         border: 1px solid var(--border);
         border-radius: 16px;
-        background: rgba(var(--surface-tint-rgb), 0.03);
+        background: color-mix(in srgb, var(--surface-tint) 3%, transparent);
         overflow: hidden;
       }
 

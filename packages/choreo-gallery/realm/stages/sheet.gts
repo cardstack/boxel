@@ -336,7 +336,11 @@ export class Sheet extends Component {
         border-radius: 20px 20px 0 0;
         background: var(--bg-spot);
         box-shadow: 0 -14px 40px
-          rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.55 * var(--shadow-a) * 100%),
+            transparent
+          );
         touch-action: none;
         cursor: grab;
         overflow: hidden;
@@ -456,7 +460,11 @@ export class Sheet extends Component {
         border-radius: 12px;
         margin-right: -27px;
         box-shadow: 0 4px 14px
-          rgba(var(--shadow-rgb), calc(0.6 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.6 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .sheet.is-sliver .share-tile:last-child {

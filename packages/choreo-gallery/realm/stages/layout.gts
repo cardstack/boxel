@@ -255,7 +255,11 @@ export class LayoutToggle extends Component {
         border-radius: 14px;
         flex: none;
         box-shadow: 0 10px 22px
-          rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.35 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .shelf.is-grid .record-art {

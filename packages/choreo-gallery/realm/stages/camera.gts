@@ -681,14 +681,24 @@ export class Camera extends Component {
         overflow: hidden;
         border-radius: 14px;
         box-shadow:
-          0 10px 22px rgba(var(--shadow-rgb), calc(0.32 * var(--shadow-a))),
+          0 10px 22px
+            color-mix(
+              in srgb,
+              var(--shadow-ink) calc(0.32 * var(--shadow-a) * 100%),
+              transparent
+            ),
           inset 0 0 28px rgba(0, 0, 0, 0.28);
       }
 
       @media (hover: hover) {
         .cam-frame:hover .cam-wash {
           box-shadow:
-            0 14px 30px rgba(var(--shadow-rgb), calc(0.42 * var(--shadow-a))),
+            0 14px 30px
+              color-mix(
+                in srgb,
+                var(--shadow-ink) calc(0.42 * var(--shadow-a) * 100%),
+                transparent
+              ),
             inset 0 0 28px rgba(0, 0, 0, 0.28);
         }
       }
@@ -711,7 +721,11 @@ export class Camera extends Component {
         background: color-mix(in srgb, var(--card) 86%, transparent);
         backdrop-filter: blur(12px);
         box-shadow: 0 10px 24px
-          rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.35 * var(--shadow-a) * 100%),
+            transparent
+          );
         opacity: 0;
         transform: translateY(6px);
         pointer-events: none;
@@ -765,7 +779,7 @@ export class Camera extends Component {
         height: 32px;
         padding: 0;
         border: 1px solid var(--border-strong);
-        background: rgba(var(--surface-tint-rgb), 0.08);
+        background: color-mix(in srgb, var(--surface-tint) 8%, transparent);
         color: var(--muted-foreground);
         box-shadow: none;
         cursor: pointer;

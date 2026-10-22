@@ -1246,8 +1246,18 @@ export class Rack extends Component {
           inset 0 1.5px 0 var(--tile-top),
           inset 2px 0 0 rgba(255, 253, 244, 0.35),
           inset -2px 0 0 rgba(122, 92, 44, 0.18),
-          0 2px 3px rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a))),
-          0 -1px 2px rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
+          0 2px 3px
+            color-mix(
+              in srgb,
+              var(--shadow-ink) calc(0.55 * var(--shadow-a) * 100%),
+              transparent
+            ),
+          0 -1px 2px
+            color-mix(
+              in srgb,
+              var(--shadow-ink) calc(0.3 * var(--shadow-a) * 100%),
+              transparent
+            );
         font-family: var(--font-display);
         font-size: 13px;
         line-height: 1;
@@ -1365,7 +1375,12 @@ export class Rack extends Component {
         background-size: 22px 22px;
         box-shadow:
           inset 0 0 0 1px rgba(120, 96, 60, 0.35),
-          0 2px 8px rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+          0 2px 8px
+            color-mix(
+              in srgb,
+              var(--shadow-ink) calc(0.35 * var(--shadow-a) * 100%),
+              transparent
+            );
         opacity: 0;
       }
 
@@ -1443,7 +1458,12 @@ export class Rack extends Component {
         box-shadow:
           inset 0 2px 0 rgba(255, 226, 187, 0.32),
           inset 0 -3px 0 rgba(0, 0, 0, 0.28),
-          0 3px 6px rgba(var(--shadow-rgb), calc(0.6 * var(--shadow-a)));
+          0 3px 6px
+            color-mix(
+              in srgb,
+              var(--shadow-ink) calc(0.6 * var(--shadow-a) * 100%),
+              transparent
+            );
         touch-action: none;
         cursor: grab;
       }

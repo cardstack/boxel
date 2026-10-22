@@ -189,7 +189,11 @@ export class PreferencePicker<T extends string> extends Component<
         border-radius: 16px;
         background: var(--canvas);
         box-shadow: 0 12px 40px
-          rgba(var(--shadow-rgb), calc(0.27 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.27 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .header-picker-label {

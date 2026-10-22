@@ -428,7 +428,7 @@ class Fitted extends Component<typeof GalleryDemo> {
         background:
           linear-gradient(
             180deg,
-            rgba(var(--surface-tint-rgb), 0.02),
+            color-mix(in srgb, var(--surface-tint) 2%, transparent),
             transparent 40%
           ),
           var(--card);
@@ -471,7 +471,7 @@ class Fitted extends Component<typeof GalleryDemo> {
         gap: 6px;
         padding: 16px 18px 16px;
         border-top: 1px solid var(--border);
-        background: rgba(var(--surface-tint-rgb), 0.015);
+        background: color-mix(in srgb, var(--surface-tint) 1.5%, transparent);
       }
 
       .tile-group {

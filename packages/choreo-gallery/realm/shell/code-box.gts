@@ -30,7 +30,7 @@ export const CodeBox: TOC<Signature> = <template>
       border-radius: 18px;
       overflow: hidden;
       /* the same faint light veil as a demo's own stage */
-      background: rgba(var(--surface-tint-rgb), 0.03);
+      background: color-mix(in srgb, var(--surface-tint) 3%, transparent);
     }
 
     .sample-label {

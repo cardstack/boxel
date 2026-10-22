@@ -218,7 +218,11 @@ export class HideHeader extends Component {
           var(--inset);
         border: 1px solid var(--border-strong);
         box-shadow: 0 22px 50px
-          rgba(var(--shadow-rgb), calc(0.4 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.4 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .chat-scroll {

@@ -1158,7 +1158,11 @@ export class Playhead extends Component {
           var(--ph-card-bot)
         );
         box-shadow: 0 18px 44px
-          rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.45 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .ph-head {
@@ -1301,7 +1305,11 @@ export class Playhead extends Component {
         border-radius: 50%;
         background: #fff;
         box-shadow: 0 2px 6px
-          rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.45 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .ph-go {
@@ -1335,7 +1343,11 @@ export class Playhead extends Component {
           var(--ph-receipt-bot)
         );
         box-shadow: 0 24px 60px
-          rgba(var(--shadow-rgb), calc(0.6 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.6 * var(--shadow-a) * 100%),
+            transparent
+          );
         text-align: center;
         /* invisible until the score places the order, and not in the way until then
            — but still measurable, which is how the hand knows where Done is.

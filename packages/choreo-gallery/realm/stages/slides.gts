@@ -346,7 +346,11 @@ export class Slides extends Component {
           #2a0c08 100%
         );
         box-shadow: 0 12px 28px
-          rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.35 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       /* fit-content on both, so projection scales the type between two real sizes

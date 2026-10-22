@@ -231,19 +231,19 @@ export class Interrupt extends Component {
       }
 
       .slot:focus-visible {
-        background: rgba(var(--surface-tint-rgb), 0.08);
+        background: color-mix(in srgb, var(--surface-tint) 8%, transparent);
       }
 
       /* the tap's own flash — hover is gated to hover-capable devices above, so
          touch needs feedback of its own, one step brighter than the hover fill
          so it reads against the rail in dark */
       .slot:active {
-        background: rgba(var(--surface-tint-rgb), 0.14);
+        background: color-mix(in srgb, var(--surface-tint) 14%, transparent);
       }
 
       @media (hover: hover) {
         .slot:hover {
-          background: rgba(var(--surface-tint-rgb), 0.08);
+          background: color-mix(in srgb, var(--surface-tint) 8%, transparent);
         }
       }
 
@@ -252,7 +252,11 @@ export class Interrupt extends Component {
         height: 26px;
         border-radius: 50%;
         box-shadow: 0 6px 18px
-          rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.55 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .puck.is-spring {

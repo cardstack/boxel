@@ -88,7 +88,7 @@ export class SharedTabs extends Component {
         border-radius: 999px;
         /* a light tint capped at 4%, like every other panel on the page — not a
            flat near-black fill */
-        background: rgba(var(--surface-tint-rgb), 0.04);
+        background: color-mix(in srgb, var(--surface-tint) 4%, transparent);
         border: 1px solid var(--border);
       }
 
