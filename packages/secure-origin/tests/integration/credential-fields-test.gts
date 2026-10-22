@@ -264,6 +264,27 @@ module('Integration | credential fields', function (hooks) {
         .hasText('Wrong password');
     });
 
+    test('a field is named by its label alone, not by its error message', async function (assert) {
+      await renderForm('reset');
+      await fillIn('[data-test-password-field]', 'short');
+      await blur('[data-test-password-field]');
+      assert.dom('[data-test-boxel-input-error-message]').exists();
+      let input = document.querySelector('[data-test-password-field]')!;
+      let labelId = input.getAttribute('aria-labelledby');
+      assert.ok(labelId, 'the input names its label');
+      assert
+        .dom(document.getElementById(labelId!))
+        .hasAttribute('data-test-boxel-field-label')
+        .hasText('Enter New Password');
+    });
+
+    test('a field with no label names none', async function (assert) {
+      await renderForm('confirm-password');
+      assert
+        .dom('[data-test-password-field]')
+        .doesNotHaveAttribute('aria-labelledby');
+    });
+
     test('shows the error the app reports for a field', async function (assert) {
       let { receive } = await renderForm('login');
       receive({
