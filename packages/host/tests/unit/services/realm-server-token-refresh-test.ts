@@ -32,15 +32,21 @@ function serverSessionToken(expiresInSec: number): string {
 
 // Runs the refresher against a virtual clock. Each wait it asks for passes at
 // once while it fits in `budgetMs`; the first that doesn't is recorded and
-// never passes, which stops the refresher there.
-function virtualClock(realmServer: RealmServerService, budgetMs: number) {
+// never passes, which stops the refresher there. A refresher that keeps asking
+// for zero-length waits never exhausts the budget, so it is also stopped after
+// `maxWaits`, leaving the test to fail on its counts instead of hanging.
+function virtualClock(
+  realmServer: RealmServerService,
+  budgetMs: number,
+  maxWaits = 20,
+) {
   let waits: number[] = [];
   let elapsed = 0;
   let resolveExhausted: () => void;
   let exhausted = new Promise<void>((r) => (resolveExhausted = r));
   realmServer.waitForTokenRefresh = (ms: number) => {
     waits.push(ms);
-    if (elapsed + ms > budgetMs) {
+    if (elapsed + ms > budgetMs || waits.length >= maxWaits) {
       resolveExhausted();
       return new Promise<void>(() => {});
     }
