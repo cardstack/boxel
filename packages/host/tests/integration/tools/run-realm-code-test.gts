@@ -3668,10 +3668,15 @@ module(
           `await realm.entries.search({}, { realms: ['@cardstack/catalog/', realm.current.url] });`,
         );
         await search(`await realm.entries.search({});`);
+        await search(
+          `await realm.entries.search({}, { realms: [${JSON.stringify(
+            `${catalogURL}components/`,
+          )}] });`,
+        );
         assert.strictEqual(
           sentRealms.length,
           2,
-          'a search of the catalog alone is answered empty, without a request',
+          'a search of the catalog alone, or of a folder in it, is answered empty, without a request',
         );
         assert.deepEqual(
           sentRealms[0],
