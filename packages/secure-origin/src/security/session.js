@@ -418,7 +418,9 @@ const LOGIN_TOKEN_RETRY_MS = 65 * 1000;
 // hand-off that signs the app, or the CLI, in to Matrix. The secure session
 // itself stays here. The Matrix server mints one login token per user a
 // minute, so a sign-in handed over again within the minute waits for the
-// next, as long as the server says to.
+// next, as long as the server says to. A session the server has ended answers
+// `signed-out`, and is forgotten if it is the window's own, as
+// `authorizedRequest` forgets one.
 export async function loginToken(config, session) {
   let deadline = Date.now() + LOGIN_TOKEN_RETRY_MS;
   for (;;) {
@@ -429,6 +431,14 @@ export async function loginToken(config, session) {
       );
       return json.data.attributes;
     } catch (e) {
+      if (e.status === 401) {
+        // Only the session it was handed: one signed in for the CLI is never
+        // the window's, and the window's own may still be live.
+        if (storedSession()?.token === session.token) {
+          forgetSession();
+        }
+        throw signedOut();
+      }
       let wait = e.retryAfterMs;
       if (
         e.status !== 429 ||

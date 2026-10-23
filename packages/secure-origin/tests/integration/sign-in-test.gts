@@ -934,7 +934,7 @@ module('Integration | sign-in', function (hooks) {
     hooks.beforeEach(function () {
       originsMeta = document.createElement('meta');
       originsMeta.name = 'boxel-app-origins';
-      originsMeta.content = `${APP} http://localhost:* https://*.preview.test`;
+      originsMeta.content = `${APP} http://localhost:* https://localhost:* https://*.preview.test`;
       document.head.append(originsMeta);
     });
 
@@ -977,7 +977,7 @@ module('Integration | sign-in', function (hooks) {
       assert.deepEqual(navigations, [
         {
           how: 'replace',
-          url: `${APP}/some/path?operatorModeState=%7B%7D&loginToken=a-login-token`,
+          url: `${APP}/some/path?operatorModeState=%7B%7D#loginToken=a-login-token`,
         },
       ]);
       let mint = server.requests.find(
@@ -1005,7 +1005,7 @@ module('Integration | sign-in', function (hooks) {
       await render(SignInPage);
       await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [
-        { how: 'replace', url: `${APP}/?loginToken=a-login-token` },
+        { how: 'replace', url: `${APP}/#loginToken=a-login-token` },
       ]);
       assert.dom('[data-test-secure-sign-in-form]').doesNotExist();
     });
@@ -1022,7 +1022,7 @@ module('Integration | sign-in', function (hooks) {
       await waitUntil(() => navigations.length > 0);
       assert.strictEqual(
         navigations[0].url,
-        'https://branch.preview.test/?loginToken=a-login-token',
+        'https://branch.preview.test/#loginToken=a-login-token',
       );
     });
 
@@ -1062,9 +1062,50 @@ module('Integration | sign-in', function (hooks) {
       assert.deepEqual(navigations, [
         {
           how: 'replace',
-          url: 'http://localhost:4200/?loginToken=a-login-token',
+          url: 'http://localhost:4200/#loginToken=a-login-token',
         },
       ]);
+    });
+
+    test('a hand-off to a program on this computer asks first over https too', async function (assert) {
+      storeSession(SESSION);
+      let server = serve(NO_GOOGLE, MINTS, {
+        'GET _secure-session': () => json(200, { data: {} }),
+      });
+      visitShell(`?mode=sign-in${returnFragment('https://localhost:4200/')}`);
+      await render(SignInPage);
+      await waitFor('[data-test-secure-loopback-confirm]');
+      assert
+        .dom('[data-test-secure-title]')
+        .hasText('Continue to https://localhost:4200?');
+      assert.false(
+        server.requests.some((r) => r.path === '_secure-session/login-token'),
+      );
+    });
+
+    test('a session ended while handing over goes back to sign in, keeping the page to go back to', async function (assert) {
+      storeSession(SESSION);
+      serve(NO_GOOGLE, {
+        'GET _secure-session': () => json(200, { data: {} }),
+        'POST _secure-session/login-token': () =>
+          refusal(401, 'signed-out', 'this session is signed out'),
+      });
+      visitShell(`?mode=sign-in${returnFragment(`${APP}/`)}`);
+      await render(SignInPage);
+      await waitUntil(() => navigations.length > 0);
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: '/secure/?mode=sign-in' },
+      ]);
+      assert.strictEqual(
+        localStorage.getItem('boxel-secure-session'),
+        null,
+        'the ended session is forgotten',
+      );
+      assert.strictEqual(
+        sessionStorage.getItem('boxel-secure-return'),
+        `${APP}/`,
+        'the hand-off still waits for the next sign-in',
+      );
     });
 
     test('declining a hand-off to a program on this computer hands nothing over', async function (assert) {
@@ -1102,7 +1143,7 @@ module('Integration | sign-in', function (hooks) {
       assert.deepEqual(navigations, [
         {
           how: 'replace',
-          url: `${APP}/some/path?operatorModeState=%7B%7D&loginToken=a-login-token`,
+          url: `${APP}/some/path?operatorModeState=%7B%7D#loginToken=a-login-token`,
         },
       ]);
     });
@@ -1125,7 +1166,7 @@ module('Integration | sign-in', function (hooks) {
       assert.strictEqual(attempts, 2);
       assert.strictEqual(
         navigations[0].url,
-        `${APP}/?loginToken=a-login-token`,
+        `${APP}/#loginToken=a-login-token`,
       );
     });
 
@@ -1149,7 +1190,7 @@ module('Integration | sign-in', function (hooks) {
       await waitUntil(() => navigations.length > 0);
       assert.strictEqual(
         navigations[0].url,
-        `${APP}/?loginToken=a-login-token`,
+        `${APP}/#loginToken=a-login-token`,
       );
     });
 

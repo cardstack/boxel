@@ -20,10 +20,11 @@ A secure session is a realm-server JWT with `user`, `sessionRoom` and
 `secureSession`: the id of a `secure_sessions` row. It works anywhere the
 user's session does, and additionally:
 
-| Gate                       | Requires                                                                    |
-| -------------------------- | --------------------------------------------------------------------------- |
-| `POST /_key-write-tickets` | `isSecureSession`: the claim, naming a row of the token's user, not expired |
-| `GET /_secure-session`     | The same; answers 204, or 401 `signed-out`                                  |
+| Gate                                | Requires                                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `POST /_key-write-tickets`          | `isSecureSession`: the claim, naming a row of the token's user, not expired                      |
+| `GET /_secure-session`              | The same; answers 204, or 401 `signed-out`                                                       |
+| `POST /_secure-session/login-token` | The same, and `Origin` the secure origin's; answers a single-use Matrix login token for the user |
 
 Minting also still requires the request's `Origin` to be the secure origin's
 or absent (the CLI). Only `createSecureSessionJWT` mints the claim (ADR 005
@@ -266,12 +267,15 @@ its build set, which is off.
    way the window signs in (password, Google, a new account) ends on
    `SignedIn`, which then mints a login token, `POST
 /_secure-session/login-token` under the window's secure session, and
-   replaces the location with `return?loginToken=…`. A loopback `http:`
-   `return` first asks "Continue to http://localhost:4200?". A `return` on an
+   replaces the location with `return#loginToken=…`, the token in the
+   fragment so no server log or access log records it. A `return` on a
+   loopback origin, `http:` or `https:`, first asks "Continue to
+   http://localhost:4200?", unless it is the realm server's own. A `return` on an
    origin that isn't listed is dropped, and the window just says it is
    signed in.
-3. The app redeems the token with an `m.login.token` login before it loads
-   any card, takes it out of the address, and boots as after any sign-in:
+3. The app redeems the token (from the fragment, or the query, where
+   `boxel browse` and Synapse's SSO put it) with an `m.login.token` login
+   before it loads any card, takes it out of the address, and boots as after any sign-in:
    realm-server session, realm tokens, service-worker sync.
 
 The login token is the Matrix server's own (MSC3882 `login/get_token`),
@@ -289,7 +293,8 @@ Signing out of the app (`MatrixService.signOut()`) runs the app's own
 `logout()` first, which ends the Matrix device, clears the service worker's
 realm tokens and asks the realm server to end the user's window sessions.
 It then replaces the location with
-`<secure origin>?mode=sign-out#return=<app root>`, which forgets the
+`<secure origin>?mode=sign-out#return=<app root>` (an app in a frame signs
+out of its own session only, since the secure origin can't be framed), which forgets the
 window's session, ends it on the server, and goes back to a listed `return`.
 
 Links already sent keep working through the app: a reset link
@@ -304,8 +309,8 @@ same port and state.
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 403 `forbidden`           | A sign-in not from the secure origin                                                                                                                                                                                       |
 | 401 `invalid-credentials` | Any failed password sign-in (no account, no password, wrong)                                                                                                                                                               |
-| 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure                                                                                                                                                  |
-| 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`                                                                                                                                                 |
+| 401 `signed-out`          | `GET /_secure-session` or `POST /_secure-session/login-token` with a session that isn't, or is no longer, secure                                                                                                           |
+| 429 `rate-limited`        | Too many failed password sign-ins for the account, or, from `POST /_secure-session/login-token`, a login token already minted for the user within the minute (the Matrix server's limit); see `meta.retryAfterMs`          |
 | 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in                                                                                                                                                        |
 | 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                                                                                                                                                              |
 | 403 `ambiguous-email`     | More than one account holds the unlinked Google account's email                                                                                                                                                            |

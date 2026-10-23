@@ -209,8 +209,14 @@ export default class SecureSignIn extends Component {
     }
     try {
       let auth = await this.matrixService.loginWithSsoToken(token);
-      clearRedirectGuard();
       await this.matrixService.start({ auth, refreshRoutes: true });
+      // `start()` handles a failure after the Matrix login by signing out
+      // again rather than throwing, so only a session that is up counts.
+      if (!this.matrixService.isLoggedIn) {
+        throw new Error('the session could not be started');
+      }
+      // Only now is the next signed-out arrival a new one, which redirects.
+      clearRedirectGuard();
     } catch (e: any) {
       if (
         isMatrixError(e) &&

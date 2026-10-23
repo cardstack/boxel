@@ -111,6 +111,7 @@ import { pickableModelIds, usedLLMsFromEvents } from '../lib/pickable-models';
 import {
   appRootURL,
   clearRedirectGuard,
+  framing,
   secureSignOutURL,
   signInOnSecureOrigin,
 } from '../lib/secure-sign-in';
@@ -888,8 +889,12 @@ export default class MatrixService extends Service {
   // never carry them), and then sends the user to the secure origin to end
   // its session too. That page comes back to the app's root, signed out, and
   // the full navigation drops any card code that was running.
+  //
+  // A framed app is never navigated (the secure origin refuses to be framed):
+  // it signs out of its own session only, and its signed-out page offers
+  // sign-in in a tab of its own.
   async signOut() {
-    if (!signInOnSecureOrigin()) {
+    if (!signInOnSecureOrigin() || framing.isFramed()) {
       await this.logout();
       return;
     }

@@ -115,15 +115,19 @@ NOT navigate a frame it is shown in to do so.
 
 The secure origin MUST hand the app only a single-use Matrix login token, and
 MUST NOT hand it the secure session (§1.4). The token MUST travel only by a
-top-level navigation to the page the app asked to come back to, never by
-`postMessage`. The realm server MUST mint it only for a live secure session,
-and only for a request whose `Origin` is the secure origin's.
+top-level navigation to the page the app asked to come back to, in that
+page's URL fragment, or to the CLI's loopback listener (§1.5); never by
+`postMessage` or to an opener. The realm server MUST mint it only for a live
+secure session, and only for a request whose `Origin` is the secure
+origin's.
 
 The page to come back to MUST travel to the secure origin in the URL's
 fragment, never its query string. The secure origin MUST hand a token only to
 a page on one of the app origins the realm server lists for the deployment.
-It MUST ask the user to confirm a hand-off to a loopback `http:` origin, which
-any program on the user's machine can listen on.
+It MUST ask the user to confirm a hand-off to a loopback origin, of either
+scheme, which any program on the user's machine can listen on; the realm
+server's own origin is exempt, since the realm server is configured with
+it.
 
 A login token is something card code can get (§1.3), so the session the app
 redeems it for MUST NOT be a secure session. Signing out of the app SHOULD
@@ -210,6 +214,35 @@ session ending is the answer. Closing the gap needs a proof that doesn't
 share the sign-in limit. A password set outside Boxel, such as by an
 operator through Synapse's admin API, ends no session.
 
+Signing in to the app on the secure origin (§1.7) closes what the
+credential fields leave open. Those fields are invisible frames inside the
+app's own form, so card code can draw a form that looks the same and the user
+can't tell them apart; a full page on the secure origin gives the user an
+address bar to check. One sign-in there also serves both the app and the
+secure window, which otherwise sign in separately.
+
+What reaches the app is a Matrix login token, not a session of the secure
+origin's: card code can already mint the same kind of token from the app's
+Matrix session (§1.3), so handing one over grants nothing card code couldn't
+get, while the secure session never leaves its origin. The realm server asks
+the Matrix server for it (`login/get_token`) with a token minted for the user
+and logged out at once, so the Matrix server binds it to the user and honours
+it once. It lasts the Matrix server's `token_timeout`, two minutes on every
+deployment, which `boxel browse` shares. The Matrix server mints one per user
+a minute, so a sign-in right after another waits for the next.
+
+The token rides in the destination's fragment, as `return` does on the way
+in, because a fragment never reaches a server: the realm server's request log
+and the load balancer's access log both record query strings, and a firewall
+in front of staging refuses a query string that names a loopback origin. A
+top-level navigation carries it because the secure origin's pages cut their
+opener (§1.4), so neither `postMessage` nor the opener is there to use. The
+allowlist of app origins keeps the page from being an open redirect for
+tokens. Of the listed origins, only a loopback one can be served by whatever
+program happens to listen there, so only a hand-off to one is confirmed. An
+already-signed-in window hands over to any other listed origin with no click,
+as an app already signed in would show the user straight into the app.
+
 ## 3. Considered options
 
 - **A separate session, signed in on the secure origin (chosen).**
@@ -246,6 +279,22 @@ operator through Synapse's admin API, ends no session.
 - **Letting the app's session ask, as sign-out does.** Card code could then
   end the CLI's sessions. While card code keeps the windows signed out, the
   CLI is the only way left to replace a key.
+- **Handing the app the secure session, or a session of its own minted by
+  the realm server.** The secure session would then sit where card code reads
+  it (§1.4). A realm-server session alone leaves the app with no Matrix
+  device, which it needs.
+- **Carrying the token by `postMessage` to the window that opened sign-in.**
+  The secure origin's pages cut their opener, and a message names its target
+  only by origin, which card code shares with the app.
+- **Synapse's own SSO redirect, returning a token to the app.** It takes the
+  user's credential on Synapse's pages, not the secure origin's, and the
+  redirect target is whatever the request names.
+- **The token in the app page's query string.** The realm server's request
+  log and the load balancer's access log would both record a token that is
+  live for two minutes.
+- **Confirming every hand-off, not only a loopback one.** Every sign-in
+  would ask a question whose answer is always yes; the listed origins other
+  than loopback are the deployment's own.
 
 ## 4. Sources
 

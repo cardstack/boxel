@@ -170,6 +170,77 @@ module('Integration | Component | matrix/secure-sign-in', function (hooks) {
     }
   });
 
+  test('a login token handed over in the fragment is redeemed and taken out of the address', async function (assert) {
+    window.location.href = `${APP_PAGE}#loginToken=in-the-fragment`;
+    let redeemed: string | undefined;
+    setLoginWithTokenInterceptor((token: string) => {
+      redeemed = token;
+      return Promise.resolve({
+        access_token: 't',
+        user_id: '@u:s',
+        device_id: 'd',
+      } as any);
+    });
+    let replaced: (string | null | undefined)[] = [];
+    let originalReplaceState = window.history.replaceState;
+    (window.history as any).replaceState = (
+      _state: unknown,
+      _title: string,
+      url?: string | null,
+    ) => replaced.push(url);
+    let service = matrixService(this);
+    let originalStart = service.start.bind(service);
+    let started = false;
+    service.start = (async () => {
+      started = true;
+    }) as typeof service.start;
+    try {
+      await render(<template><SecureSignIn /></template>);
+      await waitUntil(() => started);
+      assert.strictEqual(redeemed, 'in-the-fragment');
+      assert.strictEqual(
+        replaced.at(-1),
+        APP_PAGE,
+        'the address keeps its path and query, and loses the token',
+      );
+    } finally {
+      service.start = originalStart;
+      (window.history as any).replaceState = originalReplaceState;
+    }
+  });
+
+  test('a session that fails to start after the token redeems says so, and keeps the guard', async function (assert) {
+    window.location.href = `${APP_PAGE}#loginToken=handed-over`;
+    noteRedirect(Date.now() - 1000);
+    setLoginWithTokenInterceptor(() =>
+      Promise.resolve({
+        access_token: 't',
+        user_id: '@u:s',
+        device_id: 'd',
+      } as any),
+    );
+    let service = matrixService(this);
+    let originalStart = service.start.bind(service);
+    // `start()` signs out again on a failure after the Matrix login, rather
+    // than throwing; this one never signs in.
+    service.start = (async () => {}) as typeof service.start;
+    try {
+      await render(<template><SecureSignIn /></template>);
+      await waitFor('[data-test-secure-sign-in-landing="failed"]');
+      assert
+        .dom('[data-test-secure-sign-in-status]')
+        .hasText('Sign-in didn’t complete');
+      assert.dom('[data-test-secure-sign-in-button]').exists();
+      assert.notStrictEqual(
+        window.sessionStorage.getItem('boxel-secure-sign-in-redirected-at'),
+        null,
+        'the guard still stops the next signed-out arrival from redirecting',
+      );
+    } finally {
+      service.start = originalStart;
+    }
+  });
+
   test('a spent login token says so, with a link to sign in again', async function (assert) {
     window.location.href = `${APP_PAGE}&loginToken=spent`;
     setLoginWithTokenInterceptor(() =>

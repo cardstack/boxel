@@ -4,14 +4,15 @@
 // in front of a deployment refuses a query string that names a loopback
 // origin, and the fragment never leaves the browser. Once the user is signed
 // in here, the page navigates to `return` with a single-use Matrix login
-// token in its query, which the app redeems for a Matrix session of its own.
+// token in its fragment, which the app redeems for a Matrix session of its
+// own.
 // The secure session never leaves this origin.
 //
 // `return` is honoured only on one of the app origins the realm server lists
 // for this deployment (`boxel-app-origins`, the same list the credential
 // fields may be framed by, and the realm server's own), so this page is never
-// an open redirect handing login tokens to whoever asks. A loopback `http:`
-// origin is on every deployment's list for a host app on the developer's own
+// an open redirect handing login tokens to whoever asks. The loopback origins
+// are on every deployment's list for a host app on the developer's own
 // machine, and any program on that machine can listen there, so a hand-off to
 // one waits for the user to confirm it.
 
@@ -101,16 +102,24 @@ export function forgetReturn() {
   sessionStorage.removeItem(RETURN_KEY);
 }
 
-// Whether a hand-off to `target` goes to a program on the user's own machine,
-// which the user confirms first.
-export function isLoopback(target) {
+// Whether the user confirms a hand-off to `target` first: one to a program on
+// their own machine, whatever its scheme, since any program there can listen
+// on a loopback port, `https:` as well as `http:`. The realm server's own
+// origin, which serves the app it is configured with, is never asked about.
+export function needsConfirmation(target, config) {
   let url = new URL(target);
-  return url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname);
+  return (
+    LOOPBACK_HOSTS.has(url.hostname) &&
+    url.origin !== config.realmServerURL.origin
+  );
 }
 
-// `target` with the login token in its query, in place of any it carried.
+// `target` with the login token in its fragment, in place of any fragment it
+// carried. The fragment never reaches a server, so no request log or access
+// log records the token on its way to the app.
 export function handOffURL(target, loginToken) {
   let url = new URL(target);
-  url.searchParams.set('loginToken', loginToken);
+  url.searchParams.delete('loginToken');
+  url.hash = new URLSearchParams({ loginToken }).toString();
   return url.href;
 }
