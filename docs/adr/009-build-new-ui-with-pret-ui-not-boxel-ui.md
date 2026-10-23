@@ -20,8 +20,10 @@ Boxel has two component libraries: boxel-ui (`packages/boxel-ui`) and Pret UI
 authors, people and agents alike, unsure which one to use. We consolidate on
 Pret UI. It covers more of what host and card authors need, and it is built
 the Boxel way: it lives in a realm, and each component comes with a Spec card.
-boxel-ui is deprecated. New UI uses Pret UI, and boxel-ui gets only fixes
-while a migration empties it. Then it is removed.
+boxel-ui is deprecated, and a migration will empty it so it can be removed.
+New UI uses Pret UI. boxel-ui gets only fixes and changes that help code
+migrate away from it. Its shared stylesheets can take new tokens and other
+changes until they move to host.
 
 ## 1. Decision
 
@@ -46,6 +48,10 @@ uses it. It MUST NOT add it to boxel-ui.
 boxel-ui MUST NOT gain new components, new exports, or new arguments on
 existing components. It MAY take bug fixes, accessibility fixes, and changes
 that help code migrate away from it.
+
+The shared stylesheets already in `packages/boxel-ui/src/styles/` are not
+frozen. Until they move to host (§1.3), they MAY take new `--boxel-*` tokens
+and changes to the variables, the theme contract and the global CSS.
 
 ### 1.3. What new code may still take from boxel-ui
 
@@ -83,7 +89,8 @@ and MUST NOT point to a file in boxel-ui as their home.
 
 Pret UI MUST NOT import `@cardstack/boxel-ui` or depend on it. Where Pret
 UI needs a boxel-ui module, that module MUST move to its destination under
-§1.3.
+§1.3. Reading a `--boxel-*` or theme custom property is not a dependency
+(§1.3).
 
 boxel-ui MUST NOT be removed while code in this repository, the catalog,
 boxel-home, or boxel-skills still imports it. Imports in user-realm cards,
@@ -127,7 +134,9 @@ use. Host chrome such as card headers and pickers serves operator mode only,
 so it moves to host. Icons already have a library in boxel-icons. The
 stylesheets are platform runtime that host loads before any card, so they
 move to host with their names unchanged, and the code that reads them
-doesn't change.
+doesn't change. The freeze leaves them out (§1.2) because they aren't a
+component library: they hold the tokens that host, Pret UI and cards read
+today, and those tokens need maintaining until the move.
 
 ## 3. Considered options
 
