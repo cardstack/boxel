@@ -58,9 +58,11 @@ Before writing anything, state in the PR description:
   page. A rule meant for big builds says so in its own text, or it fires on a
   three-field card too;
 - which core use case it targets, by number;
-- the observed failure it fixes: a room id (`inspect-ai-room` reads it), an
-  eval result card, or a Claude Code transcript. "The model might" is not an
-  observed failure.
+- the observed failure it fixes: a local eval room id (`inspect-ai-room` reads
+  it), an eval result card, or a Claude Code transcript. "The model might" is
+  not an observed failure. A staging or production room is a user's DM with
+  the bot: describe what happened in the PR and put the room id in the Linear
+  ticket, as `pr-privacy` says.
 
 A change written for Claude Code still reaches the assistant if it lands in a
 file the assistant reads. Either put it where only Claude Code looks, or treat
@@ -93,13 +95,16 @@ A new evaluation is one JSON file, `<use-case>-<problem>.json`, shaped like
 - **Seed the workspace for update and bulk evals.** Put the starting cards and
   files under `eval-realm/` and name them in `initialCards` / `initialFiles`.
   The runner copies them in at the same relative paths.
-- **End on a rendered card.** The runner grades `pass` only when the assistant
-  applied at least one `run-realm-code` write or other writing tool call and a
-  card rendered with no error. A navigation eval (use case 3) must still end with a card shown and
-  something written, for example "open the Smith invoice and mark it paid".
-  An eval that only navigates is graded `model-failure` however well it went,
-  which is a runner limitation to fix in `assistant-eval.spec.ts`, not to work
-  around in the criteria.
+- **End on a card the assistant created.** The runner grades `pass` only when
+  the assistant applied at least one `run-realm-code` write or other writing
+  tool call and a card rendered with no error, and the rendered check skips
+  every card in `initialCards`. An update, bulk or navigation eval (use cases
+  1 and 2 update, 3, 4) that ends on a seeded card it edited is graded
+  `model-failure` however well it went, on both sides, so the comparison
+  measures nothing. Until the runner counts an edited seeded card, such an
+  eval's prompt also asks for one new card the user would want from the
+  task, for example "mark every overdue invoice paid and make me a summary
+  card of what changed".
 - **Fill `cardInfo.name` and `cardInfo.summary`.** The `/run-ai-assistant-eval`
   command lists evaluations by them. The summary says what the prompts ask and
   what the eval tests.
@@ -117,33 +122,45 @@ with a cost estimate, and wait for a yes:
   turns; one model shows half the story.
 - **Runs:** three per model per side. One run is too noisy to call a
   difference (the `ai-assistant-evals` skill lists the models that give
-  different grades on different runs), and three show a direction.
+  different grades on different runs), and three show a direction. The
+  `/run-ai-assistant-eval` command runs each model once per session, so the
+  three runs are three sessions, each started with all three models after
+  the previous session's results are read and judged.
 
 ## 4. Run without and with the change
 
 The local stack serves skills from `packages/skills-realm/contents/`, a clone
 of boxel-skills. Whatever is checked out there is what the assistant reads.
-Edits there need no restart, and the runner opens a new room per run, which a
-skill change needs.
+Edits to the skill files there need no restart, and the runner opens a new
+room per run, which a skill change needs.
 
 The two sides differ in the change and nothing else: the same boxel commit,
 the same day, the same models. There are two ways to get them.
 
-- **A skill feature (preferred).** Put the changed section between
-  `<!-- feature:<name> -->` and `<!-- /feature:<name> -->` and register the
-  name in `SKILL_FEATURES` in `packages/runtime-common/ai/debug.ts`. The
-  ai-bot leaves a feature section out of the prompt unless the room enabled
-  it, so one branch gives both sides: run with
-  `EVAL_SKILL_FEATURES=<name>` for "with" and without it (or with `-<name>`
-  when the evaluation's `skillFeatures` switches it on) for "without". The
-  section stays out of every assistant prompt for as long as the markers
-  remain: nothing turns a feature on for every room. So once the evidence
-  says the change helps, the PR that ships it removes the markers and drops
-  the name from `SKILL_FEATURES`. A change meant only for Claude Code keeps
-  them, which is how it ships without touching the assistant.
-- **Two branches.** Make the "without" side from the PR branch with the
-  change reverted, not from `main`, because `main` may have moved under the
-  PR. To measure rules that are already merged, revert them on a scratch
+- **A skill feature (preferred for `index.md`).** Markers work only in
+  `index.md`: the ai-bot strips feature sections from the instructions of the
+  skills a room enables, and the default system card enables only
+  `index.md`. Every other skill file reaches the assistant through
+  `readRealmFile` with its sections intact, so a change marked there is on
+  both sides. For a change in `index.md`, put the changed section between
+  `<!-- feature:<name> -->` and `<!-- /feature:<name> -->`, register the
+  name in `SKILL_FEATURES` in `packages/runtime-common/ai/debug.ts`, and
+  restart the ai-bot (`mise run services:ai-bot` after stopping the running
+  one), which reads that map only at start; until then every "with" run
+  stops with "no skill feature named". One branch then gives both sides:
+  `EVAL_SKILL_FEATURES=<name> pnpm eval …` for "with", and plain
+  `pnpm eval …` (or `EVAL_SKILL_FEATURES=-<name>` when the evaluation's
+  `skillFeatures` switches it on) for "without". The section stays out of
+  every assistant prompt for as long as the markers remain: nothing turns a
+  feature on for every room. Shipping a change for the assistant takes two
+  PRs, in this order: the boxel-skills PR removes the markers, then a boxel
+  PR drops the name from `SKILL_FEATURES` and from every evaluation's
+  `skillFeatures`, which would otherwise fail to switch it on. A change meant
+  only for Claude Code keeps the markers, which is how it ships without
+  touching the assistant.
+- **Two branches,** for a change anywhere but `index.md`. Make the "without"
+  side from the PR branch with the change reverted, not from `main`, because
+  `main` may have moved under the PR. To measure rules that are already merged, revert them on a scratch
   branch of `main`.
 
 1. `git -C packages/skills-realm/contents status` must be clean. From
@@ -167,12 +184,13 @@ the same day, the same models. There are two ways to get them.
 Compare per model, on the averages of the three runs.
 
 A run with a `host-failure`, `bot-failure` or `runner-failure` verdict is
-unscored: it says nothing about the skill. Leave it out of the averages and
-run that one again.
+unscored: it says nothing about the skill. Leave it out of the averages and,
+once its result is read, run that model again in a session of its own.
 
-The change helps when the problem criterion held in every "with" run of the
-target eval, every other criterion held too, and it failed in most "without"
-runs.
+Both sides are called by the same rule, a majority of a model's three runs.
+The change helps a model when the problem criterion failed in at least two
+"without" runs and held in at least two "with" runs, and every other
+criterion held in at least two "with" runs.
 
 The change costs nothing when, on each small-card eval and each model, the
 "with" average takes no more turns, cost or time than the "without" average
@@ -182,8 +200,9 @@ the rooms explain it (`inspect-ai-room`): the extra reads, captures or tool
 calls the change added, and whether the rule should apply to that build at
 all. The usual fix is to limit the rule to the builds it is for.
 
-A mixed result (some "with" runs fix it, some do not) is not evidence. Read
-the rooms and find out why before running more.
+A mixed result (the change helps some models and not others) is not
+evidence. Read the rooms of the models it did not help and find out why
+before running more.
 
 ## 6. Put it in the PR
 

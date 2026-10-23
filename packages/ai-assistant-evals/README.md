@@ -70,6 +70,7 @@ Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace
 puts it in `initialCards` / `initialFiles`; the runner copies those in before
 the prompt.
+
 A skill change that targets a core use case adds an evaluation that shows the
 problem it fixes; the `skill-change-eval` skill in `.claude/skills` covers how.
 
