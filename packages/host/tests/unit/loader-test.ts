@@ -20,6 +20,7 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../helpers';
+import { shimTestModule } from '../helpers/identity-tags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -713,19 +714,18 @@ module('Unit | loader', function (hooks) {
 
     class StringField {}
 
-    throwIfFetch.shimModule(`${baseRealm.url}card-api.gts`, {
+    shimTestModule(throwIfFetch, `${baseRealm.url}card-api.gts`, {
       StringField,
     });
 
-    throwIfFetch.shimModule(`${baseRealm.url}string.ts`, {
+    shimTestModule(throwIfFetch, `${baseRealm.url}string.ts`, {
       default: StringField,
     });
 
-    // This Loader is constructed without a `virtualNetwork`, so
-    // `captureIdentitiesOfModuleExports` records the raw shim module
-    // identifier without running it through `vn.unresolveURL`. The
-    // identity stays in URL form. Other test setups that build a VN
-    // alongside the Loader see the RRI canonical form here.
+    // This Loader is constructed without a `virtualNetwork`, so the tag is
+    // read without canonicalizing it and the identity stays in URL form.
+    // Other test setups that build a VN alongside the Loader see the RRI
+    // canonical form here.
     assert.deepEqual(Loader.identify(StringField), {
       module: `${baseRealm.url}card-api`,
       name: 'StringField',

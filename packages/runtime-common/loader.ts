@@ -14,6 +14,7 @@ import {
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
+import { exportIdentitySymbolKey } from './export-identity-plugin.ts';
 
 type FetchingModule = {
   state: 'fetching';
@@ -237,65 +238,44 @@ function defaultSleep(ms: number): Promise<void> {
 }
 
 let nonce = 0;
-// A bundled base module publishes the classes it declares under its own name as
-// it is evaluated, which the `bundled-base-scoped-css` vite plugin appends to
-// its compiled source. This is the only account of those classes the loader can
-// have: it names the exports of every module it is asked for, and it is never
-// asked for a module reachable only from inside another module's chunk — the
-// bundler resolved that import where the loader could not see it.
-//
-// Read before the loader's own record, and it wins. Only a module that
-// *declares* a class publishes it, so this answers with the declarer or not at
-// all — it can correct an attribution but never invent one. The loader's own
-// record cannot make that promise: it credits the first module it is asked for
-// that exposes a name, so a bundled module re-exporting a class it did not
-// declare takes the credit whenever it happens to be served first, and the
-// answer then depends on which card imported what.
-//
-// The index is built from what has been published so far and extended on later
-// lookups, so a module evaluated after the first one is still found. Nothing
-// here resolves or fetches: the values are the very class objects the chunk is
-// using, published as a side effect of an evaluation that happens regardless.
-const bundledIdentities = new WeakMap<
-  Function,
-  { module: string; name: string }
->();
-const indexedBundledModules = new Set<string>();
 
-function bundledIdentityFor(
+// An exported class carries its identity as a static member keyed by this
+// registered symbol, which the compiler puts there (see
+// export-identity-plugin.ts). The tag is read as an own property: a subclass
+// inherits its parent's static members, and an inherited tag names the parent.
+const identityTagKey = Symbol.for(exportIdentitySymbolKey);
+
+// The identity a class's tag gives it, in the form a code ref carries. A tag
+// records its module as compiled — a realm module by its URL — and the module
+// is canonicalized when the tag is read: the realm prefix that spells it may be
+// registered after the module was compiled.
+//
+// A class is given the same identity object each time it is identified, for as
+// long as its module canonicalizes the same way, so callers can compare
+// identities by reference.
+const identities = new WeakMap<Function, { module: string; name: string }>();
+
+function identityFromTag(
   value: Function,
+  virtualNetwork: VirtualNetwork | undefined,
 ): { module: string; name: string } | undefined {
-  let registry = (
-    globalThis as {
-      __boxelBundledBaseIdentities?: Record<string, Record<string, unknown>>;
-    }
-  ).__boxelBundledBaseIdentities;
-  if (!registry) {
+  let tag = Object.getOwnPropertyDescriptor(value, identityTagKey)?.value as
+    | [string, string]
+    | undefined;
+  if (!tag) {
     return undefined;
   }
-  let known = bundledIdentities.get(value);
-  if (known) {
+  let [taggedModule, name] = tag;
+  let module = virtualNetwork
+    ? virtualNetwork.unresolveURL(taggedModule)
+    : taggedModule;
+  let known = identities.get(value);
+  if (known?.module === module && known.name === name) {
     return known;
   }
-  for (let moduleName of Object.keys(registry)) {
-    if (indexedBundledModules.has(moduleName)) {
-      continue;
-    }
-    indexedBundledModules.add(moduleName);
-    let exports = registry[moduleName];
-    for (let exportName of Object.keys(exports)) {
-      let exported = exports[exportName];
-      // First registration wins. A class is declared by one module; a module
-      // that merely re-exports it publishes nothing, so there is no contest.
-      if (typeof exported === 'function' && !bundledIdentities.has(exported)) {
-        bundledIdentities.set(exported, {
-          module: `@cardstack/base/${moduleName}`,
-          name: exportName,
-        });
-      }
-    }
-  }
-  return bundledIdentities.get(value);
+  let identity = { module, name };
+  identities.set(value, identity);
+  return identity;
 }
 
 export class Loader {
@@ -312,10 +292,10 @@ export class Loader {
   private knownDepsCache = new Map<string, Set<string>>();
   // Module identifier → the key it is tracked under (see trackingKey).
   private trackingKeyCache = new Map<string, string>();
-  private identities = new WeakMap<
-    Function,
-    { module: string; name: string }
-  >();
+  // The functions this loader has found among the exports of the modules it
+  // loads, each of which names it as its loader unless a later loader finds
+  // the function too (see `getLoaderFor`).
+  private exportedFunctions = new WeakSet<Function>();
   private static loaders = new WeakMap<Function, Loader>();
 
   private fetchImplementation: Fetch;
@@ -456,7 +436,7 @@ export class Loader {
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
-    this.captureIdentitiesOfModuleExports(module, moduleIdentifier);
+    this.recordLoaderOfModuleExports(module);
     this.setCanonicalModuleURL(moduleIdentifier, moduleIdentifier);
 
     this.moduleShims.set(moduleIdentifier, module);
@@ -578,14 +558,20 @@ export class Loader {
     if (typeof value !== 'function') {
       return undefined;
     }
-    return (
-      bundledIdentityFor(value) ?? Loader.loaders.get(value)?.identify(value)
-    );
+    let loader = Loader.loaders.get(value);
+    if (loader) {
+      return loader.identify(value);
+    }
+    // A class no loader has loaded a module of, such as a bundled base class
+    // reached only from inside another module's chunk, has no virtual network
+    // to canonicalize its tag through. A bundled base module's tag is already
+    // in canonical form.
+    return identityFromTag(value, undefined);
   }
 
   identify(value: unknown): { module: string; name: string } | undefined {
     if (typeof value === 'function') {
-      return this.identities.get(value);
+      return identityFromTag(value, this.virtualNetwork);
     } else {
       return undefined;
     }
@@ -733,7 +719,7 @@ export class Loader {
   }
 
   // Canonical form for module identifiers that flow out of the loader
-  // (dependency lists, identities): the registered realm-prefix (RRI)
+  // (dependency lists): the registered realm-prefix (RRI)
   // spelling when the virtual network has a matching mapping, otherwise the
   // identifier unchanged. Resolving back to a fetchable URL is the virtual
   // network's job at the network boundary.
@@ -1386,26 +1372,14 @@ export class Loader {
   // (`https://localhost:4201/base/X`) for the same module. Returns the
   // input unchanged when no virtual alias is registered.
 
-  private captureIdentitiesOfModuleExports(
-    module: any,
-    moduleIdentifier: string,
-  ) {
-    // Identities are recorded in canonical identifier form so that
-    // `identify()` output matches the form persisted in code refs.
-    let moduleId = this.canonicalIdentifier(
-      trimModuleIdentifier(moduleIdentifier),
-    );
+  private recordLoaderOfModuleExports(module: any) {
     for (let propName of Object.keys(module)) {
       let exportedEntity = module[propName];
       if (
         typeof exportedEntity === 'function' &&
-        typeof propName === 'string' &&
-        !this.identities.has(exportedEntity)
+        !this.exportedFunctions.has(exportedEntity)
       ) {
-        this.identities.set(exportedEntity, {
-          module: moduleId,
-          name: propName,
-        });
+        this.exportedFunctions.add(exportedEntity);
         Loader.loaders.set(exportedEntity, this);
       }
     }
@@ -1494,7 +1468,7 @@ export class Loader {
     this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
 
     if (loaded.type === 'shimmed') {
-      this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
+      this.recordLoaderOfModuleExports(loaded.module);
 
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
@@ -1672,7 +1646,7 @@ export class Loader {
         );
         this.#currentlyEvaluatingModule = previouslyEvaluating;
       }
-      this.captureIdentitiesOfModuleExports(moduleProxy, moduleIdentifier);
+      this.recordLoaderOfModuleExports(moduleProxy);
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: moduleProxy,

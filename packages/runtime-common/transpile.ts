@@ -6,6 +6,8 @@ import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-t
 //@ts-ignore breaks esbuild for VS Code extension
 import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
 import { loaderPlugin } from './loader-plugin.ts';
+import { exportIdentityPlugin } from './export-identity-plugin.ts';
+import { CLASS_FACTORIES, canonicalFactoryModule } from './class-factories.ts';
 //@ts-ignore ironically no types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
@@ -49,9 +51,26 @@ const compiler = {
   },
 };
 
+// The version of what `transpileJS` makes from a given source. Compiled modules
+// are cached, and served with validators, by their source alone, so a change
+// that makes the same source compile differently must bump this, or output
+// from before the change outlives it. Version 2 tags exported classes with
+// their identity.
+export const TRANSPILE_VERSION = 2;
+
+// `identity.moduleIdentifier` names the module, by URL for a realm module.
+// When given, every exported class is tagged with it (see
+// export-identity-plugin.ts); the tag is canonicalized where it is read.
+// `identity.canonicalModule` spells a module the way the plugin's class
+// factories are named, so a factory imported by a realm URL is recognized;
+// without one, only the base realm's alias is.
 export async function transpileJS(
   content: string,
   debugFilename: string,
+  identity?: {
+    moduleIdentifier: string;
+    canonicalModule?: (module: string) => string;
+  },
 ): Promise<string> {
   const contentIsAllWhitespace = content.match(/^\s*$/);
 
@@ -87,6 +106,19 @@ export async function transpileJS(
       [decoratorTransforms],
       [makeEmberTemplatePlugin, templateOptions],
       loaderPlugin,
+      ...(identity
+        ? [
+            [
+              exportIdentityPlugin,
+              {
+                moduleIdentifier: identity.moduleIdentifier,
+                classFactories: CLASS_FACTORIES,
+                canonicalModule:
+                  identity.canonicalModule ?? canonicalFactoryModule,
+              },
+            ],
+          ]
+        : []),
     ],
     highlightCode: false, // Do not output ANSI color codes in error messages so that the client can display them plainly
   });

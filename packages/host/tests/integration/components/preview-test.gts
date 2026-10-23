@@ -12,6 +12,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
+import { shimTestModule } from '../../helpers/identity-tags';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -46,7 +47,7 @@ module('Integration | preview', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { TestCard });
+    shimTestModule(loader, `${testRealmURL}test-cards`, { TestCard });
     let card = new TestCard({ firstName: 'Mango ' });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -230,7 +231,7 @@ module('Integration | preview', function (hooks) {
       static isolated = SharedTemplate;
       static edit = SharedTemplate;
     }
-    loader.shimModule(`${testRealmURL}shared-template-card`, {
+    shimTestModule(loader, `${testRealmURL}shared-template-card`, {
       SharedTemplateCard,
     });
 
@@ -302,7 +303,7 @@ module('Integration | preview', function (hooks) {
       static isolated = IsolatedTemplate;
       static edit = EditTemplate;
     }
-    loader.shimModule(`${testRealmURL}distinct-template-card`, {
+    shimTestModule(loader, `${testRealmURL}distinct-template-card`, {
       DistinctTemplateCard,
     });
 
@@ -379,7 +380,7 @@ module('Integration | preview', function (hooks) {
       static isolated = FieldHostTemplate;
       static edit = FieldHostTemplate;
     }
-    loader.shimModule(`${testRealmURL}field-host-card`, {
+    shimTestModule(loader, `${testRealmURL}field-host-card`, {
       SharedFormatField,
       FieldHostCard,
     });
@@ -447,7 +448,7 @@ module('Integration | preview', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}stable-card`, { StableCard });
+    shimTestModule(loader, `${testRealmURL}stable-card`, { StableCard });
 
     let card = new StableCard({ name: 'Mango' });
 

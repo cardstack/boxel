@@ -225,6 +225,7 @@ import {
   isModuleResource,
   executableExtensions,
   hasExecutableExtension,
+  trimExecutableExtension,
   isNode,
   logger,
   fetchRealmPermissions,
@@ -434,7 +435,7 @@ import {
   getFileWithFallbacks,
   type TextFileRef,
 } from './stream.ts';
-import { transpileJS } from './transpile.ts';
+import { TRANSPILE_VERSION, transpileJS } from './transpile.ts';
 import { moduleSchemaChanged } from './module-schema-change.ts';
 import { recordModuleCompile } from './module-compile-stats.ts';
 import type {
@@ -1268,7 +1269,10 @@ const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 // previous generation, and the index event that follows the swap refreshes
 // live clients.
 const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
-const MODULE_ETAG_VARIANT = 'module';
+// Carries the transpiler version, so compiled output stored or cached under an
+// earlier version no longer matches the validator a request builds and is
+// compiled over.
+const MODULE_ETAG_VARIANT = `module-v${TRANSPILE_VERSION}`;
 
 // A compile this long holds up every other request the process has, so it is
 // logged at info rather than debug.
@@ -10041,7 +10045,15 @@ export class Realm {
       }
       this.#transpileCallCount += 1;
       compileStart = performance.now();
-      transpiled = await transpileJS(source, debugFilename);
+      // The module's exported classes are tagged with its URL without the
+      // executable extension. The tag is canonicalized where it is read, so
+      // what is compiled does not depend on the realm prefixes registered now.
+      // Imports are canonicalized to recognize the class factories the module
+      // calls by whichever URL it imports them.
+      transpiled = await transpileJS(source, debugFilename, {
+        moduleIdentifier: trimExecutableExtension(canonicalPath),
+        canonicalModule: (module) => this.#virtualNetwork.unresolveURL(module),
+      });
     } catch (err: any) {
       // A compile that fails can hold the thread as long as one that
       // succeeds, so it is recorded too. Nothing is recorded when the failure

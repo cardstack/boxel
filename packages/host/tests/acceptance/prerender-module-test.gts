@@ -25,6 +25,7 @@ import {
   createPrerenderAuth,
   withCachedRealmSetup,
 } from '../helpers';
+import { shimTestModule } from '../helpers/identity-tags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -374,7 +375,7 @@ module('Acceptance | prerender | module', function (hooks) {
     }
 
     let shimURL = `${testRealmURL}shimmed.gts`;
-    loader.shimModule(shimURL, { Shimmed });
+    shimTestModule(loader, shimURL, { Shimmed });
 
     await visit(modulePath(shimURL));
     let { status, model } = captureModuleResult();
