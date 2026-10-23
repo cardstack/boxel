@@ -10115,11 +10115,12 @@ export class Realm {
       // The module's exported classes are tagged with its URL without the
       // executable extension. The tag is canonicalized where it is read, so
       // what is compiled does not depend on the realm prefixes registered now.
-      transpiled = await transpileJS(
-        source,
-        debugFilename,
-        trimExecutableExtension(canonicalPath),
-      );
+      // Imports are canonicalized to recognize the class factories the module
+      // calls by whichever URL it imports them.
+      transpiled = await transpileJS(source, debugFilename, {
+        moduleIdentifier: trimExecutableExtension(canonicalPath),
+        canonicalModule: (module) => this.#virtualNetwork.unresolveURL(module),
+      });
     } catch (err: any) {
       // A compile that fails can hold the thread as long as one that
       // succeeds, so it is recorded too. Nothing is recorded when the failure

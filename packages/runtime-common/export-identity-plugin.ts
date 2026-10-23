@@ -1,22 +1,50 @@
 import type * as Babel from '@babel/core';
 import type { PluginObj, PluginPass, types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
+import { PREFIX_REALMS } from './realm-prefixes.ts';
 
 // Every exported class gets a static member keyed by this registered symbol,
 // whose value is `[moduleIdentifier, exportedName]`.
 //
 // A class written in the module gets the member in its body. A class the
-// module only computes — `export const Status = enumField(StringField, ...)`,
-// where a factory makes the class — is tagged by a statement after the
-// binding, once its value is known: when the value is a function that carries
-// no identity of its own, it gets the same member.
+// module gets from a class factory — `export const Status =
+// enumField(StringField, ...)` — has no body in the module to put it in, so it
+// is tagged by a statement after the binding, once the factory has returned
+// it.
 export const exportIdentitySymbolKey = 'ident';
+
+// A function that returns a class a module may export, named by the module
+// that exports the function and the name it is exported under.
+export type ClassFactory = readonly [module: string, exportedName: string];
+
+// The class factories card and field modules call to make the classes they
+// export. A class made by any other function is exported untagged.
+export const CLASS_FACTORIES: readonly ClassFactory[] = Object.freeze([
+  ['@cardstack/base/enum', 'default'],
+  ['@cardstack/catalog/fields/status/status', 'statusField'],
+  ['@cardstack/catalog/fields/priority/priority', 'priorityField'],
+]);
 
 export interface Options {
   // Names the module being compiled. A function receives the on-disk filename
   // babel was given and returns the identifier to inline, or `null` to leave
   // every class in that file untagged.
   moduleIdentifier: string | ((filename: string) => string | null);
+  // The class factories whose results are tagged. Defaults to CLASS_FACTORIES.
+  classFactories?: readonly ClassFactory[];
+  // Names the module an import specifier refers to, in the form
+  // `classFactories` names modules. Given the specifier and the module being
+  // compiled; returning undefined leaves the default in place, which resolves
+  // a relative specifier against the module's identifier when that is a URL
+  // and spells a well-known realm alias by its prefix.
+  importedModule?: (
+    specifier: string,
+    importer: { moduleIdentifier: string; filename: string | undefined },
+  ) => string | undefined;
+  // Spells a resolved module the way `classFactories` does, for a module that
+  // has spellings beyond the alias forms the default knows, such as a realm
+  // URL a prefix is registered for.
+  canonicalModule?: (module: string) => string;
 }
 
 interface State extends PluginPass {
@@ -118,6 +146,11 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
         }
         let moduleIdentifier: string = resolved;
         let exportedNames = collectLocalExports(program);
+        let isClassFactoryCall = classFactoryCallMatcher(
+          program,
+          state,
+          moduleIdentifier,
+        );
 
         function tag(
           classPath: NodePath<t.ClassDeclaration | t.ClassExpression>,
@@ -163,7 +196,7 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
                 tag(init, exportedName);
               } else if (
                 exportedName !== undefined &&
-                mayEvaluateToClass(init.node)
+                isClassFactoryCall(init.node)
               ) {
                 computed.push(
                   identityStatement(id, moduleIdentifier, exportedName),
@@ -186,10 +219,9 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
               tag(declaration, 'default');
             } else if (
               declaration.isExpression() &&
-              !declaration.isIdentifier() &&
-              mayEvaluateToClass(declaration.node)
+              isClassFactoryCall(declaration.node)
             ) {
-              // `export default makeClass()`: the value is bound to a name
+              // `export default enumField(...)`: the value is bound to a name
               // the tagging statement can reach, and that name exported.
               let binding = statement.scope.generateUidIdentifier('default');
               statement.insertBefore([
@@ -219,34 +251,148 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
   };
 }
 
-// Whether an initializer could evaluate to a class it does not spell out: a
-// factory call, a reference to another binding, and the like. Literals,
-// functions and object or array literals cannot.
-function mayEvaluateToClass(expression: t.Node | null | undefined): boolean {
-  if (!expression) {
-    return false;
+// Recognizes a call to one of the configured class factories, however the
+// module reaches the factory: imported by default, by name or through a
+// namespace, or declared and exported by the module itself.
+function classFactoryCallMatcher(
+  program: NodePath<t.Program>,
+  state: State,
+  moduleIdentifier: string,
+): (expression: t.Node | null | undefined) => boolean {
+  let factories = new Set(
+    (state.opts.classFactories ?? CLASS_FACTORIES).map(
+      ([module, name]) => `${trimExtension(module)}#${name}`,
+    ),
+  );
+  let importer = { moduleIdentifier, filename: state.filename };
+  let canonical = state.opts.canonicalModule ?? ((module: string) => module);
+  let moduleOf = (specifier: string) =>
+    trimExtension(
+      canonical(
+        state.opts.importedModule?.(specifier, importer) ??
+          defaultImportedModule(specifier, moduleIdentifier),
+      ),
+    );
+  let ownExports = collectOwnExportNames(program);
+
+  // The factory a callee names, as `module#exportedName`.
+  function factoryOf(callee: t.Node): string | undefined {
+    if (callee.type === 'Identifier') {
+      let binding = program.scope.getBinding(callee.name);
+      if (!binding) {
+        return undefined;
+      }
+      let declaration = binding.path;
+      if (
+        declaration.isImportDefaultSpecifier() ||
+        declaration.isImportSpecifier()
+      ) {
+        let source = (declaration.parent as t.ImportDeclaration).source.value;
+        let imported = declaration.isImportDefaultSpecifier()
+          ? 'default'
+          : importedName(declaration.node);
+        return `${moduleOf(source)}#${imported}`;
+      }
+      let exported = ownExports.get(callee.name);
+      return exported === undefined
+        ? undefined
+        : `${trimExtension(canonical(moduleIdentifier))}#${exported}`;
+    }
+    if (
+      callee.type === 'MemberExpression' &&
+      !callee.computed &&
+      callee.object.type === 'Identifier' &&
+      callee.property.type === 'Identifier'
+    ) {
+      let declaration = program.scope.getBinding(callee.object.name)?.path;
+      if (declaration?.isImportNamespaceSpecifier()) {
+        let source = (declaration.parent as t.ImportDeclaration).source.value;
+        return `${moduleOf(source)}#${callee.property.name}`;
+      }
+    }
+    return undefined;
   }
-  switch (expression.type) {
-    case 'CallExpression':
-    case 'OptionalCallExpression':
-    case 'Identifier':
-    case 'MemberExpression':
-    case 'OptionalMemberExpression':
-    case 'ConditionalExpression':
-    case 'LogicalExpression':
-    case 'SequenceExpression':
-    case 'AwaitExpression':
-      return true;
-    case 'ParenthesizedExpression':
-    case 'TSAsExpression':
-    case 'TSSatisfiesExpression':
-    case 'TSNonNullExpression':
-    case 'TSTypeAssertion':
-    case 'TypeCastExpression':
-      return mayEvaluateToClass(expression.expression);
-    default:
+
+  return function isClassFactoryCall(expression) {
+    let call = unwrap(expression);
+    if (call?.type !== 'CallExpression') {
       return false;
+    }
+    let factory = factoryOf(call.callee);
+    return factory !== undefined && factories.has(factory);
+  };
+}
+
+// The expression a type assertion or parentheses wrap.
+function unwrap(expression: t.Node | null | undefined): t.Node | undefined {
+  while (
+    expression &&
+    (expression.type === 'ParenthesizedExpression' ||
+      expression.type === 'TSAsExpression' ||
+      expression.type === 'TSSatisfiesExpression' ||
+      expression.type === 'TSNonNullExpression' ||
+      expression.type === 'TSTypeAssertion' ||
+      expression.type === 'TypeCastExpression')
+  ) {
+    expression = expression.expression;
   }
+  return expression ?? undefined;
+}
+
+function importedName(specifier: t.ImportSpecifier): string {
+  return specifier.imported.type === 'Identifier'
+    ? specifier.imported.name
+    : specifier.imported.value;
+}
+
+// A relative specifier resolved against the importing module when its
+// identifier is a URL, and a well-known realm alias spelled by its prefix.
+function defaultImportedModule(
+  specifier: string,
+  moduleIdentifier: string,
+): string {
+  let module = specifier;
+  if (/^\.\.?\//.test(specifier)) {
+    try {
+      module = new URL(specifier, moduleIdentifier).href;
+    } catch {
+      return specifier;
+    }
+  }
+  for (let { prefix, alias } of PREFIX_REALMS) {
+    if (alias && module.startsWith(alias)) {
+      return prefix + module.slice(alias.length);
+    }
+  }
+  return module;
+}
+
+function trimExtension(module: string): string {
+  return module.replace(/\.(gts|ts|gjs|js)$/, '');
+}
+
+// Maps every local binding the module exports — by its declaration or by a
+// separate export statement — to the first name it is exported under.
+function collectOwnExportNames(
+  program: NodePath<t.Program>,
+): Map<string, string> {
+  let names = collectLocalExports(program);
+  for (let statement of program.node.body) {
+    if (statement.type !== 'ExportNamedDeclaration') {
+      continue;
+    }
+    let declaration = statement.declaration;
+    if (declaration?.type === 'FunctionDeclaration' && declaration.id) {
+      names.set(declaration.id.name, declaration.id.name);
+    } else if (declaration?.type === 'VariableDeclaration') {
+      for (let declarator of declaration.declarations) {
+        if (declarator.id.type === 'Identifier') {
+          names.set(declarator.id.name, declarator.id.name);
+        }
+      }
+    }
+  }
+  return names;
 }
 
 function resolveModuleIdentifier(state: State): string | null {

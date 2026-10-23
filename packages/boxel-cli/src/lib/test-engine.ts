@@ -1011,11 +1011,9 @@ export async function startTestPageServer(
                 // The module's URL without its extension is the identifier
                 // its exported classes are tagged with, as a realm-server
                 // tags the modules it serves.
-                body: await transpileJS(
-                  source,
-                  '/' + normalized,
-                  `${realmUrl}${normalized.replace(/\.(gts|ts)$/, '')}`,
-                ),
+                body: await transpileJS(source, '/' + normalized, {
+                  moduleIdentifier: `${realmUrl}${normalized.replace(/\.(gts|ts)$/, '')}`,
+                }),
               };
             } catch (err) {
               let message = err instanceof Error ? err.message : String(err);
