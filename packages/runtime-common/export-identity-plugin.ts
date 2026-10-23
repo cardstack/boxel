@@ -17,21 +17,14 @@ export const exportIdentitySymbolKey = 'ident';
 // that exports the function and the name it is exported under.
 export type ClassFactory = readonly [module: string, exportedName: string];
 
-// The class factories card and field modules call to make the classes they
-// export. A class made by any other function is exported untagged.
-export const CLASS_FACTORIES: readonly ClassFactory[] = Object.freeze([
-  ['@cardstack/base/enum', 'default'],
-  ['@cardstack/catalog/fields/status/status', 'statusField'],
-  ['@cardstack/catalog/fields/priority/priority', 'priorityField'],
-]);
-
 export interface Options {
   // Names the module being compiled. A function receives the on-disk filename
   // babel was given and returns the identifier to inline, or `null` to leave
   // every class in that file untagged.
   moduleIdentifier: string | ((filename: string) => string | null);
-  // The class factories whose results are tagged. Defaults to CLASS_FACTORIES.
-  classFactories?: readonly ClassFactory[];
+  // The class factories whose results are tagged. A class made by any other
+  // function is exported untagged.
+  classFactories: readonly ClassFactory[];
   // Names the module an import specifier refers to, in the form
   // `classFactories` names modules. Given the specifier and the module being
   // compiled; returning undefined leaves the default in place, which resolves
@@ -260,7 +253,7 @@ function classFactoryCallMatcher(
   moduleIdentifier: string,
 ): (expression: t.Node | null | undefined) => boolean {
   let factories = new Set(
-    (state.opts.classFactories ?? CLASS_FACTORIES).map(
+    (state.opts.classFactories ?? []).map(
       ([module, name]) => `${trimExtension(module)}#${name}`,
     ),
   );

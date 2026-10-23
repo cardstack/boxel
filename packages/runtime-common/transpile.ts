@@ -7,6 +7,7 @@ import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-t
 import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
 import { loaderPlugin } from './loader-plugin.ts';
 import { exportIdentityPlugin } from './export-identity-plugin.ts';
+import { CLASS_FACTORIES } from './class-factories.ts';
 //@ts-ignore ironically no types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
@@ -110,6 +111,7 @@ export async function transpileJS(
               exportIdentityPlugin,
               {
                 moduleIdentifier: identity.moduleIdentifier,
+                classFactories: CLASS_FACTORIES,
                 canonicalModule: identity.canonicalModule,
               },
             ],

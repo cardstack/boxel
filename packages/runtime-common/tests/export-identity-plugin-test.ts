@@ -16,16 +16,24 @@ function moduleURL(onDisk: string): string {
     .replace(/\.gts$/, '');
 }
 
-function transform(
-  code: string,
-  options: Options = { moduleIdentifier: moduleURL },
-): string {
+// The class factories the cases below recognize calls to.
+const classFactories: Options['classFactories'] = [
+  ['@cardstack/base/enum', 'default'],
+  ['@cardstack/catalog/fields/status/status', 'statusField'],
+];
+
+function transform(code: string, options: Partial<Options> = {}): string {
   let result = babel.transformSync(code, {
     filename,
     configFile: false,
     babelrc: false,
     parserOpts: { plugins: ['typescript'] },
-    plugins: [[exportIdentityPlugin, options]],
+    plugins: [
+      [
+        exportIdentityPlugin,
+        { moduleIdentifier: moduleURL, classFactories, ...options },
+      ],
+    ],
   });
   if (!result?.code) {
     throw new Error('babel produced no output');
