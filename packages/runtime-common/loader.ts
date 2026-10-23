@@ -15,6 +15,12 @@ import {
 } from './dependency-tracker.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
+// Subscribes a loader to changes in what its resolver would answer, and
+// returns the unsubscribe. `additive` means the resolver only gained answers.
+export type ResolutionChangeSubscribe = (
+  listener: (change: 'additive' | 'destructive') => void,
+) => () => void;
+
 type FetchingModule = {
   state: 'fetching';
   deferred: Deferred<void>;
@@ -319,8 +325,18 @@ export class Loader {
   private static loaders = new WeakMap<Function, Loader>();
 
   private fetchImplementation: Fetch;
-  private resolveImport: (moduleIdentifier: string) => string;
+  // The second argument is the module doing the importing, when there is one.
+  // A resolver that scopes resolution by importer, such as a Deck lock, needs
+  // it; one that does not can ignore it.
+  private resolveImport: (
+    moduleIdentifier: string,
+    relativeTo?: string,
+  ) => string;
   private virtualNetwork: VirtualNetwork | undefined;
+  // Tells the loader when the resolver behind `resolveImport` changes what it
+  // would answer. Kept so a clone subscribes to the same source.
+  private onResolutionChange: ResolutionChangeSubscribe | undefined;
+  private unsubscribeResolutionChange: (() => void) | undefined;
   // Unsubscribe for the realm-mapping-change listener registered below. The
   // VirtualNetwork outlives any single loader (LoaderService replaces the
   // loader on every module edit / session boundary), so a loader that isn't
@@ -338,10 +354,11 @@ export class Loader {
 
   constructor(
     fetch: Fetch,
-    resolveImport?: (moduleIdentifier: string) => string,
+    resolveImport?: (moduleIdentifier: string, relativeTo?: string) => string,
     options?: {
       retrySleep?: (ms: number) => Promise<void>;
       virtualNetwork?: VirtualNetwork;
+      onResolutionChange?: ResolutionChangeSubscribe;
     },
   ) {
     this.fetchImplementation = fetch;
@@ -359,6 +376,19 @@ export class Loader {
       this.knownDepsCache.clear();
       this.trackingKeyCache.clear();
     });
+    // A resolver change that only adds answers cannot change a module already
+    // registered: its dependencies were resolved when it registered. Anything
+    // else can, so it discards the caches the way a mapping change does.
+    this.onResolutionChange = options?.onResolutionChange;
+    this.unsubscribeResolutionChange = this.onResolutionChange?.((change) => {
+      if (change === 'additive') {
+        return;
+      }
+      this.modules.clear();
+      this.moduleCanonicalURLs.clear();
+      this.knownDepsCache.clear();
+      this.trackingKeyCache.clear();
+    });
   }
 
   // Release the realm-mapping-change subscription so this loader can be
@@ -368,6 +398,8 @@ export class Loader {
   dispose() {
     this.unsubscribeMappingChange?.();
     this.unsubscribeMappingChange = undefined;
+    this.unsubscribeResolutionChange?.();
+    this.unsubscribeResolutionChange = undefined;
   }
 
   getVirtualNetwork(): VirtualNetwork | undefined {
@@ -378,6 +410,7 @@ export class Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
       retrySleep: loader.retrySleep,
       virtualNetwork: loader.virtualNetwork,
+      onResolutionChange: loader.onResolutionChange,
     });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
@@ -1556,7 +1589,7 @@ export class Loader {
           return {
             type: 'dep',
             moduleURL: new URL(
-              this.resolveImport(depId),
+              this.resolveImport(depId, moduleIdentifier),
               new URL(moduleIdentifier),
             ),
           };
