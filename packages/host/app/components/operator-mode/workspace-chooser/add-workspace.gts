@@ -48,7 +48,7 @@ interface AddWorkspaceModalSignature {
   };
 }
 
-class AddWorkspaceModal extends Component<AddWorkspaceModalSignature> {
+export class AddWorkspaceModal extends Component<AddWorkspaceModalSignature> {
   private get isCreateWorkspaceButtonDisabled() {
     return !this.args.endpoint || !this.args.displayName;
   }
