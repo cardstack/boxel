@@ -274,6 +274,12 @@ class RealmResource {
   }
 
   private loggingIn: Promise<void> | undefined;
+  // The last token this resource minted, so the refresher can tell a token
+  // fresh from the realm server apart from one restored out of storage.
+  private lastMintedToken: string | undefined;
+  // Mints in a row whose token arrived already inside the refresh period. Each
+  // one doubles the wait before the next mint.
+  private unusableMints = 0;
 
   async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
@@ -381,6 +387,7 @@ class RealmResource {
       let token = await this.matrixService.createRealmSession(
         new URL(this.realmURL),
       );
+      this.lastMintedToken = token;
       this.token = token;
     } catch (e: any) {
       console.error(`RealmService - Failed to login to realm: ${e.message}`, e);
@@ -596,24 +603,42 @@ class RealmResource {
     );
   }
 
+  // Re-mints the session `tokenRefreshPeriodSec` before it expires, going by
+  // `exp` alone. A token restored from storage that is already inside that
+  // period is re-minted at once. A freshly minted one that arrives inside it
+  // cannot be scheduled from its `exp`, so the refresher waits
+  // `minTokenRefreshIntervalSec`, doubling with each such mint in a row up to
+  // `maxTokenRefreshBackoffSec`, and reports it, rather than asking again
+  // straight away.
   private tokenRefresher = restartableTask(async () => {
     if ((globalThis as any).__boxelRenderContext || !this.claims) {
       return;
     }
 
-    let refreshMs = 0;
+    // token expiration is unix time (seconds)
+    let refreshMs =
+      this.claims.exp * 1000 - Date.now() - tokenRefreshPeriodSec * 1000;
 
-    if (this.claims.sessionRoom) {
-      // token expiration is unix time (seconds)
-      let expirationMs = this.claims.exp * 1000;
-
-      refreshMs = Math.max(
-        expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
-        0,
-      );
+    if (this.token === this.lastMintedToken) {
+      if (refreshMs < minTokenRefreshIntervalSec * 1000) {
+        this.unusableMints++;
+        refreshMs = Math.min(
+          minTokenRefreshIntervalSec * 1000 * 2 ** (this.unusableMints - 1),
+          maxTokenRefreshBackoffSec * 1000,
+        );
+        console.error(
+          `RealmService - the session minted for ${this.realmURL} expires at ${new Date(
+            this.claims.exp * 1000,
+          ).toISOString()}, too soon to schedule a refresh; minting again in ${
+            refreshMs / 1000
+          }s`,
+        );
+      } else {
+        this.unusableMints = 0;
+      }
     }
 
-    await rawTimeout(refreshMs);
+    await this.realmService.waitForTokenRefresh(Math.max(refreshMs, 0));
 
     if (!this.loggingIn) {
       this.loggingIn = this.loginTask.perform();
@@ -1385,6 +1410,36 @@ export default class RealmService extends Service {
     clearServiceWorkerTokens();
   }
 
+  // Drops every stored realm session that belongs to someone other than
+  // `userId`. Sessions are kept per browser rather than per account, so after
+  // the browser signs in to a different Matrix account the ones it holds were
+  // minted for the previous account, and would read the previous account's
+  // realms on this one's behalf.
+  dropSessionsNotFor(userId: string): void {
+    for (let resource of this.realms.values()) {
+      let user = resource.claims?.user;
+      if (user && user !== userId) {
+        resource.clearRealmSession();
+      }
+    }
+    for (let [realmURL, token] of Object.entries(
+      SessionStorage.getAll() ?? {},
+    )) {
+      let user = token ? safeClaimsFromRawToken(token)?.user : undefined;
+      if (user && user !== userId) {
+        SessionStorage.remove(realmURL);
+        syncTokenToServiceWorker(realmURL, undefined);
+      }
+    }
+    this.lastRestoredSessionsString = null;
+  }
+
+  // How a realm's token refresher waits for its next mint. Tests replace it to
+  // run refreshers against a virtual clock.
+  waitForTokenRefresh = async (ms: number): Promise<void> => {
+    await rawTimeout(ms);
+  };
+
   async publish(realmURL: string, publishedRealmURLs: string[]) {
     let resource = this.getOrCreateRealmResource(realmURL);
     return await resource.publish(publishedRealmURLs);
@@ -1662,7 +1717,8 @@ export default class RealmService extends Service {
     // call signs in afresh rather than waiting on this one.
     try {
       let resource = this.getOrCreateRealmResource(realmURL);
-      resource.logout();
+      // Only this realm's session is discarded; every other realm's stays.
+      resource.clearRealmSession();
       await resource.login();
       let result = resource.token;
       deferred.fulfill(result);
@@ -1758,10 +1814,22 @@ export default class RealmService extends Service {
 }
 
 export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
+// The shortest wait between two mints of one realm's session, and the longest
+// the doubling wait after a run of unusable mints grows to.
+export const minTokenRefreshIntervalSec = 30;
+export const maxTokenRefreshBackoffSec = 30 * 60;
 
 export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as JWTPayload;
+}
+
+function safeClaimsFromRawToken(rawToken: string): JWTPayload | undefined {
+  try {
+    return claimsFromRawToken(rawToken);
+  } catch {
+    return undefined;
+  }
 }
 
 let SessionStorage = {

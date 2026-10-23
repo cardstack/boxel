@@ -556,7 +556,10 @@ import {
 import { resolveFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
-import { MatrixBackendAuthentication } from './matrix-backend-authentication.ts';
+import {
+  MatrixBackendAuthentication,
+  SessionUserNotFoundError,
+} from './matrix-backend-authentication.ts';
 
 import type {
   CoalescedIndexWrite,
@@ -583,6 +586,7 @@ import {
 import { REALMS_LIST_UPDATED_EVENT_TYPE } from './matrix-constants.ts';
 import { createSendEvent } from './send-event.ts';
 import { userExists } from './db-queries/user-queries.ts';
+import { isBotAccount } from './db-queries/realm-permission-queries.ts';
 import {
   analyzeRealmPublishability,
   type PublishabilityViolation,
@@ -2178,7 +2182,8 @@ async function computeContentHashFromRef(
 export interface TokenClaims {
   user: string;
   realm: string;
-  sessionRoom: string | undefined; // TODO: remove when we create users on demand in ensureSessionRoom
+  // Absent for a platform account, which has no session room.
+  sessionRoom: string | undefined;
   permissions: RealmPermissions['user'];
   realmServerURL: string;
   // Set on tokens minted by the realm-server's /_delegate-session endpoint
@@ -3522,16 +3527,23 @@ export class Realm {
     await this.#matrixClient.login();
   }
 
+  // The room this realm messages `matrixUserId` in. A platform account (a
+  // realm's own user, a bot, the realm server's account) has no Boxel account
+  // and is given no room. A person with no Boxel account is refused with
+  // `SessionUserNotFoundError`: the account and its room are made when they
+  // sign in to Boxel, through the realm server's own session.
   async ensureSessionRoom(matrixUserId: string): Promise<string | undefined> {
     let sessionRoom = await fetchSessionRoom(this.#dbAdapter, matrixUserId);
 
     if (!sessionRoom) {
-      await this.#matrixClient.login();
       let userExistsInDB = await userExists(this.#dbAdapter, matrixUserId);
       if (!userExistsInDB) {
-        // TODO: should we create it if it doesn't exist?
-        return undefined;
+        if (isBotAccount(matrixUserId)) {
+          return undefined;
+        }
+        throw new SessionUserNotFoundError(matrixUserId);
       }
+      await this.#matrixClient.login();
       sessionRoom = await this.#matrixClient.createDM(matrixUserId);
       await upsertSessionRoom(this.#dbAdapter, matrixUserId, sessionRoom);
     }

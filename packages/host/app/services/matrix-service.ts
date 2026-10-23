@@ -1013,6 +1013,7 @@ export default class MatrixService extends Service {
       deviceId,
     });
 
+    this.realm.dropSessionsNotFor(userId);
     this.realmServer.setClient(this.client);
     this.saveAuth(auth);
   }
@@ -1406,6 +1407,10 @@ export default class MatrixService extends Service {
     this.configureClientWithAuth(auth);
 
     if (this.client.isLoggedIn()) {
+      let userId = this.client.getUserId();
+      if (userId) {
+        this.realm.dropSessionsNotFor(userId);
+      }
       this.realmServer.setClient(this.client);
       if (isTesting()) console.warn('[start-phase] realmServer.login');
       await this.realmServer.login(registrationToken);
