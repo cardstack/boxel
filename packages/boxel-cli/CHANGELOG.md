@@ -6,6 +6,40 @@ Entries below are written by CI on each stable promotion — most recent first.
 
 <!-- New entries are inserted directly below this line by the stable job in .github/workflows/boxel-cli-publish.yml. -->
 
+## 2026-10-23 — npm v0.9.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.9.0
+
+## @cardstack/boxel-cli v0.9.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.9.0
+
+## Changes
+
+- feat: index public-realm deploys and system reindexes without realm events by @habdelra in https://github.com/cardstack/boxel/pull/6914
+- feat: announce a bulk realm write once, and let a deploy push without realm events by @habdelra in https://github.com/cardstack/boxel/pull/6903
+- fix(boxel-cli): push a whole realm in /\_atomic batches and commit long checkpoint messages through stdin by @richardhjtan in https://github.com/cardstack/boxel/pull/6894
+- feat(boxel-cli): push only what changed since a git revision with realm push --changed-since by @habdelra in https://github.com/cardstack/boxel/pull/6900
+- build: serve the secure origin's pages from their own package by @habdelra in https://github.com/cardstack/boxel/pull/6889
+- fix: fold tsc elaboration lines into boxel parse error messages by @FadhlanR in https://github.com/cardstack/boxel/pull/6853
+- fix(browser-sign-in): say a local host can sign in with a password against staging and production by @habdelra in https://github.com/cardstack/boxel/pull/6860
+- fix: Save a browser sign-in's profile without asking when no terminal is attached by @habdelra in https://github.com/cardstack/boxel/pull/6815
+- feat(skills): add browser-sign-in skill for boxel browse by @christse in https://github.com/cardstack/boxel/pull/6849
+- feat: Issue scoped, audited diagnostic sessions for rendering a live card by @habdelra in https://github.com/cardstack/boxel/pull/6784
+- feat: Sign in on the secure window for a session card code can't reach, and require it to mint key write tickets by @habdelra in https://github.com/cardstack/boxel/pull/6776
+- docs: teach @cardstack/<realm>/ prefixes in agent skills and docs by @lukemelia in https://github.com/cardstack/boxel/pull/6762
+- feat: add boxel realm-server keys, seed-authorized system-key administration with an audit trail by @habdelra in https://github.com/cardstack/boxel/pull/6731
+- feat: Rotate the secrets data key without downtime by @habdelra in https://github.com/cardstack/boxel/pull/6719
+- fix: replay the boxel-cli release commit when main moves under the publish run by @habdelra in https://github.com/cardstack/boxel/pull/6692
+- feat: Port Crossing, Drift, Hang, Inline Edit, Long Take and Mockup to the gallery realm by @lukemelia in https://github.com/cardstack/boxel/pull/6667
+- fix: show only whitelisted public realms on the dashboard, and let users choose more catalogs by @lukemelia in https://github.com/cardstack/boxel/pull/6672
+- fix: type the styles helper so it accepts any MotionValue by @lukemelia in https://github.com/cardstack/boxel/pull/6665
+- feat: play the Choreo films and the feature reel from the gallery realm by @lukemelia in https://github.com/cardstack/boxel/pull/6600
+- fix: move boxel-cli and software-factory capture clients to POST /\_capture by @habdelra in https://github.com/cardstack/boxel/pull/6606
+- docs: describe .gitignore and .boxelignore handling in the boxel-cli README by @richardhjtan in https://github.com/cardstack/boxel/pull/6592
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.8.0...boxel-cli-v0.9.0
+
 ## 2026-10-07 — npm v0.8.0
 
 Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.8.0
