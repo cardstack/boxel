@@ -624,6 +624,9 @@ export interface BrowserLoginOptions {
   // The realm server's secure origin, when it signs profiles in. Its
   // `cli-auth` page is opened instead of the host app's.
   secureOriginUrl?: string;
+  // Ends a secure session that came with a login token that couldn't be
+  // redeemed, so nothing leaves it live with no profile holding it.
+  discardSecureSession?: (session: PostedSecureSession) => Promise<void>;
   timeoutMs?: number;
   fetchFn?: typeof fetch;
   openBrowserFn?: (url: string) => Promise<boolean>;
@@ -651,6 +654,7 @@ export async function browserLogin(
     matrixUrl,
     hostUrl,
     secureOriginUrl,
+    discardSecureSession,
     timeoutMs,
     fetchFn = fetch,
     openBrowserFn = openBrowser,
@@ -684,11 +688,15 @@ export async function browserLogin(
 
     const result = await callback.waitForResult();
     if (result.kind === 'loginToken') {
-      const auth = await redeemLoginToken(
-        matrixUrl,
-        result.loginToken,
-        fetchFn,
-      );
+      let auth;
+      try {
+        auth = await redeemLoginToken(matrixUrl, result.loginToken, fetchFn);
+      } catch (e) {
+        if (result.secureSession) {
+          await discardSecureSession?.(result.secureSession).catch(() => {});
+        }
+        throw e;
+      }
       return result.secureSession
         ? { ...auth, secureSession: result.secureSession }
         : auth;

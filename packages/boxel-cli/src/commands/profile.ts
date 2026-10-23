@@ -520,7 +520,12 @@ async function addProfileViaBrowser(
     let secureOriginUrl = signInOnHostApp
       ? undefined
       : await ctx.secureOriginForProfiles(realmServerUrl);
-    auth = await ctx.browserLogin({ matrixUrl, hostUrl, secureOriginUrl });
+    auth = await ctx.browserLogin({
+      matrixUrl,
+      hostUrl,
+      secureOriginUrl,
+      discardSecureSession: (s) => ctx.secureSignOut(realmServerUrl, s.token),
+    });
   } catch (err) {
     if (err instanceof SsoTimeoutError) {
       console.log(`\n${FG_YELLOW}${err.message}${RESET}`);

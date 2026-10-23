@@ -492,6 +492,51 @@ describe('browserLogin', () => {
     });
   });
 
+  it('ends the secure session that came with a login token the homeserver refuses', async () => {
+    let discarded: unknown[] = [];
+    let refusing = (async (url: string | URL) => {
+      const href = typeof url === 'string' ? url : url.href;
+      if (href.endsWith('/_matrix/client/v3/login')) {
+        return jsonResponse({ errcode: 'M_FORBIDDEN' }, 403);
+      }
+      throw new Error(`unexpected request to ${href}`);
+    }) as unknown as typeof fetch;
+    await expect(
+      browserLogin({
+        matrixUrl: MATRIX_URL,
+        hostUrl: HOST_URL,
+        secureOriginUrl: 'https://secure.example.com/',
+        discardSecureSession: async (session) => {
+          discarded.push(session);
+        },
+        fetchFn: refusing,
+        log: () => {},
+        openBrowserFn: async (authUrl) => {
+          const target = loopbackFrom(authUrl);
+          await fetch(target.origin + target.pathname, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formBody({
+              state: target.searchParams.get('state')!,
+              login_token: 'syt_from_secure_origin',
+              secure_session: 'secure-session-token',
+              user_id: USER_ID,
+              expires_at: '2099-01-01T00:00:00.000Z',
+            }),
+          });
+          return true;
+        },
+      }),
+    ).rejects.toThrow();
+    expect(discarded).toEqual([
+      {
+        token: 'secure-session-token',
+        userId: USER_ID,
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      },
+    ]);
+  });
+
   it('takes the session the password branch POSTs, once whoami agrees', async () => {
     const auth = await browserLogin({
       matrixUrl: MATRIX_URL,

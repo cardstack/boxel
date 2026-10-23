@@ -191,6 +191,26 @@ describe('boxel profile add through the browser', () => {
       );
     });
 
+    it('ends a secure session whose login token could not be redeemed, on this realm server', async () => {
+      let { deps: d } = deps({
+        tty: false,
+        secureOrigin: SECURE_ORIGIN,
+        browserLogin: async (options) => {
+          await options.discardSecureSession!(secureSession);
+          throw new Error('The homeserver refused the login token.');
+        },
+      });
+      await expect(addProfile(manager, environment, true, d)).rejects.toThrow(
+        'refused the login token',
+      );
+
+      expect(d.secureSignOut).toHaveBeenCalledWith(
+        environment.realmServerUrl,
+        secureSession.token,
+      );
+      expect(manager.getProfile(matrixId)).toBeUndefined();
+    });
+
     it('ends the secure session the profile had, which the new one replaces', async () => {
       await manager.addProfileWithAuth(
         matrixId,
@@ -334,11 +354,13 @@ describe('boxel profile add through the browser', () => {
       let { deps: d } = deps({ tty: false });
       await addProfile(manager, environment, true, d);
 
-      expect(d.browserLogin).toHaveBeenCalledWith({
-        matrixUrl: environment.matrixUrl,
-        hostUrl: environment.realmServerUrl,
-        secureOriginUrl: undefined,
-      });
+      expect(d.browserLogin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          matrixUrl: environment.matrixUrl,
+          hostUrl: environment.realmServerUrl,
+          secureOriginUrl: undefined,
+        }),
+      );
       expect(manager.getProfile(matrixId)!.secureSession).toBeUndefined();
     });
   });
