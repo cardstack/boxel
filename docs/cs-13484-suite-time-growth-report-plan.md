@@ -27,12 +27,16 @@ we built only that.
 
 - `packages/realm-server/scripts/compare-test-module-timings.mjs`
   - `--since <date|ref>` (default 21 days ago), `--until <date|ref>` (default
-    HEAD), `--shard-count <n>` (optional, prints time per shard), `--top <n>`.
+    HEAD), `--shard-count <n>` (optional, prints the predicted slowest shard
+    at each end, packed as CI packs it), `--top <n>`.
   - A date resolves to the last commit to the timings file on or before that
-    day.
-  - Output: total time then and now, time per shard, file counts, the files
-    that grew most (new files included), the files that shrank most, and
-    removed files.
+    local day.
+  - Output: total time then and now, slowest shard, file counts, the files
+    that grew most (every new file included), the files that shrank most,
+    removed files, and test files that have no timing yet.
+  - The timings history is drift-gated: the shard-timings job commits only
+    when a rebalance saves enough time, so the weights at each end can be
+    days old. The script says so in its output.
   - Test counts come from `git grep -c` for `test(` calls at the later
     revision, so they are approximate.
 - `packages/realm-server/tests/compare-test-module-timings-test.ts`: tests for
@@ -42,5 +46,5 @@ we built only that.
 ## Check
 
 `node scripts/compare-test-module-timings.mjs --since 2026-09-10 --until 2026-10-02 --shard-count 6`
-shows 12.3 → 24.5 min per shard, and the realm-policy suites at the top of the
-list. This is the same result as the manual investigation in CS-13469.
+shows a predicted slowest shard of 12.5 → 24.9 min, and the realm-policy
+suites at the top of the list. This is the same result as the manual investigation in CS-13469.

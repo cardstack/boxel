@@ -3,13 +3,17 @@
 
 // Compares tests/test-module-timings.json at two points in history and says
 // which test files the suite's time went to. The file is the shard-timings
-// job's output (see scripts/generate-test-module-timings.mjs), committed on
-// main several times a day, so its history is a record of what every file
-// costs without downloading any CI report.
+// job's output (see scripts/generate-test-module-timings.mjs), so its history
+// records what every file cost without downloading any CI report.
 //
-// Growth that matters rarely comes from one file: many files that are each
-// reasonable add up. This answers "what grew since <date>" for when CI feels
-// slow.
+// The history is drift-gated, not sampled. The job rewrites the file only when
+// repacking with fresh measurements would cut the predicted slowest shard by
+// a minimum (--min-drift-seconds in .github/workflows/ci.yaml). A slowdown
+// that leaves the packing about the same — shared setup getting slower, or
+// growth spread evenly across files — is not committed until some later run
+// opens the gate, and that run then writes every file's fresh time at once.
+// So the weights at either end can be days older than the commit date
+// suggests, and growth inside the window can show up late.
 //
 // Usage:
 //   node scripts/compare-test-module-timings.mjs --since 2026-09-10
@@ -17,32 +21,48 @@
 //
 // Options:
 //   --since <date|ref>  Baseline: the file as of the last commit to it on or
-//                       before that date, or at that git ref. Default: 21 days
-//                       ago.
+//                       before that local date, or at that git ref. Default:
+//                       21 days ago.
 //   --until <date|ref>  The other end, resolved the same way. Default: HEAD.
-//   --shard-count <n>   Also print the implied time per shard. There is no
-//                       default, for the reason the generator has none: keep it
-//                       equal to the realm-server matrix in
-//                       .github/workflows/ci.yaml.
-//   --top <n>           How many grown files to list. Default 15.
+//   --shard-count <n>   Also print the predicted slowest shard at each end,
+//                       packed the way CI packs it. There is no default, for
+//                       the reason the generator has none. The same count
+//                       applies to both ends, so the comparison is of the
+//                       suite, not of a matrix change inside the window.
+//   --top <n>           How many files each list shows. Default 15.
 //
 // Test counts are approximate: a count of `test(` calls in each file's source
 // at the later revision, so a loop or a helper that registers tests counts as
 // one or none.
 
 import { execFileSync } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
+
+import shardTestModules from './shard-test-modules.cjs';
+
+const { DEFAULT_WEIGHT, assignByWeight, weightFor } = shardTestModules;
 
 const packageDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const timingsFile = 'tests/test-module-timings.json';
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TEST_CALL = '(^|[^.[:alnum:]_])test(\\.[a-z]+)?\\(';
+const USAGE =
+  'Usage: node scripts/compare-test-module-timings.mjs [--since date|ref] ' +
+  '[--until date|ref] [--shard-count n] [--top n]';
 
 // Exported for tests/compare-test-module-timings-test.ts. Every file present
 // at either end gets a row; a file absent at one end is new or removed, which
-// is also how a renamed file shows up.
-export function compareTimings(before, after, testCounts = {}) {
+// is also how a renamed file shows up. `filesAfter`, the test files on disk at
+// the later end, finds the ones no run has measured yet.
+export function compareTimings(
+  before,
+  after,
+  testCounts = {},
+  filesAfter = [],
+) {
   const files = new Set([...Object.keys(before), ...Object.keys(after)]);
   const rows = [...files].map((file) => {
     const was = before[file];
@@ -68,8 +88,9 @@ export function compareTimings(before, after, testCounts = {}) {
   return {
     before: { total: sum(before), files: Object.keys(before).length },
     after: { total: sum(after), files: Object.keys(after).length },
+    // A new file is listed even at 0s, so every added file can be named.
     grown: rows
-      .filter((r) => r.status !== 'removed' && r.delta > 0)
+      .filter((r) => r.status === 'new' || (r.status === 'kept' && r.delta > 0))
       .sort(byDelta),
     shrunk: rows
       .filter((r) => r.status === 'kept' && r.delta < 0)
@@ -78,7 +99,23 @@ export function compareTimings(before, after, testCounts = {}) {
     removed: rows
       .filter((r) => r.status === 'removed')
       .sort((a, b) => byDelta(b, a)),
+    unmeasured: filesAfter.filter((file) => after[file] === undefined).sort(),
   };
+}
+
+// The load of the heaviest bin when `files` are packed the way CI packs them:
+// measured zeros floored to MIN_WEIGHT, unmeasured files at DEFAULT_WEIGHT.
+// This, not total / shardCount, is what a CI run waits on.
+export function slowestShard(files, timings, shardCount) {
+  let slowest = 0;
+  for (let shard = 1; shard <= shardCount; shard++) {
+    const load = assignByWeight(files, timings, shard, shardCount).reduce(
+      (sum, file) => sum + weightFor(file, timings),
+      0,
+    );
+    slowest = Math.max(slowest, load);
+  }
+  return round(slowest);
 }
 
 function round(seconds) {
@@ -91,6 +128,11 @@ function git(...args) {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
+}
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
 }
 
 // A date picks the last commit to the timings file on or before the end of
@@ -107,15 +149,37 @@ function resolveRevision(spec) {
       timingsFile,
     ).trim();
     if (!sha) {
-      throw new Error(`${timingsFile} has no commit on or before ${spec}.`);
+      // A shallow clone (the actions/checkout default) has cut the history
+      // off, which is not the same as the file having no commit then.
+      if (git('rev-parse', '--is-shallow-repository').trim() === 'true') {
+        fail(
+          `This clone is shallow, so the history before ${spec} is missing. ` +
+            `Run \`git fetch --shallow-since=${spec}\` (or \`git fetch --unshallow\`) and retry.`,
+        );
+      }
+      fail(`${timingsFile} has no commit on or before ${spec}.`);
     }
     return sha;
   }
-  return git('rev-parse', '--verify', `${spec}^{commit}`).trim();
+  try {
+    return git('rev-parse', '--verify', '--quiet', `${spec}^{commit}`).trim();
+  } catch {
+    fail(`${spec} is neither a YYYY-MM-DD date nor a commit.`);
+  }
 }
 
 function readTimingsAt(sha) {
   return JSON.parse(git('show', `${sha}:./${timingsFile}`));
+}
+
+// The same discovery rule as collectTestModules in shard-test-modules.cjs,
+// read from a commit instead of the working tree.
+function testFilesAt(sha) {
+  return git('ls-tree', '-r', '--name-only', sha, '--', 'tests')
+    .split('\n')
+    .filter((path) => path.endsWith('-test.ts'))
+    .map((path) => path.slice('tests/'.length))
+    .sort();
 }
 
 function testCountsAt(sha) {
@@ -140,6 +204,14 @@ function testCountsAt(sha) {
 
 function commitLabel(sha) {
   return git('show', '-s', '--format=%cs %h', sha).trim();
+}
+
+// Local, because git reads the date in `--before` as local time.
+function localDateDaysAgo(days) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 function minutes(seconds) {
@@ -182,89 +254,111 @@ function table(rows) {
     .join('\n');
 }
 
-function main(args) {
-  const options = { since: undefined, until: 'HEAD', top: 15 };
-  for (let i = 0; i < args.length; i++) {
-    const flag = args[i];
-    const value = args[++i];
-    if (flag === '--since') {
-      options.since = value;
-    } else if (flag === '--until') {
-      options.until = value;
-    } else if (flag === '--shard-count') {
-      options.shardCount = Number(value);
-    } else if (flag === '--top') {
-      options.top = Number(value);
-    } else {
-      console.error(`Unexpected argument: ${flag}`);
-      process.exit(1);
-    }
+function printList(title, items, top, render) {
+  if (!items.length) {
+    return;
   }
-  if (
-    (options.shardCount !== undefined &&
-      !(Number.isInteger(options.shardCount) && options.shardCount > 0)) ||
-    !(Number.isInteger(options.top) && options.top > 0)
-  ) {
-    console.error(
-      'Usage: node scripts/compare-test-module-timings.mjs [--since date|ref] ' +
-        '[--until date|ref] [--shard-count n] [--top n]',
-    );
-    process.exit(1);
-  }
-  if (!options.since) {
-    const date = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000);
-    options.since = date.toISOString().slice(0, 10);
-  }
+  console.log(`${title} (${Math.min(top, items.length)} of ${items.length}):`);
+  console.log(render(items.slice(0, top)));
+  console.log();
+}
 
+function parseOptions(args) {
+  let values;
+  try {
+    ({ values } = parseArgs({
+      args,
+      options: {
+        since: { type: 'string' },
+        until: { type: 'string', default: 'HEAD' },
+        'shard-count': { type: 'string' },
+        top: { type: 'string', default: '15' },
+        help: { type: 'boolean', short: 'h' },
+      },
+      strict: true,
+      allowPositionals: false,
+    }));
+  } catch (err) {
+    fail(`${err.message}\n${USAGE}`);
+  }
+  if (values.help) {
+    console.log(USAGE);
+    process.exit(0);
+  }
+  const shardCount =
+    values['shard-count'] === undefined
+      ? undefined
+      : Number(values['shard-count']);
+  const top = Number(values.top);
+  if (
+    (shardCount !== undefined &&
+      !(Number.isInteger(shardCount) && shardCount > 0)) ||
+    !(Number.isInteger(top) && top > 0)
+  ) {
+    fail(`--shard-count and --top take a positive whole number.\n${USAGE}`);
+  }
+  return {
+    since: values.since ?? localDateDaysAgo(21),
+    until: values.until,
+    shardCount,
+    top,
+  };
+}
+
+function main(args) {
+  const options = parseOptions(args);
   const from = resolveRevision(options.since);
   const to = resolveRevision(options.until);
-  const result = compareTimings(
-    readTimingsAt(from),
-    readTimingsAt(to),
-    testCountsAt(to),
-  );
-  const { before, after } = result;
+  const before = readTimingsAt(from);
+  const after = readTimingsAt(to);
+  const filesAfter = testFilesAt(to);
+  const result = compareTimings(before, after, testCountsAt(to), filesAfter);
 
   console.log(`${timingsFile}: ${commitLabel(from)} → ${commitLabel(to)}\n`);
   console.log(
-    `Total:      ${minutes(before.total)} → ${minutes(after.total)}` +
-      percent(before.total, after.total),
+    `Total:          ${minutes(result.before.total)} → ${minutes(result.after.total)}` +
+      percent(result.before.total, result.after.total),
   );
   if (options.shardCount) {
+    const was = slowestShard(testFilesAt(from), before, options.shardCount);
+    const now = slowestShard(filesAfter, after, options.shardCount);
     console.log(
-      `Per shard:  ${minutes(before.total / options.shardCount)} → ` +
-        `${minutes(after.total / options.shardCount)} (${options.shardCount} shards)`,
+      `Slowest shard:  ${minutes(was)} → ${minutes(now)}${percent(was, now)} ` +
+        `(predicted, ${options.shardCount} shards at both ends)`,
     );
   }
   console.log(
-    `Files:      ${before.files} → ${after.files} ` +
+    `Files:          ${result.before.files} → ${result.after.files} ` +
       `(${result.added} new, ${result.removed.length} removed)\n`,
   );
 
-  if (result.grown.length) {
-    console.log(
-      `Grew most (${Math.min(options.top, result.grown.length)} of ${result.grown.length}):`,
-    );
-    console.log(table(result.grown.slice(0, options.top)));
-    console.log();
-  }
-  if (result.shrunk.length) {
-    console.log(
-      `Shrank most (${Math.min(5, result.shrunk.length)} of ${result.shrunk.length}):`,
-    );
-    console.log(table(result.shrunk.slice(0, 5)));
-    console.log();
-  }
-  if (result.removed.length) {
-    console.log('Removed (a renamed file also shows as new above):');
-    console.log(table(result.removed));
-    console.log();
-  }
+  printList('Grew most', result.grown, options.top, table);
+  printList('Shrank most', result.shrunk, options.top, table);
+  printList(
+    'Removed — a renamed file also shows as new above',
+    result.removed,
+    options.top,
+    table,
+  );
+  printList(
+    `Not measured yet (CI packs each at ${DEFAULT_WEIGHT}s)`,
+    result.unmeasured,
+    options.top,
+    (files) => files.map((file) => `  ${file}`).join('\n'),
+  );
+
   console.log(
-    'Tests are counted from `test(` calls at the later revision, so they are approximate.',
+    'The timings file is rewritten only when a rebalance is worth a commit, so ' +
+      'the weights at each end can be days older than the commit dates above.\n' +
+      'Tests are counted from `test(` calls at the later revision, so they are approximate.',
   );
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Compare real paths, so the script still runs when invoked through a symlink,
+// and do nothing when imported with no script path (node -e, a REPL).
+if (
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
   main(process.argv.slice(2));
 }

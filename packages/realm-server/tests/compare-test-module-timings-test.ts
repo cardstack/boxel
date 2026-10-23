@@ -2,7 +2,10 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 
-import { compareTimings } from '../scripts/compare-test-module-timings.mjs';
+import {
+  compareTimings,
+  slowestShard,
+} from '../scripts/compare-test-module-timings.mjs';
 
 module(basename(import.meta.filename), function () {
   test('totals and file counts cover each end on its own', function (assert) {
@@ -61,5 +64,55 @@ module(basename(import.meta.filename), function () {
     ).grown;
     assert.strictEqual(row.tests, 0);
     assert.strictEqual(row.secondsPerTest, undefined);
+  });
+
+  test('a new file measured at 0s is still listed', function (assert) {
+    let result = compareTimings(
+      { 'a-test.ts': 10 },
+      { 'a-test.ts': 10, 'b-test.ts': 0 },
+    );
+    assert.deepEqual(
+      result.grown.map((r) => [r.file, r.status]),
+      [['b-test.ts', 'new']],
+    );
+  });
+
+  test('test files on disk with no timing are listed as unmeasured', function (assert) {
+    let result = compareTimings({}, { 'a-test.ts': 10 }, {}, [
+      'nested/c-test.ts',
+      'a-test.ts',
+      'b-test.ts',
+    ]);
+    assert.deepEqual(result.unmeasured, ['b-test.ts', 'nested/c-test.ts']);
+  });
+
+  test('the slowest shard is the heaviest packed bin, not the mean', function (assert) {
+    // Packed into 2 shards: [a] = 60s and [b, c] = 10s + 5s (c is unmeasured
+    // and charged DEFAULT_WEIGHT). The mean would be 37.5s.
+    assert.strictEqual(
+      slowestShard(
+        ['a-test.ts', 'b-test.ts', 'c-test.ts'],
+        {
+          'a-test.ts': 60,
+          'b-test.ts': 10,
+        },
+        2,
+      ),
+      60,
+    );
+    // A measured 0 still costs MIN_WEIGHT, so three of them on one shard
+    // weigh 3s.
+    assert.strictEqual(
+      slowestShard(
+        ['a-test.ts', 'b-test.ts', 'c-test.ts'],
+        {
+          'a-test.ts': 0,
+          'b-test.ts': 0,
+          'c-test.ts': 0,
+        },
+        1,
+      ),
+      3,
+    );
   });
 });
