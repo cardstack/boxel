@@ -5689,6 +5689,76 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        // The delete counterpart of the test above. Removing `hassan` leaves
+        // `jade`'s link in place, now broken, so `jade` is not rewritten. Its
+        // card+json assembled `hassan` into `included` before the delete, so
+        // its validator must move, and neither a cached body nor a 304 may
+        // hand a client the deleted card.
+        test('a card that links a deleted card stops serving it under a new validator', async function (assert) {
+          let before = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(before.status, 200, `HTTP 200: ${before.text}`);
+          let etag = before.get('etag') ?? '';
+          assert.ok(etag, 'the first read carries an ETag');
+          assert.ok(
+            (before.body.included ?? []).some(
+              (resource: { id: string }) =>
+                resource.id === `${testRealmHref}hassan`,
+            ),
+            'the linked card is in included before the delete',
+          );
+          let primed = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            primed.get('x-boxel-card-cache'),
+            'hit',
+            'the linking card is cached before the delete',
+          );
+
+          let deleted = await request
+            .delete('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(deleted.status, 204, `HTTP 204: ${deleted.text}`);
+
+          let gone = await request
+            .get('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(gone.status, 404, 'the deleted card is gone');
+
+          let conditional = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', etag);
+          assert.strictEqual(
+            conditional.status,
+            200,
+            `the old validator no longer matches (x-boxel-card-cache: ${conditional.get(
+              'x-boxel-card-cache',
+            )}, etag before: ${etag}, etag after: ${conditional.get('etag')})`,
+          );
+
+          let plain = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(plain.status, 200, `HTTP 200: ${plain.text}`);
+          assert.notOk(
+            (plain.body.included ?? []).some(
+              (resource: { id: string }) =>
+                resource.id === `${testRealmHref}hassan`,
+            ),
+            `the deleted card is not in included (x-boxel-card-cache: ${plain.get(
+              'x-boxel-card-cache',
+            )}, etag: ${plain.get('etag')})`,
+          );
+          assert.strictEqual(
+            plain.body.data.relationships?.friend?.links?.self,
+            './hassan',
+            'the broken link itself is kept',
+          );
+        });
+
         // `hassan-tag` reads `hassan`'s name into a computed field, so patching
         // `hassan` re-indexes `hassan-tag` in the same pass. The realm computed
         // `hassan-tag`'s new state, so nobody holds it and every client wants

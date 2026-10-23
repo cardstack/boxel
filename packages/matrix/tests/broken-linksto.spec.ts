@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.ts';
 import {
   createRealm,
@@ -11,6 +12,44 @@ const serverIndexUrl = new URL(appURL).origin;
 
 function uniqueRealmName(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// Logs what the realm serves for the linking card and its deleted target, so
+// a failed cold visit shows whether the realm was still serving the deleted
+// card in the linking card's `included`, and whether that body came from the
+// realm's card document cache. Read outside the page so the response headers
+// the browser cannot see cross-origin are readable.
+async function logServedLinkState(
+  page: Page,
+  label: string,
+  {
+    realmURL,
+    linkingId,
+    deletedId,
+  }: { realmURL: string; linkingId: string; deletedId: string },
+) {
+  let token = await page.evaluate(
+    (realmURL) => JSON.parse(localStorage['boxel-session'] ?? '{}')[realmURL],
+    realmURL,
+  );
+  let headers = {
+    accept: 'application/vnd.card+json',
+    ...(token ? { authorization: token } : {}),
+  };
+  let linking = await page.request.get(linkingId, { headers });
+  let deleted = await page.request.get(deletedId, { headers });
+  let body = linking.ok() ? await linking.json() : undefined;
+  console.log(
+    `[broken-linksto] ${label}: ${JSON.stringify({
+      at: new Date().toISOString(),
+      linkingStatus: linking.status(),
+      linkingEtag: linking.headers()['etag'],
+      linkingCardCache: linking.headers()['x-boxel-card-cache'],
+      linkingGeneration: body?.data?.meta?.generation,
+      includedIds: (body?.included ?? []).map((r: { id: string }) => r.id),
+      deletedStatus: deleted.status(),
+    })}`,
+  );
 }
 
 test.describe('Broken linksTo tolerance', () => {
@@ -145,6 +184,11 @@ test.describe('Broken linksTo tolerance', () => {
     // The rest of PetPerson is unaffected — only the broken slot becomes
     // the placeholder.
     await expect(page.locator('[data-test-person-name]')).toHaveText('Hassan');
+    await logServedLinkState(page, 'before cold visit', {
+      realmURL,
+      linkingId: hassanId,
+      deletedId: ringoId,
+    });
 
     // Reload to drop all in-memory state, then verify the cold visit. The
     // realm-server must serve PetPerson as a normal 200 instance (broken
@@ -156,6 +200,11 @@ test.describe('Broken linksTo tolerance', () => {
       page.locator(`[data-test-stack-card="${hassanId}"]`),
     ).toHaveCount(1);
     await expect(page.locator('[data-test-person-name]')).toHaveText('Hassan');
+    await logServedLinkState(page, 'cold visit', {
+      realmURL,
+      linkingId: hassanId,
+      deletedId: ringoId,
+    });
     await expect(
       page.locator('[data-test-pet-slot] [data-test-broken-link-template]'),
     ).toHaveCount(1);
@@ -318,6 +367,11 @@ test.describe('Broken linksTo tolerance', () => {
       page.locator('[data-test-pets-slot] [data-test-pet-name]'),
     ).toHaveText('Mango');
     await expect(page.locator('[data-test-person-name]')).toHaveText('Hassan');
+    await logServedLinkState(page, 'before cold visit', {
+      realmURL,
+      linkingId: hassanId,
+      deletedId: ringoId,
+    });
 
     // Cold visit: reload and confirm the per-slot state survives. PetPerson
     // serves as a normal 200 instance and the per-element placeholder
@@ -327,6 +381,11 @@ test.describe('Broken linksTo tolerance', () => {
       page.locator(`[data-test-stack-card="${hassanId}"]`),
     ).toHaveCount(1);
     await expect(page.locator('[data-test-person-name]')).toHaveText('Hassan');
+    await logServedLinkState(page, 'cold visit', {
+      realmURL,
+      linkingId: hassanId,
+      deletedId: ringoId,
+    });
     await expect(
       page.locator('[data-test-pets-slot] [data-test-broken-link-template]'),
     ).toHaveCount(1);
