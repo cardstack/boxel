@@ -1435,10 +1435,12 @@ export default class RealmService extends Service {
   }
 
   // How a realm's token refresher waits for its next mint. Tests replace it to
-  // run refreshers against a virtual clock.
-  waitForTokenRefresh = async (ms: number): Promise<void> => {
+  // run refreshers against a virtual clock. A method rather than a field, since
+  // the resources restored from storage start refreshing while this service's
+  // fields are still being initialized.
+  async waitForTokenRefresh(ms: number): Promise<void> {
     await rawTimeout(ms);
-  };
+  }
 
   async publish(realmURL: string, publishedRealmURLs: string[]) {
     let resource = this.getOrCreateRealmResource(realmURL);
