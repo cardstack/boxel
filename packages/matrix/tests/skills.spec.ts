@@ -387,9 +387,25 @@ test.describe('Skills', () => {
       .locator('[data-test-field="codeRef"] input')
       .fill('@cardstack/boxel-host/commands/switch-submode/default');
     await page.waitForSelector('[data-test-last-saved]');
-    const cards = await page.locator('[data-test-card]').all();
-    const skillCard =
-      await cards[cards.length - 1].getAttribute('data-test-card');
+    // The new skill opens as stack item 1, above the workspace index. Take
+    // its id from that stack item: `[data-test-card]` also matches every
+    // card in the index's Library grid (the realm card among them), which
+    // render on their own schedule and sit before the skill in DOM order.
+    const skillCard = await page
+      .locator('[data-test-stack-card-index="1"]')
+      .getAttribute('data-test-stack-card');
+    const stackCardIds = await page
+      .locator('[data-test-stack-card]')
+      .evaluateAll((els) =>
+        els.map((el) => el.getAttribute('data-test-stack-card')),
+      );
+    console.log(
+      `[skills-overwrite] new skill card=${skillCard} stack=${JSON.stringify(stackCardIds)}`,
+    );
+    expect(
+      skillCard,
+      `stack item 1 should hold the new Skill card; stack: ${JSON.stringify(stackCardIds)}`,
+    ).toMatch(/\/Skill\/[^/]+$/);
 
     // close the Skill card
     await page.locator('[data-test-close-button]').click();
