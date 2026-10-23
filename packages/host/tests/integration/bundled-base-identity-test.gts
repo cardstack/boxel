@@ -14,7 +14,9 @@ import type * as CardAPIModule from '@cardstack/base/card-api';
 // declares a FieldDef, and `holder` holds it as a field. The holder names the
 // class by JS reference rather than by asking the loader for it, which is what
 // bundling leaves behind — the bundler resolves a bundled module's import
-// inside the chunk, so the loader is never asked for the declarer.
+// inside the chunk, so the loader is never asked for the declarer. Each class
+// is tagged with its identity where it is defined, as compiling the module
+// tags it, whether or not the loader is ever asked for the module.
 const DECLARER =
   'http://bundled-identity.test/declarer' as RealmResourceIdentifier;
 const HOLDER = 'http://bundled-identity.test/holder' as RealmResourceIdentifier;
@@ -38,14 +40,16 @@ function defineLinkedPair(api: typeof CardAPIModule) {
     @field target = linksTo(Target);
   }
 
+  tagTestModuleExports(declarer, { Target });
+  tagTestModuleExports(holder, { LinkHolder });
   let virtualNetwork = getService('network').virtualNetwork;
   virtualNetwork.shimAsyncModule({
     id: declarer,
-    resolve: async () => tagTestModuleExports(declarer, { Target }),
+    resolve: async () => ({ Target }),
   });
   virtualNetwork.shimAsyncModule({
     id: holder,
-    resolve: async () => tagTestModuleExports(holder, { LinkHolder }),
+    resolve: async () => ({ LinkHolder }),
   });
   return { Target, LinkHolder, declarer, holder };
 }
@@ -76,14 +80,16 @@ function defineBundledPair(api: typeof CardAPIModule) {
   // Each module exposes only what it declares, as a compiled module does. The
   // holder does not re-export `Detail`, so serving the holder says nothing
   // about where `Detail` comes from.
+  tagTestModuleExports(DECLARER, { Detail });
+  tagTestModuleExports(HOLDER, { Holder });
   let virtualNetwork = getService('network').virtualNetwork;
   virtualNetwork.shimAsyncModule({
     id: DECLARER,
-    resolve: async () => tagTestModuleExports(DECLARER, { Detail }),
+    resolve: async () => ({ Detail }),
   });
   virtualNetwork.shimAsyncModule({
     id: HOLDER,
-    resolve: async () => tagTestModuleExports(HOLDER, { Holder }),
+    resolve: async () => ({ Holder }),
   });
   return { Detail, Holder };
 }
@@ -106,12 +112,10 @@ module('Integration | bundled base identity', function (hooks) {
     );
   }
 
-  // The loader names the classes of every module it is asked for, and it is
-  // never asked for a module reachable only from inside another module's
-  // chunk. A class held as a field is named anyway, but not by the loader:
-  // resolving the field records where it is held, and that record is what
-  // names it.
-  test('a class only a bundled sibling names is identified through its holder', async function (assert) {
+  // A class's identity is compiled into it, so a class held as a field is
+  // named by the module that declares it even though the loader is never
+  // asked for that module.
+  test('a class only a bundled sibling names is identified by its declaring module', async function (assert) {
     let loader = getService('loader-service').loader;
     let { Detail, Holder } = defineBundledPair(await cardAPI());
 
@@ -122,30 +126,15 @@ module('Integration | bundled base identity', function (hooks) {
       { module: HOLDER, name: 'Holder' },
       'the module the loader was asked for names its own class',
     );
-    assert.strictEqual(
-      Loader.identify(Detail),
-      undefined,
-      'the module the loader was never asked for names nothing',
-    );
-    assert.strictEqual(
+    assert.deepEqual(
       identifyCard(Detail),
-      undefined,
-      'and until the field is resolved, nothing else names it either',
+      { module: DECLARER, name: 'Detail' },
+      'the field class is named by the module that declares it',
     );
-
     assert.strictEqual(
       getField(Holder, 'detail')!.card,
       Detail,
       'resolving the field reaches the same class',
-    );
-    assert.deepEqual(
-      identifyCard(Detail),
-      {
-        type: 'fieldOf',
-        field: 'detail',
-        card: { module: HOLDER, name: 'Holder' },
-      },
-      'which is what names it: the field of the holder it is declared on',
     );
   });
 
@@ -172,29 +161,19 @@ module('Integration | bundled base identity', function (hooks) {
     );
   });
 
-  // Why the attribution rule asks about links and not contained fields. A link
-  // carries its type as data — the chooser searches by it — so the two orders
-  // have to name the same module, and they do not: served, the ref names the
-  // module that declares the class; unserved, it names the field it is held as.
-  test('a link to such a class names the field rather than the module', async function (assert) {
+  // A link carries its type as data — the chooser searches by it — so the
+  // type has to be named the same way whichever modules were served: by the
+  // module that declares it.
+  test('a link to such a class names its declaring module whichever modules were served', async function (assert) {
     let loader = getService('loader-service').loader;
     let api = await cardAPI();
 
     let unserved = defineLinkedPair(api);
     await loader.import(unserved.holder);
-    assert.strictEqual(
-      Loader.identify(unserved.Target),
-      undefined,
-      'the module declaring the link target is never asked for',
-    );
     assert.deepEqual(
       identifyCard(getField(unserved.LinkHolder, 'target')!.card),
-      {
-        type: 'fieldOf',
-        field: 'target',
-        card: { module: unserved.holder, name: 'LinkHolder' },
-      },
-      'so the type a chooser would filter by names the field',
+      { module: unserved.declarer, name: 'Target' },
+      'the link target is named by its module though that module was never asked for',
     );
 
     let served = defineLinkedPair(api);
@@ -203,31 +182,30 @@ module('Integration | bundled base identity', function (hooks) {
     assert.deepEqual(
       identifyCard(getField(served.LinkHolder, 'target')!.card),
       { module: served.declarer, name: 'Target' },
-      'and names the declaring module once the loader is asked for it',
+      'and the same when the loader is asked for it',
     );
   });
 
   // The same shape in the module table rather than in a fixture: `DocxDef`
   // holds `OfficeMetadataField`, which `file-formats/metadata-fields` declares,
   // and both are bundled. This is the case the table's file-format family
-  // rests on.
-  //
-  // What the loader knows of the field class is deliberately not asserted here.
-  // `Loader.loaders` is static and binds a class to the first loader that
-  // serves a module exposing it, for the life of the class — so whether this
-  // one is named depends on what ran before, across the whole suite. The
-  // shimmed pair above is where that is pinned, on classes made for the test.
-  // What holds either way is that the field carries an identity and the value
-  // deserializes, which is what the module table depends on.
+  // rests on. The field class is named by the module that declares it, though
+  // the loader is never asked for that module: the identity is compiled into
+  // the class.
   test('a bundled def holding a bundled field class deserializes it', async function (assert) {
     let loader = getService('loader-service').loader;
     let api = await cardAPI();
     let { DocxDef } = await loader.import<any>('@cardstack/base/docx-file-def');
     let officeField = getField(DocxDef, 'officeMetadata');
 
-    assert.ok(
+    assert.deepEqual(
       identifyCard(officeField!.card),
-      'the field class is named, by its module or by the field holding it',
+      {
+        module:
+          '@cardstack/base/file-formats/metadata-fields' as RealmResourceIdentifier,
+        name: 'OfficeMetadataField',
+      },
+      'the field class is named by the module that declares it',
     );
 
     let resource = {
@@ -256,7 +234,7 @@ module('Integration | bundled base identity', function (hooks) {
     assert.strictEqual(
       file.officeMetadata.title,
       'A doc',
-      'the field whose class the loader never named still deserializes',
+      'the field still deserializes',
     );
     assert.strictEqual(file.officeMetadata.pageCount, 3);
   });
