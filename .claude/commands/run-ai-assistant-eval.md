@@ -11,6 +11,8 @@ optional, token is a comma-separated list of models as the picker names them
 
 Every model run spends real money and takes minutes. Run each model once per
 session. Never rerun a model whose result you have not read, and never loop.
+A plan that repeats runs, as the `skill-change-eval` skill's does, runs each
+repeat as its own session once the previous one is judged.
 
 ## 1. Ask what to run
 
