@@ -122,6 +122,7 @@ module(basename(import.meta.filename), function () {
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: (url) =>
           url === 'http://x.test/a/' ? realmA : undefined,
+        listMountedRealms: () => [],
       });
 
       listener.handleNotification('http://x.test/a/:cards/foo.gts');
@@ -136,6 +137,34 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("handleReconnect clears every mounted realm's cached files and realm info", function (assert) {
+      const cleared: string[] = [];
+      const realms = ['http://x.test/a/', 'http://x.test/b/'].map((url) =>
+        makeFakeRealm(url, {
+          onClearAll: () => cleared.push(`files ${url}`),
+          onInvalidateInfo: () => cleared.push(`info ${url}`),
+        }),
+      );
+      const listener = new RealmFileChangesListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        lookupMountedRealm: () => undefined,
+        listMountedRealms: () => realms,
+      });
+
+      listener.handleReconnect();
+
+      assert.deepEqual(
+        cleared,
+        [
+          'files http://x.test/a/',
+          'info http://x.test/a/',
+          'files http://x.test/b/',
+          'info http://x.test/b/',
+        ],
+        'each mounted realm is cleared as a wildcard notification clears it',
+      );
+    });
+
     test("handleNotification drops the realm's memoized info when realm.json changes, and only then", function (assert) {
       let infoInvalidations: string[] = [];
       let current = '';
@@ -146,6 +175,7 @@ module(basename(import.meta.filename), function () {
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: (url) =>
           url === 'http://x.test/a/' ? realmA : undefined,
+        listMountedRealms: () => [],
       });
 
       for (let path of [
@@ -181,6 +211,7 @@ module(basename(import.meta.filename), function () {
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: (url) =>
           url === 'http://x.test/a/' ? realmA : undefined,
+        listMountedRealms: () => [],
       });
 
       listener.handleNotification('http://x.test/a/:cards/foo.gts');
@@ -203,6 +234,7 @@ module(basename(import.meta.filename), function () {
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: (url) =>
           url === 'http://x.test/a/' ? realmA : undefined,
+        listMountedRealms: () => [],
       });
 
       listener.handleNotification('http://x.test/a/:*');
@@ -229,6 +261,7 @@ module(basename(import.meta.filename), function () {
       const listener = new RealmFileChangesListener({
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: () => undefined,
+        listMountedRealms: () => [],
       });
 
       listener.handleNotification('http://x.test/unmounted/:file.gts');
@@ -246,6 +279,7 @@ module(basename(import.meta.filename), function () {
         lookupMountedRealm: () => {
           throw new Error('should not be called for malformed payloads');
         },
+        listMountedRealms: () => [],
       });
 
       // Must not throw. Behavior: warn and return.
@@ -259,6 +293,7 @@ module(basename(import.meta.filename), function () {
         lookupMountedRealm: () => {
           throw new Error('should not be called for empty payloads');
         },
+        listMountedRealms: () => [],
       });
 
       listener.handleNotification(undefined);
@@ -285,6 +320,7 @@ module(basename(import.meta.filename), function () {
       const listener = new RealmFileChangesListener({
         dbAdapter,
         lookupMountedRealm: (url) => (url === realmUrl ? realmA : undefined),
+        listMountedRealms: () => [],
       });
       await listener.start();
       try {
@@ -317,6 +353,7 @@ module(basename(import.meta.filename), function () {
       const listener = new RealmFileChangesListener({
         dbAdapter,
         lookupMountedRealm: (url) => (url === realmUrl ? realmA : undefined),
+        listMountedRealms: () => [],
       });
       await listener.start();
       try {
@@ -346,6 +383,7 @@ module(basename(import.meta.filename), function () {
       const listener = new RealmFileChangesListener({
         dbAdapter,
         lookupMountedRealm: (url) => (url === realmUrl ? realmA : undefined),
+        listMountedRealms: () => [],
       });
       await listener.start();
       try {
@@ -377,6 +415,7 @@ module(basename(import.meta.filename), function () {
           lookups.push(url);
           return undefined;
         },
+        listMountedRealms: () => [],
       });
       await listener.start();
       try {

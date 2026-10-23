@@ -37,9 +37,8 @@ export interface RealmFileChangesListenerDeps {
   dbAdapter: PgAdapter;
   lookupMountedRealm: (url: string) => Realm | undefined;
   // Every realm mounted here, for catching up after the notification
-  // connection reconnects (see `#handleReconnect`). Without it there is
-  // nothing to catch up.
-  listMountedRealms?: () => readonly Realm[];
+  // connection reconnects (see `#handleReconnect`).
+  listMountedRealms: () => readonly Realm[];
 }
 
 export class RealmFileChangesListener {
@@ -111,15 +110,22 @@ export class RealmFileChangesListener {
   // peer created or deleted during the gap can be hidden, and only until the
   // kernel's attribute cache expires (see DirectoryViewRefresher).
   #handleReconnect(): void {
-    for (const realm of this.#deps.listMountedRealms?.() ?? []) {
-      try {
-        realm.clearLocalSourceCaches();
-        realm.invalidateCachedRealmInfo();
-      } catch (err: unknown) {
-        log.warn(
-          `clearing caches after reconnect failed for ${realm.url}: ${String(err)}`,
-        );
-      }
+    for (const realm of this.#deps.listMountedRealms()) {
+      this.#clearAllCachedFiles(realm);
+    }
+  }
+
+  // What a wildcard notification does, and the reconnect catch-up with it:
+  // drop every cached path of the realm, and its cached realm info, since
+  // `realm.json` may be among the paths.
+  #clearAllCachedFiles(realm: Realm): void {
+    try {
+      realm.clearLocalSourceCaches();
+      realm.invalidateCachedRealmInfo();
+    } catch (err: unknown) {
+      log.warn(
+        `clearLocalSourceCaches failed for ${realm.url}: ${String(err)}`,
+      );
     }
   }
 
@@ -137,30 +143,30 @@ export class RealmFileChangesListener {
       // Not mounted on this instance — nothing to invalidate.
       return;
     }
-    const isWildcard = parsed.path === REALM_FILE_CHANGES_WILDCARD;
+    if (parsed.path === REALM_FILE_CHANGES_WILDCARD) {
+      this.#clearAllCachedFiles(realm);
+      return;
+    }
     try {
-      if (isWildcard) {
-        realm.clearLocalSourceCaches();
-      } else {
-        realm.invalidateCache(parsed.path);
-        // Fire-and-forget: the NOTIFY handler stays synchronous, and a failed
-        // directory listing only means the kernel cache expires on its own.
-        realm.refreshDirectoryView(parsed.path).catch((err: unknown) => {
-          log.warn(
-            `refreshDirectoryView failed for ${parsed.url} ${parsed.path}: ${String(err)}`,
-          );
-        });
-      }
+      realm.invalidateCache(parsed.path);
+      // Fire-and-forget: the NOTIFY handler stays synchronous, and a failed
+      // directory listing only means the kernel cache expires on its own.
+      realm.refreshDirectoryView(parsed.path).catch((err: unknown) => {
+        log.warn(
+          `refreshDirectoryView failed for ${parsed.url} ${parsed.path}: ${String(err)}`,
+        );
+      });
       // The realm reads its info, its settings and its policy pointer from
       // `realm.json` on disk, and memoizes the parse. A peer's write to the
       // file has to drop that here too, or this process keeps answering the
       // old values until the file's index pass lands.
-      if (isWildcard || parsed.path === 'realm.json') {
+      if (parsed.path === 'realm.json') {
         realm.invalidateCachedRealmInfo();
       }
     } catch (err: unknown) {
-      const op = isWildcard ? 'clearLocalSourceCaches' : 'invalidateCache';
-      log.warn(`${op} failed for ${parsed.url} ${parsed.path}: ${String(err)}`);
+      log.warn(
+        `invalidateCache failed for ${parsed.url} ${parsed.path}: ${String(err)}`,
+      );
     }
   }
 }

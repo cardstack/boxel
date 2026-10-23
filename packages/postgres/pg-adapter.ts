@@ -224,6 +224,16 @@ export interface SubscribeOptions {
 const NOTIFICATION_RECONNECT_INITIAL_DELAY_MS = 250;
 const NOTIFICATION_RECONNECT_MAX_DELAY_MS = 30_000;
 
+// A connection can also die without a word: a failover or a network drop that
+// sends no reset leaves the socket open on this side, and an idle LISTEN
+// connection sends nothing that would find out. TCP keepalive notices in the
+// end, but with operating-system defaults that takes minutes, so the shared
+// client is also asked a trivial query on an interval, and a query that gets
+// no answer within the timeout counts as a lost connection.
+const NOTIFICATION_KEEPALIVE_INITIAL_DELAY_MS = 10_000;
+const NOTIFICATION_HEARTBEAT_INTERVAL_MS = 30_000;
+const NOTIFICATION_HEARTBEAT_TIMEOUT_MS = 10_000;
+
 // `pg` reports a connection dying as an `error` event, and an `error` event
 // with no listener is an uncaught exception — so every connection whose
 // lifecycle this module owns carries one, whether it lives for a query or for
@@ -275,6 +285,12 @@ export class PgAdapter implements DBAdapter {
   #notificationClient?: Client;
   #notificationClientStarting?: Promise<Client>;
   #notificationReconnecting?: Promise<void>;
+  // When the shared client was lost, while it is being reopened. The open that
+  // succeeds clears it and calls each subscriber's `onReconnect`.
+  #notificationsLostAt?: number;
+  #reconnectWait?: { timer: ReturnType<typeof setTimeout>; done: () => void };
+  #notificationHeartbeat?: ReturnType<typeof setInterval>;
+  #notificationHeartbeatInFlight = false;
   #channels = new Map<string, ChannelState>();
   // In-process coalescer for the per-user cost-barrier. Multiple concurrent
   // same-user callers in this process chain on the same in-memory promise so
@@ -370,6 +386,14 @@ export class PgAdapter implements DBAdapter {
   async close() {
     log.debug(`closing ${this.url}`);
     this.#isClosed = true;
+    if (this.#notificationHeartbeat) {
+      clearInterval(this.#notificationHeartbeat);
+      this.#notificationHeartbeat = undefined;
+    }
+    // A reconnect waiting out its backoff stops now, rather than at its next
+    // check, so it cannot outlive close().
+    this.#reconnectWait?.done();
+    await this.#notificationReconnecting;
     await this.started;
     // Resolve any in-flight notification-client startup so we can end the
     // resulting Client. Without this await, a close() that races a first
@@ -502,7 +526,11 @@ export class PgAdapter implements DBAdapter {
       return this.#notificationClientStarting;
     }
     this.#notificationClientStarting = (async () => {
-      const client = new Client(this.config);
+      const client = new Client({
+        ...this.config,
+        keepAlive: true,
+        keepAliveInitialDelayMillis: NOTIFICATION_KEEPALIVE_INITIAL_DELAY_MS,
+      });
       client.on('notification', (n) => {
         log.debug(`heard pg notification for channel %s`, n.channel);
         const state = this.#channels.get(n.channel);
@@ -531,10 +559,15 @@ export class PgAdapter implements DBAdapter {
           throw new Error('PgAdapter is closed');
         }
         // After a reconnect, every channel that still has subscribers was
-        // listened on by the client that died. A first connect has none yet:
-        // subscribe() adds its channel after this returns.
-        for (const channel of this.#channels.keys()) {
-          await client.query(`LISTEN ${safeName(channel)}`);
+        // listened on by the client that died: listen on all of them in one
+        // round trip, since notifications sent until then are lost. A first
+        // connect has none yet: subscribe() adds its channel after this
+        // returns.
+        const channels = [...this.#channels.keys()];
+        if (channels.length > 0) {
+          await client.query(
+            channels.map((channel) => `LISTEN ${safeName(channel)}`).join('; '),
+          );
         }
       } catch (err: unknown) {
         // Not the current client yet, so ending it here does not count as
@@ -543,6 +576,17 @@ export class PgAdapter implements DBAdapter {
         throw err;
       }
       this.#notificationClient = client;
+      this.#startNotificationHeartbeat();
+      // Whichever call opens the client after a loss, the reconnect loop or a
+      // subscribe() during its backoff, catches the subscribers up at once.
+      if (this.#notificationsLostAt !== undefined) {
+        const lostForMs = Date.now() - this.#notificationsLostAt;
+        this.#notificationsLostAt = undefined;
+        log.info(
+          `shared notification client reconnected after ${lostForMs}ms; listening on ${this.#channels.size} channel(s)`,
+        );
+        this.#callOnReconnect();
+      }
       return client;
     })();
     try {
@@ -571,8 +615,18 @@ export class PgAdapter implements DBAdapter {
     if (this.#isClosed) {
       return;
     }
+    const reason = err ? `error: ${String(err)}` : 'connection ended';
+    if (this.#channels.size === 0) {
+      // Nobody is listening, so there is nothing to keep open or catch up:
+      // the next subscribe() opens a new client.
+      log.warn(
+        `shared notification client ${reason}; no channel has subscribers, so it is opened again on the next subscribe`,
+      );
+      return;
+    }
+    this.#notificationsLostAt ??= Date.now();
     log.error(
-      `shared notification client ${err ? `error: ${String(err)}` : 'connection ended'}; reconnecting and listening again on ${this.#channels.size} channel(s)`,
+      `shared notification client ${reason}; reconnecting and listening again on ${this.#channels.size} channel(s)`,
     );
     void this.#reconnectNotificationClient();
   }
@@ -582,14 +636,20 @@ export class PgAdapter implements DBAdapter {
       return this.#notificationReconnecting;
     }
     this.#notificationReconnecting = (async () => {
-      let lostAt = Date.now();
       let delay = NOTIFICATION_RECONNECT_INITIAL_DELAY_MS;
       for (let attempt = 1; ; attempt++) {
-        if (this.#isClosed) {
+        // A subscribe() may have opened the client during the backoff, and
+        // the last subscriber may have left: either way the loop is done.
+        if (this.#isClosed || this.#notificationClient) {
+          return;
+        }
+        if (this.#channels.size === 0) {
+          this.#notificationsLostAt = undefined;
           return;
         }
         try {
           await this.#ensureNotificationClient();
+          return;
         } catch (err: unknown) {
           if (this.#isClosed) {
             return;
@@ -597,23 +657,77 @@ export class PgAdapter implements DBAdapter {
           log.error(
             `shared notification client reconnect attempt ${attempt} failed: ${String(err)}; retrying in ${delay}ms`,
           );
-          await new Promise((resolve) => {
-            let timer = setTimeout(resolve, delay);
-            timer.unref?.();
-          });
+          await this.#waitBeforeReconnecting(delay);
           delay = Math.min(delay * 2, NOTIFICATION_RECONNECT_MAX_DELAY_MS);
-          continue;
         }
-        log.info(
-          `shared notification client reconnected after ${attempt} attempt(s) in ${Date.now() - lostAt}ms; listening on ${this.#channels.size} channel(s)`,
-        );
-        this.#callOnReconnect();
-        return;
       }
     })().finally(() => {
       this.#notificationReconnecting = undefined;
     });
     return this.#notificationReconnecting;
+  }
+
+  // Resolves after `ms`, or at once when close() cancels it.
+  #waitBeforeReconnecting(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        if (this.#reconnectWait?.done === done) {
+          this.#reconnectWait = undefined;
+        }
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      (timer as { unref?: () => void }).unref?.();
+      this.#reconnectWait = { timer, done };
+    });
+  }
+
+  #startNotificationHeartbeat(): void {
+    if (this.#notificationHeartbeat || this.#isClosed) {
+      return;
+    }
+    this.#notificationHeartbeat = setInterval(
+      () => void this.#checkNotificationClient(),
+      NOTIFICATION_HEARTBEAT_INTERVAL_MS,
+    );
+    (this.#notificationHeartbeat as { unref?: () => void }).unref?.();
+  }
+
+  // Asks the shared client a trivial query. One that fails, or gets no answer
+  // within the timeout, means the connection is gone even if its socket has
+  // not said so.
+  async #checkNotificationClient(): Promise<void> {
+    const client = this.#notificationClient;
+    if (!client || this.#notificationHeartbeatInFlight) {
+      return;
+    }
+    this.#notificationHeartbeatInFlight = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        client.query('SELECT 1'),
+        new Promise((_resolve, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `no answer to a heartbeat within ${NOTIFICATION_HEARTBEAT_TIMEOUT_MS}ms`,
+                ),
+              ),
+            NOTIFICATION_HEARTBEAT_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } catch (err: unknown) {
+      this.#onNotificationClientLost(
+        client,
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    } finally {
+      clearTimeout(timer);
+      this.#notificationHeartbeatInFlight = false;
+    }
   }
 
   #callOnReconnect(): void {
@@ -703,7 +817,20 @@ export class PgAdapter implements DBAdapter {
     fn: () => Promise<void>,
     opts: SubscribeOptions = {},
   ) {
-    let subscription = await this.subscribe(channel, handler, opts);
+    // A closed adapter has nothing to listen on: return rather than reject, so
+    // a work loop that starts during shutdown ends quietly.
+    if (this.#isClosed) {
+      return;
+    }
+    let subscription: NotificationSubscription;
+    try {
+      subscription = await this.subscribe(channel, handler, opts);
+    } catch (err: unknown) {
+      if (this.#isClosed) {
+        return;
+      }
+      throw err;
+    }
     try {
       await fn();
     } finally {

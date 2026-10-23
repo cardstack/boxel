@@ -103,10 +103,9 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
           this.#dispatch(notification.payload);
         },
         // A populate that finished while the connection was down notified no
-        // one, so its waiters would sit out their full timeout. Wake them
-        // all: each re-reads the cache and waits again if its row is not
-        // there yet.
-        { onReconnect: () => this.#wakeAllWaiters() },
+        // one, so its waiters would sit out their full timeout. See
+        // #wakeWaitersWithNoWinner for which of them are woken.
+        { onReconnect: () => void this.#wakeWaitersWithNoWinner() },
       );
     })();
     try {
@@ -260,6 +259,53 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
   // Exposed for tests.
   handleNotification(payload: string | undefined): void {
     this.#dispatch(payload);
+  }
+
+  // Exposed for tests; invoked internally after the notification connection
+  // reconnects.
+  async handleReconnect(): Promise<void> {
+    await this.#wakeWaitersWithNoWinner();
+  }
+
+  // After a reconnect, wake only the waiters whose winner no longer holds its
+  // advisory lock: that winner finished (and its notification was lost) or
+  // died, so the waiter's re-read either finds the row or does the work
+  // itself. A winner still holding the lock is still working and notifies on
+  // the reconnected connection. Waking its waiters early would cost them: a
+  // definition lookup spends one of its few iterations, and a module
+  // transpile, which does not wait again, starts a duplicate of the
+  // winner's work.
+  //
+  // A bigint advisory lock appears in pg_locks as its high 32 bits in
+  // `classid` and its low 32 bits in `objid`, with `objsubid` 1.
+  async #wakeWaitersWithNoWinner(): Promise<void> {
+    const keys = [...this.#waiters.keys()];
+    if (keys.length === 0) {
+      return;
+    }
+    let held: Set<string>;
+    try {
+      const rows = await this.#deps.dbAdapter.execute(
+        `SELECT ((classid::bigint << 32) | objid::bigint)::text AS key
+           FROM pg_locks
+          WHERE locktype = 'advisory'
+            AND objsubid = 1
+            AND granted
+            AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+      );
+      held = new Set(rows.map((row) => String(row.key)));
+    } catch (err: unknown) {
+      // The waiters keep their timeout, as they would without a reconnect.
+      log.warn(
+        `could not read advisory locks after reconnect; waiters keep their timeout: ${String(err)}`,
+      );
+      return;
+    }
+    for (const key of keys) {
+      if (!held.has(key)) {
+        this.#dispatch(key);
+      }
+    }
   }
 
   #dispatch(payload: string | undefined): void {

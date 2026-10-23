@@ -39,9 +39,8 @@ export interface RealmIndexUpdatedListenerDeps {
   dbAdapter: PgAdapter;
   lookupMountedRealm: (url: string) => Realm | undefined;
   // Every realm mounted here, for catching up after the notification
-  // connection reconnects (see `#handleReconnect`). Without it there is
-  // nothing to catch up.
-  listMountedRealms?: () => readonly Realm[];
+  // connection reconnects (see `#handleReconnect`).
+  listMountedRealms: () => readonly Realm[];
 }
 
 export class RealmIndexUpdatedListener {
@@ -106,7 +105,7 @@ export class RealmIndexUpdatedListener {
   // own notification would have. A compiled policy that reads from a realm
   // not mounted here revalidates on its own within its staleness bound.
   #handleReconnect(): void {
-    for (const realm of this.#deps.listMountedRealms?.() ?? []) {
+    for (const realm of this.#deps.listMountedRealms()) {
       try {
         realm.clearRealmIndexCaches();
       } catch (err: unknown) {
