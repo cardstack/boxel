@@ -556,7 +556,10 @@ import {
 import { resolveFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
-import { MatrixBackendAuthentication } from './matrix-backend-authentication.ts';
+import {
+  MatrixBackendAuthentication,
+  SessionUserNotFoundError,
+} from './matrix-backend-authentication.ts';
 
 import type {
   CoalescedIndexWrite,
@@ -2178,7 +2181,9 @@ async function computeContentHashFromRef(
 export interface TokenClaims {
   user: string;
   realm: string;
-  sessionRoom: string | undefined; // TODO: remove when we create users on demand in ensureSessionRoom
+  // Absent for the realm's own Matrix account, which has no session room, and
+  // on delegated tokens (see `delegated` below).
+  sessionRoom: string | undefined;
   permissions: RealmPermissions['user'];
   realmServerURL: string;
   // Set on tokens minted by the realm-server's /_delegate-session endpoint
@@ -3522,16 +3527,21 @@ export class Realm {
     await this.#matrixClient.login();
   }
 
-  async ensureSessionRoom(matrixUserId: string): Promise<string | undefined> {
+  // The room this realm messages `matrixUserId` in. Every caller here has a
+  // Boxel account: the realm's own Matrix account, which the realm server's
+  // workers and realm-to-realm reads sign in as, never asks for a room. A
+  // caller with no account is refused with `SessionUserNotFoundError`; the
+  // account and its room are made when a person signs in to Boxel, through the
+  // realm server's own session.
+  async ensureSessionRoom(matrixUserId: string): Promise<string> {
     let sessionRoom = await fetchSessionRoom(this.#dbAdapter, matrixUserId);
 
     if (!sessionRoom) {
-      await this.#matrixClient.login();
       let userExistsInDB = await userExists(this.#dbAdapter, matrixUserId);
       if (!userExistsInDB) {
-        // TODO: should we create it if it doesn't exist?
-        return undefined;
+        throw new SessionUserNotFoundError(matrixUserId);
       }
+      await this.#matrixClient.login();
       sessionRoom = await this.#matrixClient.createDM(matrixUserId);
       await upsertSessionRoom(this.#dbAdapter, matrixUserId, sessionRoom);
     }

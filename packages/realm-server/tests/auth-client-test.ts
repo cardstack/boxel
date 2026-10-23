@@ -177,8 +177,8 @@ module(basename(import.meta.filename), function () {
 
       await assert.rejects(
         client.getJWT(),
-        /expected 'Authorization' header/,
-        'missing Authorization header indicates verification failure',
+        /_session for http:\/\/testrealm\.com\/ failed with 401: .*invalid token/,
+        'the failure carries the status and the realm’s reason',
       );
     });
   });

@@ -1059,6 +1059,7 @@ export default class MatrixService extends Service {
       deviceId,
     });
 
+    this.realm.dropSessionsNotFor(userId);
     this.realmServer.setClient(this.client);
     this.saveAuth(auth);
   }

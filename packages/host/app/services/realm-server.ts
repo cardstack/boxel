@@ -196,10 +196,19 @@ export default class RealmServerService
     return Boolean(this.client);
   }
 
+  // The stored session is the browser's, not the account's: one minted for a
+  // different Matrix user than `client` is discarded, so the next login mints
+  // a session for this user instead of acting as the previous one.
   setClient(client: ExtendedClient) {
     this.client = client;
-    this.token =
-      window.localStorage.getItem(sessionLocalStorageKey) ?? undefined;
+    let stored =
+      window.localStorage.getItem(sessionLocalStorageKey) || undefined;
+    let storedUser = stored ? realmClaimsFromRawToken(stored)?.user : undefined;
+    let userId = client.getUserId();
+    if (stored && userId && storedUser !== userId) {
+      stored = undefined;
+    }
+    this.token = stored;
   }
 
   async createStripeSession(email: string) {
@@ -1914,7 +1923,9 @@ function isTokenExpired(rawToken: string): boolean {
   return !Number.isFinite(exp) || (exp as number) * 1000 <= Date.now();
 }
 
-function realmClaimsFromRawToken(rawToken: string): JWTPayload | undefined {
+export function realmClaimsFromRawToken(
+  rawToken: string,
+): JWTPayload | undefined {
   try {
     let [_header, payload] = rawToken.split('.');
     return JSON.parse(atob(payload)) as JWTPayload;
