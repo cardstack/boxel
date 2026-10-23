@@ -37,8 +37,11 @@ const AuthFormField: TemplateOnlyComponent<Signature> = <template>
     .auth-form-field :deep(.validation-icon-container) {
       display: none;
     }
+    .auth-form-field :deep(.boxel-input.has-validation-icon) {
+      padding-inline-end: var(--boxel-input-padding-inline-end, 0);
+    }
     .auth-form-field :deep(.error-message) {
-      margin-left: 0;
+      margin-inline-start: 0;
       font: 500 var(--boxel-font-xs);
     }
   </style>

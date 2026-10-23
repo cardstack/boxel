@@ -464,26 +464,45 @@ module('Integration | Store', function (hooks) {
       'dropping a prefix reference clears the resolved URL reference count',
     );
 
-    let saveFinished = new Deferred<void>();
+    // A running save holds a reference to its card until it lands, so the
+    // counts are read while the save is in flight and again once it settles.
+    let countsDuringSave: { url: number; prefix: number } | undefined;
     this.onSave((url) => {
       if (url.href === `${testRealmURL}Person/hassan`) {
-        assert.strictEqual(url.href, `${testRealmURL}Person/hassan`);
-        assert.strictEqual(
-          storeService.getReferenceCount(`${testRealmURL}Person/hassan`),
-          0,
-          'save() does not create a separate resolved-url reference count',
-        );
-        assert.strictEqual(
-          storeService.getReferenceCount('@test-prefix/Person/hassan'),
-          0,
-          'save() does not create a separate prefix reference count',
-        );
-        saveFinished.fulfill();
+        countsDuringSave = {
+          url: storeService.getReferenceCount(`${testRealmURL}Person/hassan`),
+          prefix: storeService.getReferenceCount('@test-prefix/Person/hassan'),
+        };
       }
     });
 
     storeService.save('@test-prefix/Person/hassan');
-    await saveFinished;
+    // The save's test waiters span it from the call until its hold is
+    // released.
+    await settled();
+
+    let saveError = storeService.getSaveState(
+      (byPrefix as CardDef)[localId],
+    )?.lastSaveError;
+    assert.strictEqual(
+      saveError,
+      undefined,
+      `save() persists the card${
+        saveError
+          ? `: ${saveError instanceof Error ? saveError.message : JSON.stringify(saveError)}`
+          : ''
+      }`,
+    );
+    assert.deepEqual(
+      countsDuringSave,
+      { url: 1, prefix: 1 },
+      'save() holds exactly one reference while it runs, read the same through the prefix id and the resolved URL',
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount('@test-prefix/Person/hassan'),
+      0,
+      'save() releases its hold once it lands',
+    );
 
     storeService.addReference('@test-prefix/Person/boris');
     await storeService.flush();

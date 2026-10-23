@@ -50,6 +50,10 @@ export default class BoxelInput extends Component<Signature> {
     return this.args.state && this.args.state !== 'none';
   }
 
+  private get hasValidationIcon() {
+    return Boolean(this.validationIcon);
+  }
+
   private get isInvalid() {
     return this.args.state === 'invalid';
   }
@@ -89,6 +93,7 @@ export default class BoxelInput extends Component<Signature> {
         class={{cn
           'boxel-input'
           has-validation=this.hasValidation
+          has-validation-icon=this.hasValidationIcon
           invalid=this.isInvalid
         }}
         id={{this.id}}
@@ -161,7 +166,9 @@ export default class BoxelInput extends Component<Signature> {
             --boxel-input-height,
             var(--boxel-form-control-height)
           );
-          padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+          padding-block: var(--boxel-sp-xs);
+          padding-inline: var(--boxel-sp-sm)
+            var(--boxel-input-padding-inline-end, 0);
           background-color: var(--background, var(--boxel-light));
           color: var(--foreground, var(--boxel-dark));
           border: 1px solid
@@ -172,6 +179,11 @@ export default class BoxelInput extends Component<Signature> {
           transition:
             var(--boxel-transition-properties),
             outline-color var(--boxel-transition);
+        }
+
+        /* keep text out from under the validation icon */
+        .boxel-input.has-validation-icon {
+          padding-inline-end: var(--_icon-full-length);
         }
 
         .boxel-input:focus-visible {
@@ -214,7 +226,7 @@ export default class BoxelInput extends Component<Signature> {
           grid-area: error;
 
           margin-top: var(--boxel-sp-3xs);
-          margin-left: calc(var(--boxel-sp-sm) + 1px);
+          margin-inline-start: calc(var(--boxel-sp-sm) + 1px);
           color: var(--destructive-ink);
           font-size: var(--boxel-font-size-sm);
           font-weight: 500;

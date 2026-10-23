@@ -277,6 +277,8 @@ interface AwaitingEmailSignature {
     resending?: boolean;
     onResend: (event: Event) => void;
   };
+  // A notice under the heading, such as how long the CLI waits.
+  Blocks: { default: [] };
 }
 
 // Waiting for the user to follow the link in the validation email.
@@ -289,6 +291,7 @@ export const AwaitingEmail: TemplateOnlyComponent<AwaitingEmailSignature> =
       data-test-secure-title
       data-test-email-validation
     >Please check your email to complete registration</span>
+    {{yield}}
     <ul class='email-validation-instruction'>
       <li>Leave this window open while we verify your email</li>
       <li>This screen will update once your email is verified</li>

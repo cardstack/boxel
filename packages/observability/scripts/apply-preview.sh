@@ -3,7 +3,8 @@
 #
 # Wraps render-preview.sh (changed-dashboard filtering + UID rewriting) and
 # `grafanactl resources push`. Used by the observability-preview.yml workflow
-# on PR open/synchronize/reopen.
+# on PR open/synchronize/reopen, once per environment (see
+# ci-apply-preview.sh).
 #
 # Usage:
 #   ./scripts/apply-preview.sh --pr <n> --base-ref <ref> [--env staging|local|production]
@@ -58,6 +59,11 @@ done
 [[ -n "$base_ref" ]] || usage_error "--base-ref <ref> is required"
 
 cd "$(dirname "$0")/.."
+
+# Previews authenticate as the scoped `observability-preview` account, never
+# the Admin one the canonical apply uses. See cardstack/infra,
+# configs/grafana/base/main.tf.
+export GRAFANA_TOKEN_SSM_PATH="${GRAFANA_TOKEN_SSM_PATH:-/${env_name}/grafana/preview_grafanactl_token}"
 
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"

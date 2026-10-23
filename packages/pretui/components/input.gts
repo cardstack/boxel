@@ -32,10 +32,10 @@ export interface InputSignature {
   Element: HTMLInputElement;
 }
 
-// Retrofit ON boxel-ui (standing reuse directive): BoxelInput carries the
-// machinery — validation-state plumbing, aria-invalid/aria-errormessage/
-// aria-describedby wiring, error + helper message rows, optional indicator —
-// while the wrapper div re-dresses it through the semantic-token + --boxel-*
+// Input wraps boxel-ui's BoxelInput, which carries the machinery —
+// validation-state plumbing, aria-invalid/aria-errormessage/aria-describedby
+// wiring, error + helper message rows, optional indicator — while the
+// wrapper div re-dresses it through the semantic-token + --boxel-*
 // custom-property channel (same pattern as EmailInput/PhoneInput; no CSS
 // reaches into boxel-ui markup). The inline style beats the two spots the
 // channel cannot reach — the UA font on native controls and element-local
@@ -48,16 +48,10 @@ export interface InputSignature {
 // line-height; the inline constant can. Borders, padding-block and
 // --boxel-form-control-line-height-sm add up to
 // --boxel-form-control-height-sm (1.75rem); the line-height token assumes
-// this padding-block, so change them together. BoxelInput pads only the physical left, so the
-// inline style sets Select's inset on both inline sides, which also holds
-// in right-to-left text. A search input keeps BoxelInput's start padding,
-// which clears its icon. A color input keeps BoxelInput's `padding: 0`, or
-// its swatch shrinks inside the fixed box.
+// this padding-block, so change them together. A color input keeps
+// BoxelInput's `padding: 0`, or its swatch shrinks inside the fixed box.
 const INPUT_FONT = htmlSafe(
-  'font: inherit; letter-spacing: inherit; line-height: var(--boxel-form-control-line-height-sm); padding-block: 0.25rem; padding-inline: calc(0.625rem - 1px);',
-);
-const SEARCH_INPUT_FONT = htmlSafe(
-  'font: inherit; letter-spacing: inherit; line-height: var(--boxel-form-control-line-height-sm); padding-block: 0.25rem; padding-inline-end: calc(0.625rem - 1px);',
+  'font: inherit; letter-spacing: inherit; line-height: var(--boxel-form-control-line-height-sm); padding-block: 0.25rem;',
 );
 const COLOR_INPUT_FONT = htmlSafe('font: inherit; letter-spacing: inherit;');
 
@@ -85,14 +79,7 @@ export class Input extends Component<InputSignature> {
     return this.invalid ? 'invalid' : 'none';
   }
   get inputStyle() {
-    switch (this.args.type) {
-      case 'color':
-        return COLOR_INPUT_FONT;
-      case 'search':
-        return SEARCH_INPUT_FONT;
-      default:
-        return INPUT_FONT;
-    }
+    return this.args.type === 'color' ? COLOR_INPUT_FONT : INPUT_FONT;
   }
   handleInput = (value: string) => {
     emit(
@@ -114,7 +101,7 @@ export class Input extends Component<InputSignature> {
         @disabled={{this.disabled}}
         @readonly={{this.readonly}}
         @state={{this.state}}
-        @errorMessage={{@errorMessage}}
+        @errorMessage={{unless this.disabled @errorMessage}}
         @helperText={{this.helperText}}
         @required={{this.required}}
         @optional={{@optional}}
@@ -144,8 +131,53 @@ export class Input extends Component<InputSignature> {
           --boxel-font-size-sm: var(--boxel-font-size-2xs);
           --boxel-input-optional-font-size: var(--boxel-font-size-2xs);
           --boxel-sp-xs: var(--boxel-sp-3xs);
-          /* Select's 0.625rem text inset, less this edge's 1px border */
+          /* Select's 0.625rem text inset on both sides, less this edge's 1px
+             border. While the invalid icon shows, BoxelInput reserves its
+             column at the end instead; a search input keeps BoxelInput's
+             start inset, which clears the search icon. */
           --boxel-sp-sm: calc(0.625rem - 1px);
+          --boxel-input-padding-inline-end: calc(0.625rem - 1px);
+          /* Select's and Autocomplete's states. Hover leaves the edge alone
+             unless the pointer can hover (below). Focus is the kit's 2px --ring
+             outline, laid over the 1px border, which BoxelInput turns --ring. */
+          --boxel-input-hover-border-color: var(--border);
+          --boxel-input-outline: 0 solid transparent;
+          --boxel-input-outline-offset: -1px;
+          --boxel-input-invalid-color: var(--destructive-ink);
+          --boxel-input-invalid-box-shadow: none;
+          --boxel-input-invalid-focus-outline: 2px solid var(--ring);
+          --boxel-input-invalid-focus-box-shadow: none;
+          --boxel-input-disabled-opacity: 0.45;
+          /* read-only stays focusable and copyable, so it isn't dimmed */
+          --boxel-input-readonly-opacity: 1;
+          /* the invalid dress this control takes, from @invalid or an invalid
+             Field: the -ink edge, as on Autocomplete (the fill hue misses a
+             boundary's 3:1), and no tint */
+          --pretui-invalid-border: var(--destructive-ink);
+          --pretui-invalid-background: var(--field);
+        }
+        @media (hover: hover) {
+          /* Select's hover edge: toward --foreground, in both schemes. It
+             mixes from --border, so an invalid field (from @invalid or an
+             invalid Field) keeps its error edge on hover, darkened. */
+          .pretui-inputwrap {
+            --boxel-input-hover-border-color: color-mix(
+              in oklch,
+              var(--foreground) 30%,
+              var(--border)
+            );
+          }
+          /* only hovering the field itself, not its message rows */
+          .pretui-inputwrap:has(input:hover) {
+            --boxel-input-invalid-color: var(--boxel-input-hover-border-color);
+          }
+        }
+        /* forced colors paint a transparent outline, so it only gets a width
+           on focus; at rest it would look the same as the focus ring. Focus
+           swaps the error edge for the ring, which wins over hover. */
+        .pretui-inputwrap:has(input:focus) {
+          --boxel-input-outline: 2px solid transparent;
+          --boxel-input-invalid-color: var(--ring);
         }
         /* iOS zooms into inputs under 16px on focus */
         @media (pointer: coarse) {
@@ -153,13 +185,15 @@ export class Input extends Component<InputSignature> {
             font-size: var(--boxel-form-control-touch-font-size);
           }
         }
-        /* Input owns @invalid, so the invalid channel must also be applied
-           here. Field's selector below is only an extra convenience for a
-           Field-level error message; relying on it made the standalone Input
-           demo (and any Input without Field) lose the Pretui invalid dress. */
+        /* a disabled field can't be fixed, so it drops the error edge (and
+           the template drops the error row) */
+        .pretui-inputwrap:has(input:disabled) {
+          --pretui-invalid-border: var(--input);
+        }
+        /* Input owns @invalid, so it applies the invalid edge itself;
+           Field's rule only adds it for a Field-level error */
         .pretui-inputwrap[data-invalid='true'] {
-          --border: var(--destructive);
-          --background: color-mix(in oklch, var(--destructive) 4%, var(--field));
+          --border: var(--pretui-invalid-border);
         }
       }
     </style>

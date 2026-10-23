@@ -42,6 +42,7 @@ import {
   registerUser,
 } from '../synapse.ts';
 import { keepsMethodAndPathOnly } from '../lib/request-telemetry.ts';
+import { secureSignInConfigured } from '../lib/secure-session.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
   installSecretsKeyring,
@@ -1324,6 +1325,110 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(ended.body.errors[0].code, 'signed-out');
     });
 
+    function mintLoginToken(authorization: string, origin = secureOrigin) {
+      return request
+        .post('/_secure-session/login-token')
+        .set('Authorization', authorization)
+        .set('Origin', origin);
+    }
+
+    async function redeemLoginToken(token: string) {
+      let response = await fetch(
+        new URL('_matrix/client/v3/login', matrixURL),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'm.login.token', token }),
+        },
+      );
+      return {
+        status: response.status,
+        body: (await response.json()) as Record<string, any>,
+      };
+    }
+
+    test("a secure session hands its user's sign-in over as a single-use Matrix login token", async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let session = (await passwordSignIn(username, password)).body.data
+        .attributes;
+
+      let minted = await mintLoginToken(`Bearer ${session.token}`);
+      assert.strictEqual(minted.status, 201, minted.text);
+      assert.strictEqual(minted.body.data.type, 'login-token');
+      let { loginToken, expiresInMs } = minted.body.data.attributes;
+      assert.strictEqual(typeof loginToken, 'string');
+      assert.strictEqual(typeof expiresInMs, 'number');
+      assert.true(expiresInMs > 0, 'the token says when it expires');
+
+      let redeemed = await redeemLoginToken(loginToken);
+      assert.strictEqual(redeemed.status, 200, 'the token signs in');
+      assert.strictEqual(
+        redeemed.body.user_id,
+        userId,
+        "as the session's user",
+      );
+      assert.strictEqual(
+        typeof redeemed.body.device_id,
+        'string',
+        'on a device of its own',
+      );
+      await logoutMatrixAccessToken({
+        matrixURL,
+        accessToken: redeemed.body.access_token,
+      });
+
+      let again = await redeemLoginToken(loginToken);
+      assert.strictEqual(again.status, 403, 'and signs in only once');
+    });
+
+    test('a login token is minted only for a live secure session, from the secure origin', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let appSession = `Bearer ${createRealmServerJWT(
+        { user: userId, sessionRoom: 'test-session' },
+        realmSecretSeed,
+      )}`;
+      let app = await mintLoginToken(appSession);
+      assert.strictEqual(app.status, 401, "the app's session mints none");
+      assert.strictEqual(app.body.errors[0].code, 'signed-out');
+
+      let none = await request
+        .post('/_secure-session/login-token')
+        .set('Origin', secureOrigin);
+      assert.strictEqual(none.status, 401, 'nor does no session');
+
+      let auth = await secureSessionAuth(dbAdapter, userId);
+      let elsewhere = await mintLoginToken(auth, APP_ORIGIN);
+      assert.strictEqual(
+        elsewhere.status,
+        403,
+        'a secure session mints none for another origin',
+      );
+      assert.strictEqual(elsewhere.body.errors[0].code, 'forbidden');
+
+      await request.delete('/_secure-session').set('Authorization', auth);
+      let ended = await mintLoginToken(auth);
+      assert.strictEqual(ended.status, 401, 'nor once it is signed out');
+      assert.strictEqual(ended.body.errors[0].code, 'signed-out');
+    });
+
+    test('a second login token within the minute says when to try again', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let auth = await secureSessionAuth(dbAdapter, userId);
+      assert.strictEqual((await mintLoginToken(auth)).status, 201);
+
+      let second = await mintLoginToken(auth);
+      assert.strictEqual(second.status, 429, second.text);
+      assert.strictEqual(second.body.errors[0].code, 'rate-limited');
+      let { retryAfterMs } = second.body.errors[0].meta;
+      assert.true(retryAfterMs > 0, `a wait (${retryAfterMs} ms)`);
+      assert.true(retryAfterMs <= 60_000, 'within the minute');
+      assert.strictEqual(
+        second.headers['retry-after'],
+        String(Math.ceil(retryAfterMs / 1000)),
+      );
+    });
+
     test("signing out of the app signs the user's secure windows out", async function (assert) {
       let { userId } = await registerPasswordUser(dbAdapter);
       let other = await registerPasswordUser(dbAdapter);
@@ -1743,6 +1848,22 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("the CLI is told the secure origin can't sign it in without the Matrix server's admin credentials", function (assert) {
+      let matrixURL = new URL('https://matrix.example.test/');
+      assert.false(secureSignInConfigured({ matrixURL }));
+      assert.false(
+        secureSignInConfigured({ matrixURL, matrixAdminUsername: 'admin' }),
+        'nor with only one of them',
+      );
+      assert.true(
+        secureSignInConfigured({
+          matrixURL,
+          matrixAdminUsername: 'admin',
+          matrixAdminPassword: 'a-password',
+        }),
+      );
+    });
+
     test('the secure origin is published for clients outside the browser', async function (assert) {
       let response = await request.get('/_secure-origin');
       assert.strictEqual(response.status, 200);
@@ -1754,6 +1875,10 @@ module(basename(import.meta.filename), function () {
         response.body.data.attributes.matrixServerName,
         'localhost',
         'with the Matrix server its accounts are on',
+      );
+      assert.true(
+        response.body.data.attributes.cliAuth,
+        'and that its pages sign a CLI profile in',
       );
     });
   });

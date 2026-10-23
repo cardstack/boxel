@@ -173,6 +173,7 @@ export default class BoxelInput extends Component<Signature> {
           class={{cn
             'boxel-input'
             has-validation=this.hasValidation
+            has-validation-icon=(bool this.validationIcon)
             invalid=this.isInvalid
             search=this.isSearch
             loading=(eq @state 'loading')
@@ -285,14 +286,16 @@ export default class BoxelInput extends Component<Signature> {
             --boxel-input-height,
             var(--boxel-form-control-height)
           );
-          padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-          background-color: var(--background, var(--boxel-light));
-          color: var(--foreground, var(--boxel-dark));
-          border: 1px solid
-            var(--border, var(--boxel-form-control-border-color));
+          padding-block: var(--boxel-sp-xs);
+          padding-inline: var(--boxel-sp-sm)
+            var(--boxel-input-padding-inline-end, 0);
+          background-color: var(--background);
+          color: var(--foreground);
+          border: 1px solid var(--border);
           border-radius: var(--boxel-form-control-border-radius);
           box-shadow: var(--boxel-form-control-box-shadow);
           outline: var(--boxel-input-outline, 1px solid transparent);
+          outline-offset: var(--boxel-input-outline-offset, 0);
           transition:
             var(--boxel-transition-properties),
             outline-color var(--boxel-transition);
@@ -301,6 +304,11 @@ export default class BoxelInput extends Component<Signature> {
         .boxel-input--large {
           --boxel-form-control-height: 4.375rem;
           font-size: var(--boxel-font-size);
+        }
+
+        /* keep text out from under the validation icon */
+        .boxel-input.has-validation-icon {
+          padding-inline-end: var(--_icon-full-length);
         }
 
         textarea {
@@ -339,66 +347,79 @@ export default class BoxelInput extends Component<Signature> {
         }
 
         .boxel-input:not([type='color']):disabled {
-          opacity: 0.5;
+          opacity: var(--boxel-input-disabled-opacity, 0.5);
           resize: none; /* do not display resize toggle since it's disabled */
         }
 
-        .boxel-input:not([type='color'])[readonly] {
-          opacity: 0.5;
+        .boxel-input:not([type='color'])[readonly]:not(:disabled) {
+          opacity: var(--boxel-input-readonly-opacity, 0.5);
         }
 
         .boxel-input:focus-visible {
-          outline-color: var(--ring, var(--boxel-highlight));
-          border-color: var(--ring, var(--boxel-highlight));
+          outline-color: var(--ring);
+          border-color: var(--ring);
         }
 
         .boxel-input::placeholder {
-          color: var(--muted-foreground, var(--boxel-450));
+          color: var(--muted-foreground);
         }
 
         .boxel-input:hover:not(:focus-visible):not(:disabled):not(.invalid):not(
             .search
           ) {
-          border-color: currentColor;
+          border-color: var(--boxel-input-hover-border-color, currentColor);
+        }
+
+        .invalid {
+          --_invalid-color: var(
+            --boxel-input-invalid-color,
+            var(--destructive)
+          );
         }
 
         .invalid:not(:disabled) {
-          border-color: var(--destructive, var(--boxel-error-100));
-          box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
+          border-color: var(--_invalid-color);
+          box-shadow: var(
+            --boxel-input-invalid-box-shadow,
+            0 0 0 1px var(--_invalid-color)
+          );
         }
 
         .invalid:focus-visible {
-          outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
-          box-shadow: 0 0 0 1.5px var(--destructive, var(--boxel-error-100));
+          /* transparent by default, so the invalid edge stays what shows */
+          outline: var(
+            --boxel-input-invalid-focus-outline,
+            1px solid transparent
+          );
+          box-shadow: var(
+            --boxel-input-invalid-focus-box-shadow,
+            0 0 0 1.5px var(--_invalid-color)
+          );
         }
 
         .invalid:hover:not(:disabled) {
-          border-color: var(--destructive, var(--boxel-error-100));
+          border-color: var(--_invalid-color);
         }
 
         .search {
           --search-input-color: var(
             --boxel-input-search-color,
-            var(--background, var(--boxel-light))
+            var(--background)
           );
 
           --search-input-background-color: var(
             --boxel-input-search-background-color,
-            var(--foreground, var(--boxel-dark))
+            var(--foreground)
           );
 
-          --boxel-form-control-border-color: var(--border, var(--boxel-dark));
           --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
 
           background-color: var(--search-input-background-color);
           color: var(--search-input-color);
-          padding-top: var(--boxel-sp-xxxs);
-          padding-right: var(--boxel-sp-xl);
-          padding-bottom: var(--boxel-sp-xxxs);
-          /* to account for the icon being on the left */
-          padding-right: unset;
-          padding-left: var(--boxel-sp-xxl); /* leave room for icon */
-          outline-width: 1px;
+          padding-top: var(--boxel-sp-3xs);
+          padding-bottom: var(--boxel-sp-3xs);
+          /* leave room for the icon at the start */
+          padding-inline-start: var(--boxel-sp-2xl);
         }
 
         .boxel-input--bottom-flat {
@@ -437,14 +458,11 @@ export default class BoxelInput extends Component<Signature> {
         }
 
         .search ~ .validation-icon-container .validation-icon-loading {
-          color: var(--primary, var(--boxel-highlight));
+          color: var(--primary);
           --icon-color: currentColor;
         }
         .search ~ .search-icon-container .search-icon {
-          color: var(
-            --boxel-input-search-icon-color,
-            var(--primary, var(--boxel-highlight))
-          );
+          color: var(--boxel-input-search-icon-color, var(--primary));
           --icon-color: currentColor;
         }
 
@@ -452,7 +470,7 @@ export default class BoxelInput extends Component<Signature> {
           grid-area: optional;
           justify-self: end;
 
-          margin-bottom: var(--boxel-sp-xxxs);
+          margin-bottom: var(--boxel-sp-3xs);
           font-size: var(
             --boxel-input-optional-font-size,
             var(--boxel-font-size-xs)
@@ -465,8 +483,8 @@ export default class BoxelInput extends Component<Signature> {
         .error-message {
           grid-area: error;
 
-          margin-top: var(--boxel-sp-xxxs);
-          margin-left: calc(var(--boxel-sp-sm) + 1px);
+          margin-top: var(--boxel-sp-3xs);
+          margin-inline-start: calc(var(--boxel-sp-sm) + 1px);
           color: var(--destructive-ink);
           font-size: var(--boxel-font-size-sm);
           font-weight: 500;
@@ -477,7 +495,7 @@ export default class BoxelInput extends Component<Signature> {
           grid-area: helper;
 
           margin-top: var(--boxel-sp-xs);
-          margin-left: calc(var(--boxel-sp-sm) + 1px);
+          margin-inline-start: calc(var(--boxel-sp-sm) + 1px);
           font-size: var(--boxel-font-size-sm);
           letter-spacing: var(--boxel-lsp);
           opacity: 0.75;
@@ -505,31 +523,31 @@ export default class BoxelInput extends Component<Signature> {
             --boxel-checkbox-size,
             var(--boxel-body-font-size)
           );
-          --checkbox-border-radius: var(--boxel-checkbox-border-radius, 3px);
+          --checkbox-border-radius: var(
+            --boxel-checkbox-border-radius,
+            0.1875rem
+          );
           --checkbox-border-color: var(
             --boxel-checkbox-border-color,
-            var(--border, var(--boxel-400))
+            var(--border)
           );
           --checkbox-background: var(
             --boxel-checkbox-background-color,
-            var(--background, transparent)
+            var(--background)
           );
           --checkbox-checked-background: var(
             --boxel-checkbox-checked-background-color,
-            var(--primary, var(--boxel-highlight))
+            var(--primary)
           );
           --checkbox-checked-border-color: var(
             --boxel-checkbox-checked-border-color,
-            var(--primary, var(--boxel-dark))
+            var(--primary)
           );
           --checkbox-checkmark-color: var(
             --boxel-checkbox-checkmark-color,
-            var(--primary-foreground, #333)
+            var(--primary-foreground)
           );
-          --checkbox-padding: var(
-            --boxel-checkbox-padding,
-            var(--spacing, 2px)
-          );
+          --checkbox-padding: var(--boxel-checkbox-padding, var(--spacing));
 
           display: inline-grid;
           grid-template-columns: auto;
@@ -584,7 +602,7 @@ export default class BoxelInput extends Component<Signature> {
         }
 
         .boxel-input[type='checkbox']:focus-visible {
-          outline: 2px solid var(--ring, var(--boxel-highlight));
+          outline: 2px solid var(--ring);
           outline-offset: 2px;
           border-color: var(--checkbox-border-color);
         }

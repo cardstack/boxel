@@ -202,7 +202,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   @service declare billingService: BillingService;
 
   @action private logout() {
-    this.matrixService.logout();
+    this.matrixService.signOut();
   }
 }
 

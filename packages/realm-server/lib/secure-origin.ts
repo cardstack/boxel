@@ -255,6 +255,14 @@ export function createSecureOrigin(
     .replace(
       MATRIX_URL_PLACEHOLDER,
       escapeAttribute(shellOptions?.matrixURL?.href ?? ''),
+    )
+    // The app origins a sign-in started by the app may be handed back to:
+    // the same list the credential fields may be framed by.
+    .replace(
+      APP_ORIGINS_PLACEHOLDER,
+      escapeAttribute(
+        (credentialFields?.appOrigins ?? []).map(appOrigin).join(' '),
+      ),
     );
   // Everything the origin serves, by path, each with the headers its
   // response carries.

@@ -2,8 +2,9 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
-import { Input } from './input';
+import { Input as PretuiInput } from './input';
 import { Field } from './field';
+import { Select } from './select';
 
 const INPUT_TYPES = [
   'text',
@@ -14,22 +15,28 @@ const INPUT_TYPES = [
   'url',
   'date',
 ];
+const PAIR_OPTIONS = ['Draft', 'In review', 'Published'].map((label) => ({
+  value: label,
+  label,
+}));
+
 // ── Input ← input/usage.gts ──────────────────────────────────────────────
-// Retrofit ON BoxelInput: the message rows now belong to the component
-// itself (@helperText / @errorMessage / @required / @optional are boxel
-// machinery surfaced as Pretui args); the wrapping Field still owns the
-// label. Dropped knobs: @readonly / @min / @max (native attrs — splat
-// them), @bottomTreatment (single rounded shape), @size (single 28px
+// Input wraps BoxelInput: the message rows belong to the component itself
+// (@helperText / @errorMessage / @required / @optional are boxel machinery
+// surfaced as Pretui args); the wrapping Field still owns the label.
+// Dropped knobs: @min / @max (native attrs — splat them), @bottomTreatment (single rounded shape), @size (single 28px
 // control height), @onKeyPress / @onFocus / @onBlur (use native event
 // splatting), textarea type (separate Textarea component), checkbox type
 // (separate Checkbox component).
 export class InputUsage extends Component {
   typeOptions = INPUT_TYPES;
+  pairOptions = PAIR_OPTIONS;
   @tracked value = '';
   @tracked type = 'text';
   @tracked placeholder = 'Please enter';
   @tracked invalid = false;
   @tracked disabled = false;
+  @tracked readonly = false;
   @tracked label = 'Full name';
   @tracked helperText = '';
   @tracked errorMessage = 'This value is invalid.';
@@ -40,6 +47,7 @@ export class InputUsage extends Component {
   setPlaceholder = (v: string) => (this.placeholder = v);
   setInvalid = (v: boolean) => (this.invalid = v);
   setDisabled = (v: boolean) => (this.disabled = v);
+  setReadonly = (v: boolean) => (this.readonly = v);
   setLabel = (v: string) => (this.label = v);
   setHelperText = (v: string) => (this.helperText = v);
   setErrorMessage = (v: string) => (this.errorMessage = v);
@@ -51,6 +59,7 @@ export class InputUsage extends Component {
     if (this.placeholder) bits.push(`@placeholder='${this.placeholder}'`);
     if (this.invalid) bits.push('@invalid={{true}}');
     if (this.disabled) bits.push('@disabled={{true}}');
+    if (this.readonly) bits.push('@readonly={{true}}');
     bits.push('@onInput={{this.setValue}}');
     return `<Input ${bits.join(' ')} />`;
   }
@@ -62,16 +71,17 @@ export class InputUsage extends Component {
     >
       <:example>
         <Field @label={{this.label}} as |controlId|>
-          <Input
+          <PretuiInput
             @controlId={{controlId}}
             @value={{this.value}}
             @type={{this.type}}
-            placeholder={{this.placeholder}}
+            @placeholder={{this.placeholder}}
             @invalid={{this.invalid}}
-            disabled={{this.disabled}}
+            @disabled={{this.disabled}}
+            @readonly={{this.readonly}}
             @helperText={{this.helperText}}
             @errorMessage={{this.errorMessage}}
-            required={{this.required}}
+            @required={{this.required}}
             @optional={{this.optionalArg}}
             @onInput={{this.setValue}}
           />
@@ -79,6 +89,25 @@ export class InputUsage extends Component {
         <p class='pretui-demo-readout' data-test-input-readout>
           type = {{this.type}} · value = “{{this.value}}”
         </p>
+        {{! Input and Select share one field style; disabled applies to both }}
+        <div class='pretui-demo-pair' data-test-input-select-pair>
+          <Field @label='Input' as |controlId|>
+            <PretuiInput
+              @controlId={{controlId}}
+              @type={{this.type}}
+              @placeholder={{this.placeholder}}
+              @disabled={{this.disabled}}
+            />
+          </Field>
+          <Field @label='Select' as |controlId|>
+            <Select
+              @controlId={{controlId}}
+              @options={{this.pairOptions}}
+              @placeholder={{this.placeholder}}
+              @disabled={{this.disabled}}
+            />
+          </Field>
+        </div>
       </:example>
       <:api as |Args|>
         <Args.Base
@@ -108,6 +137,12 @@ export class InputUsage extends Component {
           @name='disabled'
           @value={{this.disabled}}
           @onInput={{this.setDisabled}}
+        />
+        <Args.Bool
+          @name='readonly'
+          @value={{this.readonly}}
+          @description='Native readonly: focusable and copyable, not dimmed.'
+          @onInput={{this.setReadonly}}
         />
         <Args.String
           @name='errorMessage'
@@ -152,6 +187,12 @@ export class InputUsage extends Component {
       </:api>
     </FreestyleUsage>
     <style scoped>
+      .pretui-demo-pair {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+        gap: var(--boxel-sp-sm);
+        margin-block-start: var(--boxel-sp);
+      }
       .pretui-demo-readout {
         margin: 8px 0 0;
         font-family: var(--font-mono);
