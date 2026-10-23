@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "merchant": "Trattoria Sole",
+      "date": "2026-09-14",
+      "amount": 74.8,
+      "isIncome": false,
+      "category": "dining",
+      "recurrence": "none",
+      "memo": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/travel-rewards-card"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../home-ledger",
+        "name": "Transaction"
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "merchant": "Metro Transit Pass",
+      "date": "2026-10-08",
+      "amount": 98,
+      "isIncome": false,
+      "category": "transport",
+      "recurrence": "monthly",
+      "memo": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/travel-rewards-card"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../home-ledger",
+        "name": "Transaction"
+      }
+    }
+  }
+}

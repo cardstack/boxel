@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "merchant": "Greenleaf Market",
+      "date": "2026-10-04",
+      "amount": 201.67,
+      "isIncome": false,
+      "category": "groceries",
+      "recurrence": "none",
+      "memo": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/everyday-checking"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../home-ledger",
+        "name": "Transaction"
+      }
+    }
+  }
+}

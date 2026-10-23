@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "accountName": "Travel Rewards Card",
+      "institution": "Northwind Bank",
+      "kind": "credit",
+      "openingBalance": 0,
+      "lastFour": "7725",
+      "notes": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../home-ledger",
+        "name": "Account"
+      }
+    }
+  }
+}
