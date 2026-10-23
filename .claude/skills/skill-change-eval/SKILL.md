@@ -143,10 +143,13 @@ the same day, the same models. There are two ways to get them.
   `index.md`. Every other skill file reaches the assistant through
   `readRealmFile` with its sections intact, so a change marked there is on
   both sides. For a change in `index.md`, put the changed section between
-  `<!-- feature:<name> -->` and `<!-- /feature:<name> -->`, register the
-  name in `SKILL_FEATURES` in `packages/runtime-common/ai/debug.ts`, and
-  restart the ai-bot (`mise run services:ai-bot` after stopping the running
-  one), which reads that map only at start; until then every "with" run
+  `<!-- feature:<name> -->` and `<!-- /feature:<name> -->`, with `<name>`
+  the folder of the skill the section points to (`skills/<name>/SKILL.md`):
+  the runner notes every run that enabled a feature but never read that
+  file. Register the name in `SKILL_FEATURES` in
+  `packages/runtime-common/ai/debug.ts`, and restart the ai-bot (stop the
+  running one, then `mise run services:ai-bot` with `OPENROUTER_API_KEY`
+  set), which reads that map only at start; until then every "with" run
   stops with "no skill feature named". One branch then gives both sides:
   `EVAL_SKILL_FEATURES=<name> pnpm eval …` for "with", and plain
   `pnpm eval …` (or `EVAL_SKILL_FEATURES=-<name>` when the evaluation's
@@ -160,8 +163,8 @@ the same day, the same models. There are two ways to get them.
   touching the assistant.
 - **Two branches,** for a change anywhere but `index.md`. Make the "without"
   side from the PR branch with the change reverted, not from `main`, because
-  `main` may have moved under the PR. To measure rules that are already merged, revert them on a scratch
-  branch of `main`.
+  `main` may have moved under the PR. To measure rules that are already
+  merged, revert them on a scratch branch of `main`.
 
 1. `git -C packages/skills-realm/contents status` must be clean. From
    `packages/ai-assistant-evals`, run `pnpm eval:setup` (it pushes a new
@@ -181,7 +184,8 @@ the same day, the same models. There are two ways to get them.
 
 ## 5. Read the evidence
 
-Compare per model, on the averages of the three runs.
+Compare per model: criteria by how many of the three runs they held in,
+quality, turns, cost and time by the average of the three.
 
 A run with a `host-failure`, `bot-failure` or `runner-failure` verdict is
 unscored: it says nothing about the skill. Leave it out of the averages and,
@@ -208,7 +212,8 @@ before running more.
 
 The evaluation JSON and any seed cards go in a PR to cardstack/boxel. The
 boxel-skills PR links it. Its description carries one table, one row per eval,
-model and side, with the averages of the three runs:
+model and side, with the problem criterion as runs held out of three (`2/3`)
+and the other columns as averages of the three runs:
 
 | Eval | Model | Side | Problem criterion held | Quality | Effectiveness | Turns | Cost | Time |
 | ---- | ----- | ---- | ---------------------- | ------- | ------------- | ----- | ---- | ---- |
