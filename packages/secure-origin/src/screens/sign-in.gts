@@ -3,10 +3,10 @@
 // block, the link to reset a forgotten password, Sign In, and the link to
 // create an account. A page that signs in for something other than the app,
 // such as the CLI's, names itself with `@title` and says what signing in
-// grants in its `intro` block, in place of the Google subtitle. It holds no
-// state and sends nothing; the caller decides what each control does. On the
-// secure origin the fields are its own inputs; in the app they are the
-// credential frame.
+// grants in its `intro` block, in place of the Google subtitle; the screen
+// sets the intro's type and the space around it. It holds no state and sends
+// nothing; the caller decides what each control does. On the secure origin
+// the fields are its own inputs; in the app they are the credential frame.
 //
 // Each control carries the test attributes of both origins' suites.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
@@ -46,7 +46,7 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
     data-test-secure-sign-in-title
   >{{if @title @title 'Sign in to your Boxel Account'}}</span>
   {{#if (has-block 'intro')}}
-    {{yield to='intro'}}
+    <div class='intro'>{{yield to='intro'}}</div>
   {{else if @googleSubtitle}}
     <p class='subtitle' data-test-secure-sign-in-subtitle>Use Google to get
       started in one tap - we'll create your Boxel account if you don't have one
@@ -131,6 +131,15 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
     }
     .subtitle {
       margin: 0 0 var(--boxel-sp-lg);
+      color: var(--foreground);
+      font: var(--boxel-font-sm);
+      line-height: 1.4;
+    }
+    .intro {
+      display: flex;
+      flex-direction: column;
+      gap: var(--boxel-sp-lg);
+      margin-bottom: var(--boxel-sp-lg);
       color: var(--foreground);
       font: var(--boxel-font-sm);
       line-height: 1.4;

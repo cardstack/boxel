@@ -106,15 +106,15 @@ export default class CliAuth extends Component {
         >
           <:intro>
             {{#if this.signedInUserId}}
-              <p class='subtitle'>Confirm your password to give the Boxel CLI
+              <p class='intro-text'>Confirm your password to give the Boxel CLI
                 running on this computer access to the workspaces of
                 <span
                   class='signed-in-user'
                   data-test-cli-auth-signed-in-as
                 >{{this.signedInUserId}}</span>.</p>
             {{else}}
-              <p class='subtitle'>Signing in gives the Boxel CLI running on this
-                computer access to your workspaces.</p>
+              <p class='intro-text'>Signing in gives the Boxel CLI running on
+                this computer access to your workspaces.</p>
             {{/if}}
             {{#if this.resumedFromEmail}}
               <p class='notice' data-test-cli-auth-resumed>The CLI stops waiting
@@ -151,8 +151,11 @@ export default class CliAuth extends Component {
         font-weight: 600;
         overflow-wrap: anywhere;
       }
+      .intro-text {
+        margin: 0;
+      }
       .notice {
-        margin: 0 0 var(--boxel-sp-lg);
+        margin: 0;
         color: var(--muted-foreground);
         font: var(--boxel-font-xs);
         line-height: 1.4;

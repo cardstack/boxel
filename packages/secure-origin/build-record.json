@@ -645,7 +645,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 24557,
+      "bytes": 24759,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -709,7 +709,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/screens/b3524c0491.css"
+          "module": "src/screens/c37cd4a1a6.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -738,7 +738,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 58949,
+      "bytes": 59023,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -793,7 +793,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/sign-in.gts",
-          "size": 3916
+          "size": 4001
         },
         {
           "package": "@cardstack/secure-origin",
