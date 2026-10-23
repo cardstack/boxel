@@ -27,5 +27,6 @@ import './lenient-json-test.ts';
 import './stop-test.ts';
 import './compaction-test.ts';
 import './tool-call-ids-test.ts';
+import './script-syntax-check-test.ts';
 
 QUnit.start();

@@ -22,6 +22,7 @@ import MatrixResponsePublisher, {
 } from './matrix/response-publisher.ts';
 import ResponseState from './response-state.ts';
 import { classifyToolCalls, type BotToolTurn } from './bot-tools/index.ts';
+import { scriptSyntaxRetryMessages } from './script-syntax-check.ts';
 import type { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
@@ -360,6 +361,28 @@ export class Responder {
     }
 
     return await Promise.all(this.messagePromises);
+  }
+
+  // The messages that hand the finished reply's unparseable run-realm-code
+  // scripts back to the model, or undefined when the reply goes out as it is.
+  // Only while nothing has marked the answer finished: the host runs an
+  // answer's calls once it is, so a call it may already have can't be
+  // withdrawn.
+  scriptSyntaxRetryMessages(message: ChatCompletion.Choice['message']) {
+    if (this.responseState.isStreamingFinished) {
+      return undefined;
+    }
+    return scriptSyntaxRetryMessages(
+      message.content,
+      this.responseState.withPostedIds(message.tool_calls),
+    );
+  }
+
+  // The turn goes on with a new reply from the model, after the last one was
+  // handed back (see scriptSyntaxRetryMessages).
+  startNewReply() {
+    this.responseState.startNewReply();
+    this.toolCallDeltaStats.clear();
   }
 
   // The finished reply's bot-tool calls, under the ids they were posted with,

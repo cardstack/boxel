@@ -53,6 +53,20 @@ export default class ResponseState {
     }
   }
 
+  // The content of the replies this turn already handed back to the model
+  // (see startNewReply), shown ahead of the current reply's content.
+  private earlierContent = '';
+
+  // The turn goes on with a new reply from the model: the earlier reply's
+  // calls are dropped, since none of them runs, and its content stays.
+  startNewReply() {
+    this.earlierContent = this.latestContent;
+    this.toolCalls = [];
+    this.toolCallsJson = undefined;
+    this.finishReason = undefined;
+    this.toolCallIds.startNewReply();
+  }
+
   setAllowedToolNames(names: Iterable<string> | undefined) {
     this.allowedToolNames = names ? new Set(names) : undefined;
   }
@@ -112,6 +126,9 @@ export default class ResponseState {
   private updateContent(contentSnapshot: string | null | undefined) {
     if (contentSnapshot?.length) {
       contentSnapshot = cleanContent(contentSnapshot);
+      if (this.earlierContent) {
+        contentSnapshot = `${this.earlierContent}\n\n${contentSnapshot}`;
+      }
       if (this.latestContent !== contentSnapshot) {
         if (this.latestReasoning === thinkingMessage) {
           this.latestReasoning = '';
