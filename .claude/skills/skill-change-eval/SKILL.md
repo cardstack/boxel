@@ -101,9 +101,8 @@ A new evaluation is one JSON file, `<use-case>-<problem>.json`, shaped like
   every card in `initialCards`. An update, bulk or navigation eval (use cases
   1 and 2 update, 3, 4) that ends on a seeded card it edited is graded
   `model-failure` however well it went, on both sides, so the comparison
-  measures nothing. Until the runner counts an edited seeded card, such an
-  eval's prompt also asks for one new card the user would want from the
-  task, for example "mark every overdue invoice paid and make me a summary
+  measures nothing. So such an eval's prompt also asks for one new card the
+  user would want from the task, for example "mark every overdue invoice paid and make me a summary
   card of what changed".
 - **Fill `cardInfo.name` and `cardInfo.summary`.** The `/run-ai-assistant-eval`
   command lists evaluations by them. The summary says what the prompts ask and
@@ -170,8 +169,8 @@ the same day, the same models. There are two ways to get them.
    `packages/ai-assistant-evals`, run `pnpm eval:setup` (it pushes a new
    evaluation).
 2. **Without.** Check out the PR branch (feature off) or the "without"
-   branch in `packages/skills-realm/contents/` and run every eval in the plan through
-   `/run-ai-assistant-eval`, judging each result.
+   branch in `packages/skills-realm/contents/` and run every eval in the
+   plan through `/run-ai-assistant-eval`, judging each result.
 3. **Check the problem shows.** The problem criterion must fail in at least
    two of the three runs of each model. If it passes, the eval does not show
    the problem: rewrite the prompt or the seed until it does, or conclude the
@@ -228,5 +227,6 @@ request: the eval that shows the problem, and the with/without numbers. A
 table whose problem criterion holds without the change does not show the
 problem. A table with no small-card rows does not show what the change costs.
 A rule written for apps or pages whose text does not say so will fire on
-every build: ask for the limit in the text. A change meant for the assistant that still sits
-between feature markers reaches no one: ask for the markers to come out.
+every build: ask for the limit in the text. A change meant for the assistant
+that still sits between feature markers reaches no one: ask for the markers to
+come out.
