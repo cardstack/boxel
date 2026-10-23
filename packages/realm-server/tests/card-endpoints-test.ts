@@ -5759,6 +5759,79 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        // The same, for cards made the way a client makes them: both created
+        // by POST, the link written as an absolute URL to the target's id.
+        test('a created card that links a deleted created card stops serving it', async function (assert) {
+          let localPathOf = (id: string) =>
+            new URL(id).pathname.replace(new URL(testRealmHref).pathname, '');
+          let createFriend = async (
+            firstName: string,
+            friendId?: string,
+          ): Promise<string> => {
+            let write = await request
+              .post('/')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: { firstName },
+                  ...(friendId
+                    ? {
+                        relationships: {
+                          friend: { links: { self: friendId } },
+                        },
+                      }
+                    : {}),
+                  meta: {
+                    adoptsFrom: {
+                      module: rri(`${testRealmHref}friend`),
+                      name: 'Friend',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+            assert.strictEqual(write.status, 201, `HTTP 201: ${write.text}`);
+            return write.body.data.id;
+          };
+          let targetId = await createFriend('Ringo');
+          let linkingId = await createFriend('Hassan', targetId);
+
+          let before = await request
+            .get(`/${localPathOf(linkingId)}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(before.status, 200, `HTTP 200: ${before.text}`);
+          let etag = before.get('etag') ?? '';
+          assert.ok(
+            (before.body.included ?? []).some(
+              (resource: { id: string }) => resource.id === targetId,
+            ),
+            'the linked card is in included before the delete',
+          );
+
+          let deleted = await request
+            .delete(`/${localPathOf(targetId)}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(deleted.status, 204, `HTTP 204: ${deleted.text}`);
+
+          let after = await request
+            .get(`/${localPathOf(linkingId)}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(after.status, 200, `HTTP 200: ${after.text}`);
+          assert.notStrictEqual(
+            after.get('etag'),
+            etag,
+            `the linking card's validator moved (x-boxel-card-cache: ${after.get(
+              'x-boxel-card-cache',
+            )})`,
+          );
+          assert.notOk(
+            (after.body.included ?? []).some(
+              (resource: { id: string }) => resource.id === targetId,
+            ),
+            'the deleted card is not in included',
+          );
+        });
+
         // `hassan-tag` reads `hassan`'s name into a computed field, so patching
         // `hassan` re-indexes `hassan-tag` in the same pass. The realm computed
         // `hassan-tag`'s new state, so nobody holds it and every client wants
