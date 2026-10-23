@@ -21,7 +21,10 @@
 #   - apply-preview.sh runs this before every push, so a PR that shrinks
 #     its changed-dashboard set (e.g. reverts one of two prior edits)
 #     gets the old preview resources removed before the new tree lands.
-#   - observability-preview.yml runs this on pull_request `closed`.
+#   - ci-apply-preview.sh runs this when a PR stops changing dashboards
+#     altogether, to clear a preview an earlier push left behind.
+#   - observability-preview.yml runs this on pull_request `closed`, once
+#     per environment.
 #   - observability-preview-sweep.yml runs this for PRs the daily sweep
 #     has decided are stale.
 set -eo pipefail
@@ -52,6 +55,10 @@ done
 [[ "$pr_number" =~ ^[0-9]+$ ]] || usage_error "--pr must be a positive integer"
 
 cd "$(dirname "$0")/.."
+
+# Same scoped account as apply-preview.sh — teardown needs no more reach
+# than the push did.
+export GRAFANA_TOKEN_SSM_PATH="${GRAFANA_TOKEN_SSM_PATH:-/${env_name}/grafana/preview_grafanactl_token}"
 
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
