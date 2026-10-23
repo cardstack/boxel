@@ -234,8 +234,9 @@ than prose, and it is deleted when the ADR is accepted.
 - `canonicalIdentifier`, `trackingKey`, `moduleKey`, `loadedModuleKeys` and
   `getConsumedModules` break §1.4.3: they report RRIs, converted through the
   `VirtualNetwork`, instead of URLs.
-- Static `identify` (`bundledIdentityFor`) breaks §1.4.3: it reports bundled
-  modules as `@cardstack/base/` RRIs.
+- `identify` breaks §1.4.3: it reads a class's identity tag and reports the
+  module as an RRI, converted through the `VirtualNetwork`, and the tags of
+  bundled base classes are `@cardstack/base/` RRIs.
 - `getConsumedModules` breaks §1.4.3: it imports, and so evaluates, a module
   that is not loaded yet.
 - `shimModule`, `moduleShims`, `cloneLoader` break §1.4.2: they put modules

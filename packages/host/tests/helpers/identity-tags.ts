@@ -4,17 +4,16 @@ import { exportIdentitySymbolKey } from '@cardstack/runtime-common/export-identi
 
 // A class a test defines and shims as a module stands in for one a realm
 // compiles, which carries its identity as a static member (see
-// export-identity-plugin.ts). Test classes have no compile step, so the
-// helpers that shim them tag them instead: with the module they are shimmed as
-// and the first name that module exports them by.
+// export-identity-plugin.ts); that member is the only identity a class has.
+// Test classes have no compile step, so the helpers that shim them tag them
+// instead: with the module they are shimmed as and the first name that module
+// exports them by.
 //
 // A test class can be shimmed by several tests, as a different module each
-// time, and as several modules within one test. A loader credits a class to
-// the first module it records it under, and every test starts with fresh
-// loaders, so the first tag a class gets in a test is the one it keeps for the
-// rest of that test. A tag the class was compiled with, such as a base class a
-// fixture re-exports, is left alone: those are what the tags are validated
-// against.
+// time, and as several modules within one test. Within a test it keeps the
+// first tag it gets, as a class keeps the identity of the one module that
+// declares it; the next test starts over. A tag the class was compiled with,
+// such as a base class a fixture re-exports, is left alone.
 const identityTagKey = Symbol.for(exportIdentitySymbolKey);
 const taggedByTest = new WeakSet<Function>();
 let taggedInThisTest = new WeakSet<Function>();

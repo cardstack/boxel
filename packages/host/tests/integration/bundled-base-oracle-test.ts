@@ -51,38 +51,18 @@ module('Integration | bundled base oracle', function (hooks) {
   // credit for it, whichever module the loader was asked for first.
   // `image-file-def` is that shape — `import { ImageDef } from './card-api';
   // export { ImageDef }; export default ImageDef;` — and it is bundled here.
-  //
-  // Serving order cannot be staged in a test: `Loader.loaders` is static, so a
-  // class the app already captured stays captured whatever a fresh loader
-  // does. What makes the answer order-independent is that only a declarer
-  // publishes, so the registry has one entry for the class and it is
-  // `card-api`. That is asserted directly, beside the ref it produces.
+  // The identity is compiled into the class where it is declared, so loading
+  // it through the re-exporter cannot change it.
   test('a re-exporter does not take the credit for a class it borrows', async function (assert) {
     let loader = getService('loader-service').loader;
     let { ImageDef } = await loader.import<any>(
       '@cardstack/base/image-file-def',
     );
 
-    let registry = (
-      globalThis as {
-        __boxelBundledBaseIdentities?: Record<string, Record<string, unknown>>;
-      }
-    ).__boxelBundledBaseIdentities;
-
-    assert.strictEqual(
-      registry?.['card-api']?.ImageDef,
-      ImageDef,
-      'card-api publishes ImageDef, being the module that declares it',
-    );
-    assert.strictEqual(
-      registry?.['image-file-def']?.ImageDef,
-      undefined,
-      'image-file-def publishes nothing for a class it only re-exports',
-    );
     assert.deepEqual(
       Loader.identify(ImageDef),
       { module: '@cardstack/base/card-api', name: 'ImageDef' },
-      'so the ref names card-api however the modules were served',
+      'the ref names card-api, though the class was loaded through image-file-def',
     );
   });
 });
