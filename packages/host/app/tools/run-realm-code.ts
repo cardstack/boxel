@@ -176,7 +176,7 @@ type WriteFile = (
   content: string,
   expected: string | undefined,
   options?: { lint?: boolean },
-) => Promise<string>;
+) => Promise<string | undefined>;
 
 // Saves the card instances realm.cards.update changed, all or none, in one
 // request. `expected` is each file's content when the run first read it; the
@@ -382,6 +382,10 @@ class RealmFsSession {
   // Files saved by this run, in the order of their first save. A file the
   // run deleted is no longer here.
   readonly saved = new Set<string>();
+  // Files the run wrote that came out of lint with the text they already
+  // held (lint removes unused imports), and that it never changed. Nothing
+  // was written, and the result says so rather than reporting them saved.
+  readonly unchanged = new Set<string>();
   // Files this run created that still exist, so a delete is reported as
   // undoing the run's own write rather than removing an earlier file.
   private created = new Set<string>();
@@ -1608,6 +1612,13 @@ class RealmFsSession {
       throw new Error(`The run has ended; ${url} was not saved`);
     }
     let saved = await this.writeFile(url, content, expected, options);
+    if (saved === undefined) {
+      if (!this.saved.has(url)) {
+        this.unchanged.add(url);
+      }
+      return;
+    }
+    this.unchanged.delete(url);
     this.known.set(url, saved);
     if (expected === undefined) {
       this.markCreated(url);
@@ -1628,6 +1639,7 @@ class RealmFsSession {
   private forgetDeleted(url: string) {
     this.created.delete(url);
     this.saved.delete(url);
+    this.unchanged.delete(url);
     this.binary.delete(url);
     this.binaryDigests.delete(url);
     this.known.set(url, undefined);
@@ -2011,6 +2023,15 @@ export default class RunRealmCodeTool extends HostBaseTool<
                 : 'Source saved; correctness validation will run after this tool result.',
             }),
         ),
+        ...[...session.unchanged].map(
+          (fileUrl) =>
+            new commandModule.RealmCodeFileResult({
+              fileUrl,
+              status: 'unchanged',
+              detail:
+                "Not saved: after lint fixes (which remove unused imports) the text is the same as the file's current text, so nothing changed.",
+            }),
+        ),
         ...[...session.deleted].map(
           (fileUrl) =>
             new commandModule.RealmCodeFileResult({
@@ -2281,7 +2302,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     content: string,
     expected: string | undefined,
     options?: { lint?: boolean },
-  ): Promise<string> {
+  ): Promise<string | undefined> {
     if (options?.lint !== false && /\.(gts|ts)$/.test(url)) {
       let lint = await new LintAndFixTool(this.toolContext).execute({
         realm: this.realm.realmOf(rri(url))!,
@@ -2292,6 +2313,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
         throw new Error(`Lint errors in ${url}: ${lint.lintErrors.join('; ')}`);
       }
       content = lint.output;
+    }
+    // what is left to write is what the file holds: nothing to save
+    if (expected !== undefined && content === expected) {
+      return undefined;
     }
     let current = await this.readSource(url);
     if (expected === undefined) {
