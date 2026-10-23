@@ -1138,8 +1138,11 @@ Common issues are:
                   extra: { roomId: room.roomId, eventId },
                 });
               }
-              // Each reply's cost is debited once, after that reply.
+              // Each reply's cost is debited once, after that reply. Its
+              // generation id goes too, so a next reply that fails before
+              // its first chunk can't schedule a fallback debit for this one.
               costInUsd = undefined;
+              generationId = undefined;
               if (!retryGeneration) {
                 activeGenerations.delete(room.roomId);
               }

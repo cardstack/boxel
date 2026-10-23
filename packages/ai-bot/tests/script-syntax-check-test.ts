@@ -6,6 +6,8 @@ import {
   scriptSyntaxRetryMessages,
 } from '../lib/script-syntax-check.ts';
 import ResponseState from '../lib/response-state.ts';
+import { Responder } from '../lib/responder.ts';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 
 function runRealmCodeCall(id: string, code: string) {
   return {
@@ -139,5 +141,52 @@ module('ResponseState.startNewReply', () => {
       ['call:0_1'],
       'the new call does not reuse the id the earlier reply was given',
     );
+  });
+});
+
+module('Responder.startNewReply', () => {
+  function usageChunk(usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    cost: number;
+    provider: string;
+  }) {
+    let { provider, ...rest } = usage;
+    return { id: `gen-${provider}`, provider, choices: [], usage: rest } as any;
+  }
+
+  test("the answer's usage counts every reply of the turn", async (assert) => {
+    let responder = new Responder(
+      new FakeMatrixClient(),
+      'room-id',
+      'agent-id',
+      [],
+    );
+    let snapshot = { choices: [{ message: {} }] } as any;
+    await responder.onChunk(
+      usageChunk({
+        prompt_tokens: 100,
+        completion_tokens: 10,
+        cost: 0.01,
+        provider: 'first',
+      }),
+      snapshot,
+    );
+    responder.startNewReply();
+    await responder.onChunk(
+      usageChunk({
+        prompt_tokens: 150,
+        completion_tokens: 20,
+        cost: 0.02,
+        provider: 'second',
+      }),
+      snapshot,
+    );
+    let usage = responder.matrixResponsePublisher.usage;
+    assert.strictEqual(usage?.promptTokens, 250);
+    assert.strictEqual(usage?.completionTokens, 30);
+    assert.strictEqual(Number(usage?.costUsd?.toFixed(6)), 0.03);
+    assert.strictEqual(usage?.provider, 'second');
+    assert.strictEqual(responder.turnTelemetry.promptTokens, 250);
   });
 });
