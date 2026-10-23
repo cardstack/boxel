@@ -6,6 +6,7 @@ import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { focusWhen, listenDocument } from '../focus';
 import type { TreeNode } from './tree';
+import { Caret } from '../internal/caret';
 
 export interface TreeSelectSignature {
   Args: {
@@ -365,7 +366,7 @@ export class TreeSelect extends Component<TreeSelectSignature> {
         {{else}}
           <span class='pretui-treeselect-placeholder'>{{if @placeholder @placeholder 'Select'}}</span>
         {{/if}}
-        <span class='pretui-treeselect-caret' aria-hidden='true'></span>
+        <Caret class='pretui-treeselect-caret' />
       </button>
       {{#if this.open}}
         {{! template-lint-disable no-invalid-interactive }}
@@ -424,31 +425,60 @@ export class TreeSelect extends Component<TreeSelectSignature> {
           display: inline-block;
           min-inline-size: 14rem;
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
+          letter-spacing: var(--boxel-lsp-xs);
         }
+        /* Select's field style: the --field face, a 1px --input edge inside
+           the box, Button's corner and a --boxel-form-control-height-sm
+           height that grows with wrapped chips; the block padding seats a
+           1.25rem chip in the rest height */
         .pretui-treeselect-trigger {
           display: flex;
           align-items: center;
-          gap: var(--space-2, 0.375rem);
+          gap: var(--boxel-sp-2xs);
           inline-size: 100%;
-          min-block-size: var(--pretui-control-h, 2.25rem);
-          padding: 0.25rem var(--space-3, 0.5rem);
-          border: 0;
-          border-radius: var(--radius-control, 6px);
-          background: var(--input-background, var(--card));
-          box-shadow: 0 0 0 1px var(--input, var(--border));
+          min-block-size: var(--boxel-form-control-height-sm);
+          padding-block: calc(0.25rem - 1px);
+          padding-inline: calc(0.25rem - 1px) calc(0.625rem - 1px);
+          border: 1px solid var(--input);
+          border-radius: calc(var(--radius) - 0.125rem);
+          background-color: var(--field);
           color: var(--foreground);
-          font: inherit;
+          font-family: inherit;
+          font-size: inherit;
+          font-weight: inherit;
+          font-style: inherit;
+          letter-spacing: inherit;
+          line-height: var(--boxel-form-control-line-height-sm);
           text-align: start;
           cursor: pointer;
+          transition: border-color var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
         }
-        .pretui-treeselect-trigger:focus-visible {
+        /* Select's hover edge: toward --foreground, in both schemes */
+        @media (hover: hover) {
+          .pretui-treeselect-trigger:hover:not(:disabled) {
+            border-color: color-mix(
+              in oklch,
+              var(--foreground) 30%,
+              var(--input)
+            );
+          }
+        }
+        .pretui-treeselect-trigger:focus-visible,
+        .pretui-treeselect-trigger[aria-expanded='true'] {
           outline: 2px solid var(--ring);
-          outline-offset: 1px;
+          outline-offset: -1px;
         }
         .pretui-treeselect-trigger:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
+          opacity: var(--boxel-disabled-opacity);
+          cursor: default;
+        }
+        /* iOS zooms into inputs under 16px on focus */
+        @media (pointer: coarse) {
+          .pretui-treeselect {
+            font-size: var(--boxel-form-control-touch-font-size);
+          }
         }
         .pretui-treeselect-chips {
           display: flex;
@@ -461,7 +491,7 @@ export class TreeSelect extends Component<TreeSelectSignature> {
         .pretui-treeselect-more {
           display: inline-flex;
           align-items: center;
-          block-size: 1.375rem;
+          block-size: 1.25rem;
           padding-inline: 0.5rem;
           border-radius: var(--radius-chip, 6px);
           background: color-mix(in oklch, var(--muted-foreground) var(--pretui-chip-mix, 20%), var(--card));
@@ -471,18 +501,20 @@ export class TreeSelect extends Component<TreeSelectSignature> {
           color: var(--muted-foreground);
           font-variant-numeric: tabular-nums;
         }
+        /* lines up with the text in Select's trigger */
         .pretui-treeselect-placeholder {
           flex: 1;
+          padding-inline-start: 0.375rem;
           color: var(--muted-foreground);
         }
         .pretui-treeselect-caret {
           flex: none;
-          inline-size: 0.4rem;
-          block-size: 0.4rem;
-          border-inline-end: 1.5px solid var(--muted-foreground);
-          border-block-end: 1.5px solid var(--muted-foreground);
-          rotate: 45deg;
-          translate: 0 -0.1rem;
+          margin-inline-start: auto;
+          color: var(--muted-foreground);
+        }
+        /* points up while the tree is open, as on Select */
+        .pretui-treeselect[data-open='true'] .pretui-treeselect-caret {
+          rotate: 180deg;
         }
         .pretui-treeselect-tree {
           position: absolute;
@@ -533,8 +565,8 @@ export class TreeSelect extends Component<TreeSelectSignature> {
           font-weight: 600;
         }
         .pretui-treeselect-row[aria-disabled='true'] {
-          opacity: 0.5;
-          cursor: not-allowed;
+          opacity: var(--boxel-disabled-opacity);
+          cursor: default;
         }
         .pretui-treeselect-twisty,
         .pretui-treeselect-twisty-space {

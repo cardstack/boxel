@@ -209,8 +209,7 @@ class SelectSearch extends Component<SelectSearchSignature> {
           position: relative;
         }
         .pretui-selectsearch-icon {
-          --icon-color: var(--muted-foreground);
-
+          color: var(--muted-foreground);
           position: absolute;
           /* the box's padding, then the input's */
           inset-inline-start: calc(var(--boxel-sp-xs) + var(--_select-px));
@@ -379,7 +378,7 @@ export class Select extends Component<SelectSignature> {
           outline-offset: -1px;
         }
         .pretui-selectwrap :deep(.pretui-selecttrigger[aria-disabled='true']) {
-          opacity: 0.45;
+          opacity: var(--boxel-disabled-opacity);
           /* BoxelSelect paints disabled on --muted; this rule outranks it, so
              the field surface holds and only the opacity says disabled */
           background-color: var(--field);

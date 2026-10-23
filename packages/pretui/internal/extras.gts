@@ -29,12 +29,10 @@ import { htmlSafe } from '@ember/template';
 // --boxel-form-control-line-height-sm add up to --boxel-form-control-height-sm
 // (1.75rem); the line-height token assumes this padding-block, so change them
 // together.
-// BoxelInput pads only the physical left, so the inline style sets Select's
-// inset on both inline sides, which also holds in right-to-left text. A
-// control that pads around its own icon or button (Search's magnifier,
-// Password's reveal) builds on TYPED_BLOCK_RULES.
+// The inline inset is left to the wrapper's --boxel-sp-sm and
+// --boxel-input-padding-inline-end, so BoxelInput can reserve the validation
+// icon's column. A control that pads around its own icon or button (Search's
+// magnifier, Password's reveal) adds that side's padding to TYPED_BLOCK_RULES.
 export const TYPED_BLOCK_RULES =
   'font: inherit; letter-spacing: inherit; line-height: var(--boxel-form-control-line-height-sm); padding-block: 0.25rem;';
-export const TYPED_INSET = 'calc(0.625rem - 1px)';
-const TYPED_FONT_RULES = `${TYPED_BLOCK_RULES} padding-inline: ${TYPED_INSET};`;
-export const TYPED_FONT = htmlSafe(TYPED_FONT_RULES);
+export const TYPED_FONT = htmlSafe(TYPED_BLOCK_RULES);

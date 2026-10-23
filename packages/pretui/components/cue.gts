@@ -74,6 +74,9 @@ export interface CueSignature {
     id?: string;
     /** purely decorative — hidden from assistive tech entirely */
     decorative?: boolean;
+    /** false drops the tone glyph, for a caller whose control already
+     * shows the tone */
+    glyph?: boolean;
   };
   Blocks: { default: [] };
   Element: HTMLSpanElement;
@@ -94,7 +97,7 @@ export class Cue extends Component<CueSignature> {
     return this.args.id ?? `${guidFor(this)}-cue`;
   }
   get glyph() {
-    return CUE_GLYPHS[this.tone];
+    return this.args.glyph === false ? undefined : CUE_GLYPHS[this.tone];
   }
   // Held in getters rather than written as `{{if}}` literals in the template:
   // ember-template-lint validates a literal `role` and would reject the

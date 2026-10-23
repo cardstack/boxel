@@ -4,6 +4,7 @@ import { htmlSafe } from '@ember/template';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
+import { FieldDress } from '../internal/field-dress';
 
 export interface TextareaSignature {
   Args: ControlAliasArgs & {
@@ -26,13 +27,15 @@ export interface TextareaSignature {
   Element: HTMLTextAreaElement;
 }
 
-// Same retrofit as Input, on BoxelInput @type='textarea'. The inline style
-// carries the Pretui textarea metrics (64px min-height, 7/9 padding,
-// vertical-only resize) — boxel defines its 10rem --boxel-input-height ON
-// the textarea element itself, so the wrapper channel cannot override it;
-// the inline declaration can.
+// Same retrofit as Input, on BoxelInput @type='textarea', in the shared
+// FieldDress. The inline style carries the textarea metrics (a 4rem
+// min-height, its block padding, vertical-only resize) — boxel defines its
+// 10rem --boxel-input-height ON the textarea element itself, so the wrapper
+// channel cannot override it; the inline declaration can. The inline inset
+// is left to FieldDress, so BoxelInput can reserve the validation icon's
+// column.
 const TEXTAREA_METRICS = htmlSafe(
-  'font: inherit; letter-spacing: inherit; --boxel-input-height: 64px; padding: 7px 9px; resize: vertical;',
+  'font: inherit; letter-spacing: inherit; --boxel-input-height: 4rem; padding-block: calc(0.5rem - 1px); resize: vertical;',
 );
 
 export class Textarea extends Component<TextareaSignature> {
@@ -44,6 +47,9 @@ export class Textarea extends Component<TextareaSignature> {
   }
   get required() {
     return firstDefined(this.args.required, this.args.isRequired);
+  }
+  get showOptional() {
+    return Boolean(this.args.optional) && !this.required;
   }
   get readonly() {
     return firstDefined(
@@ -65,11 +71,7 @@ export class Textarea extends Component<TextareaSignature> {
     );
   };
   <template>
-    <div
-      class='pretui-inputwrap pretui-textareawrap'
-      data-invalid={{if this.invalid 'true'}}
-      data-test-pretui-textarea
-    >
+    <FieldDress @optional={{this.showOptional}} data-test-pretui-textarea>
       <BoxelInput
         @id={{@controlId}}
         @type='textarea'
@@ -78,35 +80,14 @@ export class Textarea extends Component<TextareaSignature> {
         @disabled={{this.disabled}}
         @readonly={{this.readonly}}
         @state={{this.state}}
-        @errorMessage={{@errorMessage}}
+        @errorMessage={{unless this.disabled @errorMessage}}
         @helperText={{this.helperText}}
         @required={{this.required}}
-        @optional={{@optional}}
         @onInput={{this.handleInput}}
         style={{TEXTAREA_METRICS}}
         ...attributes
       />
-    </div>
-    <style scoped>
-      @layer PretComponent {
-        /* Same re-skin channel as Input — see that component's note. */
-        .pretui-inputwrap {
-          width: 100%;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          --background: var(--field, var(--boxel-light));
-          --border: var(--input);
-          --ring: var(--primary);
-          --muted-foreground: var(--ink-3, var(--boxel-400));
-          --boxel-form-control-height: var(--control-h, 28px);
-          --boxel-form-control-border-radius: var(--radius);
-          --boxel-font-size-sm: var(--text-ui-sm, 11.5px);
-          --boxel-font-size-xs: var(--text-ui-xs, 11px);
-          --boxel-sp-xs: 5px;
-          --boxel-sp-sm: 9px;
-        }
-      }
-    </style>
+    </FieldDress>
   </template>
 }
 

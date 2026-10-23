@@ -2,7 +2,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
-import { Input } from './input';
+import { Input as PretuiInput } from './input';
 import { FormField } from './form-field';
 import type { FormIssue } from '../internal/forms-core';
 import { LAYOUTS } from '../demo-forms-core';
@@ -27,6 +27,11 @@ class FormFieldUsage extends Component {
   @tracked isStatic = false;
   @tracked showIssue = true;
   @tracked layout = 'stacked';
+  @tracked hideRequiredIndicator = false;
+  @tracked labelHidden = false;
+  @tracked reserveMessageSpace = true;
+  @tracked showAdvisory = true;
+  @tracked showRuleId = true;
 
   setLabel = (v: string) => (this.label = v);
   setPath = (v: string) => (this.path = v);
@@ -39,6 +44,11 @@ class FormFieldUsage extends Component {
   setStatic = (v: boolean) => (this.isStatic = v);
   setShowIssue = (v: boolean) => (this.showIssue = v);
   setLayout = (v: string) => (this.layout = v);
+  setHideRequiredIndicator = (v: boolean) => (this.hideRequiredIndicator = v);
+  setLabelHidden = (v: boolean) => (this.labelHidden = v);
+  setReserveMessageSpace = (v: boolean) => (this.reserveMessageSpace = v);
+  setShowAdvisory = (v: boolean) => (this.showAdvisory = v);
+  setShowRuleId = (v: boolean) => (this.showRuleId = v);
 
   get layoutVal() {
     return this.layout as 'stacked' | 'horizontal';
@@ -52,6 +62,12 @@ class FormFieldUsage extends Component {
             severity: 'error',
             message:
               'Annual revenue is 41% above the prior year — a regional buyer has to confirm the band.',
+          },
+          {
+            ruleId: 'acct-revenue-stale',
+            targetPath: this.path,
+            severity: 'warning',
+            message: 'Last updated over 90 days ago.',
           },
         ]
       : [];
@@ -67,6 +83,11 @@ class FormFieldUsage extends Component {
     if (this.readonly) bits.push('@readonly={{true}}');
     if (this.isStatic) bits.push(`@static={{true}} @value='${this.value}'`);
     if (this.layout !== 'stacked') bits.push(`@layout='${this.layout}'`);
+    if (this.hideRequiredIndicator) bits.push('@hideRequiredIndicator={{true}}');
+    if (this.labelHidden) bits.push('@labelHidden={{true}}');
+    if (!this.reserveMessageSpace) bits.push('@reserveMessageSpace={{false}}');
+    if (!this.showAdvisory) bits.push('@showAdvisory={{false}}');
+    if (this.showRuleId) bits.push('@showRuleId={{true}}');
     return `<FormField ${bits.join(' ')}>\n  <:control as |c|>\n    <Input @controlId={{c.id}} aria-describedby={{c.describedBy}}\n      aria-invalid={{if c.invalid 'true'}} @disabled={{c.disabled}} />\n  </:control>\n</FormField>`;
   }
 
@@ -90,10 +111,14 @@ class FormFieldUsage extends Component {
             @static={{this.isStatic}}
             @layout={{this.layoutVal}}
             @issues={{this.issues}}
-            @showRuleId={{true}}
+            @showRuleId={{this.showRuleId}}
+            @hideRequiredIndicator={{this.hideRequiredIndicator}}
+            @labelHidden={{this.labelHidden}}
+            @reserveMessageSpace={{this.reserveMessageSpace}}
+            @showAdvisory={{this.showAdvisory}}
           >
             <:control as |c|>
-              <Input
+              <PretuiInput
                 @controlId={{c.id}}
                 @value={{this.value}}
                 @disabled={{c.disabled}}
@@ -187,26 +212,36 @@ class FormFieldUsage extends Component {
         <Args.Bool
           @name='hideRequiredIndicator'
           @defaultValue={{false}}
+          @value={{this.hideRequiredIndicator}}
+          @onInput={{this.setHideRequiredIndicator}}
           @description='Suppress the asterisk only; the accessible marking stays.'
         />
         <Args.Bool
           @name='labelHidden'
           @defaultValue={{false}}
+          @value={{this.labelHidden}}
+          @onInput={{this.setLabelHidden}}
           @description='Keep the label in the accessible tree but out of the picture.'
         />
         <Args.Bool
           @name='reserveMessageSpace'
           @defaultValue={{true}}
+          @value={{this.reserveMessageSpace}}
+          @onInput={{this.setReserveMessageSpace}}
           @description='Hold the message row open so a row of side-by-side fields never jumps when one grows an error.'
         />
         <Args.Bool
           @name='showAdvisory'
           @defaultValue={{true}}
+          @value={{this.showAdvisory}}
+          @onInput={{this.setShowAdvisory}}
           @description='Render warnings and info alongside errors.'
         />
         <Args.Bool
           @name='showRuleId'
           @defaultValue={{false}}
+          @value={{this.showRuleId}}
+          @onInput={{this.setShowRuleId}}
           @description='Print each issue ruleId as a mono Token — provenance while authoring rules (Law 3).'
         />
         <Args.Bool
@@ -260,7 +295,7 @@ class FormFieldUsage extends Component {
         />
         <Css.Basic
           @name='--pretui-field-disabled-opacity'
-          @value='0.5'
+          @value='0.45'
           @description='Dimming applied to a disabled field (readonly is never dimmed).'
         />
       </:cssVars>

@@ -426,7 +426,7 @@ export class FormSection
         }
         /* A disabled fieldset dims as one block; nothing inside has to know. */
         .pretui-formsection:disabled .pretui-formsection-body {
-          opacity: var(--pretui-field-disabled-opacity, 0.5);
+          opacity: var(--pretui-field-disabled-opacity, var(--boxel-disabled-opacity));
         }
       }
     </style>

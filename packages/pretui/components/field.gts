@@ -107,6 +107,7 @@ export class Field extends Component<FieldSignature> {
             @tone={{this.messageTone}}
             @text={{this.messageText}}
             @id={{this.messageId}}
+            @glyph={{false}}
           />
         {{/if}}
       </div>
@@ -160,10 +161,20 @@ export class Field extends Component<FieldSignature> {
           line-height: 1rem;
         }
         /* the hint / error spans are gone: the message line is a <Cue>, which
-           brings its own type scale, its own tone and its own glyph */
-        .pretui-fieldw[data-invalid] :deep(.pretui-input) {
-          box-shadow: 0 0 0 1px var(--destructive);
-          background-color: color-mix(in oklch, var(--destructive) 4%, var(--field));
+           brings its own type scale and its own tone. Its glyph is off: the
+           control's edge already shows an error, and the text says it. */
+        /* the invalid dress is Input's: a --destructive-ink edge (the fill
+           hue misses a field boundary's 3:1) and no tint, through --input,
+           which the select-type triggers draw their edge from. A disabled
+           control can't be fixed, so it keeps the usual edge; a disabled
+           option or tree row inside it doesn't count. */
+        .pretui-fieldw[data-invalid]:not(
+            :has(
+              :is(input, textarea, select, button):disabled,
+              [aria-disabled='true']:not([role='option'], [role='treeitem'])
+            )
+          ) {
+          --input: var(--destructive-ink);
         }
         /* boxel-ui-wrapped controls: the invalid dress travels through the
            token channel — repoint the wrapper's --border/--background and the
@@ -172,11 +183,8 @@ export class Field extends Component<FieldSignature> {
            to choose its own dress. */
         .pretui-fieldw[data-invalid] :deep(.pretui-inputwrap),
         .pretui-fieldw[data-invalid] :deep(.pretui-boxelwrap) {
-          --border: var(--pretui-invalid-border, var(--destructive));
-          --background: var(
-            --pretui-invalid-background,
-            color-mix(in oklch, var(--destructive) 4%, var(--field))
-          );
+          --border: var(--pretui-invalid-border, var(--destructive-ink));
+          --background: var(--pretui-invalid-background, var(--field));
         }
       }
     </style>

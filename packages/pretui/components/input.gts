@@ -4,7 +4,8 @@ import { htmlSafe } from '@ember/template';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
-import { TYPED_BLOCK_RULES } from '../internal/extras';
+import { TYPED_BLOCK_RULES, TYPED_FONT } from '../internal/extras';
+import { FieldDress } from '../internal/field-dress';
 import { SEARCH_START_PADDING, SearchGlyph } from '../internal/search-glyph';
 
 export interface InputSignature {
@@ -36,9 +37,9 @@ export interface InputSignature {
 
 // Input wraps boxel-ui's BoxelInput, which carries the machinery —
 // validation-state plumbing, aria-invalid/aria-errormessage/aria-describedby
-// wiring, error + helper message rows — while the wrapper div re-dresses it
-// through the semantic-token + --boxel-* custom-property channel (same
-// pattern as EmailInput/PhoneInput; no CSS reaches into boxel-ui markup). The
+// wiring, error + helper message rows — while FieldDress (internal/
+// field-dress) re-dresses it through the token channel, as on every
+// BoxelInput-based control. The
 // inline style beats the two spots the channel cannot reach — the UA font on native controls and element-local
 // var definitions in boxel's own sheet; splatted attributes land on the
 // inner input, so aria-label / autocomplete / min / max keep working.
@@ -49,7 +50,6 @@ export interface InputSignature {
 // its start padding; Input renders the Optional label itself, so the
 // magnifier's positioned box is the field alone. A color input keeps
 // BoxelInput's `padding: 0`, or its swatch shrinks inside the fixed box.
-const INPUT_FONT = htmlSafe(TYPED_BLOCK_RULES);
 const SEARCH_INPUT_FONT = htmlSafe(
   `${TYPED_BLOCK_RULES} ${SEARCH_START_PADDING}`,
 );
@@ -83,9 +83,6 @@ export class Input extends Component<InputSignature> {
   get boxelType() {
     return this.isSearch || !this.args.type ? 'text' : this.args.type;
   }
-  get dimmed() {
-    return Boolean(this.disabled) || Boolean(this.readonly);
-  }
   get showOptional() {
     return Boolean(this.args.optional) && !this.required;
   }
@@ -96,7 +93,7 @@ export class Input extends Component<InputSignature> {
     if (this.args.type === 'color') {
       return COLOR_INPUT_FONT;
     }
-    return this.isSearch ? SEARCH_INPUT_FONT : INPUT_FONT;
+    return this.isSearch ? SEARCH_INPUT_FONT : TYPED_FONT;
   }
   handleInput = (value: string) => {
     emit(
@@ -105,14 +102,7 @@ export class Input extends Component<InputSignature> {
     );
   };
   <template>
-    <div
-      class='pretui-inputwrap'
-      data-invalid={{if this.invalid 'true'}}
-      data-test-pretui-input
-    >
-      {{#if this.showOptional}}
-        <span class='pretui-inputoptional'>Optional</span>
-      {{/if}}
+    <FieldDress @optional={{this.showOptional}} data-test-pretui-input>
       <div class='pretui-inputfield'>
         <BoxelInput
           @id={{@controlId}}
@@ -130,103 +120,16 @@ export class Input extends Component<InputSignature> {
           ...attributes
         />
         {{#if this.isSearch}}
-          <SearchGlyph @dimmed={{this.dimmed}} />
+          <SearchGlyph @dimmed={{this.disabled}} />
         {{/if}}
       </div>
-    </div>
+    </FieldDress>
     <style scoped>
       @layer PretComponent {
-        /* the kit's field style, Select's trigger the reference, fed into
-           BoxelInput via its token channel: the --field face, an --input
-           edge, the theme's --ring and --muted-foreground, Button's corner,
-           a --boxel-form-control-height-sm height and --boxel-font-size-xs
-           type */
-        .pretui-inputwrap {
-          width: 100%;
-          font-size: var(--boxel-font-size-xs);
-          letter-spacing: var(--boxel-lsp-xs);
-          --background: var(--field);
-          --border: var(--input);
-          --boxel-form-control-height: var(--boxel-form-control-height-sm);
-          --boxel-input-height: var(--boxel-form-control-height-sm);
-          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
-          /* the helper and error rows, a step below the field's text */
-          --boxel-font-size-sm: var(--boxel-font-size-2xs);
-          --boxel-sp-xs: var(--boxel-sp-3xs);
-          /* Select's 0.625rem text inset on both sides, less this edge's 1px
-             border. While the invalid icon shows, BoxelInput reserves its
-             column at the end instead; a search input keeps BoxelInput's
-             start inset, which clears the search icon. */
-          --boxel-sp-sm: calc(0.625rem - 1px);
-          --boxel-input-padding-inline-end: calc(0.625rem - 1px);
-          /* Select's and Autocomplete's states. Hover leaves the edge alone
-             unless the pointer can hover (below). Focus is the kit's 2px --ring
-             outline, laid over the 1px border, which BoxelInput turns --ring. */
-          --boxel-input-hover-border-color: var(--border);
-          --boxel-input-outline: 0 solid transparent;
-          --boxel-input-outline-offset: -1px;
-          --boxel-input-invalid-color: var(--destructive-ink);
-          --boxel-input-invalid-box-shadow: none;
-          --boxel-input-invalid-focus-outline: 2px solid var(--ring);
-          --boxel-input-invalid-focus-box-shadow: none;
-          --boxel-input-disabled-opacity: 0.45;
-          /* read-only stays focusable and copyable, so it isn't dimmed */
-          --boxel-input-readonly-opacity: 1;
-          /* the invalid dress this control takes, from @invalid or an invalid
-             Field: the -ink edge, as on Autocomplete (the fill hue misses a
-             boundary's 3:1), and no tint */
-          --pretui-invalid-border: var(--destructive-ink);
-          --pretui-invalid-background: var(--field);
-        }
-        @media (hover: hover) {
-          /* Select's hover edge: toward --foreground, in both schemes. It
-             mixes from --border, so an invalid field (from @invalid or an
-             invalid Field) keeps its error edge on hover, darkened. */
-          .pretui-inputwrap {
-            --boxel-input-hover-border-color: color-mix(
-              in oklch,
-              var(--foreground) 30%,
-              var(--border)
-            );
-          }
-          /* only hovering the field itself, not its message rows */
-          .pretui-inputwrap:has(input:hover) {
-            --boxel-input-invalid-color: var(--boxel-input-hover-border-color);
-          }
-        }
-        /* forced colors paint a transparent outline, so it only gets a width
-           on focus; at rest it would look the same as the focus ring. Focus
-           swaps the error edge for the ring, which wins over hover. */
-        .pretui-inputwrap:has(input:focus) {
-          --boxel-input-outline: 2px solid transparent;
-          --boxel-input-invalid-color: var(--ring);
-        }
-        .pretui-inputoptional {
-          display: block;
-          margin-block-end: var(--boxel-sp-3xs);
-          font-size: var(--boxel-font-size-2xs);
-          font-style: oblique;
-          text-align: end;
-          opacity: 0.75;
-        }
+        /* the magnifier's positioned box: the field, without the Optional
+           label above it */
         .pretui-inputfield {
           position: relative;
-        }
-        /* iOS zooms into inputs under 16px on focus */
-        @media (pointer: coarse) {
-          .pretui-inputwrap {
-            font-size: var(--boxel-form-control-touch-font-size);
-          }
-        }
-        /* a disabled field can't be fixed, so it drops the error edge (and
-           the template drops the error row) */
-        .pretui-inputwrap:has(input:disabled) {
-          --pretui-invalid-border: var(--input);
-        }
-        /* Input owns @invalid, so it applies the invalid edge itself;
-           Field's rule only adds it for a Field-level error */
-        .pretui-inputwrap[data-invalid='true'] {
-          --border: var(--pretui-invalid-border);
         }
       }
     </style>

@@ -158,6 +158,8 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
       {{#if (not @select.disabled)}}
         <CaretDown
           class={{cn 'picker-trigger__caret' (if @select.isOpen 'is-open')}}
+          width='10'
+          height='10'
         />
       {{/if}}
     </div>

@@ -8,6 +8,7 @@ import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
 import { TYPED_BLOCK_RULES } from '../internal/extras';
 import { SEARCH_START_PADDING, SearchGlyph } from '../internal/search-glyph';
+import { FieldDress } from '../internal/field-dress';
 
 // A BoxelInput in Input's field style with the kit's own magnifier, plus the
 // clear button boxel-ui doesn't ship: an overlay ✕ appears once the field
@@ -61,8 +62,7 @@ export class SearchInput extends Component<SearchInputSignature> {
     this.notify('');
   };
   <template>
-    <div
-      class='pretui-boxelwrap'
+    <FieldDress
       data-filled={{if this.showClear 'true'}}
       data-test-pretui-search-input
       ...attributes
@@ -92,43 +92,38 @@ export class SearchInput extends Component<SearchInputSignature> {
             /></svg>
         </button>
       {{/if}}
-    </div>
+    </FieldDress>
     <style scoped>
       @layer PretComponent {
-        /* Same re-skin channel as EmailInput — see that component's note. */
-        .pretui-boxelwrap {
-          position: relative;
-          width: 100%;
-          font-size: var(--boxel-font-size-xs);
-          letter-spacing: var(--boxel-lsp-xs);
-          --background: var(--field);
-          --border: var(--input);
-          --boxel-form-control-height: var(--boxel-form-control-height-sm);
-          --boxel-input-height: var(--boxel-form-control-height-sm);
-          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
-          --boxel-sp-xs: var(--boxel-sp-3xs);
-          --boxel-sp-sm: calc(0.625rem - 1px);
-        }
-        /* iOS zooms into inputs under 16px on focus */
-        @media (pointer: coarse) {
-          .pretui-boxelwrap {
-            font-size: var(--boxel-form-control-touch-font-size);
-          }
-        }
+        /* inset the same on the block and inline sides, with the field's
+           corner less that inset, so the button and its ring sit concentric
+           in the field */
         .pretui-searchclear {
+          --_inset: calc((var(--boxel-input-height) - 1.25rem) / 2);
           position: absolute;
-          top: calc((var(--boxel-input-height) - 1.25rem) / 2);
-          inset-inline-end: var(--boxel-sp-3xs);
+          top: var(--_inset);
+          inset-inline-end: var(--_inset);
           display: grid;
           place-items: center;
           width: 1.25rem;
           height: 1.25rem;
           border: 0;
           padding: 0;
-          border-radius: var(--boxel-border-radius-sm);
+          border-radius: max(
+            0rem,
+            calc(var(--boxel-form-control-border-radius) - var(--_inset))
+          );
           background: none;
           color: var(--muted-foreground);
           cursor: pointer;
+        }
+        /* the kit's 2px --ring, drawn inside so it stays clear of the
+           field's edge; host's global button focus rule reads its offset
+           from --host-outline-offset */
+        .pretui-searchclear:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+          --host-outline-offset: -2px;
         }
         .pretui-searchclear:hover {
           background-color: var(--hover);

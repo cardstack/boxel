@@ -759,7 +759,12 @@ export class Autocomplete extends Component<AutocompleteSignature> {
             aria-label={{this.clearLabel}}
             {{on 'click' this.clear}}
             data-test-pretui-autocomplete-clear
-          ><XIcon width='12' height='12' aria-hidden='true' /></Button>
+          ><XIcon
+              class='pretui-ac-clear-icon'
+              width='12'
+              height='12'
+              aria-hidden='true'
+            /></Button>
         {{/if}}
       </div>
 
@@ -962,15 +967,20 @@ export class Autocomplete extends Component<AutocompleteSignature> {
             --pretui-ac-edge: color-mix(in oklch, var(--foreground) 30%, var(--input));
           }
         }
-        /* the invalid edge marks the field at rest; hover and focus draw the
-           field's usual edge, as on Input. The hover rule above outranks the
-           inherit, which hands a toned field back its appearance's edge. */
-        .pretui-ac[data-invalid='true'] .pretui-ac-field:not(:focus-within) {
+        /* as on Input: an invalid field keeps its error edge on hover,
+           darkened, and focus draws the ring over it. A disabled field can't
+           be fixed, so it drops the error edge. */
+        .pretui-ac[data-invalid='true']:not([data-disabled='true']) {
           --pretui-ac-edge: var(--destructive-ink);
         }
         @media (hover: hover) {
-          .pretui-ac[data-invalid='true'] .pretui-ac-field:hover {
-            --pretui-ac-edge: inherit;
+          .pretui-ac[data-invalid='true']:not([data-disabled='true'])
+            .pretui-ac-field:hover {
+            --pretui-ac-edge: color-mix(
+              in oklch,
+              var(--foreground) 30%,
+              var(--destructive-ink)
+            );
           }
         }
         .pretui-ac-field:focus-within {
@@ -978,7 +988,7 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           outline-offset: -1px;
         }
         .pretui-ac[data-disabled='true'] {
-          opacity: 0.45;
+          opacity: var(--boxel-disabled-opacity);
         }
         .pretui-ac-input {
           flex: 1 1 auto;
@@ -1004,6 +1014,11 @@ export class Autocomplete extends Component<AutocompleteSignature> {
 
           flex: none;
         }
+        /* Button's label is a line box, which sits an inline icon on the
+           text baseline, above center */
+        .pretui-ac-clear-icon {
+          display: block;
+        }
         @keyframes pretui-ac-spin {
           to {
             transform: rotate(360deg);
@@ -1023,18 +1038,18 @@ export class Autocomplete extends Component<AutocompleteSignature> {
         /* a row's corner is the list's corner less the list's padding, so the
            two stay concentric */
         .pretui-ac-list {
-          --pretui-ac-list-radius: calc(var(--radius) - 0.125rem);
-          --pretui-ac-list-inset: 0.25em;
+          --_ac-list-radius: calc(var(--radius) - 0.125rem);
+          --_ac-list-inset: 0.25em;
           position: absolute;
           z-index: var(--pretui-z-dropdown, 60);
           inset-inline: 0;
           inset-block-start: calc(100% + var(--boxel-sp-4xs));
           margin: 0;
-          padding: var(--pretui-ac-list-inset);
+          padding: var(--_ac-list-inset);
           max-height: 16em;
           overflow-y: auto;
           list-style: none;
-          border-radius: var(--pretui-ac-list-radius);
+          border-radius: var(--_ac-list-radius);
           background-color: var(--popover);
           color: var(--popover-foreground);
           box-shadow:
@@ -1057,7 +1072,7 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           min-width: 0;
           padding: 0.34em 0.5em;
           border-radius: calc(
-            var(--pretui-ac-list-radius) - var(--pretui-ac-list-inset)
+            var(--_ac-list-radius) - var(--_ac-list-inset)
           );
           cursor: pointer;
         }
@@ -1084,7 +1099,7 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           cursor: default;
         }
         .pretui-ac-row:has(.pretui-ac-option[aria-disabled='true']) {
-          opacity: 0.45;
+          opacity: var(--boxel-disabled-opacity);
           cursor: default;
         }
         /* the truncation triple, never min-width alone */

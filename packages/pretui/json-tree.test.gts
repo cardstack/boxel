@@ -608,7 +608,7 @@ module('Pretui | JsonTree + JsonEditor render', function (hooks) {
 
     assert.strictEqual(state.lastJson, undefined, '@onChange never fires for an invalid draft');
     assert.true(state.issues > 0, '@onIssue reports it so the caller can render the error');
-    const wrap = document.querySelector('[data-test-pretui-input][data-invalid="true"]');
+    const wrap = document.querySelector('[data-test-pretui-input]:has(input[aria-invalid="true"])');
     assert.ok(wrap, 'the control is marked invalid — and carries a message, not just a colour');
     assert.true(
       (wrap as HTMLElement).innerText.toLowerCase().includes('json number'),

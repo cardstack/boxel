@@ -47,7 +47,7 @@ An `<input type="number">` supplies the role and the `aria-value*` properties im
 
 Input's field style: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus.
 
-Forwarded into boxel-ui through the `--boxel-*` channel, matching **Input**'s metrics so a numeric field and a text field align in the same form.
+It wears Input's field dress (`internal/field-dress`), so its hover, invalid, disabled, read-only and focus states are Input's too; see **Input**'s Theming. Its figures are tabular, so values don't shift as they change.
 
 Native spinner buttons are a UA-rendered control that CSS custom properties cannot reach — a theme cannot restyle them, and they will look like the browser's rather than like the kit's. **Stepper** exists partly for that reason. If a theme wants consistent numeric chrome, prefer Stepper. The invalid dress arrives from an enclosing **Field** through the token channel, as with the rest of the family.
 

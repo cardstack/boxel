@@ -112,10 +112,8 @@ module('Pretui | React-dialect aliases — controls', function (hooks) {
         data-test-alias-input
       />
     </template>);
-    let wrap = q('[data-test-pretui-input]') as HTMLElement;
-    assert.strictEqual(
-      wrap.dataset['invalid'],
-      'true',
+    assert.ok(
+      q('[data-test-pretui-input] input[aria-invalid="true"]'),
       'isInvalid dresses the field',
     );
     let input = q('[data-test-alias-input]') as HTMLInputElement;

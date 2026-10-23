@@ -32,6 +32,7 @@ class LookupUsage extends Component {
   @tracked multiple = false;
   @tracked loading = false;
   @tracked disabled = false;
+  @tracked invalid = false;
   @tracked placeholder = 'Search accounts…';
 
   objectTypes = ['Accounts', 'Contacts'];
@@ -82,6 +83,7 @@ class LookupUsage extends Component {
   };
   setLoading = (v: boolean) => (this.loading = v);
   setDisabled = (v: boolean) => (this.disabled = v);
+  setInvalid = (v: boolean) => (this.invalid = v);
   setPlaceholder = (v: string) => (this.placeholder = v);
   setSelectedIds = (ids: string[]) => {
     this.selected = ids
@@ -105,6 +107,9 @@ class LookupUsage extends Component {
     if (this.disabled) {
       bits.push('@disabled={{true}}');
     }
+    if (this.invalid) {
+      bits.push('@invalid={{true}}');
+    }
     if (this.placeholder) {
       bits.push(`@placeholder='${this.placeholder}'`);
     }
@@ -126,6 +131,7 @@ class LookupUsage extends Component {
           @multiple={{this.multiple}}
           @loading={{this.loading}}
           @disabled={{this.disabled}}
+          @invalid={{this.invalid}}
           @label={{this.label}}
           @recordNoun={{this.recordNoun}}
           @placeholder={{this.placeholder}}
@@ -195,6 +201,8 @@ class LookupUsage extends Component {
         <Args.Bool
           @name='invalid'
           @defaultValue={{false}}
+          @value={{this.invalid}}
+          @onInput={{this.setInvalid}}
           @description='Error dress plus aria-invalid. The message itself belongs to the surrounding form field — this control never validates.'
         />
         <Args.Base

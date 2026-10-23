@@ -51,7 +51,7 @@ Gaps:
 
 Input's field style: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus. The valid state additionally reads `--success` through the boxel-ui validation channel.
 
-Forwarded into boxel-ui through the `--boxel-*` channel, matching **Input**'s metrics exactly so the family aligns in a shared form.
+It wears Input's field dress (`internal/field-dress`), so its hover, invalid, disabled, read-only and focus states are Input's too; see **Input**'s Theming.
 
 `--success` is the token to check per theme here: unlike the rest of the family, this component has an affirmative state, and a theme that tunes `--success` for a **Delta**'s 11.5px mono ink may find it too light as a field hairline. The invalid dress still arrives from an enclosing **Field** by repointing `--border`/`--background`, so error styling is a theme concern defined once.
 
