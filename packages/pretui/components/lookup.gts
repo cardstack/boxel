@@ -235,13 +235,37 @@ export class Lookup extends Component<LookupSignature> {
           position: relative; /* anchors the in-place dropdown */
           display: block;
           min-width: 0;
-          --boxel-form-control-border-radius: var(--radius);
-          --boxel-border-radius-sm: var(--radius);
+          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
+          --boxel-border-radius-sm: calc(var(--radius) - 0.125rem);
           --boxel-select-trigger-padding: 0;
           --boxel-dropdown-background-color: var(--popover);
           --boxel-dropdown-text-color: var(--foreground);
-          --boxel-dropdown-hover-color: var(--hover, var(--boxel-100));
-          --boxel-dropdown-highlight-color: var(--hover, var(--boxel-100));
+          --boxel-dropdown-hover-color: var(--hover);
+          --boxel-dropdown-highlight-color: var(--hover);
+          /* the trigger's resting edge, which invalid repoints, and the
+             edge drawn, which hover mixes from it */
+          --_lookup-rest-edge: var(--input);
+          --_lookup-edge: var(--_lookup-rest-edge);
+          /* Select's caret inset, less this edge's 1px border */
+          --_lookup-caret-end: calc(0.625rem - 1px);
+        }
+        /* as on Input: an invalid field keeps its error edge on hover,
+           darkened, and focus draws the ring over it. A disabled field can't
+           be fixed, so it drops the error edge. */
+        .pretui-lookup[data-invalid]:not([data-disabled]) {
+          --_lookup-rest-edge: var(--destructive-ink);
+        }
+        /* Select's hover edge: toward --foreground, in both schemes. Keyed on
+           the trigger, so hovering the in-place dropdown leaves it alone. */
+        @media (hover: hover) {
+          .pretui-lookup:not([data-disabled])
+            :deep(.pretui-pickertrigger.ember-power-select-trigger:hover) {
+            --_lookup-edge: color-mix(
+              in oklch,
+              var(--foreground) 30%,
+              var(--_lookup-rest-edge)
+            );
+          }
         }
         /* loading affix — the one state the engine cannot express without
            being handed a promise for @options (which strands its `loading`
@@ -249,11 +273,11 @@ export class Lookup extends Component<LookupSignature> {
         .pretui-picker-busy {
           position: absolute;
           top: 0;
-          right: 8px;
-          height: var(--control-h, 28px);
+          inset-inline-end: 0.5rem;
+          height: var(--boxel-form-control-height-sm);
           display: inline-flex;
           align-items: center;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--muted-foreground);
           pointer-events: none;
         }
         /* screen-reader-only; never display:none — a hidden region never speaks */
@@ -275,36 +299,64 @@ export class Lookup extends Component<LookupSignature> {
       .pretui-lookup :deep(.pretui-pickertrigger.ember-power-select-trigger) {
         display: flex;
         align-items: center;
-        min-height: var(--control-h, 28px);
-        padding: 2px 26px 2px 4px;
-        border: 0;
-        border-radius: var(--radius);
-        background: var(--field, var(--boxel-light));
-        box-shadow: 0 0 0 1px var(--input);
+        min-height: var(--boxel-form-control-height-sm);
+        /* seats a 1.25rem pill and its 1px edge with a gap inside a 1.75rem
+           field, as MultiSelect seats its chips */
+        padding-block: calc(0.25rem - 1px);
+        padding-inline: calc(0.25rem - 1px)
+          calc(var(--_lookup-caret-end) + 0.625rem + var(--boxel-sp-2xs));
+        border: 1px solid var(--_lookup-edge);
+        border-radius: calc(var(--radius) - 0.125rem);
+        background-color: var(--field);
         color: var(--foreground);
+        font-size: var(--boxel-font-size-xs);
+        letter-spacing: var(--boxel-lsp-xs);
+        /* power-select's 1.75 line-height outgrows the height at 16px */
+        line-height: var(--boxel-form-control-line-height-sm);
         width: 100%;
         overflow: visible;
       }
-      /* Ring rides box-shadow so it costs no layout; the transparent outline
-         beside it is dead weight in normal rendering and the only thing that
-         survives forced-colors mode, where box-shadow is not painted. */
+      /* iOS zooms into inputs under 16px on focus */
+      @media (pointer: coarse) {
+        .pretui-lookup :deep(.pretui-pickertrigger.ember-power-select-trigger) {
+          font-size: var(--boxel-form-control-touch-font-size);
+        }
+      }
+      /* Select's caret: a 10px chevron in --muted-foreground at Select's
+         inset, drawn on power-select's status icon, which flips it while
+         open. The loading spinner takes its place. */
+      .pretui-lookup :deep(.ember-power-select-status-icon) {
+        /* clears power-select's physical right: 5px before the logical
+           inset places it, so the order matters */
+        right: auto;
+        inset-inline-end: var(--_lookup-caret-end);
+        width: 0.625rem;
+        height: 0.375rem;
+        border: 0;
+        background-color: var(--muted-foreground);
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0.41 0.41 10 6'%3E%3Cpath fill='none' stroke='black' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m1.414 1.414 4 4 4-4'/%3E%3C/svg%3E")
+          center / contain no-repeat;
+      }
+      .pretui-lookup[data-loading] :deep(.ember-power-select-status-icon) {
+        visibility: hidden;
+      }
       .pretui-lookup
         :deep(.pretui-pickertrigger.ember-power-select-trigger[aria-expanded='true']),
       .pretui-lookup
         :deep(.pretui-pickertrigger.ember-power-select-trigger:focus-within) {
-        outline: 2px solid transparent;
-        outline-offset: 1px;
-        box-shadow: 0 0 0 2px var(--primary),
-          var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
-      }
-      .pretui-lookup[data-invalid]
-        :deep(.pretui-pickertrigger.ember-power-select-trigger) {
-        box-shadow: 0 0 0 1px var(--destructive);
+        outline: 2px solid var(--ring);
+        outline-offset: -1px;
       }
       .pretui-lookup[data-disabled]
         :deep(.pretui-pickertrigger.ember-power-select-trigger) {
-        opacity: 0.45;
+        opacity: var(--boxel-disabled-opacity);
         cursor: default;
+      }
+      /* the trigger carries the disabled dimming; the global input:disabled
+         rule would dim the text a second time */
+      .pretui-lookup
+        :deep(input.ember-power-select-trigger-multiple-input:disabled) {
+        opacity: 1;
       }
       .pretui-lookup :deep(ul.ember-power-select-multiple-options) {
         display: flex;
@@ -324,10 +376,10 @@ export class Lookup extends Component<LookupSignature> {
         align-items: center;
         gap: 4px;
         margin: 0;
-        min-height: 22px;
+        min-height: 1.25rem;
         padding: 1px 5px 1px 4px;
         border: 0;
-        border-radius: 11px;
+        border-radius: 0.625rem;
         background: var(--card);
         box-shadow: var(
           --pretui-shadow-control,
@@ -362,14 +414,13 @@ export class Lookup extends Component<LookupSignature> {
       }
       .pretui-lookup :deep(input.ember-power-select-trigger-multiple-input) {
         width: 100%;
-        height: 24px;
+        height: 1.25rem;
         margin: 0;
         padding: 0 5px;
         border: 0;
         background: transparent;
         font: inherit;
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
+        letter-spacing: inherit;
         color: var(--foreground);
       }
       .pretui-lookup :deep(input.ember-power-select-trigger-multiple-input:focus) {
@@ -377,7 +428,7 @@ export class Lookup extends Component<LookupSignature> {
       }
       .pretui-lookup
         :deep(input.ember-power-select-trigger-multiple-input::placeholder) {
-        color: var(--ink-3, var(--boxel-400));
+        color: var(--muted-foreground);
       }
       /* dropdown — the kit's popover look, identical to Select's */
       .pretui-lookup

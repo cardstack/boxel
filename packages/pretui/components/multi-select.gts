@@ -8,6 +8,7 @@ import { guidFor } from '@ember/object/internals';
 import { OwnedTimers, TypeaheadBuffer, ownsTimers, typeaheadIndex } from '../focus';
 import { Popup } from './popup';
 import type { SelectOption } from './select';
+import { Caret } from '../internal/caret';
 
 // ── MultiSelect ──────────────────────────────────────────────────────────
 // Fresh on the Popup primitive, mirroring Pretui Select's structure: same
@@ -174,7 +175,7 @@ export class MultiSelect extends Component<MultiSelectSignature> {
             {{else}}
               <span class='pretui-placeholder'>{{if @placeholder @placeholder 'Select…'}}</span>
             {{/if}}
-            <svg width='10' height='10' viewBox='0 0 10 10' class='pretui-caret' aria-hidden='true'><path d='M2 3.5 5 6.5 8 3.5' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' /></svg>
+            <Caret class='pretui-caret' />
           </div>
         </:anchor>
         <:default>
@@ -222,58 +223,68 @@ export class MultiSelect extends Component<MultiSelectSignature> {
           clip-path: inset(50%);
           white-space: nowrap;
         }
-        .pretui-input {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          height: var(--control-h, 28px);
-          padding: 0 9px;
-          border: 0;
-          border-radius: var(--radius);
-          font: inherit;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          color: var(--foreground);
-          background: var(--field, var(--boxel-light));
-          box-shadow: 0 0 0 1px var(--input);
-          width: 100%;
-        }
-        /* trigger grows with wrapped chips; keeps the h28 rest state */
+        /* Select's trigger: the --field face, a 1px --input edge inside the
+           box, Button's corner, a --boxel-form-control-height-sm height and
+           --boxel-font-size-xs type. It grows with wrapped chips; the block
+           padding seats a 20px chip in the rest height. */
         .pretui-mstrigger {
-          height: auto;
-          min-height: var(--control-h, 28px);
+          display: flex;
           flex-wrap: wrap;
-          gap: 3px;
-          padding: 3px 9px 3px 4px;
+          align-items: center;
+          gap: var(--boxel-sp-5xs);
+          width: 100%;
+          min-height: var(--boxel-form-control-height-sm);
+          padding-block: calc(0.25rem - 1px);
+          padding-inline: calc(0.25rem - 1px) calc(0.625rem - 1px);
+          border: 1px solid var(--input);
+          border-radius: calc(var(--radius) - 0.125rem);
+          background-color: var(--field);
+          color: var(--foreground);
+          font-family: inherit;
+          font-size: var(--boxel-font-size-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+          line-height: var(--boxel-form-control-line-height-sm);
           cursor: pointer;
+          transition: border-color var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
         }
-        /* The ring is a box-shadow so it costs no layout — but a box-shadow is
-           not painted at all in forced-colors mode, which would leave this
-           trigger with no focus indicator in high contrast. The transparent
-           outline is the standard fix: it paints nothing in normal rendering
-           and it never participates in layout, while forced-colors forces
-           outline-color to a system colour and the ring reappears. boxel-ui
-           uses exactly this device on its own invalid-input focus state. */
-        .pretui-mstrigger:focus-visible {
-          outline: 2px solid transparent;
-          outline-offset: 1px;
-          box-shadow: 0 0 0 2px var(--primary), var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
+        /* Select's hover edge: toward --foreground, in both schemes. It
+           mixes from --input, so an invalid Field's edge darkens too. */
+        @media (hover: hover) {
+          .pretui-mstrigger:not([data-disabled]):hover {
+            border-color: color-mix(in oklch, var(--foreground) 30%, var(--input));
+          }
         }
+        /* the kit's 2px --ring outline over the edge, which forced colors
+           keep */
+        .pretui-mstrigger:focus-visible,
         .pretui-mstrigger[data-state='open'] {
-          box-shadow: 0 0 0 2px var(--primary), var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
+          outline: 2px solid var(--ring);
+          outline-offset: -1px;
         }
         .pretui-mstrigger[data-disabled] {
-          opacity: 0.45;
+          opacity: var(--boxel-disabled-opacity);
           cursor: default;
         }
+        /* iOS zooms into inputs under 16px on focus */
+        @media (pointer: coarse) {
+          .pretui-mstrigger {
+            font-size: var(--boxel-form-control-touch-font-size);
+          }
+        }
+        /* lines up with the text in Select's trigger */
         .pretui-placeholder {
-          color: var(--ink-3, var(--boxel-400));
-          padding-left: 5px;
+          padding-inline-start: 0.375rem;
+          color: var(--muted-foreground);
         }
         .pretui-caret {
           flex: none;
-          margin-left: auto;
-          color: var(--ink-3, var(--boxel-400));
+          margin-inline-start: auto;
+          color: var(--muted-foreground);
+        }
+        /* points up while the list is open, as on Select */
+        .pretui-mstrigger[data-state='open'] .pretui-caret {
+          rotate: 180deg;
         }
         /* selected chips — FilterChips capsule dress, cut down to 20px */
         .pretui-mschip {

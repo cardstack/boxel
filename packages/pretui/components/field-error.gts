@@ -43,6 +43,10 @@ export interface FieldErrorSignature {
     announce?: boolean;
     /** Show `issue.ruleId` as a mono Token after the message (Law 3). */
     showRuleId?: boolean;
+    /** false drops the error glyph, for a caller whose control already
+     *  shows the error. Warnings and info keep theirs, so the severities
+     *  stay apart without relying on color. */
+    glyph?: boolean;
   };
   Element: HTMLDivElement;
 }
@@ -51,7 +55,10 @@ export class FieldError extends Component<FieldErrorSignature> {
   get severity(): FormSeverity {
     return normalizeSeverity(this.args.issue?.severity);
   }
-  get glyph(): string {
+  get glyph(): string | undefined {
+    if (this.args.glyph === false && this.severity === 'error') {
+      return undefined;
+    }
     return SEVERITY_GLYPHS[this.severity];
   }
   get role(): string | undefined {
@@ -68,7 +75,9 @@ export class FieldError extends Component<FieldErrorSignature> {
       data-test-pretui-field-error
       ...attributes
     >
-      <span class='pretui-field-error-glyph' aria-hidden='true'>{{this.glyph}}</span>
+      {{#if this.glyph}}
+        <span class='pretui-field-error-glyph' aria-hidden='true'>{{this.glyph}}</span>
+      {{/if}}
       <span class='pretui-field-error-msg'>{{@issue.message}}</span>
       {{#if this.ruleId}}
         <Token @value={{this.ruleId}} class='pretui-field-error-rule' />
@@ -82,24 +91,24 @@ export class FieldError extends Component<FieldErrorSignature> {
            hue; the recipe below is written once and reads it. */
         .pretui-field-error {
           --pretui-issue-hue: var(--pretui-issue-error, var(--destructive));
+          /* the text is the severity's -ink, as on Input's error row */
+          --_issue-ink: var(--destructive-ink);
           display: flex;
           align-items: flex-start;
           gap: var(--pretui-issue-gap, 5px);
           font-size: var(--text-ui-sm, 11.5px);
           line-height: 16px;
           font-weight: 500;
-          color: color-mix(
-            in oklch,
-            var(--foreground) 22%,
-            var(--pretui-issue-hue)
-          );
+          color: var(--_issue-ink);
           min-width: 0;
         }
         .pretui-field-error[data-severity='warning'] {
           --pretui-issue-hue: var(--pretui-issue-warning, var(--warning, var(--boxel-warning)));
+          --_issue-ink: var(--warning-ink);
         }
         .pretui-field-error[data-severity='info'] {
           --pretui-issue-hue: var(--pretui-issue-info, var(--pretui-info, var(--boxel-blue)));
+          --_issue-ink: var(--info-ink);
         }
         .pretui-field-error-glyph {
           flex: none;

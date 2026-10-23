@@ -32,7 +32,7 @@ Where it is behind Bootstrap's version: no size axis, and the two-mode API is mo
 
 ## Accessibility
 
-No APG pattern; it is a labelled control plus decorations, governed by WCAG **1.3.1**, **3.3.2** and **4.1.2**.
+No APG pattern; it is a labeled control plus decorations, governed by WCAG **1.3.1**, **3.3.2** and **4.1.2**.
 
 Gaps, and the affix one is the interesting one:
 
@@ -46,7 +46,7 @@ Gaps, and the affix one is the interesting one:
 
 ## Theming
 
-Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3`, `--control-h`, `--radius`, `--text-ui-md`, `--track-ui`, plus **Button**/**IconButton**/**Select** tokens for whatever accessories you place.
+Input's field style: a `--field` face with `--foreground` text, an `--input` edge, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus. BoxelInputGroup has no placeholder setting, so the placeholder keeps the browser's color. Text accessories and the helper row are `--boxel-font-size-2xs`, a step below the field's text; **Button**/**IconButton**/**Select** accessories bring their own tokens.
 
 Forwarded into boxel-ui through the `--boxel-*` channel. `data-state` (the validation enum) and `data-disabled` are reflected on the wrapper, so a stylesheet can dress both without reaching inside.
 

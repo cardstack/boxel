@@ -125,6 +125,8 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
             (if @select.isOpen 'is-open')
             (if @invertIcon 'is-inverted')
           }}
+          width='10'
+          height='10'
           data-test-caret-down
         />
       </:icon>

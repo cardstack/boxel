@@ -3,6 +3,7 @@ import { click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { Button } from '@cardstack/pretui/components/button';
+import { EmailInput } from '@cardstack/pretui/components/email-input';
 import { Field } from '@cardstack/pretui/components/field';
 import { Input as PretuiInput } from '@cardstack/pretui/components/input';
 import { Switch } from '@cardstack/pretui/components/switch';
@@ -58,7 +59,7 @@ module('Integration | pretui components', function (hooks) {
     assert.deepEqual(seen, [true]);
   });
 
-  test('an invalid Field dresses Input and Textarea through their wrappers', async function (assert) {
+  test('an invalid Field gives every wrapped control the -ink edge and no tint', async function (assert) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -67,6 +68,9 @@ module('Integration | pretui components', function (hooks) {
           </Field>
           <Field @error='Required' as |controlId|>
             <PretuiTextarea @controlId={{controlId}} />
+          </Field>
+          <Field @error='Required' as |controlId|>
+            <EmailInput @controlId={{controlId}} />
           </Field>
         </template>
       },
@@ -90,16 +94,64 @@ module('Integration | pretui components', function (hooks) {
       'Input is not tinted',
     );
 
-    let textarea = '[data-test-pretui-textarea]';
-    assert.strictEqual(
-      token(textarea, '--border'),
-      token(textarea, '--destructive'),
-      'Textarea keeps the fill-hue edge',
+    for (let control of [
+      '[data-test-pretui-textarea]',
+      '[data-test-pretui-email-input]',
+    ]) {
+      assert.strictEqual(
+        token(control, '--border'),
+        token(control, '--destructive-ink'),
+        `${control} takes the -ink edge`,
+      );
+      assert.strictEqual(
+        token(control, '--background'),
+        token(control, '--field'),
+        `${control} is not tinted`,
+      );
+    }
+  });
+
+  test('a disabled control in an invalid Field drops the error edge', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Field @error='Required' as |controlId|>
+            <PretuiTextarea @controlId={{controlId}} @disabled={{true}} />
+          </Field>
+          <Field @error='Required' as |controlId|>
+            <EmailInput @controlId={{controlId}} @disabled={{true}} />
+          </Field>
+        </template>
+      },
     );
-    assert.notStrictEqual(
-      token(textarea, '--background'),
-      token(textarea, '--field'),
-      'Textarea is tinted',
+
+    for (let control of [
+      '[data-test-pretui-textarea]',
+      '[data-test-pretui-email-input]',
+    ]) {
+      let style = getComputedStyle(document.querySelector(control)!);
+      assert.strictEqual(
+        style.getPropertyValue('--border').trim(),
+        style.getPropertyValue('--input').trim(),
+        control,
+      );
+    }
+  });
+
+  test("an invalid Textarea leaves its end inset to BoxelInput's validation icon column", async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <PretuiTextarea @invalid={{true}} data-test-invalid />
+        </template>
+      },
+    );
+
+    let textarea = document.querySelector<HTMLElement>('[data-test-invalid]')!;
+    assert.strictEqual(
+      textarea.style.paddingInlineEnd,
+      '',
+      'no inline end padding overrides the column BoxelInput reserves',
     );
   });
 

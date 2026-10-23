@@ -6,6 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { emit, firstDefined, resolveSize } from '../pretui-primitives';
 import type { ControlAliasArgs, PretuiSizeArg } from '../pretui-primitives';
+import { Caret } from '../internal/caret';
 
 export interface NativeSelectOption {
   value: string;
@@ -120,27 +121,25 @@ export class NativeSelect extends Component<NativeSelectSignature> {
           {{/each}}
         {{/if}}
       </select>
-      <svg class='pretui-nativeselect-caret' viewBox='0 0 12 12' aria-hidden='true'>
-        <path d='M3 4.5l3 3 3-3' />
-      </svg>
+      <Caret class='pretui-nativeselect-caret' />
     </span>
     <style scoped>
       @layer PretComponent {
+        /* Select's field style: the --field face, a 1px --input edge inside
+           the box, Button's corner, --boxel-form-control-height-sm at size m
+           and --boxel-font-size-xs type, with Select's caret at its inset */
         .pretui-nativeselect {
-          --ns-h-base: var(--control-h, 1.75rem);
+          --ns-h-base: var(--boxel-form-control-height-sm);
           --ns-h: var(--ns-h-base);
-          --ns-text: var(--text-ui-md, 0.78rem);
-          --ns-text-sm: var(--text-ui-sm, 0.72rem);
-          --ns-text-lg: var(--text-ui-lg, 0.875rem);
-          --ns-pad: var(--space-3, 0.5rem);
-          --ns-snap: var(--pretui-dur-snap, 180ms) var(--pretui-ease-snap, ease);
+          /* Select's 0.625rem text inset, less the edge's 1px border */
+          --ns-pad: calc(0.625rem - 1px);
           position: relative;
           display: inline-grid;
           align-items: center;
           inline-size: 100%;
           min-inline-size: 0;
-          font-size: var(--ns-text);
-          letter-spacing: var(--track-ui, 0.01em);
+          font-size: var(--boxel-font-size-xs);
+          letter-spacing: var(--boxel-lsp-xs);
         }
         .pretui-nativeselect-control {
           appearance: none;
@@ -148,63 +147,81 @@ export class NativeSelect extends Component<NativeSelectSignature> {
           min-block-size: var(--ns-h);
           margin: 0;
           padding-block: 0;
-          padding-inline: var(--ns-pad) calc(var(--ns-pad) * 2 + 0.75rem);
-          font: inherit;
+          padding-inline: var(--ns-pad)
+            calc(var(--ns-pad) + 0.625rem + var(--boxel-sp-2xs));
+          font-family: inherit;
+          font-size: inherit;
+          font-weight: inherit;
+          font-style: inherit;
           letter-spacing: inherit;
+          line-height: var(--boxel-form-control-line-height-sm);
           color: var(--foreground);
           background-color: var(--field);
-          border: 0;
-          border-radius: var(--radius);
-          box-shadow: 0 0 0 1px var(--input);
+          border: 1px solid var(--input);
+          border-radius: calc(var(--radius) - 0.125rem);
           cursor: pointer;
-          transition:
-            box-shadow var(--ns-snap),
-            background-color var(--ns-snap);
+          transition: border-color var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
         }
         .pretui-nativeselect[data-empty='true'] .pretui-nativeselect-control {
           color: var(--muted-foreground);
         }
-        .pretui-nativeselect-control:hover:not(:disabled) {
-          background-color: var(--hover);
+        /* the -ink edge (the fill hue misses a field boundary's 3:1), which
+           hover darkens; a disabled field can't be fixed, so it drops it */
+        .pretui-nativeselect[data-invalid='true']
+          .pretui-nativeselect-control:not(:disabled) {
+          --input: var(--destructive-ink);
+        }
+        /* Select's hover edge: toward --foreground, in both schemes */
+        @media (hover: hover) {
+          .pretui-nativeselect-control:hover:not(:disabled) {
+            border-color: color-mix(
+              in oklch,
+              var(--foreground) 30%,
+              var(--input)
+            );
+          }
         }
         .pretui-nativeselect-control:focus-visible {
           outline: 2px solid var(--ring);
-          outline-offset: 2px;
-        }
-        .pretui-nativeselect[data-invalid='true'] .pretui-nativeselect-control {
-          box-shadow: 0 0 0 1px var(--destructive);
+          outline-offset: -1px;
         }
         .pretui-nativeselect-control:disabled {
-          opacity: 0.45;
+          opacity: var(--boxel-disabled-opacity);
           cursor: default;
         }
+        /* the platform draws the open list, so the caret never flips */
         .pretui-nativeselect-caret {
           position: absolute;
-          inset-inline-end: var(--ns-pad);
-          inline-size: 0.75rem;
-          block-size: 0.75rem;
-          fill: none;
-          stroke: currentColor;
-          stroke-width: 1.5;
-          stroke-linecap: round;
-          stroke-linejoin: round;
+          inset-inline-end: 0.625rem;
           color: var(--muted-foreground);
           pointer-events: none;
         }
+        .pretui-nativeselect:has(select:disabled) .pretui-nativeselect-caret {
+          opacity: var(--boxel-disabled-opacity);
+        }
         .pretui-nativeselect[data-size='xs'] {
           --ns-h: calc(var(--ns-h-base) - 0.375rem);
-          --ns-text: var(--ns-text-sm);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-nativeselect[data-size='s'] {
           --ns-h: calc(var(--ns-h-base) - 0.1875rem);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-nativeselect[data-size='l'] {
           --ns-h: calc(var(--ns-h-base) + 0.25rem);
-          --ns-text: var(--ns-text-lg);
+          font-size: var(--boxel-font-size-sm);
         }
         .pretui-nativeselect[data-size='xl'] {
           --ns-h: calc(var(--ns-h-base) + 0.5rem);
-          --ns-text: var(--ns-text-lg);
+          font-size: var(--boxel-font-size-sm);
+        }
+        /* iOS zooms into inputs under 16px on focus */
+        @media (pointer: coarse) {
+          .pretui-nativeselect,
+          .pretui-nativeselect[data-size] {
+            font-size: var(--boxel-form-control-touch-font-size);
+          }
         }
       }
     </style>
