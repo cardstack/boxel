@@ -249,6 +249,12 @@ const identityTagKey = Symbol.for(exportIdentitySymbolKey);
 // records its module as compiled — a realm module by its URL — and the module
 // is canonicalized when the tag is read: the realm prefix that spells it may be
 // registered after the module was compiled.
+//
+// A class is given the same identity object each time it is identified, for as
+// long as its module canonicalizes the same way, so callers can compare
+// identities by reference.
+const identities = new WeakMap<Function, { module: string; name: string }>();
+
 function identityFromTag(
   value: Function,
   virtualNetwork: VirtualNetwork | undefined,
@@ -259,11 +265,17 @@ function identityFromTag(
   if (!tag) {
     return undefined;
   }
-  let [module, name] = tag;
-  return {
-    module: virtualNetwork ? virtualNetwork.unresolveURL(module) : module,
-    name,
-  };
+  let [taggedModule, name] = tag;
+  let module = virtualNetwork
+    ? virtualNetwork.unresolveURL(taggedModule)
+    : taggedModule;
+  let known = identities.get(value);
+  if (known?.module === module && known.name === name) {
+    return known;
+  }
+  let identity = { module, name };
+  identities.set(value, identity);
+  return identity;
 }
 
 export class Loader {
