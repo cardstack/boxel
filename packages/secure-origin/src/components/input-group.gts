@@ -63,6 +63,8 @@ interface Signature {
     disabled?: boolean;
     errorMessage?: string;
     id?: string;
+    // The id of the element that labels the input.
+    labelledBy?: string;
     name?: string;
     onBlur?: (ev: Event) => void;
     onInput?: (value: string) => void;
@@ -75,8 +77,9 @@ interface Signature {
     after: [AccessoriesBlockArg];
     before: [AccessoriesBlockArg];
   };
-  // The input itself, as a BoxelInput's attributes go on its input.
-  Element: HTMLInputElement;
+  // The bordered group around the input, as boxel-ui's InputGroup's
+  // attributes go on its group.
+  Element: HTMLDivElement;
 }
 
 export default class InputGroup extends Component<Signature> {
@@ -124,8 +127,12 @@ export default class InputGroup extends Component<Signature> {
             false
             @state
           }}
+          ...attributes
         >
           {{yield Accessories to='before'}}
+          {{! Named by the label @labelledBy points at, rather than by all the
+            text of a label around it, an error message included. }}
+          {{! template-lint-disable require-input-label }}
           <input
             class='form-control'
             id={{this.elementId}}
@@ -134,6 +141,7 @@ export default class InputGroup extends Component<Signature> {
             value={{@value}}
             disabled={{@disabled}}
             autocomplete={{@autocomplete}}
+            aria-labelledby={{@labelledBy}}
             aria-invalid={{if (eq @state 'invalid') 'true'}}
             aria-errormessage={{if
               shouldShowErrorMessage
@@ -149,7 +157,6 @@ export default class InputGroup extends Component<Signature> {
             }}
             {{on 'input' this.onInput}}
             {{on 'blur' this.onBlur}}
-            ...attributes
           />
           {{yield Accessories to='after'}}
           {{#if this.validationIcon}}

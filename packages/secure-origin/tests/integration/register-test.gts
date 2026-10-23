@@ -75,8 +75,8 @@ function invitingServer(servers: MockServers) {
 async function fillRegistration(password = PASSWORD) {
   await fillIn('[data-test-name-field]', 'New User');
   await fillIn('[data-test-email-field]', 'new-user@example.com');
-  await fillIn('[data-test-username-field]', 'new-user');
-  await triggerEvent('[data-test-username-field]', 'blur');
+  await fillIn('[data-test-username-field] input', 'new-user');
+  await triggerEvent('[data-test-username-field] input', 'blur');
   await waitFor('[data-test-username-available]');
   await fillIn('[data-test-password-field]', password);
   await fillIn('[data-test-confirm-password-field]', password);
@@ -275,15 +275,15 @@ module('Integration | register', function (hooks) {
       ['realm/name', 'Username cannot start with "realm/"'],
       ['taken', 'Username is already taken'],
     ] as const) {
-      await fillIn('[data-test-username-field]', value);
-      await triggerEvent('[data-test-username-field]', 'blur');
+      await fillIn('[data-test-username-field] input', value);
+      await triggerEvent('[data-test-username-field] input', 'blur');
       await waitUntil(() =>
         document.querySelector(error('username'))?.textContent?.trim(),
       );
       assert.dom(error('username')).hasText(message, value || 'empty');
       // An error the availability check shows on its own is announced, and
       // read with its field.
-      let input = document.querySelector('[data-test-username-field]')!;
+      let input = document.querySelector('[data-test-username-field] input')!;
       let described = input.getAttribute('aria-describedby');
       assert.ok(
         described,
@@ -472,11 +472,11 @@ module('Integration | register', function (hooks) {
       </template>,
     );
     assert
-      .dom('[data-test-username-field]')
+      .dom('[data-test-username-field] input')
       .hasValue('new-user', "the CLI's suggested username is filled in");
     await fillIn('[data-test-name-field]', 'New User');
     await fillIn('[data-test-email-field]', 'new-user@example.com');
-    await triggerEvent('[data-test-username-field]', 'blur');
+    await triggerEvent('[data-test-username-field] input', 'blur');
     await waitFor('[data-test-username-available]');
     await fillIn('[data-test-password-field]', PASSWORD);
     await fillIn('[data-test-confirm-password-field]', PASSWORD);

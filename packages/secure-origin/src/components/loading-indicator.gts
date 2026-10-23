@@ -1,5 +1,4 @@
-// boxel-ui's LoadingIndicator, with its icon's path copied in (the realm
-// server's `secure-origin-test.ts` checks it against boxel-ui's). boxel-ui
+// boxel-ui's LoadingIndicator, with its icon's path copied in. boxel-ui
 // takes `@color` and `@size` and binds them to a `style` attribute, which the
 // page's policy refuses. Here a caller sets them from a scoped rule of its
 // own on the indicator: `--boxel-loading-indicator-color` (or
