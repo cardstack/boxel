@@ -45,4 +45,4 @@ Read the implementation: [`clip.gts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Registering a Picture and Its Capabilities](film-picture.md) · [All guides](README.md) · [Media Attachments and Picture-in-Picture →](film-media-graph.md)
+[← Registering a Picture and Its Capabilities](film-picture) · [All guides](README) · [Media Attachments and Picture-in-Picture →](film-media-graph)

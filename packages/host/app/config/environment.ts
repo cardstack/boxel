@@ -47,6 +47,8 @@ export default config as {
   iconsURL: string;
   secureOriginURL: string;
   autoSaveDelayMs: number;
+  autoSaveQuietPeriodMs: number;
+  autoSaveMaxWaitMs: number;
   monacoDebounceMs: number;
   monacoCursorDebounceMs: number;
   serverEchoDebounceMs: number;
@@ -58,6 +60,7 @@ export default config as {
   stripePaymentLink: string;
   featureFlags?: {
     AI_PATCHING_CORRECTNESS_CHECKS?: boolean;
+    DASHBOARD_V2?: boolean;
   };
   publishedRealmDomainOverrides: string;
   publishedRealmBoxelSpaceDomain: string;

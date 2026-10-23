@@ -13,5 +13,5 @@ exec docker run --rm \
   -e PYTHONPATH=/custom/modules \
   -e PYTHONDONTWRITEBYTECODE=1 \
   --entrypoint python \
-  matrixdotorg/synapse:v1.126.0 \
+  matrixdotorg/synapse:v1.163.0 \
   -m unittest discover -p 'test_*.py' -v

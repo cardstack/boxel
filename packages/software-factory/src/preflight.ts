@@ -33,7 +33,7 @@ export { boxelSkillsPresent };
 
 export const MIN_NODE_MAJOR = 24;
 // Matches `.nvmrc` and root package.json `devEngines.runtime`.
-export const PINNED_NODE = '24.17.0';
+export const PINNED_NODE = '24.22.1';
 
 // Whether argv is asking for usage. Lives here, apart from the usage text it
 // guards, because the CLI has to answer this question *before* importing the

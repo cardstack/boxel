@@ -41,4 +41,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← The Standalone Choreo Player](film-player.md) · [All guides](README.md) · [Clip Windows, Lanes, and Source Time →](film-clips.md)
+[← The Standalone Choreo Player](film-player) · [All guides](README) · [Clip Windows, Lanes, and Source Time →](film-clips)

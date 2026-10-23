@@ -6,7 +6,7 @@ This tutorial turns a six-second Choreo scene into a playable MP4 with a short a
 
 ## Run the recordable scene
 
-Use the starter from [Build Your First Choreo Application](core-first-app.md), then open http://localhost:4600/film. The orange circle moves, holds, changes scale, and returns. Play starts the scene; the seek slider requests a specific time. The full component is app/components/recordable-scene.gts.
+Use the starter from [Build Your First Choreo Application](core-first-app), then open http://localhost:4600/film. The orange circle moves, holds, changes scale, and returns. Play starts the scene; the seek slider requests a specific time. The full component is app/components/recordable-scene.gts.
 
 The score is six seconds long. Position and scale arrays share normalized times, so the hold occupies the same part of both tracks. Nothing is added or removed during this scene. That makes every requested frame reconstructible without replaying application actions. A larger film that opens panels or changes text must reconstruct those semantic states too.
 
@@ -53,10 +53,10 @@ Run the starter verification script from the first tutorial as well. It captures
 
 ## Add a larger edit
 
-For narration, replace the generated cue track with approved audio and align its clip offsets to the same score. Keep browser autoplay permission separate from offline audio mixing. For chapters, picture renderers, and joins, continue with [Building a Film](film-shots.md) and [Picture readiness](film-picture.md). This tutorial demonstrates the complete smallest recording pipeline so those additions have a working baseline.
+For narration, replace the generated cue track with approved audio and align its clip offsets to the same score. Keep browser autoplay permission separate from offline audio mixing. For chapters, picture renderers, and joins, continue with [Building a Film](film-shots) and [Picture readiness](film-picture). This tutorial demonstrates the complete smallest recording pipeline so those additions have a working baseline.
 
 The complete sources are [recordable-scene.gts](../../studies/recordable-scene.gts) and [record-tutorial.mjs](https://github.com/cardstack/boxel/blob/main/packages/choreo-gallery/scripts/record-tutorial.mjs). Keep output media outside tracked source files unless you intentionally want to distribute an example recording.
 
 ---
 
-[← Recorded & Film Choreo](film-start.md) · [All guides](README.md) · [Driving an External Clock →](film-clock.md)
+[← Recorded & Film Choreo](film-start) · [All guides](README) · [Driving an External Clock →](film-clock)

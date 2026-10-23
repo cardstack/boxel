@@ -40,4 +40,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Media Attachments and Picture-in-Picture](film-media-graph.md) · [All guides](README.md) · [Seam Readiness and Exact Capture →](film-seam-readiness.md)
+[← Media Attachments and Picture-in-Picture](film-media-graph) · [All guides](README) · [Seam Readiness and Exact Capture →](film-seam-readiness)

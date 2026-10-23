@@ -6,7 +6,7 @@ This tutorial puts a working HTML card into perspective and gives its orientatio
 
 ## Run the example
 
-Generate the application in [Build Your First Choreo Application](core-first-app.md), then open http://localhost:4600/spatial. The complete implementation is app/components/spatial-card.gts. Click Toggle perspective, then click the count button on the angled card. The number should update without flattening the card or resetting its pose. Both buttons are keyboard accessible because they remain ordinary HTML controls.
+Generate the application in [Build Your First Choreo Application](core-first-app), then open http://localhost:4600/spatial. The complete implementation is app/components/spatial-card.gts. Click Toggle perspective, then click the count button on the angled card. The number should update without flattening the card or resetting its pose. Both buttons are keyboard accessible because they remain ordinary HTML controls.
 
 The example has two kinds of state. The application owns the count and whether the card should be angled. Choreo owns the interpolated camera pose. A host callback receives that pose and converts it to a CSS transform. Keep those responsibilities explicit: changing the count should not start a separate camera animation.
 
@@ -48,12 +48,12 @@ Try the browser's reduced-motion preference and repeat. The example uses the lib
 
 ## Grow beyond one card
 
-When adding a real 3D device, share the renderer's projection and object matrices with the DOM plane. The CSS mapping in this small study is not a shortcut for aligning an arbitrary mesh screen. [Keeping the interface live](spatial-dom.md) explains that next boundary, and Mockup is the larger reference implementation.
+When adding a real 3D device, share the renderer's projection and object matrices with the DOM plane. The CSS mapping in this small study is not a shortcut for aligning an arbitrary mesh screen. [Keeping the interface live](spatial-dom) explains that next boundary, and Mockup is the larger reference implementation.
 
 Before adding assets, keep this example's useful checks: the visible button and its hit target agree after movement, changing application state does not reset the camera, resizing does not clip essential controls, and leaving the route stops its work. The browser verification command in the first tutorial checks that the angled button remains usable and that the transition changes the plane transform.
 
-The complete source is [spatial-card.gts](../../studies/spatial-card.gts). Once that host boundary is clear, continue to [recording a scene](film-first-export.md) to learn how an external clock can request completed frames.
+The complete source is [spatial-card.gts](../../studies/spatial-card.gts). Once that host boundary is clear, continue to [recording a scene](film-first-export) to learn how an external clock can request completed frames.
 
 ---
 
-[← Spatial & 3D Choreo](spatial-start.md) · [All guides](README.md) · [Directing a 3D Camera →](spatial-cameras.md)
+[← Spatial & 3D Choreo](spatial-start) · [All guides](README) · [Directing a 3D Camera →](spatial-cameras)

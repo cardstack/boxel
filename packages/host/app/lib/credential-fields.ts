@@ -2,7 +2,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
 // The fields a password is typed into live in a frame on the secure origin
-// (`packages/realm-server/secure-origin/credentials.js`), where card code in
+// (`packages/secure-origin/src/security/credentials.js`), where card code in
 // this page can't read them. A form that has such fields owns one of these:
 // it learns from the frame whether the fields are filled in, never what is in
 // them, and asks the frame to make the Matrix request that carries the

@@ -33,6 +33,7 @@ import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
+import ENV from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
@@ -44,6 +45,7 @@ import SearchSheet, { SearchSheetModes } from '../search-sheet';
 import SubmodeSwitcher, { Submodes } from '../submode-switcher';
 
 import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
+import Dashboard from './dashboard';
 
 import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
@@ -388,6 +390,12 @@ export default class SubmodeLayout extends Component<Signature> {
       workspaceChooserOpened;
   }
 
+  // Read at render time rather than once at module load, so a test can turn
+  // the flag on for its module.
+  private get isDashboardV2Enabled() {
+    return Boolean(ENV.featureFlags?.DASHBOARD_V2);
+  }
+
   @action private toggleWorkspaceChooser() {
     this.operatorModeStateService.workspaceChooserOpened =
       !this.operatorModeStateService.workspaceChooserOpened;
@@ -530,9 +538,15 @@ export default class SubmodeLayout extends Component<Signature> {
             </button>
           </div>
           {{#if this.workspaceChooserOpened}}
-            <WorkspaceChooser
-              @topBarCenterElement={{this.topBarCenterElement}}
-            />
+            <div class='workspace-overlay'>
+              {{#if this.isDashboardV2Enabled}}
+                <Dashboard />
+              {{else}}
+                <WorkspaceChooser
+                  @topBarCenterElement={{this.topBarCenterElement}}
+                />
+              {{/if}}
+            </div>
           {{/if}}
 
           {{yield
@@ -618,6 +632,19 @@ export default class SubmodeLayout extends Component<Signature> {
     />
 
     <style scoped>
+      /* Covers the stacks with whichever of the workspace chooser and the
+         dashboard is shown; the child fills it. */
+      .workspace-overlay {
+        display: grid;
+        /* Tracks no bigger than the overlay, so a tall chooser scrolls inside
+           it instead of growing past it. */
+        grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+        position: absolute;
+        height: 100%;
+        width: 100%;
+        background-color: var(--boxel-800);
+        z-index: var(--host-workspace-chooser-z-index);
+      }
       .submode-layout {
         --submode-bar-item-border-radius: var(--boxel-border-radius);
         --boxel-icon-button-width: var(--container-button-size);

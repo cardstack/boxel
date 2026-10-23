@@ -45,6 +45,12 @@ import {
 } from '@cardstack/runtime-common';
 
 import { getPromptParts } from '@cardstack/runtime-common/ai';
+import {
+  type AppBoxelDashboardContent,
+  dashboardContentKey,
+  mergeDashboardContent,
+  parseDashboardContent,
+} from '@cardstack/runtime-common/dashboard-state';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -63,6 +69,7 @@ import {
   REALMS_LIST_UPDATED_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
+  APP_BOXEL_DASHBOARD_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   DEFAULT_FALLBACK_MODELS,
@@ -171,6 +178,8 @@ const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 // so a persistently-down server doesn't spin forever.
 const UNREACHABLE_RETRY_INTERVAL_MS = 10_000;
 const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
+// How long logout waits for pending card saves before signing out anyway.
+const LOGOUT_SAVE_FLUSH_TIMEOUT_MS = 5_000;
 
 const realmEventsLogger = logger('realm:events');
 
@@ -258,6 +267,7 @@ export default class MatrixService extends Service {
 
   @tracked private storage: Storage | undefined;
   @tracked workspaceFavorites: string[] = [];
+  @tracked dashboardState: AppBoxelDashboardContent = {};
 
   profile = getMatrixProfile(this, () => this.userId);
 
@@ -546,6 +556,23 @@ export default class MatrixService extends Service {
                 (e.event.content.realms as string[] | undefined) ?? [],
               );
               break;
+            // Onboarding and agent setup progress follow the user across tabs.
+            case APP_BOXEL_DASHBOARD_EVENT_TYPE: {
+              // The echo of this tab's own write is already shown. When a
+              // later write of this tab has been shown since, the echo is
+              // stale and would step the state back until the later echo
+              // follows. Anything else is another tab's write.
+              let key = dashboardContentKey(e.event.content);
+              let index = this.dashboardEchoesPending.indexOf(key);
+              if (index >= 0) {
+                this.dashboardEchoesPending.splice(0, index + 1);
+                if (this.dashboardEchoesPending.length > 0) {
+                  break;
+                }
+              }
+              this.dashboardState = parseDashboardContent(e.event.content);
+              break;
+            }
           }
         },
       ],
@@ -759,6 +786,13 @@ export default class MatrixService extends Service {
     skipIndexTransition?: true;
     serverLogoutAuth?: LoginResponse;
   }) {
+    // Card edits still waiting to be saved are sent while the session can
+    // still authenticate them, with a bound so a slow realm can't hold up
+    // signing out. Nothing to send keeps logout synchronous up to the network
+    // logout below.
+    if (this.store.hasUnsavedEdits) {
+      await this.store.flushSaves({ timeoutMs: LOGOUT_SAVE_FLUSH_TIMEOUT_MS });
+    }
     // Which session to revoke server-side, decoupled from `this._client`. During
     // an account switch the live client has already been rewritten to the
     // incoming account's token by loginWithToken(), and the outgoing account was
@@ -808,22 +842,33 @@ export default class MatrixService extends Service {
       // `client` above, so the network logout below is unaffected.
       this.resetState();
       didResetState = true;
-      await client?.logout(true);
-      if (!opts?.skipIndexTransition) {
-        // when user logs out we transition them back to an empty stack with
-        // the workspace chooser open. this way we don't inadvertently leak
-        // private card id's in the URL
-        this.router.transitionTo('index-root', {
-          queryParams: {
-            operatorModeState: stringify({
-              stacks: [],
-              submode: Submodes.Interact,
-              workspaceChooserOpened: true,
-            } as OperatorModeSerializedState),
-            sid: null,
-            clientSecret: null,
-          },
-        });
+      // Sent before the transition below, so a transition that throws can't
+      // stop the server-side session from being revoked.
+      let serverLogout = client?.logout(true);
+      try {
+        if (!opts?.skipIndexTransition) {
+          // when user logs out we transition them back to an empty stack with
+          // the workspace chooser open. this way we don't inadvertently leak
+          // private card id's in the URL
+          //
+          // This happens before the network logout is awaited. The transition
+          // changes route, which renders the login form again from scratch;
+          // done after the await, it would clear anything typed into the form
+          // that clearAuth() above already put on screen.
+          this.router.transitionTo('index-root', {
+            queryParams: {
+              operatorModeState: stringify({
+                stacks: [],
+                submode: Submodes.Interact,
+                workspaceChooserOpened: true,
+              } as OperatorModeSerializedState),
+              sid: null,
+              clientSecret: null,
+            },
+          });
+        }
+      } finally {
+        await serverLogout;
       }
     } catch (e) {
       console.log('Error logging out of Matrix', e);
@@ -1189,6 +1234,100 @@ export default class MatrixService extends Service {
     this.workspaceFavorites = newFavorites;
   }
 
+  // Dashboard writes run one at a time, each reading the key from the server,
+  // applying its change and writing it back, so a write always sees the one
+  // queued before it. They don't go through the sync store or wait for their
+  // sync echo, which resolves on any event of the type and never arrives if
+  // sync stops. A write from another tab can still be overwritten: account
+  // data has no compare-and-set.
+  private dashboardWrites: Promise<unknown> = Promise.resolve();
+  // Bumped by resetState() so a write queued before logout never lands in
+  // the next session.
+  private dashboardSession = 0;
+  // The content of each write of this tab whose sync echo hasn't arrived, in
+  // write order, so the account-data listener can tell a stale echo of an
+  // earlier write from another tab's write.
+  private dashboardEchoesPending: string[] = [];
+
+  // Nothing renders the state while the flag is off, so no request is made.
+  // A failed read must not keep the user from logging in: the state starts
+  // empty and the next sync echo or write fills it.
+  private async fetchDashboardStateAtBoot(): Promise<unknown> {
+    if (!ENV.featureFlags?.DASHBOARD_V2) {
+      return null;
+    }
+    try {
+      return await this.client.getAccountDataFromServer(
+        APP_BOXEL_DASHBOARD_EVENT_TYPE,
+      );
+    } catch (e) {
+      console.error('Failed to read app.boxel.dashboard account data', e);
+      return null;
+    }
+  }
+
+  // Applies `change` to the stored dashboard state: an object of fields to
+  // set, or a function from the stored state to those fields.
+  public async updateDashboardState(
+    change:
+      | Partial<AppBoxelDashboardContent>
+      | ((
+          stored: AppBoxelDashboardContent,
+        ) => Partial<AppBoxelDashboardContent>),
+  ): Promise<void> {
+    let session = this.dashboardSession;
+    let userId = this._client?.getUserId();
+    // The client of the session this write was queued in, or nothing once that
+    // session has ended: logged out, or switched to another account, which logs
+    // in on the same client before logging the old account out. With nobody
+    // logged in there is no session, so the write is dropped like one whose
+    // session ended.
+    let sessionClient = () =>
+      userId &&
+      session === this.dashboardSession &&
+      this._client?.getUserId() === userId
+        ? this._client
+        : undefined;
+    let write = this.dashboardWrites.then(async () => {
+      // A write whose session ended is dropped. It resolves rather than
+      // rejects, even when the ending cut off its request, since its caller
+      // belonged to that session.
+      try {
+        let client = sessionClient();
+        if (!client) {
+          return;
+        }
+        let stored = await client.fetchAccountData(
+          APP_BOXEL_DASHBOARD_EVENT_TYPE,
+        );
+        client = sessionClient();
+        if (!client) {
+          return;
+        }
+        let changes =
+          typeof change === 'function'
+            ? change(parseDashboardContent(stored))
+            : change;
+        let next = mergeDashboardContent(stored, changes);
+        await client.setAccountDataRaw(APP_BOXEL_DASHBOARD_EVENT_TYPE, next);
+        // Shown right away; the account-data listener then applies whatever
+        // syncs after it, including a newer write from another tab.
+        if (sessionClient()) {
+          this.dashboardEchoesPending.push(dashboardContentKey(next));
+          this.dashboardState = parseDashboardContent(next);
+        }
+      } catch (e) {
+        if (sessionClient()) {
+          throw e;
+        }
+      }
+    });
+    // A failed write must not stall the ones queued behind it; its caller
+    // still sees the failure.
+    this.dashboardWrites = write.catch(() => undefined);
+    return write;
+  }
+
   // Replaces the public realms the user added to the Catalogs section of their
   // dashboard.
   public async setUserCatalogRealms(realmURLs: string[]): Promise<void> {
@@ -1294,20 +1433,33 @@ export default class MatrixService extends Service {
           this.startedAtTs = 0;
         }
         if (isTesting())
-          console.warn('[start-phase] getAccountData(realm-servers,favorites)');
-        let [realmServersData, favoritesData, catalogRealmsData] =
-          await Promise.all([
-            this.client.getAccountDataFromServer(
-              APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
-            ) as Promise<{ realmServers: string[] } | null>,
-            this.client.getAccountDataFromServer(
-              APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
-            ) as Promise<{ favorites: string[] } | null>,
-            this.client.getAccountDataFromServer(
-              APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
-            ) as Promise<{ realms: string[] } | null>,
-          ]);
+          console.warn(
+            '[start-phase] getAccountData(realm-servers,favorites,catalog-realms,dashboard)',
+          );
+        // A write queued while this read is in flight has already shown a
+        // newer state than the read returns.
+        let dashboardStateBeforeRead = this.dashboardState;
+        let [
+          realmServersData,
+          favoritesData,
+          catalogRealmsData,
+          dashboardData,
+        ] = await Promise.all([
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+          ) as Promise<{ realmServers: string[] } | null>,
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+          ) as Promise<{ favorites: string[] } | null>,
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
+          ) as Promise<{ realms: string[] } | null>,
+          this.fetchDashboardStateAtBoot(),
+        ]);
         this.workspaceFavorites = favoritesData?.favorites ?? [];
+        if (this.dashboardState === dashboardStateBeforeRead) {
+          this.dashboardState = parseDashboardContent(dashboardData);
+        }
 
         // Boot assembles the realm list from trusted servers via
         // `_realm-auth`. The transition fallback below reads the legacy
@@ -2549,6 +2701,10 @@ export default class MatrixService extends Service {
     this.flushRoomState = undefined;
     this.timelineLoadingState.clear();
     this._client = this.#matrixSDK?.createClient({ baseUrl: matrixURL });
+    this.dashboardState = {};
+    this.dashboardSession++;
+    this.dashboardWrites = Promise.resolve();
+    this.dashboardEchoesPending = [];
     this._currentRoomId = undefined;
     this._isInitializingNewUser = false;
     if (isTesting() && this.session.isAuthenticated) {

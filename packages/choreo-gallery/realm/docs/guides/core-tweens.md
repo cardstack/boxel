@@ -50,4 +50,4 @@ Read the implementation: [`easings.ts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Spring Transitions](core-springs.md) · [All guides](README.md) · [Variants and Staggered Children →](core-variants.md)
+[← Spring Transitions](core-springs) · [All guides](README) · [Variants and Staggered Children →](core-variants)

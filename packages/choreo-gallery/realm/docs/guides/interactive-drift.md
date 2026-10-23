@@ -24,8 +24,8 @@ Drive the same broad path with two grip settings and compare the turn. Then rest
 
 If a recording needs a repeatable driving moment, define how to reconstruct the simulation state and its input history. A timestamp alone does not make a history-dependent simulation deterministic. A guided film can instead use a prepared state and a defined input sequence with a controlled integration clock.
 
-Continue with [commands](interactive-commands.md) for semantic actions and [film transport](film-transport.md) for explicit clock ownership.
+Continue with [commands](interactive-commands) for semantic actions and [film transport](film-transport) for explicit clock ownership.
 
 ---
 
-[← Composing Slide Changes](interactive-slides.md) · [All guides](README.md) · [Turning a Gesture into a Scored Throw →](interactive-hang.md)
+[← Composing Slide Changes](interactive-slides) · [All guides](README) · [Turning a Gesture into a Scored Throw →](interactive-hang)

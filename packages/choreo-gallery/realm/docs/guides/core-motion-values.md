@@ -37,4 +37,4 @@ Inspect the pointer, parallax, and sheet demos to see this separation in real in
 
 ---
 
-[← Variants and Staggered Children](core-variants.md) · [All guides](README.md) · [Dragging, Constraints, and Momentum →](core-drag.md)
+[← Variants and Staggered Children](core-variants) · [All guides](README) · [Dragging, Constraints, and Momentum →](core-drag)

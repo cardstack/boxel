@@ -50,6 +50,31 @@ export function choreoGalleryGuides(): Record<string, string> {
   return guides;
 }
 
+/** the guides' index, `docs/guides/README.md`, as Markdown */
+export function choreoGalleryGuideIndex(): string {
+  return GUIDES[`${ROOT}docs/guides/README.md`]!;
+}
+
+/**
+ * The guides' pages for the given guides, for a test realm: each guide's
+ * Markdown and its `Guide` card, and the index's (`README`), which every
+ * guide's page reads its sections from.
+ */
+export function choreoGalleryGuidePages(slugs: string[]): RealmContents {
+  let contents: RealmContents = {};
+  let all = choreoGalleryContents();
+  for (let slug of [...new Set([...slugs, 'README'])]) {
+    let markdown = GUIDES[`${ROOT}docs/guides/${slug}.md`];
+    let card = all[`docs/guides/${slug}.json`];
+    if (markdown === undefined || card === undefined) {
+      throw new Error(`the gallery has no guide page ${slug}`);
+    }
+    contents[`docs/guides/${slug}.md`] = markdown;
+    contents[`docs/guides/${slug}.json`] = card;
+  }
+  return contents;
+}
+
 /**
  * The gallery realm cut down to a gallery of the given demos, for a test that
  * indexes the realm: every module, the theme, those demos' instances, and an

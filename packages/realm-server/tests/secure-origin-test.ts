@@ -17,14 +17,46 @@ import {
   createSecureOrigin,
   secureOriginHeaders,
 } from '../lib/secure-origin.ts';
-import { isListedOrigin } from '../secure-origin/app-origins.js';
-import { redactResponse } from '../secure-origin/redact.js';
+import { isListedOrigin } from '@cardstack/secure-origin/security/app-origins.js';
+import { redactResponse } from '@cardstack/secure-origin/security/redact.js';
 import {
   registerSecureOriginHost,
   scrubRequestTelemetry,
 } from '../lib/request-telemetry.ts';
 
 const realmURL = new URL('http://127.0.0.1:4444/test/');
+const requireFromTest = createRequire(import.meta.url);
+
+const securePackage = dirname(
+  requireFromTest.resolve('@cardstack/secure-origin/package.json'),
+);
+
+// The secure origin's build: each entry document and the files it loads, and
+// the committed record of which modules each file holds.
+const buildDir = join(securePackage, 'dist');
+const buildManifest: Record<string, string[]> = JSON.parse(
+  readFileSync(join(buildDir, 'manifest.json'), 'utf8'),
+).entries;
+const buildRecord: {
+  files: Record<string, { modules?: { package: string; module: string }[] }>;
+} = JSON.parse(
+  readFileSync(join(dirname(buildDir), 'build-record.json'), 'utf8'),
+);
+
+// The files an entry document loads, without the document itself.
+function loadedFiles(document: string): string[] {
+  return buildManifest[document].filter((name) => name !== document);
+}
+
+function contentTypeOf(name: string): string {
+  return name.endsWith('.css') ? 'text/css' : 'text/javascript';
+}
+
+function entryScript(path: string): RegExp {
+  return new RegExp(
+    `<script type="module"(?: crossorigin)? src="${path.replace(/[.]/g, '\\.')}">`,
+  );
+}
 const secureOriginURL = new URL('https://secure.example.test/secure');
 const secureHost = secureOriginURL.host;
 
@@ -479,9 +511,7 @@ module(basename(import.meta.filename), function () {
         );
         assertSecureOriginHeaders(assert, response, path, SHELL_PAGE_HEADERS);
         assert.ok(
-          response.text.includes(
-            '<script type="module" src="/secure/shell.js">',
-          ),
+          entryScript('/secure/shell.js').test(response.text),
           `${path}: loads the shell's entry point`,
         );
         assert.notOk(
@@ -520,28 +550,46 @@ module(basename(import.meta.filename), function () {
         SHELL_PAGE_HEADERS,
       );
       assert.ok(
-        response.text.includes('<script type="module" src="/secure/shell.js">'),
+        entryScript('/secure/shell.js').test(response.text),
         'it is the shell, whose script finishes the sign-in',
       );
     });
 
     test("serves the modes' scripts with the locked-down headers", async function (assert) {
+      let shellModules = loadedFiles('index.html').flatMap((name) =>
+        (buildRecord.files[name].modules ?? []).map(({ module }) => module),
+      );
       for (let name of [
         'session.js',
-        'sign-in.js',
+        'sign-in-page.gts',
+        'cli-sign-in-page.gts',
+        'google-callback.gts',
+        'sign-in-form.gts',
+        'cli-handoff.js',
+        'urls.js',
         'sign-in-copy.js',
-        'register.js',
-        'password-reset.js',
-        'password-fields.js',
+        'register.gts',
+        'verify-email.gts',
+        'registration.ts',
+        'forgot-password.gts',
+        'reset-password.gts',
+        'reset-link.ts',
+        'new-password-fields.gts',
+        'input-group.gts',
         'matrix.js',
-        'dom.js',
       ]) {
+        assert.ok(
+          shellModules.some((module) => module.endsWith(`/${name}`)),
+          `${name}: built into the files the shell loads`,
+        );
+      }
+      for (let name of loadedFiles('index.html')) {
         let response = await request
           .get(`/secure/${name}`)
           .set('Host', secureHost);
         assert.strictEqual(response.status, 200, `${name}: status`);
         assert.ok(
-          response.headers['content-type'].startsWith('text/javascript'),
+          response.headers['content-type'].startsWith(contentTypeOf(name)),
           `${name}: content type`,
         );
         assertSecureOriginHeaders(assert, response, name);
@@ -603,10 +651,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test("draws boxel-ui's own icons", async function (assert) {
-      // The pages build the app's logo, Google's "G", the check mark and the
+      // The pages draw the app's logo, Google's "G", the check mark and the
       // loading indicator from boxel-ui's icon components' paths, copied in,
       // since the page's policy loads no markup from elsewhere. Every path
-      // boxel-ui draws them with is in the copy.
+      // boxel-ui draws them with is in the package's component for it.
       let icons = join(
         dirname(
           createRequire(import.meta.url).resolve(
@@ -616,22 +664,25 @@ module(basename(import.meta.filename), function () {
         '..',
         'icons',
       );
-      let dom = readFileSync(
-        join(import.meta.dirname, '..', 'secure-origin', 'dom.js'),
-        'utf8',
-      );
-      for (let icon of [
-        'boxel-icon.gts',
-        'google-color.gts',
-        'check-mark.gts',
-        'loading-indicator.gts',
-      ]) {
+      let copies: Record<string, string[]> = {
+        'boxel-icon.gts': ['src/components/icons/boxel-icon.gts'],
+        'google-color.gts': ['src/components/icons/google-color.gts'],
+        'check-mark.gts': ['src/components/icons/check-mark.gts'],
+        'loading-indicator.gts': ['src/components/loading-indicator.gts'],
+      };
+      for (let [icon, files] of Object.entries(copies)) {
         let paths = [
           ...readFileSync(join(icons, icon), 'utf8').matchAll(/\sd='([^']+)'/g),
         ].map(([, d]) => d);
         assert.ok(paths.length > 0, `${icon} has paths`);
-        for (let d of paths) {
-          assert.ok(dom.includes(`'${d}'`), `${icon}: ${d.slice(0, 24)}…`);
+        for (let file of files) {
+          let copy = readFileSync(join(securePackage, file), 'utf8');
+          for (let d of paths) {
+            assert.ok(
+              copy.includes(`'${d}'`),
+              `${icon} in ${file}: ${d.slice(0, 24)}…`,
+            );
+          }
         }
       }
     });
@@ -775,9 +826,7 @@ module(basename(import.meta.filename), function () {
         'names the app origins it talks to',
       );
       assert.ok(
-        response.text.includes(
-          '<script type="module" src="/secure/credentials.js">',
-        ),
+        entryScript('/secure/credentials.js').test(response.text),
         "loads the fields' entry point",
       );
       assert.notOk(
@@ -787,12 +836,23 @@ module(basename(import.meta.filename), function () {
     });
 
     test("serves the credential fields' script, stylesheet and font, framable by no one", async function (assert) {
-      for (let [path, type] of [
-        ['/secure/credentials.js', 'text/javascript'],
-        ['/secure/app-origins.js', 'text/javascript'],
-        ['/secure/redact.js', 'text/javascript'],
-        ['/secure/credentials.css', 'text/css'],
-      ]) {
+      let credentialModules = loadedFiles('credentials.html').flatMap((name) =>
+        (buildRecord.files[name].modules ?? []).map(({ module }) => module),
+      );
+      for (let name of ['credentials.js', 'app-origins.js', 'redact.js']) {
+        assert.ok(
+          credentialModules.some((module) => module.endsWith(`/${name}`)),
+          `${name}: built into the files the credential fields load`,
+        );
+      }
+      assert.ok(
+        loadedFiles('credentials.html').includes('credentials.css'),
+        "the fields' stylesheet is built",
+      );
+      for (let [path, type] of loadedFiles('credentials.html').map((name) => [
+        `/secure/${name}`,
+        contentTypeOf(name),
+      ])) {
         let response = await request.get(path).set('Host', secureHost);
         assert.strictEqual(response.status, 200, `${path}: status`);
         assert.ok(

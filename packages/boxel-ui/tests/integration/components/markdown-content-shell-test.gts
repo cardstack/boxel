@@ -13,6 +13,15 @@ const SAMPLE_HTML = htmlSafe(
 
 const ANCESTOR_TOKENS = htmlSafe('--markdown-link-color: rgb(17, 34, 51);');
 
+// the render's own text, beside an embed holding text of its own
+const PROSE_AND_EMBED_HTML = htmlSafe(
+  '<h2>Measure</h2><p data-test-prose>Prose.</p><ul data-test-list><li>Item</li></ul>' +
+    '<div data-test-embed><p data-test-embedded-prose>A card.</p></div>' +
+    '<pre data-test-code>code</pre>',
+);
+
+const PROSE_MAX_WIDTH = htmlSafe('--markdown-prose-max-width: 300px;');
+
 function computedOf(selector: string, property: string): string {
   let el = document.querySelector(selector);
   if (!el) {
@@ -53,6 +62,47 @@ module('Integration | Component | markdown-content-shell', function (hooks) {
       'rgb(17, 34, 51)',
       'the ancestor-set link color reaches the rendered content',
     );
+  });
+
+  test("--markdown-prose-max-width caps only the render's own text blocks", async function (assert) {
+    await render(
+      <template>
+        <div style={{PROSE_MAX_WIDTH}}>
+          <MarkdownContentShell>{{PROSE_AND_EMBED_HTML}}</MarkdownContentShell>
+        </div>
+      </template>,
+    );
+    for (let selector of [
+      '[data-test-markdown-content-shell] h2',
+      '[data-test-prose]',
+      '[data-test-list]',
+    ]) {
+      assert.strictEqual(
+        computedOf(selector, 'max-width'),
+        '300px',
+        `${selector} runs at the measure`,
+      );
+    }
+    for (let selector of [
+      '[data-test-embed]',
+      '[data-test-embedded-prose]',
+      '[data-test-code]',
+    ]) {
+      assert.strictEqual(
+        computedOf(selector, 'max-width'),
+        'none',
+        `${selector} keeps the full width`,
+      );
+    }
+  });
+
+  test('without --markdown-prose-max-width the text is not capped', async function (assert) {
+    await render(
+      <template>
+        <MarkdownContentShell>{{PROSE_AND_EMBED_HTML}}</MarkdownContentShell>
+      </template>,
+    );
+    assert.strictEqual(computedOf('[data-test-prose]', 'max-width'), 'none');
   });
 
   test('a heading that opens the render has no top margin', async function (assert) {

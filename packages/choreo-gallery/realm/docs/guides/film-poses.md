@@ -41,4 +41,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Authoring a Film Graph](film-graph.md) · [All guides](README.md) · [The Headless Film Schedule →](film-schedule.md)
+[← Authoring a Film Graph](film-graph) · [All guides](README) · [The Headless Film Schedule →](film-schedule)

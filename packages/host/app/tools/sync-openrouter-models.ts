@@ -271,6 +271,8 @@ export default class SyncOpenRouterModelsTool extends HostBaseTool<
     });
   }
 
+  // The sync is a scheduled refresh of a public realm that no reader asked
+  // for, so its writes announce nothing to the realm's subscribers.
   private async executeBatchWithRetry(
     batch: AtomicOperation[],
     realmURL: URL,
@@ -278,6 +280,7 @@ export default class SyncOpenRouterModelsTool extends HostBaseTool<
     let result = await this.cardService.executeAtomicOperations(
       batch,
       realmURL,
+      { realmEvents: false },
     );
 
     if (!result.errors) {
@@ -325,6 +328,7 @@ export default class SyncOpenRouterModelsTool extends HostBaseTool<
     let retryResult = await this.cardService.executeAtomicOperations(
       retryBatch,
       realmURL,
+      { realmEvents: false },
     );
 
     if (retryResult.errors) {

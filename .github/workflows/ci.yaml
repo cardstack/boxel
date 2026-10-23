@@ -58,6 +58,7 @@ jobs:
       bench-amd: ${{ steps.filter.outputs.bench-amd }}
       bench-realm: ${{ steps.filter.outputs.bench-realm }}
       deployed-realms: ${{ steps.filter.outputs.deployed-realms }}
+      secure-origin: ${{ steps.filter.outputs.secure-origin }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
@@ -101,6 +102,7 @@ jobs:
               - 'packages/bxl/**'
               - 'packages/host/**'
               - 'packages/realm-server/**'
+              - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
             ai-bot:
               - *shared
@@ -149,6 +151,9 @@ jobs:
             glimmer-motion:
               - *shared
               - 'packages/glimmer-motion/**'
+            secure-origin:
+              - *shared
+              - 'packages/secure-origin/**'
             # Realm content the realm-server image carries and each deploy
             # copies onto the realm's disk, so a change to it needs a staging
             # deploy even when it touches no other boxel package. The gallery
@@ -167,6 +172,7 @@ jobs:
               - 'packages/host/**'
               - 'packages/matrix/**'
               - 'packages/realm-server/**'
+              - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
             realm-server:
               - *shared
@@ -178,6 +184,7 @@ jobs:
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
               - 'packages/realm-server/**'
+              - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
             vscode-boxel-tools:
               - *shared
@@ -653,6 +660,25 @@ jobs:
       - name: Run test suite
         run: pnpm test
         working-directory: packages/choreo
+
+  # The secure origin's pages: the credential frame's protocol and the
+  # components each page draws, run in Chrome against a development build of
+  # the package with its tests entry.
+  secure-origin-test:
+    name: Secure Origin Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.secure-origin == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: secure-origin-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run test suite
+        run: pnpm test:components
+        working-directory: packages/secure-origin
 
   # The film app's QUnit suite: the reference films' scores against their
   # golden fixtures. It compiles glimmer-motion and Choreo from source through

@@ -1,0 +1,42 @@
+name: Finish a realm deployment
+description: |
+  Marks a deployment realm-deployment/start recorded as succeeded or failed,
+  from the outcome of the step that pushed. Run it with
+  `if: always() && steps.<start>.outputs.deployment-id`, so a push that failed
+  or never ran still marks it failed. The next sync then compares against its
+  revision too, since the realm may hold part of it.
+
+inputs:
+  deployment-id:
+    description: The `deployment-id` output of realm-deployment/start.
+    required: true
+  outcome:
+    description: The push step's outcome. Anything but `success` marks the deployment failed.
+    required: true
+  realm-url:
+    description: The realm the push wrote to, recorded as the environment URL.
+    required: true
+  token:
+    description: "A token with `deployments: write` on the repository."
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Finish the deployment record
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        DEPLOYMENT_ID: ${{ inputs.deployment-id }}
+        OUTCOME: ${{ inputs.outcome }}
+        REALM_URL: ${{ inputs.realm-url }}
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+          await github.rest.repos.createDeploymentStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            deployment_id: Number(process.env.DEPLOYMENT_ID),
+            state: process.env.OUTCOME === 'success' ? 'success' : 'failure',
+            environment_url: process.env.REALM_URL,
+            log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+          });

@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   formattedError,
   isJsonContentType,
+  REALM_EVENTS_HEADER,
   SupportedMimeType,
   type CardDocument,
   type SingleCardDocument,
@@ -438,7 +439,14 @@ export default class CardService extends Service {
   async executeAtomicOperations(
     operations: AtomicOperation[],
     realm: RealmIdentifier | URL,
-    opts?: { clientRequestId?: string },
+    opts?: {
+      clientRequestId?: string;
+      // False for a write the system makes on its own, such as a scheduled
+      // sync of a public realm's content. The realm indexes it as usual but
+      // announces nothing to its subscribers, so no open tab resets its loader
+      // for a change its user did not ask for (see `REALM_EVENTS_HEADER`).
+      realmEvents?: boolean;
+    },
   ) {
     let realmURL = this.toURL(realm);
     for (let operation of operations) {
@@ -462,6 +470,9 @@ export default class CardService extends Service {
         Accept: SupportedMimeType.JSONAPI,
         ...(opts?.clientRequestId
           ? { 'X-Boxel-Client-Request-Id': opts.clientRequestId }
+          : {}),
+        ...(opts?.realmEvents === false
+          ? { [REALM_EVENTS_HEADER]: 'none' }
           : {}),
       },
       body: JSON.stringify(doc),

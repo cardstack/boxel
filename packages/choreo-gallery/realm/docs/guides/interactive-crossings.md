@@ -44,4 +44,4 @@ Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Nested Regions and Far Matching](interactive-regions.md) · [All guides](README.md) · [Arming and Reliable Activation →](interactive-arming.md)
+[← Nested Regions and Far Matching](interactive-regions) · [All guides](README) · [Arming and Reliable Activation →](interactive-arming)

@@ -52,4 +52,4 @@ Read the implementation: [`helpers.ts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Tweens, Easing, and Keyframes](core-tweens.md) · [All guides](README.md) · [Motion Values and Derived Values →](core-motion-values.md)
+[← Tweens, Easing, and Keyframes](core-tweens) · [All guides](README) · [Motion Values and Derived Values →](core-motion-values)

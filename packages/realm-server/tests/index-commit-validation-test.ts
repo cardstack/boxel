@@ -761,6 +761,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     function incrementalArgs(
       coalescedCallers: IncrementalArgs['coalescedCallers'],
+      realmEvents = true,
     ): IncrementalArgs {
       return {
         realmURL: testRealm,
@@ -771,6 +772,7 @@ module(basename(import.meta.filename), function (hooks) {
         deferPrerenderHtml: false,
         carriedPrerenderHtmlChanges: [],
         readsOwnWrite: false,
+        realmEvents,
       };
     }
 
@@ -795,6 +797,18 @@ module(basename(import.meta.filename), function (hooks) {
         indexUpdates,
         [{ channel: REALM_INDEX_UPDATED_CHANNEL, payload: testRealm }],
         "every replica is told to drop the realm's index-derived caches",
+      );
+    });
+
+    test('which follows writes that asked for no realm events, tells the replicas but not the hosts', async function (assert) {
+      let { realmEvents, indexUpdates } = await runIncrementalTask(
+        incrementalArgs([], false),
+      );
+      assert.deepEqual(realmEvents, [], 'hosts hear nothing');
+      assert.deepEqual(
+        indexUpdates,
+        [{ channel: REALM_INDEX_UPDATED_CHANNEL, payload: testRealm }],
+        "every replica is still told to drop the realm's index-derived caches",
       );
     });
 

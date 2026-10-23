@@ -40,4 +40,4 @@ Read the implementation: [`group.gts`](https://github.com/cardstack/boxel/blob/m
 
 ---
 
-[← Drag Handles and Coordinate Correction](core-drag-handles.md) · [All guides](README.md) · [Scroll Progress and Viewport Observation →](core-scroll.md)
+[← Drag Handles and Coordinate Correction](core-drag-handles) · [All guides](README) · [Scroll Progress and Viewport Observation →](core-scroll)

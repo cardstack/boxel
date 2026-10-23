@@ -42,4 +42,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Named Anchors and Overlap](interactive-anchors.md) · [All guides](README.md) · [Measured Movement, Size, and Paths →](interactive-move.md)
+[← Named Anchors and Overlap](interactive-anchors) · [All guides](README) · [Measured Movement, Size, and Paths →](interactive-move)

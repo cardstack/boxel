@@ -41,4 +41,4 @@ Read the implementation: [`math.ts`](https://github.com/cardstack/boxel/blob/mai
 
 ---
 
-[← Graph Compilation and Custom Adjustments](film-graph-extension.md) · [All guides](README.md)
+[← Graph Compilation and Custom Adjustments](film-graph-extension) · [All guides](README)

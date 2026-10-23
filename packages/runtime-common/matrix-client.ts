@@ -31,6 +31,62 @@ const joinedRoomsRequests = new WeakMap<object, Promise<JoinedRoomsResponse>>();
 // sharing the device must never reuse a transaction id; see nextTxnId.
 export const SERVER_MATRIX_DEVICE_ID = 'boxel-server';
 
+// A homeserver request that came back with a non-2xx status. The status is
+// carried as a field so a caller can tell an overloaded or unreachable
+// homeserver (429, 502, 503, 504) from a request the homeserver refused.
+// `retryAfterMs` is how long the homeserver asked the caller to wait before
+// trying again, from a rate-limit answer's `retry_after_ms` or its
+// `Retry-After` header.
+export class MatrixRequestError extends Error {
+  readonly status: number;
+  readonly retryAfterMs: number | undefined;
+  constructor(message: string, status: number, retryAfterMs?: number) {
+    super(message);
+    this.name = 'MatrixRequestError';
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+// Builds the error for a non-2xx answer. A proxy in front of synapse answers a
+// timeout or an unreachable upstream with an HTML page, not a matrix error, so
+// the body is read as text and kept out of the message unless it is JSON.
+async function matrixRequestError(
+  response: Response,
+  message: string,
+): Promise<MatrixRequestError> {
+  let body = await response.text().catch(() => '');
+  let detail: string;
+  let retryAfterMs: number | undefined;
+  try {
+    let json = JSON.parse(body);
+    detail = JSON.stringify(json);
+    if (typeof json?.retry_after_ms === 'number') {
+      retryAfterMs = json.retry_after_ms;
+    }
+  } catch {
+    detail = `non-JSON body (${body.length} bytes)`;
+  }
+  if (retryAfterMs === undefined) {
+    let seconds = Number(response.headers.get('Retry-After') ?? NaN);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      retryAfterMs = seconds * 1000;
+    }
+  }
+  return new MatrixRequestError(
+    `${message}: status ${response.status} - ${detail}`,
+    response.status,
+    retryAfterMs,
+  );
+}
+
+// How long a login or a room send waits for synapse to answer. A request
+// synapse accepts but never answers would otherwise wait out the HTTP client's
+// own headers timeout (minutes), holding up everything queued behind it. When
+// it fires the request rejects with a `TimeoutError`, which a caller can retry:
+// a send retried with the same transaction id is not stored twice.
+const MATRIX_WRITE_TIMEOUT_MS = 30_000;
+
 export interface MatrixAccess {
   accessToken: string;
   deviceId: string;
@@ -179,19 +235,18 @@ export class MatrixClient {
           type: 'm.login.password',
           device_id: SERVER_MATRIX_DEVICE_ID,
         }),
+        signal: AbortSignal.timeout(MATRIX_WRITE_TIMEOUT_MS),
       },
       false,
     );
 
-    let json = await response.json();
-
     if (!response.ok) {
-      throw new Error(
-        `Unable to login to matrix ${this.matrixURL.href} as user ${
-          this.username
-        }: status ${response.status} - ${JSON.stringify(json)}`,
+      throw await matrixRequestError(
+        response,
+        `Unable to login to matrix ${this.matrixURL.href} as user ${this.username}`,
       );
     }
+    let json = await response.json();
     let {
       access_token: accessToken,
       device_id: deviceId,
@@ -333,26 +388,36 @@ export class MatrixClient {
     return await fetchMatrixProfile(this.matrixURL, userId);
   }
 
-  async sendEvent<T>(roomId: string, type: string, content: T) {
+  // A caller that retries a send passes the same `txnId` on every attempt, so
+  // synapse answers a retry of a send it already stored with the stored event
+  // rather than storing a second copy. That matters when a proxy in front of
+  // synapse times the request out while synapse goes on to complete it.
+  async sendEvent<T>(
+    roomId: string,
+    type: string,
+    content: T,
+    txnId: string = this.nextTxnId(),
+  ) {
     if (!this.access) {
       throw new Error(`Missing matrix access token`);
     }
-    let txnId = this.nextTxnId();
 
     let response = await this.request(
       `_matrix/client/v3/rooms/${roomId}/send/${type}/${txnId}`,
       'PUT',
-      { body: JSON.stringify(content) },
+      {
+        body: JSON.stringify(content),
+        signal: AbortSignal.timeout(MATRIX_WRITE_TIMEOUT_MS),
+      },
     );
 
-    let json = (await response.json()) as { event_id: string };
     if (!response.ok) {
-      throw new Error(
-        `Unable to send room event '${type}' to room ${roomId}: status ${
-          response.status
-        } - ${JSON.stringify(json)}`,
+      throw await matrixRequestError(
+        response,
+        `Unable to send room event '${type}' to room ${roomId}`,
       );
     }
+    let json = (await response.json()) as { event_id: string };
     return json.event_id;
   }
 
@@ -530,7 +595,7 @@ export class MatrixClient {
     return uint8ArrayToHex(await hash.digest());
   }
 
-  private nextTxnId() {
+  nextTxnId() {
     // Unique per client instance, and within it even when several events are
     // sent in the same millisecond. Every process logs in to the same device,
     // and synapse answers a repeated (device, transaction id) send with the

@@ -15,7 +15,7 @@ package's README is its reference: what it exports and how to install it.
 
 - [guide.md](guide.md): Choreo from a Glimmer card. How you actually write
   motion in a `.gts` file, in the order you meet the problems.
-- [The Choreo guides](guides/README.md): the guided path through
+- [The Choreo guides](guides/README): the guided path through
   glimmer-motion, interactive Choreo, spatial Choreo and Film, with the live
   demos embedded, and a guide for every public API.
 

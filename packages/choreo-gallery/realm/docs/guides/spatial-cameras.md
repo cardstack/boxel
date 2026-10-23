@@ -40,7 +40,7 @@ Use the [mockup](../../demos/mockup) to compare a device view with its interacti
 
 Let the Choreo run evaluate the camera movement and have the renderer consume the result. Avoid accumulating a separate camera offset on every animation frame; accumulation makes seeking depend on playback history.
 
-For films, choose exact seeking when the requested frame must be reproducible. A chased camera can suit live playback, but its state needs explicit handling at a cut. The [Film guide](film-shots.md) explains that distinction.
+For films, choose exact seeking when the requested frame must be reproducible. A chased camera can suit live playback, but its state needs explicit handling at a cut. The [Film guide](film-shots) explains that distinction.
 
 ## Choosing a More Specific Direction
 
@@ -48,4 +48,4 @@ The spatial section now separates fitting and aiming, relative pans and zooms, t
 
 ---
 
-[← Build Your First Spatial Scene](spatial-first-scene.md) · [All guides](README.md) · [Keeping the Interface Live →](spatial-dom.md)
+[← Build Your First Spatial Scene](spatial-first-scene) · [All guides](README) · [Keeping the Interface Live →](spatial-dom)

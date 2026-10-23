@@ -44,3 +44,7 @@ packages/pretui/plot/index.js
 packages/pretui/qrcode/index.js
 packages/pretui/wavesurfer/index.js
 packages/pretui/surfaces/grid/index.js
+
+# The secure origin's build record: written by its build, which compares it
+# byte for byte, so its formatting is the build's.
+packages/secure-origin/build-record.json

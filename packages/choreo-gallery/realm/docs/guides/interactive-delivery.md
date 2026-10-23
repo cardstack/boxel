@@ -38,4 +38,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Elevation and Directed Scrolling](interactive-raise-scroll.md) · [All guides](README.md) · [Derived Motion With Follow →](interactive-follow.md)
+[← Elevation and Directed Scrolling](interactive-raise-scroll) · [All guides](README) · [Derived Motion With Follow →](interactive-follow)

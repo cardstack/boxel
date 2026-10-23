@@ -41,4 +41,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← The Headless Film Schedule](film-schedule.md) · [All guides](README.md) · [Attaching Another Region to a Clock →](film-attachments.md)
+[← The Headless Film Schedule](film-schedule) · [All guides](README) · [Attaching Another Region to a Clock →](film-attachments)

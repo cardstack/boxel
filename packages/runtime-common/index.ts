@@ -1889,6 +1889,7 @@ export * from './constants.ts';
 export * from './helpers/const.ts';
 export * from './document.ts';
 export * from './matrix-constants.ts';
+export * from './dashboard-state.ts';
 export * from './session-token.ts';
 export * from './matrix-client.ts';
 export * from './anonymous-access.ts';
@@ -2020,6 +2021,7 @@ export { RealmAuthDataSource } from './realm-auth-data-source.ts';
 export type {
   Kind,
   RealmAdapter,
+  RealmEventDelivery,
   FileRef,
   RealmIndexCounts,
   RealmInfo,

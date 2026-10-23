@@ -335,6 +335,8 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'shared-pass-both',
         'shared-pass-mixed-card',
         'shared-pass-mixed-peer',
+        'shared-pass-silent',
+        'shared-pass-announcing',
         'version-target',
         'patch-over-http',
         'patch-over-batch',
@@ -808,6 +810,105 @@ module(basename(import.meta.filename), function (hooks) {
       event.clientRequestId,
       'instance:first-tab',
       'the first writer to join the pass announces it',
+    );
+  });
+
+  test('a pass shared by a write that asked for no realm events and one that did is announced by the one that did', async function (assert) {
+    let silent = `${testRealmHref}shared-pass-silent`;
+    let announcing = `${testRealmHref}shared-pass-announcing`;
+    let jobsBefore = await indexJobIds();
+    let { holder, release } = await holdIndexingLane();
+    let since = Date.now();
+    let writes: Promise<unknown>[] = [];
+    try {
+      // The silent write joins the pending pass first, which is the position
+      // that makes a caller the pass's announcer.
+      writes.push(
+        Promise.resolve(
+          request
+            .post('/shared-pass-silent.json')
+            .set('Accept', 'application/vnd.card+source')
+            .set('Content-Type', 'text/plain;charset=UTF-8')
+            .set('X-Boxel-Client-Request-Id', 'source:silent-deploy')
+            .set('X-Boxel-Realm-Events', 'none')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  attributes: { firstName: 'Silent' },
+                  meta: { adoptsFrom: PERSON },
+                },
+              }),
+            ),
+        ),
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('source:silent-deploy'),
+      );
+      writes.push(
+        Promise.resolve(
+          request
+            .patch('/shared-pass-announcing')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'instance:announcing-tab')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Announced' },
+                meta: { adoptsFrom: PERSON },
+              },
+            }),
+        ),
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:announcing-tab'),
+      );
+    } finally {
+      release.fulfill();
+    }
+    let responses = (await Promise.all(writes)) as { status: number }[];
+    await holder.done;
+    await realm.incrementalIndexing();
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      [204, 200],
+      'both writes are served',
+    );
+    let newJobs = (await indexJobIds()).filter(
+      (id) => !jobsBefore.includes(id),
+    );
+    assert.strictEqual(
+      newJobs.length,
+      1,
+      `the two writes share one index pass (got ${newJobs.length})`,
+    );
+
+    let eventsForPass = async () =>
+      (await incrementalIndexEventsSince(since)).filter(
+        (event) =>
+          event.invalidations.includes(silent) ||
+          event.invalidations.includes(announcing),
+      );
+    await waitUntil(async () => (await eventsForPass()).length > 0);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    let events = await eventsForPass();
+    assert.strictEqual(
+      events.length,
+      1,
+      `the shared pass is announced once (got ${events.length})`,
+    );
+    let [event] = events;
+    assert.strictEqual(
+      event.clientRequestId,
+      'instance:announcing-tab',
+      'the writer that wants realm events announces the pass',
+    );
+    assert.deepEqual(
+      (event.coalescedWrites ?? [])
+        .map(({ clientRequestId }) => clientRequestId)
+        .sort(),
+      ['instance:announcing-tab', 'source:silent-deploy'],
+      'and names the silent write among the writes the pass indexed',
     );
   });
 

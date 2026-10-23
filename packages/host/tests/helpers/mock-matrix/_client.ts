@@ -1,5 +1,7 @@
 import type Owner from '@ember/owner';
 
+import { waitForPromise } from '@ember/test-waiters';
+
 import { getService } from '@universal-ember/test-support';
 
 import { MatrixEvent } from 'matrix-js-sdk';
@@ -26,6 +28,7 @@ import {
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
+  APP_BOXEL_DASHBOARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import ENV from '@cardstack/host/config/environment';
@@ -113,6 +116,11 @@ export class MockClient implements ExtendedClient {
       return {
         realms: this.sdkOpts.catalogRealms ?? [],
       } as unknown as K;
+    } else if (_eventType === APP_BOXEL_DASHBOARD_EVENT_TYPE) {
+      if (this.sdkOpts.dashboardStateReadError) {
+        throw this.sdkOpts.dashboardStateReadError;
+      }
+      return (this.sdkOpts.dashboardState ?? null) as unknown as K;
     }
     return null;
   }
@@ -265,6 +273,8 @@ export class MockClient implements ExtendedClient {
       this.sdkOpts.workspaceFavorites = (data as any).favorites;
     } else if (type === APP_BOXEL_CATALOG_REALMS_EVENT_TYPE) {
       this.sdkOpts.catalogRealms = (data as any).realms;
+    } else if (type === APP_BOXEL_DASHBOARD_EVENT_TYPE) {
+      this.sdkOpts.dashboardState = data as any;
     } else {
       throw new Error(
         'Support for updating this event type in account data is not yet implemented in this mock.',
@@ -276,6 +286,44 @@ export class MockClient implements ExtendedClient {
         content: data as unknown as Record<string, unknown>,
       }),
     );
+    return Promise.resolve({});
+  }
+
+  fetchAccountData(type: string): Promise<unknown> {
+    return this.getAccountDataFromServer(type as any);
+  }
+
+  // Resolves once the server has the write, before it syncs back, as in the
+  // SDK. The echo is waited on so settled() covers it.
+  setAccountDataRaw<K extends keyof MatrixSDK.AccountDataEvents>(
+    type: K,
+    data: MatrixSDK.AccountDataEvents[K] | Record<string, never>,
+  ): Promise<{}> {
+    if (type !== APP_BOXEL_DASHBOARD_EVENT_TYPE) {
+      throw new Error(
+        'Support for raw writes of this event type is not yet implemented in this mock.',
+      );
+    }
+    this.sdkOpts.dashboardState = data as any;
+    let echo = () =>
+      this.emitEvent(
+        new MatrixEvent({
+          type: type as string,
+          content: data as unknown as Record<string, unknown>,
+        }),
+      );
+    if (this.sdkOpts.heldDashboardEchoes) {
+      this.sdkOpts.heldDashboardEchoes.push(echo);
+    } else {
+      waitForPromise(
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            echo();
+            resolve();
+          }),
+        ),
+      );
+    }
     return Promise.resolve({});
   }
 
@@ -655,6 +703,7 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
       case APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE:
       case APP_BOXEL_CATALOG_REALMS_EVENT_TYPE:
+      case APP_BOXEL_DASHBOARD_EVENT_TYPE:
       case 'm.direct':
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:

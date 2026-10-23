@@ -26,7 +26,7 @@ By the end of this section, you will be able to:
 
 ## Installing the Library
 
-The verified path for this checkout uses built local packages in a separate Ember/Vite app. Follow [Build Your First Choreo Application](core-first-app.md) for the generator and exact commands. The local package manifests remain at version 0.0.0; these guides do not assume a published npm installation. Keep Motion peer versions aligned with the generated package.json and the repository lockfile.
+The verified path for this checkout uses built local packages in a separate Ember/Vite app. Follow [Build Your First Choreo Application](core-first-app) for the generator and exact commands. The local package manifests remain at version 0.0.0; these guides do not assume a published npm installation. Keep Motion peer versions aligned with the generated package.json and the repository lockfile.
 
 ## Your First Animation
 
@@ -56,14 +56,14 @@ The modifier works on the paragraph itself. You do not need a special animated e
 
 ## Choosing Your Next Step
 
-For hover, tap, and changes to a single element, continue with [Animating an Element](core-elements.md). For a list that adds or removes items, read [Entering and Leaving](core-presence.md).
+For hover, tap, and changes to a single element, continue with [Animating an Element](core-elements). For a list that adds or removes items, read [Entering and Leaving](core-presence).
 
-For cameras, live DOM planes, and galleries, explore [Spatial & 3D Choreo](spatial-start.md). When several changes need to happen in an order, move on to [Interactive Choreo](interactive-start.md). When a clock needs to reproduce an entire presentation, start with [Recorded & Film Choreo](film-start.md).
+For cameras, live DOM planes, and galleries, explore [Spatial & 3D Choreo](spatial-start). When several changes need to happen in an order, move on to [Interactive Choreo](interactive-start). When a clock needs to reproduce an entire presentation, start with [Recorded & Film Choreo](film-start).
 
 ## A complete working tutorial
 
-Continue with the [end-to-end tutorial](core-first-app.md) for a runnable application, complete source, and verification commands.
+Continue with the [end-to-end tutorial](core-first-app) for a runnable application, complete source, and verification commands.
 
 ---
 
-[All guides](README.md) · [Build Your First Choreo Application →](core-first-app.md)
+[All guides](README) · [Build Your First Choreo Application →](core-first-app)

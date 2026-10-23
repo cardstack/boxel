@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24.17.0-slim
+FROM node:24.22.1-slim
 ARG realm_server_script
 ENV realm_server_script=$realm_server_script
 
@@ -26,6 +26,11 @@ RUN CI=1 pnpm install -r --offline
 # Building it into the realm here means setup:choreo-gallery-in-deployment
 # copies the films along with the rest of the realm.
 RUN pnpm --dir=packages/choreo-film-app build:realm
+
+# The secure origin's pages, which the realm server serves from their build.
+# A build that fails, or ships a module outside its import allowlist, fails
+# the image here rather than the realm server at startup.
+RUN pnpm --dir=packages/secure-origin build
 
 EXPOSE 3000
 

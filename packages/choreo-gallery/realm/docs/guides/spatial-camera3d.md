@@ -42,4 +42,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Relative Pans and Slow Zooms](spatial-relative.md) · [All guides](README.md) · [Camera Paths, Cuts, and Smoothing →](spatial-paths.md)
+[← Relative Pans and Slow Zooms](spatial-relative) · [All guides](README) · [Camera Paths, Cuts, and Smoothing →](spatial-paths)

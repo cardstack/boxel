@@ -13,6 +13,8 @@ import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import { NodeAdapter } from '../node-realm.ts';
+import { RealmEventDispatcher } from '../realm-event-dispatcher.ts';
+import { MatrixRequestError } from '@cardstack/runtime-common/matrix-client';
 import { insertUser, setupDB } from './helpers/index.ts';
 
 module(basename(import.meta.filename), function (hooks) {
@@ -56,6 +58,8 @@ module(basename(import.meta.filename), function (hooks) {
     let matrixClient = {
       login: async () => undefined,
       getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn-1',
       sendEvent: async () => {
         sendEventCalls++;
         throw new Error(
@@ -64,7 +68,7 @@ module(basename(import.meta.filename), function (hooks) {
       },
     } as unknown as MatrixClient;
 
-    let adapter = new NodeAdapter('/tmp');
+    let adapter = new NodeAdapter('/tmp', false, new RealmEventDispatcher());
     await adapter.broadcastRealmEvent(
       makeEvent(),
       realmURL.href,
@@ -90,6 +94,8 @@ module(basename(import.meta.filename), function (hooks) {
     let matrixClient = {
       login: async () => undefined,
       getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn-1',
       sendEvent: async () => {
         throw new Error(
           `Unable to send room event 'app.boxel.realm-event' to room ${staleRoomId}: status 500 - {"errcode":"M_UNKNOWN","error":"boom"}`,
@@ -97,7 +103,7 @@ module(basename(import.meta.filename), function (hooks) {
       },
     } as unknown as MatrixClient;
 
-    let adapter = new NodeAdapter('/tmp');
+    let adapter = new NodeAdapter('/tmp', false, new RealmEventDispatcher());
     await adapter.broadcastRealmEvent(
       makeEvent(),
       realmURL.href,
@@ -128,6 +134,8 @@ module(basename(import.meta.filename), function (hooks) {
     let matrixClient = {
       login: async () => undefined,
       getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn-1',
       sendEvent: async () => {
         failCleanup = true;
         throw new Error(
@@ -136,7 +144,7 @@ module(basename(import.meta.filename), function (hooks) {
       },
     } as unknown as MatrixClient;
 
-    let adapter = new NodeAdapter('/tmp');
+    let adapter = new NodeAdapter('/tmp', false, new RealmEventDispatcher());
 
     await adapter.broadcastRealmEvent(
       makeEvent(),
@@ -146,6 +154,153 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     assert.true(true, 'broadcast resolves even if stale room cleanup fails');
+  });
+
+  test('retries a send synapse answers as overloaded, with the same transaction id', async function (assert) {
+    await insertSessionForAlice();
+
+    let txnIds: string[] = [];
+    let matrixClient = {
+      login: async () => undefined,
+      getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => `txn-${txnIds.length}`,
+      sendEvent: async (
+        _roomId: string,
+        _type: string,
+        _content: unknown,
+        txnId: string,
+      ) => {
+        txnIds.push(txnId);
+        if (txnIds.length === 1) {
+          throw new MatrixRequestError(
+            `Unable to send room event 'app.boxel.realm-event' to room ${staleRoomId}: status 504 - non-JSON body (122 bytes)`,
+            504,
+          );
+        }
+        return '$event';
+      },
+    } as unknown as MatrixClient;
+
+    let adapter = new NodeAdapter(
+      '/tmp',
+      false,
+      new RealmEventDispatcher({ initialBackoffMs: 1 }),
+    );
+    await adapter.broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.deepEqual(
+      txnIds,
+      ['txn-0', 'txn-0'],
+      'the retry reuses the transaction id of the first attempt',
+    );
+    assert.strictEqual(
+      await fetchSessionRoom(dbAdapter, '@alice:localhost'),
+      staleRoomId,
+      'an overloaded homeserver does not clear the session room',
+    );
+  });
+
+  test('logs in again after a login synapse answers as overloaded, rather than skip the event', async function (assert) {
+    await insertSessionForAlice();
+
+    let logins = 0;
+    let sent: string[] = [];
+    let matrixClient = {
+      login: async () => {
+        logins++;
+        if (logins === 1) {
+          throw new MatrixRequestError(
+            `Unable to login to matrix: status 502 - non-JSON body (150 bytes)`,
+            502,
+          );
+        }
+      },
+      getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn-1',
+      sendEvent: async (roomId: string) => {
+        sent.push(roomId);
+        return '$event';
+      },
+    } as unknown as MatrixClient;
+
+    let adapter = new NodeAdapter(
+      '/tmp',
+      false,
+      new RealmEventDispatcher({ initialBackoffMs: 1 }),
+    );
+    await adapter.broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.strictEqual(logins, 2, 'the login is tried again after a pause');
+    assert.deepEqual(sent, [staleRoomId], 'the event still reaches the room');
+  });
+
+  test('delivers only to the named recipients when the broadcast names any', async function (assert) {
+    await insertSessionForAlice();
+    await insertUser(
+      dbAdapter,
+      '@carol:localhost',
+      'cus_carol',
+      'c@example.com',
+    );
+    await upsertSessionRoom(
+      dbAdapter,
+      '@carol:localhost',
+      '!room-carol:localhost',
+    );
+    await insertPermissions(dbAdapter, realmURL, {
+      '@carol:localhost': ['read'],
+    });
+
+    let sentTo: string[] = [];
+    let matrixClient = {
+      login: async () => undefined,
+      getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => `txn-${sentTo.length}`,
+      sendEvent: async (roomId: string) => {
+        sentTo.push(roomId);
+        return '$event';
+      },
+    } as unknown as MatrixClient;
+
+    let adapter = new NodeAdapter('/tmp', false, new RealmEventDispatcher());
+    await adapter.broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+    assert.deepEqual(
+      sentTo.sort(),
+      ['!room-alice:localhost', '!room-carol:localhost'],
+      'with no recipients, every subscriber receives the event',
+    );
+
+    sentTo = [];
+    await adapter.broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+      { recipients: ['@carol:localhost', '@nobody:localhost'] },
+    );
+    assert.deepEqual(
+      sentTo,
+      ['!room-carol:localhost'],
+      "only the named subscriber's room receives the event",
+    );
   });
 });
 

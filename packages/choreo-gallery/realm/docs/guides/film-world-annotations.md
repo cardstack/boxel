@@ -40,4 +40,4 @@ Read the implementation: [`nodes.gts`](https://github.com/cardstack/boxel/blob/m
 
 ---
 
-[← Picture Adjustments, Grades, and Filters](film-adjustments.md) · [All guides](README.md) · [Lower Thirds, Captions, and Screen Overlays →](film-typography.md)
+[← Picture Adjustments, Grades, and Filters](film-adjustments) · [All guides](README) · [Lower Thirds, Captions, and Screen Overlays →](film-typography)
