@@ -5759,6 +5759,55 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        // A linking card's rendered links reach `prerendered_html.deps` only
+        // once its `prerender_html` job has run, which can trail its index
+        // pass by seconds under load. Removing `jade`'s HTML row puts it back
+        // in that window: the delete must still move its validator, through
+        // the links its index row records itself.
+        test('a card whose HTML has not been rendered yet stops serving a deleted linked card', async function (assert) {
+          await dbAdapter.execute(
+            `DELETE FROM prerendered_html WHERE realm_url = '${testRealmHref}' AND url = '${testRealmHref}jade.json'`,
+          );
+
+          let before = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(before.status, 200, `HTTP 200: ${before.text}`);
+          let etag = before.get('etag') ?? '';
+          assert.ok(etag, 'the first read carries an ETag');
+          assert.ok(
+            (before.body.included ?? []).some(
+              (resource: { id: string }) =>
+                resource.id === `${testRealmHref}hassan`,
+            ),
+            'the linked card is in included before the delete',
+          );
+
+          let deleted = await request
+            .delete('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(deleted.status, 204, `HTTP 204: ${deleted.text}`);
+
+          let after = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(after.status, 200, `HTTP 200: ${after.text}`);
+          assert.notStrictEqual(
+            after.get('etag'),
+            etag,
+            `the linking card's validator moved (x-boxel-card-cache: ${after.get(
+              'x-boxel-card-cache',
+            )})`,
+          );
+          assert.notOk(
+            (after.body.included ?? []).some(
+              (resource: { id: string }) =>
+                resource.id === `${testRealmHref}hassan`,
+            ),
+            'the deleted card is not in included',
+          );
+        });
+
         // The same, for cards made the way a client makes them: both created
         // by POST, the link written as an absolute URL to the target's id.
         test('a created card that links a deleted created card stops serving it', async function (assert) {
