@@ -14,7 +14,7 @@ import {
   appOrigins,
   forgetReturn,
   handOffURL,
-  isLoopback,
+  needsConfirmation,
   pendingReturn,
 } from '../../security/app-handoff.js';
 import {
@@ -27,6 +27,7 @@ import AuthContainer from '../../components/auth-container.gts';
 import LoadingIndicator from '../../components/loading-indicator.gts';
 import { navigation } from '../navigation.js';
 import { asSentence } from '../sign-in-copy.js';
+import { modeURL } from '../urls.js';
 
 import MessagePage from './message-page.gts';
 
@@ -141,7 +142,7 @@ export default class SignedIn extends Component {
     if (!this.target) {
       return;
     }
-    if (isLoopback(this.target)) {
+    if (needsConfirmation(this.target, this.config)) {
       this.page.state = {
         name: 'confirming',
         target: this.target,
@@ -185,6 +186,13 @@ export default class SignedIn extends Component {
     try {
       minted = await loginToken(this.config, session);
     } catch (e: any) {
+      if (e.code === 'signed-out') {
+        // The session ended since the window checked it, as signing out in
+        // another tab ends it: sign in again, and the hand-off this tab is
+        // waiting on follows.
+        navigation.replace(modeURL('sign-in'));
+        return;
+      }
       this.page.state = { name: 'failed', error: asSentence(e.message) };
       return;
     }

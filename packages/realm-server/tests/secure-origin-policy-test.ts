@@ -22,6 +22,7 @@ const SHELL_PAGES = [
   '/secure?mode=verify-email',
   '/secure?mode=forgot-password',
   '/secure?mode=reset-password',
+  '/secure?mode=sign-out',
   '/secure/google-callback',
 ];
 
@@ -181,6 +182,47 @@ module(basename(import.meta.filename), function (hooks) {
       }
       assert.deepEqual(await violationsIn(page), [], `${path}: no violation`);
     }
+  });
+
+  test('the screens a sign-in is handed back to the app from run under the policy', async function (assert) {
+    // A window already signed in, sent here by an app on a loopback origin:
+    // it asks to confirm, then, with nothing to mint the token, says the
+    // hand-off didn't work.
+    await page.goto(`${secureOrigin}/secure?mode=none`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.evaluate(() =>
+      localStorage.setItem(
+        'boxel-secure-session',
+        JSON.stringify({
+          token: 'policy-test',
+          user: '@someone:example.test',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        }),
+      ),
+    );
+    await page.goto(
+      `${secureOrigin}/secure?mode=sign-in#return=${encodeURIComponent(`${appOrigin}/`)}`,
+      { waitUntil: 'networkidle0' },
+    );
+    await page.waitForSelector('[data-test-secure-loopback-confirm]', {
+      timeout: 10000,
+    });
+    assert.deepEqual(
+      await violationsIn(page),
+      [],
+      'asking to confirm: no violation',
+    );
+    await page.click('[data-test-secure-loopback-continue]');
+    await page.waitForSelector('[data-test-secure-handoff-retry]', {
+      timeout: 10000,
+    });
+    assert.deepEqual(
+      await violationsIn(page),
+      [],
+      'handing over, and failing to: no violation',
+    );
+    await page.evaluate(() => localStorage.clear());
   });
 
   test('each credential form runs under the policy, framed by the app', async function (assert) {

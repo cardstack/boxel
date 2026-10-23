@@ -92,12 +92,12 @@
       ]
     },
     "session.js": {
-      "bytes": 5116,
+      "bytes": 5170,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/session.js",
-          "size": 7567
+          "size": 7685
         }
       ]
     },
@@ -721,7 +721,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 60339,
+      "bytes": 60474,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -766,7 +766,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/app-handoff.js",
-          "size": 1710
+          "size": 1795
         },
         {
           "package": "@cardstack/secure-origin",
@@ -891,7 +891,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/signed-in.gts",
-          "size": 4744
+          "size": 4859
         },
         {
           "package": "@cardstack/secure-origin",

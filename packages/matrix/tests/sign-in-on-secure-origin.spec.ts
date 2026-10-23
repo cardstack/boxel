@@ -4,6 +4,7 @@ import { appURL, secureOriginURL } from '../support/isolated-realm-server.ts';
 import {
   createSubscribedUser,
   logout,
+  postCardSource,
   setupPermissions,
 } from '../helpers/index.ts';
 
@@ -168,6 +169,62 @@ test.describe('Sign in on the secure origin', () => {
       "the secure origin's session is gone",
     ).toBeNull();
     await snapshot(testInfo, page, 'signed out, at the secure sign-in');
+  });
+
+  test("a private realm's images load after the hand-off, and stop once signed out", async ({
+    page,
+  }) => {
+    let realmURL = `${appURL}/`;
+    let imageURL = `${realmURL}secure-sign-in-probe-${Date.now()}.svg`;
+    let loads = (url: string) =>
+      page.evaluate(
+        (src) =>
+          new Promise<boolean>((resolve) => {
+            let img = new Image();
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(false);
+            img.src = `${src}?nocache=${Math.random()}`;
+          }),
+        url,
+      );
+
+    await page.goto(appURL);
+    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    await signInOnSecurePage(page, username, password);
+    await expect(
+      page.locator('[data-test-operator-mode-stack="0"]'),
+    ).toHaveCount(1, { timeout: 60_000 });
+    await postCardSource(
+      page,
+      realmURL,
+      imageURL.slice(realmURL.length),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4"/></svg>',
+    );
+    let anonymous = await fetch(imageURL);
+    expect(anonymous.status, 'the realm is private').toBe(401);
+
+    await expect
+      .poll(() => loads(imageURL), {
+        message: "the service worker attaches the realm's token",
+        timeout: 30_000,
+      })
+      .toBe(true);
+
+    await logout(page);
+    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    // Back on the app, held there rather than sent on to sign in again.
+    await page.route(
+      (url) => url.origin === new URL(secureOriginURL).origin,
+      (route) => route.fulfill({ status: 204 }),
+    );
+    await page.goto(appURL);
+    await expect(
+      page.locator('[data-test-secure-sign-in-button]'),
+    ).toBeVisible();
+    expect(
+      await loads(imageURL),
+      "the signed-out app's images carry no token",
+    ).toBe(false);
   });
 
   test('a sign-in is never handed to an origin the realm server does not list', async ({
