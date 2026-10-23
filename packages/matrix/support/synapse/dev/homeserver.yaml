@@ -1,6 +1,11 @@
 server_name: "localhost"
 pid_file: /data/homeserver.pid
 public_baseurl: "http://localhost:8008"
+# Rooms are created as room version 10. Room version 12 rejects a room
+# creator listed in power_level_content_override.users, which the host's
+# room creation sends, and its room IDs carry no server name. The deployed
+# homeserver config pins the same version.
+default_room_version: "10"
 listeners:
   - port: 8008
     tls: false
@@ -49,6 +54,17 @@ rc_joins:
 rc_joins_per_room:
   per_second: 9999
   burst_count: 9999
+# Rooms are created per user: the realm server's Matrix user creates a
+# session room on each user's first sign-in, and the host creates a room for
+# every new AI assistant chat. The realm server also looks up profiles
+# without an access token. So neither room creation nor profile lookups are
+# limited here.
+rc_room_creation:
+  per_second: 10000
+  burst_count: 10000
+rc_profile:
+  per_second: 10000
+  burst_count: 10000
 rc_3pid_validation:
   per_second: 1000
   burst_count: 1000
