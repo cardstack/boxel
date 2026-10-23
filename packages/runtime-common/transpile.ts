@@ -7,7 +7,7 @@ import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-t
 import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
 import { loaderPlugin } from './loader-plugin.ts';
 import { exportIdentityPlugin } from './export-identity-plugin.ts';
-import { CLASS_FACTORIES } from './class-factories.ts';
+import { CLASS_FACTORIES, canonicalFactoryModule } from './class-factories.ts';
 //@ts-ignore ironically no types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
@@ -62,7 +62,8 @@ export const TRANSPILE_VERSION = 2;
 // When given, every exported class is tagged with it (see
 // export-identity-plugin.ts); the tag is canonicalized where it is read.
 // `identity.canonicalModule` spells a module the way the plugin's class
-// factories are named, so a factory imported by a realm URL is recognized.
+// factories are named, so a factory imported by a realm URL is recognized;
+// without one, only the base realm's alias is.
 export async function transpileJS(
   content: string,
   debugFilename: string,
@@ -112,7 +113,8 @@ export async function transpileJS(
               {
                 moduleIdentifier: identity.moduleIdentifier,
                 classFactories: CLASS_FACTORIES,
-                canonicalModule: identity.canonicalModule,
+                canonicalModule:
+                  identity.canonicalModule ?? canonicalFactoryModule,
               },
             ],
           ]

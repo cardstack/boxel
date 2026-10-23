@@ -16,6 +16,14 @@ function moduleURL(onDisk: string): string {
     .replace(/\.gts$/, '');
 }
 
+// Spells a base realm module by its prefix, as a compile's canonicalModule
+// does for a module imported by the base realm's URL.
+function baseRealmByPrefix(module: string): string {
+  return module.startsWith(baseRealm.url)
+    ? `@cardstack/base/${module.slice(baseRealm.url.length)}`
+    : module;
+}
+
 // The class factories the cases below recognize calls to.
 const classFactories: Options['classFactories'] = [
   ['@cardstack/base/enum', 'default'],
@@ -372,15 +380,18 @@ const tests = Object.freeze({
     );
   },
 
-  'recognizes a class factory imported by a realm alias or through a namespace':
+  'recognizes a class factory imported by another spelling or through a namespace':
     async (assert) => {
       assert.codeEqual(
-        transform(`
-          import enumField from '${baseRealm.url}enum';
-          import * as status from '@cardstack/catalog/fields/status/status';
-          export const DogStatus = enumField(StringField, { options: ['good'] });
-          export const TicketStatus = status.statusField({ options: [] });
-        `),
+        transform(
+          `
+            import enumField from '${baseRealm.url}enum';
+            import * as status from '@cardstack/catalog/fields/status/status';
+            export const DogStatus = enumField(StringField, { options: ['good'] });
+            export const TicketStatus = status.statusField({ options: [] });
+          `,
+          { canonicalModule: baseRealmByPrefix },
+        ),
         `
           import enumField from '${baseRealm.url}enum';
           import * as status from '@cardstack/catalog/fields/status/status';
@@ -401,7 +412,10 @@ const tests = Object.freeze({
           import enumField from './enum';
           export const Status = enumField(StringField, { options: ['good'] });
         `,
-        { moduleIdentifier: `${baseRealm.url}status` },
+        {
+          moduleIdentifier: `${baseRealm.url}status`,
+          canonicalModule: baseRealmByPrefix,
+        },
       ),
       `
         import enumField from './enum';

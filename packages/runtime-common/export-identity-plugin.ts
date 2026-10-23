@@ -1,7 +1,6 @@
 import type * as Babel from '@babel/core';
 import type { PluginObj, PluginPass, types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
-import { PREFIX_REALMS } from './realm-prefixes.ts';
 
 // Every exported class gets a static member keyed by this registered symbol,
 // whose value is `[moduleIdentifier, exportedName]`.
@@ -28,15 +27,13 @@ export interface Options {
   // Names the module an import specifier refers to, in the form
   // `classFactories` names modules. Given the specifier and the module being
   // compiled; returning undefined leaves the default in place, which resolves
-  // a relative specifier against the module's identifier when that is a URL
-  // and spells a well-known realm alias by its prefix.
+  // a relative specifier against the module's identifier when that is a URL.
   importedModule?: (
     specifier: string,
     importer: { moduleIdentifier: string; filename: string | undefined },
   ) => string | undefined;
-  // Spells a resolved module the way `classFactories` does, for a module that
-  // has spellings beyond the alias forms the default knows, such as a realm
-  // URL a prefix is registered for.
+  // Spells a resolved module the way `classFactories` does, for a module with
+  // more than one spelling, such as a realm URL a prefix is registered for.
   canonicalModule?: (module: string) => string;
 }
 
@@ -339,25 +336,19 @@ function importedName(specifier: t.ImportSpecifier): string {
 }
 
 // A relative specifier resolved against the importing module when its
-// identifier is a URL, and a well-known realm alias spelled by its prefix.
+// identifier is a URL.
 function defaultImportedModule(
   specifier: string,
   moduleIdentifier: string,
 ): string {
-  let module = specifier;
-  if (/^\.\.?\//.test(specifier)) {
-    try {
-      module = new URL(specifier, moduleIdentifier).href;
-    } catch {
-      return specifier;
-    }
+  if (!/^\.\.?\//.test(specifier)) {
+    return specifier;
   }
-  for (let { prefix, alias } of PREFIX_REALMS) {
-    if (alias && module.startsWith(alias)) {
-      return prefix + module.slice(alias.length);
-    }
+  try {
+    return new URL(specifier, moduleIdentifier).href;
+  } catch {
+    return specifier;
   }
-  return module;
 }
 
 function trimExtension(module: string): string {

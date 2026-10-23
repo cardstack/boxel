@@ -86,7 +86,7 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('recognizes a class factory imported by a realm alias or through a namespace', async function (assert) {
+    test('recognizes a class factory imported by another spelling or through a namespace', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
