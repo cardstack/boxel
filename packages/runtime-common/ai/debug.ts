@@ -10,6 +10,21 @@ export const SKILL_FEATURES: Record<string, string> = {
     'Makes the assistant search the catalog for a listing to install or remix, and for specs to reuse, before it writes any .gts file.',
 };
 
+// The realms a feature's skill sections send the assistant to search, by
+// realm prefix. In a room that has not enabled the feature, the host leaves
+// them out of every search a run-realm-code script makes, so turning a
+// feature off removes its realms along with its skill text.
+export const SKILL_FEATURE_REALMS: Record<string, string[]> = {
+  'catalog-reuse': ['@cardstack/catalog/'],
+};
+
+// The realms gated behind a feature that `enabledFeatures` does not include.
+export function realmsOfDisabledFeatures(enabledFeatures: string[]): string[] {
+  return Object.entries(SKILL_FEATURE_REALMS).flatMap(([feature, realms]) =>
+    enabledFeatures.includes(feature) ? [] : realms,
+  );
+}
+
 // The command names the bot used before they moved under `boxel-debug:`.
 const LEGACY_DEBUG_COMMAND_RE =
   /^debug(:(help|prompt|eventlist|title|boom|patch|feature)\b[\s\S]*)?$/;

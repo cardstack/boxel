@@ -1,4 +1,4 @@
-import { settled } from '@ember/test-helpers';
+import { settled, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -3681,6 +3681,92 @@ module(
         );
       } finally {
         virtualNetwork.unmount(spy);
+      }
+    });
+
+    test('realm.cards.search in the catalog finds nothing unless the room enabled catalog-reuse', async function (assert) {
+      await getService('matrix-service').ready;
+      let roomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'catalog-reuse',
+      });
+      let { virtualNetwork } = getService('network');
+      let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
+      let searches = 0;
+      // Stands in for the catalog: a public realm whose searches are counted.
+      let catalog = async (request: Request) => {
+        let { pathname } = new URL(request.url);
+        if (request.url === `${catalogURL}_info`) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                id: catalogURL,
+                type: 'realm-info',
+                attributes: { name: 'Catalog' },
+              },
+            }),
+            {
+              headers: {
+                'content-type': SupportedMimeType.RealmInfo,
+                'x-boxel-realm-public-readable': 'true',
+              },
+            },
+          );
+        }
+        if (
+          pathname.endsWith('_search') ||
+          pathname.endsWith('_federated-search')
+        ) {
+          searches++;
+          return new Response(
+            JSON.stringify({ data: [], meta: { page: { total: 0 } } }),
+            { headers: { 'content-type': SupportedMimeType.CardJson } },
+          );
+        }
+        return null;
+      };
+      virtualNetwork.mount(catalog, { prepend: true });
+      try {
+        await getService('realm').ensureRealmMeta(catalogURL);
+        let command = new RunRealmCodeTool(
+          getService('tool-service').toolContext,
+        );
+        let search = async () =>
+          JSON.parse(
+            (
+              await command.execute({
+                realm: '@cardstack/catalog/',
+                roomId,
+                code: `return await realm.cards.search({});`,
+              })
+            ).scriptResult!,
+          );
+
+        assert.deepEqual(
+          await search(),
+          { cards: [], total: 0, truncated: false },
+          'the catalog answers empty',
+        );
+        assert.strictEqual(searches, 0, 'without a request');
+
+        mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
+          msgtype: 'm.text',
+          body: 'boxel-debug:feature:enable:catalog-reuse',
+        });
+        // The message reaches the room's events a tick after it is sent.
+        await waitUntil(() =>
+          getService('matrix-service')
+            .roomResources.get(roomId)
+            ?.events.some(
+              (event) =>
+                (event.content as { body?: string })?.body ===
+                'boxel-debug:feature:enable:catalog-reuse',
+            ),
+        );
+        await search();
+        assert.strictEqual(searches, 1, 'with the feature on, it is searched');
+      } finally {
+        virtualNetwork.unmount(catalog);
       }
     });
   },

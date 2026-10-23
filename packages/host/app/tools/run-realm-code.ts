@@ -30,7 +30,10 @@ import {
   type Saved,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
-import { sessionSkillFeatures } from '@cardstack/runtime-common/ai/debug';
+import {
+  realmsOfDisabledFeatures,
+  sessionSkillFeatures,
+} from '@cardstack/runtime-common/ai/debug';
 
 import {
   generateImage,
@@ -1871,9 +1874,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url, maxBytes, signal) => this.downloadFile(url, maxBytes, signal),
       (url) => this.listDirectory(url),
       // The run reads only the rows' own data, so the linked cards' resources
-      // are not asked for.
-      (query) =>
-        this.store.searchEntries(query, [realmURL], { linksOnly: true }),
+      // are not asked for. A script run in a feature-gated realm finds
+      // nothing there unless the room enabled the feature.
+      async (query) =>
+        this.searchableRealms(roomId, [realmURL])?.length === 0
+          ? { data: [], meta: { page: { total: 0 } } }
+          : await this.store.searchEntries(query, [realmURL], {
+              linksOnly: true,
+            }),
       (reference, base) =>
         this.network.virtualNetwork.resolveURL(reference, base).href,
       (id) => this.readCard(id),
@@ -2629,9 +2637,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
       : new URL(realm).href;
   }
 
-  // The catalog is searched only in a room that enabled the catalog-reuse
-  // feature; elsewhere it is left out of every entry search, whether the
-  // script named it or relied on the default of every readable realm.
+  // A realm gated behind a skill feature (SKILL_FEATURE_REALMS) is searched
+  // only in a room that enabled the feature; elsewhere it is left out of every
+  // entry and card search, whether the script named it, ran in it, or relied
+  // on the default of every readable realm.
   private searchableRealms(
     roomId: string,
     realms: string[] | undefined,
@@ -2642,20 +2651,20 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let aiBotUserId = this.matrixService.userId
       ? this.matrixService.aiBotUserId
       : '';
-    if (sessionSkillFeatures(events, aiBotUserId).includes('catalog-reuse')) {
+    let { virtualNetwork } = this.network;
+    // Named by prefix, which every build registers: a test build clears the
+    // catalog's URL but keeps the prefix.
+    let gated = realmsOfDisabledFeatures(
+      sessionSkillFeatures(events, aiBotUserId),
+    ).map((realm) => canonicalRealmIdentifier(virtualNetwork, realm));
+    if (gated.length === 0) {
       return realms;
     }
-    let { virtualNetwork } = this.network;
-    // Named by its prefix, which every build registers: a test build clears
-    // the catalog's URL but keeps the prefix.
-    let catalog = canonicalRealmIdentifier(
-      virtualNetwork,
-      '@cardstack/catalog/',
-    );
     return (
       realms?.length ? realms : this.realmServer.availableRealmIdentifiers
     ).filter(
-      (realm) => canonicalRealmIdentifier(virtualNetwork, realm) !== catalog,
+      (realm) =>
+        !gated.includes(canonicalRealmIdentifier(virtualNetwork, realm)),
     );
   }
 
