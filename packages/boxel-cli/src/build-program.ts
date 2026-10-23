@@ -64,7 +64,7 @@ export function buildBoxelProgram(version: string): Command {
     )
     .option(
       '--host-url <url>',
-      'Origin serving the browser sign-in page, when it is not the realm server (for add command)',
+      "Sign in on this origin's /cli-auth page instead of the realm server's secure origin (for add command)",
     )
     .option('--production', 'Target production — the default (for add command)')
     .option(
@@ -84,7 +84,11 @@ export function buildBoxelProgram(version: string): Command {
       `
 Sign-in (for 'add'):
   Interactive 'boxel profile add' opens your browser to the Boxel sign-in
-  page, which offers both a username/password form and Google. Use
+  page, which offers a username/password form, Google, and creating an
+  account. It is on the realm server's secure origin, and that one sign-in
+  also signs the profile in for 'boxel keys'. A realm server without a
+  secure origin that can do this gets the host app's own sign-in page, as
+  does --host-url, which names the origin whose page to open. Use
   --no-browser to sign in with a username and password in the terminal
   instead. Supplying -u with a password (or BOXEL_PASSWORD) stays fully
   non-interactive and never opens a browser, which is the path to use in CI.

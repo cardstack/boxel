@@ -42,6 +42,7 @@ import {
   registerUser,
 } from '../synapse.ts';
 import { keepsMethodAndPathOnly } from '../lib/request-telemetry.ts';
+import { secureSignInConfigured } from '../lib/secure-session.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
   installSecretsKeyring,
@@ -1847,6 +1848,22 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("the CLI is told the secure origin can't sign it in without the Matrix server's admin credentials", function (assert) {
+      let matrixURL = new URL('https://matrix.example.test/');
+      assert.false(secureSignInConfigured({ matrixURL }));
+      assert.false(
+        secureSignInConfigured({ matrixURL, matrixAdminUsername: 'admin' }),
+        'nor with only one of them',
+      );
+      assert.true(
+        secureSignInConfigured({
+          matrixURL,
+          matrixAdminUsername: 'admin',
+          matrixAdminPassword: 'a-password',
+        }),
+      );
+    });
+
     test('the secure origin is published for clients outside the browser', async function (assert) {
       let response = await request.get('/_secure-origin');
       assert.strictEqual(response.status, 200);
@@ -1858,6 +1875,10 @@ module(basename(import.meta.filename), function () {
         response.body.data.attributes.matrixServerName,
         'localhost',
         'with the Matrix server its accounts are on',
+      );
+      assert.true(
+        response.body.data.attributes.cliAuth,
+        'and that its pages sign a CLI profile in',
       );
     });
   });

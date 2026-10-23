@@ -4,6 +4,7 @@ import { afterEach, describe, test } from 'node:test';
 import {
   cliCallback,
   handoffFields,
+  handProfileSignIn,
   handToCli,
   isCliCallback,
 } from '../src/security/cli-handoff.js';
@@ -65,6 +66,41 @@ describe('cliCallback', () => {
     assert.equal(cliCallback(params({ state: STATE })), undefined);
     assert.equal(cliCallback(params({ port: '51234' })), undefined);
   });
+
+  test('a profile sign-in says whether the CLI takes a secure session too', () => {
+    let listener = {
+      url: 'http://127.0.0.1:51234/callback',
+      state: STATE,
+    };
+    assert.deepEqual(
+      cliCallback(params({ port: '51234', state: STATE }), { profile: true }),
+      { ...listener, profile: { secureSession: false } },
+      'the cli-auth page is a profile sign-in whatever its address says',
+    );
+    assert.deepEqual(
+      cliCallback(params({ port: '51234', state: STATE, session: 'secure' }), {
+        profile: true,
+      }),
+      { ...listener, profile: { secureSession: true } },
+    );
+    assert.deepEqual(
+      cliCallback(
+        params({
+          port: '51234',
+          state: STATE,
+          cli: 'profile',
+          session: 'secure',
+        }),
+      ),
+      { ...listener, profile: { secureSession: true } },
+      'the pages a profile sign-in links to read it from `cli=profile`',
+    );
+    assert.deepEqual(
+      cliCallback(params({ port: '51234', state: STATE, session: 'secure' })),
+      listener,
+      '`boxel keys sign-in` is handed a secure session alone',
+    );
+  });
 });
 
 describe('handToCli', () => {
@@ -76,11 +112,42 @@ describe('handToCli', () => {
   };
 
   test('sends the CLI its state and the session', () => {
-    assert.deepEqual(handoffFields(callback, session), [
+    assert.deepEqual(handoffFields(callback, { session }), [
       ['state', STATE],
       ['secure_session', 'secure-session-token'],
       ['user_id', '@someone:example.test'],
       ['expires_at', '2030-01-01T00:00:00.000Z'],
+    ]);
+  });
+
+  test('sends a profile sign-in its login token, with the session it takes', () => {
+    assert.deepEqual(
+      handoffFields(callback, { loginToken: 'login-token', session }),
+      [
+        ['state', STATE],
+        ['login_token', 'login-token'],
+        ['secure_session', 'secure-session-token'],
+        ['user_id', '@someone:example.test'],
+        ['expires_at', '2030-01-01T00:00:00.000Z'],
+      ],
+    );
+  });
+
+  test('sends a login token alone the way every CLI accepts it: in the query of a navigation to the listener', () => {
+    let navigated: string[] = [];
+    let doc = {
+      createElement() {
+        throw new Error('no form is made');
+      },
+    } as unknown as Document;
+    let form = handToCli(
+      callback,
+      { loginToken: 'login token' },
+      { doc, navigate: (url: string) => navigated.push(url) },
+    );
+    assert.equal(form, undefined);
+    assert.deepEqual(navigated, [
+      `http://127.0.0.1:51234/callback?state=${STATE}&loginToken=login+token`,
     ]);
   });
 
@@ -107,12 +174,16 @@ describe('handToCli', () => {
       createElement: element,
       body: { append: (node: unknown) => appended.push(node) },
     };
-    let form = handToCli(callback, session, doc as unknown as Document) as any;
+    let form = handToCli(
+      callback,
+      { session },
+      { doc: doc as unknown as Document },
+    ) as any;
     assert.equal(form.method, 'POST');
     assert.equal(form.action, 'http://127.0.0.1:51234/callback');
     assert.deepEqual(
       form.children.map((input: any) => [input.type, input.name, input.value]),
-      handoffFields(callback, session).map(([name, value]) => [
+      handoffFields(callback, { session }).map(([name, value]) => [
         'hidden',
         name,
         value,
@@ -120,6 +191,113 @@ describe('handToCli', () => {
     );
     assert.deepEqual(appended, [form], 'the form is in the page');
     assert.equal(submitted, 1, 'it is submitted once');
+  });
+});
+
+describe('handProfileSignIn', () => {
+  const session = {
+    token: 'secure-session-token',
+    user: '@someone:example.test',
+    expiresAt: '2030-01-01T00:00:00.000Z',
+  };
+  const listener = { url: 'http://127.0.0.1:51234/callback', state: STATE };
+
+  function recorder() {
+    let calls: string[] = [];
+    let posted: unknown[] = [];
+    let doc = {
+      createElement(tag: string) {
+        return {
+          tag,
+          children: [] as any[],
+          append(...nodes: unknown[]) {
+            this.children.push(...nodes);
+          },
+          setAttribute() {},
+          submit() {
+            calls.push('post');
+            posted.push(this);
+          },
+        };
+      },
+      body: { append() {} },
+    } as unknown as Document;
+    return {
+      calls,
+      posted,
+      requests: {
+        mintLoginToken: async () => {
+          calls.push('mint');
+          return 'login-token';
+        },
+        endSession: async (ended: typeof session) => {
+          calls.push(`end ${ended.token}`);
+        },
+        doc,
+        navigate: (url: string) => calls.push(`navigate ${url}`),
+      },
+    };
+  }
+
+  test('a CLI that takes a secure session is posted the login token with it, and the session lives on', async () => {
+    let { calls, posted, requests } = recorder();
+    await handProfileSignIn(
+      { ...listener, profile: { secureSession: true } },
+      session,
+      requests,
+    );
+    assert.deepEqual(calls, ['mint', 'post']);
+    assert.deepEqual(
+      (posted[0] as any).children.map((input: any) => input.name),
+      ['state', 'login_token', 'secure_session', 'user_id', 'expires_at'],
+    );
+  });
+
+  test('a CLI that takes none is sent the login token only once the session is ended', async () => {
+    let { calls, requests } = recorder();
+    await handProfileSignIn(
+      { ...listener, profile: { secureSession: false } },
+      session,
+      requests,
+    );
+    assert.deepEqual(calls, [
+      'mint',
+      'end secure-session-token',
+      `navigate http://127.0.0.1:51234/callback?state=${STATE}&loginToken=login-token`,
+    ]);
+  });
+
+  test('a token that can’t be minted ends the session, and the failure is the caller’s to show', async () => {
+    let { calls, requests } = recorder();
+    await assert.rejects(
+      handProfileSignIn(
+        { ...listener, profile: { secureSession: true } },
+        session,
+        {
+          ...requests,
+          mintLoginToken: async () => {
+            throw new Error('signing in is unavailable right now');
+          },
+        },
+      ),
+      /unavailable/,
+    );
+    assert.deepEqual(calls, ['end secure-session-token']);
+  });
+
+  test('a failure to end the session doesn’t keep the CLI from its token', async () => {
+    let { calls, requests } = recorder();
+    await handProfileSignIn(
+      { ...listener, profile: { secureSession: false } },
+      session,
+      {
+        ...requests,
+        endSession: async () => {
+          throw new Error('Boxel could not be reached.');
+        },
+      },
+    );
+    assert.match(calls.at(-1)!, /^navigate /);
   });
 });
 
@@ -150,10 +328,21 @@ describe('a hand-off target that is not the loopback listener', () => {
       { url: 'http://127.0.0.1:70000/callback', state: STATE },
       { url: 'http://127.0.0.1:51234/callback', state: 'short' },
       { url: 'http://127.0.0.1:51234/callback' },
+      {
+        url: 'http://127.0.0.1:51234/callback',
+        state: STATE,
+        profile: { secureSession: 'yes' },
+      },
+      { url: 'http://127.0.0.1:51234/callback', state: STATE, profile: true },
       undefined,
     ]) {
       assert.throws(
-        () => handToCli(callback as any, session, doc),
+        () =>
+          handToCli(
+            callback as any,
+            { loginToken: 'login-token', session },
+            { doc, navigate: () => created++ },
+          ),
         /names no listener on this machine/,
         JSON.stringify(callback),
       );
@@ -206,6 +395,36 @@ describe("the shell's addresses", () => {
     assert.deepEqual(cliParams(undefined, 'someone'), {});
   });
 
+  test("a profile sign-in's pages carry that it is one, and whether it takes a secure session", () => {
+    at('/secure/');
+    let cli = {
+      url: 'http://127.0.0.1:51234/callback',
+      state: STATE,
+      profile: { secureSession: true },
+    };
+    assert.deepEqual(cliParams(cli), {
+      port: '51234',
+      state: STATE,
+      user: undefined,
+      cli: 'profile',
+      session: 'secure',
+    });
+    assert.deepEqual(cliParams({ ...cli, profile: { secureSession: false } }), {
+      port: '51234',
+      state: STATE,
+      user: undefined,
+      cli: 'profile',
+      session: undefined,
+    });
+    assert.deepEqual(
+      cliCallback(
+        new URLSearchParams(modeURL('register', cliParams(cli)).split('?')[1]),
+      ),
+      cli,
+      'and the page they reach reads the same CLI back',
+    );
+  });
+
   test('starting a Google sign-in again returns to the page it began on', () => {
     at('/secure/google-callback');
     assert.equal(startURL(undefined), '/secure/?mode=sign-in');
@@ -217,6 +436,18 @@ describe("the shell's addresses", () => {
         username: 'someone',
       }),
       `/secure/?mode=cli-sign-in&port=51234&state=${STATE}&user=someone`,
+    );
+    assert.equal(
+      startURL({
+        client: 'cli',
+        cli: {
+          url: 'http://127.0.0.1:51234/callback',
+          state: STATE,
+          profile: { secureSession: true },
+        },
+      }),
+      `/secure/?mode=cli-auth&port=51234&state=${STATE}&cli=profile&session=secure`,
+      'a profile sign-in starts again on its own page',
     );
     assert.equal(
       startURL({ client: 'cli' }),

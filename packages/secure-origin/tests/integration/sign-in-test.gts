@@ -14,6 +14,7 @@ import { setupRenderingTest } from 'ember-qunit';
 
 import { forgetSession, storeSession } from '../../src/security/session.js';
 import { navigation } from '../../src/shell/navigation.js';
+import CliAuthPage from '../../src/shell/sign-in/cli-auth-page.gts';
 import CliSignInPage from '../../src/shell/sign-in/cli-sign-in-page.gts';
 import GoogleCallback from '../../src/shell/sign-in/google-callback.gts';
 import SignInPage from '../../src/shell/sign-in/sign-in-page.gts';
@@ -523,6 +524,232 @@ module('Integration | sign-in', function (hooks) {
         {
           how: 'assign',
           url: `/secure/?mode=register&port=51234&state=${STATE}&user=someone`,
+        },
+      ]);
+    });
+  });
+
+  module('the CLI profile sign-in', function () {
+    const LOGIN_TOKEN = 'single-use-login-token';
+    const MINTS: Record<string, Route> = {
+      'POST _secure-session/login-token': () =>
+        json(201, {
+          data: {
+            type: 'login-token',
+            attributes: { loginToken: LOGIN_TOKEN, expiresInMs: 120000 },
+          },
+        }),
+    };
+    const ENDS: Record<string, Route> = {
+      'DELETE _secure-session': () => ({ status: 204 }),
+    };
+
+    async function signInAs(username: string) {
+      await waitFor('[data-test-secure-sign-in-form]');
+      await fillIn('[data-test-secure-username]', username);
+      await fillIn('[data-test-secure-password]', 'a-password');
+      await click('[data-test-secure-password-submit]');
+    }
+
+    test('without a usable port and state it says it can’t authorize, as the app does', async function (assert) {
+      serve(NO_GOOGLE);
+      for (let query of [
+        '?mode=cli-auth',
+        `?mode=cli-auth&state=${STATE}`,
+        '?mode=cli-auth&port=0&state=' + STATE,
+        '?mode=cli-auth&port=51234&state=short',
+      ]) {
+        visitShell(query);
+        await render(CliAuthPage);
+        assert
+          .dom('[data-test-secure-title]')
+          .hasText("Can't authorize", query);
+        assert
+          .dom('[data-test-secure-info]')
+          .hasText(
+            'This page needs the `port` and `state` values that the Boxel CLI puts in its URL. Start it with `boxel profile add`.',
+          );
+        assert.dom('[data-test-secure-sign-in-form]').doesNotExist(query);
+      }
+    });
+
+    test('asks the user to authorize the CLI, with every way to sign in', async function (assert) {
+      serve(WITH_GOOGLE);
+      visitShell(`?mode=cli-auth&port=51234&state=${STATE}&session=secure`);
+      await render(CliAuthPage);
+      await waitFor('[data-test-secure-google]');
+      assert.dom('[data-test-secure-title]').hasText('Authorize Boxel CLI');
+      assert
+        .dom('[data-test-secure-cli-auth-subtitle]')
+        .hasText(
+          'Signing in gives the Boxel CLI running on this computer access to your workspaces.',
+        );
+      assert.dom('[data-test-secure-sign-in-subtitle]').doesNotExist();
+      assert.dom('[data-test-secure-username]').isFocused();
+      await click('[data-test-secure-forgot-password]');
+      await click('[data-test-secure-register]');
+      assert.deepEqual(navigations, [
+        {
+          how: 'assign',
+          url: `/secure/?mode=forgot-password&port=51234&state=${STATE}&cli=profile&session=secure`,
+        },
+        {
+          how: 'assign',
+          url: `/secure/?mode=register&port=51234&state=${STATE}&cli=profile&session=secure`,
+        },
+      ]);
+    });
+
+    test('a window already signed in asks that account to confirm its password', async function (assert) {
+      storeSession(SESSION);
+      serve(NO_GOOGLE, { 'GET _secure-session': () => ({ status: 204 }) });
+      visitShell(`?mode=cli-auth&port=51234&state=${STATE}&session=secure`);
+      await render(CliAuthPage);
+      await waitFor('[data-test-secure-cli-auth-signed-in-as]');
+      assert
+        .dom('[data-test-secure-cli-auth-signed-in-as]')
+        .hasText(SESSION.user);
+      assert.dom('[data-test-secure-username]').hasValue('someone');
+      assert.dom('[data-test-secure-password]').isFocused();
+    });
+
+    test('hands the CLI a login token and the secure session together, and keeps none of it', async function (assert) {
+      let server = serve(NO_GOOGLE, signsIn(SIGNED_IN), MINTS);
+      visitShell(`?mode=cli-auth&port=51234&state=${STATE}&session=secure`);
+      await render(CliAuthPage);
+      await signInAs('someone');
+      await waitUntil(() => handoffs.length > 0);
+      let [form] = handoffs;
+      assert.strictEqual(form.method, 'post');
+      assert.strictEqual(form.action, 'http://127.0.0.1:51234/callback');
+      assert.deepEqual(
+        [...new FormData(form)].map(([name, value]) => [name, value]),
+        [
+          ['state', STATE],
+          ['login_token', LOGIN_TOKEN],
+          ['secure_session', SESSION.token],
+          ['user_id', SESSION.user],
+          ['expires_at', SESSION.expiresAt],
+        ],
+      );
+      assert.deepEqual(navigations, []);
+      let signIn = server.requests.find(
+        (r) => r.method === 'POST' && r.path === '_secure-session',
+      );
+      assert.strictEqual(signIn?.body.data.attributes.client, 'cli');
+      assert.ok(
+        server.requests.some(
+          (r) =>
+            r.method === 'POST' && r.path === '_secure-session/login-token',
+        ),
+        'the login token is minted with the session just signed in',
+      );
+      assert.notOk(
+        server.requests.some((r) => r.method === 'DELETE'),
+        'the session it hands over is not ended',
+      );
+      assert.strictEqual(localStorage.getItem('boxel-secure-session'), null);
+    });
+
+    test('a CLI that takes no secure session gets the login token in the query of a navigation, and the session is ended', async function (assert) {
+      let server = serve(NO_GOOGLE, signsIn(SIGNED_IN), MINTS, ENDS);
+      visitShell(`?mode=cli-auth&port=51234&state=${STATE}`);
+      await render(CliAuthPage);
+      await signInAs('someone');
+      await waitUntil(() => navigations.length > 0);
+      assert.deepEqual(navigations, [
+        {
+          how: 'replace',
+          url: `http://127.0.0.1:51234/callback?state=${STATE}&loginToken=${LOGIN_TOKEN}`,
+        },
+      ]);
+      assert.deepEqual(handoffs, [], 'nothing is posted');
+      let ended = server.requests.find((r) => r.method === 'DELETE');
+      assert.strictEqual(ended?.path, '_secure-session');
+    });
+
+    test('a login token that can’t be minted says so, and how to start again', async function (assert) {
+      let server = serve(NO_GOOGLE, signsIn(SIGNED_IN), ENDS, {
+        'POST _secure-session/login-token': () =>
+          refusal(503, 'unavailable', 'signing in is unavailable right now'),
+      });
+      visitShell(`?mode=cli-auth&port=51234&state=${STATE}&session=secure`);
+      await render(CliAuthPage);
+      await signInAs('someone');
+      await waitFor('[data-test-secure-cli-handoff-failed]');
+      assert.dom('[data-test-secure-title]').hasText('That didn’t work');
+      assert
+        .dom('[data-test-secure-error]')
+        .hasText('Signing in is unavailable right now.');
+      assert
+        .dom('[data-test-secure-cli-handoff-failed]')
+        .hasText('Run boxel profile add in your terminal again.');
+      assert.deepEqual(handoffs, []);
+      assert.deepEqual(navigations, []);
+      assert.strictEqual(
+        server.requests.find((r) => r.method === 'DELETE')?.path,
+        '_secure-session',
+        'the session nobody will hold is ended',
+      );
+    });
+
+    test('a Google sign-in for it hands the CLI a login token too', async function (assert) {
+      sessionStorage.setItem(
+        'boxel-secure-google-sign-in',
+        JSON.stringify({
+          state: 'google-state',
+          nonce: 'nonce',
+          codeVerifier: 'verifier',
+          resume: {
+            client: 'cli',
+            cli: {
+              url: 'http://127.0.0.1:51234/callback',
+              state: STATE,
+              profile: { secureSession: true },
+            },
+          },
+        }),
+      );
+      serve(MINTS, {
+        'POST _secure-session/google': () => SIGNED_IN,
+      });
+      visitShell('?state=google-state&code=a-code', '/secure/google-callback');
+      await render(GoogleCallback);
+      await waitUntil(() => handoffs.length > 0);
+      assert.deepEqual(
+        [...new FormData(handoffs[0])].map(([name]) => name),
+        ['state', 'login_token', 'secure_session', 'user_id', 'expires_at'],
+      );
+    });
+
+    test('cancelling at Google returns to the profile sign-in', async function (assert) {
+      sessionStorage.setItem(
+        'boxel-secure-google-sign-in',
+        JSON.stringify({
+          state: 'google-state',
+          nonce: 'nonce',
+          codeVerifier: 'verifier',
+          resume: {
+            client: 'cli',
+            cli: {
+              url: 'http://127.0.0.1:51234/callback',
+              state: STATE,
+              profile: { secureSession: false },
+            },
+          },
+        }),
+      );
+      serve(NO_GOOGLE);
+      visitShell(
+        '?state=google-state&error=access_denied',
+        '/secure/google-callback',
+      );
+      await render(GoogleCallback);
+      await waitUntil(() => navigations.length > 0);
+      assert.deepEqual(navigations, [
+        {
+          how: 'replace',
+          url: `/secure/?mode=cli-auth&port=51234&state=${STATE}&cli=profile`,
         },
       ]);
     });

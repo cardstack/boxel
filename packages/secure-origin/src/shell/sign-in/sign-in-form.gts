@@ -37,21 +37,27 @@ interface Signature {
     username?: string;
     onSignedIn: (session: Session) => void;
   };
+  // The page's title and the line under it, in place of the sign-in's own.
+  Blocks: { heading: [] };
 }
 
 export default class SignInForm extends Component<Signature> {
   <template>
-    <span
-      class='title'
-      role='heading'
-      aria-level='1'
-      data-test-secure-title
-      data-test-secure-sign-in-title
-    >Sign in to your Boxel Account</span>
-    {{#if this.state.google}}
-      <p class='subtitle' data-test-secure-sign-in-subtitle>Use Google to get
-        started in one tap - we'll create your Boxel account if you don't have
-        one yet.</p>
+    {{#if (has-block 'heading')}}
+      {{yield to='heading'}}
+    {{else}}
+      <span
+        class='title'
+        role='heading'
+        aria-level='1'
+        data-test-secure-title
+        data-test-secure-sign-in-title
+      >Sign in to your Boxel Account</span>
+      {{#if this.state.google}}
+        <p class='subtitle' data-test-secure-sign-in-subtitle>Use Google to get
+          started in one tap - we'll create your Boxel account if you don't have
+          one yet.</p>
+      {{/if}}
     {{/if}}
     <form novalidate data-test-secure-sign-in-form {{on 'submit' this.submit}}>
       {{#if this.state.google}}

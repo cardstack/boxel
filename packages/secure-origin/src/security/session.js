@@ -315,15 +315,21 @@ export function forgetSession() {
 // Signs the window's own session out: forgotten here even when the server
 // can't be reached, and ended on the server.
 export async function signOut(config) {
-  let token = storedSession()?.token;
+  let session = storedSession();
   forgetSession();
-  if (!token) {
+  if (!session) {
     return;
   }
+  await endSession(config, session);
+}
+
+// Ends a secure session on the server. The window ends one it signed in only
+// to hand on, when whoever it was for doesn't take it, as well as its own.
+export async function endSession(config, session) {
   try {
     await request(new URL('_secure-session', config.realmServerURL), {
       method: 'DELETE',
-      token,
+      token: session.token,
     });
   } catch (e) {
     // An ended or expired session is already signed out.

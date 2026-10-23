@@ -18,6 +18,8 @@ const SHELL_PAGES = [
   '/secure',
   '/secure?mode=sign-in',
   '/secure?mode=cli-sign-in&port=4567&state=example-state',
+  '/secure?mode=cli-auth&port=4567&state=example-state-0123',
+  '/secure?mode=cli-auth&port=4567&state=example-state-0123&session=secure',
   '/secure?mode=register',
   '/secure?mode=verify-email',
   '/secure?mode=forgot-password',

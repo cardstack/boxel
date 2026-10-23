@@ -213,11 +213,32 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
    room, so a sign-in that fails part way sets up again.
 
 Both POSTs answer only a request whose `Origin` is the secure origin's. The
-CLI never calls them: `boxel keys sign-in` opens
-`<secure origin>?mode=cli-sign-in&port=…&state=…`, and the window posts the
-session (`secure_session`, `user_id`, `expires_at`, `state`) to
+CLI never calls them; it opens a page of the window, which signs in with
+`client: 'cli'` and hands the result to the CLI's listener at
 `http://127.0.0.1:<port>/callback` (after a Google round trip too; the CLI's
-port and state wait in session storage). A Google sign-in the user cancels
+port and state wait in session storage):
+
+- `boxel keys sign-in` opens `<secure origin>?mode=cli-sign-in&port=…&state=…`,
+  and the window posts the session (`secure_session`, `user_id`,
+  `expires_at`, `state`).
+- `boxel profile add` opens `<secure origin>?mode=cli-auth&port=…&state=…&session=secure`
+  when `GET /_secure-origin` says `cliAuth: true`, and the host app's
+  `/cli-auth` otherwise or under `--host-url`. Once signed in, the window
+  mints a Matrix login token with the session (`POST
+/_secure-session/login-token`) and posts it as `login_token` beside the
+  session's fields. The CLI redeems it (`m.login.token`) for a Matrix device
+  of its own and keeps the secure session on the profile, so one sign-in
+  serves realm commands and `boxel keys` alike. A `cli-auth` link without
+  `session=secure` is one for a CLI that can't hold a secure session (one
+  from before secure sessions opens the host app's `/cli-auth`, which
+  forwards to this page when the app signs in on the secure origin). For
+  it, the window ends the session it signed in and navigates to the listener
+  with `?state=…&loginToken=…`, the form every released CLI accepts.
+
+The terminal and CI sign-ins (`--no-browser`, `-u` with `BOXEL_PASSWORD`,
+`profile migrate`, and the re-authentication prompt) log in to Matrix with
+`m.login.password` directly and never reach the secure origin, so the Matrix
+server's password login stays enabled. A Google sign-in the user cancels
 (`error=access_denied`) returns the window to the page it started from: the
 `cli-sign-in` page for the same listener, or the window's own sign-in. A
 Google sign-in that fails any other way shows the error, with Start again

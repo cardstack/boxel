@@ -92,12 +92,12 @@
       ]
     },
     "session.js": {
-      "bytes": 5170,
+      "bytes": 5218,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/session.js",
-          "size": 7685
+          "size": 7780
         }
       ]
     },
@@ -652,7 +652,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 24106,
+      "bytes": 25147,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -704,6 +704,14 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/040e10289d.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/2d5d118eaf.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/308a3464c4.css"
         },
         {
@@ -716,12 +724,16 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/bdb94feaf3.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/e427278d04.css"
         }
       ]
     },
     "shell.js": {
-      "bytes": 60474,
+      "bytes": 66495,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -771,7 +783,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/cli-handoff.js",
-          "size": 1513
+          "size": 2781
         },
         {
           "package": "@cardstack/secure-origin",
@@ -786,7 +798,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/cli-links.ts",
-          "size": 344
+          "size": 349
         },
         {
           "package": "@cardstack/secure-origin",
@@ -806,7 +818,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/forgot-password.gts",
-          "size": 5146
+          "size": 5325
         },
         {
           "package": "@cardstack/secure-origin",
@@ -821,7 +833,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/reset-password.gts",
-          "size": 4982
+          "size": 5354
         },
         {
           "package": "@cardstack/secure-origin",
@@ -831,7 +843,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/register/register.gts",
-          "size": 16291
+          "size": 16475
         },
         {
           "package": "@cardstack/secure-origin",
@@ -841,7 +853,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/shell.js",
-          "size": 651
+          "size": 688
         },
         {
           "package": "@cardstack/secure-origin",
@@ -850,13 +862,23 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/cli-auth-page.gts",
+          "size": 3559
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/cli-handoff.gts",
-          "size": 520
+          "size": 1853
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/cli-sign-in-page.gts",
           "size": 1240
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/cli-wait-notice.gts",
+          "size": 679
         },
         {
           "package": "@cardstack/secure-origin",
@@ -876,7 +898,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/sign-in-form.gts",
-          "size": 6729
+          "size": 6848
         },
         {
           "package": "@cardstack/secure-origin",
@@ -896,7 +918,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/urls.js",
-          "size": 945
+          "size": 1192
         }
       ]
     }

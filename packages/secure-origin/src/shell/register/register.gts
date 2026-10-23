@@ -37,6 +37,7 @@ import MessagePage from '../sign-in/message-page.gts';
 import SignedIn from '../sign-in/signed-in.gts';
 import { asSentence } from '../sign-in-copy.js';
 import { modeURL } from '../urls.js';
+import CliWaitNotice from '../sign-in/cli-wait-notice.gts';
 
 // Creating a Boxel account on the secure origin (`register`), drawn and
 // worded as the app's registration is. `Registration` drives the Matrix
@@ -370,6 +371,9 @@ export default class Register extends Component<Signature> {
             data-test-secure-title
             data-test-email-validation
           >Please check your email to complete registration</span>
+          {{#if @cli}}
+            <CliWaitNotice @cli={{@cli}} />
+          {{/if}}
           <ul class='email-validation-instruction'>
             <li>Leave this window open while we verify your email</li>
             <li>This screen will update once your email is verified</li>
