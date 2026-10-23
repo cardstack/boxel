@@ -162,7 +162,7 @@ export class Cue extends Component<CueSignature> {
           color: var(--foreground);
         }
         .pretui-cue[data-kind='error'],
-        .pretui-cue[data-tone='danger'] {
+        .pretui-cue[data-tone='danger']:not([data-kind='label']) {
           font-weight: 500;
         }
         /* the second, non-color channel the source lacked */

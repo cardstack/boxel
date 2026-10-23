@@ -44,7 +44,7 @@ module('Pretui | components/cue', function (hooks) {
     assert.true(ids.every(Boolean), 'every cue is referenceable');
   });
 
-  test('every non-neutral tone carries a glyph, so it survives greyscale', async function (assert) {
+  test('every non-neutral tone carries a glyph, so it survives grayscale', async function (assert) {
     await render(
       <template>
         <Cue @tone='info' @text='i' />
@@ -56,7 +56,7 @@ module('Pretui | components/cue', function (hooks) {
     let glyphs = all('[data-test-pretui-cue]').map((e) =>
       e.querySelector('.pretui-cue-glyph')?.textContent?.trim(),
     );
-    assert.deepEqual(glyphs, ['i', '✓', '!', '✕'], 'colour is never the only signal');
+    assert.deepEqual(glyphs, ['i', '✓', '!', '✕'], 'color is never the only signal');
     assert.deepEqual(
       all('.pretui-cue-glyph').map((g) => g.getAttribute('aria-hidden')),
       Array(4).fill('true'),
