@@ -44,7 +44,7 @@ Gaps:
 
 ## Theming
 
-Trigger: `--field`, `--input`, `--primary` (the open/focus ring), `--ink-3` (placeholder), `--control-h`, `--radius`, `--text-ui-md`, `--track-ui`. Chips: **FilterChips**' capsule dress. Listbox: `--popover`, `--hover`, `--foreground`, `--pretui-shadow-overlay`, and the 28px row height the index-positioned highlight depends on.
+Trigger: Select's field style, a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Select's 10px `--muted-foreground` caret (flipped while open), Button's corner (`calc(var(--radius) - 0.125rem)`), a `--boxel-form-control-height-sm` (1.75rem) minimum height that grows with wrapped chips, and `--boxel-font-size-xs` text, at least 16px on touch screens. Hover pulls the edge 30% toward `--foreground`, open and focus draw a 2px `--ring` outline over it, and disabled dims to `--boxel-disabled-opacity`. Inside an invalid **Field**, `--input` becomes `--destructive-ink`. Chips: **FilterChips**' capsule dress. Listbox: `--popover`, `--hover`, `--foreground`, `--pretui-shadow-overlay`, and the 28px row height the index-positioned highlight depends on.
 
 **That 28px is load-bearing**: the traveling highlight is positioned by index × row height rather than measured, so a theme that changes option row height without changing the highlight's step will desynchronize them. It is the one metric here that cannot safely be retuned in CSS alone.
 

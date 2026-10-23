@@ -8,7 +8,8 @@ import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
 import { PasswordStrength, estimateWhenIdle, loadPasswordEstimator } from './password-strength';
 import type { StrengthReading } from './password-strength';
-import { TYPED_BLOCK_RULES, TYPED_FONT, TYPED_INSET } from '../internal/extras';
+import { TYPED_BLOCK_RULES, TYPED_FONT } from '../internal/extras';
+import { FieldDress } from '../internal/field-dress';
 
 // BoxelInput @type='password' plus the reveal toggle boxel-ui doesn't
 // ship: an overlay eye button flips the native type to text while pressed
@@ -35,7 +36,7 @@ import { TYPED_BLOCK_RULES, TYPED_FONT, TYPED_INSET } from '../internal/extras';
 // locally and there is no network call on this path.
 
 const PASSWORD_METRICS = htmlSafe(
-  `${TYPED_BLOCK_RULES} padding-inline-start: ${TYPED_INSET}; padding-inline-end: 1.875rem;`,
+  `${TYPED_BLOCK_RULES} padding-inline-end: 1.875rem;`,
 );
 
 /** Idle time after the last keystroke before an estimate runs. Long enough
@@ -175,8 +176,7 @@ export class PasswordInput extends Component<PasswordInputSignature> {
     this.revealed = !this.revealed;
   };
   <template>
-    <div
-      class='pretui-boxelwrap'
+    <FieldDress
       data-revealed={{if this.revealed 'true'}}
       data-test-pretui-password-input
       ...attributes
@@ -275,51 +275,45 @@ export class PasswordInput extends Component<PasswordInputSignature> {
           />
         </div>
       {{/if}}
-    </div>
+    </FieldDress>
     <style scoped>
       @layer PretComponent {
-        /* Same re-skin channel as EmailInput — see that component's note. */
-        .pretui-boxelwrap {
-          position: relative;
-          width: 100%;
-          font-size: var(--boxel-font-size-xs);
-          letter-spacing: var(--boxel-lsp-xs);
-          --background: var(--field);
-          --border: var(--input);
-          --boxel-form-control-height: var(--boxel-form-control-height-sm);
-          --boxel-input-height: var(--boxel-form-control-height-sm);
-          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
-          --boxel-font-size-sm: var(--boxel-font-size-2xs);
-          --boxel-sp-xs: var(--boxel-sp-3xs);
-          --boxel-sp-sm: calc(0.625rem - 1px);
-        }
-        /* iOS zooms into inputs under 16px on focus */
-        @media (pointer: coarse) {
-          .pretui-boxelwrap {
-            font-size: var(--boxel-form-control-touch-font-size);
-          }
-        }
+        /* inset the same on the block and inline sides, with the field's
+           corner less that inset, so the button and its ring sit concentric
+           in the field */
         .pretui-reveal {
+          --_inset: calc((var(--boxel-input-height) - 1.25rem) / 2);
           position: absolute;
-          top: calc((var(--boxel-input-height) - 1.25rem) / 2);
-          inset-inline-end: var(--boxel-sp-3xs);
+          top: var(--_inset);
+          inset-inline-end: var(--_inset);
           display: grid;
           place-items: center;
           width: 1.25rem;
           height: 1.25rem;
           border: 0;
           padding: 0;
-          border-radius: var(--boxel-border-radius-sm);
+          border-radius: max(
+            0rem,
+            calc(var(--boxel-form-control-border-radius) - var(--_inset))
+          );
           background: none;
           color: var(--muted-foreground);
           cursor: pointer;
+        }
+        /* the kit's 2px --ring, drawn inside so it stays clear of the
+           field's edge; host's global button focus rule reads its offset
+           from --host-outline-offset */
+        .pretui-reveal:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+          --host-outline-offset: -2px;
         }
         .pretui-reveal:hover:not(:disabled) {
           background-color: var(--hover);
           color: var(--foreground);
         }
         .pretui-reveal:disabled {
-          opacity: 0.45;
+          opacity: var(--boxel-disabled-opacity);
           cursor: default;
         }
         /* The meter sits under the control inside the same wrapper. It is the

@@ -46,6 +46,6 @@ Where it is thinner: no async loading, no grouped or sectioned options, no multi
 
 The trigger has Input's field style: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus.
 
-Focus is a 2px `--ring`, as on Select. Invalid makes the edge `--destructive-ink` at rest; hover and focus show the usual edge, as on Input. `--pretui-combobox-max-height` bounds the dropdown, and `--pretui-shadow-overlay` draws its layer.
+The caret is Select's 10px `--muted-foreground` chevron at Select's inset. Hover pulls the `--input` edge toward `--foreground` and focus is a 2px `--ring`, as on Select; disabled dims the trigger to 0.45. Invalid makes the edge `--destructive-ink`, darkened toward `--foreground` on hover, under the `--ring` on focus, and dropped while disabled, as on Input. `--pretui-combobox-max-height` bounds the dropdown, and `--pretui-shadow-overlay` draws its layer.
 
 The rules for the combobox's own elements sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector. The `:deep()` rules that restyle BoxelMultiSelect's power-select markup stay unlayered, because its own rules are unlayered and would beat them from inside a layer.

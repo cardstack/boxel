@@ -48,7 +48,7 @@ Gaps, and the first two are specific to phone fields:
 
 Input's field style: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus.
 
-Forwarded into boxel-ui through the `--boxel-*` channel — the same height, radius, type size and spacing **Input** sets, so a phone field and a text field in the same form line up.
+It wears Input's field dress (`internal/field-dress`), so its hover, invalid, disabled, read-only and focus states are Input's too; see **Input**'s Theming.
 
 An inline `style` carries font inheritance (the UA font on native controls is one of the two places the token channel cannot reach). The invalid dress arrives from an enclosing **Field** by repointing `--border` and `--background`, so it works here without this component knowing about it — and the same mechanism means a theme redefines "invalid" once for the whole family.
 

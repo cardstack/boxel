@@ -5,6 +5,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
 import { TYPED_FONT } from '../internal/extras';
+import { FieldDress } from '../internal/field-dress';
 
 // boxel-ui has no URL validation engine (email/phone only), so this pairs
 // BoxelInput @type='url' with an EmailInput-shaped validation surface:
@@ -86,8 +87,7 @@ export class UrlInput extends Component<UrlInputSignature> {
     this.report(this.validate(this.current));
   };
   <template>
-    <div
-      class='pretui-boxelwrap'
+    <FieldDress
       data-state={{this.state}}
       data-test-pretui-url-input
       ...attributes
@@ -99,36 +99,12 @@ export class UrlInput extends Component<UrlInputSignature> {
         @disabled={{this.disabled}}
         @required={{this.required}}
         @state={{this.state}}
-        @errorMessage={{this.errorMessage}}
+        @errorMessage={{unless this.disabled this.errorMessage}}
         @onInput={{this.handleInput}}
         @onBlur={{this.handleBlur}}
         id={{@controlId}}
         style={{TYPED_FONT}}
       />
-    </div>
-    <style scoped>
-      @layer PretComponent {
-        /* Same re-skin channel as EmailInput — see that component's note. */
-        .pretui-boxelwrap {
-          width: 100%;
-          font-size: var(--boxel-font-size-xs);
-          letter-spacing: var(--boxel-lsp-xs);
-          --background: var(--field);
-          --border: var(--input);
-          --boxel-form-control-height: var(--boxel-form-control-height-sm);
-          --boxel-input-height: var(--boxel-form-control-height-sm);
-          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
-          --boxel-font-size-sm: var(--boxel-font-size-2xs);
-          --boxel-sp-xs: var(--boxel-sp-3xs);
-          --boxel-sp-sm: calc(0.625rem - 1px);
-        }
-        /* iOS zooms into inputs under 16px on focus */
-        @media (pointer: coarse) {
-          .pretui-boxelwrap {
-            font-size: var(--boxel-form-control-touch-font-size);
-          }
-        }
-      }
-    </style>
+    </FieldDress>
   </template>
 }

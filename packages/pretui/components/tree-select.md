@@ -53,7 +53,9 @@ APG **Tree View**, multi-select with checkboxes.
 
 ## Theming
 
-`--input-background`, `--input`, `--ring`, `--radius-control`, `--pretui-control-h`, `--foreground`, `--muted-foreground`, `--primary` / `--primary-foreground` (checkboxes and the selected row), `--radius-chip`, `--pretui-chip-mix`, `--popover`, `--popover-foreground`, `--pretui-shadow-raised`, `--radius-surface`, `--hover`, `--pretui-z-dropdown`, `--pretui-dur-snap` / `--pretui-ease-snap` (the twisty), `--font-sans`, `--text-ui-md`, `--space-2` and `--space-3`.
+The trigger has Select's field style: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 0.125rem)`), a `--boxel-form-control-height-sm` (1.75rem) minimum height that grows with wrapped chips, and `--boxel-font-size-xs` text, at least 16px on touch screens. Hover pulls the edge 30% toward `--foreground`, open and focus draw a 2px `--ring` outline over it, and disabled dims to `--boxel-disabled-opacity`. The caret is Select's 10px `--muted-foreground` chevron, flipped while the tree is open.
+
+The rest: `--foreground`, `--muted-foreground`, `--primary` / `--primary-foreground` (checkboxes and the selected row), `--radius-chip`, `--pretui-chip-mix`, `--popover`, `--popover-foreground`, `--pretui-shadow-raised`, `--radius-surface`, `--hover`, `--pretui-z-dropdown`, `--pretui-dur-snap` / `--pretui-ease-snap` (the twisty), `--font-sans`, and `--space-2` and `--space-3` (the tree's rows).
 
 Indent is 1rem per level, up to five levels. The tree's 18rem maximum height is fixed.
 

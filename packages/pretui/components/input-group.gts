@@ -268,8 +268,10 @@ export class InputGroup extends Component<InputGroupSignature> {
             font-size: var(--boxel-form-control-touch-font-size);
           }
         }
+        /* the group dims once; its inputs don't dim again inside it */
         .pretui-inputgroup[data-disabled] {
-          opacity: 0.75;
+          --boxel-input-disabled-opacity: 1;
+          opacity: var(--boxel-disabled-opacity);
         }
       }
     </style>
