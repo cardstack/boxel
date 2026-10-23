@@ -39,6 +39,14 @@ async function logServedLinkState(
   let linking = await page.request.get(linkingId, { headers });
   let deleted = await page.request.get(deletedId, { headers });
   let body = linking.ok() ? await linking.json() : undefined;
+  // The deleted card reaches the linking card's index visit only through a
+  // dep that names it, so log the stored deps that could.
+  let deps = await page.request.get(
+    `${realmURL}_card-dependencies?url=${encodeURIComponent(linkingId)}`,
+    { headers: { ...headers, accept: 'application/json' } },
+  );
+  let depsBody: unknown = deps.ok() ? await deps.json() : undefined;
+  let deletedSegment = new URL(deletedId).pathname.split('/').pop()!;
   console.log(
     `[broken-linksto] ${label}: ${JSON.stringify({
       at: new Date().toISOString(),
@@ -48,6 +56,13 @@ async function logServedLinkState(
       linkingGeneration: body?.data?.meta?.generation,
       includedIds: (body?.included ?? []).map((r: { id: string }) => r.id),
       deletedStatus: deleted.status(),
+      linkingDepsStatus: deps.status(),
+      linkingDepsNamingDeleted: Array.isArray(depsBody)
+        ? depsBody.filter(
+            (dep): dep is string =>
+              typeof dep === 'string' && dep.includes(deletedSegment),
+          )
+        : depsBody,
     })}`,
   );
 }
