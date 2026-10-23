@@ -60,6 +60,11 @@ done
 
 cd "$(dirname "$0")/.."
 
+# Previews authenticate as the scoped `observability-preview` account, never
+# the Admin one the canonical apply uses. See cardstack/infra,
+# configs/grafana/base/main.tf.
+export GRAFANA_TOKEN_SSM_PATH="${GRAFANA_TOKEN_SSM_PATH:-/${env_name}/grafana/preview_grafanactl_token}"
+
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
 

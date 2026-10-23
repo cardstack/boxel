@@ -57,9 +57,15 @@ env:
   # contributor can read. boxel-observability-preview grants three
   # parameters per environment and nothing else:
   #
-  #   /<env>/grafana/grafanactl_token        authenticate grafanactl
-  #   /<env>/boxel-grafana/realm_server_url  fill a template variable
-  #   /<env>/boxel/GRAFANA_SECRET            make operator buttons work
+  #   /<env>/grafana/preview_grafanactl_token  scoped Grafana account
+  #   /<env>/boxel-grafana/realm_server_url    fill a template variable
+  #   /<env>/boxel/GRAFANA_SECRET              make operator buttons work
+  #
+  # The Grafana token belongs to `observability-preview`: Viewer, plus Admin
+  # on the `Previews` folder. So a pull request cannot overwrite or delete a
+  # canonical dashboard. It can still read them, and therefore read
+  # GRAFANA_SECRET out of the six that carry it — that half closes when
+  # operator calls move to a Grafana datasource proxy.
   #
   # The apply role additionally grants the Grafana database credentials and
   # the Loki / Prometheus / DB-host values. Never point this workflow at it.

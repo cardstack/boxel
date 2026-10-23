@@ -482,29 +482,53 @@ weak credential.** It runs on `pull_request`, and GitHub loads that workflow —
 and every script it calls — from the PR itself. Whatever the assumed role can
 read, a contributor can read. So the preview uses its own IAM role,
 `boxel-observability-preview` (cardstack/infra,
-`configs/boxel-observability-preview/`), which grants exactly two parameters
-per environment:
+`configs/boxel-observability-preview/`), granting three parameters per
+environment:
 
 ```
-/<env>/grafana/grafanactl_token        authenticate grafanactl
-/<env>/boxel-grafana/realm_server_url  fill the realm_server template variable
+/<env>/grafana/preview_grafanactl_token  scoped Grafana service account
+/<env>/boxel-grafana/realm_server_url    fill the realm_server variable
+/<env>/boxel/GRAFANA_SECRET              make the operator buttons work
 ```
 
-Not `boxel-observability-apply`. That role also grants the Grafana database
-password and `GRAFANA_SECRET` — and `GRAFANA_SECRET` is the shared bearer token
-guarding the realm-server's operator endpoints (`_grafana-reindex`,
-`_grafana-add-credit`, `_grafana-upsert-realm-user-permission`,
-`_grafana-revoke-user-sessions`). Never point the preview at it.
+Not `boxel-observability-apply`. That role grants the Grafana database
+credentials and, worse, the **Admin** `grafanactl_token`. Nothing in Grafana
+scopes that token to `pr<n>-` UIDs, so a PR holding it could overwrite or
+delete any canonical dashboard — and could read `GRAFANA_SECRET` without being
+granted it, since `apply.sh` substitutes the live secret into six canonical
+dashboards and `cleanup-preview.sh` pulls every dashboard on each PR close.
 
-Two things keep that grant list short, so keep them true:
+The preview token therefore belongs to a separate Grafana service account,
+`observability-preview` (cardstack/infra, `configs/grafana/base/main.tf`):
+**Viewer, plus Admin on the `Previews` folder and nothing else.** Every per-PR
+folder is nested inside `Previews`, which is what makes that single grant
+sufficient — a root-level preview folder is refused.
 
-- **Previews carry no operator secret.** `render-preview.sh` stamps an inert
-  placeholder into the `grafana_secret` constant unconditionally, so operator
-  buttons on a preview dashboard return 401. Review an operator-button change
-  against the canonical dashboards after merge.
+What a PR can still do, stated plainly:
+
+- write and delete dashboards and folders **inside `Previews`**
+- read every dashboard, and so read `GRAFANA_SECRET` out of the six carrying it
+- use `GRAFANA_SECRET` to call the realm-server operator endpoints
+
+It **cannot** overwrite or delete a canonical dashboard. That was the
+irreversible risk and it is closed. The read half stays open until operator
+calls move to a Grafana datasource proxy and the secret leaves dashboard
+bodies; the preview grant should be dropped when that lands.
+
+`role = "None"` would close the read half too, and Grafana enforces the folder
+scope correctly under it — but grafanactl drives the App Platform APIs, which
+403 for an account with no basic role however its folder permissions are set.
+Push, pull and delete all fail, so the preview tooling cannot run under it.
+Only the legacy REST API honours folder scoping.
+
+Two mechanisms keep the preview inside its lane, so keep them true:
+
 - **Previews cannot address a canonical dashboard.** `render-preview.sh`
-  rewrites every UID it emits and then fails closed if any manifest lacks the
-  `pr<n>-` prefix, so a bug there costs a preview rather than a live dashboard.
+  rewrites every UID it emits, then fails closed unless each dashboard sits in
+  this PR's own folder and each preview folder's only parent is `Previews`.
+- **Operator buttons act on the real environment.** A preview carries the real
+  `GRAFANA_SECRET`, so a button clicked on a production preview performs the
+  production mutation. Prefer the staging preview for exercising one.
 
 ## Operator actions
 

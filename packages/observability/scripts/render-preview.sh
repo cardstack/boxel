@@ -104,9 +104,17 @@ fi
 # CAUTION: those buttons act on the real environment. A button clicked on a
 # production preview performs the production mutation; it is not a
 # rehearsal. Prefer the staging preview for exercising one.
+# UID of the shared parent folder that every per-PR preview folder nests
+# under. Fixed, because cardstack/infra creates it with this UID and grants
+# the preview service account Admin on it by name.
+preview_parent_folder="previews"
+
 case "$env_name" in
   local)
     realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}"
+    # The docker-compose Grafana has no `Previews` folder, and pushing a
+    # child of a missing parent fails.
+    preview_parent_folder=""
     if [[ -n "${GRAFANA_SECRET:-}" ]]; then
       grafana_secret="$GRAFANA_SECRET"
     else
@@ -229,8 +237,14 @@ done < <(find "$rendered/dashboards" -type f -name '*.json' -print0)
 find "$rendered/dashboards" -type d -empty -delete 2>/dev/null || true
 
 # Step 3 — folders: keep only those referenced by a kept dashboard, rewrite
-# UID + title. Drop the rest (so the push doesn't create unused per-PR
-# folders for unchanged areas).
+# UID + title, and nest them under the shared `Previews` parent. Drop the
+# rest (so the push doesn't create unused per-PR folders for unchanged
+# areas).
+#
+# The nesting is what makes the scoped credential sufficient. The
+# `observability-preview` service account is Viewer plus Admin on `Previews`
+# only, so it can create a folder inside that parent and nowhere else; a
+# root-level preview folder is refused.
 while IFS= read -r -d '' f; do
   orig_uid="$(jq -r '.metadata.name // ""' "$f")"
   if [[ -z "$orig_uid" ]] || [[ "$referenced_folders" != *"${orig_uid}"$'\n'* ]]; then
@@ -238,9 +252,15 @@ while IFS= read -r -d '' f; do
     continue
   fi
   new_uid="$(prefix_uid "$pr_number" "$orig_uid")"
-  jq --arg uid "$new_uid" --arg prefix "Preview – PR #${pr_number}: " '
+  jq --arg uid "$new_uid" \
+     --arg prefix "Preview – PR #${pr_number}: " \
+     --arg parent "$preview_parent_folder" '
     .metadata.name = $uid
     | (if .spec.title then .spec.title = ($prefix + .spec.title) else . end)
+    | (if $parent != "" then
+         .metadata.annotations =
+           ((.metadata.annotations // {}) + {"grafana.app/folder": $parent})
+       else . end)
   ' "$f" > "$f.tmp"
   mv "$f.tmp" "$f"
 done < <(find "$rendered/folders" -type f -name '*.json' -print0)
@@ -269,8 +289,20 @@ while IFS= read -r -d '' f; do
     exit 1
   fi
   folder="$(jq -r '(.metadata.annotations // {})["grafana.app/folder"] // ""' "$f")"
-  if [[ -n "$folder" && "$folder" != "pr${pr_number}-"* ]]; then
-    echo "error: $f points at folder '$folder', which lacks the pr${pr_number}- prefix" >&2
+  kind="$(jq -r '.kind // ""' "$f")"
+  # A preview FOLDER is allowed exactly one parent: the shared `Previews`
+  # folder, which has no `pr<n>-` prefix because it is not per-PR. Everything
+  # else — every dashboard — must sit in this PR's own folder, so that a
+  # manifest cannot drop a dashboard into a canonical folder.
+  allowed_parent=""
+  if [[ "$kind" == "Folder" ]]; then
+    allowed_parent="$preview_parent_folder"
+  fi
+  if [[ -n "$folder" \
+        && "$folder" != "pr${pr_number}-"* \
+        && ( -z "$allowed_parent" || "$folder" != "$allowed_parent" ) ]]; then
+    echo "error: $f points at folder '$folder', which is neither this PR's" \
+         "folder nor the shared preview parent" >&2
     rm -rf "$rendered"
     exit 1
   fi

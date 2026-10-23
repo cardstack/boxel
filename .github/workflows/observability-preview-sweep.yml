@@ -98,7 +98,7 @@ jobs:
           ENV_NAME: ${{ matrix.env }}
         run: |
           GRAFANA_TOKEN="$(aws ssm get-parameter \
-            --name "/${ENV_NAME}/grafana/grafanactl_token" \
+            --name "/${ENV_NAME}/grafana/preview_grafanactl_token" \
             --with-decryption \
             --query 'Parameter.Value' \
             --output text)"

@@ -54,6 +54,12 @@ cd "$(dirname "$0")/.."
 # it out of the dashboard JSON. Withholding it here would not keep it from
 # anyone who can reach the preview.
 #
+# The Grafana token is the `observability-preview` service account, not the
+# Admin `grafanactl_token` the canonical apply uses. It is Viewer plus Admin
+# on the `Previews` folder, so a pull request holding it cannot overwrite or
+# delete a canonical dashboard. It can still read them, which is why
+# GRAFANA_SECRET below is not meaningfully protected by withholding it.
+#
 # GRAFANA_TOKEN is re-fetched by grafanactl-env.sh inside apply-preview.sh;
 # fetching it here too is what registers the `::add-mask::`, so the value is
 # redacted if grafanactl ever echoes it on a failure path.
@@ -62,7 +68,7 @@ ssm() {
     --query 'Parameter.Value' --output text
 }
 
-GRAFANA_TOKEN="$(ssm "/${ENV_NAME}/grafana/grafanactl_token" --with-decryption)"
+GRAFANA_TOKEN="$(ssm "/${ENV_NAME}/grafana/preview_grafanactl_token" --with-decryption)"
 echo "::add-mask::$GRAFANA_TOKEN"
 
 GRAFANA_SECRET="$(ssm "/${ENV_NAME}/boxel/GRAFANA_SECRET" --with-decryption)"

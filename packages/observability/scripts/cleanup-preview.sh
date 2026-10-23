@@ -56,6 +56,10 @@ done
 
 cd "$(dirname "$0")/.."
 
+# Same scoped account as apply-preview.sh — teardown needs no more reach
+# than the push did.
+export GRAFANA_TOKEN_SSM_PATH="${GRAFANA_TOKEN_SSM_PATH:-/${env_name}/grafana/preview_grafanactl_token}"
+
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
 
