@@ -1,6 +1,5 @@
 import {
   CardDef,
-  FieldDef,
   Component,
   field,
   contains,
@@ -814,6 +813,921 @@ export class Transaction extends CardDef {
 // Ledger (the app card)
 // ---------------------------------------------------------------------------
 
+class HomeLedgerIsolated extends Component<typeof HomeLedger> {
+  @tracked activeTab: 'overview' | 'transactions' | 'accounts' = 'overview';
+  @tracked categoryFilter: string | undefined;
+  @tracked showIncome = true;
+
+  get allTransactions(): Transaction[] {
+    return (this.args.model.transactions ?? []).filter(
+      Boolean,
+    ) as Transaction[];
+  }
+
+  get allAccounts(): Account[] {
+    return (this.args.model.accounts ?? []).filter(Boolean) as Account[];
+  }
+
+  get filteredTransactions(): Transaction[] {
+    let list = this.allTransactions;
+    if (this.categoryFilter) {
+      list = list.filter((t) => t.category === this.categoryFilter);
+    }
+    if (!this.showIncome) {
+      list = list.filter((t) => !t.isIncome);
+    }
+    return [...list].sort((a, b) => {
+      let ad = a.date ? new Date(a.date).getTime() : 0;
+      let bd = b.date ? new Date(b.date).getTime() : 0;
+      return bd - ad;
+    });
+  }
+
+  get months(): MonthSummary[] {
+    return summarizeByMonth(this.allTransactions);
+  }
+
+  get currentMonth(): MonthSummary | undefined {
+    return this.months[0];
+  }
+
+  get previousMonth(): MonthSummary | undefined {
+    return this.months[1];
+  }
+
+  get categories(): CategoryTotal[] {
+    let current = this.currentMonth;
+    if (!current) {
+      return [];
+    }
+    return spendingByCategory(
+      this.allTransactions.filter((t) => monthKey(t.date) === current.key),
+    );
+  }
+
+  get merchants() {
+    return topMerchants(this.allTransactions, 6);
+  }
+
+  get budget(): number {
+    return this.args.model.monthlyBudget ?? 0;
+  }
+
+  get spentThisMonth(): number {
+    return this.currentMonth?.spending ?? 0;
+  }
+
+  get incomeThisMonth(): number {
+    return this.currentMonth?.income ?? 0;
+  }
+
+  get budgetPercent(): number {
+    return percentOf(this.spentThisMonth, this.budget);
+  }
+
+  get budgetRemaining(): number {
+    return roundMoney(this.budget - this.spentThisMonth);
+  }
+
+  get overBudget(): boolean {
+    return this.budget > 0 && this.spentThisMonth > this.budget;
+  }
+
+  get budgetBarStyle() {
+    return htmlSafe(`--fill: ${Math.min(this.budgetPercent, 100)}%`);
+  }
+
+  get rate(): number {
+    return savingsRate(this.incomeThisMonth, this.spentThisMonth);
+  }
+
+  get spendingChange(): number {
+    let current = this.currentMonth?.spending ?? 0;
+    let previous = this.previousMonth?.spending ?? 0;
+    return roundMoney(current - previous);
+  }
+
+  get spendingUp(): boolean {
+    return this.spendingChange > 0;
+  }
+
+  get maxMonthValue(): number {
+    return Math.max(
+      1,
+      ...this.months.map((m) => Math.max(m.income, m.spending)),
+    );
+  }
+
+  barStyle = (value: number) => {
+    return htmlSafe(
+      `--height: ${Math.round((value / this.maxMonthValue) * 100)}%`,
+    );
+  };
+
+  categoryStyle = (category: CategoryTotal) => {
+    return htmlSafe(
+      `--swatch: ${category.color}; --width: ${category.percent}%`,
+    );
+  };
+
+  accountTransactions = (account: Account) => {
+    return this.allTransactions.filter((t) => t.account?.id === account.id);
+  };
+
+  accountBalance = (account: Account) => {
+    let movements = this.accountTransactions(account).map((t) =>
+      signedAmount(t.amount, t.isIncome),
+    );
+    return roundMoney((account.openingBalance ?? 0) + sum(movements));
+  };
+
+  accountCount = (account: Account) => {
+    return this.accountTransactions(account).length;
+  };
+
+  get totalBalance(): number {
+    return roundMoney(sum(this.allAccounts.map((a) => this.accountBalance(a))));
+  }
+
+  get categoryChips() {
+    let used = new Set(this.allTransactions.map((t) => t.category ?? 'other'));
+    return CATEGORY_OPTIONS.filter((o) => used.has(o.value));
+  }
+
+  setTab = (tab: 'overview' | 'transactions' | 'accounts') => {
+    this.activeTab = tab;
+  };
+
+  setCategory = (category: string | undefined) => {
+    this.categoryFilter =
+      this.categoryFilter === category ? undefined : category;
+  };
+
+  toggleIncome = () => {
+    this.showIncome = !this.showIncome;
+  };
+
+  get hasTransactions(): boolean {
+    return this.allTransactions.length > 0;
+  }
+
+  get hasAccounts(): boolean {
+    return this.allAccounts.length > 0;
+  }
+
+  get savingsGoal(): number {
+    return this.args.model.savingsGoal ?? 0;
+  }
+
+  get savedSoFar(): number {
+    return roundMoney(
+      sum(
+        this.allTransactions
+          .filter((t) => t.category === 'savings')
+          .map((t) => Math.abs(t.amount ?? 0)),
+      ),
+    );
+  }
+
+  get savingsPercent(): number {
+    return percentOf(this.savedSoFar, this.savingsGoal);
+  }
+
+  get savingsBarStyle() {
+    return htmlSafe(`--fill: ${this.savingsPercent}%`);
+  }
+
+  <template>
+    <div class='ledger'>
+      <header class='top'>
+        <div class='title-block'>
+          <p class='eyebrow'>Household ledger</p>
+          <h1><@fields.cardTitle /></h1>
+          {{#if this.currentMonth}}
+            <p class='subtitle'>{{this.currentMonth.label}}</p>
+          {{/if}}
+        </div>
+        <nav class='tabs' aria-label='Ledger sections'>
+          <button
+            type='button'
+            class='tab {{if (eq this.activeTab "overview") "active"}}'
+            {{on 'click' (fn this.setTab 'overview')}}
+          >Overview</button>
+          <button
+            type='button'
+            class='tab {{if (eq this.activeTab "transactions") "active"}}'
+            {{on 'click' (fn this.setTab 'transactions')}}
+          >Transactions</button>
+          <button
+            type='button'
+            class='tab {{if (eq this.activeTab "accounts") "active"}}'
+            {{on 'click' (fn this.setTab 'accounts')}}
+          >Accounts</button>
+        </nav>
+      </header>
+
+      {{#if (eq this.activeTab 'overview')}}
+        <section class='stats'>
+          <div class='stat'>
+            <span class='stat-label'>Spent this month</span>
+            <span class='stat-value'>
+              {{formatCurrency this.spentThisMonth currency='USD'}}
+            </span>
+            {{#if this.previousMonth}}
+              <span class='stat-delta {{if this.spendingUp "up" "down"}}'>
+                {{if this.spendingUp '▲' '▼'}}
+                {{formatCurrency this.spendingChange currency='USD'}}
+                vs
+                {{this.previousMonth.label}}
+              </span>
+            {{/if}}
+          </div>
+          <div class='stat'>
+            <span class='stat-label'>Income this month</span>
+            <span class='stat-value'>
+              {{formatCurrency this.incomeThisMonth currency='USD'}}
+            </span>
+            <span class='stat-delta'>Savings rate {{this.rate}}%</span>
+          </div>
+          <div class='stat'>
+            <span class='stat-label'>Across all accounts</span>
+            <span class='stat-value'>
+              {{formatCurrency this.totalBalance currency='USD'}}
+            </span>
+            <span class='stat-delta'>
+              {{this.allAccounts.length}}
+              accounts
+            </span>
+          </div>
+        </section>
+
+        <section class='grid'>
+          <div class='panel budget'>
+            <div class='panel-head'>
+              <h2>Monthly budget</h2>
+              <span class='panel-meta'>
+                {{formatCurrency this.budget currency='USD'}}
+              </span>
+            </div>
+            {{#if (gt this.budget 0)}}
+              <div
+                class='bar {{if this.overBudget "over"}}'
+                style={{this.budgetBarStyle}}
+                role='progressbar'
+                aria-valuenow={{this.budgetPercent}}
+                aria-valuemin='0'
+                aria-valuemax='100'
+                aria-label='Budget used'
+              >
+                <span class='fill'></span>
+              </div>
+              <p class='budget-text'>
+                {{#if this.overBudget}}
+                  Over budget by
+                  {{formatCurrency
+                    (this.absolute this.budgetRemaining)
+                    currency='USD'
+                  }}
+                {{else}}
+                  {{formatCurrency this.budgetRemaining currency='USD'}}
+                  left ({{this.budgetPercent}}% used)
+                {{/if}}
+              </p>
+            {{else}}
+              <p class='empty'>Set a monthly budget to track it here.</p>
+            {{/if}}
+          </div>
+
+          <div class='panel savings'>
+            <div class='panel-head'>
+              <h2>Savings goal</h2>
+              <span class='panel-meta'>
+                {{formatCurrency this.savingsGoal currency='USD'}}
+              </span>
+            </div>
+            {{#if (gt this.savingsGoal 0)}}
+              <div
+                class='bar savings-bar'
+                style={{this.savingsBarStyle}}
+                role='progressbar'
+                aria-valuenow={{this.savingsPercent}}
+                aria-valuemin='0'
+                aria-valuemax='100'
+                aria-label='Savings progress'
+              >
+                <span class='fill'></span>
+              </div>
+              <p class='budget-text'>
+                {{formatCurrency this.savedSoFar currency='USD'}}
+                saved ({{this.savingsPercent}}%)
+              </p>
+            {{else}}
+              <p class='empty'>Set a savings goal to track it here.</p>
+            {{/if}}
+          </div>
+
+          <div class='panel categories'>
+            <div class='panel-head'>
+              <h2>Where it went</h2>
+              {{#if this.currentMonth}}
+                <span class='panel-meta'>{{this.currentMonth.label}}</span>
+              {{/if}}
+            </div>
+            {{#if this.categories.length}}
+              <ul class='category-list'>
+                {{#each this.categories as |category|}}
+                  <li style={{this.categoryStyle category}}>
+                    <div class='category-head'>
+                      <span class='swatch' aria-hidden='true'></span>
+                      <span class='category-name'>{{category.label}}</span>
+                      <span class='category-total'>
+                        {{formatCurrency category.total currency='USD'}}
+                      </span>
+                    </div>
+                    <div class='category-bar'>
+                      <span class='category-fill'></span>
+                    </div>
+                  </li>
+                {{/each}}
+              </ul>
+            {{else}}
+              <p class='empty'>No spending recorded this month.</p>
+            {{/if}}
+          </div>
+
+          <div class='panel trend'>
+            <div class='panel-head'>
+              <h2>Month by month</h2>
+            </div>
+            {{#if this.months.length}}
+              <div class='chart' role='img' aria-label='Income and spending by month'>
+                {{#each this.months as |month|}}
+                  <div class='chart-col'>
+                    <div class='chart-bars'>
+                      <span
+                        class='chart-bar income'
+                        style={{this.barStyle month.income}}
+                      ></span>
+                      <span
+                        class='chart-bar spending'
+                        style={{this.barStyle month.spending}}
+                      ></span>
+                    </div>
+                    <span class='chart-label'>{{month.label}}</span>
+                  </div>
+                {{/each}}
+              </div>
+              <div class='legend'>
+                <span class='legend-item'>
+                  <span class='legend-swatch income'></span>Income
+                </span>
+                <span class='legend-item'>
+                  <span class='legend-swatch spending'></span>Spending
+                </span>
+              </div>
+            {{else}}
+              <p class='empty'>No months to show yet.</p>
+            {{/if}}
+          </div>
+
+          <div class='panel merchants'>
+            <div class='panel-head'>
+              <h2>Top merchants</h2>
+            </div>
+            {{#if this.merchants.length}}
+              <ol class='merchant-list'>
+                {{#each this.merchants as |merchant|}}
+                  <li>
+                    <span class='merchant-name'>{{merchant.merchant}}</span>
+                    <span class='merchant-count'>
+                      {{merchant.count}}
+                      visits
+                    </span>
+                    <span class='merchant-total'>
+                      {{formatCurrency merchant.total currency='USD'}}
+                    </span>
+                  </li>
+                {{/each}}
+              </ol>
+            {{else}}
+              <p class='empty'>No merchants yet.</p>
+            {{/if}}
+          </div>
+
+          <div class='panel recent'>
+            <div class='panel-head'>
+              <h2>Recent activity</h2>
+              <button
+                type='button'
+                class='link-button'
+                {{on 'click' (fn this.setTab 'transactions')}}
+              >See all</button>
+            </div>
+            {{#if this.hasTransactions}}
+              <ul class='recent-list'>
+                {{#each this.filteredTransactions as |txn index|}}
+                  {{#if (lt index 5)}}
+                    <li>
+                      <span class='recent-name'>{{txn.cardTitle}}</span>
+                      <span class='recent-category'>
+                        {{this.categoryName txn.category}}
+                      </span>
+                      <span
+                        class='recent-amount {{if txn.isIncome "income"}}'
+                      >
+                        {{if txn.isIncome '+' '−'}}{{formatCurrency
+                          txn.amount
+                          currency='USD'
+                        }}
+                      </span>
+                    </li>
+                  {{/if}}
+                {{/each}}
+              </ul>
+            {{else}}
+              <p class='empty'>No transactions yet.</p>
+            {{/if}}
+          </div>
+        </section>
+      {{/if}}
+
+      {{#if (eq this.activeTab 'transactions')}}
+        <section class='panel transactions'>
+          <div class='panel-head'>
+            <h2>Transactions</h2>
+            <label class='toggle'>
+              <input
+                type='checkbox'
+                checked={{this.showIncome}}
+                {{on 'change' this.toggleIncome}}
+              />
+              Show income
+            </label>
+          </div>
+          <div class='chips' role='group' aria-label='Filter by category'>
+            {{#each this.categoryChips as |chip|}}
+              <button
+                type='button'
+                class='chip {{if (eq this.categoryFilter chip.value) "active"}}'
+                {{on 'click' (fn this.setCategory chip.value)}}
+              >{{chip.label}}</button>
+            {{/each}}
+          </div>
+          {{#if this.filteredTransactions.length}}
+            <ul class='recent-list transaction-list'>
+              {{#each this.filteredTransactions as |txn|}}
+                <li>
+                  <span class='recent-name'>{{txn.cardTitle}}</span>
+                  <span class='recent-category'>
+                    {{this.categoryName txn.category}}
+                    ·
+                    {{formatDateTime txn.date preset='short' fallback='No date'}}
+                  </span>
+                  <span class='recent-amount {{if txn.isIncome "income"}}'>
+                    {{if txn.isIncome '+' '−'}}{{formatCurrency
+                      txn.amount
+                      currency='USD'
+                    }}
+                  </span>
+                </li>
+              {{/each}}
+            </ul>
+          {{else}}
+            <p class='empty'>No transactions match this filter.</p>
+          {{/if}}
+        </section>
+      {{/if}}
+
+      {{#if (eq this.activeTab 'accounts')}}
+        <section class='panel accounts'>
+          <div class='panel-head'>
+            <h2>Accounts</h2>
+            <span class='panel-meta'>
+              Total
+              {{formatCurrency this.totalBalance currency='USD'}}
+            </span>
+          </div>
+          {{#if this.hasAccounts}}
+            <ul class='account-list'>
+              {{#each this.allAccounts as |account|}}
+                <li class='account-item'>
+                  <div class='account-main'>
+                    <strong>{{account.cardTitle}}</strong>
+                    <span class='account-meta'>
+                      {{this.kindName account.kind}}
+                      ·
+                      {{this.accountCount account}}
+                      transactions
+                    </span>
+                  </div>
+                  <span class='account-balance'>
+                    {{formatCurrency
+                      (this.accountBalance account)
+                      currency='USD'
+                    }}
+                  </span>
+                </li>
+              {{/each}}
+            </ul>
+          {{else}}
+            <p class='empty'>Link an account to see balances.</p>
+          {{/if}}
+        </section>
+      {{/if}}
+    </div>
+    <style scoped>
+      .ledger {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+        min-height: 100%;
+        color: var(--foreground);
+        background: var(--background);
+        font-family: var(--font-sans, inherit);
+      }
+      .top {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: var(--boxel-sp);
+      }
+      .eyebrow {
+        margin: 0;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+      }
+      h1 {
+        margin: var(--boxel-sp-4xs) 0 0;
+        font-size: var(--boxel-font-size-xxl);
+        line-height: 1.1;
+      }
+      .subtitle {
+        margin: var(--boxel-sp-4xs) 0 0;
+        color: var(--muted-foreground);
+      }
+      .tabs {
+        display: flex;
+        gap: var(--boxel-sp-4xs);
+        padding: var(--boxel-sp-5xs);
+        border-radius: 999px;
+        background: var(--muted);
+      }
+      .tab {
+        border: none;
+        background: transparent;
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        border-radius: 999px;
+        font: inherit;
+        font-weight: 600;
+        color: var(--muted-foreground);
+        cursor: pointer;
+        min-height: 40px;
+      }
+      .tab:hover {
+        color: var(--foreground);
+      }
+      .tab:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+      }
+      .tab.active {
+        background: var(--background);
+        color: var(--foreground);
+        box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.08));
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: var(--boxel-sp);
+      }
+      .stat {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-lg);
+        border-radius: var(--radius, 16px);
+        border: 1px solid var(--border);
+        background: var(--card);
+      }
+      .stat-label {
+        font-size: var(--boxel-font-size-sm);
+        color: var(--muted-foreground);
+      }
+      .stat-value {
+        font-size: var(--boxel-font-size-xxl);
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .stat-delta {
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+      }
+      .stat-delta.up {
+        color: var(--destructive, #b42318);
+      }
+      .stat-delta.down {
+        color: var(--chart-2, #1f7a4d);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: var(--boxel-sp);
+      }
+      .panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-lg);
+        border-radius: var(--radius, 16px);
+        border: 1px solid var(--border);
+        background: var(--card);
+        min-width: 0;
+      }
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: var(--boxel-sp-sm);
+      }
+      h2 {
+        margin: 0;
+        font-size: var(--boxel-font-size-md);
+      }
+      .panel-meta {
+        font-size: var(--boxel-font-size-sm);
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .bar {
+        position: relative;
+        height: 14px;
+        border-radius: 999px;
+        background: var(--muted);
+        overflow: hidden;
+      }
+      .bar .fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: var(--fill);
+        border-radius: inherit;
+        background: var(--primary);
+        transition: width 300ms ease;
+      }
+      .bar.over .fill {
+        background: var(--destructive, #b42318);
+      }
+      .savings-bar .fill {
+        background: var(--chart-2, #2fa36b);
+      }
+      .budget-text {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        font-variant-numeric: tabular-nums;
+      }
+      .category-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .category-head {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--swatch);
+      }
+      .category-name {
+        font-weight: 600;
+      }
+      .category-total {
+        font-variant-numeric: tabular-nums;
+      }
+      .category-bar {
+        height: 6px;
+        margin-top: var(--boxel-sp-5xs);
+        border-radius: 999px;
+        background: var(--muted);
+        overflow: hidden;
+      }
+      .category-fill {
+        display: block;
+        height: 100%;
+        width: var(--width);
+        background: var(--swatch);
+      }
+      .chart {
+        display: flex;
+        align-items: flex-end;
+        gap: var(--boxel-sp-sm);
+        height: 180px;
+        padding-top: var(--boxel-sp-sm);
+        overflow-x: auto;
+      }
+      .chart-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        height: 100%;
+        min-width: 56px;
+      }
+      .chart-bars {
+        flex: 1;
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        width: 100%;
+        justify-content: center;
+      }
+      .chart-bar {
+        width: 16px;
+        height: var(--height);
+        min-height: 2px;
+        border-radius: 4px 4px 0 0;
+      }
+      .chart-bar.income,
+      .legend-swatch.income {
+        background: var(--chart-2, #2fa36b);
+      }
+      .chart-bar.spending,
+      .legend-swatch.spending {
+        background: var(--chart-1, #4f6bed);
+      }
+      .chart-label {
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+      .legend {
+        display: flex;
+        gap: var(--boxel-sp);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+      }
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+      }
+      .legend-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+      }
+      .merchant-list,
+      .recent-list,
+      .account-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .merchant-list li,
+      .recent-list li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xs) 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .merchant-list li:last-child,
+      .recent-list li:last-child,
+      .account-list li:last-child {
+        border-bottom: none;
+      }
+      .merchant-name,
+      .recent-name {
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .merchant-count,
+      .recent-category {
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+      }
+      .merchant-total,
+      .recent-amount {
+        font-variant-numeric: tabular-nums;
+      }
+      .recent-amount.income {
+        color: var(--chart-2, #1f7a4d);
+      }
+      .link-button {
+        border: none;
+        background: none;
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        font: inherit;
+        font-size: var(--boxel-font-size-sm);
+        color: var(--primary);
+        cursor: pointer;
+        min-height: 32px;
+      }
+      .link-button:hover {
+        text-decoration: underline;
+      }
+      .link-button:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+      }
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+        font-size: var(--boxel-font-size-sm);
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-4xs);
+      }
+      .chip {
+        border: 1px solid var(--border);
+        background: var(--background);
+        border-radius: 999px;
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
+        font: inherit;
+        font-size: var(--boxel-font-size-sm);
+        cursor: pointer;
+        min-height: 32px;
+      }
+      .chip:hover {
+        border-color: var(--foreground);
+      }
+      .chip:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+      }
+      .chip.active {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .account-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp-sm) 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .account-main {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .account-meta {
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+      }
+      .account-balance {
+        font-size: var(--boxel-font-size-lg);
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .empty {
+        margin: 0;
+        color: var(--muted-foreground);
+      }
+      @media (max-width: 640px) {
+        .ledger {
+          padding: var(--boxel-sp);
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .tabs {
+          width: 100%;
+        }
+        .tab {
+          flex: 1;
+        }
+      }
+    </style>
+  </template>
+
+  absolute = (value: number) => Math.abs(value);
+
+  categoryName = (value: string | undefined) => categoryLabel(value);
+
+  kindName = (value: string | undefined) => accountKindLabel(value);
+}
+
 export class HomeLedger extends CardDef {
   static displayName = 'Home Ledger';
   static icon = BookIcon;
@@ -834,920 +1748,7 @@ export class HomeLedger extends CardDef {
     },
   });
 
-  static isolated = class Isolated extends Component<typeof this> {
-    @tracked activeTab: 'overview' | 'transactions' | 'accounts' = 'overview';
-    @tracked categoryFilter: string | undefined;
-    @tracked showIncome = true;
-
-    get allTransactions(): Transaction[] {
-      return (this.args.model.transactions ?? []).filter(
-        Boolean,
-      ) as Transaction[];
-    }
-
-    get allAccounts(): Account[] {
-      return (this.args.model.accounts ?? []).filter(Boolean) as Account[];
-    }
-
-    get filteredTransactions(): Transaction[] {
-      let list = this.allTransactions;
-      if (this.categoryFilter) {
-        list = list.filter((t) => t.category === this.categoryFilter);
-      }
-      if (!this.showIncome) {
-        list = list.filter((t) => !t.isIncome);
-      }
-      return [...list].sort((a, b) => {
-        let ad = a.date ? new Date(a.date).getTime() : 0;
-        let bd = b.date ? new Date(b.date).getTime() : 0;
-        return bd - ad;
-      });
-    }
-
-    get months(): MonthSummary[] {
-      return summarizeByMonth(this.allTransactions);
-    }
-
-    get currentMonth(): MonthSummary | undefined {
-      return this.months[0];
-    }
-
-    get previousMonth(): MonthSummary | undefined {
-      return this.months[1];
-    }
-
-    get categories(): CategoryTotal[] {
-      let current = this.currentMonth;
-      if (!current) {
-        return [];
-      }
-      return spendingByCategory(
-        this.allTransactions.filter((t) => monthKey(t.date) === current.key),
-      );
-    }
-
-    get merchants() {
-      return topMerchants(this.allTransactions, 6);
-    }
-
-    get budget(): number {
-      return this.args.model.monthlyBudget ?? 0;
-    }
-
-    get spentThisMonth(): number {
-      return this.currentMonth?.spending ?? 0;
-    }
-
-    get incomeThisMonth(): number {
-      return this.currentMonth?.income ?? 0;
-    }
-
-    get budgetPercent(): number {
-      return percentOf(this.spentThisMonth, this.budget);
-    }
-
-    get budgetRemaining(): number {
-      return roundMoney(this.budget - this.spentThisMonth);
-    }
-
-    get overBudget(): boolean {
-      return this.budget > 0 && this.spentThisMonth > this.budget;
-    }
-
-    get budgetBarStyle() {
-      return htmlSafe(`--fill: ${Math.min(this.budgetPercent, 100)}%`);
-    }
-
-    get rate(): number {
-      return savingsRate(this.incomeThisMonth, this.spentThisMonth);
-    }
-
-    get spendingChange(): number {
-      let current = this.currentMonth?.spending ?? 0;
-      let previous = this.previousMonth?.spending ?? 0;
-      return roundMoney(current - previous);
-    }
-
-    get spendingUp(): boolean {
-      return this.spendingChange > 0;
-    }
-
-    get maxMonthValue(): number {
-      return Math.max(
-        1,
-        ...this.months.map((m) => Math.max(m.income, m.spending)),
-      );
-    }
-
-    barStyle = (value: number) => {
-      return htmlSafe(
-        `--height: ${Math.round((value / this.maxMonthValue) * 100)}%`,
-      );
-    };
-
-    categoryStyle = (category: CategoryTotal) => {
-      return htmlSafe(
-        `--swatch: ${category.color}; --width: ${category.percent}%`,
-      );
-    };
-
-    accountTransactions = (account: Account) => {
-      return this.allTransactions.filter((t) => t.account?.id === account.id);
-    };
-
-    accountBalance = (account: Account) => {
-      let movements = this.accountTransactions(account).map((t) =>
-        signedAmount(t.amount, t.isIncome),
-      );
-      return roundMoney((account.openingBalance ?? 0) + sum(movements));
-    };
-
-    accountCount = (account: Account) => {
-      return this.accountTransactions(account).length;
-    };
-
-    get totalBalance(): number {
-      return roundMoney(sum(this.allAccounts.map((a) => this.accountBalance(a))));
-    }
-
-    get categoryChips() {
-      let used = new Set(this.allTransactions.map((t) => t.category ?? 'other'));
-      return CATEGORY_OPTIONS.filter((o) => used.has(o.value));
-    }
-
-    setTab = (tab: 'overview' | 'transactions' | 'accounts') => {
-      this.activeTab = tab;
-    };
-
-    setCategory = (category: string | undefined) => {
-      this.categoryFilter =
-        this.categoryFilter === category ? undefined : category;
-    };
-
-    toggleIncome = () => {
-      this.showIncome = !this.showIncome;
-    };
-
-    get hasTransactions(): boolean {
-      return this.allTransactions.length > 0;
-    }
-
-    get hasAccounts(): boolean {
-      return this.allAccounts.length > 0;
-    }
-
-    get savingsGoal(): number {
-      return this.args.model.savingsGoal ?? 0;
-    }
-
-    get savedSoFar(): number {
-      return roundMoney(
-        sum(
-          this.allTransactions
-            .filter((t) => t.category === 'savings')
-            .map((t) => Math.abs(t.amount ?? 0)),
-        ),
-      );
-    }
-
-    get savingsPercent(): number {
-      return percentOf(this.savedSoFar, this.savingsGoal);
-    }
-
-    get savingsBarStyle() {
-      return htmlSafe(`--fill: ${this.savingsPercent}%`);
-    }
-
-    <template>
-      <div class='ledger'>
-        <header class='top'>
-          <div class='title-block'>
-            <p class='eyebrow'>Household ledger</p>
-            <h1><@fields.cardTitle /></h1>
-            {{#if this.currentMonth}}
-              <p class='subtitle'>{{this.currentMonth.label}}</p>
-            {{/if}}
-          </div>
-          <nav class='tabs' aria-label='Ledger sections'>
-            <button
-              type='button'
-              class='tab {{if (eq this.activeTab "overview") "active"}}'
-              {{on 'click' (fn this.setTab 'overview')}}
-            >Overview</button>
-            <button
-              type='button'
-              class='tab {{if (eq this.activeTab "transactions") "active"}}'
-              {{on 'click' (fn this.setTab 'transactions')}}
-            >Transactions</button>
-            <button
-              type='button'
-              class='tab {{if (eq this.activeTab "accounts") "active"}}'
-              {{on 'click' (fn this.setTab 'accounts')}}
-            >Accounts</button>
-          </nav>
-        </header>
-
-        {{#if (eq this.activeTab 'overview')}}
-          <section class='stats'>
-            <div class='stat'>
-              <span class='stat-label'>Spent this month</span>
-              <span class='stat-value'>
-                {{formatCurrency this.spentThisMonth currency='USD'}}
-              </span>
-              {{#if this.previousMonth}}
-                <span class='stat-delta {{if this.spendingUp "up" "down"}}'>
-                  {{if this.spendingUp '▲' '▼'}}
-                  {{formatCurrency this.spendingChange currency='USD'}}
-                  vs
-                  {{this.previousMonth.label}}
-                </span>
-              {{/if}}
-            </div>
-            <div class='stat'>
-              <span class='stat-label'>Income this month</span>
-              <span class='stat-value'>
-                {{formatCurrency this.incomeThisMonth currency='USD'}}
-              </span>
-              <span class='stat-delta'>Savings rate {{this.rate}}%</span>
-            </div>
-            <div class='stat'>
-              <span class='stat-label'>Across all accounts</span>
-              <span class='stat-value'>
-                {{formatCurrency this.totalBalance currency='USD'}}
-              </span>
-              <span class='stat-delta'>
-                {{this.allAccounts.length}}
-                accounts
-              </span>
-            </div>
-          </section>
-
-          <section class='grid'>
-            <div class='panel budget'>
-              <div class='panel-head'>
-                <h2>Monthly budget</h2>
-                <span class='panel-meta'>
-                  {{formatCurrency this.budget currency='USD'}}
-                </span>
-              </div>
-              {{#if (gt this.budget 0)}}
-                <div
-                  class='bar {{if this.overBudget "over"}}'
-                  style={{this.budgetBarStyle}}
-                  role='progressbar'
-                  aria-valuenow={{this.budgetPercent}}
-                  aria-valuemin='0'
-                  aria-valuemax='100'
-                  aria-label='Budget used'
-                >
-                  <span class='fill'></span>
-                </div>
-                <p class='budget-text'>
-                  {{#if this.overBudget}}
-                    Over budget by
-                    {{formatCurrency
-                      (this.absolute this.budgetRemaining)
-                      currency='USD'
-                    }}
-                  {{else}}
-                    {{formatCurrency this.budgetRemaining currency='USD'}}
-                    left ({{this.budgetPercent}}% used)
-                  {{/if}}
-                </p>
-              {{else}}
-                <p class='empty'>Set a monthly budget to track it here.</p>
-              {{/if}}
-            </div>
-
-            <div class='panel savings'>
-              <div class='panel-head'>
-                <h2>Savings goal</h2>
-                <span class='panel-meta'>
-                  {{formatCurrency this.savingsGoal currency='USD'}}
-                </span>
-              </div>
-              {{#if (gt this.savingsGoal 0)}}
-                <div
-                  class='bar savings-bar'
-                  style={{this.savingsBarStyle}}
-                  role='progressbar'
-                  aria-valuenow={{this.savingsPercent}}
-                  aria-valuemin='0'
-                  aria-valuemax='100'
-                  aria-label='Savings progress'
-                >
-                  <span class='fill'></span>
-                </div>
-                <p class='budget-text'>
-                  {{formatCurrency this.savedSoFar currency='USD'}}
-                  saved ({{this.savingsPercent}}%)
-                </p>
-              {{else}}
-                <p class='empty'>Set a savings goal to track it here.</p>
-              {{/if}}
-            </div>
-
-            <div class='panel categories'>
-              <div class='panel-head'>
-                <h2>Where it went</h2>
-                {{#if this.currentMonth}}
-                  <span class='panel-meta'>{{this.currentMonth.label}}</span>
-                {{/if}}
-              </div>
-              {{#if this.categories.length}}
-                <ul class='category-list'>
-                  {{#each this.categories as |category|}}
-                    <li style={{this.categoryStyle category}}>
-                      <div class='category-head'>
-                        <span class='swatch' aria-hidden='true'></span>
-                        <span class='category-name'>{{category.label}}</span>
-                        <span class='category-total'>
-                          {{formatCurrency category.total currency='USD'}}
-                        </span>
-                      </div>
-                      <div class='category-bar'>
-                        <span class='category-fill'></span>
-                      </div>
-                    </li>
-                  {{/each}}
-                </ul>
-              {{else}}
-                <p class='empty'>No spending recorded this month.</p>
-              {{/if}}
-            </div>
-
-            <div class='panel trend'>
-              <div class='panel-head'>
-                <h2>Month by month</h2>
-              </div>
-              {{#if this.months.length}}
-                <div class='chart' role='img' aria-label='Income and spending by month'>
-                  {{#each this.months as |month|}}
-                    <div class='chart-col'>
-                      <div class='chart-bars'>
-                        <span
-                          class='chart-bar income'
-                          style={{this.barStyle month.income}}
-                        ></span>
-                        <span
-                          class='chart-bar spending'
-                          style={{this.barStyle month.spending}}
-                        ></span>
-                      </div>
-                      <span class='chart-label'>{{month.label}}</span>
-                    </div>
-                  {{/each}}
-                </div>
-                <div class='legend'>
-                  <span class='legend-item'>
-                    <span class='legend-swatch income'></span>Income
-                  </span>
-                  <span class='legend-item'>
-                    <span class='legend-swatch spending'></span>Spending
-                  </span>
-                </div>
-              {{else}}
-                <p class='empty'>No months to show yet.</p>
-              {{/if}}
-            </div>
-
-            <div class='panel merchants'>
-              <div class='panel-head'>
-                <h2>Top merchants</h2>
-              </div>
-              {{#if this.merchants.length}}
-                <ol class='merchant-list'>
-                  {{#each this.merchants as |merchant|}}
-                    <li>
-                      <span class='merchant-name'>{{merchant.merchant}}</span>
-                      <span class='merchant-count'>
-                        {{merchant.count}}
-                        visits
-                      </span>
-                      <span class='merchant-total'>
-                        {{formatCurrency merchant.total currency='USD'}}
-                      </span>
-                    </li>
-                  {{/each}}
-                </ol>
-              {{else}}
-                <p class='empty'>No merchants yet.</p>
-              {{/if}}
-            </div>
-
-            <div class='panel recent'>
-              <div class='panel-head'>
-                <h2>Recent activity</h2>
-                <button
-                  type='button'
-                  class='link-button'
-                  {{on 'click' (fn this.setTab 'transactions')}}
-                >See all</button>
-              </div>
-              {{#if this.hasTransactions}}
-                <ul class='recent-list'>
-                  {{#each this.filteredTransactions as |txn index|}}
-                    {{#if (lt index 5)}}
-                      <li>
-                        <span class='recent-name'>{{txn.cardTitle}}</span>
-                        <span class='recent-category'>
-                          {{this.categoryName txn.category}}
-                        </span>
-                        <span
-                          class='recent-amount {{if txn.isIncome "income"}}'
-                        >
-                          {{if txn.isIncome '+' '−'}}{{formatCurrency
-                            txn.amount
-                            currency='USD'
-                          }}
-                        </span>
-                      </li>
-                    {{/if}}
-                  {{/each}}
-                </ul>
-              {{else}}
-                <p class='empty'>No transactions yet.</p>
-              {{/if}}
-            </div>
-          </section>
-        {{/if}}
-
-        {{#if (eq this.activeTab 'transactions')}}
-          <section class='panel transactions'>
-            <div class='panel-head'>
-              <h2>Transactions</h2>
-              <label class='toggle'>
-                <input
-                  type='checkbox'
-                  checked={{this.showIncome}}
-                  {{on 'change' this.toggleIncome}}
-                />
-                Show income
-              </label>
-            </div>
-            <div class='chips' role='group' aria-label='Filter by category'>
-              {{#each this.categoryChips as |chip|}}
-                <button
-                  type='button'
-                  class='chip {{if (eq this.categoryFilter chip.value) "active"}}'
-                  {{on 'click' (fn this.setCategory chip.value)}}
-                >{{chip.label}}</button>
-              {{/each}}
-            </div>
-            {{#if this.filteredTransactions.length}}
-              <ul class='recent-list transaction-list'>
-                {{#each this.filteredTransactions as |txn|}}
-                  <li>
-                    <span class='recent-name'>{{txn.cardTitle}}</span>
-                    <span class='recent-category'>
-                      {{this.categoryName txn.category}}
-                      ·
-                      {{formatDateTime txn.date preset='short' fallback='No date'}}
-                    </span>
-                    <span class='recent-amount {{if txn.isIncome "income"}}'>
-                      {{if txn.isIncome '+' '−'}}{{formatCurrency
-                        txn.amount
-                        currency='USD'
-                      }}
-                    </span>
-                  </li>
-                {{/each}}
-              </ul>
-            {{else}}
-              <p class='empty'>No transactions match this filter.</p>
-            {{/if}}
-          </section>
-        {{/if}}
-
-        {{#if (eq this.activeTab 'accounts')}}
-          <section class='panel accounts'>
-            <div class='panel-head'>
-              <h2>Accounts</h2>
-              <span class='panel-meta'>
-                Total
-                {{formatCurrency this.totalBalance currency='USD'}}
-              </span>
-            </div>
-            {{#if this.hasAccounts}}
-              <ul class='account-list'>
-                {{#each this.allAccounts as |account|}}
-                  <li class='account-item'>
-                    <div class='account-main'>
-                      <strong>{{account.cardTitle}}</strong>
-                      <span class='account-meta'>
-                        {{this.kindName account.kind}}
-                        ·
-                        {{this.accountCount account}}
-                        transactions
-                      </span>
-                    </div>
-                    <span class='account-balance'>
-                      {{formatCurrency
-                        (this.accountBalance account)
-                        currency='USD'
-                      }}
-                    </span>
-                  </li>
-                {{/each}}
-              </ul>
-            {{else}}
-              <p class='empty'>Link an account to see balances.</p>
-            {{/if}}
-          </section>
-        {{/if}}
-      </div>
-      <style scoped>
-        .ledger {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-lg);
-          padding: var(--boxel-sp-xl);
-          min-height: 100%;
-          color: var(--foreground);
-          background: var(--background);
-          font-family: var(--font-sans, inherit);
-        }
-        .top {
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: space-between;
-          align-items: flex-end;
-          gap: var(--boxel-sp);
-        }
-        .eyebrow {
-          margin: 0;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          font-size: var(--boxel-font-size-xs);
-          color: var(--muted-foreground);
-        }
-        h1 {
-          margin: var(--boxel-sp-4xs) 0 0;
-          font-size: var(--boxel-font-size-xxl);
-          line-height: 1.1;
-        }
-        .subtitle {
-          margin: var(--boxel-sp-4xs) 0 0;
-          color: var(--muted-foreground);
-        }
-        .tabs {
-          display: flex;
-          gap: var(--boxel-sp-4xs);
-          padding: var(--boxel-sp-5xs);
-          border-radius: 999px;
-          background: var(--muted);
-        }
-        .tab {
-          border: none;
-          background: transparent;
-          padding: var(--boxel-sp-xs) var(--boxel-sp);
-          border-radius: 999px;
-          font: inherit;
-          font-weight: 600;
-          color: var(--muted-foreground);
-          cursor: pointer;
-          min-height: 40px;
-        }
-        .tab:hover {
-          color: var(--foreground);
-        }
-        .tab:focus-visible {
-          outline: 2px solid var(--ring);
-          outline-offset: 2px;
-        }
-        .tab.active {
-          background: var(--background);
-          color: var(--foreground);
-          box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.08));
-        }
-        .stats {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: var(--boxel-sp);
-        }
-        .stat {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-5xs);
-          padding: var(--boxel-sp-lg);
-          border-radius: var(--radius, 16px);
-          border: 1px solid var(--border);
-          background: var(--card);
-        }
-        .stat-label {
-          font-size: var(--boxel-font-size-sm);
-          color: var(--muted-foreground);
-        }
-        .stat-value {
-          font-size: var(--boxel-font-size-xxl);
-          font-weight: 700;
-          font-variant-numeric: tabular-nums;
-        }
-        .stat-delta {
-          font-size: var(--boxel-font-size-xs);
-          color: var(--muted-foreground);
-        }
-        .stat-delta.up {
-          color: var(--destructive, #b42318);
-        }
-        .stat-delta.down {
-          color: var(--chart-2, #1f7a4d);
-        }
-        .grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-          gap: var(--boxel-sp);
-        }
-        .panel {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-sm);
-          padding: var(--boxel-sp-lg);
-          border-radius: var(--radius, 16px);
-          border: 1px solid var(--border);
-          background: var(--card);
-          min-width: 0;
-        }
-        .panel-head {
-          display: flex;
-          justify-content: space-between;
-          align-items: baseline;
-          gap: var(--boxel-sp-sm);
-        }
-        h2 {
-          margin: 0;
-          font-size: var(--boxel-font-size-md);
-        }
-        .panel-meta {
-          font-size: var(--boxel-font-size-sm);
-          color: var(--muted-foreground);
-          font-variant-numeric: tabular-nums;
-        }
-        .bar {
-          position: relative;
-          height: 14px;
-          border-radius: 999px;
-          background: var(--muted);
-          overflow: hidden;
-        }
-        .bar .fill {
-          position: absolute;
-          inset: 0 auto 0 0;
-          width: var(--fill);
-          border-radius: inherit;
-          background: var(--primary);
-          transition: width 300ms ease;
-        }
-        .bar.over .fill {
-          background: var(--destructive, #b42318);
-        }
-        .savings-bar .fill {
-          background: var(--chart-2, #2fa36b);
-        }
-        .budget-text {
-          margin: 0;
-          font-size: var(--boxel-font-size-sm);
-          font-variant-numeric: tabular-nums;
-        }
-        .category-list {
-          list-style: none;
-          margin: 0;
-          padding: 0;
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xs);
-        }
-        .category-head {
-          display: grid;
-          grid-template-columns: auto 1fr auto;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-        }
-        .swatch {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          background: var(--swatch);
-        }
-        .category-name {
-          font-weight: 600;
-        }
-        .category-total {
-          font-variant-numeric: tabular-nums;
-        }
-        .category-bar {
-          height: 6px;
-          margin-top: var(--boxel-sp-5xs);
-          border-radius: 999px;
-          background: var(--muted);
-          overflow: hidden;
-        }
-        .category-fill {
-          display: block;
-          height: 100%;
-          width: var(--width);
-          background: var(--swatch);
-        }
-        .chart {
-          display: flex;
-          align-items: flex-end;
-          gap: var(--boxel-sp-sm);
-          height: 180px;
-          padding-top: var(--boxel-sp-sm);
-          overflow-x: auto;
-        }
-        .chart-col {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: var(--boxel-sp-5xs);
-          height: 100%;
-          min-width: 56px;
-        }
-        .chart-bars {
-          flex: 1;
-          display: flex;
-          align-items: flex-end;
-          gap: 4px;
-          width: 100%;
-          justify-content: center;
-        }
-        .chart-bar {
-          width: 16px;
-          height: var(--height);
-          min-height: 2px;
-          border-radius: 4px 4px 0 0;
-        }
-        .chart-bar.income,
-        .legend-swatch.income {
-          background: var(--chart-2, #2fa36b);
-        }
-        .chart-bar.spending,
-        .legend-swatch.spending {
-          background: var(--chart-1, #4f6bed);
-        }
-        .chart-label {
-          font-size: var(--boxel-font-size-xs);
-          color: var(--muted-foreground);
-          white-space: nowrap;
-        }
-        .legend {
-          display: flex;
-          gap: var(--boxel-sp);
-          font-size: var(--boxel-font-size-xs);
-          color: var(--muted-foreground);
-        }
-        .legend-item {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--boxel-sp-5xs);
-        }
-        .legend-swatch {
-          width: 10px;
-          height: 10px;
-          border-radius: 2px;
-        }
-        .merchant-list,
-        .recent-list,
-        .account-list {
-          list-style: none;
-          margin: 0;
-          padding: 0;
-          display: flex;
-          flex-direction: column;
-        }
-        .merchant-list li,
-        .recent-list li {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) auto auto;
-          align-items: center;
-          gap: var(--boxel-sp-sm);
-          padding: var(--boxel-sp-xs) 0;
-          border-bottom: 1px solid var(--border);
-        }
-        .merchant-list li:last-child,
-        .recent-list li:last-child,
-        .account-list li:last-child {
-          border-bottom: none;
-        }
-        .merchant-name,
-        .recent-name {
-          font-weight: 600;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .merchant-count,
-        .recent-category {
-          font-size: var(--boxel-font-size-xs);
-          color: var(--muted-foreground);
-        }
-        .merchant-total,
-        .recent-amount {
-          font-variant-numeric: tabular-nums;
-        }
-        .recent-amount.income {
-          color: var(--chart-2, #1f7a4d);
-        }
-        .link-button {
-          border: none;
-          background: none;
-          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-          font: inherit;
-          font-size: var(--boxel-font-size-sm);
-          color: var(--primary);
-          cursor: pointer;
-          min-height: 32px;
-        }
-        .link-button:hover {
-          text-decoration: underline;
-        }
-        .link-button:focus-visible {
-          outline: 2px solid var(--ring);
-          outline-offset: 2px;
-        }
-        .toggle {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--boxel-sp-4xs);
-          font-size: var(--boxel-font-size-sm);
-        }
-        .chips {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--boxel-sp-4xs);
-        }
-        .chip {
-          border: 1px solid var(--border);
-          background: var(--background);
-          border-radius: 999px;
-          padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
-          font: inherit;
-          font-size: var(--boxel-font-size-sm);
-          cursor: pointer;
-          min-height: 32px;
-        }
-        .chip:hover {
-          border-color: var(--foreground);
-        }
-        .chip:focus-visible {
-          outline: 2px solid var(--ring);
-          outline-offset: 2px;
-        }
-        .chip.active {
-          background: var(--primary);
-          border-color: var(--primary);
-          color: var(--primary-foreground);
-        }
-        .account-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--boxel-sp);
-          padding: var(--boxel-sp-sm) 0;
-          border-bottom: 1px solid var(--border);
-        }
-        .account-main {
-          display: flex;
-          flex-direction: column;
-          min-width: 0;
-        }
-        .account-meta {
-          font-size: var(--boxel-font-size-xs);
-          color: var(--muted-foreground);
-        }
-        .account-balance {
-          font-size: var(--boxel-font-size-lg);
-          font-weight: 700;
-          font-variant-numeric: tabular-nums;
-        }
-        .empty {
-          margin: 0;
-          color: var(--muted-foreground);
-        }
-        @media (max-width: 640px) {
-          .ledger {
-            padding: var(--boxel-sp);
-          }
-          .grid {
-            grid-template-columns: 1fr;
-          }
-          .tabs {
-            width: 100%;
-          }
-          .tab {
-            flex: 1;
-          }
-        }
-      </style>
-    </template>
-
-    absolute = (value: number) => Math.abs(value);
-
-    categoryName = (value: string | undefined) => categoryLabel(value);
-
-    kindName = (value: string | undefined) => accountKindLabel(value);
-  };
+  static isolated = HomeLedgerIsolated;
 
   static embedded = class Embedded extends Component<typeof this> {
     get transactions(): Transaction[] {
