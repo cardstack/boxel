@@ -17,6 +17,8 @@ import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
 import {
   createJWT,
+  resetCatalogRealmURL,
+  setCatalogRealmURL,
   testRealmSecretSeed,
   testRealmURL,
   setupIntegrationTestRealm,
@@ -3603,6 +3605,16 @@ module(
   'Integration | tools | run-realm-code | catalog-reuse',
   function (hooks) {
     setupRenderingTest(hooks);
+    // The test build lists no catalog, so list one for the default realms
+    // to leave out. It must be listed before the user signs in.
+    hooks.beforeEach(function () {
+      setCatalogRealmURL(
+        getService('network').virtualNetwork.toURL('@cardstack/catalog/').href,
+      );
+    });
+    hooks.afterEach(function () {
+      resetCatalogRealmURL();
+    });
     setupLocalIndexing(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
@@ -3633,7 +3645,16 @@ module(
         return null;
       };
       virtualNetwork.mount(spy, { prepend: true });
+      let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
       try {
+        let realmServer = getService('realm-server');
+        await realmServer.ready;
+        let isCatalog = (realm: string) =>
+          realm === '@cardstack/catalog/' || realm === catalogURL;
+        assert.ok(
+          realmServer.availableRealmIdentifiers.some(isCatalog),
+          'the catalog is one of the available realms',
+        );
         let command = new RunRealmCodeTool(
           getService('tool-service').toolContext,
         );
@@ -3658,11 +3679,7 @@ module(
           'a named catalog is dropped',
         );
         assert.notOk(
-          sentRealms[1].some(
-            (realm) =>
-              realm === '@cardstack/catalog/' ||
-              realm === virtualNetwork.toURL('@cardstack/catalog/').href,
-          ),
+          sentRealms[1].some(isCatalog),
           'the default realms leave the catalog out',
         );
 
