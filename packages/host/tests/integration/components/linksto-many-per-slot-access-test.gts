@@ -30,6 +30,7 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
+import { shimTestModule } from '../../helpers/identity-tags';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -100,7 +101,7 @@ module(
         @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({ firstName: 'Mango' });
       let vangogh = new Pet({ firstName: 'Van Gogh' });
@@ -205,7 +206,11 @@ module(
         static displayName = 'Post';
         @field tags = contains(TagSet);
       }
-      loader.shimModule(`${testRealmURL}nested-cards`, { Post, TagSet, Tag });
+      shimTestModule(loader, `${testRealmURL}nested-cards`, {
+        Post,
+        TagSet,
+        Tag,
+      });
 
       let red = new Tag({ name: 'red' });
       let blue = new Tag({ name: 'blue' });
@@ -319,7 +324,7 @@ module(
         @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({ firstName: 'Mango' });
       let vangogh = new Pet({ firstName: 'Van Gogh' });
