@@ -3,12 +3,24 @@ const {
   babelCompatSupport,
   templateCompatSupport,
 } = require('@embroider/compat/babel');
+const { externalName } = require('@embroider/reverse-exports');
 const {
   exportIdentityPlugin,
 } = require('@cardstack/runtime-common/export-identity-plugin');
 
 const baseDir = path.resolve(__dirname, '..', 'base') + path.sep;
+const basePackageJSON = require('../base/package.json');
 const toolsDir = path.resolve(__dirname, 'app', 'tools') + path.sep;
+
+// The name a base realm file is imported by, without its extension:
+// `/abs/packages/base/date/day.gts` → `@cardstack/base/date/day`.
+function baseModuleName(file) {
+  let relative = path.relative(baseDir, file).split(path.sep).join('/');
+  return externalName(basePackageJSON, `./${relative}`)?.replace(
+    /\.(gts|ts)$/,
+    '',
+  );
+}
 
 // The modules tagged are the ones the loader serves by name, each tagged with
 // the identifier the loader gives it; everything else in the host bundle is
@@ -21,15 +33,10 @@ function moduleIdentifier(filename) {
   ) {
     return null;
   }
-  // A base realm module compiled into the bundle:
-  // `/abs/packages/base/date/day.gts` → `@cardstack/base/date/day`.
+  // A base realm module compiled into the bundle, by the name it is imported
+  // by.
   if (file.startsWith(baseDir)) {
-    let name = file
-      .slice(baseDir.length)
-      .replace(/\.(gts|ts)$/, '')
-      .split(path.sep)
-      .join('/');
-    return `@cardstack/base/${name}`;
+    return baseModuleName(file) ?? null;
   }
   // A host tool, which app/tools/index.ts shims under its bare file name
   // wherever in app/tools the file sits:
@@ -41,6 +48,17 @@ function moduleIdentifier(filename) {
     return name === 'index' ? null : `@cardstack/boxel-host/tools/${name}`;
   }
   return null;
+}
+
+// A base module imports its siblings relatively (`./enum`), and the class
+// factories it calls are named by the module's package name, so a relative
+// import inside base is named the same way.
+function importedModule(specifier, { filename }) {
+  if (!filename || !/^\.\.?\//.test(specifier)) {
+    return undefined;
+  }
+  let file = path.resolve(path.dirname(filename.split('?')[0]), specifier);
+  return file.startsWith(baseDir) ? baseModuleName(file) : undefined;
 }
 
 module.exports = {
@@ -86,7 +104,7 @@ module.exports = {
       },
     ],
     ...babelCompatSupport(),
-    [exportIdentityPlugin, { moduleIdentifier }],
+    [exportIdentityPlugin, { moduleIdentifier, importedModule }],
   ],
 
   generatorOpts: {

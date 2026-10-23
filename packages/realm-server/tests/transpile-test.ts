@@ -32,7 +32,7 @@ module(basename(import.meta.filename), function () {
       export default class {}
       `,
       'test-module.ts',
-      '@cardstack/catalog/person',
+      { moduleIdentifier: '@cardstack/catalog/person' },
     );
     assert.codeEqual(
       transpiled,

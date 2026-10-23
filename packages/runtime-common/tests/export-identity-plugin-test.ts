@@ -3,6 +3,7 @@ import {
   exportIdentityPlugin,
   type Options,
 } from '../export-identity-plugin.ts';
+import { baseRealm } from '../constants.ts';
 import type { SharedTests } from '../helpers/index.ts';
 import '../helpers/code-equality-assertion.ts';
 
@@ -314,61 +315,169 @@ const tests = Object.freeze({
       `,
     );
   },
-  'tags a class a factory computes for an exported binding, once it exists':
-    async (assert) => {
-      assert.codeEqual(
-        transform(`
-          export const DogStatus = enumField(StringField, { options: ['good'] });
-        `),
-        `
-          export const DogStatus = enumField(StringField, { options: ['good'] });
-          if (typeof DogStatus === 'function' && !Object.prototype.hasOwnProperty.call(DogStatus, Symbol.for('ident'))) Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
-        `,
-      );
-    },
-
-  'tags a computed binding exported through an export list': async (assert) => {
+  'tags the class a class factory returns for an exported binding': async (
+    assert,
+  ) => {
     assert.codeEqual(
       transform(`
-        const Status = makeField();
+        import enumField from '@cardstack/base/enum';
+        export const DogStatus = enumField(StringField, { options: ['good'] });
+      `),
+      `
+        import enumField from '@cardstack/base/enum';
+        export const DogStatus = enumField(StringField, { options: ['good'] });
+        if (typeof DogStatus === 'function' && !Object.prototype.hasOwnProperty.call(DogStatus, Symbol.for('ident'))) Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
+      `,
+    );
+  },
+
+  'tags a class factory result exported through an export list': async (
+    assert,
+  ) => {
+    assert.codeEqual(
+      transform(`
+        import enumField from '@cardstack/base/enum';
+        const Status = enumField(StringField, { options: ['good'] });
         export { Status as DogStatus };
       `),
       `
-        const Status = makeField();
+        import enumField from '@cardstack/base/enum';
+        const Status = enumField(StringField, { options: ['good'] });
         if (typeof Status === 'function' && !Object.prototype.hasOwnProperty.call(Status, Symbol.for('ident'))) Object.defineProperty(Status, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
         export { Status as DogStatus };
       `,
     );
   },
 
-  'tags a class a factory computes for the default export': async (assert) => {
+  'tags a class factory result that is the default export': async (assert) => {
     assert.codeEqual(
       transform(`
-        export default makeField();
+        import enumField from '@cardstack/base/enum';
+        export default enumField(StringField, { options: ['good'] });
       `),
       `
-        const _default = makeField();
+        import enumField from '@cardstack/base/enum';
+        const _default = enumField(StringField, { options: ['good'] });
         if (typeof _default === 'function' && !Object.prototype.hasOwnProperty.call(_default, Symbol.for('ident'))) Object.defineProperty(_default, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'default'], configurable: true, writable: true });
         export default _default;
       `,
     );
   },
 
-  'leaves exported values that cannot be classes alone': async (assert) => {
+  'recognizes a class factory imported by a realm alias or through a namespace':
+    async (assert) => {
+      assert.codeEqual(
+        transform(`
+          import enumField from '${baseRealm.url}enum';
+          import * as status from '@cardstack/catalog/fields/status/status';
+          export const DogStatus = enumField(StringField, { options: ['good'] });
+          export const TicketStatus = status.statusField({ options: [] });
+        `),
+        `
+          import enumField from '${baseRealm.url}enum';
+          import * as status from '@cardstack/catalog/fields/status/status';
+          export const DogStatus = enumField(StringField, { options: ['good'] });
+          if (typeof DogStatus === 'function' && !Object.prototype.hasOwnProperty.call(DogStatus, Symbol.for('ident'))) Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
+          export const TicketStatus = status.statusField({ options: [] });
+          if (typeof TicketStatus === 'function' && !Object.prototype.hasOwnProperty.call(TicketStatus, Symbol.for('ident'))) Object.defineProperty(TicketStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'TicketStatus'], configurable: true, writable: true });
+        `,
+      );
+    },
+
+  'recognizes a class factory a module imports by a relative specifier': async (
+    assert,
+  ) => {
+    assert.codeEqual(
+      transform(
+        `
+          import enumField from './enum';
+          export const Status = enumField(StringField, { options: ['good'] });
+        `,
+        { moduleIdentifier: `${baseRealm.url}status` },
+      ),
+      `
+        import enumField from './enum';
+        export const Status = enumField(StringField, { options: ['good'] });
+        if (typeof Status === 'function' && !Object.prototype.hasOwnProperty.call(Status, Symbol.for('ident'))) Object.defineProperty(Status, Symbol.for('ident'), { value: ['${baseRealm.url}status', 'Status'], configurable: true, writable: true });
+      `,
+    );
+  },
+
+  'recognizes a class factory the module declares and exports itself': async (
+    assert,
+  ) => {
+    assert.codeEqual(
+      transform(
+        `
+          export function statusField(config) {
+            return class Status extends StringField {};
+          }
+          export const StatusField = statusField({ options: [] });
+        `,
+        {
+          moduleIdentifier: '@cardstack/catalog/fields/status/status',
+        },
+      ),
+      `
+        export function statusField(config) {
+          return class Status extends StringField {};
+        }
+        export const StatusField = statusField({ options: [] });
+        if (typeof StatusField === 'function' && !Object.prototype.hasOwnProperty.call(StatusField, Symbol.for('ident'))) Object.defineProperty(StatusField, Symbol.for('ident'), { value: ['@cardstack/catalog/fields/status/status', 'StatusField'], configurable: true, writable: true });
+      `,
+    );
+  },
+
+  'names an imported module through the importedModule option': async (
+    assert,
+  ) => {
+    let asked: string[] = [];
+    let output = transform(
+      `
+        import makeStatus from '../shared/status';
+        export const Status = makeStatus();
+      `,
+      {
+        moduleIdentifier: moduleURL,
+        classFactories: [['@example/shared/status', 'default']],
+        importedModule: (specifier) => {
+          asked.push(specifier);
+          return specifier === '../shared/status'
+            ? '@example/shared/status'
+            : undefined;
+        },
+      },
+    );
+    assert.deepEqual(asked, ['../shared/status']);
+    assert.codeEqual(
+      output,
+      `
+        import makeStatus from '../shared/status';
+        export const Status = makeStatus();
+        if (typeof Status === 'function' && !Object.prototype.hasOwnProperty.call(Status, Symbol.for('ident'))) Object.defineProperty(Status, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'Status'], configurable: true, writable: true });
+      `,
+    );
+  },
+
+  'leaves values made by other functions alone': async (assert) => {
     assert.codeEqual(
       transform(`
+        import { modifier } from 'ember-modifier';
         export const count = 1;
-        export const label = 'dog';
         export const bark = () => 'woof';
-        export const config = { loud: true };
-        export default 'dog';
+        export const key = Symbol.for('dog');
+        export const setup = modifier(() => {});
+        export const Alias = SomethingElse;
+        export default makeField();
       `),
       `
+        import { modifier } from 'ember-modifier';
         export const count = 1;
-        export const label = 'dog';
         export const bark = () => 'woof';
-        export const config = { loud: true };
-        export default 'dog';
+        export const key = Symbol.for('dog');
+        export const setup = modifier(() => {});
+        export const Alias = SomethingElse;
+        export default makeField();
       `,
     );
   },

@@ -57,13 +57,18 @@ const compiler = {
 // their identity.
 export const TRANSPILE_VERSION = 2;
 
-// `moduleIdentifier` names the module, by URL for a realm module. When given,
-// every exported class is tagged with it (see export-identity-plugin.ts); the
-// tag is canonicalized where it is read.
+// `identity.moduleIdentifier` names the module, by URL for a realm module.
+// When given, every exported class is tagged with it (see
+// export-identity-plugin.ts); the tag is canonicalized where it is read.
+// `identity.canonicalModule` spells a module the way the plugin's class
+// factories are named, so a factory imported by a realm URL is recognized.
 export async function transpileJS(
   content: string,
   debugFilename: string,
-  moduleIdentifier?: string,
+  identity?: {
+    moduleIdentifier: string;
+    canonicalModule?: (module: string) => string;
+  },
 ): Promise<string> {
   const contentIsAllWhitespace = content.match(/^\s*$/);
 
@@ -99,8 +104,16 @@ export async function transpileJS(
       [decoratorTransforms],
       [makeEmberTemplatePlugin, templateOptions],
       loaderPlugin,
-      ...(moduleIdentifier !== undefined
-        ? [[exportIdentityPlugin, { moduleIdentifier }]]
+      ...(identity
+        ? [
+            [
+              exportIdentityPlugin,
+              {
+                moduleIdentifier: identity.moduleIdentifier,
+                canonicalModule: identity.canonicalModule,
+              },
+            ],
+          ]
         : []),
     ],
     highlightCode: false, // Do not output ANSI color codes in error messages so that the client can display them plainly

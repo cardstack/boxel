@@ -74,19 +74,35 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('tags a class a factory computes for an exported binding, once it exists', async function (assert) {
+    test('tags the class a class factory returns for an exported binding', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('tags a computed binding exported through an export list', async function (assert) {
+    test('tags a class factory result exported through an export list', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('tags a class a factory computes for the default export', async function (assert) {
+    test('tags a class factory result that is the default export', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('leaves exported values that cannot be classes alone', async function (assert) {
+    test('recognizes a class factory imported by a realm alias or through a namespace', async function (assert) {
+      await runSharedTest(exportIdentityPluginTests, assert, {});
+    });
+
+    test('recognizes a class factory a module imports by a relative specifier', async function (assert) {
+      await runSharedTest(exportIdentityPluginTests, assert, {});
+    });
+
+    test('recognizes a class factory the module declares and exports itself', async function (assert) {
+      await runSharedTest(exportIdentityPluginTests, assert, {});
+    });
+
+    test('names an imported module through the importedModule option', async function (assert) {
+      await runSharedTest(exportIdentityPluginTests, assert, {});
+    });
+
+    test('leaves values made by other functions alone', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
   });
