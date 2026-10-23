@@ -496,7 +496,7 @@ module('Integration | Store', function (hooks) {
     assert.deepEqual(
       countsDuringSave,
       { url: 1, prefix: 1 },
-      'save() holds one reference, under the resolved URL, that the prefix id shares rather than counting separately',
+      'save() holds exactly one reference while it runs, read the same through the prefix id and the resolved URL',
     );
     assert.strictEqual(
       storeService.getReferenceCount('@test-prefix/Person/hassan'),
