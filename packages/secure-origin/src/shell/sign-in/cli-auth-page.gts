@@ -43,15 +43,9 @@ export default class CliAuthPage extends Component {
             @cli={{this.callback}}
             @username={{this.username}}
             @onSignedIn={{this.signedIn}}
+            @title='Authorize Boxel CLI'
           >
-            <:heading>
-              <span
-                class='title'
-                role='heading'
-                aria-level='1'
-                data-test-secure-title
-                data-test-secure-cli-auth-title
-              >Authorize Boxel CLI</span>
+            <:intro>
               {{#if this.state.signedInAs}}
                 <p class='subtitle'>Confirm your password to give the Boxel CLI
                   running on this computer access to the workspaces of
@@ -64,7 +58,7 @@ export default class CliAuthPage extends Component {
                   in gives the Boxel CLI running on this computer access to your
                   workspaces.</p>
               {{/if}}
-            </:heading>
+            </:intro>
           </SignInForm>
         </AuthContainer>
       {{else}}
@@ -78,12 +72,6 @@ export default class CliAuthPage extends Component {
     {{/if}}
 
     <style scoped>
-      .title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-        margin-bottom: var(--boxel-sp-sm);
-        padding: 0;
-      }
       .subtitle {
         margin: 0 0 var(--boxel-sp-lg);
         color: var(--foreground);

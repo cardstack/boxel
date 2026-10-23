@@ -249,9 +249,12 @@ target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1
 
 With `SIGN_IN_ON_SECURE_ORIGIN=true` on the realm server that serves the app,
 the app draws no sign-in form. The realm server writes the setting into the
-host's config as `signInOnSecureOrigin` each time it serves the app, so a
-deployment turns it on or off without a rebuild. Unset, the host keeps what
-its build set, which is off.
+host's config as `signInOnSecureOrigin` when it builds the app's page, so a
+deployment turns it on or off without a rebuild. Outside development the
+realm server builds that page once and keeps it for as long as the process
+runs, so a changed setting takes effect when the realm server next starts,
+as on the next deploy. Unset, the host keeps what its build set, which is
+off.
 
 1. A signed-out app (`components/matrix/secure-sign-in.gts`) replaces itself
    with `<secure origin>?mode=sign-in#return=<the app page, path and query>`.

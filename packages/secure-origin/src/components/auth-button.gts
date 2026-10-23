@@ -1,5 +1,5 @@
-// The host's AuthButton: a full-width Button of the touch size, as every
-// button on the sign-in screens is.
+// AuthButton: a full-width Button of the touch size, as every button on the
+// sign-in screens is, in the app and on the secure origin alike.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import Button from './button.gts';

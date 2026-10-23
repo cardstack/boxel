@@ -21,6 +21,8 @@
   },
   "exports": {
     "./package.json": "./package.json",
+    "./components/*": "./src/components/*",
+    "./screens/*": "./src/screens/*",
     "./security/*": "./src/security/*",
     "./shell/*": "./src/shell/*",
     "./dist/*": "./dist/*"

@@ -112,7 +112,7 @@
   }
 }
 
-/* The host's AuthContainer draws on this. */
+/* AuthContainer draws on this. */
 body {
   background-color: #191624;
 }

@@ -2235,38 +2235,30 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     test('the monaco cursor position is maintained during an auto-save', async function (assert) {
       assert.expect(2);
-      // we only want to change this for this particular test so we emulate what the non-test env sees
-      monacoService.serverEchoDebounceMs = 5000;
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}in-this-file.gts`,
+      })!;
 
-      try {
-        await visitOperatorMode({
-          submode: 'code',
-          codePath: `${testRealmURL}in-this-file.gts`,
-        })!;
+      let originalPosition: MonacoSDK.Position | undefined | null;
 
-        let originalPosition: MonacoSDK.Position | undefined | null;
+      setMonacoContent(`// This is a change \n${inThisFileSource}`);
+      monacoService.updateCursorPosition(new MonacoSDK.Position(45, 0));
+      originalPosition = monacoService.getCursorPosition();
 
-        setMonacoContent(`// This is a change \n${inThisFileSource}`);
-        monacoService.updateCursorPosition(new MonacoSDK.Position(45, 0));
-        originalPosition = monacoService.getCursorPosition();
-
-        await waitFor('[data-test-saved]');
-        await waitFor('[data-test-save-idle]');
-        let currentPosition = monacoService.getCursorPosition();
-        assert.strictEqual(
-          originalPosition!.lineNumber,
-          currentPosition?.lineNumber,
-          'cursor position line number has not changed',
-        );
-        assert.strictEqual(
-          originalPosition!.column,
-          currentPosition?.column,
-          'cursor position column has not changed',
-        );
-      } finally {
-        // set this back correctly regardless of test outcome
-        monacoService.serverEchoDebounceMs = 0;
-      }
+      await waitFor('[data-test-saved]');
+      await waitFor('[data-test-save-idle]');
+      let currentPosition = monacoService.getCursorPosition();
+      assert.strictEqual(
+        originalPosition!.lineNumber,
+        currentPosition?.lineNumber,
+        'cursor position line number has not changed',
+      );
+      assert.strictEqual(
+        originalPosition!.column,
+        currentPosition?.column,
+        'cursor position column has not changed',
+      );
     });
 
     test('cursor is placed at the correct declaration when user opens definition', async function (assert) {
@@ -2400,6 +2392,44 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.ok(
         content.includes(`${testRealmURL}Country/united-states`),
         'content includes Country/united-states',
+      );
+    });
+
+    test('monaco editor shows a change made just after the file opens', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}Person/fadhlan.json`,
+      });
+      await waitUntil(() => getMonacoContent().includes('Fadhlan'), {
+        timeout: 5_000,
+      });
+
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'FadhlanYYY',
+            },
+            meta: {
+              adoptsFrom: {
+                module: rri('../person'),
+                name: 'Person',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await waitUntil(() => getMonacoContent().includes('FadhlanYYY'), {
+        timeout: 5_000,
+        timeoutMessage: 'monaco did not show the change made elsewhere',
+      });
+      assert.strictEqual(
+        JSON.parse(getMonacoContent()).data.attributes.firstName,
+        'FadhlanYYY',
+        'monaco shows the saved document',
       );
     });
 

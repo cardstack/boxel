@@ -171,6 +171,9 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 - Measure per-file wall time + peak RSS (median across N runs):
   `./scripts/measure-test-file.sh sanitize-head-html-test [runs]`
   Wraps `TEST_FILES` + `/usr/bin/time -l` with a clean per-file signal. Re-preps test-pg between runs. Used for before/after PR baselines on CS-10009 fixture migrations.
+- See which test files the suite's CI time went to between two dates (from the committed `tests/test-module-timings.json` history; no test run needed):
+  `node scripts/compare-test-module-timings.mjs --since 2026-09-10 --shard-count <n>`
+  `<n>` is the shard count of the `realm-server-test` matrix in `.github/workflows/ci.yaml`. The timings file is only rewritten when a rebalance is worth a commit, so its weights can lag by days.
 - Focusing on single test or module:
   Add `.only` to module/test declaration (`test.only('returns a 201 response', ...)`)
   Then run `pnpm test`

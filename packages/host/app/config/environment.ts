@@ -48,9 +48,10 @@ export default config as {
   secureOriginURL: string;
   signInOnSecureOrigin: boolean;
   autoSaveDelayMs: number;
+  autoSaveQuietPeriodMs: number;
+  autoSaveMaxWaitMs: number;
   monacoDebounceMs: number;
   monacoCursorDebounceMs: number;
-  serverEchoDebounceMs: number;
   loginMessageTimeoutMs: number;
   minSaveTaskDurationMs: number;
   cardRenderTimeout: number;

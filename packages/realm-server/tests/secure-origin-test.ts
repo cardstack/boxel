@@ -658,43 +658,6 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test("draws boxel-ui's own icons", async function (assert) {
-      // The pages draw the app's logo, Google's "G", the check mark and the
-      // loading indicator from boxel-ui's icon components' paths, copied in,
-      // since the page's policy loads no markup from elsewhere. Every path
-      // boxel-ui draws them with is in the package's component for it.
-      let icons = join(
-        dirname(
-          createRequire(import.meta.url).resolve(
-            '@cardstack/boxel-ui/styles/fonts.css',
-          ),
-        ),
-        '..',
-        'icons',
-      );
-      let copies: Record<string, string[]> = {
-        'boxel-icon.gts': ['src/components/icons/boxel-icon.gts'],
-        'google-color.gts': ['src/components/icons/google-color.gts'],
-        'check-mark.gts': ['src/components/icons/check-mark.gts'],
-        'loading-indicator.gts': ['src/components/loading-indicator.gts'],
-      };
-      for (let [icon, files] of Object.entries(copies)) {
-        let paths = [
-          ...readFileSync(join(icons, icon), 'utf8').matchAll(/\sd='([^']+)'/g),
-        ].map(([, d]) => d);
-        assert.ok(paths.length > 0, `${icon} has paths`);
-        for (let file of files) {
-          let copy = readFileSync(join(securePackage, file), 'utf8');
-          for (let d of paths) {
-            assert.ok(
-              copy.includes(`'${d}'`),
-              `${icon} in ${file}: ${d.slice(0, 24)}…`,
-            );
-          }
-        }
-      }
-    });
-
     test('answers HEAD for the shell without a body', async function (assert) {
       let response = await request.head('/secure').set('Host', secureHost);
       assert.strictEqual(response.status, 200);

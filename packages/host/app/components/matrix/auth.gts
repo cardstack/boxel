@@ -5,12 +5,12 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import AuthContainer from '@cardstack/secure-origin/components/auth-container.gts';
+
 import { bool, eq, or } from '@cardstack/boxel-ui/helpers';
 
 import { resetPasswordParamsFrom } from '@cardstack/host/lib/reset-password-link';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import AuthContainer from './auth-container';
 
 import ForgotPassword, { type ResetPasswordParams } from './forgot-password';
 import Login from './login';

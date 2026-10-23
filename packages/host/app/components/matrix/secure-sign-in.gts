@@ -5,6 +5,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { Button } from '@cardstack/pretui/components/button';
 import { Spinner } from '@cardstack/pretui/components/spinner';
+import AuthContainer from '@cardstack/secure-origin/components/auth-container.gts';
 import { restartableTask } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
@@ -23,8 +24,6 @@ import {
   consumeLoginTokenFromUrl,
   peekLoginToken,
 } from '@cardstack/host/utils/login-token';
-
-import AuthContainer from './auth-container';
 
 import { extractMatrixErrorMessage } from './login';
 

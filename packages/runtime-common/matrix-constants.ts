@@ -268,7 +268,7 @@ export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
   },
 ] as const;
 
-export const DEFAULT_FALLBACK_MODEL_ID = 'openai/gpt-6-luna';
+export const DEFAULT_FALLBACK_MODEL_ID = 'anthropic/claude-haiku-5.5';
 
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
