@@ -227,12 +227,15 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
   return next();
 }
 
-// The request URL as the log lines print it: any `token` query param is
-// masked, because two token-bearing families travel there — capture-URL
-// tokens on `_capture/` GETs and full session JWTs on `_download-realm`
-// links — and these lines ship to Loki. (ALB access logs still record the
-// raw request line; the capture token's single-URL scope and short TTL are
-// the mitigation there.)
+// The request URL as the log lines print it, with the credentials that
+// travel in a query string masked, because these lines ship to Loki: a
+// `token` (capture-URL tokens on `_capture/` GETs and full session JWTs on
+// `_download-realm` links) and a `loginToken` (the single-use Matrix login
+// token `boxel browse` and Synapse's SSO hand the app page). (ALB access logs
+// still record the raw request line; each token's single-URL scope or single
+// use and short TTL are the mitigation there.)
+const MASKED_QUERY_PARAMS = ['token', 'loginToken'];
+
 function loggableRequestURL(ctxt: Koa.Context): string {
   let url = fullRequestURL(ctxt);
   // A key route takes nothing in its query string, so whatever a client put
@@ -240,11 +243,16 @@ function loggableRequestURL(ctxt: Koa.Context): string {
   if (url.search && isKeyRoutePath(url.pathname)) {
     return `${url.origin}${url.pathname}`;
   }
-  if (!url.searchParams.has('token')) {
+  let present = MASKED_QUERY_PARAMS.filter((name) =>
+    url.searchParams.has(name),
+  );
+  if (present.length === 0) {
     return url.href;
   }
   let masked = new URL(url.href);
-  masked.searchParams.set('token', 'REDACTED');
+  for (let name of present) {
+    masked.searchParams.set(name, 'REDACTED');
+  }
   return masked.href;
 }
 

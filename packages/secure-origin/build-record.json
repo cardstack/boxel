@@ -1,6 +1,7 @@
 {
   "entries": {
     "credentials.html": [
+      "app-origins.js",
       "credentials.css",
       "credentials.html",
       "credentials.js",
@@ -10,6 +11,7 @@
       "shared.js"
     ],
     "index.html": [
+      "app-origins.js",
       "index.html",
       "layers.css",
       "session.js",
@@ -20,6 +22,16 @@
     ]
   },
   "files": {
+    "app-origins.js": {
+      "bytes": 563,
+      "modules": [
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/security/app-origins.js",
+          "size": 966
+        }
+      ]
+    },
     "credentials.css": {
       "bytes": 1046,
       "sources": [
@@ -30,10 +42,10 @@
       ]
     },
     "credentials.html": {
-      "bytes": 963
+      "bytes": 1052
     },
     "credentials.js": {
-      "bytes": 16961,
+      "bytes": 16453,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -57,11 +69,6 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/security/app-origins.js",
-          "size": 966
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/security/credentials.js",
           "size": 12292
         },
@@ -73,7 +80,7 @@
       ]
     },
     "index.html": {
-      "bytes": 1156
+      "bytes": 1307
     },
     "layers.css": {
       "bytes": 48,
@@ -85,12 +92,12 @@
       ]
     },
     "session.js": {
-      "bytes": 4817,
+      "bytes": 5218,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/session.js",
-          "size": 7093
+          "size": 7780
         }
       ]
     },
@@ -645,7 +652,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 24557,
+      "bytes": 26233,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -725,6 +732,14 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/040e10289d.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/2d5d118eaf.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/3cd83a5a00.css"
         },
         {
@@ -733,12 +748,16 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/sign-in/cd2fde4553.css"
+          "module": "src/shell/sign-in/e427278d04.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/f689b7b4e7.css"
         }
       ]
     },
     "shell.js": {
-      "bytes": 58834,
+      "bytes": 71111,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -783,22 +802,27 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/password-reset.gts",
-          "size": 6963
+          "size": 7055
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/register.gts",
-          "size": 8973
+          "size": 9019
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/sign-in.gts",
-          "size": 3791
+          "size": 3916
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/security/app-handoff.js",
+          "size": 1795
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/cli-handoff.js",
-          "size": 1513
+          "size": 2781
         },
         {
           "package": "@cardstack/secure-origin",
@@ -813,7 +837,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/cli-links.ts",
-          "size": 344
+          "size": 349
         },
         {
           "package": "@cardstack/secure-origin",
@@ -833,7 +857,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/forgot-password.gts",
-          "size": 2303
+          "size": 2471
         },
         {
           "package": "@cardstack/secure-origin",
@@ -848,7 +872,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/reset-password.gts",
-          "size": 2538
+          "size": 2852
         },
         {
           "package": "@cardstack/secure-origin",
@@ -858,7 +882,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/register/register.gts",
-          "size": 9758
+          "size": 9979
         },
         {
           "package": "@cardstack/secure-origin",
@@ -868,7 +892,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/shell.js",
-          "size": 614
+          "size": 688
         },
         {
           "package": "@cardstack/secure-origin",
@@ -877,13 +901,23 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/cli-auth-page.gts",
+          "size": 3322
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/cli-handoff.gts",
-          "size": 520
+          "size": 1853
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/cli-sign-in-page.gts",
           "size": 1240
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/cli-wait-notice.gts",
+          "size": 679
         },
         {
           "package": "@cardstack/secure-origin",
@@ -903,22 +937,27 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/sign-in-form.gts",
-          "size": 3733
+          "size": 5262
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/sign-in-page.gts",
-          "size": 1491
+          "size": 1534
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/sign-out-page.gts",
+          "size": 774
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/signed-in.gts",
-          "size": 614
+          "size": 4859
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/urls.js",
-          "size": 945
+          "size": 1192
         }
       ]
     }

@@ -13,6 +13,7 @@ import {
 } from '../../security/matrix.js';
 import type { CliCallback } from '../../security/cli-handoff.js';
 import { resetLink } from './reset-link.ts';
+import CliWaitNotice from '../sign-in/cli-wait-notice.gts';
 
 // The first page of resetting a forgotten password (`forgot-password`), on
 // the screens the app draws too: it asks the Matrix server to email a
@@ -103,7 +104,11 @@ export default class ForgotPassword extends Component<Signature> {
           @email={{this.state.sentTo}}
           @resending={{this.state.sending}}
           @onResend={{this.resend}}
-        />
+        >
+          {{#if @cli}}
+            <CliWaitNotice @cli={{@cli}} />
+          {{/if}}
+        </ResetEmailSent>
       {{else}}
         <ForgotPasswordForm
           @email={{this.state.email}}

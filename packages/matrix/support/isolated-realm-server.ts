@@ -621,6 +621,9 @@ export async function startServer({
     // the harness serves expects it where the dev stack puts it.
     `--securePort=${SECURE_ORIGIN_PORT}`,
     `--secureOriginURL='${secureOriginURL}'`,
+    // A host app on the developer's own machine, as every deployment lists
+    // it, so a sign-in handed to a loopback page can be tested.
+    `--secureOriginAppOrigin='http://localhost:*'`,
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,

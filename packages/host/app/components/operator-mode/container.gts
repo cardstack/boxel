@@ -33,10 +33,12 @@ import {
 
 import AccountSwitchFailed from '@cardstack/host/components/matrix/account-switch-failed';
 import Auth from '@cardstack/host/components/matrix/auth';
+import SecureSignIn from '@cardstack/host/components/matrix/secure-sign-in';
 
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import HostSubmode from '@cardstack/host/components/operator-mode/host-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
+import { signInOnSecureOrigin } from '@cardstack/host/lib/secure-sign-in';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -207,6 +209,12 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
+  // Read when the page renders, so a deployment's setting applies without a
+  // rebuild (see `lib/secure-sign-in`).
+  private get signInOnSecureOrigin() {
+    return signInOnSecureOrigin();
+  }
+
   private get isCodeMode() {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
@@ -233,7 +241,11 @@ export default class OperatorModeContainer extends Component<Signature> {
           this.matrixService.isInitializingNewUser
         )
       }}
-        <Auth />
+        {{#if this.signInOnSecureOrigin}}
+          <SecureSignIn />
+        {{else}}
+          <Auth />
+        {{/if}}
       {{else if this.isCodeMode}}
         <CodeSubmode @saveSourceOnClose={{perform this.saveSource}} />
       {{else if this.isHostMode}}

@@ -176,6 +176,22 @@ function adminCreds(deps: SecureSessionDeps) {
   };
 }
 
+// Whether this server can sign anyone in on the secure origin: every sign-in
+// drives the Matrix server's admin API, so without its credentials each one
+// answers 503.
+export function secureSignInConfigured({
+  matrixURL,
+  matrixAdminUsername,
+  matrixAdminPassword,
+}: {
+  matrixURL: URL;
+  matrixAdminUsername?: string;
+  matrixAdminPassword?: string;
+}): boolean {
+  return resolveAdminCreds(matrixURL, matrixAdminUsername, matrixAdminPassword)
+    .ok;
+}
+
 // The realm server's own Matrix client signs in on first use.
 async function ensureLoggedIn(matrixClient: MatrixClient): Promise<void> {
   if (!matrixClient.isLoggedIn()) {
@@ -1024,6 +1040,93 @@ export async function isSecureSession(
     { bind: [id, token.user] },
   );
   return rows.length > 0;
+}
+
+export interface LoginToken {
+  loginToken: string;
+  expiresInMs?: number;
+}
+
+// A single-use Matrix login token for the user a live secure session belongs
+// to: the hand-off by which a sign-in on the secure origin signs the app, or
+// the CLI, in to Matrix. The secure origin's page carries the token to its
+// destination by a top-level navigation, and the destination redeems it with
+// an `m.login.token` login, which makes a device of its own. The secure session
+// itself never leaves the secure origin.
+//
+// The token comes from the Matrix server's own login-token request (MSC3882
+// `login/get_token`), made with an access token minted for the user through
+// the admin API and logged out straight after. So the Matrix server binds the
+// token to the user, honours it once, and expires it after its
+// `login_via_existing_session.token_timeout`. It allows one such request per
+// user a minute; a request inside that minute is refused with when to try
+// again.
+export async function mintLoginToken(
+  deps: SecureSessionDeps,
+  token: RealmServerTokenClaim | undefined,
+): Promise<LoginToken> {
+  if (!token?.user || !(await isSecureSession(deps.dbAdapter, token))) {
+    throw new SecureSessionError(
+      401,
+      'signed-out',
+      'this session is signed out',
+    );
+  }
+  let minted = await asUser(deps, token.user, async (accessToken) => {
+    let response = await fetch(
+      new URL('_matrix/client/v1/login/get_token', deps.matrixClient.matrixURL),
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      },
+    );
+    let body: Record<string, any> = {};
+    try {
+      body = (await response.json()) as Record<string, any>;
+    } catch {
+      // Judged by its status alone.
+    }
+    if (response.status === 429) {
+      let retryAfterMs = matrixRetryAfterMs(response, body);
+      throw new SecureSessionError(
+        429,
+        'rate-limited',
+        'a sign-in was handed over moments ago; try again shortly',
+        {
+          retryAfterMs:
+            retryAfterMs !== undefined &&
+            Number.isFinite(retryAfterMs) &&
+            retryAfterMs >= 0
+              ? Math.ceil(retryAfterMs)
+              : undefined,
+        },
+      );
+    }
+    if (!response.ok || typeof body.login_token !== 'string') {
+      log.error(
+        `the Matrix server did not mint a login token: HTTP ${response.status} ${body.errcode ?? ''}`,
+      );
+      throw unavailable();
+    }
+    return {
+      loginToken: body.login_token,
+      ...(typeof body.expires_in_ms === 'number'
+        ? { expiresInMs: body.expires_in_ms }
+        : {}),
+    };
+  });
+  if (!minted) {
+    throw new SecureSessionError(
+      401,
+      'signed-out',
+      'this session is signed out',
+    );
+  }
+  return minted;
 }
 
 // Signs a secure session out by expiring its row. The row stays until it is

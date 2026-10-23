@@ -17,6 +17,7 @@ import { NewPassword } from '../new-password.ts';
 import { cliParams, modeURL } from '../urls.js';
 import { signInURL } from '../cli-links.ts';
 import type { ResetLink } from './reset-link.ts';
+import CliWaitNotice from '../sign-in/cli-wait-notice.gts';
 
 // Where a password reset link lands (`reset-password`), once it was
 // confirmed at the Matrix server: the new password is set here. Setting it
@@ -96,7 +97,11 @@ export default class ResetPassword extends Component<Signature> {
   <template>
     <AuthContainer>
       {{#if this.state.done}}
-        <ResetPasswordDone @onSignIn={{this.goToSignIn}} />
+        <ResetPasswordDone @onSignIn={{this.goToSignIn}}>
+          {{#if @link.cli}}
+            <CliWaitNotice @cli={{@link.cli}} />
+          {{/if}}
+        </ResetPasswordDone>
       {{else}}
         <ResetPasswordForm
           @submitDisabled={{this.submitDisabled}}
@@ -106,6 +111,9 @@ export default class ResetPassword extends Component<Signature> {
           @error={{this.state.error}}
           @onSubmit={{this.submit}}
         >
+          {{#if @link.cli}}
+            <CliWaitNotice @cli={{@link.cli}} />
+          {{/if}}
           <NewPasswordFields
             @password={{this.password}}
             @passwordLabel='Enter New Password'

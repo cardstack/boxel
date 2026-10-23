@@ -20,10 +20,11 @@ A secure session is a realm-server JWT with `user`, `sessionRoom` and
 `secureSession`: the id of a `secure_sessions` row. It works anywhere the
 user's session does, and additionally:
 
-| Gate                       | Requires                                                                    |
-| -------------------------- | --------------------------------------------------------------------------- |
-| `POST /_key-write-tickets` | `isSecureSession`: the claim, naming a row of the token's user, not expired |
-| `GET /_secure-session`     | The same; answers 204, or 401 `signed-out`                                  |
+| Gate                                | Requires                                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `POST /_key-write-tickets`          | `isSecureSession`: the claim, naming a row of the token's user, not expired                      |
+| `GET /_secure-session`              | The same; answers 204, or 401 `signed-out`                                                       |
+| `POST /_secure-session/login-token` | The same, and `Origin` the secure origin's; answers a single-use Matrix login token for the user |
 
 Minting also still requires the request's `Origin` to be the secure origin's
 or absent (the CLI). Only `createSecureSessionJWT` mints the claim (ADR 005
@@ -212,16 +213,104 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
    room, so a sign-in that fails part way sets up again.
 
 Both POSTs answer only a request whose `Origin` is the secure origin's. The
-CLI never calls them: `boxel keys sign-in` opens
-`<secure origin>?mode=cli-sign-in&port=…&state=…`, and the window posts the
-session (`secure_session`, `user_id`, `expires_at`, `state`) to
+CLI never calls them; it opens a page of the window, which signs in with
+`client: 'cli'` and hands the result to the CLI's listener at
 `http://127.0.0.1:<port>/callback` (after a Google round trip too; the CLI's
-port and state wait in session storage). A Google sign-in the user cancels
+port and state wait in session storage):
+
+- `boxel keys sign-in` opens `<secure origin>?mode=cli-sign-in&port=…&state=…`,
+  and the window posts the session (`secure_session`, `user_id`,
+  `expires_at`, `state`).
+- `boxel profile add` opens `<secure origin>?mode=cli-auth&port=…&state=…&session=secure`
+  when `GET /_secure-origin` says `cliAuth: true`, and the host app's
+  `/cli-auth` otherwise or under `--host-url`. Once signed in, the window
+  mints a Matrix login token with the session (`POST
+/_secure-session/login-token`) and posts it as `login_token` beside the
+  session's fields. The CLI redeems it (`m.login.token`) for a Matrix device
+  of its own and keeps the secure session on the profile, so one sign-in
+  serves realm commands and `boxel keys` alike. A `cli-auth` link without
+  `session=secure` is one for a CLI that can't hold a secure session (one
+  from before secure sessions opens the host app's `/cli-auth`, which
+  forwards to this page when the app signs in on the secure origin). For
+  it, the window ends the session it signed in and navigates to the listener
+  with `?state=…&loginToken=…`, the form every released CLI accepts.
+
+The terminal and CI sign-ins (`--no-browser`, `-u` with `BOXEL_PASSWORD`,
+`profile migrate`, and the re-authentication prompt) log in to Matrix with
+`m.login.password` directly and never reach the secure origin, so the Matrix
+server's password login stays enabled. A Google sign-in the user cancels
 (`error=access_denied`) returns the window to the page it started from: the
 `cli-sign-in` page for the same listener, or the window's own sign-in. A
 Google sign-in that fails any other way shows the error, with Start again
 pointing at that same page. The shell's CSP allows that form
 target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1.4).
+
+## Handing a sign-in to the app
+
+With `SIGN_IN_ON_SECURE_ORIGIN=true` on the realm server that serves the app,
+the app draws no sign-in form. The realm server writes the setting into the
+host's config as `signInOnSecureOrigin` when it builds the app's page, so a
+deployment turns it on or off without a rebuild. Outside development the
+realm server builds that page once and keeps it for as long as the process
+runs, so a changed setting takes effect when the realm server next starts,
+as on the next deploy. Unset, the host keeps what its build set, which is
+off.
+
+1. A signed-out app (`components/matrix/secure-sign-in.gts`) replaces itself
+   with `<secure origin>?mode=sign-in#return=<the app page, path and query>`.
+   `return` rides in the fragment, which no firewall or access log sees. The
+   page is also a plain **Sign in to Boxel** link to the same address. A tab
+   that comes back signed out within two minutes of being sent stops and
+   says "Sign-in didn’t complete" (`sessionStorage`), and an app in a frame
+   is never navigated: its link opens a new tab.
+2. The sign-in page keeps `return` for the tab, in `sessionStorage`, once it
+   checks out against the app origins the realm server lists
+   (`boxel-app-origins` in the shell's markup: the credential fields'
+   `--secureOriginAppOrigin` list and the realm server's own origin). Every
+   way the window signs in (password, Google, a new account) ends on
+   `SignedIn`, which then mints a login token, `POST
+/_secure-session/login-token` under the window's secure session, and
+   replaces the location with `return#loginToken=…`, the token in the
+   fragment so no server log or access log records it. A `return` on a
+   loopback origin, `http:` or `https:`, first asks "Continue to
+   http://localhost:4200?", unless it is the realm server's own. A `return` on an
+   origin that isn't listed is dropped, and the window just says it is
+   signed in.
+3. The app redeems the token (from the fragment, or the query, where
+   `boxel browse` and Synapse's SSO put it) with an `m.login.token` login
+   before it loads any card, takes it out of the address, and boots as after any sign-in:
+   realm-server session, realm tokens, service-worker sync.
+   A token for another account than the one stored in the browser switches
+   accounts (`MatrixService.switchAccount`), signing the stored one out. A
+   token for the same account boots alongside it and signs nothing out. This
+   happens when two tabs that signed out together each come back from the
+   secure origin. Signing the stored session out would sign the other tab out,
+   and would end the secure windows the sign-in just came from.
+
+The login token is the Matrix server's own (MSC3882 `login/get_token`),
+asked for with an admin-minted token for the user that is logged out right
+after. The Matrix server binds it to the user, honours it once, and expires
+it after `login_via_existing_session.token_timeout` (two minutes on every
+deployment). It mints one per user a minute, and the route passes a refusal
+on as `429 rate-limited` with `meta.retryAfterMs`. The window's
+`loginToken()` waits and tries again for up to about a minute, so signing in
+again straight after signing out shows "Signing you in…" for a while rather
+than an error. The route answers only the secure origin (403 `forbidden`)
+and only a live secure session (401 `signed-out`).
+
+Signing out of the app (`MatrixService.signOut()`) runs the app's own
+`logout()` first, which ends the Matrix device, clears the service worker's
+realm tokens and asks the realm server to end the user's window sessions.
+It then replaces the location with
+`<secure origin>?mode=sign-out#return=<app root>` (an app in a frame signs
+out of its own session only, since the secure origin can't be framed), which forgets the
+window's session, ends it on the server, and goes back to a listed `return`.
+
+Links already sent keep working through the app: a reset link
+(`?clientSecret=…#email=…&sid=…`) is replaced by the secure origin's
+`reset-password` with all three in its fragment, and an older CLI's
+`/cli-auth?port=&state=` by the secure origin's `cli-auth` mode with the
+same port and state.
 
 ## Refusals
 
@@ -229,8 +318,8 @@ target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 403 `forbidden`           | A sign-in not from the secure origin                                                                                                                                                                                       |
 | 401 `invalid-credentials` | Any failed password sign-in (no account, no password, wrong)                                                                                                                                                               |
-| 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure                                                                                                                                                  |
-| 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`                                                                                                                                                 |
+| 401 `signed-out`          | `GET /_secure-session` or `POST /_secure-session/login-token` with a session that isn't, or is no longer, secure                                                                                                           |
+| 429 `rate-limited`        | Too many failed password sign-ins for the account, or, from `POST /_secure-session/login-token`, a login token already minted for the user within the minute (the Matrix server's limit); see `meta.retryAfterMs`          |
 | 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in                                                                                                                                                        |
 | 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                                                                                                                                                              |
 | 403 `ambiguous-email`     | More than one account holds the unlinked Google account's email                                                                                                                                                            |

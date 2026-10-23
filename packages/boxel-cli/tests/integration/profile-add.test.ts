@@ -20,6 +20,8 @@ import {
   matrixURL,
 } from '../helpers/integration.ts';
 import { runBoxel } from '../helpers/run-boxel.ts';
+import { secureOriginForProfiles } from '../../src/lib/secure-session.ts';
+import { browserLogin } from '../../src/lib/sso-login.ts';
 
 const realmServerUrl = `${TEST_REALM_SERVER_URL}/`;
 const matrixId = `@${TEST_USERNAME}:localhost`;
@@ -187,5 +189,31 @@ describe('boxel profile add (integration, subprocess)', () => {
     expect(second.matrixAccessToken).not.toBe(first.matrixAccessToken);
     expect(second.matrixDeviceId).not.toBe(first.matrixDeviceId);
     expect(second.password).toBeUndefined();
+  });
+});
+
+// A realm server without a secure origin, as one from before secure sessions
+// is: `boxel profile add` opens the host app's own `/cli-auth`, as it always
+// has.
+describe('boxel profile add against a realm server without a secure origin', () => {
+  it('signs in on the host app', async () => {
+    expect(await secureOriginForProfiles(realmServerUrl)).toBeUndefined();
+    let opened: string | undefined;
+    await expect(
+      browserLogin({
+        matrixUrl: matrixURL.href,
+        hostUrl: realmServerUrl,
+        secureOriginUrl: await secureOriginForProfiles(realmServerUrl),
+        timeoutMs: 1000,
+        log: () => {},
+        openBrowserFn: async (link) => {
+          opened = link;
+          return true;
+        },
+      }),
+    ).rejects.toThrow(/Timed out/);
+    expect(new URL(opened!).href.startsWith(`${realmServerUrl}cli-auth?`)).toBe(
+      true,
+    );
   });
 });

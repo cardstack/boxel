@@ -119,6 +119,7 @@ import {
   handleEndWindowSessions,
   handleGoogleSignIn,
   handleGoogleSignInStart,
+  handleMintLoginToken,
   handlePasswordChange,
   handlePasswordSignIn,
   handleSecureOriginInfo,
@@ -312,6 +313,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     SECURE_SESSION_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleEndSecureSession(args),
+  );
+  router.post(
+    `${SECURE_SESSION_PATH}/login-token`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMintLoginToken(args),
   );
   router.delete(
     SECURE_SESSIONS_PATH,

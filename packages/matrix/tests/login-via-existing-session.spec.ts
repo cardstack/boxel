@@ -277,6 +277,37 @@ test.describe('login_via_existing_session', () => {
     ).toBe(401);
   });
 
+  test('a ?loginToken for the account already stored leaves its session signed in', async ({
+    page,
+  }) => {
+    let user = await createSubscribedUserAndLogin(page, 'same-account-token');
+    await assertLoggedIn(page, {
+      displayName: user.username,
+      userId: user.credentials.userId,
+    });
+    let storedAccessToken = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('auth') ?? '{}').access_token,
+    );
+
+    let { login_token } = await mintLoginToken(user.credentials.accessToken);
+    // Away first: a navigation that changes only the fragment doesn't reload
+    // the app.
+    await page.goto('about:blank');
+    await page.goto(`${appURL}#loginToken=${login_token}`);
+    await assertLoggedIn(page, {
+      displayName: user.username,
+      userId: user.credentials.userId,
+    });
+    expect(new URL(page.url()).hash).not.toContain('loginToken');
+
+    // Another tab may be running the stored session, so it isn't logged out.
+    let whoami = await fetch(
+      `${getSynapseURL()}/_matrix/client/v3/account/whoami`,
+      { headers: { Authorization: `Bearer ${storedAccessToken}` } },
+    );
+    expect(whoami.status, 'the stored session is still valid').toBe(200);
+  });
+
   test('the minted token carries the configured 2-minute lifetime and exchanges for a new session', async () => {
     let { credentials } = await createUser('login-token');
 

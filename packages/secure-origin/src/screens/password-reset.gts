@@ -115,6 +115,8 @@ interface ResetEmailSentSignature {
     resending?: boolean;
     onResend: (event: Event) => void;
   };
+  // A notice under the heading, such as how long the CLI waits.
+  Blocks: { default: [] };
 }
 
 // Waiting for the user to follow the reset link in their email.
@@ -127,6 +129,7 @@ export const ResetEmailSent: TemplateOnlyComponent<ResetEmailSentSignature> =
       data-test-secure-title
       data-test-email-validation
     >Please check your email to reset your password</span>
+    {{yield}}
     <ul class='email-validation-instruction'>
       <li>We've sent an email to <b>{{@email}}</b></li>
       <li>Click on the link within the email to reset your password</li>
@@ -257,6 +260,8 @@ interface ResetPasswordDoneSignature {
   Args: {
     onSignIn: (event: Event) => void;
   };
+  // A notice above Sign In, such as how long the CLI waits.
+  Blocks: { default: [] };
 }
 
 export const ResetPasswordDone: TemplateOnlyComponent<ResetPasswordDoneSignature> =
@@ -270,6 +275,7 @@ export const ResetPasswordDone: TemplateOnlyComponent<ResetPasswordDoneSignature
     >Your password is now reset</span>
     <p class='info'>Your password has been successfully reset. You can use the
       link below to sign into your Boxel account with your new password.</p>
+    {{yield}}
     <div class='button-wrapper'>
       <AuthButton
         data-test-back-to-login-btn

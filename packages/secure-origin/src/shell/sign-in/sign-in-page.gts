@@ -1,5 +1,6 @@
-// The `sign-in` mode: the window's own session. Signed in, the window says so;
-// otherwise it shows the sign-in form.
+// The `sign-in` mode: the window's own session. Signed in, the window says so,
+// or hands the sign-in over to the app page that sent the user here (the
+// `return` in the address's fragment); otherwise it shows the sign-in form.
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
@@ -12,6 +13,7 @@ import {
   storeSession,
 } from '../../security/session.js';
 import type { Session } from '../../security/session.js';
+import { appOrigins, rememberReturn } from '../../security/app-handoff.js';
 import AuthContainer from '../../components/auth-container.gts';
 
 import MessagePage from './message-page.gts';
@@ -48,6 +50,7 @@ export default class SignInPage extends Component {
 
   constructor(owner: Owner, args: object) {
     super(owner, args);
+    rememberReturn(appOrigins(this.config));
     // The window has no sign-out control; this ends its session from the
     // browser's console. Signed out here, the window shows its sign-in again.
     window.boxelSignOut = async () => {
