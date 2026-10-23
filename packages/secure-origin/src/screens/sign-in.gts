@@ -3,9 +3,10 @@
 // block, the link to reset a forgotten password, Sign In, and the link to
 // create an account. A page that signs in for something other than the app,
 // such as the CLI's, names itself with `@title` and says what signing in
-// grants in its `intro` block, in place of the Google subtitle. It holds no state and sends nothing; the caller decides what each
-// control does. On the secure origin the fields are its own inputs; in the app
-// they are the credential frame.
+// grants in its `intro` block, in place of the Google subtitle. It holds no
+// state and sends nothing; the caller decides what each control does. On the
+// secure origin the fields are its own inputs; in the app they are the
+// credential frame.
 //
 // Each control carries the test attributes of both origins' suites.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
