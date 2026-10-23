@@ -287,6 +287,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       :global(.input-container .invalid + .validation-icon-container) {
         display: none;
       }
+      /* with the icon hidden, give back the column BoxelInput reserves */
+      :global(
+        .input-container .boxel-input.invalid:has(+ .validation-icon-container)
+      ) {
+        padding-inline-end: var(--boxel-input-padding-inline-end, 0);
+      }
       .operator-mode {
         background: var(--operator-mode-bg-color);
         padding: 0;

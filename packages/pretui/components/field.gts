@@ -42,12 +42,11 @@ export interface FieldSignature {
 // THE wrapper every input needs: label[for] + reserved message line so
 // side-by-side fields never shift when an error appears (alignment law).
 //
-// 2026-08-13 (boxel-catalog E11): the message line is now a `Cue`, so its
-// tone carries a glyph as well as a colour and a status announces itself;
-// the control row gained `<:inlineStart>` / `<:inlineEnd>` accessory slots at
-// the LOGICAL edges (a currency prefix, a unit suffix, a verified tick); and
-// the message line finally has an id, yielded as the block's second param so
-// a control can point `aria-describedby` at it.
+// The message line is a `Cue`, so its tone carries a glyph as well as a
+// color and a status announces itself. `<:inlineStart>` / `<:inlineEnd>` hold
+// accessories at the LOGICAL edges of the control row (a currency prefix, a
+// unit suffix, a verified tick). The message line's id is the block's second
+// param, so a control can point `aria-describedby` at it.
 export class Field extends Component<FieldSignature> {
   get controlId() {
     return `${guidFor(this)}-ctl`;
@@ -118,15 +117,15 @@ export class Field extends Component<FieldSignature> {
       @layer PretComposite {
         .pretui-fieldw {
           display: grid;
-          gap: 5px;
+          gap: var(--boxel-sp-3xs);
           grid-template-rows: auto auto auto;
           align-content: start;
           justify-items: start;
         }
         .pretui-fieldw > label {
-          line-height: 16px;
-          font-size: var(--text-ui, 12px);
-          font-weight: 500;
+          font-size: var(--boxel-ui-label-font-size);
+          font-weight: var(--boxel-ui-label-font-weight);
+          line-height: var(--boxel-ui-label-line-height);
           color: var(--foreground);
         }
         /* the control row: accessories sit at the LOGICAL edges, so an RTL
@@ -157,22 +156,27 @@ export class Field extends Component<FieldSignature> {
           justify-self: stretch;
         }
         .pretui-fieldmsg {
-          min-height: 16px;
-          line-height: 16px;
+          min-height: 1rem;
+          line-height: 1rem;
         }
         /* the hint / error spans are gone: the message line is a <Cue>, which
            brings its own type scale, its own tone and its own glyph */
         .pretui-fieldw[data-invalid] :deep(.pretui-input) {
           box-shadow: 0 0 0 1px var(--destructive);
-          background: color-mix(in oklch, var(--destructive) 4%, var(--field, var(--boxel-light)));
+          background-color: color-mix(in oklch, var(--destructive) 4%, var(--field));
         }
         /* boxel-ui-wrapped controls: the invalid dress travels through the
            token channel — repoint the wrapper's --border/--background and the
-           inner BoxelInput re-dresses itself; no CSS reaches boxel markup. */
+           inner BoxelInput re-dresses itself; no CSS reaches boxel markup.
+           A control sets --pretui-invalid-border/-background on its wrapper
+           to choose its own dress. */
         .pretui-fieldw[data-invalid] :deep(.pretui-inputwrap),
         .pretui-fieldw[data-invalid] :deep(.pretui-boxelwrap) {
-          --border: var(--destructive);
-          --background: color-mix(in oklch, var(--destructive) 4%, var(--field, var(--boxel-light)));
+          --border: var(--pretui-invalid-border, var(--destructive));
+          --background: var(
+            --pretui-invalid-background,
+            color-mix(in oklch, var(--destructive) 4%, var(--field))
+          );
         }
       }
     </style>

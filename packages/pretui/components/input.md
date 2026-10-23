@@ -1,6 +1,6 @@
 ## What it is
 
-The kit's single-line text control. Every typed value that is not a picker goes through it, and the typed-input family — **EmailInput**, **PhoneInput**, **UrlInput**, **PasswordInput**, **NumberInput**, **SearchInput** — is built on the same underlying machinery with format-specific behaviour layered on. Reach for `Input` directly for free text; reach for the typed sibling when the value has a shape, because those add validation, `inputmode`, `autocomplete` and affordances you would otherwise re-invent. For multi-line use **Textarea**; for a value chosen from a list use **Select**; for a value chosen from a list _or_ typed freely use **Combobox**.
+The kit's single-line text control. Every typed value that is not a picker goes through it, and the typed-input family — **EmailInput**, **PhoneInput**, **UrlInput**, **PasswordInput**, **NumberInput**, **SearchInput** — is built on the same underlying machinery with format-specific behavior layered on. Reach for `Input` directly for free text; reach for the typed sibling when the value has a shape, because those add validation, `inputmode`, `autocomplete` and affordances you would otherwise re-invent. For multi-line use **Textarea**; for a value chosen from a list use **Select**; for a value chosen from a list _or_ typed freely use **Combobox**.
 
 ## The contract
 
@@ -24,7 +24,7 @@ Two places the channel cannot reach, handled by a single inline `style`: the UA 
 
 Pretui sits deliberately between them. It does not own its label (Field/FormField does), which avoids the two-labels problem you hit when a form layout also wants to place labels. But unlike shadcn it _does_ carry `@helperText` and `@errorMessage`, because those are ARIA-wired by the layer below and re-implementing them at the wrapper would mean re-implementing the wiring.
 
-The genuine improvement over both: **invalid styling travels through the token channel.** Field sets `data-invalid` on itself, and its stylesheet repoints `--border` and `--background` on the wrapper — the inner control re-dresses itself. Compare the usual approach of a `.error` class threaded down through every layer. It also means a theme can change what "invalid" looks like by changing one token.
+The genuine improvement over both: **invalid styling travels through the token channel.** Field sets `data-invalid` on itself, and its stylesheet repoints `--border` on the wrapper — the inner control re-dresses itself. Compare the usual approach of a `.error` class threaded down through every layer. It also means a theme can change what "invalid" looks like by changing one token.
 
 ## Accessibility
 
@@ -33,17 +33,18 @@ Native `<input>`; no APG pattern needed. The wiring that matters is inherited fr
 Honest gaps:
 
 - **`@invalid` and `@errorMessage` are independent.** Passing `@invalid` without `@errorMessage` produces a red control with nothing announced; passing `@errorMessage` without `@invalid` renders nothing (the error row is gated on validation state). Nothing warns you. Always pass both, or use **FormField**, which does it for you.
-- **No accessible name of its own.** An `<Input>` used outside `Field`/`FormField`/`FormField`'s descendants and without an explicit `aria-label` is unlabelled. A placeholder is not a label.
+- **No accessible name of its own.** An `<Input>` used outside `Field`/`FormField`/`FormField`'s descendants and without an explicit `aria-label` is unlabeled. A placeholder is not a label.
 - `@required` sets the native attribute, which is correct, and suppresses the "Optional" indicator. `@optional` is a purely visual marker with no ARIA meaning — fine, but do not read it as the inverse of `@required`.
 - `@disabled` uses the native attribute, so the control leaves the tab order and its value is not submitted. If you need a read-only-but-focusable field, pass `readonly` through `...attributes` instead.
-- Focus ring is the theme's `--ring`, applied by BoxelInput.
-- Hover, invalid, disabled and focus come from BoxelInput, so they don't yet match Select and Autocomplete: hover takes the full `currentColor` edge, invalid takes `--destructive` rather than `--destructive-ink`, disabled is 0.5 opacity rather than 0.45, and focus is a 1px ring-colored border plus outline rather than a 1.5px ring.
+- The focus ring is the kit's 2px `--ring` outline laid over the edge, so it still shows in forced-colors mode.
 
 ## Theming
 
 Input, **Select** and **Autocomplete** share one field look at rest: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 2px)`), a `--boxel-form-control-height-sm` (1.75rem) height and `--boxel-font-size-xs` text, with the helper and error rows and the Optional label a step below at `--boxel-font-size-2xs`. On touch screens (`pointer: coarse`) the field's text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus.
 
-Forwarded into boxel-ui: `--boxel-form-control-height`, `--boxel-input-height`, `--boxel-form-control-border-radius`, `--boxel-font-size-sm` (the helper and error rows), `--boxel-sp-xs`, `--boxel-sp-sm`.
+The three share their states too. Hover pulls the edge 30% toward `--foreground`, only where the pointer can hover, so the edge doesn't stick after a tap. Invalid is a `--destructive-ink` edge, since the `--destructive` fill misses the 3:1 a field boundary needs; hovering the field (not its message rows) darkens it the same 30% toward `--foreground`, and focus swaps it for the ring, as GOV.UK, Carbon and Primer do. Disabled is 0.45 opacity with the usual edge and no error row, invalid or not, since a disabled field can't be fixed; read-only isn't dimmed, since the field can still be focused and its value copied. Focus is a 2px `--ring` outline.
+
+Forwarded into boxel-ui: `--boxel-form-control-height`, `--boxel-input-height`, `--boxel-form-control-border-radius`, `--boxel-font-size-sm` (the helper and error rows), `--boxel-sp-xs`, `--boxel-sp-sm`, and the state knobs `--boxel-input-hover-border-color`, `--boxel-input-outline`, `--boxel-input-outline-offset`, `--boxel-input-invalid-color`, `--boxel-input-invalid-box-shadow`, `--boxel-input-invalid-focus-outline`, `--boxel-input-invalid-focus-box-shadow`, `--boxel-input-disabled-opacity` and `--boxel-input-readonly-opacity`. The end inset goes in through `--boxel-input-padding-inline-end`, so while the invalid icon shows, BoxelInput can swap it for the icon's column. Input also sets `--pretui-invalid-border` and `--pretui-invalid-background`, which tell Field how to dress it when the Field has an error.
 
 A theme must keep `--field` and `--card` visually distinct or inputs vanish into panels; and must not set `--input` equal to `--border` if it wants controls to read as inset rather than as bordered boxes.
 

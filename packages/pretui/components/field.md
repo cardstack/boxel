@@ -12,9 +12,9 @@ Element: HTMLDivElement
 
 Two decisions carry the component.
 
-**It mints the id and yields it.** `guidFor(this) + '-ctl'` goes on `<label for>` and is handed to the block, which passes it to the control's own id arg. Ownership of the association sits in exactly one place, and no control has to generate an id it might collide on. The cost is real and worth stating: **a control that takes no id arg cannot be labelled through this API at all** — which currently rules out `RadioGroup`, `Slider`, `Checkbox` and `Rating`.
+**It mints the id and yields it.** `guidFor(this) + '-ctl'` goes on `<label for>` and is handed to the block, which passes it to the control's own id arg. Ownership of the association sits in exactly one place, and no control has to generate an id it might collide on. The cost is real and worth stating: **a control that takes no id arg cannot be labeled through this API at all** — which currently rules out `RadioGroup`, `Slider`, `Checkbox` and `Rating`.
 
-**The message line is always there.** `.pretui-fieldmsg` has `min-height: 16px` whether or not there is anything to say. This is the kit's alignment law: two fields side by side never shift when an error appears on one of them. Every design system eventually learns this; most learn it after shipping the jump.
+**The message line is always there.** `.pretui-fieldmsg` has `min-height: 1rem` whether or not there is anything to say. This is the kit's alignment law: two fields side by side never shift when an error appears on one of them. Every design system eventually learns this; most learn it after shipping the jump.
 
 `@error` takes precedence over `@hint` — one line, error wins — rather than stacking both. That keeps the reserved height at exactly one line and forces the hint to be genuinely optional guidance rather than something the user needs while fixing an error.
 
@@ -24,7 +24,7 @@ Two decisions carry the component.
 
 Pretui's yielded-id shape is closest to Radix's implicit association but explicit about it, which makes it obvious at the call site which control the label belongs to — useful when a "field" contains two controls.
 
-Where Pretui is genuinely better than all three: **the invalid dress travels through the token channel.** `Field` sets `data-invalid` on itself, and its own stylesheet repoints `--border` and `--background` on any `.pretui-inputwrap` or `.pretui-boxelwrap` descendant. The inner boxel-ui control re-dresses itself; **no Pretui CSS reaches into boxel markup**, so a boxel-ui upgrade cannot break the error styling, and a theme can redefine what "invalid" looks like by changing one token. Compare the usual approach of threading an `isError` prop down through three components.
+Where Pretui is genuinely better than all three: **the invalid dress travels through the token channel.** `Field` sets `data-invalid` on itself, and its own stylesheet repoints `--border` and `--background` on any `.pretui-inputwrap` or `.pretui-boxelwrap` descendant. A control picks its own invalid dress by setting `--pretui-invalid-border` and `--pretui-invalid-background` on its wrapper; Input uses a `--destructive-ink` edge and no tint, and the rest default to a `--destructive` edge with a 4% tint. The inner boxel-ui control re-dresses itself; **no Pretui CSS reaches into boxel markup**, so a boxel-ui upgrade cannot break the error styling, and a theme can redefine what "invalid" looks like by changing one token. Compare the usual approach of threading an `isError` prop down through three components.
 
 Where it is behind: no `aria-describedby` wiring (below), no required/optional marker of its own, and no support for grouped controls.
 
@@ -42,15 +42,15 @@ Gaps, and they matter:
 - **Controls without a `@controlId` arg cannot be associated.** Wrapping a `RadioGroup` or `Slider` in a `Field` produces a visible label pointing at nothing — `for` references an id that no element has. That is worse than no label, because it looks correct in review.
 - No `aria-required` and no required marker.
 
-Use **FormField** for anything validated. Field is right for a labelled control on a settings panel, not for a form that reports errors.
+Use **FormField** for anything validated. Field is right for a labeled control on a settings panel, not for a form that reports errors.
 
 ## Theming
 
-`--foreground` (label ink), `--ink-3` (hint ink), `--destructive` (error ink and the invalid hairline/tint), `--field` (the tinted invalid background base), `--text-ui` (label), `--text-ui-sm` (messages).
+`--foreground` (label ink), `--muted-foreground` (hint ink, through Cue), `--destructive` (error ink, through Cue, and the other controls' invalid hairline/tint), `--destructive-ink` (an invalid Input's edge), `--field` (the tinted invalid background base), the label role (`--boxel-ui-label-*`), `--text-ui-sm` (messages, through Cue).
 
-Repointed into descendants when invalid: `--border` → `--destructive`, `--background` → a 4% `--destructive` mix over `--field`.
+Repointed into descendants when invalid: on an **Input**, `--border` → `--destructive-ink`, matching Select and Autocomplete; on Textarea and the other boxel-ui-wrapped controls, `--border` → `--destructive` and `--background` → a 4% `--destructive` mix over `--field`.
 
-The 5px row gap, 16px label line-height and 16px reserved message line are fixed. A theme must keep `--ink-3` and `--destructive` distinguishable at 11.5px — hint and error occupy the same slot, so weight (500 on the error) plus hue is the only differentiator, and hue alone fails WCAG 1.4.1.
+The `--boxel-sp-3xs` row gap and 1rem reserved message line are fixed. A theme must keep `--muted-foreground` and `--destructive` distinguishable at 11.5px — hint and error occupy the same slot, so weight (500 on the error) plus hue is the only differentiator, and hue alone fails WCAG 1.4.1.
 
 The styles sit in `@layer PretComposite`, above Input's `PretComponent` layer, so what this component sets on Input wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.
 
