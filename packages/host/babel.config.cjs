@@ -7,6 +7,9 @@ const { externalName } = require('@embroider/reverse-exports');
 const {
   exportIdentityPlugin,
 } = require('@cardstack/runtime-common/export-identity-plugin');
+const {
+  CLASS_FACTORIES,
+} = require('@cardstack/runtime-common/class-factories');
 
 const baseDir = path.resolve(__dirname, '..', 'base') + path.sep;
 const basePackageJSON = require('../base/package.json');
@@ -104,7 +107,10 @@ module.exports = {
       },
     ],
     ...babelCompatSupport(),
-    [exportIdentityPlugin, { moduleIdentifier, importedModule }],
+    [
+      exportIdentityPlugin,
+      { moduleIdentifier, importedModule, classFactories: CLASS_FACTORIES },
+    ],
   ],
 
   generatorOpts: {
