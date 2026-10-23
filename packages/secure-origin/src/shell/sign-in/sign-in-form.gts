@@ -2,6 +2,7 @@
 // email address or username and a password typed into it. Everything here is
 // typed into, and sent from, this window; a session it signs in is handed to
 // `@onSignedIn`, never to the page that opened the window.
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
@@ -33,51 +34,109 @@ interface Signature {
     cli?: CliCallback;
     username?: string;
     onSignedIn: (session: Session) => void;
+    // The page's heading, for a page that signs in for something other than
+    // the app, such as the CLI's; the sign-in's own when not given.
+    title?: string;
   };
+  // What signing in grants, under the heading, in place of the line
+  // inviting a new user to start with Google.
+  Blocks: { intro: [] };
 }
+
+// The fields a password sign-in types into.
+const Fields: TemplateOnlyComponent<{
+  Args: {
+    username: string;
+    password: string;
+    onUsername: (value: string) => void;
+    onPassword: (value: string) => void;
+    focusUsername: boolean;
+    focusPassword: boolean;
+  };
+}> = <template>
+  <AuthFormField
+    @label='Email Address or Username'
+    data-test-secure-field='username'
+  >
+    <BoxelInput
+      @type='text'
+      @autocomplete='username'
+      @placeholder='Your email address'
+      @value={{@username}}
+      @onInput={{@onUsername}}
+      name='username'
+      data-test-secure-username
+      {{autofocus @focusUsername}}
+    />
+  </AuthFormField>
+  <AuthFormField @label='Password' data-test-secure-field='password'>
+    <BoxelInput
+      @type='password'
+      @autocomplete='current-password'
+      @placeholder='Your password'
+      @value={{@password}}
+      @onInput={{@onPassword}}
+      name='password'
+      data-test-secure-password
+      {{autofocus @focusPassword}}
+    />
+  </AuthFormField>
+</template>;
 
 export default class SignInForm extends Component<Signature> {
   <template>
-    <SignInScreen
-      @google={{bool this.state.google}}
-      @googleSubtitle={{bool this.state.google}}
-      @startingGoogle={{this.state.startingGoogle}}
-      @submitDisabled={{this.submitDisabled}}
-      @submitting={{this.state.submitting}}
-      @error={{this.state.error}}
-      @onSubmit={{this.submit}}
-      @onGoogle={{this.startGoogle}}
-      @onForgotPassword={{this.forgotPassword}}
-      @onRegister={{this.register}}
-    >
-      <AuthFormField
-        @label='Email Address or Username'
-        data-test-secure-field='username'
+    {{! A named block can't be passed on only when given, so the screen is
+        drawn with or without the caller's intro. }}
+    {{#if (has-block 'intro')}}
+      <SignInScreen
+        @title={{@title}}
+        @google={{bool this.state.google}}
+        @googleSubtitle={{bool this.state.google}}
+        @startingGoogle={{this.state.startingGoogle}}
+        @submitDisabled={{this.submitDisabled}}
+        @submitting={{this.state.submitting}}
+        @error={{this.state.error}}
+        @onSubmit={{this.submit}}
+        @onGoogle={{this.startGoogle}}
+        @onForgotPassword={{this.forgotPassword}}
+        @onRegister={{this.register}}
       >
-        <BoxelInput
-          @type='text'
-          @autocomplete='username'
-          @placeholder='Your email address'
-          @value={{this.state.username}}
-          @onInput={{this.setUsername}}
-          name='username'
-          data-test-secure-username
-          {{autofocus this.focusUsername}}
+        <:intro>{{yield to='intro'}}</:intro>
+        <:default>
+          <Fields
+            @username={{this.state.username}}
+            @password={{this.state.password}}
+            @onUsername={{this.setUsername}}
+            @onPassword={{this.setPassword}}
+            @focusUsername={{this.focusUsername}}
+            @focusPassword={{this.focusPassword}}
+          />
+        </:default>
+      </SignInScreen>
+    {{else}}
+      <SignInScreen
+        @title={{@title}}
+        @google={{bool this.state.google}}
+        @googleSubtitle={{bool this.state.google}}
+        @startingGoogle={{this.state.startingGoogle}}
+        @submitDisabled={{this.submitDisabled}}
+        @submitting={{this.state.submitting}}
+        @error={{this.state.error}}
+        @onSubmit={{this.submit}}
+        @onGoogle={{this.startGoogle}}
+        @onForgotPassword={{this.forgotPassword}}
+        @onRegister={{this.register}}
+      >
+        <Fields
+          @username={{this.state.username}}
+          @password={{this.state.password}}
+          @onUsername={{this.setUsername}}
+          @onPassword={{this.setPassword}}
+          @focusUsername={{this.focusUsername}}
+          @focusPassword={{this.focusPassword}}
         />
-      </AuthFormField>
-      <AuthFormField @label='Password' data-test-secure-field='password'>
-        <BoxelInput
-          @type='password'
-          @autocomplete='current-password'
-          @placeholder='Your password'
-          @value={{this.state.password}}
-          @onInput={{this.setPassword}}
-          name='password'
-          data-test-secure-password
-          {{autofocus this.focusPassword}}
-        />
-      </AuthFormField>
-    </SignInScreen>
+      </SignInScreen>
+    {{/if}}
   </template>
 
   private state = trackedObject({

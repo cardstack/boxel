@@ -534,6 +534,12 @@ module(basename(import.meta.filename), function () {
           ),
           `${path}: names the Matrix server its modes talk to`,
         );
+        assert.ok(
+          response.text.includes(
+            `<meta name="boxel-app-origins" content="${realmURL.origin}" />`,
+          ),
+          `${path}: names the app origins a sign-in may be handed back to`,
+        );
       }
     });
 
@@ -563,6 +569,8 @@ module(basename(import.meta.filename), function () {
         'session.js',
         'sign-in-page.gts',
         'cli-sign-in-page.gts',
+        'cli-auth-page.gts',
+        'cli-wait-notice.gts',
         'google-callback.gts',
         'sign-in-form.gts',
         'cli-handoff.js',

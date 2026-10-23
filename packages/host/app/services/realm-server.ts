@@ -1940,7 +1940,9 @@ function isTokenExpired(rawToken: string): boolean {
   return !Number.isFinite(exp) || (exp as number) * 1000 <= Date.now();
 }
 
-function realmClaimsFromRawToken(rawToken: string): JWTPayload | undefined {
+export function realmClaimsFromRawToken(
+  rawToken: string,
+): JWTPayload | undefined {
   try {
     let [_header, payload] = rawToken.split('.');
     return JSON.parse(atob(payload)) as JWTPayload;

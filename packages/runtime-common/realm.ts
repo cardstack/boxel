@@ -2181,7 +2181,8 @@ async function computeContentHashFromRef(
 export interface TokenClaims {
   user: string;
   realm: string;
-  // Absent for the realm's own Matrix account, which has no session room.
+  // Absent for the realm's own Matrix account, which has no session room, and
+  // on delegated tokens (see `delegated` below).
   sessionRoom: string | undefined;
   permissions: RealmPermissions['user'];
   realmServerURL: string;

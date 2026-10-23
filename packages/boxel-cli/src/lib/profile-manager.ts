@@ -323,6 +323,9 @@ export class ProfileManager implements RealmAuthenticator {
     auth: MatrixAuth,
     displayName?: string,
     realmServerUrl?: string,
+    // A secure session the same sign-in gave this profile, which replaces any
+    // it had.
+    secureSession?: SecureSessionRecord,
   ): Promise<void> {
     const slots = this.resolveProfileSlots(
       matrixId,
@@ -347,7 +350,8 @@ export class ProfileManager implements RealmAuthenticator {
       realmServerToken: urlsChanged ? undefined : existing?.realmServerToken,
       // The key-management sign-in is for this profile's realm server, so it
       // carries over a re-authentication against the same one.
-      secureSession: urlsChanged ? undefined : existing?.secureSession,
+      secureSession:
+        secureSession ?? (urlsChanged ? undefined : existing?.secureSession),
     };
 
     this.config.profiles[matrixId] = profile;

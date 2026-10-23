@@ -87,7 +87,7 @@ Manage saved profiles for different users/environments
 - `-m, --matrix-url <url>` — Matrix server URL (for add command with non-standard domains)
 - `-r, --realm-server-url <url>` — Realm server URL (for add command with non-standard domains)
 - `--no-browser` — Sign in with a username and password in the terminal instead of opening a browser (for add command)
-- `--host-url <url>` — Origin serving the browser sign-in page, when it is not the realm server (for add command)
+- `--host-url <url>` — Sign in on this origin's /cli-auth page instead of the realm server's secure origin (for add command)
 - `--production` — Target production — the default (for add command)
 - `--staging` — Target staging instead of production (for add command)
 - `--local` — Target a local dev server instead of production (for add command)

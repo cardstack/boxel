@@ -35,6 +35,7 @@ import MessagePage from '../sign-in/message-page.gts';
 import SignedIn from '../sign-in/signed-in.gts';
 import { asSentence } from '../sign-in-copy.js';
 import { modeURL } from '../urls.js';
+import CliWaitNotice from '../sign-in/cli-wait-notice.gts';
 
 // Creating a Boxel account on the secure origin (`register`), on the
 // registration screens the app draws too. `Registration` drives the Matrix
@@ -364,7 +365,11 @@ export default class Register extends Component<Signature> {
           <AwaitingEmail
             @resending={{this.state.resending}}
             @onResend={{this.resendValidation}}
-          />
+          >
+            {{#if @cli}}
+              <CliWaitNotice @cli={{@cli}} />
+            {{/if}}
+          </AwaitingEmail>
         {{else if (eq this.state.page 'creating')}}
           <CreatingAccount />
         {{else if (eq this.state.page 'invite-code')}}

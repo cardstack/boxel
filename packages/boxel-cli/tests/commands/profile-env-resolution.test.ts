@@ -168,6 +168,8 @@ describe('resolveEnvironment', () => {
         matrixUrl: 'https://matrix.my.server',
         realmServerUrl: 'https://realms-staging.stack.cards/',
         appUrl: 'https://app.my.server/',
+        // --host-url names the page to sign in on.
+        signInOnHostApp: true,
       },
       source: 'flag',
       overrides: {
