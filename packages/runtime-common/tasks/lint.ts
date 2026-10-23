@@ -1,12 +1,14 @@
-import type { Linter } from 'eslint';
-import Module from 'node:module';
-import { delimiter, extname, resolve, sep } from 'node:path';
+import { resolve, sep } from 'node:path';
+import { Worker } from 'node:worker_threads';
 
 import type { Task } from './index.ts';
+import type { LintThreadRequest, LintThreadResponse } from './lint-thread.ts';
 
-import { jobIdentity } from '../index.ts';
+import { jobIdentity, MAX_LINT_SOURCE_BYTES } from '../index.ts';
 
-import { resolvePrettierConfig } from '../prettier-config.ts';
+import { LINT_ANCHOR } from './lint-engines.ts';
+
+export { isLintableFilename } from './lint-engines.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -48,172 +50,109 @@ export interface LintResult {
 // groups, so duplicate-instance contention is negligible.
 
 // ---------------------------------------------------------------------------
-// Input bounds
+// Lint thread
 // ---------------------------------------------------------------------------
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+// The engines run in a worker thread with its own heap limit, so a file that
+// is expensive to lint can only fail its own lint job. Without the limit the
+// engines grow inside the worker process, whose heap limit is sized for the
+// whole container; several workers share that container, so one expensive
+// lint exhausts the container's memory and the kernel kills whichever worker
+// it picks, along with the job that worker was running.
+//
+// The loaded engines hold about 200 MB of heap, and a source at the size limit
+// needs at most a few hundred MB more, so this leaves headroom for every
+// source the size limit admits.
+export const LINT_THREAD_HEAP_LIMIT_MB = 512;
 
-// ---------------------------------------------------------------------------
-// Host config — single source of truth shared with `pnpm run lint`
-// ---------------------------------------------------------------------------
-
-// runtime-common lives at <repo>/packages/runtime-common; host is its sibling.
-const HOST_PKG = resolve(import.meta.dirname, '..', '..', 'host');
-const HOST_ESLINTRC = resolve(HOST_PKG, '.eslintrc.js');
-const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
-const LINT_ANCHOR = resolve(HOST_PKG, '__realm__');
-
-// pnpm doesn't hoist transitive deps, so parsers/plugins host references by
-// string (e.g. `parser: 'ember-eslint-parser'`) won't resolve from here.
-// Mirror pnpm's own eslint bin shim: add .pnpm/node_modules to NODE_PATH.
-let nodePathReady = false;
-function ensurePnpmNodePath() {
-  if (nodePathReady) return;
-  const pnpmNodeModules = resolve(
-    REPO_ROOT,
-    'node_modules',
-    '.pnpm',
-    'node_modules',
-  );
-  process.env.NODE_PATH = process.env.NODE_PATH
-    ? `${pnpmNodeModules}${delimiter}${process.env.NODE_PATH}`
-    : pnpmNodeModules;
-  // _initPaths is a private but stable Node API used by the official
-  // pnpm shim. It re-reads NODE_PATH into Module.globalPaths.
-  (Module as unknown as { _initPaths(): void })._initPaths();
-  nodePathReady = true;
+export class LintThreadOutOfMemoryError extends Error {
+  readonly heapLimitMb: number;
+  constructor(heapLimitMb: number) {
+    super(`the lint thread ran out of its ${heapLimitMb} MB heap limit`);
+    this.heapLimitMb = heapLimitMb;
+  }
 }
 
-// ---------------------------------------------------------------------------
-// Engine caches — config resolution + plugin loading is heavy and never
-// changes at runtime, so we instantiate once per worker process.
-// ---------------------------------------------------------------------------
+// One long-lived thread per worker process keeps the engines' config and
+// plugin loading (over a second) off every lint. When the thread dies — out of
+// memory or otherwise — the requests it held are rejected and the next lint
+// starts a fresh thread.
+export class LintThread {
+  #worker: Worker | undefined;
+  #pending = new Map<
+    number,
+    { resolve: (result: LintResult) => void; reject: (e: Error) => void }
+  >();
+  #nextId = 0;
+  readonly heapLimitMb: number;
 
-let eslintPromise: Promise<any> | undefined;
-async function getESLint(): Promise<any> {
-  if (eslintPromise) return eslintPromise;
-  eslintPromise = initESLint();
-  return eslintPromise;
+  constructor(heapLimitMb = LINT_THREAD_HEAP_LIMIT_MB) {
+    this.heapLimitMb = heapLimitMb;
+  }
+
+  lint(source: string, filename: string): Promise<LintResult> {
+    let worker = this.#worker ?? this.#start();
+    let id = this.#nextId++;
+    return new Promise<LintResult>((resolve, reject) => {
+      this.#pending.set(id, { resolve, reject });
+      // An idle thread must not hold the process open; a busy one must, or
+      // a caller awaiting its result could see the process exit under it.
+      worker.ref();
+      worker.postMessage({ id, source, filename } satisfies LintThreadRequest);
+    });
+  }
+
+  async terminate(): Promise<void> {
+    let worker = this.#worker;
+    this.#worker = undefined;
+    await worker?.terminate();
+  }
+
+  #start(): Worker {
+    let worker = new Worker(new URL('./lint-thread.ts', import.meta.url), {
+      resourceLimits: { maxOldGenerationSizeMb: this.heapLimitMb },
+    });
+    worker.unref();
+    worker.on('message', (response: LintThreadResponse) => {
+      let pending = this.#pending.get(response.id);
+      this.#pending.delete(response.id);
+      if (this.#pending.size === 0) {
+        worker.unref();
+      }
+      if ('error' in response) {
+        pending?.reject(new Error(response.error));
+      } else {
+        pending?.resolve(response.result);
+      }
+    });
+    worker.on('error', (e: Error & { code?: string }) => {
+      this.#fail(
+        worker,
+        e.code === 'ERR_WORKER_OUT_OF_MEMORY'
+          ? new LintThreadOutOfMemoryError(this.heapLimitMb)
+          : e,
+      );
+    });
+    worker.on('exit', (code) => {
+      this.#fail(worker, new Error(`the lint thread exited with code ${code}`));
+    });
+    this.#worker = worker;
+    return worker;
+  }
+
+  #fail(worker: Worker, e: Error) {
+    if (this.#worker === worker) {
+      this.#worker = undefined;
+    }
+    let pending = [...this.#pending.values()];
+    this.#pending.clear();
+    for (let { reject } of pending) {
+      reject(e);
+    }
+  }
 }
 
-async function initESLint(): Promise<any> {
-  ensurePnpmNodePath();
-  // Load ESLint from host's own node_modules so plugin/parser resolution
-  // inside ESLint follows host's dependency tree.
-  const hostRequire = Module.createRequire(resolve(HOST_PKG, 'package.json'));
-  const { ESLint } = hostRequire('eslint');
-
-  const importMappingConfig = await import(
-    // @ts-ignore no types for the import-mapping config
-    /* webpackIgnore: true */ '../etc/eslint/missing-card-api-import-config.js'
-  );
-  const importMappings = (importMappingConfig.default ?? importMappingConfig)
-    .importMappings;
-
-  return new ESLint({
-    cwd: HOST_PKG,
-    overrideConfigFile: HOST_ESLINTRC,
-    fix: true,
-    // Submission/realm files are in-memory; don't apply host's .eslintignore
-    // to them.
-    ignore: false,
-    overrideConfig: {
-      plugins: ['@cardstack/boxel'],
-      rules: {
-        // Prettier runs as a separate pass after ESLint (see lintOne); folding
-        // it in lets the prettier plugin see a mid-fix file (e.g. a not-yet-
-        // deduped duplicate import) and throw.
-        'prettier/prettier': 'off',
-        // Realm files are flat, not laid out like host's tree, so this rule
-        // misreads a realm test file (foo.test.gts, no tests/ dir) as
-        // production code and rejects its legitimate test-support imports.
-        'ember/no-test-support-import': 'off',
-        // Realm-submission autofixes host/.eslintrc.js omits (host source
-        // authors its own imports; realm content gets them injected).
-        '@cardstack/boxel/missing-card-api-import': [
-          'error',
-          { importMappings },
-        ],
-        '@cardstack/boxel/no-duplicate-imports': 'error',
-        // Generated card code routinely carries unused imports (the import
-        // block streams before the template, so plans drift). Removing them
-        // is safe to automate: if a usage appears later, the
-        // missing-card-api-import rule re-injects the import. Unused
-        // *variables* stay reported via @typescript-eslint/no-unused-vars —
-        // deleting those would change behavior. Whole declarations are
-        // deleted only for platform module namespaces that are known
-        // side-effect-free; any other module keeps a bare side-effect
-        // import so its top-level code still runs.
-        '@cardstack/boxel/no-unused-imports': [
-          'error',
-          {
-            sideEffectFreeModules: [
-              '@cardstack/base/*',
-              // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- recognizes legacy alias imports in submitted code
-              'https://cardstack.com/base/*',
-              '@cardstack/boxel-ui/*',
-              '@cardstack/boxel-icons/*',
-            ],
-          },
-        ],
-        '@cardstack/boxel/no-css-position-fixed': 'warn',
-        '@cardstack/boxel/no-forbidden-head-tags': 'warn',
-        '@cardstack/boxel/no-literal-realm-urls': 'error',
-      },
-    },
-  });
-}
-
-let templateLinterPromise: Promise<any> | undefined;
-async function getTemplateLinter(): Promise<any> {
-  if (templateLinterPromise) return templateLinterPromise;
-  templateLinterPromise = initTemplateLinter();
-  return templateLinterPromise;
-}
-
-async function initTemplateLinter(): Promise<any> {
-  ensurePnpmNodePath();
-  const hostRequire = Module.createRequire(resolve(HOST_PKG, 'package.json'));
-  const tlModule = hostRequire('ember-template-lint');
-  const TemplateLinter = (tlModule as any).default ?? tlModule;
-  // Host's config, minus no-whitespace-for-layout. That rule trims each
-  // line of a text node before matching, so what it flags is adjacent
-  // "space or &nbsp;" pairs in the authored text — never the newline plus
-  // indentation that prettier's wrapping (the pass right before this one)
-  // introduces. In realm content those &nbsp; runs are deliberate visual
-  // spacing, the rule has no autofix, and its message ("Excess whitespace
-  // detected") doesn't say which characters offend — so a model trying to
-  // clear it tends to pick a whitespace-only rewrite, which prettier then
-  // restores byte-for-byte, looping forever. The disable is uniform across
-  // .gts/.gjs/.hbs on purpose: the rule keys on authored text, not on
-  // whether the file went through the formatter, so gating it by extension
-  // would lint identical text differently.
-  const hostTemplateLintConfig = hostRequire('./.template-lintrc.js');
-  return new TemplateLinter({
-    workingDir: HOST_PKG,
-    config: {
-      ...hostTemplateLintConfig,
-      rules: {
-        ...hostTemplateLintConfig.rules,
-        'no-whitespace-for-layout': false,
-      },
-    },
-  });
-}
-
-// ---------------------------------------------------------------------------
-// File-extension routing
-// ---------------------------------------------------------------------------
-
-const ESLINT_EXTENSIONS = new Set(['.js', '.ts', '.gjs', '.gts']);
-const TEMPLATE_LINT_EXTENSIONS = new Set(['.hbs', '.gts', '.gjs']);
-
-// Callers that gate work on whether a file reaches an engine at all (e.g. the
-// submission lint fan-out) ask here, so coverage tracks routing.
-export function isLintableFilename(filename: string): boolean {
-  const ext = extname(filename).toLowerCase();
-  return ESLINT_EXTENSIONS.has(ext) || TEMPLATE_LINT_EXTENSIONS.has(ext);
-}
+let sharedLintThread: LintThread | undefined;
 
 // ---------------------------------------------------------------------------
 // Task
@@ -228,23 +167,10 @@ export const lintSource: Task<LintArgs, LintResult> = ({ reportStatus, log }) =>
     );
     reportStatus(jobInfo as any, 'start');
 
-    const validated = validateArgs(args);
-    const result = validated.ok
-      ? await lintOne(args.source, validated.filename)
-      : {
-          passed: false,
-          output: typeof args?.source === 'string' ? args.source : '',
-          fixed: false,
-          messages: [
-            {
-              ruleId: null,
-              severity: 2 as const,
-              message: validated.problem,
-              line: 1,
-              column: 1,
-            },
-          ],
-        };
+    const result = await lintArgs(
+      args,
+      (sharedLintThread ??= new LintThread()),
+    );
 
     log.debug(
       `${jobIdentity(jobInfo as any)} completed lint-source: ${result.messages.length} message(s), fixed=${result.fixed}`,
@@ -252,6 +178,65 @@ export const lintSource: Task<LintArgs, LintResult> = ({ reportStatus, log }) =>
     reportStatus(jobInfo as any, 'finish');
     return result;
   };
+
+export async function lintArgs(
+  args: LintArgs,
+  thread: LintThread,
+): Promise<LintResult> {
+  const validated = validateArgs(args);
+  if (!validated.ok) {
+    return {
+      passed: false,
+      output: typeof args?.source === 'string' ? args.source : '',
+      fixed: false,
+      messages: [problem(2, validated.problem)],
+    };
+  }
+  // Too expensive to lint is not a defect in the source, so the source passes
+  // through unchanged with a warning rather than failing: callers that refuse
+  // to save a file with lint errors still save it.
+  const bytes = Buffer.byteLength(args.source, 'utf8');
+  if (bytes > MAX_LINT_SOURCE_BYTES) {
+    return notLinted(
+      args.source,
+      `lint-source: source is ${bytes} bytes, over the ${MAX_LINT_SOURCE_BYTES}-byte lint limit, so it was not linted. Split it into smaller modules to have it linted.`,
+    );
+  }
+  try {
+    return await thread.lint(args.source, validated.filename);
+  } catch (e) {
+    if (e instanceof LintThreadOutOfMemoryError) {
+      return notLinted(
+        args.source,
+        `lint-source: linting this source ran out of the ${e.heapLimitMb} MB lint memory limit, so it was not linted. Split it into smaller modules to have it linted.`,
+      );
+    }
+    return {
+      passed: false,
+      output: args.source,
+      fixed: false,
+      messages: [
+        problem(
+          2,
+          `lint-source: lint failed: ${e instanceof Error ? e.message : String(e)}`,
+        ),
+      ],
+    };
+  }
+}
+
+function notLinted(source: string, message: string): LintResult {
+  return {
+    passed: true,
+    output: source,
+    fixed: false,
+    messages: [problem(1, message)],
+  };
+}
+
+function problem(severity: 1 | 2, message: string): LintMessage {
+  return { ruleId: null, severity, message, line: 1, column: 1 };
+}
 
 function validateArgs(
   args: LintArgs,
@@ -265,12 +250,6 @@ function validateArgs(
   if (typeof args?.source !== 'string') {
     return { ok: false, problem: 'lint-source: `source` must be a string' };
   }
-  if (Buffer.byteLength(args.source, 'utf8') > MAX_FILE_SIZE_BYTES) {
-    return {
-      ok: false,
-      problem: `lint-source: source exceeds ${MAX_FILE_SIZE_BYTES} bytes`,
-    };
-  }
   // X-Filename is user input; absolute paths and `..` traversal land here.
   const normalized = (args.filename || 'input.gts').replace(/\\/g, '/');
   const resolved = resolve(LINT_ANCHOR, normalized);
@@ -281,138 +260,4 @@ function validateArgs(
     };
   }
   return { ok: true, filename: normalized };
-}
-
-async function lintOne(source: string, filename: string): Promise<LintResult> {
-  const ext = extname(filename).toLowerCase();
-  const messages: LintMessage[] = [];
-  let working = source;
-  let modified = false;
-
-  if (ESLINT_EXTENSIONS.has(ext)) {
-    // 1. ESLint autofix — dedup imports, inject missing card-api imports,
-    //    resolve template invokables, etc.
-    const fixed = await runESLint(working, filename);
-    if (typeof fixed.output === 'string' && fixed.output !== working) {
-      working = fixed.output;
-      modified = true;
-    }
-    // 2. Prettier as a separate pass over the now-fixed source.
-    const formatted = await runPrettier(working, filename);
-    if (formatted !== working) {
-      working = formatted;
-      modified = true;
-    }
-    // 3. Settle any fixes Prettier's reflow re-triggered, and collect the
-    //    residual messages against the final formatted output.
-    const settled = await runESLint(working, filename);
-    if (typeof settled.output === 'string' && settled.output !== working) {
-      working = settled.output;
-      modified = true;
-    }
-    for (const m of settled.messages) {
-      messages.push({
-        ruleId: m.ruleId ?? null,
-        severity: (m.severity === 2 ? 2 : 1) as 1 | 2,
-        message: m.message,
-        line: m.line ?? 1,
-        column: m.column ?? 1,
-        endLine: m.endLine,
-        endColumn: m.endColumn,
-        source: 'eslint',
-      });
-    }
-  }
-
-  if (TEMPLATE_LINT_EXTENSIONS.has(ext)) {
-    const { output, messages: tlMessages } = await runTemplateLint(
-      working,
-      filename,
-    );
-    if (typeof output === 'string' && output !== working) {
-      working = output;
-      modified = true;
-    }
-    for (const m of tlMessages) {
-      messages.push({
-        ruleId: m.rule ?? null,
-        severity: (m.severity === 2 ? 2 : 1) as 1 | 2,
-        message: m.message,
-        line: m.line ?? 1,
-        column: m.column ?? 1,
-        endLine: m.endLine,
-        endColumn: m.endColumn,
-        source: 'template-lint',
-      });
-    }
-  }
-
-  const passed = !messages.some((m) => m.severity === 2);
-  return {
-    passed,
-    output: working,
-    fixed: modified,
-    messages,
-  };
-}
-
-async function runESLint(
-  source: string,
-  filename: string,
-): Promise<{ output?: string; messages: Linter.LintMessage[] }> {
-  const eslint = await getESLint();
-  let filePath = resolve(LINT_ANCHOR, filename);
-  // Host config has no .gjs parser override; lint as .gts (same parser).
-  if (filePath.endsWith('.gjs')) {
-    filePath = `${filePath.slice(0, -4)}.gts`;
-  }
-  try {
-    const results = await eslint.lintText(source, { filePath });
-    const r = results[0] ?? {};
-    return { output: r.output, messages: r.messages ?? [] };
-  } catch (e) {
-    // A parser/plugin can throw on malformed input. Surface a clean diagnostic
-    // rather than letting a (potentially circular) error object propagate into
-    // the job result, where JSON serialization would crash the worker.
-    return {
-      output: undefined,
-      messages: [
-        {
-          ruleId: null,
-          severity: 2,
-          message: `ESLint failed to process source: ${
-            e && typeof e === 'object' && 'message' in e
-              ? (e as Error).message
-              : String(e)
-          }`,
-          line: 1,
-          column: 1,
-        } as Linter.LintMessage,
-      ],
-    };
-  }
-}
-
-async function runPrettier(source: string, filename: string): Promise<string> {
-  try {
-    const prettier = await import(/* webpackIgnore: true */ 'prettier');
-    const config = await resolvePrettierConfig(filename);
-    return await prettier.format(source, config);
-  } catch {
-    // Prettier can't parse malformed source — keep the ESLint-fixed output.
-    return source;
-  }
-}
-
-async function runTemplateLint(
-  source: string,
-  filename: string,
-): Promise<{ output?: string; messages: any[] }> {
-  const linter = await getTemplateLinter();
-  const result = await linter.verifyAndFix({
-    source,
-    moduleId: filename,
-    filePath: resolve(LINT_ANCHOR, filename),
-  });
-  return { output: result.output, messages: result.messages ?? [] };
 }

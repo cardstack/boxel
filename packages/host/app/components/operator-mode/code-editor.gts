@@ -21,12 +21,14 @@ import { isEqual } from 'lodash-es';
 import { Position } from 'monaco-editor';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 
 import {
   hasExecutableExtension,
   logger,
   isSingleCardDocument,
   isCardInstance,
+  MAX_LINT_SOURCE_BYTES,
   meta as metaSymbol,
   codeRefWithAbsoluteIdentifier,
   type SingleCardDocument,
@@ -89,6 +91,12 @@ export default class CodeEditor extends Component<Signature> {
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   @tracked private isFormatting = false;
   @tracked private formattingError: string | undefined;
+  // The UTF-8 size of what the editor holds, for the file at `url`. Edits
+  // update it before they autosave; until the first edit the file's own
+  // content is the answer.
+  @tracked private editorContentSize:
+    | { url: string; bytes: number }
+    | undefined;
 
   private hasUnsavedSourceChanges = false;
   private hasSavedUnsavedSourceOnClose = false;
@@ -338,6 +346,12 @@ export default class CodeEditor extends Component<Signature> {
   private contentChangedTask = restartableTask(async (content: string) => {
     this.hasUnsavedSourceChanges = true;
     this.hasSavedUnsavedSourceOnClose = false;
+    if (isReady(this.args.file)) {
+      this.editorContentSize = {
+        url: this.args.file.url,
+        bytes: utf8ByteLength(content),
+      };
+    }
     if (!isReady(this.args.file) || content === this.args.file?.content) {
       return;
     }
@@ -612,6 +626,25 @@ export default class CodeEditor extends Component<Signature> {
     }
   });
 
+  // The lint endpoint passes a source over its size limit through unlinted,
+  // so Format with Boxel and the lint fixes applied when the assistant writes
+  // the file both leave it as it is. Say so up front, rather than letting a
+  // format quietly do nothing.
+  private get lintSizeWarning(): { size: string; limit: string } | undefined {
+    if (!this.computeFormatSupport()) {
+      return undefined;
+    }
+    let file = this.readyFile;
+    let bytes =
+      this.editorContentSize?.url === file.url
+        ? this.editorContentSize.bytes
+        : utf8ByteLength(file.content);
+    if (bytes <= MAX_LINT_SOURCE_BYTES) {
+      return undefined;
+    }
+    return { size: formatKB(bytes), limit: formatKB(MAX_LINT_SOURCE_BYTES) };
+  }
+
   private computeFormatSupport(): boolean {
     if (!isReady(this.args.file)) {
       return false;
@@ -625,6 +658,30 @@ export default class CodeEditor extends Component<Signature> {
         <BinaryFileInfo @readyFile={{this.readyFile}} />
       {{else}}
         <div class='monaco-wrapper'>
+          {{#let this.lintSizeWarning as |warning|}}
+            {{#if warning}}
+              <div
+                class='lint-size-warning'
+                data-test-lint-size-warning
+                role='status'
+              >
+                <WarningIcon
+                  class='lint-size-warning-icon'
+                  width='14'
+                  height='14'
+                />
+                <span>
+                  <strong>Linting is off for this file.</strong>
+                  At
+                  {{warning.size}}
+                  it's over the
+                  {{warning.limit}}
+                  lint limit, so Format with Boxel leaves it as it is. Split it
+                  into smaller modules to lint it again.
+                </span>
+              </div>
+            {{/if}}
+          {{/let}}
           {{#if this.isFormatting}}
             <div
               class='formatting-status'
@@ -673,6 +730,31 @@ export default class CodeEditor extends Component<Signature> {
       .monaco-wrapper {
         position: relative;
         height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .lint-size-warning {
+        flex: none;
+        display: flex;
+        align-items: flex-start;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-bottom: 1px solid rgba(255, 186, 0, 0.35);
+        background: rgba(255, 186, 0, 0.12);
+        color: var(--boxel-dark);
+        font: var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+
+      .lint-size-warning strong {
+        font-weight: 600;
+      }
+
+      .lint-size-warning-icon {
+        flex: none;
+        margin-top: 1px;
+        fill: var(--boxel-warning-200);
       }
 
       .formatting-status,
@@ -699,8 +781,8 @@ export default class CodeEditor extends Component<Signature> {
       }
 
       .monaco-container {
-        height: 100%;
-        min-height: 100%;
+        flex: 1;
+        min-height: 0;
         width: 100%;
         min-width: 100%;
         padding-top: var(--boxel-sp-xxs);
@@ -743,4 +825,12 @@ export default class CodeEditor extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+function utf8ByteLength(content: string): number {
+  return new TextEncoder().encode(content).length;
+}
+
+function formatKB(bytes: number): string {
+  return `${Math.round(bytes / 1024)} KB`;
 }

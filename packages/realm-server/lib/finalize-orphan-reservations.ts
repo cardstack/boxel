@@ -33,15 +33,32 @@ const log = logger('worker-manager');
 //
 // `reason` records *why* the reservation closed so the cap query can
 // distinguish operational interruptions (child crash, manager SIGTERM)
-// from genuine completed attempts. Every call site in the worker-manager
-// is by definition an interruption — a child that exits while still
-// holding a reservation never finished the work. The pg-queue's own
-// success/failure finalize path sets `'completed'` separately; this
-// function never owns that case.
+// from genuine completed attempts. A child that exits while still holding
+// a reservation never finished the work, so most call sites pass
+// `'interrupted'`, which the cap doesn't count. The exception is a child
+// SIGKILLed outside a graceful shutdown, closed as `'killed'`, which the
+// cap does count: that is how the kernel's out-of-memory killer ends a
+// worker, and a job that exhausts the container's memory does it again on
+// every retry, taking down whichever worker on that task the kernel picks.
+// The pg-queue's own success/failure finalize path sets `'completed'`
+// separately; this function never owns that case.
+// The reason to close a dead child's open reservations with, from how it
+// exited. Nothing in the worker-manager sends a child SIGKILL except its own
+// shutdown's straggler phase, so a SIGKILL outside a shutdown came from
+// outside the manager — in practice the kernel's out-of-memory killer.
+export function orphanedReservationReason(
+  signal: NodeJS.Signals | null,
+  managerIsShuttingDown: boolean,
+): 'killed' | 'interrupted' {
+  return signal === 'SIGKILL' && !managerIsShuttingDown
+    ? 'killed'
+    : 'interrupted';
+}
+
 export async function finalizeOrphanedReservations(
   dbAdapter: DBAdapter,
   workerId: string | undefined,
-  reason: 'interrupted' | 'timeout-expired' = 'interrupted',
+  reason: 'interrupted' | 'killed' | 'timeout-expired' = 'interrupted',
 ): Promise<void> {
   if (!workerId) {
     return;

@@ -18,6 +18,7 @@ import {
   type LooseSingleCardDocument,
   Deferred,
   baseRealm,
+  MAX_LINT_SOURCE_BYTES,
   rri,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -230,6 +231,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         }
       `,
           'README.txt': `Hello World`,
+          'large-module.ts': largeModuleSource(),
           'Pet/mango.json': {
             data: {
               attributes: {
@@ -396,6 +398,40 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
     // await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
     // await percySnapshot(assert);
+  });
+
+  test('a module over the lint size limit says that linting is off for it', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}large-module.ts`,
+    });
+    await waitFor('[data-test-editor]');
+
+    assert
+      .dom('[data-test-lint-size-warning]')
+      .includesText('Linting is off for this file.')
+      .includesText(
+        `over the ${Math.round(MAX_LINT_SOURCE_BYTES / 1024)} KB lint limit`,
+      );
+
+    setMonacoContent(`export const value = 1;\n`);
+    await waitUntil(
+      () => !document.querySelector('[data-test-lint-size-warning]'),
+    );
+    assert
+      .dom('[data-test-lint-size-warning]')
+      .doesNotExist(
+        'an edit that brings it under the limit clears the warning',
+      );
+  });
+
+  test('a module under the lint size limit shows no lint size warning', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+    await waitFor('[data-test-editor]');
+    assert.dom('[data-test-lint-size-warning]').doesNotExist();
   });
 
   test('text file in writable realm is not read-only', async function (assert) {
@@ -1032,3 +1068,16 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     });
   });
 });
+
+// A module just over the lint size limit, made of declarations simple enough
+// that indexing it stays cheap.
+function largeModuleSource(): string {
+  let lines: string[] = [];
+  let bytes = 0;
+  for (let i = 0; bytes <= MAX_LINT_SOURCE_BYTES; i++) {
+    let line = `export const value${i} = ${i};\n`;
+    lines.push(line);
+    bytes += line.length;
+  }
+  return lines.join('');
+}

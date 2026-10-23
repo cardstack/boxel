@@ -78,7 +78,10 @@ import {
   type PendingJob,
 } from './handlers/handle-indexing-dashboard.ts';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
-import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
+import {
+  finalizeOrphanedReservations,
+  orphanedReservationReason,
+} from './lib/finalize-orphan-reservations.ts';
 import { findStuckReservations } from './lib/stuck-reservations.ts';
 import {
   markFailedJob,
@@ -899,18 +902,25 @@ async function startWorker(
     // able to claim the dead worker's reservation until completed_at is
     // set, so this still races to be useful — but if it stalls, the
     // existing 60s monitorWorker / 7200s lease-expiry path is the
-    // backstop, not this exit handler. A child exit while still holding
-    // a reservation is by definition an interruption, so the row is
-    // marked 'interrupted' and does not count toward the per-job cap.
-    finalizeOrphanedReservations(adapter, workerId, 'interrupted').catch(
-      (e) => {
-        Sentry.captureException(e);
-        log.error(
-          `worker: finalizeOrphanedReservations threw for worker ${workerId}`,
-          e,
-        );
-      },
-    );
+    // backstop, not this exit handler.
+    //
+    // A child that exits while still holding a reservation never finished
+    // the work, so the row is normally marked 'interrupted' and does not
+    // count toward the per-job cap. A SIGKILL from outside our own shutdown
+    // is marked 'killed', which the cap counts, so a job that exhausts the
+    // container's memory is abandoned after a bounded number of attempts
+    // instead of killing workers on every task it is retried on.
+    finalizeOrphanedReservations(
+      adapter,
+      workerId,
+      orphanedReservationReason(signal, isExiting),
+    ).catch((e) => {
+      Sentry.captureException(e);
+      log.error(
+        `worker: finalizeOrphanedReservations threw for worker ${workerId}`,
+        e,
+      );
+    });
   });
 
   if (worker.stdout) {
