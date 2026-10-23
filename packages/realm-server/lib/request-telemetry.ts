@@ -239,37 +239,54 @@ interface Breadcrumb {
   data?: unknown;
 }
 
-// The query parameter that carries a bearer credential on ordinary routes: a
-// capture-URL token, or a session JWT on a `_download-realm` link. Masked the
-// same way the request log masks it.
-const TOKEN_PARAM = 'token';
+// The query parameters that carry a bearer credential on ordinary routes: a
+// `token` (a capture-URL token, or a session JWT on a `_download-realm` link)
+// and a `loginToken` (the single-use Matrix login token handed to the app
+// page). Masked the same way the request log masks them.
+const TOKEN_PARAMS = ['token', 'loginToken'];
 const MASKED = 'REDACTED';
 
 function withTokenMasked(url: string | undefined): string | undefined {
   let parsed = parseURL(url);
-  if (!parsed || !parsed.searchParams.has(TOKEN_PARAM)) {
+  if (!parsed || !TOKEN_PARAMS.some((name) => parsed.searchParams.has(name))) {
     return url;
   }
-  parsed.searchParams.set(TOKEN_PARAM, MASKED);
+  for (let name of TOKEN_PARAMS) {
+    if (parsed.searchParams.has(name)) {
+      parsed.searchParams.set(name, MASKED);
+    }
+  }
   return parsed.href;
 }
 
 function queryWithTokenMasked(query: unknown): unknown {
   if (typeof query === 'string') {
     let params = new URLSearchParams(query);
-    if (!params.has(TOKEN_PARAM)) {
+    if (!TOKEN_PARAMS.some((name) => params.has(name))) {
       return query;
     }
-    params.set(TOKEN_PARAM, MASKED);
+    for (let name of TOKEN_PARAMS) {
+      if (params.has(name)) {
+        params.set(name, MASKED);
+      }
+    }
     return params.toString();
   }
   if (Array.isArray(query)) {
     return query.map((pair) =>
-      Array.isArray(pair) && pair[0] === TOKEN_PARAM ? [pair[0], MASKED] : pair,
+      Array.isArray(pair) && TOKEN_PARAMS.includes(pair[0])
+        ? [pair[0], MASKED]
+        : pair,
     );
   }
-  if (query && typeof query === 'object' && TOKEN_PARAM in query) {
-    return { ...query, [TOKEN_PARAM]: MASKED };
+  if (query && typeof query === 'object') {
+    let present = TOKEN_PARAMS.filter((name) => name in query);
+    if (present.length > 0) {
+      return {
+        ...query,
+        ...Object.fromEntries(present.map((name) => [name, MASKED])),
+      };
+    }
   }
   return query;
 }

@@ -315,15 +315,21 @@ export function forgetSession() {
 // Signs the window's own session out: forgotten here even when the server
 // can't be reached, and ended on the server.
 export async function signOut(config) {
-  let token = storedSession()?.token;
+  let session = storedSession();
   forgetSession();
-  if (!token) {
+  if (!session) {
     return;
   }
+  await endSession(config, session);
+}
+
+// Ends a secure session on the server. The window ends one it signed in only
+// to hand on, when whoever it was for doesn't take it, as well as its own.
+export async function endSession(config, session) {
   try {
     await request(new URL('_secure-session', config.realmServerURL), {
       method: 'DELETE',
-      token,
+      token: session.token,
     });
   } catch (e) {
     // An ended or expired session is already signed out.
@@ -402,4 +408,46 @@ export async function mintKeyWriteTicket(config, { action, keyId }) {
     },
   });
   return json.data.attributes;
+}
+
+// How long handing a sign-in over keeps waiting while the Matrix server
+// refuses a second login token for the user within its minute.
+const LOGIN_TOKEN_RETRY_MS = 65 * 1000;
+
+// A single-use Matrix login token for the user `session` is signed in as: the
+// hand-off that signs the app, or the CLI, in to Matrix. The secure session
+// itself stays here. The Matrix server mints one login token per user a
+// minute, so a sign-in handed over again within the minute waits for the
+// next, as long as the server says to. A session the server has ended answers
+// `signed-out`, and is forgotten if it is the window's own, as
+// `authorizedRequest` forgets one.
+export async function loginToken(config, session) {
+  let deadline = Date.now() + LOGIN_TOKEN_RETRY_MS;
+  for (;;) {
+    try {
+      let json = await request(
+        new URL('_secure-session/login-token', config.realmServerURL),
+        { token: session.token },
+      );
+      return json.data.attributes;
+    } catch (e) {
+      if (e.status === 401) {
+        // Only the session it was handed: one signed in for the CLI is never
+        // the window's, and the window's own may still be live.
+        if (storedSession()?.token === session.token) {
+          forgetSession();
+        }
+        throw signedOut();
+      }
+      let wait = e.retryAfterMs;
+      if (
+        e.status !== 429 ||
+        wait === undefined ||
+        Date.now() + wait > deadline
+      ) {
+        throw e;
+      }
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
 }

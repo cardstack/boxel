@@ -1,0 +1,282 @@
+import { expect, test } from './fixtures.ts';
+import type { BrowserContext, Page, TestInfo } from '@playwright/test';
+import { appURL, secureOriginURL } from '../support/isolated-realm-server.ts';
+import {
+  createRealm,
+  createSubscribedUser,
+  logout,
+  postCardSource,
+  setupPermissions,
+} from '../helpers/index.ts';
+
+// With sign-in on the secure origin, the app draws no sign-in form: a
+// signed-out app sends the user to the secure origin's page, which signs them
+// in and hands the app a single-use Matrix login token by navigating back.
+// The realm server writes the deployment's setting into the host's config
+// each time it serves the app; these tests turn it on in the config as the
+// page parses it. (Fulfilling the document from a route instead would make
+// Chrome treat the page as public, and refuse it its loopback assets.)
+
+const APP_ORIGIN = new URL(appURL).origin;
+const SECURE_SESSION_KEY = 'boxel-secure-session';
+
+async function signInOnSecureOrigin(context: BrowserContext) {
+  await context.addInitScript(() => {
+    const NAME = '@cardstack/host/config/environment';
+    let rewrite = (meta: Element) => {
+      if (meta.getAttribute('data-test-flag-set')) {
+        return;
+      }
+      let config = JSON.parse(
+        decodeURIComponent(meta.getAttribute('content') ?? '%7B%7D'),
+      );
+      config.signInOnSecureOrigin = true;
+      meta.setAttribute('content', encodeURIComponent(JSON.stringify(config)));
+      meta.setAttribute('data-test-flag-set', 'true');
+    };
+    new MutationObserver((records) => {
+      for (let record of records) {
+        for (let node of record.addedNodes) {
+          if (
+            node instanceof Element &&
+            node.tagName === 'META' &&
+            node.getAttribute('name') === NAME
+          ) {
+            rewrite(node);
+          }
+        }
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+}
+
+async function snapshot(testInfo: TestInfo, page: Page, name: string) {
+  await testInfo.attach(name, {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+}
+
+async function signInOnSecurePage(
+  page: Page,
+  username: string,
+  password: string,
+) {
+  await page.locator('[data-test-secure-username]').fill(username);
+  await page.locator('[data-test-secure-password]').fill(password);
+  await page.locator('[data-test-secure-password-submit]').click();
+}
+
+function onSecureOrigin(page: Page, mode: string) {
+  let url = new URL(page.url());
+  return (
+    url.origin === new URL(secureOriginURL).origin &&
+    url.searchParams.get('mode') === mode
+  );
+}
+
+test.describe('Sign in on the secure origin', () => {
+  let username: string;
+  let password: string;
+
+  test.beforeEach(async ({ context }) => {
+    let user = await createSubscribedUser('secure-sign-in');
+    username = user.username;
+    password = user.password;
+    await setupPermissions(user.credentials.userId, `${appURL}/`);
+    await signInOnSecureOrigin(context);
+  });
+
+  test('a signed-out deep link signs in on the secure origin and comes back to the same page', async ({
+    page,
+  }, testInfo) => {
+    let state = JSON.stringify({
+      stacks: [[{ id: `${appURL}/index`, format: 'isolated' }]],
+      submode: 'interact',
+    });
+    let deepLink = `${appURL}/?operatorModeState=${encodeURIComponent(state)}`;
+    await page.goto(deepLink);
+
+    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    expect(onSecureOrigin(page, 'sign-in')).toBe(true);
+    expect(
+      new URL(page.url()).hash,
+      'the page to come back to is taken out of the address',
+    ).toBe('');
+    await expect(page.locator('[data-test-secure-sign-in-form]')).toBeVisible();
+    await snapshot(testInfo, page, 'secure origin sign-in, sent from the app');
+
+    await signInOnSecurePage(page, username, password);
+
+    await page.waitForURL((url) => url.origin === APP_ORIGIN);
+    await expect(
+      page.locator('[data-test-operator-mode-stack="0"]'),
+    ).toHaveCount(1, { timeout: 60_000 });
+    let back = new URL(page.url());
+    expect(back.searchParams.has('loginToken')).toBe(false);
+    expect(
+      JSON.parse(back.searchParams.get('operatorModeState')!).stacks[0][0].id,
+    ).toBe(`${appURL}/index`);
+    await expect(page.locator('[data-test-login-form]')).toHaveCount(0);
+    await snapshot(testInfo, page, 'back in the app, signed in');
+  });
+
+  test('coming back signed out at once stops sending the user round', async ({
+    page,
+  }, testInfo) => {
+    await page.goto(appURL);
+    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    // Back to the app without signing in, as a hand-off that never
+    // completed would.
+    await page.goto(appURL);
+    await expect(page.locator('[data-test-secure-sign-in-status]')).toHaveText(
+      'Sign-in didn’t complete',
+    );
+    expect(new URL(page.url()).origin).toBe(APP_ORIGIN);
+    await expect(
+      page.locator('[data-test-secure-sign-in-button]'),
+    ).toHaveAttribute('href', /mode=sign-in#return=/);
+    await expect(
+      page.locator('[data-test-login-form]'),
+      'the app draws no sign-in form of its own',
+    ).toHaveCount(0);
+    await expect(page.locator('iframe'), 'nor a credential frame').toHaveCount(
+      0,
+    );
+    await snapshot(testInfo, page, 'app: sign-in did not complete');
+
+    await page.locator('[data-test-secure-sign-in-button]').click();
+    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    await signInOnSecurePage(page, username, password);
+    await expect(
+      page.locator('[data-test-operator-mode-stack="0"]'),
+    ).toHaveCount(1, { timeout: 60_000 });
+  });
+
+  test('signing out goes through the secure origin and ends its session too', async ({
+    page,
+  }, testInfo) => {
+    await page.goto(appURL);
+    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    await signInOnSecurePage(page, username, password);
+    await expect(
+      page.locator('[data-test-operator-mode-stack="0"]'),
+    ).toHaveCount(1, { timeout: 60_000 });
+
+    await logout(page);
+
+    // Through the secure origin's sign-out, back to the app signed out, and
+    // so on to sign in again.
+    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    await expect(page.locator('[data-test-secure-sign-in-form]')).toBeVisible();
+    expect(
+      await page.evaluate(
+        (key) => localStorage.getItem(key),
+        SECURE_SESSION_KEY,
+      ),
+      "the secure origin's session is gone",
+    ).toBeNull();
+    await snapshot(testInfo, page, 'signed out, at the secure sign-in');
+  });
+
+  test("a private realm's images load after the hand-off, and stop once signed out", async ({
+    page,
+  }) => {
+    // A workspace of the user's own, which no one else may read.
+    let realmName = `secure-sign-in-${Date.now().toString(36)}`;
+    let realmURL = `${APP_ORIGIN}/${username}/${realmName}/`;
+    let imageURL = `${realmURL}probe.svg`;
+    let loads = (url: string) =>
+      page.evaluate(
+        (src) =>
+          new Promise<boolean>((resolve) => {
+            let img = new Image();
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(false);
+            img.src = `${src}?nocache=${Math.random()}`;
+          }),
+        url,
+      );
+
+    await page.goto(APP_ORIGIN);
+    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    await signInOnSecurePage(page, username, password);
+    await page.waitForURL((url) => url.origin === APP_ORIGIN);
+    await createRealm(page, realmName);
+    await postCardSource(
+      page,
+      realmURL,
+      imageURL.slice(realmURL.length),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4"/></svg>',
+    );
+    let anonymous = await fetch(imageURL);
+    expect(anonymous.status, 'the realm is private').toBe(401);
+
+    await expect
+      .poll(() => loads(imageURL), {
+        message: "the service worker attaches the realm's token",
+        timeout: 30_000,
+      })
+      .toBe(true);
+
+    await logout(page);
+    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    // Back on the app, held there rather than sent on to sign in again.
+    await page.route(
+      (url) => url.origin === new URL(secureOriginURL).origin,
+      (route) => route.fulfill({ status: 204 }),
+    );
+    await page.goto(appURL);
+    await expect(
+      page.locator('[data-test-secure-sign-in-button]'),
+    ).toBeVisible();
+    expect(
+      await loads(imageURL),
+      "the signed-out app's images carry no token",
+    ).toBe(false);
+  });
+
+  test('a sign-in is never handed to an origin the realm server does not list', async ({
+    page,
+  }, testInfo) => {
+    await page.goto(
+      `${secureOriginURL}?mode=sign-in#return=${encodeURIComponent(
+        'https://elsewhere.example/collect',
+      )}`,
+    );
+    await signInOnSecurePage(page, username, password);
+    await expect(page.locator('[data-test-secure-signed-in]')).toBeVisible({
+      timeout: 60_000,
+    });
+    expect(onSecureOrigin(page, 'sign-in')).toBe(true);
+    await snapshot(
+      testInfo,
+      page,
+      'secure origin: signed in, nothing handed over',
+    );
+  });
+
+  test('a hand-off to a program on this computer asks first', async ({
+    page,
+  }, testInfo) => {
+    await page.goto(`${secureOriginURL}?mode=sign-in`);
+    await signInOnSecurePage(page, username, password);
+    await expect(page.locator('[data-test-secure-signed-in]')).toBeVisible({
+      timeout: 60_000,
+    });
+    // Signed in; a page on the user's own machine asks for the sign-in. A
+    // fresh document, since only the fragment would differ from this one.
+    await page.goto('about:blank');
+    await page.goto(
+      `${secureOriginURL}?mode=sign-in#return=${encodeURIComponent(
+        'http://localhost:4299/',
+      )}`,
+    );
+    await expect(page.locator('[data-test-secure-title]')).toHaveText(
+      'Continue to http://localhost:4299?',
+    );
+    await snapshot(testInfo, page, 'secure origin: continue to localhost?');
+    await page.locator('[data-test-secure-loopback-cancel]').click();
+    await expect(page.locator('[data-test-secure-signed-in]')).toBeVisible();
+  });
+});

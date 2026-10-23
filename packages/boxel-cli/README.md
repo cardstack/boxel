@@ -75,6 +75,18 @@ boxel --help
 boxel --version
 ```
 
+### Signing in with `boxel profile add`
+
+`boxel profile add` opens your browser to sign in: with a password, with Google, or by creating an account. The page is on the realm server's secure origin (`secure.boxel.ai` for production), the origin Boxel keeps passwords on, away from the app's card code. Once you sign in, the page hands the CLI, which is waiting on a port on `127.0.0.1`, a single-use token that the CLI turns into a sign-in of its own. The same sign-in also lets `boxel keys` manage your keys, so a new profile doesn't need a separate `boxel keys sign-in`.
+
+The other ways in don't open a browser and work as before:
+
+- `--no-browser` asks for a username and password in the terminal.
+- `-u` with `BOXEL_PASSWORD` (or `-p`) signs in without asking anything, for CI.
+- `boxel profile migrate` builds a profile from `MATRIX_URL`, `MATRIX_USERNAME`, `MATRIX_PASSWORD` and `REALM_SERVER_URL`.
+
+A realm server whose secure origin can't sign the CLI in gets the host app's own `/cli-auth` page instead, and so does `--host-url`, which names the origin whose page to open. Profiles you already have keep working; nothing asks you to sign in again.
+
 ### Choosing an environment for `boxel profile add`
 
 `boxel profile add` targets **production**. Whichever environment it lands on is resolved the same way for the interactive and non-interactive paths, in this order:
