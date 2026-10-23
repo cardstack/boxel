@@ -235,4 +235,130 @@ module(basename(import.meta.filename), function () {
       }
     });
   });
+
+  // The notification connection can die under a healthy process: a failover,
+  // a restart, an administrator terminating the backend. Terminating it is the
+  // reachable way to do that on demand, and it is what production saw.
+  module('PgAdapter.subscribe after the connection is lost', function (hooks) {
+    let dbAdapter: PgAdapter;
+
+    setupDB(hooks, {
+      beforeEach: async (adapter) => {
+        dbAdapter = adapter;
+      },
+    });
+
+    // Terminate every backend in this test database whose last statement was
+    // a LISTEN: the shared notification client, and nothing else here.
+    async function terminateNotificationConnection(): Promise<number> {
+      let rows = await dbAdapter.execute(
+        `SELECT pg_terminate_backend(pid) AS killed
+           FROM pg_stat_activity
+          WHERE datname = current_database()
+            AND pid <> pg_backend_pid()
+            AND query ILIKE 'LISTEN %'`,
+      );
+      return rows.length;
+    }
+
+    // A notification sent before the reconnect is lost, so keep sending until
+    // one arrives.
+    async function notifyUntilSeen(
+      channel: string,
+      seen: string[],
+      payload: string,
+    ): Promise<void> {
+      await waitFor(
+        () => {
+          if (seen.includes(payload)) {
+            return true;
+          }
+          void notify(dbAdapter, channel, payload);
+          return undefined;
+        },
+        10_000,
+        200,
+      );
+    }
+
+    test('a subscriber receives notifications again after its connection is terminated', async function (assert) {
+      const seen: string[] = [];
+      const sub = await dbAdapter.subscribe('mux_reconnect_receive', (n) => {
+        if (n.payload) seen.push(n.payload);
+      });
+      try {
+        await notify(dbAdapter, 'mux_reconnect_receive', 'before');
+        await waitFor(() => (seen.includes('before') ? true : undefined));
+
+        assert.ok(
+          (await terminateNotificationConnection()) > 0,
+          'the notification connection was terminated',
+        );
+        await notifyUntilSeen('mux_reconnect_receive', seen, 'after');
+        assert.ok(seen.includes('after'), 'a notification after it arrives');
+      } finally {
+        await sub.unsubscribe();
+      }
+    });
+
+    test('each subscriber is told once that it reconnected', async function (assert) {
+      let reconnectsA = 0;
+      let reconnectsB = 0;
+      const seen: string[] = [];
+      const subA = await dbAdapter.subscribe(
+        'mux_reconnect_told',
+        (n) => {
+          if (n.payload) seen.push(n.payload);
+        },
+        { onReconnect: () => reconnectsA++ },
+      );
+      const subB = await dbAdapter.subscribe(
+        'mux_reconnect_told_other',
+        () => {},
+        { onReconnect: () => reconnectsB++ },
+      );
+      try {
+        assert.strictEqual(reconnectsA, 0, 'not told before any loss');
+        await terminateNotificationConnection();
+        await notifyUntilSeen('mux_reconnect_told', seen, 'after');
+        await waitFor(() =>
+          reconnectsA > 0 && reconnectsB > 0 ? true : undefined,
+        );
+        assert.deepEqual(
+          [reconnectsA, reconnectsB],
+          [1, 1],
+          'each subscriber is told once, whatever its channel',
+        );
+      } finally {
+        await subA.unsubscribe();
+        await subB.unsubscribe();
+      }
+    });
+
+    test('a listen() caller receives notifications again after its connection is terminated', async function (assert) {
+      const seen: string[] = [];
+      let reconnects = 0;
+      let finish!: () => void;
+      const done = new Promise<void>((resolve) => (finish = resolve));
+      let listening = dbAdapter.listen(
+        'mux_reconnect_listen',
+        (n) => {
+          if (n.payload) seen.push(n.payload);
+        },
+        () => done,
+        { onReconnect: () => reconnects++ },
+      );
+      try {
+        await notifyUntilSeen('mux_reconnect_listen', seen, 'before');
+        await terminateNotificationConnection();
+        await notifyUntilSeen('mux_reconnect_listen', seen, 'after');
+        assert.ok(seen.includes('after'), 'a notification after it arrives');
+        await waitFor(() => (reconnects > 0 ? true : undefined));
+        assert.strictEqual(reconnects, 1, 'the caller is told once');
+      } finally {
+        finish();
+        await listening;
+      }
+    });
+  });
 });

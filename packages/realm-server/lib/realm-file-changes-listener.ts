@@ -36,6 +36,10 @@ const log = logger('realm-server:file-changes-listener');
 export interface RealmFileChangesListenerDeps {
   dbAdapter: PgAdapter;
   lookupMountedRealm: (url: string) => Realm | undefined;
+  // Every realm mounted here, for catching up after the notification
+  // connection reconnects (see `#handleReconnect`). Without it there is
+  // nothing to catch up.
+  listMountedRealms?: () => readonly Realm[];
 }
 
 export class RealmFileChangesListener {
@@ -58,6 +62,7 @@ export class RealmFileChangesListener {
         (notification) => {
           this.#handleNotification(notification.payload);
         },
+        { onReconnect: () => this.#handleReconnect() },
       );
     })();
     try {
@@ -87,6 +92,28 @@ export class RealmFileChangesListener {
   // Exposed for tests; invoked internally by the LISTEN handler.
   handleNotification(payload: string | undefined): void {
     this.#handleNotification(payload);
+  }
+
+  // Exposed for tests; invoked internally after the notification connection
+  // reconnects.
+  handleReconnect(): void {
+    this.#handleReconnect();
+  }
+
+  // Any file in any realm may have changed while the connection was down, and
+  // its notification is lost. Do what a wildcard notification does for every
+  // mounted realm: drop its cached bytes and its cached realm info.
+  #handleReconnect(): void {
+    for (const realm of this.#deps.listMountedRealms?.() ?? []) {
+      try {
+        realm.clearLocalSourceCaches();
+        realm.invalidateCachedRealmInfo();
+      } catch (err: unknown) {
+        log.warn(
+          `clearing caches after reconnect failed for ${realm.url}: ${String(err)}`,
+        );
+      }
+    }
   }
 
   #handleNotification(payload: string | undefined): void {

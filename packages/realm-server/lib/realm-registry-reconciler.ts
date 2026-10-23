@@ -117,6 +117,9 @@ export class RealmRegistryReconciler {
       this.#subscription = await this.#deps.dbAdapter.subscribe(
         CHANNEL,
         this.#loop.wake.bind(this.#loop),
+        // A registry change made while the connection was down woke no one:
+        // reconcile now rather than at the next poll.
+        { onReconnect: this.#loop.wake.bind(this.#loop) },
       );
       this.#loop.run(async (loop) => {
         // Run one reconcile immediately on start, then loop on wake-or-poll.

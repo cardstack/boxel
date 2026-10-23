@@ -38,6 +38,10 @@ const log = logger('realm-server:index-updated-listener');
 export interface RealmIndexUpdatedListenerDeps {
   dbAdapter: PgAdapter;
   lookupMountedRealm: (url: string) => Realm | undefined;
+  // Every realm mounted here, for catching up after the notification
+  // connection reconnects (see `#handleReconnect`). Without it there is
+  // nothing to catch up.
+  listMountedRealms?: () => readonly Realm[];
 }
 
 export class RealmIndexUpdatedListener {
@@ -60,6 +64,7 @@ export class RealmIndexUpdatedListener {
         (notification) => {
           this.#handleNotification(notification.payload);
         },
+        { onReconnect: () => this.#handleReconnect() },
       );
     })();
     try {
@@ -88,6 +93,28 @@ export class RealmIndexUpdatedListener {
   // Exposed for tests; invoked internally by the LISTEN handler.
   handleNotification(payload: string | undefined): void {
     this.#handleNotification(payload);
+  }
+
+  // Exposed for tests; invoked internally after the notification connection
+  // reconnects.
+  handleReconnect(): void {
+    this.#handleReconnect();
+  }
+
+  // Any realm's index may have moved while the connection was down, and its
+  // notification is lost. Clear every mounted realm's index caches, as its
+  // own notification would have. A compiled policy that reads from a realm
+  // not mounted here revalidates on its own within its staleness bound.
+  #handleReconnect(): void {
+    for (const realm of this.#deps.listMountedRealms?.() ?? []) {
+      try {
+        realm.clearRealmIndexCaches();
+      } catch (err: unknown) {
+        log.warn(
+          `clearRealmIndexCaches after reconnect failed for ${realm.url}: ${String(err)}`,
+        );
+      }
+    }
   }
 
   #handleNotification(payload: string | undefined): void {

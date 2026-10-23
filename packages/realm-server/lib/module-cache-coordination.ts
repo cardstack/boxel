@@ -102,6 +102,11 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
         (notification) => {
           this.#dispatch(notification.payload);
         },
+        // A populate that finished while the connection was down notified no
+        // one, so its waiters would sit out their full timeout. Wake them
+        // all: each re-reads the cache and waits again if its row is not
+        // there yet.
+        { onReconnect: () => this.#wakeAllWaiters() },
       );
     })();
     try {
@@ -130,10 +135,15 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
     // during a clean shutdown. Their loops will re-read the cache on
     // wake and either return the row or surface a transient miss as a
     // normal undefined.
-    for (let waiters of this.#waiters.values()) {
-      for (let waiter of waiters) {
-        waiter.resolve();
-      }
+    this.#wakeAllWaiters();
+  }
+
+  #wakeAllWaiters(): void {
+    // Each waiter's resolve unregisters it from its set, so resolve from a
+    // copy.
+    let waiters = [...this.#waiters.values()].flatMap((set) => [...set]);
+    for (let waiter of waiters) {
+      waiter.resolve();
     }
     this.#waiters.clear();
   }
