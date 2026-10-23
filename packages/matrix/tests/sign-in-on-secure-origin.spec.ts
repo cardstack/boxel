@@ -2,6 +2,7 @@ import { expect, test } from './fixtures.ts';
 import type { BrowserContext, Page, TestInfo } from '@playwright/test';
 import { appURL, secureOriginURL } from '../support/isolated-realm-server.ts';
 import {
+  createRealm,
   createSubscribedUser,
   logout,
   postCardSource,
@@ -181,8 +182,10 @@ test.describe('Sign in on the secure origin', () => {
   test("a private realm's images load after the hand-off, and stop once signed out", async ({
     page,
   }) => {
-    let realmURL = `${appURL}/`;
-    let imageURL = `${realmURL}secure-sign-in-probe-${Date.now()}.svg`;
+    // A workspace of the user's own, which no one else may read.
+    let realmName = `secure-sign-in-${Date.now().toString(36)}`;
+    let realmURL = `${APP_ORIGIN}/${username}/${realmName}/`;
+    let imageURL = `${realmURL}probe.svg`;
     let loads = (url: string) =>
       page.evaluate(
         (src) =>
@@ -195,12 +198,11 @@ test.describe('Sign in on the secure origin', () => {
         url,
       );
 
-    await page.goto(appURL);
+    await page.goto(APP_ORIGIN);
     await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
     await signInOnSecurePage(page, username, password);
-    await expect(
-      page.locator('[data-test-operator-mode-stack="0"]'),
-    ).toHaveCount(1, { timeout: 60_000 });
+    await page.waitForURL((url) => url.origin === APP_ORIGIN);
+    await createRealm(page, realmName);
     await postCardSource(
       page,
       realmURL,
@@ -262,7 +264,9 @@ test.describe('Sign in on the secure origin', () => {
     await expect(page.locator('[data-test-secure-signed-in]')).toBeVisible({
       timeout: 60_000,
     });
-    // Signed in; a page on the user's own machine asks for the sign-in.
+    // Signed in; a page on the user's own machine asks for the sign-in. A
+    // fresh document, since only the fragment would differ from this one.
+    await page.goto('about:blank');
     await page.goto(
       `${secureOriginURL}?mode=sign-in#return=${encodeURIComponent(
         'http://localhost:4299/',
