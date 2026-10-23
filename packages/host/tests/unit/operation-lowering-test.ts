@@ -24,6 +24,8 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 
 import { testRealmURL } from '../helpers';
 
+import { shimTestModule } from '../helpers/identity-tags';
+
 import type { BaseDef, CardDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type * as OperationsModule from '@cardstack/base/operations';
@@ -116,7 +118,7 @@ module('Unit | operation lowering', function (hooks) {
   // and `lookupDefinition` can load it back.
   function shim(exports: Record<string, typeof BaseDef>) {
     for (let [name, def] of Object.entries(exports)) {
-      loader.shimModule(`${testRealmURL}${name.toLowerCase()}`, {
+      shimTestModule(loader, `${testRealmURL}${name.toLowerCase()}`, {
         [name]: def,
       });
     }

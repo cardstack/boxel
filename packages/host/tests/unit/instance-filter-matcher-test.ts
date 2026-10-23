@@ -21,6 +21,8 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 
 import { testRealmURL, p } from '../helpers';
 
+import { shimTestModule } from '../helpers/identity-tags';
+
 import type { CardDef, FileDef } from '@cardstack/base/card-api';
 
 let { resolvedBaseRealmURL } = ENV;
@@ -138,11 +140,11 @@ module('Unit | instance-filter-matcher', function (hooks) {
       @field _matchRelevance = contains(NumberField);
     }
 
-    loader.shimModule(`${testRealmURL}person`, { Person });
-    loader.shimModule(`${testRealmURL}fancy-person`, { FancyPerson });
-    loader.shimModule(`${testRealmURL}cat`, { Cat });
-    loader.shimModule(`${testRealmURL}event`, { Event });
-    loader.shimModule(`${testRealmURL}ranked`, { Ranked });
+    shimTestModule(loader, `${testRealmURL}person`, { Person });
+    shimTestModule(loader, `${testRealmURL}fancy-person`, { FancyPerson });
+    shimTestModule(loader, `${testRealmURL}cat`, { Cat });
+    shimTestModule(loader, `${testRealmURL}event`, { Event });
+    shimTestModule(loader, `${testRealmURL}ranked`, { Ranked });
 
     personRef = { module: rri(`${testRealmURL}person`), name: 'Person' };
     fancyPersonRef = {

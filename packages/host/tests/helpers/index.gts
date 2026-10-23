@@ -26,6 +26,7 @@ import {
   ensureTrailingSlash,
   fetchEffectiveRealmPermissions,
   getCreatedTime,
+  hasExecutableExtension,
   IndexWriter,
   insertPermissions,
   Loader,
@@ -74,6 +75,7 @@ import {
 } from '@cardstack/host/utils/render-error';
 
 import { TestRealmAdapter } from './adapter';
+import { tagTestModuleExports } from './identity-tags';
 import { testRealmServerMatrixUsername, setupMockMatrix } from './mock-matrix';
 import percySnapshot from './percy-snapshot';
 import { setupAuthEndpoints } from './realm-server-mock';
@@ -1362,6 +1364,22 @@ export async function setupAcceptanceTestRealm({
   return result;
 }
 
+// The test realm serves a module given as its exports by shimming them, so
+// the classes among them are tagged as the realm would compile them, under
+// the module's URL.
+function tagRealmContentClasses(contents: RealmContents, realmURL: string) {
+  for (let [path, value] of Object.entries(contents)) {
+    if (
+      hasExecutableExtension(path) &&
+      value &&
+      typeof value === 'object' &&
+      !(value instanceof Uint8Array)
+    ) {
+      tagTestModuleExports(new URL(path, realmURL).href, value);
+    }
+  }
+}
+
 export async function setupIntegrationTestRealm({
   contents = {},
   realmURL,
@@ -1555,6 +1573,7 @@ async function setupTestRealm({
   let { queue } = getService('queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
+  tagRealmContentClasses(contents, realmURL);
 
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');

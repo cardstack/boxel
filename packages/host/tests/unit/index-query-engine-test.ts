@@ -36,6 +36,8 @@ import {
   serializeCard,
 } from '../helpers';
 
+import { shimTestModule } from '../helpers/identity-tags';
+
 import type { CardDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
 
@@ -150,13 +152,13 @@ module('Unit | query', function (hooks) {
       });
     }
 
-    loader.shimModule(`${testRealmURL}address`, { Address });
-    loader.shimModule(`${testRealmURL}person`, { Person });
-    loader.shimModule(`${testRealmURL}fancy-person`, { FancyPerson });
-    loader.shimModule(`${testRealmURL}cat`, { Cat });
-    loader.shimModule(`${testRealmURL}spec`, { SimpleSpec });
-    loader.shimModule(`${testRealmURL}event`, { Event });
-    loader.shimModule(`${testRealmURL}org`, { Org });
+    shimTestModule(loader, `${testRealmURL}address`, { Address });
+    shimTestModule(loader, `${testRealmURL}person`, { Person });
+    shimTestModule(loader, `${testRealmURL}fancy-person`, { FancyPerson });
+    shimTestModule(loader, `${testRealmURL}cat`, { Cat });
+    shimTestModule(loader, `${testRealmURL}spec`, { SimpleSpec });
+    shimTestModule(loader, `${testRealmURL}event`, { Event });
+    shimTestModule(loader, `${testRealmURL}org`, { Org });
 
     let stringFieldEntry = new SimpleSpec({
       cardTitle: 'String Field',

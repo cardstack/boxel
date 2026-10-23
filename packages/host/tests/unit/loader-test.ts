@@ -20,6 +20,7 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../helpers';
+import { shimTestModule } from '../helpers/identity-tags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -713,11 +714,11 @@ module('Unit | loader', function (hooks) {
 
     class StringField {}
 
-    throwIfFetch.shimModule(`${baseRealm.url}card-api.gts`, {
+    shimTestModule(throwIfFetch, `${baseRealm.url}card-api.gts`, {
       StringField,
     });
 
-    throwIfFetch.shimModule(`${baseRealm.url}string.ts`, {
+    shimTestModule(throwIfFetch, `${baseRealm.url}string.ts`, {
       default: StringField,
     });
 

@@ -4,6 +4,7 @@ import { module, test } from 'qunit';
 import { Loader, getField, identifyCard } from '@cardstack/runtime-common';
 import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 
+import { tagTestModuleExports } from '../helpers/identity-tags';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -40,11 +41,11 @@ function defineLinkedPair(api: typeof CardAPIModule) {
   let virtualNetwork = getService('network').virtualNetwork;
   virtualNetwork.shimAsyncModule({
     id: declarer,
-    resolve: async () => ({ Target }),
+    resolve: async () => tagTestModuleExports(declarer, { Target }),
   });
   virtualNetwork.shimAsyncModule({
     id: holder,
-    resolve: async () => ({ LinkHolder }),
+    resolve: async () => tagTestModuleExports(holder, { LinkHolder }),
   });
   return { Target, LinkHolder, declarer, holder };
 }
@@ -78,11 +79,11 @@ function defineBundledPair(api: typeof CardAPIModule) {
   let virtualNetwork = getService('network').virtualNetwork;
   virtualNetwork.shimAsyncModule({
     id: DECLARER,
-    resolve: async () => ({ Detail }),
+    resolve: async () => tagTestModuleExports(DECLARER, { Detail }),
   });
   virtualNetwork.shimAsyncModule({
     id: HOLDER,
-    resolve: async () => ({ Holder }),
+    resolve: async () => tagTestModuleExports(HOLDER, { Holder }),
   });
   return { Detail, Holder };
 }
