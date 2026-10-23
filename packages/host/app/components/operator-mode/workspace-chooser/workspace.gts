@@ -1677,7 +1677,7 @@ interface WorkspaceDeleteSummary {
   files: number;
 }
 
-function summarizeWorkspaceContents(
+export function summarizeWorkspaceContents(
   fileURLs: string[],
 ): WorkspaceDeleteSummary {
   return fileURLs.reduce(
