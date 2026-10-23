@@ -277,6 +277,12 @@ its build set, which is off.
    `boxel browse` and Synapse's SSO put it) with an `m.login.token` login
    before it loads any card, takes it out of the address, and boots as after any sign-in:
    realm-server session, realm tokens, service-worker sync.
+   A token for another account than the one stored in the browser switches
+   accounts (`MatrixService.switchAccount`), signing the stored one out. A
+   token for the same account boots alongside it and signs nothing out. This
+   happens when two tabs that signed out together each come back from the
+   secure origin. Signing the stored session out would sign the other tab out,
+   and would end the secure windows the sign-in just came from.
 
 The login token is the Matrix server's own (MSC3882 `login/get_token`),
 asked for with an admin-minted token for the user that is logged out right

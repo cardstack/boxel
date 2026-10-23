@@ -931,6 +931,20 @@ export default class MatrixService extends Service {
       // non-destructive failure page rather than falling to the login form.
       throw new AccountSwitchError('redeem', e);
     }
+    if (auth.user_id === previousAuth.user_id) {
+      // A token for the account already stored here, as when two tabs signed
+      // out together each come back from signing in on the secure origin,
+      // switches nothing. The new session boots alongside the stored one,
+      // which another tab may be running. Logging the stored one out would
+      // sign that tab out, and would end the secure windows this sign-in
+      // just came from.
+      try {
+        await this.start({ auth, refreshRoutes: true });
+      } catch (e) {
+        throw new AccountSwitchError('boot', e);
+      }
+      return;
+    }
     await this.logout({
       skipIndexTransition: true,
       serverLogoutAuth: previousAuth,
