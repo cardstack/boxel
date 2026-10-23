@@ -12,34 +12,41 @@ import {
 // signed-out app sends the user to the secure origin's page, which signs them
 // in and hands the app a single-use Matrix login token by navigating back.
 // The realm server writes the deployment's setting into the host's config
-// each time it serves the app; these tests turn it on by rewriting that
-// config in the documents the app is served as.
+// each time it serves the app; these tests turn it on in the config as the
+// page parses it. (Fulfilling the document from a route instead would make
+// Chrome treat the page as public, and refuse it its loopback assets.)
 
 const APP_ORIGIN = new URL(appURL).origin;
 const SECURE_SESSION_KEY = 'boxel-secure-session';
-const CONFIG_META =
-  /(<meta name="@cardstack\/host\/config\/environment" content=")([^"]+)(")/;
 
 async function signInOnSecureOrigin(context: BrowserContext) {
-  await context.route(
-    (url) => url.origin === APP_ORIGIN,
-    async (route) => {
-      if (route.request().resourceType() !== 'document') {
-        await route.fallback();
+  await context.addInitScript(() => {
+    const NAME = '@cardstack/host/config/environment';
+    let rewrite = (meta: Element) => {
+      if (meta.getAttribute('data-test-flag-set')) {
         return;
       }
-      let response = await route.fetch();
-      let body = await response.text();
-      await route.fulfill({
-        response,
-        body: body.replace(CONFIG_META, (_m, open, content, close) => {
-          let config = JSON.parse(decodeURIComponent(content));
-          config.signInOnSecureOrigin = true;
-          return `${open}${encodeURIComponent(JSON.stringify(config))}${close}`;
-        }),
-      });
-    },
-  );
+      let config = JSON.parse(
+        decodeURIComponent(meta.getAttribute('content') ?? '%7B%7D'),
+      );
+      config.signInOnSecureOrigin = true;
+      meta.setAttribute('content', encodeURIComponent(JSON.stringify(config)));
+      meta.setAttribute('data-test-flag-set', 'true');
+    };
+    new MutationObserver((records) => {
+      for (let record of records) {
+        for (let node of record.addedNodes) {
+          if (
+            node instanceof Element &&
+            node.tagName === 'META' &&
+            node.getAttribute('name') === NAME
+          ) {
+            rewrite(node);
+          }
+        }
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
 }
 
 async function snapshot(testInfo: TestInfo, page: Page, name: string) {
