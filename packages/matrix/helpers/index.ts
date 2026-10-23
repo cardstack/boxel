@@ -419,9 +419,25 @@ export async function clearLocalStorage(page: Page, appURL = testHost) {
   await page.evaluate(() => window.localStorage.clear());
 }
 
+// The model shown in the editor. An older model can still be in the list
+// until it is disposed, so the first one is not necessarily this one.
 export async function getMonacoContent(page: Page): Promise<string> {
   return await page.evaluate(() =>
-    (window as any).monaco?.editor?.getModels()?.[0]?.getValue(),
+    (window as any).monaco?.editor
+      ?.getModels()
+      ?.find((model: any) => model.isAttachedToEditor())
+      ?.getValue(),
+  );
+}
+
+export async function describeMonacoModels(page: Page) {
+  return await page.evaluate(() =>
+    ((window as any).monaco?.editor?.getModels() ?? []).map((model: any) => ({
+      uri: model.uri?.toString(),
+      attached: model.isAttachedToEditor?.(),
+      length: model.getValueLength?.(),
+      start: model.getValue?.().slice(0, 300),
+    })),
   );
 }
 

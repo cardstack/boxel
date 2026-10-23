@@ -26,7 +26,6 @@ import TSWorkerUrl from 'monaco-editor/esm/vs/language/typescript/ts.worker.js?w
 
 import { logger, type SingleCardDocument } from '@cardstack/runtime-common';
 
-import config from '@cardstack/host/config/environment';
 import type CardService from '@cardstack/host/services/card-service';
 import type SessionService from '@cardstack/host/services/session';
 import {
@@ -41,8 +40,6 @@ import type * as _MonacoSDK from 'monaco-editor';
 
 export type MonacoSDK = typeof _MonacoSDK;
 export type IStandaloneCodeEditor = _MonacoSDK.editor.IStandaloneCodeEditor;
-
-const { serverEchoDebounceMs } = config;
 
 const log = logger('service:monaco');
 
@@ -104,8 +101,6 @@ export default class MonacoService extends Service {
   @tracked hasFocus = false;
   @service declare cardService: CardService;
   @service declare session: SessionService;
-  // this is in the service so that we can manipulate it in our tests
-  serverEchoDebounceMs = serverEchoDebounceMs;
 
   private waiterManager = createMonacoWaiterManager();
   // Disposables for global Monaco listeners (e.g. `onDidCreateEditor`). Monaco

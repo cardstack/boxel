@@ -149,7 +149,6 @@ module.exports = function (environment) {
     autoSaveMaxWaitMs: 10000,
     monacoDebounceMs: 500,
     monacoCursorDebounceMs: 200,
-    serverEchoDebounceMs: 5000,
     loginMessageTimeoutMs: 1000,
     minSaveTaskDurationMs: 1000,
     cardRenderTimeout: Number(
@@ -264,7 +263,6 @@ module.exports = function (environment) {
     ENV.monacoDebounceMs = 0;
     ENV.monacoCursorDebounceMs = 0;
     ENV.realmServerURL = 'http://test-realm';
-    ENV.serverEchoDebounceMs = 0;
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
     ENV.sqlSchema = sqlSchema;
