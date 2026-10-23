@@ -149,6 +149,12 @@ export interface InstanceEntry {
   // or a render that built no card document. The column is then null and the
   // GET reports no version, which is what it did before the column existed.
   sourceContentHash?: string;
+  // The dependency forms of the cards `resource`'s relationships name,
+  // persisted to `boxel_index.relationship_deps`. On the split path the index
+  // visit renders no format, so a link the card only renders is in neither
+  // `deps` nor, until its `prerender_html` job runs, `prerendered_html.deps`.
+  // This keeps the card reachable from those links in the meantime.
+  relationshipDeps?: Set<string>;
   // Per-row render timing diagnostics (launch/waits/render timings
   // plus host-side breadcrumbs). Populated from the Prerenderer's
   // `response.meta` and persisted onto `boxel_index.diagnostics`.
@@ -1641,6 +1647,9 @@ export class Batch {
           type: 'instance',
           pristine_doc: entry.resource,
           source_content_hash: entry.sourceContentHash ?? null,
+          relationship_deps: entry.relationshipDeps
+            ? [...entry.relationshipDeps]
+            : null,
           search_doc: entry.searchData,
           icon_html: entry.iconHTML,
           deps: [...entry.deps],
@@ -1826,6 +1835,11 @@ export class Batch {
     if (preparedEntry.last_known_good_deps) {
       preparedEntry.last_known_good_deps = await this.internScopedCSSDeps(
         this.virtualNetwork.unresolveURLs(preparedEntry.last_known_good_deps),
+      );
+    }
+    if (preparedEntry.relationship_deps) {
+      preparedEntry.relationship_deps = this.virtualNetwork.unresolveURLs(
+        preparedEntry.relationship_deps,
       );
     }
     if (preparedEntry.error_doc?.deps) {
@@ -2696,11 +2710,15 @@ export class Batch {
       }
     }
     for (let urlChunk of urlChunks) {
-      let formsPerQuery = bindBudget - (urlChunk?.length ?? 0) - 1;
+      // Postgres binds each form twice, once per column it matches.
+      let formsPerQuery = Math.floor(
+        (bindBudget - (urlChunk?.length ?? 0) - 1) /
+          (this.#dbAdapter.kind === 'sqlite' ? 1 : 2),
+      );
       for (let i = 0; i < depForms.length; i += formsPerQuery) {
-        let formParams = separatedByCommas(
-          depForms.slice(i, i + formsPerQuery).map((form) => [param(form)]),
-        ) as Expression;
+        let chunk = depForms.slice(i, i + formsPerQuery);
+        let formParams = () =>
+          separatedByCommas(chunk.map((form) => [param(form)])) as Expression;
         let rows = (await this.#query([
           dbExpression({
             pg: `SELECT i.url FROM boxel_index AS i WHERE`,
@@ -2721,10 +2739,18 @@ export class Batch {
               : []),
             [
               dbExpression({
-                pg: ['i.deps ?| CAST(ARRAY[', ...formParams, '] AS text[])'],
+                // `relationship_deps` too, for a linking card a peer committed
+                // before its HTML recorded the link (see `itemsThatReference`).
+                pg: [
+                  '(i.deps ?| CAST(ARRAY[',
+                  ...formParams(),
+                  '] AS text[]) OR i.relationship_deps ?| CAST(ARRAY[',
+                  ...formParams(),
+                  '] AS text[]))',
+                ],
                 sqlite: [
                   'dep_entry.value IN',
-                  ...addExplicitParens(formParams),
+                  ...addExplicitParens(formParams()),
                 ] as Expression,
               }),
             ],
@@ -4670,6 +4696,7 @@ export class Batch {
       this.isRegisteredPrefix(unresolvedPath);
     let scanTable = async (
       tableName: 'boxel_index_pending' | 'prerendered_html' | 'boxel_index',
+      column: 'deps' | 'relationship_deps' = 'deps',
     ) => {
       let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
         type: BoxelIndexTable['type'];
@@ -4687,7 +4714,7 @@ export class Batch {
               [
                 dbExpression({
                   sqlite: `deps_array_element =`,
-                  pg: `i.deps @>`,
+                  pg: `i.${column} @>`,
                 }),
                 param({
                   sqlite: resolvedPath,
@@ -4697,7 +4724,7 @@ export class Batch {
               [
                 dbExpression({
                   sqlite: `deps_array_element =`,
-                  pg: `i.deps @>`,
+                  pg: `i.${column} @>`,
                 }),
                 param({
                   sqlite: unresolvedPath,
@@ -4708,7 +4735,7 @@ export class Batch {
           : ([
               dbExpression({
                 sqlite: `deps_array_element =`,
-                pg: `i.deps @>`,
+                pg: `i.${column} @>`,
               }),
               param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
             ] as Expression);
@@ -4716,8 +4743,7 @@ export class Batch {
           'SELECT i.url, i.file_alias, i.type',
           `FROM ${tableName} as i`,
           dbExpression({
-            sqlite:
-              'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
+            sqlite: `CROSS JOIN LATERAL jsonb_array_elements_text(i.${column}) as deps_array_element`,
           }),
           'WHERE',
           ...every([
@@ -4766,10 +4792,32 @@ export class Batch {
     // fans out. A peer pass's staged rows are not: until that pass commits,
     // its edges are not part of the index this pass is working from. Rows
     // present in both tables collapse in the (url, type) dedup below.
-    let [pendingScan, prerenderedScan, productionScan] = await Promise.all([
+    //
+    // On the split path a card's links are a render edge before its HTML
+    // exists too: the index row records them in `relationship_deps`, because a
+    // card+json GET assembles `included` from them, while
+    // `prerendered_html.deps` gains them only once the card's `prerender_html`
+    // job has run. Without this scan a change to a linked card in that window
+    // would leave the linking card's `indexed_at`, and so its validator,
+    // where it was. The fused path renders the HTML in the same pass, so its
+    // `prerendered_html.deps` has no such window.
+    let noRows = { results: [], pageNumber: 0 };
+    let [
+      pendingScan,
+      prerenderedScan,
+      productionScan,
+      pendingLinkScan,
+      productionLinkScan,
+    ] = await Promise.all([
       scanTable('boxel_index_pending'),
       scanTable('prerendered_html'),
       scanTable('boxel_index'),
+      this.#splitPrerenderHtml
+        ? scanTable('boxel_index_pending', 'relationship_deps')
+        : noRows,
+      this.#splitPrerenderHtml
+        ? scanTable('boxel_index', 'relationship_deps')
+        : noRows,
     ]);
     let seen = new Set<string>();
     let results: ReferencingItem[] = [];
@@ -4777,6 +4825,8 @@ export class Batch {
       [pendingScan.results, false],
       [productionScan.results, false],
       [prerenderedScan.results, true],
+      [pendingLinkScan.results, true],
+      [productionLinkScan.results, true],
     ] as const) {
       for (let { url, file_alias, type } of rows) {
         let key = `${url}|${type}`;
@@ -4793,7 +4843,9 @@ export class Batch {
       } ms (page count=${
         pendingScan.pageNumber +
         prerenderedScan.pageNumber +
-        productionScan.pageNumber
+        productionScan.pageNumber +
+        pendingLinkScan.pageNumber +
+        productionLinkScan.pageNumber
       })`,
     );
     return results;

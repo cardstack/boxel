@@ -60,6 +60,13 @@ export interface BoxelIndexTable {
   // The GET then reports no version, which is what it did before this column
   // existed. Nothing that decides row liveness may read it.
   source_content_hash: string | null;
+  // The dependency forms of the cards a row's own relationships name, written
+  // by the pass that wrote the row. A card+json GET assembles `included` from
+  // those relationships, so the served document depends on each of them even
+  // when the index visit read none. The invalidation fan-out reads this as a
+  // render edge (see `itemsThatReference`). Instance rows only; null on a row
+  // written before the column existed.
+  relationship_deps: string[] | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
   resource_created_at: string | null; // pg represents big integers as strings in javascript
@@ -273,6 +280,7 @@ export function isPartitionedRealmMetaValue(
 export const coerceTypes = Object.freeze({
   deps: 'JSON',
   last_known_good_deps: 'JSON',
+  relationship_deps: 'JSON',
   types: 'JSON',
   pristine_doc: 'JSON',
   error_doc: 'JSON',
