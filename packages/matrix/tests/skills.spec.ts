@@ -391,21 +391,36 @@ test.describe('Skills', () => {
     // its id from that stack item: `[data-test-card]` also matches every
     // card in the index's Library grid (the realm card among them), which
     // render on their own schedule and sit before the skill in DOM order.
-    const skillCard = await page
-      .locator('[data-test-stack-card-index="1"]')
-      .getAttribute('data-test-stack-card');
-    const stackCardIds = await page
-      .locator('[data-test-stack-card]')
-      .evaluateAll((els) =>
-        els.map((el) => el.getAttribute('data-test-stack-card')),
+    // The stack item carries the id only once the card's first save has
+    // returned, which can trail `[data-test-last-saved]` (it shows "Unsaved
+    // changes" while that save is in flight), so wait for the id itself.
+    const newSkillStackItem = page.locator('[data-test-stack-card-index="1"]');
+    const stackCards = () =>
+      page
+        .locator('[data-test-stack-card-index]')
+        .evaluateAll((els) =>
+          els.map(
+            (el) =>
+              `${el.getAttribute('data-test-stack-card-index')}:${el.getAttribute('data-test-stack-card')}`,
+          ),
+        );
+    try {
+      await expect(newSkillStackItem).toHaveAttribute(
+        'data-test-stack-card',
+        /\/Skill\/[^/]+$/,
       );
-    console.log(
-      `[skills-overwrite] new skill card=${skillCard} stack=${JSON.stringify(stackCardIds)}`,
+    } catch (e) {
+      console.log(
+        `[skills-overwrite] stack item 1 never held a saved Skill card; stack=${JSON.stringify(await stackCards())}`,
+      );
+      throw e;
+    }
+    const skillCard = await newSkillStackItem.getAttribute(
+      'data-test-stack-card',
     );
-    expect(
-      skillCard,
-      `stack item 1 should hold the new Skill card; stack: ${JSON.stringify(stackCardIds)}`,
-    ).toMatch(/\/Skill\/[^/]+$/);
+    console.log(
+      `[skills-overwrite] new skill card=${skillCard} stack=${JSON.stringify(await stackCards())}`,
+    );
 
     // close the Skill card
     await page.locator('[data-test-close-button]').click();
