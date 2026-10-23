@@ -23,6 +23,10 @@ const PNPM_OWNED_FILES = new Set(['pnpm-lock.yaml', 'pnpm-workspace.yaml']);
 // it and drifts the copy from its source. Match on a path segment so absolute
 // staged paths work.
 const VERBATIM_COPIED_TREES = [
+  // Vendored from the Deck repo; `scripts/deck-sync.mjs check` fails CI if
+  // these bytes differ from DECK_SOURCE's recorded tree-hash.
+  '/packages/deck/src/',
+  '/packages/deck/tests/',
   // Licensed FileDef sample files whose bytes must match the integrity
   // manifest in the sibling SOURCES.md.
   '/packages/experiments-realm/filedef-fixtures/samples/',
