@@ -248,17 +248,17 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    // Terminate every backend in this test database whose last statement was
-    // a LISTEN: the shared notification client, and nothing else here.
-    async function terminateNotificationConnection(): Promise<number> {
-      let rows = await dbAdapter.execute(
-        `SELECT pg_terminate_backend(pid) AS killed
-           FROM pg_stat_activity
-          WHERE datname = current_database()
-            AND pid <> pg_backend_pid()
-            AND query ILIKE 'LISTEN %'`,
+    // Terminate the shared notification connection, and nothing else.
+    async function terminateNotificationConnection(): Promise<boolean> {
+      let pid = await dbAdapter.__testOnlyNotificationBackendPid();
+      if (pid === undefined) {
+        return false;
+      }
+      let [row] = await dbAdapter.execute(
+        `SELECT pg_terminate_backend($1) AS killed`,
+        { bind: [pid] },
       );
-      return rows.length;
+      return row.killed === true;
     }
 
     // A notification sent before the reconnect is lost, so keep sending until
@@ -291,7 +291,7 @@ module(basename(import.meta.filename), function () {
         await waitFor(() => (seen.includes('before') ? true : undefined));
 
         assert.ok(
-          (await terminateNotificationConnection()) > 0,
+          await terminateNotificationConnection(),
           'the notification connection was terminated',
         );
         await notifyUntilSeen('mux_reconnect_receive', seen, 'after');
@@ -319,7 +319,10 @@ module(basename(import.meta.filename), function () {
       );
       try {
         assert.strictEqual(reconnectsA, 0, 'not told before any loss');
-        await terminateNotificationConnection();
+        assert.ok(
+          await terminateNotificationConnection(),
+          'the notification connection was terminated',
+        );
         await notifyUntilSeen('mux_reconnect_told', seen, 'after');
         await waitFor(() =>
           reconnectsA > 0 && reconnectsB > 0 ? true : undefined,
@@ -350,7 +353,10 @@ module(basename(import.meta.filename), function () {
       );
       try {
         await notifyUntilSeen('mux_reconnect_listen', seen, 'before');
-        await terminateNotificationConnection();
+        assert.ok(
+          await terminateNotificationConnection(),
+          'the notification connection was terminated',
+        );
         await notifyUntilSeen('mux_reconnect_listen', seen, 'after');
         assert.ok(seen.includes('after'), 'a notification after it arrives');
         await waitFor(() => (reconnects > 0 ? true : undefined));

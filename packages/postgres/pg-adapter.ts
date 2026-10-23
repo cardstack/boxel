@@ -329,6 +329,17 @@ export class PgAdapter implements DBAdapter {
     return this.#isClosed;
   }
 
+  // Test seam: the backend pid of the shared notification connection, so a
+  // test can terminate exactly that connection. Undefined while there is none.
+  async __testOnlyNotificationBackendPid(): Promise<number | undefined> {
+    let client = this.#notificationClient;
+    if (!client) {
+      return undefined;
+    }
+    let { rows } = await client.query('SELECT pg_backend_pid() AS pid');
+    return Number(rows[0].pid);
+  }
+
   // The connection scheduler's state when read, for the health sampler:
   // connections checked out against the pool's max, acquisitions waiting,
   // and how many of those wait only because their tenant is at its share.
