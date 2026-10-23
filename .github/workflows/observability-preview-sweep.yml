@@ -65,11 +65,16 @@ jobs:
 
     steps:
       - name: Refuse to sweep production from a non-main ref
-        # `schedule` always runs the default branch, but
-        # `workflow_dispatch` lets an operator choose any ref — including
-        # one whose copy of this workflow was rewritten to do something
-        # else with the production role. Mirrors the guard in
-        # observability-apply-production.yml.
+        # `schedule` always runs the default branch; `workflow_dispatch` lets
+        # an operator choose any ref. This guard catches dispatching a stale
+        # but honest branch, which is a real mistake — nothing more.
+        #
+        # It cannot stop a ref whose copy of this workflow was rewritten,
+        # because workflow_dispatch runs the chosen ref's copy of the guard
+        # too. What limits the damage there is the credential, not this step:
+        # the sweep assumes boxel-observability-preview, whose Grafana account
+        # is Viewer plus Admin on the `Previews` folder, so a rewritten copy
+        # still cannot touch a canonical dashboard.
         if: matrix.env == 'production'
         env:
           REF: ${{ github.ref }}
