@@ -103,6 +103,13 @@ export class RealmFileChangesListener {
   // Any file in any realm may have changed while the connection was down, and
   // its notification is lost. Do what a wildcard notification does for every
   // mounted realm: drop its cached bytes and its cached realm info.
+  //
+  // Like the wildcard, this does not refresh the kernel's directory views:
+  // the paths that changed are unknown, and listing every directory of every
+  // mounted realm on the shared filesystem, on every instance at once just
+  // after the database comes back, costs more than it saves. Only a path a
+  // peer created or deleted during the gap can be hidden, and only until the
+  // kernel's attribute cache expires (see DirectoryViewRefresher).
   #handleReconnect(): void {
     for (const realm of this.#deps.listMountedRealms?.() ?? []) {
       try {
