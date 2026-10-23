@@ -1295,9 +1295,24 @@ export class HomeLedger extends CardDef {
               {{/each}}
             </div>
             {{#if this.filteredTransactions.length}}
-              <div class='transaction-list'>
-                <@fields.transactions @format='embedded' />
-              </div>
+              <ul class='recent-list transaction-list'>
+                {{#each this.filteredTransactions as |txn|}}
+                  <li>
+                    <span class='recent-name'>{{txn.cardTitle}}</span>
+                    <span class='recent-category'>
+                      {{this.categoryName txn.category}}
+                      ·
+                      {{formatDateTime txn.date preset='short' fallback='No date'}}
+                    </span>
+                    <span class='recent-amount {{if txn.isIncome "income"}}'>
+                      {{if txn.isIncome '+' '−'}}{{formatCurrency
+                        txn.amount
+                        currency='USD'
+                      }}
+                    </span>
+                  </li>
+                {{/each}}
+              </ul>
             {{else}}
               <p class='empty'>No transactions match this filter.</p>
             {{/if}}
@@ -1683,11 +1698,6 @@ export class HomeLedger extends CardDef {
           background: var(--primary);
           border-color: var(--primary);
           color: var(--primary-foreground);
-        }
-        .transaction-list > .linksToMany-field {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-4xs);
         }
         .account-item {
           display: flex;
