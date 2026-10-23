@@ -1034,30 +1034,52 @@ module('Acceptance | operator mode tests', function (hooks) {
     // snapshot stays attached for the rest of the shard.
     setupRealmCacheTeardown(hooks);
 
-    let refreshInSec = 2;
-
     hooks.beforeEach(async function () {
       delete (globalThis as any).__boxelRenderContext;
       delete (globalThis as any).__renderInstance;
-      setExpiresInSec(tokenRefreshPeriodSec + refreshInSec);
     });
 
+    // A session already inside the refresh period when it is minted can't be
+    // scheduled from its `exp`, so the refresher holds such a mint back. The
+    // near-expiry session here is one the tab restores from storage instead,
+    // and the mock mints its replacement with an hour to run.
     test('realm session refreshes within 5 minute window of expiration', async function (assert) {
-      await visit('/');
-
-      let originalToken = window.localStorage.getItem(SessionLocalStorageKey);
-      await waitUntil(
-        () =>
-          window.localStorage.getItem(SessionLocalStorageKey) !== originalToken,
-        { timeout: refreshInSec * 3 * 1000 },
+      let originalToken = createJWT(
+        {
+          user: '@testuser:localhost',
+          realm: testRealmURL,
+          sessionRoom: 'test-session-room',
+          permissions: ['read', 'write'],
+          realmServerURL: ensureTrailingSlash(new URL(testRealmURL).origin),
+        },
+        `${tokenRefreshPeriodSec - 60}s`,
+        testRealmSecretSeed,
+      );
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [testRealmURL]: originalToken }),
       );
 
-      let newToken = window.localStorage.getItem(SessionLocalStorageKey);
-      assert.ok(newToken, 'new session token obtained');
+      await visit('/');
+
+      let storedToken = () =>
+        JSON.parse(window.localStorage.getItem(SessionLocalStorageKey) ?? '{}')[
+          testRealmURL
+        ];
+      await waitUntil(() => storedToken() && storedToken() !== originalToken, {
+        timeout: 5000,
+      });
+
+      let newToken = storedToken();
       assert.notEqual(
-        originalToken,
         newToken,
-        'new session token is different than original session token',
+        originalToken,
+        'the session inside the refresh period is replaced',
+      );
+      assert.ok(
+        claimsFromRawToken(newToken).exp * 1000 >
+          Date.now() + tokenRefreshPeriodSec * 1000,
+        'the new session expires outside the refresh period',
       );
     });
   });

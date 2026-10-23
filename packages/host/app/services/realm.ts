@@ -62,6 +62,8 @@ import {
 } from '../utils/auth-service-worker-registration';
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
+import { realmClaimsFromRawToken } from './realm-server';
+
 import type MatrixService from './matrix-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
@@ -1425,7 +1427,7 @@ export default class RealmService extends Service {
     for (let [realmURL, token] of Object.entries(
       SessionStorage.getAll() ?? {},
     )) {
-      let user = token ? safeClaimsFromRawToken(token)?.user : undefined;
+      let user = token ? realmClaimsFromRawToken(token)?.user : undefined;
       if (user && user !== userId) {
         SessionStorage.remove(realmURL);
         syncTokenToServiceWorker(realmURL, undefined);
@@ -1824,14 +1826,6 @@ export const maxTokenRefreshBackoffSec = 30 * 60;
 export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as JWTPayload;
-}
-
-function safeClaimsFromRawToken(rawToken: string): JWTPayload | undefined {
-  try {
-    return claimsFromRawToken(rawToken);
-  } catch {
-    return undefined;
-  }
 }
 
 let SessionStorage = {
