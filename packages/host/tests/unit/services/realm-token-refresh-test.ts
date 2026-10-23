@@ -165,6 +165,34 @@ module('Unit | Service | realm | token refresh', function (hooks) {
     );
   });
 
+  test('logging out starts the next session without the previous one’s backoff', async function (assert) {
+    nextMint = () => sessionToken({ expiresInSec: tokenRefreshPeriodSec });
+    let first = virtualClock(realm, minTokenRefreshIntervalSec * 1000);
+    let resource = realm.getOrCreateRealmResource(
+      REALM,
+      sessionToken({ expiresInSec: -10 }),
+    );
+    await first.exhausted;
+    assert.deepEqual(
+      first.waits,
+      [0, minTokenRefreshIntervalSec * 1000, minTokenRefreshIntervalSec * 2000],
+      'two unusable mints double the wait',
+    );
+
+    realm.logout();
+    let second = virtualClock(realm, 0);
+    // Already subscribed, so signing back in fetches no realm info.
+    (resource as any).subscription = { unsubscribe() {} };
+    await resource.login();
+    await second.exhausted;
+
+    assert.deepEqual(
+      second.waits,
+      [minTokenRefreshIntervalSec * 1000],
+      'the first unusable mint after logging back in waits the shortest interval',
+    );
+  });
+
   test('reauthenticating a realm keeps every other realm’s session', async function (assert) {
     virtualClock(realm, 0);
     let otherToken = sessionToken({

@@ -14,7 +14,11 @@ export const maxTokenRefreshBackoffSec = 30 * 60;
 // cannot be scheduled from its `exp` — every re-mint would land in the same
 // place, and the refresher would loop — so the wait is
 // `minTokenRefreshIntervalSec`, doubling with each such mint in a row up to
-// `maxTokenRefreshBackoffSec`, and the first usable mint resets it.
+// `maxTokenRefreshBackoffSec`, and the first usable mint resets it. That wait
+// never runs past the session's `exp` while at least
+// `minTokenRefreshIntervalSec` of it remains, so a server whose sessions are
+// shorter than the refresh period gets one mint per session rather than
+// leaving the session expired for most of each wait.
 export class TokenRefreshSchedule {
   // The last token minted, so a fresh session can be told apart from one
   // restored out of storage.
@@ -39,7 +43,8 @@ export class TokenRefreshSchedule {
     exp: number,
     reportUnusable: (delayMs: number) => void,
   ): number {
-    let refreshMs = exp * 1000 - Date.now() - tokenRefreshPeriodSec * 1000;
+    let untilExpiryMs = exp * 1000 - Date.now();
+    let refreshMs = untilExpiryMs - tokenRefreshPeriodSec * 1000;
     if (token === this.lastMintedToken) {
       if (refreshMs < minTokenRefreshIntervalSec * 1000) {
         this.unusableMints++;
@@ -47,6 +52,9 @@ export class TokenRefreshSchedule {
           minTokenRefreshIntervalSec * 1000 * 2 ** (this.unusableMints - 1),
           maxTokenRefreshBackoffSec * 1000,
         );
+        if (untilExpiryMs >= minTokenRefreshIntervalSec * 1000) {
+          refreshMs = Math.min(refreshMs, untilExpiryMs);
+        }
         reportUnusable(refreshMs);
       } else {
         this.unusableMints = 0;

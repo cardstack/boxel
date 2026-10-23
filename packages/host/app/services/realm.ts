@@ -396,8 +396,11 @@ class RealmResource {
     }
   });
 
+  // Unlike `clearRealmSession`, which re-authentication also calls, signing
+  // out starts the next account without this one's refresh backoff.
   logout(): void {
     this.clearRealmSession();
+    this.refreshSchedule.reset();
     window.localStorage.removeItem(SessionLocalStorageKey);
     syncTokenToServiceWorker(this.realmURL, undefined);
   }

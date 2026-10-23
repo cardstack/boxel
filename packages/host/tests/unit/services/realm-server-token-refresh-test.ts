@@ -145,6 +145,55 @@ module('Unit | Service | realm-server | token refresh', function (hooks) {
     );
   });
 
+  test('the wait after unusable mints never runs past the session’s expiry', async function (assert) {
+    // Sessions that last exactly the refresh period are never usable, but
+    // each one is valid for all of it.
+    nextMint = () => serverSessionToken(tokenRefreshPeriodSec);
+    let { waits, exhausted } = virtualClock(realmServer, 2 * 60 * 60 * 1000);
+    realmServer.setClient(matrixClient);
+    await realmServer.login();
+    await exhausted;
+
+    assert.deepEqual(
+      waits.slice(0, 4),
+      [1, 2, 4, 8].map((n) => n * minTokenRefreshIntervalSec * 1000),
+      'the wait doubles while it is shorter than the session',
+    );
+    assert.true(
+      waits.slice(4).every((ms) => ms <= tokenRefreshPeriodSec * 1000),
+      `no later wait outlasts the session (${waits.slice(4).join(', ')})`,
+    );
+    assert.true(
+      waits[4] > (tokenRefreshPeriodSec - 5) * 1000,
+      'each session is used until it expires',
+    );
+  });
+
+  test('logging out starts the next session without the previous one’s backoff', async function (assert) {
+    nextMint = () => serverSessionToken(tokenRefreshPeriodSec);
+    let first = virtualClock(realmServer, minTokenRefreshIntervalSec * 1000);
+    realmServer.setClient(matrixClient);
+    await realmServer.login();
+    await first.exhausted;
+    assert.deepEqual(
+      first.waits,
+      [minTokenRefreshIntervalSec * 1000, minTokenRefreshIntervalSec * 2000],
+      'two unusable mints double the wait',
+    );
+
+    realmServer.logout();
+    let second = virtualClock(realmServer, 0);
+    realmServer.setClient(matrixClient);
+    await realmServer.login();
+    await second.exhausted;
+
+    assert.deepEqual(
+      second.waits,
+      [minTokenRefreshIntervalSec * 1000],
+      'the first unusable mint after logging back in waits the shortest interval',
+    );
+  });
+
   test('a stored session already inside the refresh period is minted again at once', async function (assert) {
     window.localStorage.setItem(
       RealmServerSessionLocalStorageKey,
