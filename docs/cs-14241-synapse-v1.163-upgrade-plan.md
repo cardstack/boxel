@@ -19,13 +19,14 @@ for local and CI runs, and GHCR `ghcr.io/element-hq/synapse:v1.163.0` for ECS.
 
 - Pin `matrixdotorg/synapse:v1.163.0` everywhere v1.126.0 was pinned:
   `packages/matrix/support/synapse/index.ts`,
-  `packages/matrix/tests/synapse-container-networking.spec.ts`,
   `packages/matrix/scripts/test-oidc-mapping-provider.sh`,
   `.github/actions/warm-test-images/action.yml`,
   `.github/workflows/mirror-test-images.yml`,
   `.devcontainer/claude-web-setup.sh`.
 - Add `default_room_version: "10"` to the `dev`, `test` and
   `test-without-registration-token` homeserver templates.
+- Lift `rc_room_creation` and `rc_profile` in the same three templates (see
+  Rate limits below).
 
 ### infra (cardstack/infra)
 
@@ -55,14 +56,24 @@ the same as today's. Existing rooms are not affected either way.
   `state/94/01` adds `inserted_ts` to `state_groups_persisting` with a stable
   default, which Postgres applies without rewriting the table. No delta
   rewrites `events`, `event_json` or `state_groups_state` at startup. The
-  heaviest work is background updates after startup, chiefly
-  `mark_unreferenced_state_groups_for_deletion_bg_update` over
-  `state_groups`.
+  heaviest work is background updates after startup, which build indexes on
+  `device_lists_changes_in_room` (`device_lists_changes_in_room_inserted_ts_idx`
+  and `device_lists_changes_in_room_unconverted_idx`). Synapse serves
+  normally while they run, but the second build needed about 25 GB of free
+  disk at its peak on staging. RDS storage autoscaling does not react fast
+  enough to cover it, so the database needs that much free storage before the
+  upgrade.
 - **Config:** no key our templates or the deployed config use was removed or
   renamed.
 - **Login, SSO and UIA:** every admin and client endpoint we call still
   exists. The OIDC mapping provider interface is unchanged.
   `test-oidc-mapping-provider.sh` passes in the v1.163.0 image.
+- **Sliding sync and experimental flags:** the templates set
+  `experimental_features.msc3575_enabled` (on by default) and
+  `msc3874_enabled`, and both still exist in v1.163.0. The host's and
+  ai-bot's sliding sync on `org.matrix.simplified_msc3575` is covered by the
+  matrix Playwright suite, which passes against v1.163.0, and by the AI
+  assistant smoke tests run after each environment's upgrade.
 - **Rate limits:** several limits apply to requests that weren't limited on
   v1.126.0. The templates and the deployed config lift the two our traffic
   hits:

@@ -45,9 +45,11 @@ rc_joins:
 rc_joins_per_room:
   per_second: 9999
   burst_count: 9999
-# Each user's first sign-in has the realm server's Matrix user create a
-# room, and the realm server looks up profiles without an access token, so
-# neither room creation nor profile lookups are limited here.
+# Rooms are created per user: the realm server's Matrix user creates a
+# session room on each user's first sign-in, and the host creates a room for
+# every new AI assistant chat. The realm server also looks up profiles
+# without an access token. So neither room creation nor profile lookups are
+# limited here.
 rc_room_creation:
   per_second: 10000
   burst_count: 10000

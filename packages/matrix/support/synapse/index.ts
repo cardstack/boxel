@@ -507,10 +507,12 @@ export async function synapseStart(
 
     try {
       synapseId = await dockerRun({
-        // If you bump this version, also update the GHCR mirror so CI keeps
-        // caching it (it must match the version pinned there):
-        // .github/workflows/mirror-test-images.yml and
-        // .github/actions/warm-test-images/action.yml.
+        // If you bump this version, bump every other pin of this image with
+        // it, so CI keeps caching it from the GHCR mirror and every test runs
+        // the same version: .github/workflows/mirror-test-images.yml,
+        // .github/actions/warm-test-images/action.yml,
+        // packages/matrix/scripts/test-oidc-mapping-provider.sh and
+        // .devcontainer/claude-web-setup.sh.
         image: 'matrixdotorg/synapse:v1.163.0',
         containerName,
         dockerParams,
