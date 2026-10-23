@@ -586,7 +586,6 @@ import {
 import { REALMS_LIST_UPDATED_EVENT_TYPE } from './matrix-constants.ts';
 import { createSendEvent } from './send-event.ts';
 import { userExists } from './db-queries/user-queries.ts';
-import { isBotAccount } from './db-queries/realm-permission-queries.ts';
 import {
   analyzeRealmPublishability,
   type PublishabilityViolation,
@@ -2182,7 +2181,7 @@ async function computeContentHashFromRef(
 export interface TokenClaims {
   user: string;
   realm: string;
-  // Absent for a platform account, which has no session room.
+  // Absent for the realm's own Matrix account, which has no session room.
   sessionRoom: string | undefined;
   permissions: RealmPermissions['user'];
   realmServerURL: string;
@@ -3527,20 +3526,18 @@ export class Realm {
     await this.#matrixClient.login();
   }
 
-  // The room this realm messages `matrixUserId` in. A platform account (a
-  // realm's own user, a bot, the realm server's account) has no Boxel account
-  // and is given no room. A person with no Boxel account is refused with
-  // `SessionUserNotFoundError`: the account and its room are made when they
-  // sign in to Boxel, through the realm server's own session.
-  async ensureSessionRoom(matrixUserId: string): Promise<string | undefined> {
+  // The room this realm messages `matrixUserId` in. Every caller here has a
+  // Boxel account: the realm's own Matrix account, which the realm server's
+  // workers and realm-to-realm reads sign in as, never asks for a room. A
+  // caller with no account is refused with `SessionUserNotFoundError`; the
+  // account and its room are made when a person signs in to Boxel, through the
+  // realm server's own session.
+  async ensureSessionRoom(matrixUserId: string): Promise<string> {
     let sessionRoom = await fetchSessionRoom(this.#dbAdapter, matrixUserId);
 
     if (!sessionRoom) {
       let userExistsInDB = await userExists(this.#dbAdapter, matrixUserId);
       if (!userExistsInDB) {
-        if (isBotAccount(matrixUserId)) {
-          return undefined;
-        }
         throw new SessionUserNotFoundError(matrixUserId);
       }
       await this.#matrixClient.login();

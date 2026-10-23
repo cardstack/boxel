@@ -18,8 +18,8 @@ import {
 import { registerUser } from '../../synapse.ts';
 
 // A realm's `_session` mints a session carrying the room the realm messages
-// its holder in. A person has that room once they have a Boxel account; a
-// platform account is given none.
+// its holder in, which exists once the holder has a Boxel account. The realm's
+// own Matrix account, which the realm server reads realms as, is given none.
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('realm session for a Matrix account', function (hooks) {
     let testRealm: Realm;
@@ -40,8 +40,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       },
     });
 
-    async function registerPerson() {
-      let username = `session-account-${randomBytes(6).toString('hex')}`;
+    async function registerPerson(suffix = '') {
+      let username = `session-account-${randomBytes(6).toString('hex')}${suffix}`;
       let password = `pw-${randomBytes(12).toString('hex')}`;
       let { userId } = await registerUser({
         matrixURL,
@@ -86,6 +86,23 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('a person whose name reads like a service account is refused a session too', async function (assert) {
+      // Matrix registration reserves none of the localparts the platform's own
+      // accounts use, so the name says nothing about who is asking.
+      let { username, password } = await registerPerson('_realm');
+      let response = await postSession(
+        await openIdToken(
+          new MatrixClient({
+            matrixURL: new URL(matrixURL),
+            username,
+            password,
+          }),
+        ),
+      );
+
+      assert.strictEqual(response.status, 403, 'the session is refused');
+    });
+
     test('a person with a Boxel account gets a session carrying their session room', async function (assert) {
       let { username, password, userId } = await registerPerson();
       await getOrCreateUser(dbAdapter, userId);
@@ -110,7 +127,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.ok(claims.sessionRoom, 'the session carries a session room');
     });
 
-    test('the realm server’s own account gets a session without a session room', async function (assert) {
+    test('the realm’s own Matrix account gets a session without a session room', async function (assert) {
       let response = await postSession(
         await openIdToken(
           new MatrixClient({

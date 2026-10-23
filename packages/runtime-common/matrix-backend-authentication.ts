@@ -14,16 +14,13 @@ export interface Utils {
     sessionRoom?: string,
     opts?: { extendedLifetime?: boolean },
   ): Promise<string>;
-  // Resolves to no room for an account that is not given one, and rejects with
-  // `SessionUserNotFoundError` for a person with no Boxel account.
-  ensureSessionRoom(
-    user: string,
-    registrationToken?: string,
-  ): Promise<string | undefined>;
+  // Rejects with `SessionUserNotFoundError` for a Matrix user with no Boxel
+  // account.
+  ensureSessionRoom(user: string, registrationToken?: string): Promise<string>;
 }
 
-// A person who holds a Matrix account but has no Boxel account on this realm
-// server, which is made when they first sign in to Boxel. A session minted for
+// A Matrix user with no Boxel account on this realm server, which is made when
+// they first sign in to Boxel. A session minted for
 // them would carry no session room, so none is minted.
 export class SessionUserNotFoundError extends Error {
   readonly user: string;
