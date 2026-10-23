@@ -1,7 +1,9 @@
-// The sign-in screen, as both origins draw it: the Google button when the
-// Matrix server offers Google, the fields the caller puts in its block, the
-// link to reset a forgotten password, Sign In, and the link to create an
-// account. It holds no state and sends nothing; the caller decides what each
+// The sign-in screen, as both origins draw it: the title, the Google button
+// when the Matrix server offers Google, the fields the caller puts in its
+// block, the link to reset a forgotten password, Sign In, and the link to
+// create an account. A page that signs in for something other than the app,
+// such as the CLI's, names itself with `@title` and says what signing in
+// grants in its `intro` block, in place of the Google subtitle. It holds no state and sends nothing; the caller decides what each
 // control does. On the secure origin the fields are its own inputs; in the app
 // they are the credential frame.
 //
@@ -15,9 +17,12 @@ import GoogleColor from '../components/icons/google-color.gts';
 
 interface Signature {
   Args: {
+    // The screen's heading; "Sign in to your Boxel Account" when not given.
+    title?: string;
     // Whether the Google button shows.
     google?: boolean;
-    // Whether the subtitle inviting a new user to start with Google shows.
+    // Whether the subtitle inviting a new user to start with Google shows,
+    // when there is no `intro` block.
     googleSubtitle?: boolean;
     startingGoogle?: boolean;
     submitDisabled?: boolean;
@@ -28,7 +33,7 @@ interface Signature {
     onForgotPassword: (event: Event) => void;
     onRegister: (event: Event) => void;
   };
-  Blocks: { default: [] };
+  Blocks: { default: []; intro: [] };
 }
 
 const SignInScreen: TemplateOnlyComponent<Signature> = <template>
@@ -38,8 +43,10 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
     aria-level='1'
     data-test-secure-title
     data-test-secure-sign-in-title
-  >Sign in to your Boxel Account</span>
-  {{#if @googleSubtitle}}
+  >{{if @title @title 'Sign in to your Boxel Account'}}</span>
+  {{#if (has-block 'intro')}}
+    {{yield to='intro'}}
+  {{else if @googleSubtitle}}
     <p class='subtitle' data-test-secure-sign-in-subtitle>Use Google to get
       started in one tap - we'll create your Boxel account if you don't have one
       yet.</p>

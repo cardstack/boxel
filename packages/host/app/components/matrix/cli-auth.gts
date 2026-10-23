@@ -1,13 +1,10 @@
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import AuthButton from '@cardstack/secure-origin/components/auth-button.gts';
 import AuthContainer from '@cardstack/secure-origin/components/auth-container.gts';
-import Button from '@cardstack/secure-origin/components/button.gts';
-import GoogleColor from '@cardstack/secure-origin/components/icons/google-color.gts';
+import SignInScreen from '@cardstack/secure-origin/screens/sign-in.gts';
 import { dropTask, restartableTask } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
@@ -95,87 +92,49 @@ export default class CliAuth extends Component {
           @onComplete={{this.onRegisterComplete}}
         />
       {{else}}
-        <span class='title'>Authorize Boxel CLI</span>
-        {{#if this.signedInUserId}}
-          <p class='subtitle'>Confirm your password to give the Boxel CLI
-            running on this computer access to the workspaces of
-            <span
-              class='signed-in-user'
-              data-test-cli-auth-signed-in-as
-            >{{this.signedInUserId}}</span>.</p>
-        {{else}}
-          <p class='subtitle'>Signing in gives the Boxel CLI running on this
-            computer access to your workspaces.</p>
-        {{/if}}
-        {{#if this.resumedFromEmail}}
-          <p class='notice' data-test-cli-auth-resumed>The CLI stops waiting
-            after
-            {{this.cliWaitWindow}}. If signing in doesn't reach it, run
-            <code>boxel profile add</code>
-            again.</p>
-        {{/if}}
-        {{! The secure origin's sign-in screen with this page's own heading
-            and test attributes, drawn from the same components; a change to
-            the sign-in screen's controls or styles is made here too. }}
-        <form data-test-cli-auth-form {{on 'submit' this.submitPassword}}>
-          {{#if this.googleSsoAvailable}}
-            <AuthButton
-              class='google-button'
-              data-test-cli-auth-google
-              @loading={{this.startGoogleSso.isRunning}}
-              {{on 'click' this.googleSso}}
-            >
-              <GoogleColor class='google-g' aria-hidden='true' />
-              Continue with Google
-            </AuthButton>
-            <div class='divider' aria-hidden='true'>
-              <span class='divider-label'>or use your email</span>
-            </div>
-          {{/if}}
-          <CredentialFieldsFrame
-            @form='cli-login'
-            @fields={{this.credentials}}
-          />
-          <Button
-            type='button'
-            class='forgot-password'
-            @kind='link-muted'
-            @size='extra-small'
-            data-test-cli-auth-forgot-password
-            {{on 'click' this.startPasswordReset}}
-          >Forgot password?</Button>
-          <AuthButton
-            data-test-cli-auth-submit
-            @variant='primary'
-            @disabled={{this.isSubmitDisabled}}
-            @loading={{this.doPasswordLogin.isRunning}}
-            {{on 'click' this.submitPassword}}
-          >Sign In</AuthButton>
-          {{#if this.error}}
-            <div
-              class='error'
-              data-test-cli-auth-form-error
-            >{{this.error}}</div>
-          {{/if}}
-          <p class='register-prompt'>
-            <span class='register-prompt-text'>Don't have an account?</span>
-            <Button
-              type='button'
-              class='register-link'
-              @kind='link-primary'
-              data-test-cli-auth-register
-              {{on 'click' this.startRegister}}
-            >Create a new Boxel account</Button>
-          </p>
-        </form>
+        <SignInScreen
+          @title='Authorize Boxel CLI'
+          @google={{this.googleSsoAvailable}}
+          @startingGoogle={{this.startGoogleSso.isRunning}}
+          @submitDisabled={{this.isSubmitDisabled}}
+          @submitting={{this.doPasswordLogin.isRunning}}
+          @error={{this.error}}
+          @onSubmit={{this.submitPassword}}
+          @onGoogle={{this.googleSso}}
+          @onForgotPassword={{this.startPasswordReset}}
+          @onRegister={{this.startRegister}}
+        >
+          <:intro>
+            {{#if this.signedInUserId}}
+              <p class='subtitle'>Confirm your password to give the Boxel CLI
+                running on this computer access to the workspaces of
+                <span
+                  class='signed-in-user'
+                  data-test-cli-auth-signed-in-as
+                >{{this.signedInUserId}}</span>.</p>
+            {{else}}
+              <p class='subtitle'>Signing in gives the Boxel CLI running on this
+                computer access to your workspaces.</p>
+            {{/if}}
+            {{#if this.resumedFromEmail}}
+              <p class='notice' data-test-cli-auth-resumed>The CLI stops waiting
+                after
+                {{this.cliWaitWindow}}. If signing in doesn't reach it, run
+                <code>boxel profile add</code>
+                again.</p>
+            {{/if}}
+          </:intro>
+          <:default>
+            <CredentialFieldsFrame
+              @form='cli-login'
+              @fields={{this.credentials}}
+            />
+          </:default>
+        </SignInScreen>
       {{/if}}
     </AuthContainer>
 
     <style scoped>
-      form {
-        display: flex;
-        flex-direction: column;
-      }
       .title {
         font: 600 var(--boxel-font-md);
         color: var(--foreground);
@@ -200,60 +159,6 @@ export default class CliAuth extends Component {
       }
       .notice code {
         font-family: var(--boxel-monospace-font-family, monospace);
-      }
-      .forgot-password {
-        --host-outline-offset: 2px;
-        margin-top: var(--boxel-sp-4xs);
-        margin-bottom: var(--boxel-sp-lg);
-        margin-left: auto;
-      }
-      .google-button {
-        margin-top: var(--boxel-sp-sm);
-        gap: var(--boxel-sp-xs);
-      }
-      .google-g {
-        width: 1.125rem;
-        height: 1.125rem;
-        flex-shrink: 0;
-      }
-      .divider {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        margin: var(--boxel-sp-lg) 0 var(--boxel-sp-xs);
-      }
-      .divider::before,
-      .divider::after {
-        content: '';
-        flex: 1;
-        height: 1px;
-        background-color: rgba(255, 255, 255, 0.18);
-      }
-      .divider-label {
-        color: var(--muted-foreground);
-        font: 600 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-lg);
-        text-transform: uppercase;
-      }
-      .error {
-        color: var(--boxel-error-100);
-        padding: 0;
-        font: 500 var(--boxel-font-xs);
-        margin: var(--boxel-sp-2xs) auto 0 auto;
-      }
-      .register-prompt {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: var(--boxel-sp-3xs);
-        margin: var(--boxel-sp) 0 0;
-        font: 500 var(--boxel-font-sm);
-      }
-      .register-prompt-text {
-        color: var(--muted-foreground);
-      }
-      .register-link {
-        --host-outline-offset: 2px;
       }
     </style>
   </template>
