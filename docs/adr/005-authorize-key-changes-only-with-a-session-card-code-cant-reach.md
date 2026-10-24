@@ -380,9 +380,8 @@ as an app already signed in would show the user straight into the app.
 6. Synapse v1.126.0: `EmailIdentityAuthChecker._check_threepid` deletes the
    validation session once it has used it.
 7. Synapse v1.126.0 and v1.163.0 alike: `SetPasswordHandler.set_password`
-   deletes the account's
-   devices and access tokens but not its `login_tokens` rows, and only an OIDC
-   back-channel logout invalidates one
+   deletes the account's devices and access tokens but not its `login_tokens`
+   rows, and only an OIDC back-channel logout invalidates one
    (`invalidate_login_tokens_by_session_id`); the admin API's device list
    (`/_synapse/admin/v2/users/<user>/devices`) carries no creation time or
    sign-in method.
