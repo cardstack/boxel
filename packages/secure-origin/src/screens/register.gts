@@ -11,6 +11,7 @@ import { on } from '@ember/modifier';
 
 import AuthButton from '../components/auth-button.gts';
 import AuthFormField from '../components/auth-form-field.gts';
+import AuthHeading from '../components/auth-heading.gts';
 import CheckMark from '../components/icons/check-mark.gts';
 import BoxelInput from '../components/input.gts';
 import InputGroup, {
@@ -24,7 +25,7 @@ interface RegisterFormSignature {
   Args: {
     // The title's heading level, 1 when not given. A page with a heading of
     // its own above the screen passes 2.
-    headingLevel?: number;
+    headingLevel?: 1 | 2;
     name: string;
     email: string;
     username: string;
@@ -63,12 +64,11 @@ function fieldState(error: string | undefined) {
 export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
   <template>
     <div class='registration-page' hidden={{@hidden}} data-test-register-page>
-      <span
+      <AuthHeading
+        @level={{@headingLevel}}
         class='title'
-        role='heading'
-        aria-level={{if @headingLevel @headingLevel 1}}
         data-test-secure-title
-      >Create a Boxel Account</span>
+      >Create a Boxel Account</AuthHeading>
       <form novalidate data-test-register-form {{on 'submit' @onSubmit}}>
         <AuthFormField
           @label='Your Name'
@@ -176,7 +176,7 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
       .title {
         font: 600 var(--boxel-font-md);
         color: var(--foreground);
-        margin-bottom: var(--boxel-sp-sm);
+        margin: 0 0 var(--boxel-sp-sm);
       }
       .button-wrapper {
         width: 100%;
@@ -192,7 +192,7 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
         padding-right: 0;
       }
       .error-message {
-        color: var(--boxel-error-100);
+        color: var(--destructive-ink);
         margin-top: var(--boxel-sp-lg);
       }
     </style>
@@ -202,7 +202,7 @@ interface InviteCodeFormSignature {
   Args: {
     // The title's heading level, 1 when not given. A page with a heading of
     // its own above the screen passes 2.
-    headingLevel?: number;
+    headingLevel?: 1 | 2;
     token: string;
     tokenError?: string;
     submitDisabled?: boolean;
@@ -222,12 +222,11 @@ export const InviteCodeForm: TemplateOnlyComponent<InviteCodeFormSignature> =
       data-test-token-page
       {{on 'submit' @onSubmit}}
     >
-      <span
+      <AuthHeading
+        @level={{@headingLevel}}
         class='title'
-        role='heading'
-        aria-level={{if @headingLevel @headingLevel 1}}
         data-test-secure-title
-      >Boxel is currently invite-only.<br />Enter your invite code here.</span>
+      >Boxel is currently invite-only.<br />Enter your invite code here.</AuthHeading>
       <AuthFormField
         @label='Your invite code'
         data-test-secure-field='token'
@@ -263,7 +262,7 @@ export const InviteCodeForm: TemplateOnlyComponent<InviteCodeFormSignature> =
       .title {
         font: 600 var(--boxel-font-md);
         color: var(--foreground);
-        margin-bottom: var(--boxel-sp-sm);
+        margin: 0 0 var(--boxel-sp-sm);
       }
       .button-wrapper {
         width: 100%;
@@ -282,7 +281,7 @@ interface AwaitingEmailSignature {
   Args: {
     // The title's heading level, 1 when not given. A page with a heading of
     // its own above the screen passes 2.
-    headingLevel?: number;
+    headingLevel?: 1 | 2;
     resending?: boolean;
     onResend: (event: Event) => void;
   };
@@ -293,13 +292,12 @@ interface AwaitingEmailSignature {
 // Waiting for the user to follow the link in the validation email.
 export const AwaitingEmail: TemplateOnlyComponent<AwaitingEmailSignature> =
   <template>
-    <span
+    <AuthHeading
+      @level={{@headingLevel}}
       class='title'
-      role='heading'
-      aria-level={{if @headingLevel @headingLevel 1}}
       data-test-secure-title
       data-test-email-validation
-    >Please check your email to complete registration</span>
+    >Please check your email to complete registration</AuthHeading>
     {{yield}}
     <ul class='email-validation-instruction'>
       <li>Leave this window open while we verify your email</li>
@@ -317,7 +315,7 @@ export const AwaitingEmail: TemplateOnlyComponent<AwaitingEmailSignature> =
       .title {
         font: 600 var(--boxel-font-md);
         color: var(--foreground);
-        margin-bottom: var(--boxel-sp-sm);
+        margin: 0 0 var(--boxel-sp-sm);
       }
       .email-validation-instruction {
         padding: 0;

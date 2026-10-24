@@ -20,7 +20,7 @@ interface Signature {
 const AccountSwitchFailed: TemplateOnlyComponent<Signature> = <template>
   <AuthContainer>
     <div class='centered' data-test-account-switch-failed>
-      <span class='title'>Couldn't switch accounts</span>
+      <h1 class='title'>Couldn't switch accounts</h1>
       <p class='message'>The sign-in link has expired or was already used. You
         haven't been signed out — return home to keep using your current
         account.</p>
@@ -44,6 +44,7 @@ const AccountSwitchFailed: TemplateOnlyComponent<Signature> = <template>
     .title {
       font: 600 var(--boxel-font-md);
       color: var(--foreground);
+      margin: 0;
     }
     .message {
       margin: 0 0 var(--boxel-sp-xs);

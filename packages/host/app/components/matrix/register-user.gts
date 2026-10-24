@@ -61,7 +61,7 @@ interface Signature {
     onComplete?: (session: LoginResponse) => void;
     // The heading level of each step's title, for a page that heads itself
     // above the registration.
-    headingLevel?: number;
+    headingLevel?: 1 | 2;
   };
 }
 

@@ -37,12 +37,7 @@ export const ForgotPasswordForm: TemplateOnlyComponent<ForgotPasswordFormSignatu
       data-test-forgot-password-form
       {{on 'submit' @onSubmit}}
     >
-      <span
-        class='title'
-        role='heading'
-        aria-level='1'
-        data-test-secure-title
-      >Forgot your password?</span>
+      <h1 class='title' data-test-secure-title>Forgot your password?</h1>
       <p class='info'>Enter email to receive a reset password link.</p>
       <AuthFormField
         @label='Email Address'
@@ -86,7 +81,7 @@ export const ForgotPasswordForm: TemplateOnlyComponent<ForgotPasswordFormSignatu
       .title {
         font: 600 var(--boxel-font-md);
         color: var(--foreground);
-        margin-bottom: var(--boxel-sp);
+        margin: 0 0 var(--boxel-sp);
       }
       .info {
         margin-top: 0;
@@ -122,13 +117,8 @@ interface ResetEmailSentSignature {
 // Waiting for the user to follow the reset link in their email.
 export const ResetEmailSent: TemplateOnlyComponent<ResetEmailSentSignature> =
   <template>
-    <span
-      class='title'
-      role='heading'
-      aria-level='1'
-      data-test-secure-title
-      data-test-email-validation
-    >Please check your email to reset your password</span>
+    <h1 class='title' data-test-secure-title data-test-email-validation>Please
+      check your email to reset your password</h1>
     {{yield}}
     <ul class='email-validation-instruction'>
       <li>We've sent an email to <b>{{@email}}</b></li>
@@ -145,7 +135,7 @@ export const ResetEmailSent: TemplateOnlyComponent<ResetEmailSentSignature> =
       .title {
         font: 600 var(--boxel-font-md);
         color: var(--foreground);
-        margin-bottom: var(--boxel-sp);
+        margin: 0 0 var(--boxel-sp);
       }
       .email-validation-instruction {
         padding: 0;
@@ -184,12 +174,7 @@ export const ResetPasswordForm: TemplateOnlyComponent<ResetPasswordFormSignature
       data-test-reset-password-form
       {{on 'submit' @onSubmit}}
     >
-      <span
-        class='title'
-        role='heading'
-        aria-level='1'
-        data-test-secure-title
-      >Reset your password</span>
+      <h1 class='title' data-test-secure-title>Reset your password</h1>
       {{yield}}
       <div class='button-wrapper'>
         <AuthButton
@@ -230,7 +215,7 @@ export const ResetPasswordForm: TemplateOnlyComponent<ResetPasswordFormSignature
       .title {
         font: 600 var(--boxel-font-md);
         color: var(--foreground);
-        margin-bottom: var(--boxel-sp);
+        margin: 0 0 var(--boxel-sp);
       }
       .button-wrapper {
         width: 100%;
@@ -243,7 +228,7 @@ export const ResetPasswordForm: TemplateOnlyComponent<ResetPasswordFormSignature
         color: var(--muted-foreground);
       }
       .error {
-        color: var(--boxel-error-100);
+        color: var(--destructive-ink);
         padding: 0;
         font: 500 var(--boxel-font-xs);
         margin: var(--boxel-sp-2xs) auto 0 auto;
@@ -266,13 +251,11 @@ interface ResetPasswordDoneSignature {
 
 export const ResetPasswordDone: TemplateOnlyComponent<ResetPasswordDoneSignature> =
   <template>
-    <span
+    <h1
       class='title'
-      role='heading'
-      aria-level='1'
       data-test-secure-title
       data-test-reset-password-success
-    >Your password is now reset</span>
+    >Your password is now reset</h1>
     <p class='info'>Your password has been successfully reset. You can use the
       link below to sign into your Boxel account with your new password.</p>
     {{yield}}
@@ -288,7 +271,7 @@ export const ResetPasswordDone: TemplateOnlyComponent<ResetPasswordDoneSignature
       .title {
         font: 600 var(--boxel-font-md);
         color: var(--foreground);
-        margin-bottom: var(--boxel-sp);
+        margin: 0 0 var(--boxel-sp);
       }
       .info {
         margin-top: 0;
