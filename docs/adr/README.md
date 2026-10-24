@@ -21,7 +21,7 @@ or backfill one.
 | [005](005-authorize-key-changes-only-with-a-session-card-code-cant-reach.md)      | Authorize changes to a user's keys only with a session that card code can't reach         | proposed |
 | [006](006-grant-realm-permissions-per-realm-and-widen-them-only-with-a-policy.md) | Grant realm permissions per realm, and widen them only with a realm policy                | proposed |
 | [007](007-keep-motion-a-reactive-layer-that-state-never-waits-on.md)              | Keep motion a reactive layer that application state never waits on                        | proposed |
-| [008](008-build-the-secure-origins-pages-as-their-own-ember-app.md)               | Build the secure origin's pages as their own Ember app                                    | proposed |
+| [008](008-build-the-secure-origins-pages-as-their-own-ember-app.md)               | Build the secure origin's pages as their own Ember app                                    | accepted |
 | [009](009-build-new-ui-with-pret-ui-not-boxel-ui.md)                              | Build new UI with Pret UI, and deprecate boxel-ui                                         | proposed |
 | [010](010-give-loaded-modules-native-esm-semantics.md)                            | Give the modules the Loader loads native ES module semantics                              | proposed |
 
