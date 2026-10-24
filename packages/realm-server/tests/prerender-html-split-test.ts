@@ -1830,6 +1830,49 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('the write buffer drains once the rows it holds reach its size budget, before the row-count threshold', async function (assert) {
+      // A row is as large as what it carries, and a large text file's row
+      // carries the file's whole text. The buffer drains on the size of what
+      // it holds as well as on its row count, so a run of such rows is written
+      // as it goes instead of piling up in the worker until the pass ends.
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      let text = 'x'.repeat(5 * 1024 * 1024);
+      let file = (name: string) => ({
+        type: 'file' as const,
+        lastModified: 1,
+        resourceCreatedAt: 1,
+        deps: new Set<string>(),
+        searchData: { name, content: text },
+      });
+      let pendingCount = async () =>
+        Number(
+          (
+            (await adapter.execute(
+              `SELECT COUNT(*) AS count FROM boxel_index_pending WHERE realm_url = $1`,
+              { bind: [testRealm] },
+            )) as { count: string | number }[]
+          )[0]?.count,
+        );
+
+      await batch.bufferEntry(new URL(`${testRealm}a.txt`), file('a.txt'));
+      assert.strictEqual(
+        await pendingCount(),
+        0,
+        'a row under the size budget stays buffered',
+      );
+
+      await batch.bufferEntry(new URL(`${testRealm}b.txt`), file('b.txt'));
+      assert.strictEqual(
+        await pendingCount(),
+        2,
+        'the row that takes the buffer past its size budget drains both buffered rows, far short of the row-count threshold',
+      );
+    });
+
     test('a retry resumes rows the prior attempt rendered instead of tombstoning them', async function (assert) {
       let url = `${testRealm}1.json`;
       let info = jobInfo();

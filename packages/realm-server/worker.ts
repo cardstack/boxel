@@ -45,8 +45,13 @@ import {
   PgAdapter,
   PgQueuePublisher,
   PgQueueRunner,
+  type JobObserver,
 } from '@cardstack/postgres';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
+import {
+  formatHeapTelemetry,
+  heapTelemetry,
+} from './prerender/heap-telemetry.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
 import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure.ts';
@@ -54,6 +59,11 @@ import { receiveSecretsKeyring } from './lib/secrets-at-rest/index.ts';
 import { getInstanceId } from './lib/instance-id.ts';
 
 let log = logger('worker');
+
+// How often a running job's worker logs its memory. A job that outgrows the
+// worker can be killed without a chance to log anything, so the samples taken
+// while it ran are what show its growth.
+const JOB_HEAP_SAMPLE_INTERVAL_MS = 15_000;
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
@@ -220,8 +230,35 @@ let autoMigrate = migrateDB || undefined;
     sendWorkerRequest(BROADCAST_REALM_EVENT, event);
   }
 
+  // Logs this worker's memory as each job starts and finishes, and at an
+  // interval while it runs, so a job whose memory grows with its input can be
+  // told apart from one that holds steady.
+  let observeJob: JobObserver = ({ jobId, jobType }) => {
+    let startedAt = Date.now();
+    let elapsed = () => `${Math.round((Date.now() - startedAt) / 1000)}s`;
+    let logHeap = (phase: string) =>
+      log.info(
+        `job ${jobId} (${jobType}) ${phase}: ${formatHeapTelemetry(heapTelemetry())}`,
+      );
+    logHeap('started');
+    let timer = setInterval(
+      () => logHeap(`running for ${elapsed()}`),
+      JOB_HEAP_SAMPLE_INTERVAL_MS,
+    );
+    timer.unref();
+    return () => {
+      clearInterval(timer);
+      logHeap(`finished after ${elapsed()}`);
+    };
+  };
+
   let dbAdapter = new PgAdapter({ autoMigrate });
-  let queue = new PgQueueRunner({ adapter: dbAdapter, workerId, priority });
+  let queue = new PgQueueRunner({
+    adapter: dbAdapter,
+    workerId,
+    priority,
+    observeJob,
+  });
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,

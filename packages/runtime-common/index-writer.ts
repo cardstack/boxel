@@ -343,6 +343,19 @@ export function verdictCoversRow(
 // so even a forced flush lands in a render's shadow.
 const WRITE_BUFFER_FLUSH_THRESHOLD = 100;
 
+// Approximate bytes of row content held in the write-behind buffer before a
+// flush is forced, whatever the row count. A row's size is the size of what
+// it carries, and a file row carries its extracted attributes twice (in
+// `pristine_doc` and `search_doc`): a few kilobytes for most files, but the
+// whole text for a large text file. A flush holds the buffered rows several
+// times over at its peak (the entries, their serialized JSON, the driver's
+// copy of the statement), so the buffer has to be bounded by what it holds
+// rather than by how many rows it holds. At this budget a buffer of
+// typical-sized rows (tens of kilobytes) still reaches the row-count
+// threshold first, and a flush peaks at tens of megabytes however large the
+// realm's files are.
+const WRITE_BUFFER_FLUSH_BYTES = 8 * 1024 * 1024;
+
 // Type-watermark rows written per statement. The set is bounded by the
 // realm's type vocabulary rather than its row count, so this only has to keep
 // a realm with an unusually large one inside the driver's bound-parameter
@@ -644,6 +657,9 @@ export class Batch {
   // the row records.
   #writeBuffer: { url: URL; entry: SearchIndexEntry; seq: number }[] = [];
   #writeBufferUrls = new Set<string>();
+  // The buffered rows' approximate size (see `approximateEntrySize`), checked
+  // against `WRITE_BUFFER_FLUSH_BYTES`.
+  #writeBufferBytes = 0;
   // Monotonic counter behind `diagnostics.writeSeq`, reset alongside
   // `#currentInvalidationId` so the two stamps always describe the same
   // fan-out. Advanced where a row enters the write path (`bufferEntry` /
@@ -1319,10 +1335,15 @@ export class Batch {
       seq: this.#positionOf(url, rowType(entry)),
     });
     this.#writeBufferUrls.add(url.href);
-    // Bound memory for long runs of dependency-free files; dependency reads
-    // flush earlier. Renders dwarf the writes, so a forced flush here still
-    // rides in the shadow of the render that started before it.
-    if (this.#writeBuffer.length >= WRITE_BUFFER_FLUSH_THRESHOLD) {
+    this.#writeBufferBytes += approximateEntrySize(entry);
+    // Bound memory for long runs of dependency-free files, by row count and
+    // by size; dependency reads flush earlier. Renders dwarf the writes, so a
+    // forced flush here still rides in the shadow of the render that started
+    // before it.
+    if (
+      this.#writeBuffer.length >= WRITE_BUFFER_FLUSH_THRESHOLD ||
+      this.#writeBufferBytes >= WRITE_BUFFER_FLUSH_BYTES
+    ) {
       await this.flushWriteBuffer();
     }
   }
@@ -1373,6 +1394,7 @@ export class Batch {
       // set, which would let the swap promote tombstones or stale rows.
       this.#writeBuffer = [];
       this.#writeBufferUrls.clear();
+      this.#writeBufferBytes = 0;
     } finally {
       this.#writeMs += Date.now() - start;
     }
@@ -5011,6 +5033,38 @@ function prerenderedRowType(
 
 function rowType(entry: SearchIndexEntry): BoxelIndexTable['type'] {
   return isErrorEntry(entry) ? baseTypeFromError(entry) : entry.type;
+}
+
+// Roughly how many bytes an entry's row serializes to, measured without
+// serializing it: every string's length plus every key's, and a flat few
+// bytes for any other value. Strings are what make a row large (a file's
+// extracted text, rendered HTML), so this tracks a row's real size closely
+// enough to bound the write buffer by. Each object is counted once.
+function approximateEntrySize(entry: SearchIndexEntry): number {
+  let size = 0;
+  let seen = new WeakSet<object>();
+  let pending: unknown[] = [entry];
+  while (pending.length > 0) {
+    let value = pending.pop();
+    if (typeof value === 'string') {
+      size += value.length;
+    } else if (value === null || typeof value !== 'object') {
+      size += 8;
+    } else if (!seen.has(value)) {
+      seen.add(value);
+      if (Array.isArray(value) || value instanceof Set) {
+        for (let item of value) {
+          pending.push(item);
+        }
+      } else {
+        for (let [key, item] of Object.entries(value)) {
+          size += key.length;
+          pending.push(item);
+        }
+      }
+    }
+  }
+  return size;
 }
 
 // A `boxel_index_pending` row payload built but not yet upserted, plus the
