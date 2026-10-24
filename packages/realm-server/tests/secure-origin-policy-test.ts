@@ -12,6 +12,9 @@ import { createSecureOrigin, secureOriginGate } from '../lib/secure-origin.ts';
 // anything. The policy has no `unsafe-inline` and no `unsafe-eval`, so a
 // `style` attribute, an inline script or style, or code compiled at run time
 // shows up here as a `securitypolicyviolation` event.
+//
+// The built pages are also where the theme's tokens resolve, so this is where
+// the error and muted text colours are checked against WCAG AA contrast.
 
 // Every mode the shell presents, and the address Google returns to.
 const SHELL_PAGES = [
@@ -236,7 +239,7 @@ module(basename(import.meta.filename), function (hooks) {
       waitUntil: 'networkidle0',
     });
     await page.waitForSelector('[data-test-secure-page]', { timeout: 10000 });
-    let { background, colors } = await page.evaluate(() => {
+    let { background, colors, nested } = await page.evaluate(() => {
       let container = document.querySelector('[data-test-secure-page]')!;
       let canvas = document.createElement('canvas');
       canvas.width = canvas.height = 1;
@@ -259,8 +262,15 @@ module(basename(import.meta.filename), function (hooks) {
       };
       let errorRule = /^\.error(-message)?(\[[^\]]+\])?$/;
       let colors: { label: string; rgb: number[] }[] = [];
-      for (let sheet of document.styleSheets) {
-        for (let rule of sheet.cssRules) {
+      let nested = 0;
+      // The components' rules sit inside `@layer` blocks, so the walk
+      // descends into every grouping rule.
+      let visit = (rules: CSSRuleList, depth: number) => {
+        for (let rule of rules) {
+          if (rule instanceof CSSGroupingRule) {
+            visit(rule.cssRules, depth + 1);
+            continue;
+          }
           if (!(rule instanceof CSSStyleRule)) {
             continue;
           }
@@ -269,18 +279,24 @@ module(basename(import.meta.filename), function (hooks) {
             value &&
             rule.selectorText.split(',').some((s) => errorRule.test(s.trim()))
           ) {
+            if (depth > 0) {
+              nested++;
+            }
             colors.push({
               label: `${rule.selectorText} { color: ${value} }`,
               rgb: resolve(value),
             });
           }
         }
+      };
+      for (let sheet of document.styleSheets) {
+        visit(sheet.cssRules, 0);
       }
       colors.push({
         label: 'var(--muted-foreground)',
         rgb: resolve('var(--muted-foreground)'),
       });
-      return { background: toRGB(backgroundColor), colors };
+      return { background: toRGB(backgroundColor), colors, nested };
     });
 
     let luminance = (rgb: number[]) => {
@@ -298,6 +314,10 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       colors.length > 1,
       `the shell's stylesheets hold error rules (${colors.length - 1})`,
+    );
+    assert.ok(
+      nested > 0,
+      `error rules inside @layer blocks are checked (${nested})`,
     );
     for (let { label, rgb } of colors) {
       let ratio = contrast(rgb, background);
