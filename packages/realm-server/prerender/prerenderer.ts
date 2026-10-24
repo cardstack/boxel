@@ -39,6 +39,7 @@ import {
   computeBatchClearCacheGate,
 } from './batch-ownership-gate.ts';
 import { batchStaleAfterMs } from './prerender-constants.ts';
+import { cardRenderTimeout } from './utils.ts';
 import {
   AffinitySnapshotSampler,
   type PeakRegistration,
@@ -769,7 +770,12 @@ export class Prerenderer {
       auth,
     });
     try {
-      let attempt = () =>
+      // Both attempts share the one time limit a single render has, so a
+      // retry keeps the capture inside the request and job deadlines sized
+      // for one render — the same bound a file capture's extract and render
+      // share in `runCaptureAttempt`.
+      let deadline = Date.now() + (opts?.timeoutMs ?? cardRenderTimeout);
+      let attempt = (timeoutMs?: number) =>
         this.#renderRunner.runCaptureAttempt({
           affinityType: 'realm',
           affinityValue: realm,
@@ -780,22 +786,34 @@ export class Prerenderer {
           ...(captureSpec ? { captureSpec } : {}),
           ...(renderOptions ? { renderOptions } : {}),
           priority,
-          opts,
+          opts: timeoutMs === undefined ? opts : { ...opts, timeoutMs },
           signal,
         });
+      let attemptStart = Date.now();
       let result = await attempt();
+      let attemptMs = Date.now() - attemptStart;
       // A fetch that failed at the network layer failed the capture with it.
       // The capture gets one more attempt — on a fresh tab when the failure
       // evicted this one, as a visit does when its tab fails to import a host
-      // chunk. A capture is a read, so repeating it is safe.
+      // chunk. A capture is a read, so repeating it is safe. A retry left
+      // less time than the failed attempt took is unlikely to finish, so the
+      // first result stands instead.
       let fetchFailure = this.#renderRunner.captureFetchFailure(result);
-      if (fetchFailure) {
+      let remainingMs = deadline - Date.now();
+      if (fetchFailure && remainingMs < attemptMs) {
+        log.warn(
+          `not retrying capture of ${url}: the attempt failed a fetch after ${attemptMs}ms and ${Math.max(
+            0,
+            remainingMs,
+          )}ms remain: ${fetchFailure}`,
+        );
+      } else if (fetchFailure) {
         log.warn(
           `retrying capture of ${url}${
             result.pool.evicted ? ' on a fresh tab' : ''
-          }: the attempt failed a fetch: ${fetchFailure}`,
+          } with ${remainingMs}ms left: the attempt failed a fetch: ${fetchFailure}`,
         );
-        result = await attempt();
+        result = await attempt(remainingMs);
         let again = this.#renderRunner.captureFetchFailure(result);
         if (again) {
           log.error(

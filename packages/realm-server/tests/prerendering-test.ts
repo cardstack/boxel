@@ -8845,18 +8845,26 @@ module(basename(import.meta.filename), function () {
         response: CapturePrerenderResponse;
         evicted: boolean;
         timedOut?: boolean;
+        // How long the stubbed attempt takes before it returns.
+        durationMs?: number;
       }[],
+      opts?: { timeoutMs?: number },
     ) {
       let originalAttempt = RenderRunner.prototype.runCaptureAttempt;
       let prerenderer: Prerenderer | undefined;
       let attempts = 0;
+      let attemptTimeouts: (number | undefined)[] = [];
       try {
         RenderRunner.prototype.runCaptureAttempt = async function (
           args: Parameters<RenderRunner['runCaptureAttempt']>[0],
         ) {
-          let { response, evicted, timedOut } =
+          let { response, evicted, timedOut, durationMs } =
             responses[Math.min(attempts, responses.length - 1)];
           attempts++;
+          attemptTimeouts.push(args.opts?.timeoutMs);
+          if (durationMs) {
+            await new Promise((r) => setTimeout(r, durationMs));
+          }
           return {
             response,
             timings: {
@@ -8889,8 +8897,9 @@ module(basename(import.meta.filename), function () {
           url: cardURL,
           auth: 'test-auth',
           format: 'isolated',
+          ...(opts ? { opts } : {}),
         });
-        return { result, attempts };
+        return { result, attempts, attemptTimeouts };
       } finally {
         RenderRunner.prototype.runCaptureAttempt = originalAttempt;
         await prerenderer?.stop();
@@ -8954,6 +8963,65 @@ module(basename(import.meta.filename), function () {
         'unusable',
         "the fresh tab's failure is returned",
       );
+    });
+
+    test('a retry gets only the time the capture has left', async function (assert) {
+      let { result, attempts, attemptTimeouts } = await captureWith(
+        [
+          {
+            response: { status: 'unusable', error: 'Failed to fetch' },
+            evicted: true,
+            durationMs: 50,
+          },
+          { response: ready, evicted: false },
+        ],
+        { timeoutMs: 10_000 },
+      );
+      assert.strictEqual(attempts, 2, 'one retry');
+      assert.strictEqual(
+        attemptTimeouts[0],
+        10_000,
+        'the first attempt has the whole limit',
+      );
+      assert.true(
+        (attemptTimeouts[1] ?? Infinity) <= 10_000 - 50,
+        `the retry has what the first attempt left (got ${attemptTimeouts[1]}ms)`,
+      );
+      assert.strictEqual(result.response.status, 'ready');
+    });
+
+    test('a capture is not retried when less time remains than the failed attempt took', async function (assert) {
+      let { result, attempts } = await captureWith(
+        [
+          {
+            response: { status: 'unusable', error: 'Failed to fetch' },
+            evicted: true,
+            durationMs: 150,
+          },
+          { response: ready, evicted: false },
+        ],
+        { timeoutMs: 200 },
+      );
+      assert.strictEqual(attempts, 1, 'no retry');
+      assert.strictEqual(
+        result.response.status,
+        'unusable',
+        "the first attempt's failure is returned",
+      );
+    });
+
+    test('an error for a fetch the server answered is returned without a retry', async function (assert) {
+      let { result, attempts } = await captureWith([
+        {
+          response: {
+            status: 'error',
+            error: `Failed to fetch realm info for ${realm}: 403`,
+          },
+          evicted: false,
+        },
+      ]);
+      assert.strictEqual(attempts, 1, 'no retry: the answer will not change');
+      assert.strictEqual(result.response.status, 'error');
     });
 
     test("a capture's own error is returned without a retry", async function (assert) {

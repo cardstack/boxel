@@ -127,11 +127,15 @@ const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
 const HOST_CHUNK_IMPORT_FAILURE_RE =
   /Failed to fetch dynamically imported module:?\s*(\S*)/;
 
-// Chrome's message for any fetch that failed at the network layer — a
-// `fetch()` that rejected with `TypeError: Failed to fetch`, or a native
-// `import()` whose fetch failed (HOST_CHUNK_IMPORT_FAILURE_RE). A request the
-// server answered, even with a 5xx, never produces it.
-const CAPTURE_FETCH_FAILURE_RE = /\bFailed to fetch\b/;
+// Chrome's message for a fetch that failed at the network layer, in the forms
+// it reaches a capture's error: bare (`Failed to fetch`, a `fetch()` that
+// rejected with `TypeError: Failed to fetch`), after the `: ` or inside the
+// parentheses a wrapping message puts it in, or as a native `import()` whose
+// fetch failed (HOST_CHUNK_IMPORT_FAILURE_RE). It is anchored because the
+// host also writes "Failed to fetch <what> for <url>: <status>" for a request
+// the server answered — a 403 or 404 that fails the same way every time.
+const CAPTURE_FETCH_FAILURE_RE =
+  /(?:^|: |\()(?:TypeError: )?Failed to fetch(?:$|\)| dynamically imported module)/;
 
 // Who a render runs as, read from the auth this server hands its tab: the
 // user every session names, when they all name one user and none carries
@@ -2670,8 +2674,9 @@ export class RenderRunner {
   // dropped, not that the card is broken, so the capture is worth another
   // attempt. It comes back `unusable` when it evicted the tab and `error`
   // when the render caught it. The capture's own failures — a target that
-  // matches nothing, a page cap — never name one. A capture that ran out of
-  // time is not retried either: its time is spent.
+  // matches nothing, a page cap — and a request the server answered with an
+  // error status never name one (see CAPTURE_FETCH_FAILURE_RE). A capture
+  // that ran out of time is not retried either: its time is spent.
   captureFetchFailure(result: {
     response: CapturePrerenderResponse;
     pool: PoolInfo;
