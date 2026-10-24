@@ -379,7 +379,8 @@ as an app already signed in would show the user straight into the app.
    took all 10 attempts in a minute from a page retrying for that minute.
 6. Synapse v1.126.0: `EmailIdentityAuthChecker._check_threepid` deletes the
    validation session once it has used it.
-7. Synapse v1.126.0: `SetPasswordHandler.set_password` deletes the account's
+7. Synapse v1.126.0 and v1.163.0 alike: `SetPasswordHandler.set_password`
+   deletes the account's
    devices and access tokens but not its `login_tokens` rows, and only an OIDC
    back-channel logout invalidates one
    (`invalidate_login_tokens_by_session_id`); the admin API's device list
