@@ -11,7 +11,7 @@
  *   preamble, the `-start` guides state their motivation and goals, the
  *   guides' index lists each guide once, and each guide's pager names its
  *   neighbours in that order. Each guide, and the index, has its page: a
- *   `Guide` card beside its Markdown that links it and the index.
+ *   `Guide` card beside its Markdown that links it, the index and the theme.
  * - Every card instance in the realm links the gallery's theme card, which
  *   carries the palette and the type every gallery component reads.
  * - Every card a realm doc embeds (`::card[…]`) is a card instance in the
@@ -210,8 +210,9 @@ order.forEach((slug, i) => {
 
 /*
  * Each guide is read on its page: a `Guide` card beside the Markdown, at the
- * Markdown's path without `.md`, linking the Markdown and the index. The
- * index has one too. The card holds no prose, so nothing else belongs in it.
+ * Markdown's path without `.md`, linking the Markdown, the index and the
+ * gallery's theme. The index has one too. The card holds no prose, so
+ * nothing else belongs in it.
  */
 const guideFiles = fs.readdirSync(guidesDir);
 const guideCardProblems = [];
@@ -225,6 +226,7 @@ for (const slug of [...pages.keys(), 'README']) {
     data: {
       type: 'card',
       relationships: {
+        'cardInfo.theme': { links: { self: '../../theme' } },
         document: { links: { self: `./${slug}.md` } },
         index: { links: { self: './README.md' } },
       },
@@ -233,7 +235,7 @@ for (const slug of [...pages.keys(), 'README']) {
   };
   if (!isDeepStrictEqual(readJSON(path.join(guidesDir, file)), expected)) {
     guideCardProblems.push(
-      `${file} must adopt from ../../guide Guide and link only ./${slug}.md and ./README.md`,
+      `${file} must adopt from ../../guide Guide and link only ../../theme, ./${slug}.md and ./README.md`,
     );
   }
 }

@@ -2,6 +2,11 @@
   "data": {
     "type": "card",
     "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../theme"
+        }
+      },
       "document": {
         "links": {
           "self": "./film-joins.md"
