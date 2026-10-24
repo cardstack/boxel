@@ -596,7 +596,7 @@ module('Integration | sign-in', function (hooks) {
       assert
         .dom('[data-test-secure-cli-auth-subtitle]')
         .hasText(
-          'Signing in gives the Boxel CLI running on this computer access to your workspaces.',
+          'Signing in gives the Boxel CLI running on this computer access to your workspaces, and lets it manage your keys.',
         );
       assert.dom('[data-test-secure-sign-in-subtitle]').doesNotExist();
       assert.dom('[data-test-secure-username]').isFocused();
@@ -623,6 +623,11 @@ module('Integration | sign-in', function (hooks) {
       assert
         .dom('[data-test-secure-cli-auth-signed-in-as]')
         .hasText(SESSION.user);
+      assert
+        .dom('[data-test-secure-cli-auth-confirm]')
+        .hasText(
+          `Confirm your password to give the Boxel CLI running on this computer access to the workspaces of ${SESSION.user}, and to let it manage their keys.`,
+        );
       assert.dom('[data-test-secure-username]').hasValue('someone');
       assert.dom('[data-test-secure-password]').isFocused();
     });
@@ -663,6 +668,32 @@ module('Integration | sign-in', function (hooks) {
         'the session it hands over is not ended',
       );
       assert.strictEqual(localStorage.getItem('boxel-secure-session'), null);
+    });
+
+    test('a CLI that takes no secure session is told it gets access to the workspaces alone', async function (assert) {
+      serve(NO_GOOGLE);
+      visitShell(`?mode=cli-auth&port=51234&state=${STATE}`);
+      await render(CliAuthPage);
+      await waitFor('[data-test-secure-sign-in-form]');
+      assert.dom('[data-test-secure-title]').hasText('Authorize Boxel CLI');
+      assert
+        .dom('[data-test-secure-cli-auth-subtitle]')
+        .hasText(
+          'Signing in gives the Boxel CLI running on this computer access to your workspaces.',
+        );
+    });
+
+    test('a window already signed in, for a CLI that takes no secure session, asks only for access to the workspaces', async function (assert) {
+      storeSession(SESSION);
+      serve(NO_GOOGLE, { 'GET _secure-session': () => ({ status: 204 }) });
+      visitShell(`?mode=cli-auth&port=51234&state=${STATE}`);
+      await render(CliAuthPage);
+      await waitFor('[data-test-secure-cli-auth-confirm]');
+      assert
+        .dom('[data-test-secure-cli-auth-confirm]')
+        .hasText(
+          `Confirm your password to give the Boxel CLI running on this computer access to the workspaces of ${SESSION.user}.`,
+        );
     });
 
     test('a CLI that takes no secure session gets the login token in the query of a navigation, and the session is ended', async function (assert) {
