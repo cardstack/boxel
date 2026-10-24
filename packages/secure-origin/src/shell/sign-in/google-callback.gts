@@ -15,7 +15,7 @@ import type { Session } from '../../security/session.js';
 import type { CliCallback } from '../../security/cli-handoff.js';
 import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
-import LoadingIndicator from '../../components/loading-indicator.gts';
+import BusyMessage from '../../components/busy-message.gts';
 import { navigation } from '../navigation.js';
 import { asSentence } from '../sign-in-copy.js';
 import { modeURL, startURL } from '../urls.js';
@@ -59,30 +59,11 @@ export default class GoogleCallback extends Component {
       </MessagePage>
     {{else}}
       <AuthContainer>
-        <div class='centered-loading' data-test-secure-signing-in>
-          <span class='loading-title'>Signing you in…</span>
-          <LoadingIndicator class='loading-spinner' />
-        </div>
+        <BusyMessage @title='Signing you in…' data-test-secure-signing-in />
       </AuthContainer>
     {{/if}}
 
     <style scoped>
-      .centered-loading {
-        align-self: center;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--boxel-sp);
-        text-align: center;
-      }
-      .loading-title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-      }
-      .loading-spinner {
-        --boxel-loading-indicator-size: var(--boxel-icon-md);
-        --loading-indicator-color: var(--boxel-highlight);
-      }
       .error {
         color: var(--boxel-error-100);
         padding: 0;

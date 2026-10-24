@@ -1569,6 +1569,14 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  // Opens the workspace chooser in this page's state without writing it to
+  // the URL, for a page the index route is about to open it on: the route
+  // writes the same state once it has booted the session. Until then the page
+  // shows the chooser rather than an empty interact submode.
+  showWorkspaceChooserBeforeBoot() {
+    this._state.workspaceChooserOpened = true;
+  }
+
   // Operator mode state is persisted in a query param, which lives in the index controller
   get operatorModeController(): IndexController {
     let controller = getOwner(this)!.lookup(

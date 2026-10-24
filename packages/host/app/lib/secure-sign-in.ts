@@ -43,6 +43,19 @@ export function currentAppPage(): string {
   return url.href;
 }
 
+// Whether this page opens on the workspace chooser once the session is up:
+// the index route opens it for the app's root page when the page names no
+// card and no operator-mode state (see `routes/index.gts`).
+export function landsOnWorkspaceChooser(): boolean {
+  let { pathname, search } = window.location;
+  let params = new URLSearchParams(search);
+  return (
+    pathname === ENV.rootURL &&
+    !params.has('operatorModeState') &&
+    !params.has('cardPath')
+  );
+}
+
 // Where a signed-out app sends the user to sign in.
 export function secureSignInURL(returnTo = currentAppPage()): string {
   return withFragment(modeURL('sign-in'), { return: returnTo });
