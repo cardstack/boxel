@@ -1093,15 +1093,11 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   });
 });
 
-// A module half again over the lint size limit, made of declarations simple
-// enough that indexing it stays cheap.
+// A module half again over the lint size limit. It is almost all comment, so
+// that compiling and indexing it stay cheap; the lint size limit counts bytes,
+// not code.
 function largeModuleSource(): string {
-  let lines: string[] = [];
-  let bytes = 0;
-  for (let i = 0; bytes <= MAX_LINT_SOURCE_BYTES * 1.5; i++) {
-    let line = `export const value${i} = ${i};\n`;
-    lines.push(line);
-    bytes += line.length;
-  }
-  return lines.join('');
+  let line = `// ${'x'.repeat(97)}\n`;
+  let lines = Math.ceil((MAX_LINT_SOURCE_BYTES * 1.5) / line.length);
+  return `${line.repeat(lines)}export const value = 1;\n`;
 }
