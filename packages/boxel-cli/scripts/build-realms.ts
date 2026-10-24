@@ -1,11 +1,12 @@
 /**
- * Populate `packages/boxel-cli/bundled-realms/` from `packages/base/` and
- * `packages/skills-realm/contents/` so a published `@cardstack/boxel-cli`
- * install can run `boxel test` without a realm-server on PATH (CS-11164).
+ * Populate `packages/boxel-cli/bundled-realms/` from `packages/base/`,
+ * `packages/skills-realm/contents/` and `packages/pretui/` so a published
+ * `@cardstack/boxel-cli` install can run `boxel test` without a realm-server
+ * on PATH.
  *
  * The CLI's in-process test-page server (see `startTestPageServer`
- * in `src/commands/test.ts`) mounts these directories at `/base/`
- * and `/skills/` and transpiles `.gts` / `.ts` on demand. Cards that
+ * in `src/commands/test.ts`) mounts these directories at `/base/`,
+ * `/skills/` and `/pretui/` and transpiles `.gts` / `.ts` on demand. Cards that
  * import `https://cardstack.com/base/card-api` resolve through the
  * host bundle's URL-mapping to that mount point, so the realm-server
  * never gets a request.
@@ -19,7 +20,14 @@
  * no upstream host build is required.
  */
 
-import { cpSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
 const PACKAGE_ROOT = resolve(import.meta.dirname, '..');
@@ -39,6 +47,12 @@ interface RealmSource {
    * the AI assistant scaffolding), so shipping without it is fine.
    */
   required: boolean;
+  /**
+   * A file in the source listing what the realm leaves out, one pattern per
+   * line. It is the list the realm's deployment reads as rsync filter rules,
+   * so the bundled copy holds what the deployed realm holds.
+   */
+  ignoreFile?: string;
 }
 
 const REALMS: RealmSource[] = [
@@ -47,6 +61,12 @@ const REALMS: RealmSource[] = [
     name: 'skills',
     src: join(MONOREPO_PACKAGES, 'skills-realm', 'contents'),
     required: false,
+  },
+  {
+    name: 'pretui',
+    src: join(MONOREPO_PACKAGES, 'pretui'),
+    required: true,
+    ignoreFile: '.boxelignore',
   },
 ];
 
@@ -82,6 +102,41 @@ function shouldSkip(name: string): boolean {
   return name === 'node_modules' || name.startsWith('.');
 }
 
+// The patterns an ignore file may use, read as rsync reads them: `name/`
+// leaves out every directory of that name, and any other pattern leaves out
+// every file or directory whose name it matches, with `*` matching within a
+// name. Lines starting `#` or `;` are comments, as they are to rsync. Anything
+// else, rsync's `+ ` and `- ` rule prefixes among it, is refused rather than
+// read some other way.
+function readIgnorePatterns(file: string): ((path: string) => boolean)[] {
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !/^[#;]/.test(line))
+    .map((pattern) => {
+      let dirOnly = pattern.endsWith('/');
+      let name = dirOnly ? pattern.slice(0, -1) : pattern;
+      if (name === '' || /^[+-] /.test(name) || /[/!?[\]\\]/.test(name)) {
+        throw new Error(
+          `Unsupported pattern "${pattern}" in ${file}: build-realms reads ` +
+            'only `name`, `*.ext`-style and `dir/` patterns.',
+        );
+      }
+      let regex = new RegExp(
+        '^' +
+          name
+            .split('*')
+            .map((part) => part.replace(/[.+^${}()|]/g, '\\$&'))
+            .join('[^/]*') +
+          '$',
+      );
+      return (path: string) => {
+        if (!regex.test(basename(path))) return false;
+        return !dirOnly || statSync(path).isDirectory();
+      };
+    });
+}
+
 function main(): void {
   console.log('Building bundled-realms for boxel-cli (CS-11164)...');
   rmSync(OUT_DIR, { recursive: true, force: true });
@@ -110,10 +165,14 @@ function main(): void {
         continue;
       }
     }
+    let ignored = realm.ignoreFile
+      ? readIgnorePatterns(join(realm.src, realm.ignoreFile))
+      : [];
     let dst = join(OUT_DIR, realm.name);
     cpSync(realm.src, dst, {
       recursive: true,
-      filter: (src) => !shouldSkip(basename(src)),
+      filter: (src) =>
+        !shouldSkip(basename(src)) && !ignored.some((ignores) => ignores(src)),
     });
   }
 
