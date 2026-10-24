@@ -76,5 +76,15 @@ export function createServeFromRealm(
     );
 
     await setContextResponse(ctxt, realmResponse);
+    // A refused upload can have unread bytes. Finish its error response before
+    // closing HTTP/1 rather than destroying the socket during body cancellation.
+    if (
+      !ctxt.req.readableEnded &&
+      ctxt.req.httpVersionMajor === 1 &&
+      ctxt.req.headers['content-type']?.split(';')[0].trim() ===
+        'application/octet-stream'
+    ) {
+      ctxt.set('Connection', 'close');
+    }
   };
 }

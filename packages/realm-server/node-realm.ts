@@ -1,3 +1,5 @@
+import { uploadStaging } from './lib/upload-staging.ts';
+import type { StagedFile } from '@cardstack/runtime-common/staged-file';
 import type {
   RealmAdapter,
   RealmEventDelivery,
@@ -116,6 +118,9 @@ export class NodeAdapter implements RealmAdapter {
     this.realmDir = realmDir;
     this.enableFileWatcher = enableFileWatcher;
     this.dispatcher = dispatcher;
+    void uploadStaging.initialize().catch((err) => {
+      realmEventsLog.error('Could not initialize upload staging', err);
+    });
   }
 
   get dir(): string {
@@ -319,6 +324,40 @@ export class NodeAdapter implements RealmAdapter {
       size: stat.size,
       createRangeStream: (start: number, end: number) =>
         createReadStream(absolutePath, { start, end }),
+    };
+  }
+
+  stage(
+    path: LocalPath,
+    body: ReadableStream<Uint8Array>,
+    limit: number,
+    contentLength?: number,
+  ): Promise<StagedFile> {
+    return uploadStaging.stage(
+      join(this.realmDir, path),
+      body,
+      limit,
+      contentLength,
+    );
+  }
+
+  disposeStaged(content: StagedFile): Promise<void> {
+    return uploadStaging.dispose(content);
+  }
+
+  stagedContentEquals(path: LocalPath, content: StagedFile): Promise<boolean> {
+    return uploadStaging.equals(join(this.realmDir, path), content);
+  }
+
+  async commitStaged(
+    path: LocalPath,
+    content: StagedFile,
+  ): Promise<AdapterWriteResult> {
+    let absolutePath = join(this.realmDir, path);
+    await uploadStaging.commit(absolutePath, content);
+    return {
+      path: absolutePath,
+      lastModified: lastModifiedSeconds(statSync(absolutePath)),
     };
   }
 

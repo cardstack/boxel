@@ -1,3 +1,4 @@
+import { request as httpRequest } from 'node:http';
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
@@ -6,7 +7,7 @@ import { formatRFC7231 } from 'date-fns';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
 import fsExtra from 'fs-extra';
-const { existsSync, readFileSync, statSync } = fsExtra;
+const { existsSync, readFileSync, statSync, readdirSync } = fsExtra;
 import {
   cardSrc,
   compiledCard,
@@ -19,6 +20,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
+  waitUntil,
   setupMatrixRoom,
   createJWT,
   cardInfo,
@@ -2434,6 +2436,155 @@ module(basename(import.meta.filename), function () {
             audioSizeLimitBytes: 2048,
             videoSizeLimitBytes: 8192,
             onRealmSetup,
+          });
+
+          async function streamUpload(
+            path: string,
+            declaredLength?: number,
+            chunks?: Buffer[],
+          ): Promise<number | undefined> {
+            return new Promise((resolve, reject) => {
+              let upload = httpRequest(
+                new URL(path, realmURL),
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/octet-stream',
+                    ...(declaredLength === undefined
+                      ? { 'Transfer-Encoding': 'chunked' }
+                      : { 'Content-Length': declaredLength }),
+                  },
+                },
+                (response) => {
+                  response.resume();
+                  response.once('end', () => {
+                    resolve(response.statusCode);
+                    upload.destroy();
+                  });
+                },
+              );
+              upload.on('error', reject);
+              upload.flushHeaders();
+              // Undefined deliberately leaves the body unsent: the server has
+              // to refuse from headers instead of waiting for those bytes.
+              if (chunks) {
+                for (let chunk of chunks) upload.write(chunk);
+                upload.end();
+              }
+            });
+          }
+
+          test('rejects an oversized declared length without waiting for a body', async function (assert) {
+            assert.strictEqual(await streamUpload('no-body.bin', 4096), 413);
+            assert.false(
+              existsSync(
+                join(dir.name, 'realm_server_1', 'test', 'no-body.bin'),
+              ),
+            );
+            assert.false(
+              readdirSync(join(dir.name, 'realm_server_1', 'test')).some(
+                (name) => name.endsWith('.boxel-partial'),
+              ),
+            );
+          });
+
+          test('accepts binary bytes without Content-Length and records actual size', async function (assert) {
+            assert.strictEqual(
+              await streamUpload('chunked.bin', undefined, [
+                Buffer.from([0, 255]),
+                Buffer.from([128, 3]),
+              ]),
+              204,
+            );
+            assert.deepEqual(
+              [
+                ...readFileSync(
+                  join(dir.name, 'realm_server_1', 'test', 'chunked.bin'),
+                ),
+              ],
+              [0, 255, 128, 3],
+            );
+            let rows = await query(dbAdapter, [
+              'SELECT content_size FROM realm_file_meta WHERE realm_url =',
+              param(testRealm.url),
+              'AND file_path =',
+              param('chunked.bin'),
+            ]);
+            assert.strictEqual(Number(rows[0].content_size), 4);
+          });
+
+          test('cuts off an oversized chunked body without publishing or metadata', async function (assert) {
+            assert.strictEqual(
+              await streamUpload('too-many.bin', undefined, [
+                Buffer.alloc(256),
+                Buffer.alloc(512),
+              ]),
+              413,
+            );
+            assert.false(
+              existsSync(
+                join(dir.name, 'realm_server_1', 'test', 'too-many.bin'),
+              ),
+            );
+            let rows = await query(dbAdapter, [
+              'SELECT content_size FROM realm_file_meta WHERE realm_url =',
+              param(testRealm.url),
+              'AND file_path =',
+              param('too-many.bin'),
+            ]);
+            assert.strictEqual(rows.length, 0);
+            assert.false(
+              readdirSync(join(dir.name, 'realm_server_1', 'test')).some(
+                (name) => name.endsWith('.boxel-partial'),
+              ),
+            );
+          });
+
+          test('a disconnected upload removes staging bytes and preserves the stored file', async function (assert) {
+            await request
+              .post('/disconnect.bin')
+              .set('Content-Type', 'application/octet-stream')
+              .send(Buffer.from([5, 6, 7]));
+            let upload = httpRequest(new URL('disconnect.bin', realmURL), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/octet-stream',
+                'Content-Length': 512,
+              },
+            });
+            upload.on('error', () => {});
+            upload.write(Buffer.alloc(10));
+            let stagedNames = () =>
+              readdirSync(join(dir.name, 'realm_server_1', 'test')).filter(
+                (name) => name.endsWith('.boxel-partial'),
+              );
+            try {
+              await waitUntil(async () => stagedNames().length > 0, {
+                timeout: 5000,
+                interval: 10,
+              });
+            } finally {
+              upload.destroy();
+            }
+            await waitUntil(async () => stagedNames().length === 0, {
+              timeout: 5000,
+              interval: 10,
+            });
+            assert.deepEqual(
+              [
+                ...readFileSync(
+                  join(dir.name, 'realm_server_1', 'test', 'disconnect.bin'),
+                ),
+              ],
+              [5, 6, 7],
+            );
+            let rows = await query(dbAdapter, [
+              'SELECT content_size FROM realm_file_meta WHERE realm_url =',
+              param(testRealm.url),
+              'AND file_path =',
+              param('disconnect.bin'),
+            ]);
+            assert.strictEqual(Number(rows[0].content_size), 3);
           });
 
           test('returns 413 when binary payload exceeds size limit', async function (assert) {
