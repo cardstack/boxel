@@ -102,6 +102,12 @@ server accepts the change, it expires every unexpired row of the account:
   reset uses it, so a second request with it is refused (401
   `M_UNAUTHORIZED`), and each check costs a confirmed reset email.
 
+The route also takes `attributes.{username, password}` from a page that set
+the password with the Matrix server itself (a page or credential frame built to set it there, which can stay loaded across a deploy). It ends the account's rows
+once that new password checks out, under the per-account limit on failed
+sign-ins it shares with `POST /_secure-session`, and answers 204; whoever
+holds the old password can keep that limit full against it.
+
 The route answers only the secure origin (403 `forbidden`), and the same
 whether or not a row ended. When ending the sessions fails after the password
 is set (the Matrix server's admin API is down, say), the failure is logged on
