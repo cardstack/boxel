@@ -42,6 +42,7 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
+import { TokenRefreshSchedule } from '@cardstack/host/lib/token-refresh-schedule';
 import {
   RealmServerSessionLocalStorageKey,
   SessionLocalStorageKey,
@@ -408,6 +409,7 @@ export default class RealmServerService
   logout(): void {
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
+    this.refreshSchedule.reset();
     this.token = undefined;
     this.client = undefined;
     this.loggingIn = undefined;
@@ -1155,26 +1157,41 @@ export default class RealmServerService
     this.tokenRefresher.perform();
   }
 
+  // Re-mints the session on the `TokenRefreshSchedule`, which reports a fresh
+  // session that arrives too close to expiry to be scheduled from its `exp`.
   private tokenRefresher = restartableTask(async () => {
-    if (!this.claims) {
+    if (!this.claims || !this.token) {
       return;
     }
 
-    // token expiration is unix time (seconds)
-    let expirationMs = this.claims.exp * 1000;
-
-    let refreshMs = Math.max(
-      expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
-      0,
+    let { exp } = this.claims;
+    let refreshMs = this.refreshSchedule.refreshDelayMs(
+      this.token,
+      exp,
+      (delayMs) =>
+        console.error(
+          `RealmServerService - the session minted by ${this.url.href} expires at ${new Date(
+            exp * 1000,
+          ).toISOString()}, too soon to schedule a refresh; minting again in ${
+            delayMs / 1000
+          }s`,
+        ),
     );
 
-    await rawTimeout(refreshMs);
+    await this.waitForTokenRefresh(refreshMs);
     if (!this.loggingIn) {
       this.loggingIn = this.loginTask.perform();
       await this.loggingIn;
     }
   });
 
+  // How the token refresher waits for its next mint. Tests replace it to run
+  // the refresher against a virtual clock.
+  async waitForTokenRefresh(ms: number): Promise<void> {
+    await rawTimeout(ms);
+  }
+
+  private refreshSchedule = new TokenRefreshSchedule();
   private loggingIn: Promise<void> | undefined;
   private pendingRegistrationToken: string | undefined;
 
@@ -1211,6 +1228,7 @@ export default class RealmServerService
       );
       this.pendingRegistrationToken = undefined;
       let token = await realmAuthClient.getJWT();
+      this.refreshSchedule.minted(token);
       this.token = token;
     } catch (e: any) {
       if (!this.client) {
@@ -1903,7 +1921,6 @@ export default class RealmServerService
   }
 }
 
-const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
 const sessionLocalStorageKey = RealmServerSessionLocalStorageKey;
 // How long signing the secure window out may take before it is abandoned.
 const secureWindowSignOutTimeoutMs = 10_000;

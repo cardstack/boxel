@@ -52,6 +52,7 @@ import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import ENV from '@cardstack/host/config/environment';
 import { realmURLDisplayText } from '@cardstack/host/lib/realm-utils';
+import { TokenRefreshSchedule } from '@cardstack/host/lib/token-refresh-schedule';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
@@ -276,12 +277,7 @@ class RealmResource {
   }
 
   private loggingIn: Promise<void> | undefined;
-  // The last token this resource minted, so the refresher can tell a token
-  // fresh from the realm server apart from one restored out of storage.
-  private lastMintedToken: string | undefined;
-  // Mints in a row whose token arrived already inside the refresh period. Each
-  // one doubles the wait before the next mint.
-  private unusableMints = 0;
+  private refreshSchedule = new TokenRefreshSchedule();
 
   async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
@@ -389,7 +385,7 @@ class RealmResource {
       let token = await this.matrixService.createRealmSession(
         new URL(this.realmURL),
       );
-      this.lastMintedToken = token;
+      this.refreshSchedule.minted(token);
       this.token = token;
     } catch (e: any) {
       console.error(`RealmService - Failed to login to realm: ${e.message}`, e);
@@ -402,8 +398,11 @@ class RealmResource {
     }
   });
 
+  // Unlike `clearRealmSession`, which re-authentication also calls, signing
+  // out starts the next account without this one's refresh backoff.
   logout(): void {
     this.clearRealmSession();
+    this.refreshSchedule.reset();
     window.localStorage.removeItem(SessionLocalStorageKey);
     syncTokenToServiceWorker(this.realmURL, undefined);
   }
@@ -605,42 +604,32 @@ class RealmResource {
     );
   }
 
-  // Re-mints the session `tokenRefreshPeriodSec` before it expires, going by
-  // `exp` alone. A token restored from storage that is already inside that
-  // period is re-minted at once. A freshly minted one that arrives inside it
-  // cannot be scheduled from its `exp`, so the refresher waits
-  // `minTokenRefreshIntervalSec`, doubling with each such mint in a row up to
-  // `maxTokenRefreshBackoffSec`, and reports it, rather than asking again
-  // straight away.
+  // Re-mints the session on the `TokenRefreshSchedule`, which reports a fresh
+  // session that arrives too close to expiry to be scheduled from its `exp`.
   private tokenRefresher = restartableTask(async () => {
-    if ((globalThis as any).__boxelRenderContext || !this.claims) {
+    if (
+      (globalThis as any).__boxelRenderContext ||
+      !this.claims ||
+      !this.token
+    ) {
       return;
     }
 
-    // token expiration is unix time (seconds)
-    let refreshMs =
-      this.claims.exp * 1000 - Date.now() - tokenRefreshPeriodSec * 1000;
-
-    if (this.token === this.lastMintedToken) {
-      if (refreshMs < minTokenRefreshIntervalSec * 1000) {
-        this.unusableMints++;
-        refreshMs = Math.min(
-          minTokenRefreshIntervalSec * 1000 * 2 ** (this.unusableMints - 1),
-          maxTokenRefreshBackoffSec * 1000,
-        );
+    let { exp } = this.claims;
+    let refreshMs = this.refreshSchedule.refreshDelayMs(
+      this.token,
+      exp,
+      (delayMs) =>
         console.error(
           `RealmService - the session minted for ${this.realmURL} expires at ${new Date(
-            this.claims.exp * 1000,
+            exp * 1000,
           ).toISOString()}, too soon to schedule a refresh; minting again in ${
-            refreshMs / 1000
+            delayMs / 1000
           }s`,
-        );
-      } else {
-        this.unusableMints = 0;
-      }
-    }
+        ),
+    );
 
-    await this.realmService.waitForTokenRefresh(Math.max(refreshMs, 0));
+    await this.realmService.waitForTokenRefresh(refreshMs);
 
     if (!this.loggingIn) {
       this.loggingIn = this.loginTask.perform();
@@ -1817,11 +1806,11 @@ export default class RealmService extends Service {
   }
 }
 
-export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
-// The shortest wait between two mints of one realm's session, and the longest
-// the doubling wait after a run of unusable mints grows to.
-export const minTokenRefreshIntervalSec = 30;
-export const maxTokenRefreshBackoffSec = 30 * 60;
+export {
+  tokenRefreshPeriodSec,
+  minTokenRefreshIntervalSec,
+  maxTokenRefreshBackoffSec,
+} from '@cardstack/host/lib/token-refresh-schedule';
 
 export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
