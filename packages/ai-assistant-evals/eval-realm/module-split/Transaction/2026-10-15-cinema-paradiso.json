@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "merchant": "Cinema Paradiso",
+      "date": "2026-10-15",
+      "amount": 38.5,
+      "isIncome": false,
+      "category": "entertainment",
+      "recurrence": "none",
+      "memo": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/travel-rewards-card"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../home-ledger",
+        "name": "Transaction"
+      }
+    }
+  }
+}

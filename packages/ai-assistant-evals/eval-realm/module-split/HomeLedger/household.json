@@ -1,0 +1,124 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "householdName": "Okafor-Lindqvist",
+      "monthlyBudget": 3200,
+      "savingsGoal": 6000
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "accounts.0": {
+        "links": {
+          "self": "../Account/everyday-checking"
+        }
+      },
+      "accounts.1": {
+        "links": {
+          "self": "../Account/rainy-day-savings"
+        }
+      },
+      "accounts.2": {
+        "links": {
+          "self": "../Account/travel-rewards-card"
+        }
+      },
+      "transactions.0": {
+        "links": {
+          "self": "../Transaction/2026-09-01-payroll-lumen-labs"
+        }
+      },
+      "transactions.1": {
+        "links": {
+          "self": "../Transaction/2026-09-02-maple-street-rent"
+        }
+      },
+      "transactions.2": {
+        "links": {
+          "self": "../Transaction/2026-09-06-greenleaf-market"
+        }
+      },
+      "transactions.3": {
+        "links": {
+          "self": "../Transaction/2026-09-11-city-power-light"
+        }
+      },
+      "transactions.4": {
+        "links": {
+          "self": "../Transaction/2026-09-14-trattoria-sole"
+        }
+      },
+      "transactions.5": {
+        "links": {
+          "self": "../Transaction/2026-09-19-greenleaf-market"
+        }
+      },
+      "transactions.6": {
+        "links": {
+          "self": "../Transaction/2026-09-24-transfer-to-savings"
+        }
+      },
+      "transactions.7": {
+        "links": {
+          "self": "../Transaction/2026-09-27-riverside-pediatrics"
+        }
+      },
+      "transactions.8": {
+        "links": {
+          "self": "../Transaction/2026-10-01-payroll-lumen-labs"
+        }
+      },
+      "transactions.9": {
+        "links": {
+          "self": "../Transaction/2026-10-02-maple-street-rent"
+        }
+      },
+      "transactions.10": {
+        "links": {
+          "self": "../Transaction/2026-10-04-greenleaf-market"
+        }
+      },
+      "transactions.11": {
+        "links": {
+          "self": "../Transaction/2026-10-08-metro-transit-pass"
+        }
+      },
+      "transactions.12": {
+        "links": {
+          "self": "../Transaction/2026-10-10-city-power-light"
+        }
+      },
+      "transactions.13": {
+        "links": {
+          "self": "../Transaction/2026-10-15-cinema-paradiso"
+        }
+      },
+      "transactions.14": {
+        "links": {
+          "self": "../Transaction/2026-10-18-greenleaf-market"
+        }
+      },
+      "transactions.15": {
+        "links": {
+          "self": "../Transaction/2026-10-21-transfer-to-savings"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../home-ledger",
+        "name": "HomeLedger"
+      }
+    }
+  }
+}

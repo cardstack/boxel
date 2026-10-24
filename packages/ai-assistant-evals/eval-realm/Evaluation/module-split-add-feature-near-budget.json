@@ -1,0 +1,130 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Add bills to my home ledger. Each bill has a name, an amount, the day of the month it's due, and the account that pays it. Add three bills a household like mine would really have, and show the upcoming bills on the ledger dashboard with the total still due this month. Then show me one of the bills. Don't ask me any questions; decide the details yourself.",
+      "followUpPrompts": [],
+      "successCriteria": "1. (problem) The upcoming-bills feature lives outside `module-split/home-ledger.gts`: its logic, template and styles are in new modules (for example an upcoming-bills component under `components/`, or the ledger's `isolated` format moved there), and `home-ledger.gts` grows by at most 20 lines from its starting 1,904 (imports, a `bills` field, the line that renders the new component). Count both from the workspace snapshot. A bills panel written straight into the existing dashboard fails this however few lines it takes.\n2. A `Bill` CardDef exists in a module of its own, not in `home-ledger.gts`, with a name, an amount, a due day of the month and a `linksTo` the `Account` that pays it.\n3. Three bill instances exist, each with a realistic name and amount and each linked to one of the three existing accounts.\n4. The ledger's dashboard lists the bills with their due day and shows a total still due this month: the bills whose due day is on or after today's date in the current calendar month. A total of all bills also counts if the assistant says that is what it shows. Judge from the code in the workspace snapshot; the ledger renders with no error boundary.\n5. Every pre-existing instance (the ledger, the three accounts, the sixteen transactions) still loads. If a class moved to another module, its instances' `adoptsFrom` were updated or the old module re-exports it.\n6. One bill is open on screen with no error boundary.\n7. Every tool call applied or was repaired by the model, the assistant did not ask a question or wait for confirmation before acting, and the whole flow took at most 20 turns.",
+      "cardInfo": {
+        "name": "Module split: add bills to a near-budget ledger",
+        "summary": "The workspace starts with a Home Ledger app whose one module, home-ledger.gts, already holds three cards, their helpers and a large dashboard in 1,904 lines, with a ledger, three accounts and sixteen transactions. The prompt asks for a new Bill card, three bills linked to the accounts, and an upcoming-bills section on the ledger dashboard. This eval tests whether the assistant adds the feature in new modules instead of growing a module that is near the 2,000-line budget past it, without breaking the existing instances.",
+        "notes": "Use case 2 (update a card definition). The problem criterion is where the upcoming-bills code lives and how much home-ledger.gts grew; check both from the workspace snapshot. The seed has no theme and is not graded on design.",
+        "cardThumbnailURL": null
+      },
+      "secondsPerPrompt": 450
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../module-split/HomeLedger/household"
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../module-split/Account/everyday-checking.json"
+        }
+      },
+      "initialFiles.1": {
+        "links": {
+          "self": "../module-split/Account/rainy-day-savings.json"
+        }
+      },
+      "initialFiles.2": {
+        "links": {
+          "self": "../module-split/Account/travel-rewards-card.json"
+        }
+      },
+      "initialFiles.3": {
+        "links": {
+          "self": "../module-split/Transaction/2026-09-01-payroll-lumen-labs.json"
+        }
+      },
+      "initialFiles.4": {
+        "links": {
+          "self": "../module-split/Transaction/2026-09-02-maple-street-rent.json"
+        }
+      },
+      "initialFiles.5": {
+        "links": {
+          "self": "../module-split/Transaction/2026-09-06-greenleaf-market.json"
+        }
+      },
+      "initialFiles.6": {
+        "links": {
+          "self": "../module-split/Transaction/2026-09-11-city-power-light.json"
+        }
+      },
+      "initialFiles.7": {
+        "links": {
+          "self": "../module-split/Transaction/2026-09-14-trattoria-sole.json"
+        }
+      },
+      "initialFiles.8": {
+        "links": {
+          "self": "../module-split/Transaction/2026-09-19-greenleaf-market.json"
+        }
+      },
+      "initialFiles.9": {
+        "links": {
+          "self": "../module-split/Transaction/2026-09-24-transfer-to-savings.json"
+        }
+      },
+      "initialFiles.10": {
+        "links": {
+          "self": "../module-split/Transaction/2026-09-27-riverside-pediatrics.json"
+        }
+      },
+      "initialFiles.11": {
+        "links": {
+          "self": "../module-split/Transaction/2026-10-01-payroll-lumen-labs.json"
+        }
+      },
+      "initialFiles.12": {
+        "links": {
+          "self": "../module-split/Transaction/2026-10-02-maple-street-rent.json"
+        }
+      },
+      "initialFiles.13": {
+        "links": {
+          "self": "../module-split/Transaction/2026-10-04-greenleaf-market.json"
+        }
+      },
+      "initialFiles.14": {
+        "links": {
+          "self": "../module-split/Transaction/2026-10-08-metro-transit-pass.json"
+        }
+      },
+      "initialFiles.15": {
+        "links": {
+          "self": "../module-split/Transaction/2026-10-10-city-power-light.json"
+        }
+      },
+      "initialFiles.16": {
+        "links": {
+          "self": "../module-split/Transaction/2026-10-15-cinema-paradiso.json"
+        }
+      },
+      "initialFiles.17": {
+        "links": {
+          "self": "../module-split/Transaction/2026-10-18-greenleaf-market.json"
+        }
+      },
+      "initialFiles.18": {
+        "links": {
+          "self": "../module-split/Transaction/2026-10-21-transfer-to-savings.json"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}
