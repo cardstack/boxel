@@ -111,7 +111,8 @@ limit on failed password sign-ins.
 
 Once every Matrix login token minted before a change it made has expired, the
 realm server MUST sign out every Matrix device of the account but the one that
-made the change (every device, for a reset). That sweep MUST still run when the
+made the change (every device, for a reset), and MUST end every realm-server
+session of the account issued before then. That sweep MUST still run when the
 realm server that scheduled it stops before it is due.
 
 A secure window whose session has ended MUST forget it and offer to sign in
@@ -245,10 +246,17 @@ minted before the change signs in a new device after it. Synapse can't revoke
 a login token, and a device records neither when nor how it signed in [7]. So
 the realm server signs the account's devices out again once the token
 lifetime has passed after it ends the secure sessions, by when every token
-minted before then has expired. That also signs out a device signed in with
-the new password in those minutes, since nothing tells it apart, and the user
-signs in again. The sweep is recorded in the database, because a deploy can
-stop the realm server within those minutes. A page that set the password with
+minted before then has expired. A device can mint a realm-server session that
+lasts a week in those minutes, so the sweep ends the account's realm-server
+sessions too; the kept device mints a new one with its Matrix token. The sweep
+also signs out a device signed in with the new password in those minutes,
+since nothing tells it apart, and the user signs in again. After a reset that
+is the usual case, since the reset page offers to sign in straight away. It is
+still the smaller cost: holding back sign-ins until the sweep would make every
+sign-in after a reset wait minutes, and would still miss a device signed in
+with the password directly on Synapse. The sweep is recorded in the database,
+and every realm server looks for due ones each minute, because a deploy can
+stop the realm server that recorded it within those minutes. A page that set the password with
 Synapse itself gets no sweep: the realm server can't tell which device made
 that change.
 
@@ -329,6 +337,10 @@ as an app already signed in would show the user straight into the app.
   any device of the account [7].
 - **Revoking the account's login tokens at the change.** Synapse has no API
   that revokes a login token [7].
+- **Holding back login tokens for the account until its sweep has run.** A
+  sign-in on the secure origin after a reset would then wait minutes for its
+  hand-off, and a device signed in with the password directly on Synapse
+  would still be swept.
 - **Sparing the devices that signed in after the change.** A device records
   neither when nor how it signed in, so one signed in with an old login token
   can't be told apart [7].

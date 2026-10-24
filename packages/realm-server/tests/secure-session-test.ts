@@ -13,6 +13,7 @@ import {
   clearSessionRoom,
   fetchSessionRoom,
   getOrCreateUser,
+  isSessionRevoked,
   upsertSessionRoom,
 } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -44,6 +45,8 @@ import {
 import { keepsMethodAndPathOnly } from '../lib/request-telemetry.ts';
 import {
   changePassword,
+  DEVICE_SWEEP_DELAY_MS,
+  resumeDeviceSweeps,
   runDueDeviceSweeps,
   secureSignInConfigured,
 } from '../lib/secure-session.ts';
@@ -1843,6 +1846,11 @@ module(basename(import.meta.filename), function () {
         .attributes;
       let minted = await mintLoginToken(`Bearer ${session.token}`);
       assert.strictEqual(minted.status, 201, minted.text);
+      assert.true(
+        minted.body.data.attributes.expiresInMs + 30_000 <=
+          DEVICE_SWEEP_DELAY_MS,
+        'the sweep waits out the login token, with a margin',
+      );
 
       let changed = await passwordChange({
         accessToken: appToken,
@@ -1871,6 +1879,11 @@ module(basename(import.meta.filename), function () {
       );
       let tokenDevice = redeemed.body.access_token as string;
       assert.strictEqual(await whoami(tokenDevice), 200, 'until the sweep');
+      let issuedBeforeSweep = Math.floor(Date.now() / 1000) - 1;
+      assert.false(
+        await isSessionRevoked(dbAdapter, userId, issuedBeforeSweep),
+        'a realm-server session issued before the sweep is live until it',
+      );
 
       assert.strictEqual(
         await runDeviceSweepNow(userId),
@@ -1886,6 +1899,10 @@ module(basename(import.meta.filename), function () {
         await whoami(appToken),
         200,
         'the device that made the change stays signed in',
+      );
+      assert.true(
+        await isSessionRevoked(dbAdapter, userId, issuedBeforeSweep),
+        'and ended by it, as one the token’s device minted would be',
       );
       assert.deepEqual(await deviceSweeps(userId), [], 'the sweep is done');
     });
@@ -1934,6 +1951,104 @@ module(basename(import.meta.filename), function () {
         await whoami(await matrixLogin(userId, newPassword)),
         200,
         'the new password signs in again after the sweep',
+      );
+    });
+
+    test('a sweep a realm server left due runs once a realm server is looking', async function (assert) {
+      let { password, userId } = await registerPasswordUser(dbAdapter);
+      let device = await matrixLogin(userId, password);
+      await dbAdapter.execute(
+        `INSERT INTO password_change_device_sweeps (user_id, sweep_at)
+           VALUES ($1, NOW())`,
+        { bind: [userId] },
+      );
+
+      resumeDeviceSweeps({ dbAdapter, matrixClient: { matrixURL } } as any);
+      let deadline = Date.now() + 20_000;
+      while ((await deviceSweeps(userId)).length > 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      assert.deepEqual(await deviceSweeps(userId), [], 'the sweep ran');
+      assert.strictEqual(
+        await whoami(device),
+        401,
+        'and signed the account’s devices out',
+      );
+    });
+
+    test('a sweep that fails stays to be tried again', async function (assert) {
+      let { password, userId } = await registerPasswordUser(dbAdapter);
+      let device = await matrixLogin(userId, password);
+      await dbAdapter.execute(
+        `INSERT INTO password_change_device_sweeps (user_id, sweep_at)
+           VALUES ($1, NOW())`,
+        { bind: [userId] },
+      );
+      let next = await runDueDeviceSweeps({
+        dbAdapter,
+        matrixClient: { matrixURL },
+        matrixAdminUsername: `not-an-admin-${randomBytes(4).toString('hex')}`,
+        matrixAdminPassword: 'wrong',
+      } as any);
+      assert.true(
+        (next ?? 0) >= 60_000,
+        'it is tried again within a minute, not straight away',
+      );
+      assert.strictEqual((await deviceSweeps(userId)).length, 1, 'it stays');
+      assert.strictEqual(
+        await whoami(device),
+        200,
+        'having signed nothing out',
+      );
+    });
+
+    test('a later change of the same account moves its sweep later, and keeps that change’s device', async function (assert) {
+      let { password, userId } = await registerPasswordUser(dbAdapter);
+      let firstDevice = await matrixLogin(userId, password);
+      let firstPassword = `pw-${randomBytes(12).toString('hex')}`;
+      let first = await passwordChange({
+        accessToken: firstDevice,
+        currentPassword: password,
+        newPassword: firstPassword,
+      });
+      assert.strictEqual(first.status, 200, first.text);
+      let [{ sweep_at: firstSweepAt }] = (await dbAdapter.execute(
+        `SELECT sweep_at FROM password_change_device_sweeps WHERE user_id = $1`,
+        { bind: [userId] },
+      )) as { sweep_at: string }[];
+
+      let secondDevice = await matrixLogin(userId, firstPassword);
+      let second = await passwordChange({
+        accessToken: secondDevice,
+        currentPassword: firstPassword,
+        newPassword: `pw-${randomBytes(12).toString('hex')}`,
+      });
+      assert.strictEqual(second.status, 200, second.text);
+      let rows = (await dbAdapter.execute(
+        `SELECT keep_device_id, sweep_at > $2 AS later
+           FROM password_change_device_sweeps WHERE user_id = $1`,
+        { bind: [userId, firstSweepAt] },
+      )) as { keep_device_id: string; later: boolean }[];
+      assert.deepEqual(
+        rows,
+        [{ keep_device_id: await deviceOf(secondDevice), later: true }],
+        'one sweep, after the later change, keeping its device',
+      );
+      await runDueDeviceSweeps({
+        dbAdapter,
+        matrixClient: { matrixURL },
+      } as any);
+      assert.strictEqual(
+        (await deviceSweeps(userId)).length,
+        1,
+        'a run before it is due leaves it',
+      );
+
+      await runDeviceSweepNow(userId);
+      assert.strictEqual(
+        await whoami(secondDevice),
+        200,
+        'the later change’s device stays signed in',
       );
     });
 

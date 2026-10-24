@@ -126,10 +126,13 @@ through the route has ended the account's rows, the realm server records a
 token's two-minute lifetime and a margin. The sweep signs out every device of
 the account through the admin API (`_synapse/admin/v2/users/<user>/devices`,
 then `delete_devices`) except `keep_device_id`, the device that made a change
-(none for a reset), and deletes the row. A device signed in with the new
-password before the sweep is signed out too; nothing tells it apart from one
-an old token signed in. Each realm-server process arms a timer for the
-earliest sweep it knows of, and runs the sweeps left due when it starts
+(none for a reset), revokes every realm-server session of the account issued
+until then (`revokeUserSessions`; the kept device mints a new one), and
+deletes the row. A device signed in with the new password before the sweep is
+signed out too; nothing tells it apart from one an old token signed in. After a
+reset that is usual, since the reset page offers to sign in straight away.
+Each realm-server process arms a timer for the earliest sweep it knows of,
+runs the sweeps due when it starts, and looks for due ones every minute
 (`resumeDeviceSweeps`), so a deploy within those minutes doesn't drop one. A
 sweep that fails stays in the table, is logged on `realm:secure-session` as
 "could not sign a changed password's devices out", and is tried again within

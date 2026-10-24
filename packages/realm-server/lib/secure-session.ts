@@ -4,6 +4,7 @@ import {
   logger,
   param,
   query,
+  revokeUserSessions,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -579,7 +580,7 @@ async function resetAccount(
 // deployment), and a margin for the time the change's requests take.
 export const DEVICE_SWEEP_DELAY_MS = (2 * 60 + 30) * 1000;
 // How soon a sweep that failed (the Matrix server's admin API is down, say)
-// is tried again.
+// is tried again, and how often each process looks for sweeps that are due.
 const DEVICE_SWEEP_RETRY_MS = 60 * 1000;
 
 // Signs an account's Matrix devices out once every login token minted before
@@ -589,9 +590,10 @@ const DEVICE_SWEEP_RETRY_MS = 60 * 1000;
 // the account could mint one (`login/get_token` asks for no password), as
 // could a secure session (`mintLoginToken`). Such a token redeemed after the
 // change makes a device the change never signed out, so the sweep signs it
-// out. It also signs out any device that signs in with the new password
-// before the sweep: nothing tells the two apart, since a device records
-// neither when nor how it signed in.
+// out, and ends every realm-server session issued before the sweep. It also
+// signs out any device that signs in with the new password before the sweep:
+// nothing tells the two apart, since a device records neither when nor how it
+// signed in.
 //
 // The sweep is recorded in `password_change_device_sweeps` before it is
 // armed, so a realm server that stops before it is due leaves it for the
@@ -617,10 +619,20 @@ async function scheduleDeviceSweep(
   armDeviceSweeps(deps, DEVICE_SWEEP_DELAY_MS);
 }
 
-// Runs the sweeps a realm server stopped before running, and any due later,
-// when the realm server starts.
+// Runs the sweeps that are due when the realm server starts, and then looks
+// for due ones every minute, so a sweep recorded by a process that stopped
+// before it was due runs within a minute of falling due on whichever process
+// is still serving, as during a rolling deploy.
 export function resumeDeviceSweeps(deps: SecureSessionDeps): void {
   armDeviceSweeps(deps, 0);
+  let poll = setInterval(() => {
+    if (deps.dbAdapter.isClosed) {
+      clearInterval(poll);
+      return;
+    }
+    armDeviceSweeps(deps, 0);
+  }, DEVICE_SWEEP_RETRY_MS);
+  poll.unref();
 }
 
 // One timer per database, for the earliest sweep this process knows is due.
@@ -677,6 +689,11 @@ export async function runDueDeviceSweeps(
   for (let { user_id: user, keep_device_id: keepDevice } of due) {
     try {
       await signOutDevicesExcept(deps, user, keepDevice ?? undefined);
+      // A device the sweep signed out may have minted a realm-server session
+      // in the meantime, one that can last a week, so every realm-server
+      // session issued until now ends with it. The kept device mints a new
+      // one with its Matrix token; the devices signed out can't.
+      await revokeUserSessions(deps.dbAdapter, user);
       // A sweep a later change moved past now stays for that change.
       await deps.dbAdapter.execute(
         `DELETE FROM password_change_device_sweeps
