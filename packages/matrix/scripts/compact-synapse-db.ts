@@ -2,24 +2,26 @@
 // log, then rewriting the file without the freed pages.
 //
 // Synapse writes a `device_lists_changes_in_room` row for every room a user
-// has joined each time one of their devices changes, and never deletes those
-// rows. A user that gets a new device on every login and sits in thousands of
-// session rooms grows the table into tens of gigabytes. The rows are a change
-// feed, not room or user data. Synapse reads them for two things:
+// has joined each time one of their devices changes. A user that gets a new
+// device on every login and sits in thousands of session rooms grows the table
+// by gigabytes. Synapse prunes rows older than 30 days itself (rows without an
+// `inserted_ts` once a later row is that old), but never shrinks the file.
+// The rows are a change feed, not room or user data. Synapse reads them for:
 //
 // - Converting each change into outbound pokes for the other homeservers in
 //   the room, in (stream_id, room_id) order up to a cursor kept in
 //   `device_lists_changes_converted_stream_position`.
 // - Answering "which users' devices changed since sync token X?". A token
-//   older than the table's oldest stream id gets a full device-list resync.
+//   below `device_lists_changes_in_room_max_pruned_stream_id`, the highest
+//   stream deleted from the table, gets a full device-list resync.
 // - Replaying a room's changes since its partial federated join started
 //   (`partial_state_rooms.device_lists_stream_id`) once the join completes.
 //
-// So the script deletes only a prefix: every row before a boundary stream.
-// That keeps the oldest-stream check sound, since every token the deleted rows
-// could answer is now older than the table and gets a resync. When no room
-// has a member on another homeserver, converting writes nothing but the
-// cursor, so the boundary is the newest stream and the cursor moves to it.
+// So the script deletes only a prefix: every row before a boundary stream,
+// raising the pruned-stream marker to the highest stream it deletes, so every
+// token the deleted rows could answer gets a resync. When no room has a
+// member on another homeserver, converting writes nothing but the cursor, so
+// the boundary is the newest stream and the cursor moves to it.
 // Otherwise the boundary is the cursor's stream, or the oldest partial join's
 // start if that is earlier, so no row synapse still has to send is lost.
 //
@@ -58,6 +60,7 @@ import {
 
 const TABLE = 'device_lists_changes_in_room';
 const CURSOR_TABLE = 'device_lists_changes_converted_stream_position';
+const PRUNED_TABLE = 'device_lists_changes_in_room_max_pruned_stream_id';
 const KEPT_TABLE = 'compact_kept_device_list_changes';
 
 let args = process.argv.slice(2);
@@ -218,6 +221,19 @@ if (newest.stream_id === null) {
         `UPDATE ${CURSOR_TABLE} SET stream_id = ?, room_id = ?
            WHERE (stream_id, room_id) < (?, ?)`,
       ).run(newest.stream_id, newest.room_id, newest.stream_id, newest.room_id);
+    }
+    // A database from before synapse kept the marker has none to raise.
+    if (hasTable(PRUNED_TABLE)) {
+      let pruned = db
+        .prepare(
+          `SELECT MAX(stream_id) AS stream_id FROM ${TABLE} WHERE stream_id < ?`,
+        )
+        .get(boundary) as { stream_id: number | null };
+      if (pruned.stream_id !== null) {
+        db.prepare(
+          `UPDATE ${PRUNED_TABLE} SET stream_id = ? WHERE stream_id < ?`,
+        ).run(pruned.stream_id, pruned.stream_id);
+      }
     }
     // Copy the kept rows aside and empty the table with an unconditional
     // DELETE, which drops its pages wholesale instead of deleting row by row.
