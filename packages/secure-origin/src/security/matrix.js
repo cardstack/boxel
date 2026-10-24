@@ -1,9 +1,11 @@
 /* eslint-env browser */
 // The Matrix requests the secure origin's pages make themselves: creating an
 // account (registration's user-interactive auth, the invite code and email
-// validation), and resetting a password by email. They go to the Matrix
+// validation), and sending a password reset email. They go to the Matrix
 // server the realm server names in the page's markup, the one server besides
-// the realm server the page's policy lets it reach.
+// the realm server the page's policy lets it reach. Setting the new password
+// goes through the realm server instead (`changePassword` in `session.js`),
+// which ends the account's secure sessions once the Matrix server sets it.
 
 export class MatrixError extends Error {
   // `status` 0 is a request that never reached the server.
@@ -124,20 +126,4 @@ export async function setDisplayName(userId, accessToken, displayname) {
 
 export async function logout(accessToken) {
   await request('logout', { accessToken, body: {} });
-}
-
-// Sets a new password once the email validation session `sid` was
-// confirmed from the email. Every device the account is signed in on is
-// signed out, as the app's reset does.
-export async function resetPassword({ sid, clientSecret, newPassword }) {
-  await request('account/password', {
-    body: {
-      auth: {
-        type: 'm.login.email.identity',
-        threepid_creds: { sid, client_secret: clientSecret },
-      },
-      new_password: newPassword,
-      logout_devices: true,
-    },
-  });
 }

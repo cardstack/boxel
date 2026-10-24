@@ -404,7 +404,6 @@ export default class ProfileSettingsModal extends Component<Signature> {
             },
           },
           accessToken: this.matrixService.accessToken,
-          account: this.matrixService.userId ?? undefined,
         },
       });
       if (!result.ok) {

@@ -180,10 +180,9 @@ module('Integration | password reset', function (hooks) {
       email: 'someone@example.com',
     };
 
-    test('sets the new password, and ends the secure sessions the old one signed in', async function (assert) {
-      servers.matrix('POST account/password', () => ({}));
+    test('sets the new password through the realm server, which ends the secure sessions the old one signed in', async function (assert) {
       servers.realmServer('POST _secure-sessions/password-change', () => ({
-        status: 204,
+        status: 200,
         body: {},
       }));
       await render(<template><ResetPassword @link={{LINK}} /></template>);
@@ -202,25 +201,21 @@ module('Integration | password reset', function (hooks) {
         .hasText('Your password is now reset');
 
       assert.deepEqual(
-        servers.requests('matrix', 'POST account/password')[0]!.body,
-        {
-          auth: {
-            type: 'm.login.email.identity',
-            threepid_creds: {
-              sid: 'sid-1',
-              client_secret: 'the-client-secret',
-            },
-          },
-          new_password: NEW_PASSWORD,
-          logout_devices: true,
-        },
-      );
-      assert.deepEqual(
         servers.requests(
           'realm-server',
           'POST _secure-sessions/password-change',
         )[0]!.body.data.attributes,
-        { username: 'someone@example.com', password: NEW_PASSWORD },
+        {
+          sid: 'sid-1',
+          clientSecret: 'the-client-secret',
+          newPassword: NEW_PASSWORD,
+          email: 'someone@example.com',
+        },
+      );
+      assert.strictEqual(
+        servers.requests('matrix').length,
+        0,
+        'the page sends the new password to the Matrix server only through the realm server',
       );
       await click('[data-test-back-to-login-btn]');
       assert.strictEqual(
@@ -250,7 +245,7 @@ module('Integration | password reset', function (hooks) {
       );
       assert.dom('[data-test-reset-password-btn]').isDisabled();
       assert.strictEqual(
-        servers.requests('matrix').length,
+        servers.requests('realm-server').length,
         0,
         'nothing was sent',
       );
@@ -278,7 +273,7 @@ module('Integration | password reset', function (hooks) {
 
     test('a refused reset says to start again, and a server error says so', async function (assert) {
       let status = 401;
-      servers.matrix('POST account/password', () => ({
+      servers.realmServer('POST _secure-sessions/password-change', () => ({
         status,
         body: { errcode: 'M_UNAUTHORIZED', error: 'Not validated' },
       }));
@@ -299,20 +294,6 @@ module('Integration | password reset', function (hooks) {
         .hasText(
           'An unknown error happened. Please try again, or contact support if the problem persists.',
         );
-    });
-
-    test('the password is reset even when its sessions can’t be ended', async function (assert) {
-      servers.matrix('POST account/password', () => ({}));
-      servers.realmServer('POST _secure-sessions/password-change', () => ({
-        status: 500,
-        body: { errors: [{ detail: 'down' }] },
-      }));
-      await render(<template><ResetPassword @link={{LINK}} /></template>);
-      await fillIn('[data-test-password-field]', NEW_PASSWORD);
-      await fillIn('[data-test-confirm-password-field]', NEW_PASSWORD);
-      await click('[data-test-reset-password-btn]');
-      await waitFor('[data-test-reset-password-success]');
-      assert.dom('[data-test-reset-password-success]').exists();
     });
   });
 });

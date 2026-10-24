@@ -22,7 +22,7 @@ interface Harness {
   parent: object;
   sent: any[];
   requests: Request[];
-  ended: { username: string; password: string }[];
+  changes: Record<string, string>[];
   submitted: { count: number };
   styled: any[];
   receive(data: unknown, from?: { source?: unknown; origin?: string }): void;
@@ -30,23 +30,26 @@ interface Harness {
 }
 
 // A frame for `formName`, with everything it reaches outside itself
-// recorded. `respond` answers each Matrix request, by its path.
+// recorded. `respond` answers each Matrix request, by its path, and
+// `respondToChange` each password change the realm server is asked to make.
 function harness(
   formName: keyof typeof FORMS,
   {
     respond = () => ({ status: 200, body: {} }),
     height = () => 100,
     rendered = () => Promise.resolve(),
+    respondToChange = () => ({ status: 200, body: {} }),
   }: {
     respond?: (path: string, body: any) => { status: number; body: unknown };
     height?: () => number;
     rendered?: () => Promise<unknown>;
+    respondToChange?: () => { status: number; body: any };
   } = {},
 ): Harness {
   let parent = {};
   let sent: any[] = [];
   let requests: Request[] = [];
-  let ended: { username: string; password: string }[] = [];
+  let changes: Record<string, string>[] = [];
   let submitted = { count: 0 };
   let styled: any[] = [];
   let frame = new CredentialFrame({
@@ -74,8 +77,10 @@ function harness(
         status: answer.status,
       });
     },
-    endSessions: async (credentials) => {
-      ended.push(credentials);
+    changePassword: async (change) => {
+      changes.push(change);
+      let answer = respondToChange();
+      return { ok: answer.status === 200, ...answer };
     },
   });
   return {
@@ -83,7 +88,7 @@ function harness(
     parent,
     sent,
     requests,
-    ended,
+    changes,
     submitted,
     styled,
     receive(data, { source = parent, origin = APP_ORIGIN } = {}) {
@@ -272,6 +277,7 @@ module('Unit | credential frame protocol', function () {
       let result = await submit(h, 'set-password', { account: 'someone' });
       assert.false(result.ok);
       assert.deepEqual(h.requests, []);
+      assert.deepEqual(h.changes, []);
     });
   });
 
@@ -525,7 +531,7 @@ module('Unit | credential frame protocol', function () {
       });
     });
 
-    test("set-password signs out every device, takes the current password from its field and ends the account's sessions", async function (assert) {
+    test("set-password asks the realm server to change the password, with the passwords from its fields and the app's token", async function (assert) {
       let h = harness('change-password');
       fill(h, {
         current: 'the-old-password',
@@ -542,39 +548,63 @@ module('Unit | credential frame protocol', function () {
         account: '@example-user:example.test',
       });
       assert.true(result.ok);
-      let [request] = h.requests;
-      assert.strictEqual(
-        request.url,
-        'https://matrix.example.test/_matrix/client/v3/account/password',
-      );
-      assert.strictEqual(request.headers.Authorization, 'Bearer app-token');
-      assert.deepEqual(request.body, {
-        auth: {
-          type: 'm.login.password',
-          password: 'the-old-password',
-          identifier: { type: 'm.id.user', user: '@example-user:example.test' },
-        },
-        new_password: 'the-new-password',
-        logout_devices: true,
-      });
-      assert.deepEqual(h.ended, [
+      assert.deepEqual(h.requests, [], 'nothing goes to the Matrix server');
+      assert.deepEqual(h.changes, [
         {
-          username: '@example-user:example.test',
-          password: 'the-new-password',
+          newPassword: 'the-new-password',
+          accessToken: 'app-token',
+          currentPassword: 'the-old-password',
         },
       ]);
     });
 
-    test('set-password ends no sessions when the change fails', async function (assert) {
-      let h = harness('reset', {
-        respond: () => ({ status: 401, body: { errcode: 'M_UNAUTHORIZED' } }),
-      });
+    test('set-password asks the realm server to reset the password with the email validation session, for the account the app names', async function (assert) {
+      let h = harness('reset');
       fill(h, { password: 'the-new-password', confirm: 'the-new-password' });
       let result = await submit(h, 'set-password', {
+        auth: {
+          type: 'm.login.email.identity',
+          threepid_creds: { sid: 'sid-1', client_secret: 'client-secret' },
+        },
         account: 'user@example.test',
       });
+      assert.true(result.ok);
+      assert.deepEqual(h.requests, [], 'nothing goes to the Matrix server');
+      assert.deepEqual(h.changes, [
+        {
+          newPassword: 'the-new-password',
+          sid: 'sid-1',
+          clientSecret: 'client-secret',
+          email: 'user@example.test',
+        },
+      ]);
+    });
+
+    test("set-password answers with the Matrix server's refusal, with the passwords redacted", async function (assert) {
+      let h = harness('change-password', {
+        respondToChange: () => ({
+          status: 401,
+          body: {
+            errcode: 'M_FORBIDDEN',
+            error: 'the-old-password is not the-new-password',
+          },
+        }),
+      });
+      fill(h, {
+        current: 'the-old-password',
+        password: 'the-new-password',
+        confirm: 'the-new-password',
+      });
+      let result = await submit(h, 'set-password', {
+        auth: { type: 'm.login.password' },
+        accessToken: 'app-token',
+      });
       assert.false(result.ok);
-      assert.deepEqual(h.ended, []);
+      assert.strictEqual(result.status, 401);
+      assert.deepEqual(result.body, {
+        errcode: 'M_FORBIDDEN',
+        error: '[redacted] is not [redacted]',
+      });
     });
 
     test('register sends the username the app names with the password from its field', async function (assert) {

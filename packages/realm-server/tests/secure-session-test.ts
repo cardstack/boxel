@@ -95,24 +95,6 @@ async function registerPasswordUser(
   return { username, password, userId };
 }
 
-// Sets a new password and signs the account's devices out, as resetting or
-// changing a password from Boxel does.
-async function setPassword(userId: string, newPassword: string) {
-  let response = await adminRequest(
-    `_synapse/admin/v1/reset_password/${encodeURIComponent(userId)}`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        new_password: newPassword,
-        logout_devices: true,
-      }),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`could not set the password: ${response.status}`);
-  }
-}
-
 async function updateAccount(userId: string, body: Record<string, unknown>) {
   let response = await adminRequest(
     `_synapse/admin/v2/users/${encodeURIComponent(userId)}`,
@@ -121,6 +103,108 @@ async function updateAccount(userId: string, body: Record<string, unknown>) {
   if (!response.ok) {
     throw new Error(`could not update the account: ${response.status}`);
   }
+}
+
+// smtp4dev, which the Matrix server's email goes to in the test services.
+const MAIL_HOST = 'http://localhost:5001';
+
+// The token in the reset email the Matrix server sent `email` for the
+// validation session `sid`.
+async function emailedResetToken(email: string, sid: string): Promise<string> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    let messages = (await (
+      await fetch(`${MAIL_HOST}/api/messages?pageSize=100`)
+    ).json()) as { id: string; to: unknown }[];
+    for (let message of messages) {
+      if (!JSON.stringify(message.to).includes(email)) {
+        continue;
+      }
+      let html = await (
+        await fetch(`${MAIL_HOST}/api/messages/${message.id}/html`)
+      ).text();
+      let link = /https?:\/\/[^"<\s]+submit_token\?[^"<\s]+/.exec(html)?.[0];
+      let params = link
+        ? new URL(link.replace(/&amp;/g, '&')).searchParams
+        : undefined;
+      if (params?.get('sid') === sid && params.get('token')) {
+        return params.get('token')!;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(`no reset email reached ${email}`);
+}
+
+// Starts a password reset for `email` and confirms it from the email, as a
+// user following the link does. Resolves to the validated session a reset
+// page holds.
+async function validatedReset(
+  email: string,
+): Promise<{ sid: string; clientSecret: string }> {
+  let clientSecret = randomBytes(16).toString('hex');
+  let requested = await fetch(
+    new URL('_matrix/client/v3/account/password/email/requestToken', matrixURL),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        client_secret: clientSecret,
+        send_attempt: 1,
+      }),
+    },
+  );
+  if (!requested.ok) {
+    throw new Error(`could not request a reset: ${requested.status}`);
+  }
+  let { sid } = (await requested.json()) as { sid: string };
+  let token = await emailedResetToken(email, sid);
+  let confirmed = await fetch(
+    new URL('_synapse/client/password_reset/email/submit_token', matrixURL),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ sid, token, client_secret: clientSecret }),
+    },
+  );
+  if (!confirmed.ok) {
+    throw new Error(`could not confirm the reset: ${confirmed.status}`);
+  }
+  return { sid, clientSecret };
+}
+
+// Binds a fresh email address to the account, as registering with one does.
+async function addEmail(userId: string): Promise<string> {
+  let email = `${randomBytes(6).toString('hex')}@secure-session.test`;
+  await updateAccount(userId, {
+    threepids: [{ medium: 'email', address: email }],
+  });
+  return email;
+}
+
+// A Matrix access token for a new device of the account, as the app holds.
+async function matrixLogin(userId: string, password: string): Promise<string> {
+  let response = await fetch(new URL('_matrix/client/v3/login', matrixURL), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'm.login.password',
+      identifier: { type: 'm.id.user', user: userId },
+      password,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`could not sign in to Matrix: ${response.status}`);
+  }
+  return ((await response.json()) as { access_token: string }).access_token;
+}
+
+async function whoami(accessToken: string): Promise<number> {
+  let response = await fetch(
+    new URL('_matrix/client/v3/account/whoami', matrixURL),
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  return response.status;
 }
 
 // Links a Google identity to the account, as Boxel's OIDC mapping provider
@@ -1558,25 +1642,41 @@ module(basename(import.meta.filename), function () {
     });
 
     function passwordChange(
-      username: string,
-      password: string,
+      attributes: Record<string, unknown>,
       origin: string | null = secureOrigin,
     ) {
       return post(
         '/_secure-sessions/password-change',
         'password-change',
-        { username, password },
+        attributes,
         origin,
       );
+    }
+
+    // Fails sign-ins for the account until its limit on failed attempts
+    // refuses one, as whoever holds the old password can keep doing.
+    async function holdLimitFull(assert: Assert, username: string) {
+      let refused = false;
+      for (let attempt = 0; attempt < 20 && !refused; attempt++) {
+        let response = await passwordSignIn(username, `wrong-${attempt}`);
+        refused = response.status === 429;
+      }
+      assert.true(refused, 'the account’s limit on failed sign-ins is full');
+    }
+
+    async function endedRows(userId: string) {
+      let rows = (await dbAdapter.execute(
+        `SELECT expires_at <= NOW() AS ended FROM secure_sessions
+          WHERE user_id = $1`,
+        { bind: [userId] },
+      )) as { ended: boolean }[];
+      return rows.map((row) => row.ended);
     }
 
     test("a password reset ends every secure session the account had, the CLI's included", async function (assert) {
       let { username, password, userId } =
         await registerPasswordUser(dbAdapter);
-      let email = `${randomBytes(6).toString('hex')}@secure-session.test`;
-      await updateAccount(userId, {
-        threepids: [{ medium: 'email', address: email }],
-      });
+      let email = await addEmail(userId);
       let other = await registerPasswordUser(dbAdapter);
       let signedIn = await passwordSignIn(username, password);
       assert.strictEqual(signedIn.status, 201, signedIn.text);
@@ -1588,24 +1688,13 @@ module(basename(import.meta.filename), function () {
       }
 
       let newPassword = `pw-${randomBytes(12).toString('hex')}`;
-      await setPassword(userId, newPassword);
-
-      let withOldPassword = await passwordChange(email, password);
-      assert.strictEqual(withOldPassword.status, 401, withOldPassword.text);
-      assert.strictEqual(
-        withOldPassword.body.errors[0].code,
-        'invalid-credentials',
-        'the old password is refused',
-      );
-      assert.strictEqual(
-        (await mint(secureWindow)).status,
-        201,
-        'and ends nothing',
-      );
-
-      let ended = await passwordChange(email, newPassword);
-      assert.strictEqual(ended.status, 204, ended.text);
-      assert.deepEqual(ended.body, {}, 'the answer says nothing');
+      let reset = await passwordChange({
+        ...(await validatedReset(email)),
+        email,
+        newPassword,
+      });
+      assert.strictEqual(reset.status, 200, reset.text);
+      assert.deepEqual(reset.body, {}, "the Matrix server's answer");
       for (let [auth, name] of [
         [secureWindow, 'window'],
         [cli, 'CLI'],
@@ -1621,38 +1710,173 @@ module(basename(import.meta.filename), function () {
         201,
         "another user's session is left alone",
       );
-
-      let rows = (await dbAdapter.execute(
-        `SELECT expires_at <= NOW() AS ended FROM secure_sessions
-          WHERE user_id = $1`,
-        { bind: [userId] },
-      )) as { ended: boolean }[];
       assert.deepEqual(
-        rows.map((row) => row.ended),
+        await endedRows(userId),
         [true, true],
         'the rows are expired, not deleted, so their proofs stay spent',
       );
 
       let again = await passwordSignIn(username, newPassword);
-      assert.strictEqual(again.status, 201, again.text);
+      assert.strictEqual(again.status, 201, 'the new password is set');
       assert.strictEqual(
-        (await mint(`Bearer ${again.body.data.attributes.token}`)).status,
-        201,
-        'the new password signs in again',
-      );
-      assert.strictEqual(
-        (await passwordChange(userId, newPassword)).status,
-        204,
-        'the account can be named by its Matrix id',
+        (await passwordSignIn(username, password)).status,
+        401,
+        'and the old one is not',
       );
     });
 
-    test('ending the sessions of a changed password is answered only for the secure origin', async function (assert) {
-      let { username, password, userId } =
-        await registerPasswordUser(dbAdapter);
+    test('a password change ends every secure session of the account, and keeps the device that made it', async function (assert) {
+      let { password, userId } = await registerPasswordUser(dbAdapter);
+      let appToken = await matrixLogin(userId, password);
+      let otherDevice = await matrixLogin(userId, password);
+      let secureWindow = await secureSessionAuth(dbAdapter, userId);
+      let cli = await secureSessionAuth(dbAdapter, userId, { client: 'cli' });
+
+      let wrong = await passwordChange({
+        accessToken: appToken,
+        currentPassword: `${password}-wrong`,
+        newPassword: `pw-${randomBytes(12).toString('hex')}`,
+      });
+      assert.strictEqual(wrong.status, 401, wrong.text);
+      assert.strictEqual(
+        wrong.body.errcode,
+        'M_FORBIDDEN',
+        "a wrong current password gets the Matrix server's refusal",
+      );
+      assert.strictEqual((await mint(cli)).status, 201, 'and ends nothing');
+
+      let notAToken = await passwordChange({
+        accessToken: 'not-a-token',
+        currentPassword: password,
+        newPassword: `pw-${randomBytes(12).toString('hex')}`,
+      });
+      assert.strictEqual(notAToken.status, 401, 'an unknown token is refused');
+      assert.strictEqual(notAToken.body.errcode, 'M_UNKNOWN_TOKEN');
+
+      let changed = await passwordChange({
+        accessToken: appToken,
+        currentPassword: password,
+        newPassword: `pw-${randomBytes(12).toString('hex')}`,
+      });
+      assert.strictEqual(changed.status, 200, changed.text);
+      for (let [auth, name] of [
+        [secureWindow, 'window'],
+        [cli, 'CLI'],
+      ]) {
+        assert.strictEqual(
+          (await mint(auth)).status,
+          403,
+          `the ${name} session mints nothing after the change`,
+        );
+      }
+      assert.strictEqual(
+        await whoami(appToken),
+        200,
+        'the device that made the change stays signed in',
+      );
+      assert.strictEqual(
+        await whoami(otherDevice),
+        401,
+        "the account's other devices are signed out",
+      );
+    });
+
+    test("a password change ends the account's sessions while its limit on failed sign-ins is held full", async function (assert) {
+      let resetting = await registerPasswordUser(dbAdapter);
+      let email = await addEmail(resetting.userId);
+      let resettingCli = await secureSessionAuth(dbAdapter, resetting.userId, {
+        client: 'cli',
+      });
+      await holdLimitFull(assert, resetting.username);
+      let reset = await passwordChange({
+        ...(await validatedReset(email)),
+        email,
+        newPassword: `pw-${randomBytes(12).toString('hex')}`,
+      });
+      assert.strictEqual(reset.status, 200, reset.text);
+      assert.strictEqual(
+        (await mint(resettingCli)).status,
+        403,
+        "a reset ends the CLI's session",
+      );
+
+      let changing = await registerPasswordUser(dbAdapter);
+      let appToken = await matrixLogin(changing.userId, changing.password);
+      let changingCli = await secureSessionAuth(dbAdapter, changing.userId, {
+        client: 'cli',
+      });
+      await holdLimitFull(assert, changing.username);
+      let changed = await passwordChange({
+        accessToken: appToken,
+        currentPassword: changing.password,
+        newPassword: `pw-${randomBytes(12).toString('hex')}`,
+      });
+      assert.strictEqual(changed.status, 200, changed.text);
+      assert.strictEqual(
+        (await mint(changingCli)).status,
+        403,
+        "a change ends the CLI's session",
+      );
+    });
+
+    test('a reset ends the sessions only of the account whose password it set', async function (assert) {
+      let victim = await registerPasswordUser(dbAdapter);
+      let victimEmail = await addEmail(victim.userId);
+      let victimCli = await secureSessionAuth(dbAdapter, victim.userId, {
+        client: 'cli',
+      });
+      let attacker = await registerPasswordUser(dbAdapter);
+      let attackerEmail = await addEmail(attacker.userId);
+      let attackersReset = await validatedReset(attackerEmail);
+
+      let attackersPassword = `pw-${randomBytes(12).toString('hex')}`;
+      let named = await passwordChange({
+        ...attackersReset,
+        email: victimEmail,
+        newPassword: attackersPassword,
+      });
+      assert.strictEqual(named.status, 200, named.text);
+      assert.strictEqual(
+        (await passwordSignIn(attacker.username, attackersPassword)).status,
+        201,
+        'the reset set the password of the account whose email confirmed it',
+      );
+      assert.strictEqual(
+        (await mint(victimCli)).status,
+        201,
+        'the account the reset names keeps its sessions',
+      );
+
+      let replayed = await passwordChange({
+        ...attackersReset,
+        email: victimEmail,
+        newPassword: `pw-${randomBytes(12).toString('hex')}`,
+      });
+      assert.strictEqual(
+        replayed.status,
+        401,
+        'a validation session resets once',
+      );
+      assert.strictEqual(
+        (await mint(victimCli)).status,
+        201,
+        'and the account named still keeps its sessions',
+      );
+    });
+
+    test('a password change is answered only for the secure origin', async function (assert) {
+      let { password, userId } = await registerPasswordUser(dbAdapter);
+      let appToken = await matrixLogin(userId, password);
       let secureWindow = await secureSessionAuth(dbAdapter, userId);
       for (let origin of [null, APP_ORIGIN]) {
-        let response = await passwordChange(username, password, origin);
+        let response = await passwordChange(
+          {
+            accessToken: appToken,
+            currentPassword: password,
+            newPassword: `pw-${randomBytes(12).toString('hex')}`,
+          },
+          origin,
+        );
         assert.strictEqual(response.status, 403, `Origin: ${origin ?? 'none'}`);
         assert.strictEqual(response.body.errors[0].code, 'forbidden');
       }
@@ -1661,25 +1885,10 @@ module(basename(import.meta.filename), function () {
         201,
         'nothing was ended',
       );
-    });
-
-    test('ending the sessions of a changed password shares the limit on failed sign-ins', async function (assert) {
-      let { username, password } = await registerPasswordUser(dbAdapter);
-      let refused;
-      for (let attempt = 0; attempt < 10; attempt++) {
-        let response = await passwordChange(username, `${password}-${attempt}`);
-        if (response.status === 429) {
-          refused = response;
-          break;
-        }
-        assert.strictEqual(response.status, 401, response.text);
-      }
-      assert.strictEqual(refused?.status, 429, 'failures are limited');
-      let signIn = await passwordSignIn(username, password);
       assert.strictEqual(
-        signIn.status,
-        429,
-        'and count against signing in with the account too',
+        (await passwordSignIn(userId, password)).status,
+        201,
+        'nor the password changed',
       );
     });
 
@@ -1735,17 +1944,28 @@ module(basename(import.meta.filename), function () {
       let sub = `google-${randomUUID()}`;
       await linkGoogle(userId, sub);
       let issued = google.issue(sub);
+      let appToken = await matrixLogin(userId, password);
+      let newPassword = `pw-${randomBytes(12).toString('hex')}`;
       let lines = await withLogDefinition('realm:requests', 'info', () =>
         logLinesDuring(['realm:requests', 'realm:secure-session'], async () => {
           await passwordSignIn(username, `${password}-wrong`);
           await passwordSignIn(username, password);
           await googleSignIn(issued);
-          await passwordChange(username, password);
+          await passwordChange({
+            accessToken: appToken,
+            currentPassword: password,
+            newPassword,
+          });
         }),
       );
       assert.true(lines.length > 0, 'the requests are logged');
       for (let line of lines) {
         assert.false(line.message.includes(password), 'no line carries it');
+        assert.false(
+          line.message.includes(newPassword),
+          'nor the new password',
+        );
+        assert.false(line.message.includes(appToken), 'nor the Matrix token');
         assert.false(line.message.includes(issued.code), 'nor the code');
         assert.false(
           line.message.includes(issued.codeVerifier),

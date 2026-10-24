@@ -45,7 +45,7 @@
       "bytes": 1052
     },
     "credentials.js": {
-      "bytes": 16453,
+      "bytes": 16492,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -70,7 +70,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/credentials.js",
-          "size": 12292
+          "size": 12384
         },
         {
           "package": "@cardstack/secure-origin",
@@ -92,12 +92,12 @@
       ]
     },
     "session.js": {
-      "bytes": 5218,
+      "bytes": 5272,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/session.js",
-          "size": 7780
+          "size": 7791
         }
       ]
     },
@@ -757,7 +757,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 71194,
+      "bytes": 70953,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -827,7 +827,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/matrix.js",
-          "size": 2520
+          "size": 2230
         },
         {
           "package": "@cardstack/secure-origin",
@@ -872,7 +872,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/reset-password.gts",
-          "size": 2852
+          "size": 2755
         },
         {
           "package": "@cardstack/secure-origin",
