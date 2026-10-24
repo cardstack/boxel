@@ -37,6 +37,7 @@ class Loading extends Component {
 
     <style scoped>
       .session-loading {
+        --foreground: var(--boxel-light);
         background-color: #686283;
         display: flex;
         align-items: center;
