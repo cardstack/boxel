@@ -580,6 +580,48 @@ module('Unit | credential frame protocol', function () {
       ]);
     });
 
+    test('set-password takes the request it makes from the form, not from what the app sends', async function (assert) {
+      let resetCreds = {
+        type: 'm.login.email.identity',
+        threepid_creds: { sid: 'sid-1', client_secret: 'client-secret' },
+      };
+      let change = harness('change-password');
+      fill(change, {
+        current: 'the-old-password',
+        password: 'the-new-password',
+        confirm: 'the-new-password',
+      });
+      let result = await submit(change, 'set-password', {
+        auth: resetCreds,
+        account: 'someone-else@example.test',
+      });
+      assert.false(result.ok, 'the change form makes no reset');
+      assert.deepEqual(change.changes, [], 'and sends nothing');
+
+      let reset = harness('reset');
+      fill(reset, {
+        password: 'the-new-password',
+        confirm: 'the-new-password',
+      });
+      await submit(reset, 'set-password', {
+        auth: resetCreds,
+        accessToken: 'app-token',
+        account: 'user@example.test',
+      });
+      assert.deepEqual(
+        reset.changes,
+        [
+          {
+            newPassword: 'the-new-password',
+            sid: 'sid-1',
+            clientSecret: 'client-secret',
+            email: 'user@example.test',
+          },
+        ],
+        'the reset form makes a reset, whatever token it is sent',
+      );
+    });
+
     test("set-password answers with the Matrix server's refusal, with the passwords redacted", async function (assert) {
       let h = harness('change-password', {
         respondToChange: () => ({

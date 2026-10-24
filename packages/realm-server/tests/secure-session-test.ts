@@ -42,7 +42,10 @@ import {
   registerUser,
 } from '../synapse.ts';
 import { keepsMethodAndPathOnly } from '../lib/request-telemetry.ts';
-import { secureSignInConfigured } from '../lib/secure-session.ts';
+import {
+  changePassword,
+  secureSignInConfigured,
+} from '../lib/secure-session.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
   installSecretsKeyring,
@@ -1816,6 +1819,76 @@ module(basename(import.meta.filename), function () {
         (await mint(changingCli)).status,
         403,
         "a change ends the CLI's session",
+      );
+    });
+
+    test('a reset whose link names no account sets the password and ends no session', async function (assert) {
+      let { username, userId } = await registerPasswordUser(dbAdapter);
+      let email = await addEmail(userId);
+      let cli = await secureSessionAuth(dbAdapter, userId, { client: 'cli' });
+      let newPassword = `pw-${randomBytes(12).toString('hex')}`;
+      let reset = await passwordChange({
+        ...(await validatedReset(email)),
+        newPassword,
+      });
+      assert.strictEqual(reset.status, 200, reset.text);
+      assert.strictEqual(
+        (await passwordSignIn(username, newPassword)).status,
+        201,
+        'the password is set',
+      );
+      assert.strictEqual(
+        (await mint(cli)).status,
+        201,
+        'and no session is ended, since nothing named the account',
+      );
+    });
+
+    test('a change that sets the password answers 200 even when ending its sessions fails', async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let appToken = await matrixLogin(userId, password);
+      let newPassword = `pw-${randomBytes(12).toString('hex')}`;
+      let result: Awaited<ReturnType<typeof changePassword>> | undefined;
+      let lines = await logLinesDuring(['realm:secure-session'], async () => {
+        result = await changePassword(
+          {
+            dbAdapter: {
+              execute: async () => {
+                throw new Error('the database is down');
+              },
+            },
+            matrixClient: { matrixURL },
+          } as any,
+          {
+            kind: 'change',
+            accessToken: appToken,
+            currentPassword: password,
+            newPassword,
+          },
+        );
+      });
+      assert.deepEqual(
+        result,
+        { status: 200, body: {} },
+        "the Matrix server's answer",
+      );
+      assert.strictEqual(
+        (await passwordSignIn(username, newPassword)).status,
+        201,
+        'the password is set',
+      );
+      assert.true(
+        lines.some((line) =>
+          line.message.includes(
+            "could not end a changed password's secure sessions",
+          ),
+        ),
+        'the failure is logged',
+      );
+      assert.false(
+        lines.some((line) => line.message.includes(newPassword)),
+        'without the password',
       );
     });
 

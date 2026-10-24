@@ -649,22 +649,33 @@ const OPERATIONS = {
   // then ends the account's secure sessions: a session signed in with the old
   // password, perhaps stolen, must not outlive the change. The Matrix server
   // always signs out the account's other devices, which is not the app's to
-  // turn off. A reset (`auth` with the email validation session) ends the
-  // sessions of the account the app names in `account`, the email address the
-  // reset was sent to, once the new password, which the app never sees, checks
-  // out for it. A change (`accessToken`) ends the sessions of the token's
-  // account, and the realm server checks the current password from the field
-  // here with the Matrix server.
+  // turn off.
+  //
+  // What the typed password authorizes is decided by the form, never by what
+  // the app sends. The change form, the one with a current password, makes a
+  // change with the app's `accessToken`: the realm server ends the sessions of
+  // the token's account, once the Matrix server has checked the current
+  // password from the field here. The reset form makes a reset with the email
+  // validation session in `auth`, and ends the sessions of the account the
+  // app names in `account`, the email address the reset was sent to, once the
+  // new password, which the app never sees, checks out for it.
   async 'set-password'({ auth, accessToken, account }) {
     let newPassword = this.value('password');
-    let creds = plainObject(plainObject(auth).threepid_creds);
-    if (typeof accessToken === 'string' && accessToken) {
+    if (this.fields.has('current')) {
+      if (typeof accessToken !== 'string' || !accessToken) {
+        return {
+          ok: false,
+          status: 0,
+          body: { error: 'A password change needs the app’s access token.' },
+        };
+      }
       return await this.changePassword({
         newPassword,
         accessToken,
         currentPassword: this.value('current'),
       });
     }
+    let creds = plainObject(plainObject(auth).threepid_creds);
     return await this.changePassword({
       newPassword,
       sid: String(creds.sid ?? ''),
