@@ -832,7 +832,7 @@
   display: grid;
   align-items: start;
   border-radius: 10px;
-  background: var(--bg, #151616);
+  background: var(--canvas, #151616);
 }
 .wr-live-canvas {
   position: relative;
@@ -885,10 +885,10 @@
 }
 
 .wr-live-content {
-  font-family: var(--font);
+  font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.5;
-  color: var(--ink);
+  color: var(--foreground);
 }
 .wr-live-content.is-resting *,
 .wr-live-content.is-resting *::before,
@@ -910,7 +910,7 @@
   object-fit: contain;
   object-position: top;
   pointer-events: none;
-  background: var(--bg, #151616);
+  background: var(--canvas, #151616);
 }
 .wr-live-tile:not([data-widget-active='true']) .wr-live-content {
   overflow: hidden;

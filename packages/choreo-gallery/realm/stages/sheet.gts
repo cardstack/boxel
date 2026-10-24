@@ -280,9 +280,9 @@ export class Sheet extends Component {
         width: min(88cqw, 300px);
         height: min(78cqh, 390px);
         overflow: hidden;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 24px;
-        background: var(--bg-well);
+        background: var(--inset);
       }
 
       .sheet-behind {
@@ -297,7 +297,7 @@ export class Sheet extends Component {
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .sheet-behind b {
@@ -307,7 +307,7 @@ export class Sheet extends Component {
 
       .sheet-behind small {
         font-size: 11px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .sheet-scrim {
@@ -316,7 +316,7 @@ export class Sheet extends Component {
         z-index: 1;
         border: 0;
         padding: 0;
-        background: var(--bg);
+        background: var(--canvas);
         opacity: 0;
         cursor: pointer;
       }
@@ -331,12 +331,16 @@ export class Sheet extends Component {
         height: 320px;
         display: flex;
         flex-direction: column;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-bottom: 0;
         border-radius: 20px 20px 0 0;
         background: var(--bg-spot);
         box-shadow: 0 -14px 40px
-          rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.55 * var(--shadow-a) * 100%),
+            transparent
+          );
         touch-action: none;
         cursor: grab;
         overflow: hidden;
@@ -347,8 +351,8 @@ export class Sheet extends Component {
          featureless white in light mode, where "elevated" needing to mean
          "even brighter than an already-bright page" runs out of room */
       .choreo-site[data-theme='light'] .sheet {
-        background: var(--bg);
-        border-color: var(--line);
+        background: var(--canvas);
+        border-color: var(--border);
       }
 
       .sheet:active {
@@ -370,7 +374,7 @@ export class Sheet extends Component {
         width: 40px;
         height: 4px;
         border-radius: 999px;
-        background: var(--line-strong);
+        background: var(--border-strong);
       }
 
       /* the title belongs to every mode that has room for one */
@@ -382,7 +386,7 @@ export class Sheet extends Component {
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .sheet.is-sliver .share-title {
@@ -400,9 +404,9 @@ export class Sheet extends Component {
       .share-tile {
         display: flex;
         align-items: center;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         background: var(--bg-spot);
-        color: var(--ink);
+        color: var(--foreground);
         cursor: pointer;
         overflow: hidden;
       }
@@ -439,7 +443,7 @@ export class Sheet extends Component {
 
       .share-copy small {
         font-size: 10px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         white-space: nowrap;
       }
 
@@ -456,7 +460,11 @@ export class Sheet extends Component {
         border-radius: 12px;
         margin-right: -27px;
         box-shadow: 0 4px 14px
-          rgba(var(--shadow-rgb), calc(0.6 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.6 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .sheet.is-sliver .share-tile:last-child {
@@ -541,7 +549,7 @@ export class Sheet extends Component {
         border: 0;
         border-radius: 10px;
         background: none;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.1em;
@@ -552,7 +560,7 @@ export class Sheet extends Component {
 
       @media (hover: hover) {
         .share-extra:hover {
-          color: var(--ink);
+          color: var(--foreground);
           background: var(--bg-spot);
         }
       }
@@ -563,7 +571,7 @@ export class Sheet extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
       @media (max-width: 720px) {
         /* The phone has to BE a phone.

@@ -1246,8 +1246,18 @@ export class Rack extends Component {
           inset 0 1.5px 0 var(--tile-top),
           inset 2px 0 0 rgba(255, 253, 244, 0.35),
           inset -2px 0 0 rgba(122, 92, 44, 0.18),
-          0 2px 3px rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a))),
-          0 -1px 2px rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
+          0 2px 3px
+            color-mix(
+              in srgb,
+              var(--shadow-ink) calc(0.55 * var(--shadow-a) * 100%),
+              transparent
+            ),
+          0 -1px 2px
+            color-mix(
+              in srgb,
+              var(--shadow-ink) calc(0.3 * var(--shadow-a) * 100%),
+              transparent
+            );
         font-family: var(--font-display);
         font-size: 13px;
         line-height: 1;
@@ -1287,7 +1297,7 @@ export class Rack extends Component {
 
       .rk-axis {
         position: absolute;
-        background: var(--line);
+        background: var(--border);
         opacity: 0;
       }
 
@@ -1312,7 +1322,7 @@ export class Rack extends Component {
         font-size: 9px;
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         opacity: 0;
         white-space: nowrap;
       }
@@ -1336,7 +1346,7 @@ export class Rack extends Component {
         top: 266px;
         transform: translateX(-50%);
         font-size: 9px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       /* The board: fifteen-by-fifteen is wider than this stage, so it is thirteen
@@ -1365,7 +1375,12 @@ export class Rack extends Component {
         background-size: 22px 22px;
         box-shadow:
           inset 0 0 0 1px rgba(120, 96, 60, 0.35),
-          0 2px 8px rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+          0 2px 8px
+            color-mix(
+              in srgb,
+              var(--shadow-ink) calc(0.35 * var(--shadow-a) * 100%),
+              transparent
+            );
         opacity: 0;
       }
 
@@ -1390,7 +1405,7 @@ export class Rack extends Component {
         text-transform: none;
         letter-spacing: 0.04em;
         font-size: 9px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .rk-key {
@@ -1403,7 +1418,7 @@ export class Rack extends Component {
         font-size: 9px;
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         opacity: 0;
         white-space: nowrap;
       }
@@ -1443,7 +1458,12 @@ export class Rack extends Component {
         box-shadow:
           inset 0 2px 0 rgba(255, 226, 187, 0.32),
           inset 0 -3px 0 rgba(0, 0, 0, 0.28),
-          0 3px 6px rgba(var(--shadow-rgb), calc(0.6 * var(--shadow-a)));
+          0 3px 6px
+            color-mix(
+              in srgb,
+              var(--shadow-ink) calc(0.6 * var(--shadow-a) * 100%),
+              transparent
+            );
         touch-action: none;
         cursor: grab;
       }
@@ -1501,7 +1521,7 @@ export class Rack extends Component {
         font-size: 9px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         white-space: nowrap;
         transition:
           color 0.18s ease,
@@ -1526,7 +1546,7 @@ export class Rack extends Component {
 
       @media (hover: hover) {
         .rk-notch:hover {
-          color: var(--ink-dim);
+          color: var(--muted-foreground);
         }
       }
 

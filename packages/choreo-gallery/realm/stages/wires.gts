@@ -514,19 +514,19 @@ export class Wires extends Component {
         align-items: center;
         gap: 2px;
         padding: 3px 4px 3px 12px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 999px;
-        background: var(--bg-elev);
+        background: var(--card);
         transform: translateX(-50%);
       }
 
       .wires-bar-label {
         margin-right: 6px;
-        font-family: var(--font);
+        font-family: var(--font-sans);
         font-size: 11px;
         font-weight: 500;
         letter-spacing: 0.01em;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .wires-bar button {
@@ -535,22 +535,22 @@ export class Wires extends Component {
         border-radius: 999px;
         min-width: 26px;
         padding: 4px 9px;
-        font-family: var(--font);
+        font-family: var(--font-sans);
         font-size: 12px;
         font-weight: 500;
         font-variant-numeric: tabular-nums;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       @media (hover: hover) {
         .wires-bar button:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
       .wires-bar button.is-on {
-        background: color-mix(in srgb, var(--ink) 8%, transparent);
-        color: var(--ink);
+        background: color-mix(in srgb, var(--foreground) 8%, transparent);
+        color: var(--foreground);
       }
 
       .wires {
@@ -574,7 +574,7 @@ export class Wires extends Component {
         content: '';
         grid-column: 1;
         grid-row: 1 / span 2;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 4px;
         background: var(--bg-spot);
         pointer-events: none;
@@ -592,7 +592,7 @@ export class Wires extends Component {
         margin: 0;
         padding: clamp(14px, 4cqw, 26px) clamp(16px, 4.7cqw, 30px)
           clamp(8px, 2.2cqw, 14px);
-        border-bottom: 1px solid var(--line);
+        border-bottom: 1px solid var(--border);
       }
 
       .wires-kicker {
@@ -601,12 +601,12 @@ export class Wires extends Component {
         align-items: baseline;
         gap: 12px;
         margin: 0 0 10px;
-        font-family: var(--font);
+        font-family: var(--font-sans);
         font-size: 11px;
         font-weight: 500;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .wires-hed {
@@ -616,7 +616,7 @@ export class Wires extends Component {
         font-weight: 700;
         letter-spacing: -0.035em;
         line-height: 1.12;
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .wires-copy {
@@ -628,12 +628,12 @@ export class Wires extends Component {
         padding: clamp(12px, 3.2cqw, 20px) clamp(16px, 4.7cqw, 30px)
           clamp(16px, 5cqw, 32px);
         max-width: none;
-        font-family: var(--font);
+        font-family: var(--font-sans);
         font-size: clamp(0.8rem, 3.3cqw, 1.24rem);
         font-weight: 400;
         line-height: 1.8;
         letter-spacing: -0.006em;
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .wires-rest {
@@ -773,29 +773,29 @@ export class Wires extends Component {
 
       .wires-who {
         display: block;
-        font-family: var(--font);
+        font-family: var(--font-sans);
         font-size: clamp(10px, 2cqw, 13px);
         font-style: normal;
         font-weight: 600;
         letter-spacing: -0.01em;
         text-transform: none;
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .wires-note p {
         margin: 4px 0 0;
-        font-family: var(--font);
+        font-family: var(--font-sans);
         font-size: clamp(10.5px, 2.2cqw, 14px);
         font-style: normal;
         font-weight: 400;
         line-height: 1.5;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .wires[data-hot='gauge'] .wires-note[data-thread='gauge'] p,
       .wires[data-hot='edition'] .wires-note[data-thread='edition'] p,
       .wires[data-hot='hed'] .wires-note[data-thread='hed'] p {
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       @container (max-width: 460px) {

@@ -280,10 +280,10 @@ export class DialPanel extends Component<Signature> {
       }
 
       .dial-spike-btn {
-        background: rgba(var(--ink-rgb), 0.08);
+        background: color-mix(in srgb, var(--foreground) 8%, transparent);
         border: 0;
         border-radius: 6px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         cursor: pointer;
         font-family: var(--font-mono);
         font-size: 10px;
@@ -292,7 +292,7 @@ export class DialPanel extends Component<Signature> {
       }
 
       .dial-spike-btn:hover {
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       /* dialkit's theme is dark-only: every token in it is a white-on-black
@@ -306,24 +306,63 @@ export class DialPanel extends Component<Signature> {
          keeps the layering intact — a hovered row is still a step above its
          surface, a groove is still a step below it. */
       .choreo-site[data-theme='light'] .dialkit-root {
-        --dial-surface: rgba(33, 29, 24, 0.06);
-        --dial-surface-hover: rgba(33, 29, 24, 0.1);
-        --dial-surface-active: rgba(33, 29, 24, 0.13);
-        --dial-surface-subtle: rgba(33, 29, 24, 0.08);
-        --dial-text-root: #211d18;
-        --dial-text-section: rgba(33, 29, 24, 0.72);
-        --dial-text-label: rgba(33, 29, 24, 0.72);
-        --dial-text-focus: #211d18;
-        --dial-text-primary: rgba(33, 29, 24, 0.95);
-        --dial-text-secondary: rgba(33, 29, 24, 0.62);
-        --dial-text-tertiary: rgba(33, 29, 24, 0.42);
-        --dial-border: rgba(33, 29, 24, 0.12);
-        --dial-border-hover: rgba(33, 29, 24, 0.2);
-        --dial-glass-bg: #f7f3ec;
-        --dial-dropdown-bg: #efe9df;
-        --dial-shadow: 0 8px 28px rgba(33, 29, 24, 0.14);
-        --dial-shadow-collapsed: 0 4px 14px rgba(33, 29, 24, 0.1);
-        --dial-shadow-dropdown: 0 8px 22px rgba(33, 29, 24, 0.14);
+        --dial-surface: color-mix(in srgb, var(--foreground) 6%, transparent);
+        --dial-surface-hover: color-mix(
+          in srgb,
+          var(--foreground) 10%,
+          transparent
+        );
+        --dial-surface-active: color-mix(
+          in srgb,
+          var(--foreground) 13%,
+          transparent
+        );
+        --dial-surface-subtle: color-mix(
+          in srgb,
+          var(--foreground) 8%,
+          transparent
+        );
+        --dial-text-root: var(--foreground);
+        --dial-text-section: color-mix(
+          in srgb,
+          var(--foreground) 72%,
+          transparent
+        );
+        --dial-text-label: color-mix(
+          in srgb,
+          var(--foreground) 72%,
+          transparent
+        );
+        --dial-text-focus: var(--foreground);
+        --dial-text-primary: color-mix(
+          in srgb,
+          var(--foreground) 95%,
+          transparent
+        );
+        --dial-text-secondary: color-mix(
+          in srgb,
+          var(--foreground) 62%,
+          transparent
+        );
+        --dial-text-tertiary: color-mix(
+          in srgb,
+          var(--foreground) 42%,
+          transparent
+        );
+        --dial-border: color-mix(in srgb, var(--foreground) 12%, transparent);
+        --dial-border-hover: color-mix(
+          in srgb,
+          var(--foreground) 20%,
+          transparent
+        );
+        --dial-glass-bg: var(--card);
+        --dial-dropdown-bg: var(--canvas);
+        --dial-shadow: 0 8px 28px
+          color-mix(in srgb, var(--foreground) 14%, transparent);
+        --dial-shadow-collapsed: 0 4px 14px
+          color-mix(in srgb, var(--foreground) 10%, transparent);
+        --dial-shadow-dropdown: 0 8px 22px
+          color-mix(in srgb, var(--foreground) 14%, transparent);
       }
 
       .dial-spike :deep(.dialkit-folder-header) {
@@ -333,7 +372,7 @@ export class DialPanel extends Component<Signature> {
       }
 
       .dial-spike :deep(.dialkit-folder-header:hover) {
-        background: rgba(var(--ink-rgb), 0.05);
+        background: color-mix(in srgb, var(--foreground) 5%, transparent);
       }
 
       /* a nested folder's rows are already inside one .dialkit-folder-inner,
@@ -353,10 +392,10 @@ export class DialPanel extends Component<Signature> {
 
       .dial-tune {
         align-items: center;
-        background: rgba(var(--ink-rgb), 0.07);
+        background: color-mix(in srgb, var(--foreground) 7%, transparent);
         border: 1px solid transparent;
         border-radius: 999px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         cursor: pointer;
         display: inline-flex;
         font-family: var(--font-mono);
@@ -371,34 +410,34 @@ export class DialPanel extends Component<Signature> {
       }
 
       .dial-tune:hover {
-        background: rgba(var(--ink-rgb), 0.13);
-        color: var(--ink);
+        background: color-mix(in srgb, var(--foreground) 13%, transparent);
+        color: var(--foreground);
       }
 
       /* the ACTIVE preset, which is the one the store is writing your edits
          into. Marked rather than merely selected, because the difference
          matters: move a slider now and this chip is what changed. */
       .dial-tune.is-on {
-        background: rgba(230, 163, 90, 0.16);
-        border-color: rgba(230, 163, 90, 0.42);
+        background: color-mix(in srgb, var(--copper) 16%, transparent);
+        border-color: color-mix(in srgb, var(--copper) 42%, transparent);
         color: var(--copper-ink);
       }
 
       .dial-tune.is-save {
         border-style: dashed;
-        border-color: rgba(var(--ink-rgb), 0.22);
+        border-color: color-mix(in srgb, var(--foreground) 22%, transparent);
         background: transparent;
       }
 
       .dial-tune-x {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-size: 12px;
         line-height: 1;
         opacity: 0.5;
       }
 
       .dial-tune-x:hover {
-        color: var(--ember-ink);
+        color: var(--primary-ink);
         opacity: 1;
       }
 
@@ -407,10 +446,10 @@ export class DialPanel extends Component<Signature> {
       }
 
       .dial-tune-input {
-        background: rgba(var(--ink-rgb), 0.1);
-        border: 1px solid rgba(230, 163, 90, 0.42);
+        background: color-mix(in srgb, var(--foreground) 10%, transparent);
+        border: 1px solid color-mix(in srgb, var(--copper) 42%, transparent);
         border-radius: 999px;
-        color: var(--ink);
+        color: var(--foreground);
         font-family: var(--font-mono);
         font-size: 10px;
         outline: none;

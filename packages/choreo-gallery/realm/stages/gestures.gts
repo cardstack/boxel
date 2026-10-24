@@ -171,10 +171,10 @@ export const Gestures = <template>
       background:
         radial-gradient(
           80% 70% at 50% 40%,
-          rgba(255, 59, 31, 0.16),
+          color-mix(in srgb, var(--primary) 16%, transparent),
           transparent 60%
         ),
-        rgba(var(--surface-tint-rgb), 0.14);
+        color-mix(in srgb, var(--surface-tint) 14%, transparent);
     }
 
     .press {
@@ -204,7 +204,7 @@ export const Gestures = <template>
       background: radial-gradient(
         circle,
         rgba(255, 176, 110, 0.62) 0%,
-        rgba(255, 106, 58, 0.34) 46%,
+        color-mix(in srgb, var(--ember-hot) 34%, transparent) 46%,
         transparent 70%
       );
       filter: blur(6px);

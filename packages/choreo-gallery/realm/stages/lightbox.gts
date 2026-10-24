@@ -299,7 +299,11 @@ export class Lightbox extends Component {
         /* radius is declared on the element — see photoStyle() in
          stages/lightbox.gts, so it can be scale-corrected */
         box-shadow: 0 12px 28px
-          rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.35 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .shot.is-open {
@@ -350,13 +354,13 @@ export class Lightbox extends Component {
         background:
           radial-gradient(
             120% 90% at 50% 42%,
-            rgba(255, 106, 58, 0.16),
+            color-mix(in srgb, var(--ember-hot) 16%, transparent),
             transparent 58%
           ),
           radial-gradient(
             100% 100% at 50% 50%,
-            rgba(var(--bg-rgb), 0.5),
-            rgba(var(--bg-rgb), 0.86)
+            color-mix(in srgb, var(--canvas) 50%, transparent),
+            color-mix(in srgb, var(--canvas) 86%, transparent)
           );
         backdrop-filter: blur(10px) saturate(0.8);
       }
@@ -434,7 +438,7 @@ export class Lightbox extends Component {
         background: rgba(12, 9, 8, 0.38);
         /* Set here, not inherited. This panel is dark glass over a photograph in
          BOTH themes — that is the point of taking its colour from the card behind
-         it — so its text is light in both. Inheriting `--ink` put a near-black
+         it — so its text is light in both. Inheriting `--foreground` put a near-black
          title on a dark amber panel the moment light mode existed; the facts and
          the note never had the bug because they name their own white. */
         color: #fff;
@@ -538,7 +542,7 @@ export class Lightbox extends Component {
         background:
           radial-gradient(
             120% 90% at 50% 42%,
-            rgba(255, 106, 58, 0.16),
+            color-mix(in srgb, var(--ember-hot) 16%, transparent),
             transparent 58%
           ),
           radial-gradient(
