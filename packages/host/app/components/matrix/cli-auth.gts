@@ -90,6 +90,7 @@ export default class CliAuth extends Component {
         <RegisterUser
           @setMode={{this.setMode}}
           @onComplete={{this.onRegisterComplete}}
+          @headingLevel={{2}}
         />
       {{else}}
         <SignInScreen
