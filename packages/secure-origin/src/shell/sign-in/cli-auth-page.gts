@@ -47,14 +47,14 @@ export default class CliAuthPage extends Component {
           >
             <:intro>
               {{#if this.state.signedInAs}}
-                <p class='subtitle'>Confirm your password to give the Boxel CLI
-                  running on this computer access to the workspaces of
+                <p class='intro-text'>Confirm your password to give the Boxel
+                  CLI running on this computer access to the workspaces of
                   <span
                     class='signed-in-user'
                     data-test-secure-cli-auth-signed-in-as
                   >{{this.state.signedInAs}}</span>.</p>
               {{else}}
-                <p class='subtitle' data-test-secure-cli-auth-subtitle>Signing
+                <p class='intro-text' data-test-secure-cli-auth-subtitle>Signing
                   in gives the Boxel CLI running on this computer access to your
                   workspaces.</p>
               {{/if}}
@@ -72,11 +72,8 @@ export default class CliAuthPage extends Component {
     {{/if}}
 
     <style scoped>
-      .subtitle {
-        margin: 0 0 var(--boxel-sp-lg);
-        color: var(--foreground);
-        font: var(--boxel-font-sm);
-        line-height: 1.4;
+      .intro-text {
+        margin: 0;
       }
       .signed-in-user {
         font-weight: 600;
