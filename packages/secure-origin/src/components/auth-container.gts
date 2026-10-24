@@ -27,7 +27,6 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
       /* theme color variable updates */
       --background: #272432;
       --foreground: var(--boxel-light);
-      --muted-foreground: #7f7c8c;
       /* local color vars */
       --auth-background: #191624;
       --auth-foreground: var(--boxel-light);

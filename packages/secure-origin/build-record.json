@@ -652,8 +652,12 @@
       ]
     },
     "shell.css": {
-      "bytes": 26350,
+      "bytes": 26301,
       "sources": [
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/264e6a5939.css"
+        },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/2a4b56d7da.css"
@@ -676,15 +680,15 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/c8a04e9c58.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/components/icons/3a3357bf22.css"
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/00e0926422.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/screens/0511df30aa.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -713,10 +717,6 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/a8ed0b50bf.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/screens/c37cd4a1a6.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -757,7 +757,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 71194,
+      "bytes": 71211,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -807,12 +807,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/register.gts",
-          "size": 9019
+          "size": 9127
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/sign-in.gts",
-          "size": 4001
+          "size": 3954
         },
         {
           "package": "@cardstack/secure-origin",
@@ -932,7 +932,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/message-page.gts",
-          "size": 1051
+          "size": 995
         },
         {
           "package": "@cardstack/secure-origin",
