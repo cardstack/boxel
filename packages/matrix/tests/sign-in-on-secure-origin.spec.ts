@@ -236,6 +236,33 @@ test.describe('Sign in on the secure origin', () => {
     ).toBe(false);
   });
 
+  test("the app's CLI sign-in page sends the browser on to the secure origin's, with the CLI's port and state", async ({
+    page,
+  }, testInfo) => {
+    // `boxel` opens the app's `/cli-auth` with the port its loopback
+    // listener is on and a state it checks when the sign-in comes back. The
+    // secure origin's CLI page draws the same sign-in screen as the app's,
+    // with the same test attributes and title, so only the address tells the
+    // two origins apart.
+    let port = '53412';
+    let state = 'cli-auth-state-0123456789';
+    await page.goto(`${APP_ORIGIN}/cli-auth?port=${port}&state=${state}`);
+
+    await page.waitForURL(
+      (url) => url.origin === new URL(secureOriginURL).origin,
+    );
+    expect(onSecureOrigin(page, 'cli-auth')).toBe(true);
+    let landed = new URL(page.url());
+    expect(landed.searchParams.get('port')).toBe(port);
+    expect(landed.searchParams.get('state')).toBe(state);
+    await expect(page.locator('[data-test-secure-username]')).toBeVisible();
+    await snapshot(
+      testInfo,
+      page,
+      'secure origin CLI sign-in, sent from the app',
+    );
+  });
+
   test('a sign-in is never handed to an origin the realm server does not list', async ({
     page,
   }, testInfo) => {
