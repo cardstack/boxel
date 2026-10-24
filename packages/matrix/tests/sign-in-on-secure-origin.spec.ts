@@ -4,10 +4,12 @@ import { appURL, secureOriginURL } from '../support/isolated-realm-server.ts';
 import {
   createRealm,
   createSubscribedUser,
+  getMatrixTestContext,
   logout,
   postCardSource,
   setupPermissions,
 } from '../helpers/index.ts';
+import { browserLogin } from '../../boxel-cli/src/lib/sso-login.ts';
 
 // With sign-in on the secure origin, the app draws no sign-in form: a
 // signed-out app sends the user to the secure origin's page, which signs them
@@ -78,11 +80,13 @@ function onSecureOrigin(page: Page, mode: string) {
 test.describe('Sign in on the secure origin', () => {
   let username: string;
   let password: string;
+  let userId: string;
 
   test.beforeEach(async ({ context }) => {
     let user = await createSubscribedUser('secure-sign-in');
     username = user.username;
     password = user.password;
+    userId = user.credentials.userId;
     await setupPermissions(user.credentials.userId, `${appURL}/`);
     await signInOnSecureOrigin(context);
   });
@@ -236,31 +240,59 @@ test.describe('Sign in on the secure origin', () => {
     ).toBe(false);
   });
 
-  test("the app's CLI sign-in page sends the browser on to the secure origin's, with the CLI's port and state", async ({
+  test("the app's CLI sign-in page sends the browser on to the secure origin's, which hands the CLI its sign-in", async ({
     page,
   }, testInfo) => {
-    // `boxel` opens the app's `/cli-auth` with the port its loopback
-    // listener is on and a state it checks when the sign-in comes back. The
-    // secure origin's CLI page draws the same sign-in screen as the app's,
-    // with the same test attributes and title, so only the address tells the
-    // two origins apart.
-    let port = '53412';
-    let state = 'cli-auth-state-0123456789';
-    await page.goto(`${APP_ORIGIN}/cli-auth?port=${port}&state=${state}`);
+    // `boxel profile add` against a deployment whose secure origin it doesn't
+    // know opens the app's `/cli-auth` with the port its loopback listener is
+    // on and a state it checks when the sign-in comes back. The secure
+    // origin's CLI page draws the same sign-in screen as the app's, with the
+    // same test attributes and title, so only the address tells the two
+    // origins apart.
+    let { matrixUrl } = getMatrixTestContext();
+    let opened: URL | undefined;
+    let auth = await browserLogin({
+      matrixUrl: matrixUrl!,
+      hostUrl: `${APP_ORIGIN}/`,
+      log: () => {},
+      openBrowserFn: async (link) => {
+        opened = new URL(link);
+        await page.goto(link);
+        await page.waitForURL(
+          (url) => url.origin === new URL(secureOriginURL).origin,
+        );
+        expect(onSecureOrigin(page, 'cli-auth')).toBe(true);
+        let landed = new URL(page.url());
+        expect(landed.searchParams.get('port')).toBe(
+          opened.searchParams.get('port'),
+        );
+        expect(landed.searchParams.get('state')).toBe(
+          opened.searchParams.get('state'),
+        );
+        await snapshot(
+          testInfo,
+          page,
+          'secure origin CLI sign-in, sent from the app',
+        );
+        await signInOnSecurePage(page, username, password);
+        return true;
+      },
+    });
 
-    await page.waitForURL(
-      (url) => url.origin === new URL(secureOriginURL).origin,
-    );
-    expect(onSecureOrigin(page, 'cli-auth')).toBe(true);
-    let landed = new URL(page.url());
-    expect(landed.searchParams.get('port')).toBe(port);
-    expect(landed.searchParams.get('state')).toBe(state);
-    await expect(page.locator('[data-test-secure-username]')).toBeVisible();
-    await snapshot(
-      testInfo,
-      page,
-      'secure origin CLI sign-in, sent from the app',
-    );
+    expect(opened!.origin).toBe(APP_ORIGIN);
+    expect(opened!.pathname).toBe('/cli-auth');
+    // Only `port` and `state` cross from the app, so the secure origin hands
+    // the CLI a login token alone, with no secure session beside it.
+    expect(auth.secureSession).toBeUndefined();
+    expect(auth.userId).toBe(userId);
+    let whoami = await fetch(`${matrixUrl}/_matrix/client/v3/account/whoami`, {
+      headers: { Authorization: `Bearer ${auth.accessToken}` },
+    });
+    expect(whoami.status).toBe(200);
+    expect(await whoami.json()).toMatchObject({
+      user_id: userId,
+      device_id: auth.deviceId,
+    });
   });
 
   test('a sign-in is never handed to an origin the realm server does not list', async ({
