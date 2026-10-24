@@ -109,6 +109,11 @@ end the sessions for a page that set the password with the Matrix server
 itself and sends the new password, once that password checks out under the
 limit on failed password sign-ins.
 
+Once every Matrix login token minted before a change it made has expired, the
+realm server MUST sign out every Matrix device of the account but the one that
+made the change (every device, for a reset). That sweep MUST still run when the
+realm server that scheduled it stops before it is due.
+
 A secure window whose session has ended MUST forget it and offer to sign in
 again.
 
@@ -233,6 +238,20 @@ new password can reach a realm server that sets passwords itself. Refusing
 it would leave that page's change with no session ended at all, so the route ends the sessions for it too, checking the new password under the sign-in
 limit as a sign-in does. Only such a page meets the starvation above.
 
+Synapse signs out the account's other devices when its password changes, but
+leaves the account's unused login tokens [7]. Any device of the account can
+mint one without a password, and so can a secure session (§1.7), and a token
+minted before the change signs in a new device after it. Synapse can't revoke
+a login token, and a device records neither when nor how it signed in [7]. So
+the realm server signs the account's devices out again once the token
+lifetime has passed after it ends the secure sessions, by when every token
+minted before then has expired. That also signs out a device signed in with
+the new password in those minutes, since nothing tells it apart, and the user
+signs in again. The sweep is recorded in the database, because a deploy can
+stop the realm server within those minutes. A page that set the password with
+Synapse itself gets no sweep: the realm server can't tell which device made
+that change.
+
 Signing in to the app on the secure origin (§1.7) closes what the
 credential fields leave open. Those fields are invisible frames inside the
 app's own form, so card code can draw a form that looks the same and the user
@@ -304,6 +323,15 @@ as an app already signed in would show the user straight into the app.
   account can reach.** A secure session mints a Matrix login token
   (§1.7), so whoever holds one gets a fresh token after the change and can
   keep that limit full too.
+- **Ending the secure sessions before Synapse sets a reset's password.** That
+  stops a secure session minting a login token while the reset's own check
+  runs, but not a token minted before the reset, by a secure session or by
+  any device of the account [7].
+- **Revoking the account's login tokens at the change.** Synapse has no API
+  that revokes a login token [7].
+- **Sparing the devices that signed in after the change.** A device records
+  neither when nor how it signed in, so one signed in with an old login token
+  can't be told apart [7].
 - **Letting the app's session ask, as sign-out does.** Card code could then
   end the CLI's sessions. While card code keeps the windows signed out, the
   CLI is the only way left to replace a key.
@@ -339,6 +367,12 @@ as an app already signed in would show the user straight into the app.
    took all 10 attempts in a minute from a page retrying for that minute.
 6. Synapse v1.126.0: `EmailIdentityAuthChecker._check_threepid` deletes the
    validation session once it has used it.
+7. Synapse v1.126.0: `SetPasswordHandler.set_password` deletes the account's
+   devices and access tokens but not its `login_tokens` rows, and only an OIDC
+   back-channel logout invalidates one
+   (`invalidate_login_tokens_by_session_id`); the admin API's device list
+   (`/_synapse/admin/v2/users/<user>/devices`) carries no creation time or
+   sign-in method.
 
 ## 5. Remediation
 

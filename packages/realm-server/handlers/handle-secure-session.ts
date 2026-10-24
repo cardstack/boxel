@@ -17,6 +17,7 @@ import {
   isSecureSession,
   matrixServerName,
   mintLoginToken,
+  resumeDeviceSweeps,
   SecureSessionError,
   secureSignInConfigured,
   signInWithGoogle,
@@ -293,6 +294,12 @@ export function handlePasswordChange(
       }),
     );
   });
+}
+
+// Runs the device sweeps of password changes (`changePassword`) that a realm
+// server stopped before running, and arms the rest, as the routes are set up.
+export function resumePasswordChangeDeviceSweeps(args: CreateRoutesArgs): void {
+  resumeDeviceSweeps(deps(args));
 }
 
 // GET /_secure-session/google: where the secure window sends the user to sign

@@ -116,6 +116,28 @@ until they expire. A password set any other way, such as by an operator
 through Synapse's admin `reset_password`, ends no secure session. To end them,
 expire the rows.
 
+The Matrix server signs out the account's other devices when the password
+changes, but not its unused login tokens, which any device of the account (and
+a secure session, through `POST /_secure-session/login-token`) can mint, and
+which sign in a new device after the change. So once a change or a reset
+through the route has ended the account's rows, the realm server records a
+**device sweep** in `password_change_device_sweeps` (`user_id`,
+`keep_device_id`, `sweep_at`), due `DEVICE_SWEEP_DELAY_MS` later: a login
+token's two-minute lifetime and a margin. The sweep signs out every device of
+the account through the admin API (`_synapse/admin/v2/users/<user>/devices`,
+then `delete_devices`) except `keep_device_id`, the device that made a change
+(none for a reset), and deletes the row. A device signed in with the new
+password before the sweep is signed out too; nothing tells it apart from one
+an old token signed in. Each realm-server process arms a timer for the
+earliest sweep it knows of, and runs the sweeps left due when it starts
+(`resumeDeviceSweeps`), so a deploy within those minutes doesn't drop one. A
+sweep that fails stays in the table, is logged on `realm:secure-session` as
+"could not sign a changed password's devices out", and is tried again within
+a minute. A later change of the same account moves its sweep later and keeps
+that change's device. A page that set the password with the Matrix server
+itself (the `{username, password}` shape) gets no sweep, since the route can't
+tell which device made that change.
+
 A reset link carries the email address it was sent to in its fragment, so
 the page it lands on can name the account: `#clientSecret=…&email=…&sid=…` on
 the secure origin, and `?clientSecret=…#email=…&sid=…` in the app (Synapse

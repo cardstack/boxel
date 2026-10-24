@@ -202,7 +202,10 @@ async function ensureLoggedIn(matrixClient: MatrixClient): Promise<void> {
 async function adminRequest(
   deps: SecureSessionDeps,
   path: string,
-  { method = 'GET', body }: { method?: 'GET' | 'PUT'; body?: unknown } = {},
+  {
+    method = 'GET',
+    body,
+  }: { method?: 'GET' | 'PUT' | 'POST'; body?: unknown } = {},
 ): Promise<{ status: number; body: Record<string, any> }> {
   let admin = adminCreds(deps);
   let response = await fetch(new URL(path, admin.matrixURL), {
@@ -435,6 +438,11 @@ export type PasswordChange =
 // but it has no way to tell the realm server, which is why the change goes
 // through here.
 //
+// A login token minted before the change and not yet used still signs in a
+// new device after it, so once every such token has expired the account's
+// devices are signed out again, all but the one that made a change
+// (`scheduleDeviceSweep`).
+//
 // - A change is made with the access token, so the account is the token's.
 //   Card code holds the app's token but not the current password, which the
 //   Matrix server checks.
@@ -454,6 +462,7 @@ export async function changePassword(
 ): Promise<MatrixResult> {
   let matrixURL = deps.matrixClient.matrixURL;
   let user: string | undefined;
+  let changingDevice: string | undefined;
   let auth: Record<string, unknown>;
   if (change.kind === 'change') {
     let whoami = await matrixClientRequest(matrixURL, 'account/whoami', {
@@ -464,6 +473,10 @@ export async function changePassword(
       return whoami;
     }
     user = whoami.body.user_id;
+    changingDevice =
+      typeof whoami.body.device_id === 'string'
+        ? whoami.body.device_id
+        : undefined;
     auth = {
       type: 'm.login.password',
       identifier: { type: 'm.id.user', user },
@@ -494,6 +507,15 @@ export async function changePassword(
           WHERE user_id = $1 AND expires_at > NOW()`,
         { bind: [user] },
       );
+      // Only once the rows are expired, so no secure session can mint a
+      // login token that outlives the sweep.
+      try {
+        await scheduleDeviceSweep(deps, user, changingDevice);
+      } catch (e: any) {
+        log.error(
+          `could not schedule a changed password's device sweep: ${e?.name ?? 'Error'}: ${e?.message ?? e}`,
+        );
+      }
     }
   } catch (e: any) {
     // The password is changed either way, and the page can't make it again:
@@ -549,6 +571,168 @@ async function resetAccount(
     throw e;
   }
   return user;
+}
+
+// How long after a password change the account's devices are signed out
+// again: the lifetime of a Matrix login token
+// (`login_via_existing_session.token_timeout`, two minutes on every
+// deployment), and a margin for the time the change's requests take.
+export const DEVICE_SWEEP_DELAY_MS = (2 * 60 + 30) * 1000;
+// How soon a sweep that failed (the Matrix server's admin API is down, say)
+// is tried again.
+const DEVICE_SWEEP_RETRY_MS = 60 * 1000;
+
+// Signs an account's Matrix devices out once every login token minted before
+// its password changed has expired, all but `keepDevice`, the device that made
+// the change. The Matrix server signs out the account's other devices when
+// the password changes, but leaves its unused login tokens, and any device of
+// the account could mint one (`login/get_token` asks for no password), as
+// could a secure session (`mintLoginToken`). Such a token redeemed after the
+// change makes a device the change never signed out, so the sweep signs it
+// out. It also signs out any device that signs in with the new password
+// before the sweep: nothing tells the two apart, since a device records
+// neither when nor how it signed in.
+//
+// The sweep is recorded in `password_change_device_sweeps` before it is
+// armed, so a realm server that stops before it is due leaves it for the
+// next one to start (`resumeDeviceSweeps`).
+async function scheduleDeviceSweep(
+  deps: SecureSessionDeps,
+  user: string,
+  keepDevice: string | undefined,
+): Promise<void> {
+  // A later change of the same account signed out the device an earlier one
+  // kept, so its device is the one to keep, and its sweep comes later.
+  await deps.dbAdapter.execute(
+    `INSERT INTO password_change_device_sweeps (user_id, keep_device_id, sweep_at)
+       VALUES ($1, $2, NOW() + $3::integer * interval '1 millisecond')
+     ON CONFLICT (user_id) DO UPDATE
+       SET keep_device_id = EXCLUDED.keep_device_id,
+           sweep_at = GREATEST(
+             password_change_device_sweeps.sweep_at,
+             EXCLUDED.sweep_at
+           )`,
+    { bind: [user, keepDevice ?? null, DEVICE_SWEEP_DELAY_MS] },
+  );
+  armDeviceSweeps(deps, DEVICE_SWEEP_DELAY_MS);
+}
+
+// Runs the sweeps a realm server stopped before running, and any due later,
+// when the realm server starts.
+export function resumeDeviceSweeps(deps: SecureSessionDeps): void {
+  armDeviceSweeps(deps, 0);
+}
+
+// One timer per database, for the earliest sweep this process knows is due.
+// Every realm server process arms its own, so a sweep may run twice, which
+// signs out nothing more.
+const sweepTimers = new WeakMap<
+  SecureSessionDeps['dbAdapter'],
+  { at: number; timer: ReturnType<typeof setTimeout> }
+>();
+
+function armDeviceSweeps(deps: SecureSessionDeps, delayMs: number): void {
+  let at = Date.now() + Math.max(0, delayMs);
+  let armed = sweepTimers.get(deps.dbAdapter);
+  if (armed && armed.at <= at) {
+    return;
+  }
+  if (armed) {
+    clearTimeout(armed.timer);
+  }
+  let timer = setTimeout(async () => {
+    sweepTimers.delete(deps.dbAdapter);
+    if (deps.dbAdapter.isClosed) {
+      return;
+    }
+    let next: number | undefined;
+    try {
+      next = await runDueDeviceSweeps(deps);
+    } catch (e: any) {
+      log.error(
+        `could not run password changes' device sweeps: ${e?.name ?? 'Error'}: ${e?.message ?? e}`,
+      );
+      next = DEVICE_SWEEP_RETRY_MS;
+    }
+    if (next !== undefined) {
+      armDeviceSweeps(deps, next);
+    }
+  }, at - Date.now());
+  // A sweep left when the process exits is in the table for the next one.
+  timer.unref();
+  sweepTimers.set(deps.dbAdapter, { at, timer });
+}
+
+// Runs every sweep that is due, and resolves to how long until the next one
+// is, if any is left. A sweep that fails stays in the table and is tried
+// again within a minute.
+export async function runDueDeviceSweeps(
+  deps: SecureSessionDeps,
+): Promise<number | undefined> {
+  let due = (await deps.dbAdapter.execute(
+    `SELECT user_id, keep_device_id FROM password_change_device_sweeps
+      WHERE sweep_at <= NOW()`,
+  )) as { user_id: string; keep_device_id: string | null }[];
+  let failed = false;
+  for (let { user_id: user, keep_device_id: keepDevice } of due) {
+    try {
+      await signOutDevicesExcept(deps, user, keepDevice ?? undefined);
+      // A sweep a later change moved past now stays for that change.
+      await deps.dbAdapter.execute(
+        `DELETE FROM password_change_device_sweeps
+          WHERE user_id = $1 AND sweep_at <= NOW()`,
+        { bind: [user] },
+      );
+    } catch (e: any) {
+      failed = true;
+      log.error(
+        `could not sign a changed password's devices out: ${e?.name ?? 'Error'}: ${e?.message ?? e}`,
+      );
+    }
+  }
+  let [{ ms }] = (await deps.dbAdapter.execute(
+    `SELECT EXTRACT(EPOCH FROM MIN(sweep_at) - NOW()) * 1000 AS ms
+      FROM password_change_device_sweeps`,
+  )) as { ms: string | number | null }[];
+  if (ms === null) {
+    return undefined;
+  }
+  let next = Math.max(0, Math.ceil(Number(ms)));
+  return failed ? Math.max(next, DEVICE_SWEEP_RETRY_MS) : next;
+}
+
+// Signs out every Matrix device of the account but `keepDevice`, through the
+// admin API, which deletes each device's access tokens with it.
+async function signOutDevicesExcept(
+  deps: SecureSessionDeps,
+  user: string,
+  keepDevice: string | undefined,
+): Promise<void> {
+  let listed = await adminRequest(deps, `${userPath(user)}/devices`);
+  if (listed.status === 404) {
+    return;
+  }
+  if (listed.status !== 200) {
+    throw new Error(`listing the account's devices got HTTP ${listed.status}`);
+  }
+  let devices = ((listed.body.devices ?? []) as { device_id?: unknown }[])
+    .map((device) => device.device_id)
+    .filter(
+      (device): device is string =>
+        typeof device === 'string' && device !== keepDevice,
+    );
+  if (devices.length === 0) {
+    return;
+  }
+  let deleted = await adminRequest(deps, `${userPath(user)}/delete_devices`, {
+    method: 'POST',
+    body: { devices },
+  });
+  if (deleted.status !== 200) {
+    throw new Error(
+      `deleting the account's devices got HTTP ${deleted.status}`,
+    );
+  }
 }
 
 // A request to the Matrix client API as a page would make it, answered with

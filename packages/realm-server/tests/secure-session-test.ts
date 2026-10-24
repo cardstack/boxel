@@ -44,6 +44,7 @@ import {
 import { keepsMethodAndPathOnly } from '../lib/request-telemetry.ts';
 import {
   changePassword,
+  runDueDeviceSweeps,
   secureSignInConfigured,
 } from '../lib/secure-session.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
@@ -1799,6 +1800,140 @@ module(basename(import.meta.filename), function () {
         await whoami(otherDevice),
         401,
         "the account's other devices are signed out",
+      );
+    });
+
+    async function deviceSweeps(userId: string) {
+      return (await dbAdapter.execute(
+        `SELECT keep_device_id,
+                sweep_at > NOW() + interval '2 minutes' AS after_token_lifetime
+           FROM password_change_device_sweeps
+          WHERE user_id = $1`,
+        { bind: [userId] },
+      )) as { keep_device_id: string | null; after_token_lifetime: boolean }[];
+    }
+
+    // Runs the account's device sweep as though the token lifetime it waits
+    // out had passed.
+    async function runDeviceSweepNow(userId: string) {
+      await dbAdapter.execute(
+        `UPDATE password_change_device_sweeps SET sweep_at = NOW()
+          WHERE user_id = $1`,
+        { bind: [userId] },
+      );
+      return await runDueDeviceSweeps({
+        dbAdapter,
+        matrixClient: { matrixURL },
+      } as any);
+    }
+
+    async function deviceOf(accessToken: string): Promise<string> {
+      let response = await fetch(
+        new URL('_matrix/client/v3/account/whoami', matrixURL),
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      return ((await response.json()) as { device_id: string }).device_id;
+    }
+
+    test('a device signed in with a login token minted before a password change is signed out once the token has expired', async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let appToken = await matrixLogin(userId, password);
+      let session = (await passwordSignIn(username, password)).body.data
+        .attributes;
+      let minted = await mintLoginToken(`Bearer ${session.token}`);
+      assert.strictEqual(minted.status, 201, minted.text);
+
+      let changed = await passwordChange({
+        accessToken: appToken,
+        currentPassword: password,
+        newPassword: `pw-${randomBytes(12).toString('hex')}`,
+      });
+      assert.strictEqual(changed.status, 200, changed.text);
+      assert.deepEqual(
+        await deviceSweeps(userId),
+        [
+          {
+            keep_device_id: await deviceOf(appToken),
+            after_token_lifetime: true,
+          },
+        ],
+        'the account’s devices are to be signed out once the token has expired, all but the one that made the change',
+      );
+
+      let redeemed = await redeemLoginToken(
+        minted.body.data.attributes.loginToken,
+      );
+      assert.strictEqual(
+        redeemed.status,
+        200,
+        'the Matrix server still honours a login token minted before the change',
+      );
+      let tokenDevice = redeemed.body.access_token as string;
+      assert.strictEqual(await whoami(tokenDevice), 200, 'until the sweep');
+
+      assert.strictEqual(
+        await runDeviceSweepNow(userId),
+        undefined,
+        'no sweep is left',
+      );
+      assert.strictEqual(
+        await whoami(tokenDevice),
+        401,
+        'the device the token signed in is signed out',
+      );
+      assert.strictEqual(
+        await whoami(appToken),
+        200,
+        'the device that made the change stays signed in',
+      );
+      assert.deepEqual(await deviceSweeps(userId), [], 'the sweep is done');
+    });
+
+    test('a device signed in with a login token minted before a reset is signed out once the token has expired', async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let email = await addEmail(userId);
+      let session = (await passwordSignIn(username, password)).body.data
+        .attributes;
+      let minted = await mintLoginToken(`Bearer ${session.token}`);
+      assert.strictEqual(minted.status, 201, minted.text);
+
+      let newPassword = `pw-${randomBytes(12).toString('hex')}`;
+      let reset = await passwordChange({
+        ...(await validatedReset(email)),
+        email,
+        newPassword,
+      });
+      assert.strictEqual(reset.status, 200, reset.text);
+      assert.deepEqual(
+        await deviceSweeps(userId),
+        [{ keep_device_id: null, after_token_lifetime: true }],
+        'a reset keeps no device',
+      );
+
+      let redeemed = await redeemLoginToken(
+        minted.body.data.attributes.loginToken,
+      );
+      assert.strictEqual(redeemed.status, 200, redeemed.body.error);
+      let tokenDevice = redeemed.body.access_token as string;
+      let newPasswordDevice = await matrixLogin(userId, newPassword);
+
+      await runDeviceSweepNow(userId);
+      assert.strictEqual(
+        await whoami(tokenDevice),
+        401,
+        'the device the token signed in is signed out',
+      );
+      assert.strictEqual(
+        await whoami(newPasswordDevice),
+        401,
+        'and so is one signed in with the new password before the sweep, which nothing tells apart from it',
+      );
+      assert.strictEqual(
+        await whoami(await matrixLogin(userId, newPassword)),
+        200,
+        'the new password signs in again after the sweep',
       );
     });
 
