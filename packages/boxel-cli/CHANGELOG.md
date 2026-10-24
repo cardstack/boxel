@@ -6,6 +6,21 @@ Entries below are written by CI on each stable promotion — most recent first.
 
 <!-- New entries are inserted directly below this line by the stable job in .github/workflows/boxel-cli-publish.yml. -->
 
+## 2026-10-24 — npm v0.10.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.10.0
+
+## @cardstack/boxel-cli v0.10.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.10.0
+
+## Changes
+
+- feat: sign in to Boxel on the secure origin, and hand the app and the CLI a login token by @habdelra in https://github.com/cardstack/boxel/pull/6932
+- feat: boxel profile add signs in on the secure origin, handing the CLI a login token and a secure session by @habdelra in https://github.com/cardstack/boxel/pull/6930
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.9.0...boxel-cli-v0.10.0
+
 ## 2026-10-23 — npm v0.9.0
 
 Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.9.0
