@@ -350,10 +350,12 @@ const WRITE_BUFFER_FLUSH_THRESHOLD = 100;
 // whole text for a large text file. A flush holds the buffered rows several
 // times over at its peak (the entries, their serialized JSON, the driver's
 // copy of the statement), so the buffer has to be bounded by what it holds
-// rather than by how many rows it holds. At this budget a buffer of
-// typical-sized rows (tens of kilobytes) still reaches the row-count
-// threshold first, and a flush peaks at tens of megabytes however large the
-// realm's files are.
+// rather than by how many rows it holds. The same budget bounds each upsert a
+// flush sends, measured on the prepared rows, because an error row takes on
+// its last-known-good production row when prepared and so outgrows its size
+// in the buffer. At this budget a buffer of typical-sized rows (tens of
+// kilobytes) still reaches the row-count threshold first, and a flush peaks
+// at tens of megabytes however large the realm's files are.
 const WRITE_BUFFER_FLUSH_BYTES = 8 * 1024 * 1024;
 
 // Type-watermark rows written per statement. The set is bounded by the
@@ -657,7 +659,7 @@ export class Batch {
   // the row records.
   #writeBuffer: { url: URL; entry: SearchIndexEntry; seq: number }[] = [];
   #writeBufferUrls = new Set<string>();
-  // The buffered rows' approximate size (see `approximateEntrySize`), checked
+  // The buffered rows' approximate size (see `approximateSize`), checked
   // against `WRITE_BUFFER_FLUSH_BYTES`.
   #writeBufferBytes = 0;
   // Monotonic counter behind `diagnostics.writeSeq`, reset alongside
@@ -1335,7 +1337,7 @@ export class Batch {
       seq: this.#positionOf(url, rowType(entry)),
     });
     this.#writeBufferUrls.add(url.href);
-    this.#writeBufferBytes += approximateEntrySize(entry);
+    this.#writeBufferBytes += approximateSize(entry);
     // Bound memory for long runs of dependency-free files, by row count and
     // by size; dependency reads flush earlier. Renders dwarf the writes, so a
     // forced flush here still rides in the shadow of the render that started
@@ -1374,12 +1376,25 @@ export class Batch {
         for (let item of buffered) {
           deduped.set(`${item.url.href}|${rowType(item.entry)}`, item);
         }
-        let prepared = await Promise.all(
-          [...deduped.values()].map(({ url, entry, seq }) =>
-            this.#prepareIndexRow(url, entry, seq),
-          ),
-        );
-        await this.#upsertIndexRows(prepared);
+        // Prepared one at a time and upserted in slices bounded by their
+        // prepared size. An error row is small in the buffer but takes on its
+        // last-known-good production row when prepared, so a buffer of error
+        // rows over large files can prepare to many times its buffered size.
+        // An upsert that lands before a later one throws is written again by
+        // the retrying flush, which is harmless: the rows are the same.
+        let slice: PreparedIndexRow[] = [];
+        let sliceBytes = 0;
+        for (let { url, entry, seq } of deduped.values()) {
+          let row = await this.#prepareIndexRow(url, entry, seq);
+          slice.push(row);
+          sliceBytes += approximateSize(row.preparedEntry);
+          if (sliceBytes >= WRITE_BUFFER_FLUSH_BYTES) {
+            await this.#upsertIndexRows(slice);
+            slice = [];
+            sliceBytes = 0;
+          }
+        }
+        await this.#upsertIndexRows(slice);
       } else {
         for (let { url, entry, seq } of buffered) {
           await this.#writeEntryNow(url, entry, seq);
@@ -5035,15 +5050,15 @@ function rowType(entry: SearchIndexEntry): BoxelIndexTable['type'] {
   return isErrorEntry(entry) ? baseTypeFromError(entry) : entry.type;
 }
 
-// Roughly how many bytes an entry's row serializes to, measured without
-// serializing it: every string's length plus every key's, and a flat few
-// bytes for any other value. Strings are what make a row large (a file's
-// extracted text, rendered HTML), so this tracks a row's real size closely
-// enough to bound the write buffer by. Each object is counted once.
-function approximateEntrySize(entry: SearchIndexEntry): number {
+// Roughly how many bytes a row serializes to, measured without serializing
+// it: every string's length plus every key's, and a flat few bytes for any
+// other value. Strings are what make a row large (a file's extracted text,
+// rendered HTML), so this tracks a row's real size closely enough to bound
+// the write buffer and its flush by. Each object is counted once.
+function approximateSize(row: unknown): number {
   let size = 0;
   let seen = new WeakSet<object>();
-  let pending: unknown[] = [entry];
+  let pending: unknown[] = [row];
   while (pending.length > 0) {
     let value = pending.pop();
     if (typeof value === 'string') {
