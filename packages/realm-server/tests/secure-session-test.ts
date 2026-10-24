@@ -119,13 +119,13 @@ async function emailedResetToken(email: string, sid: string): Promise<string> {
       if (!JSON.stringify(message.to).includes(email)) {
         continue;
       }
-      let text = await (
-        await fetch(`${MAIL_HOST}/api/messages/${message.id}/plaintext`)
+      let html = await (
+        await fetch(`${MAIL_HOST}/api/messages/${message.id}/html`)
       ).text();
-      let link = /https?:\/\/\S+submit_token\?\S+/.exec(
-        text.replace(/&amp;/g, '&'),
-      )?.[0];
-      let params = link ? new URL(link).searchParams : undefined;
+      let link = /https?:\/\/[^"<\s]+submit_token\?[^"<\s]+/.exec(html)?.[0];
+      let params = link
+        ? new URL(link.replace(/&amp;/g, '&')).searchParams
+        : undefined;
       if (params?.get('sid') === sid && params.get('token')) {
         return params.get('token')!;
       }

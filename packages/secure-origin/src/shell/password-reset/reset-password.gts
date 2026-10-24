@@ -61,8 +61,8 @@ export default class ResetPassword extends Component<Signature> {
     this.state.error = undefined;
     this.state.paramsError = false;
     // The realm server sets the password, and ends the secure sessions of the
-    // account `email` names. A link that names no account still resets the
-    // password, and ends no session.
+    // account `email` names. A link that names no account resets the password
+    // and ends no session.
     let result = await changePassword(readConfig(), {
       sid,
       clientSecret,

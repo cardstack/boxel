@@ -163,9 +163,9 @@ consent screen [2].
 Secure-origin pages reach the Matrix server themselves to create an account
 and to send a reset email, so the password and the invite code are typed
 into, and sent from, the secure origin alone [3]. They set a new password
-through the realm server, for the reason below. The realm server writes the Matrix
-server's URL into the page from its own configuration, so card code can't
-change where those requests go. The credential fields the app frames, on the
+through the realm server, for the reason below. The realm server writes the
+Matrix server's URL into the page from its own configuration, so card code
+can't change where those requests go. The credential fields the app frames, on the
 same origin and with the same storage, already connect to it [3].
 
 Signing out of the app has to reach the secure window, or a session the user
@@ -205,9 +205,9 @@ attempt costs them nothing, so any proof checked under it can be starved [5].
 
 A change is made with the app's access token and the current password. Card
 code holds the token but not the password, and Synapse checks the password,
-so card code can't end the CLI's sessions this way. Synapse signs out every
-device of the account but the one that made the change, so whoever held the
-old password keeps no token that could make another.
+so card code can't end the CLI's sessions this way. Nor can whoever holds
+the old password make a change once the password has changed, whatever token
+they hold, since Synapse asks for the current one.
 
 A reset names no account to Synapse, which finds it from the validated
 email, and doesn't say which it was. So the page names the account by the

@@ -507,7 +507,7 @@ export async function changePassword(
 }
 
 // The account a reset sent to `email` reset, when `password`, the one the
-// reset set, is now that account's. Undefined otherwise.
+// reset set, is that account's password. Undefined otherwise.
 async function resetAccount(
   deps: SecureSessionDeps,
   email: string,
