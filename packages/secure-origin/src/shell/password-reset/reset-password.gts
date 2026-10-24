@@ -2,11 +2,7 @@ import { trackedObject } from '@ember/reactive/collections';
 import Component from '@glimmer/component';
 
 import AuthContainer from '../../components/auth-container.gts';
-import { resetPassword } from '../../security/matrix.js';
-import {
-  endSessionsForNewPassword,
-  readConfig,
-} from '../../security/session.js';
+import { changePassword, readConfig } from '../../security/session.js';
 import {
   ResetPasswordDone,
   ResetPasswordForm,
@@ -64,31 +60,24 @@ export default class ResetPassword extends Component<Signature> {
     this.state.resetting = true;
     this.state.error = undefined;
     this.state.paramsError = false;
-    try {
-      await resetPassword({ sid, clientSecret, newPassword });
-    } catch (e) {
+    // The realm server sets the password, and ends the secure sessions of the
+    // account `email` names. A link that names no account still resets the
+    // password, and ends no session.
+    let result = await changePassword(readConfig(), {
+      sid,
+      clientSecret,
+      newPassword,
+      ...(email ? { email } : {}),
+    });
+    if (!result.ok) {
       this.state.resetting = false;
-      let { status } = e as { status: number };
-      if (status >= 400 && status < 500) {
+      if (result.status >= 400 && result.status < 500) {
         this.state.paramsError = true;
       } else {
         this.state.error =
           'An unknown error happened. Please try again, or contact support if the problem persists.';
       }
       return;
-    }
-    // A link that names no account still resets the password; only ending
-    // the account's secure sessions needs to know whose it is.
-    if (email) {
-      try {
-        await endSessionsForNewPassword(readConfig(), {
-          username: email,
-          password: newPassword,
-        });
-      } catch {
-        // The password is reset either way. A session the realm server
-        // couldn't end runs out within its week.
-      }
     }
     this.state.resetting = false;
     this.state.done = true;

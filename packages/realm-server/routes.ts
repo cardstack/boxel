@@ -293,11 +293,9 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleCreateUserRequest(args),
   );
   router.get('/_secure-origin', handleSecureOriginInfo(args));
-  // Every route that checks a password counts failures against one limit.
-  let passwordLimiter = new SignInLimiter();
   router.post(
     SECURE_SESSION_PATH,
-    handlePasswordSignIn(args, createRealmDeps, passwordLimiter),
+    handlePasswordSignIn(args, createRealmDeps, new SignInLimiter()),
   );
   router.get(`${SECURE_SESSION_PATH}/google`, handleGoogleSignInStart(args));
   router.post(
@@ -332,7 +330,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     `${SECURE_SESSIONS_PATH}/password-change`,
-    handlePasswordChange(args, passwordLimiter),
+    handlePasswordChange(args),
   );
   router.post(
     KEY_WRITE_TICKETS_PATH,
