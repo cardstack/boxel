@@ -9,6 +9,7 @@ import type {
   FileExtractResponse,
   RenderRouteOptions,
   CaptureRequestSpec,
+  CapturePrerenderResponse,
 } from '@cardstack/runtime-common';
 import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index.ts';
@@ -8763,6 +8764,164 @@ module(basename(import.meta.filename), function () {
         RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
         await prerenderer?.stop();
       }
+    });
+  });
+
+  module('prerender - capture fetch failures', function () {
+    let realm = 'https://capture-retry.example/';
+    let cardURL = `${realm}card`;
+    let ready: CapturePrerenderResponse = {
+      status: 'ready',
+      base64: 'cG5n',
+      width: 800,
+      height: 600,
+    };
+
+    // Runs one capture against a stubbed attempt that answers each call with
+    // the next response in `responses`, and reports how many attempts ran.
+    async function captureWith(
+      responses: {
+        response: CapturePrerenderResponse;
+        evicted: boolean;
+        timedOut?: boolean;
+      }[],
+    ) {
+      let originalAttempt = RenderRunner.prototype.runCaptureAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let attempts = 0;
+      try {
+        RenderRunner.prototype.runCaptureAttempt = async function (
+          args: Parameters<RenderRunner['runCaptureAttempt']>[0],
+        ) {
+          let { response, evicted, timedOut } =
+            responses[Math.min(attempts, responses.length - 1)];
+          attempts++;
+          return {
+            response,
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+                tabProbeMs: 0,
+              },
+            },
+            pool: {
+              pageId: `page-${attempts}`,
+              affinityType: args.affinityType,
+              affinityValue: args.affinityValue,
+              reused: false,
+              evicted,
+              timedOut: timedOut ?? false,
+            },
+          };
+        };
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+        let result = await prerenderer.prerenderCapture({
+          realm,
+          url: cardURL,
+          auth: 'test-auth',
+          format: 'isolated',
+        });
+        return { result, attempts };
+      } finally {
+        RenderRunner.prototype.runCaptureAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    }
+
+    test('a capture whose evicted tab failed a fetch is retried on a fresh tab', async function (assert) {
+      let { result, attempts } = await captureWith([
+        {
+          response: { status: 'unusable', error: 'Failed to fetch' },
+          evicted: true,
+        },
+        { response: ready, evicted: false },
+      ]);
+      assert.strictEqual(attempts, 2, 'one retry on a fresh tab');
+      assert.strictEqual(
+        result.response.status,
+        'ready',
+        'the fresh tab result is returned',
+      );
+    });
+
+    test('a capture whose evicted tab failed to import a host chunk is retried on a fresh tab', async function (assert) {
+      let { result, attempts } = await captureWith([
+        {
+          response: {
+            status: 'unusable',
+            error:
+              'unable to fetch https://localhost:4201/base/card-api: fetch failed for https://localhost:4201/base/card-api: Failed to fetch dynamically imported module: https://localhost:4200/assets/card-api-abc123.js',
+          },
+          evicted: true,
+        },
+        { response: ready, evicted: false },
+      ]);
+      assert.strictEqual(attempts, 2, 'one retry on a fresh tab');
+      assert.strictEqual(result.response.status, 'ready');
+    });
+
+    test('a capture retries a failed fetch only once', async function (assert) {
+      let { result, attempts } = await captureWith([
+        {
+          response: { status: 'unusable', error: 'Failed to fetch' },
+          evicted: true,
+        },
+      ]);
+      assert.strictEqual(attempts, 2, 'the fresh tab is the last attempt');
+      assert.strictEqual(
+        result.response.status,
+        'unusable',
+        "the fresh tab's failure is returned",
+      );
+    });
+
+    test("a capture's own error is returned without a retry", async function (assert) {
+      let { result, attempts } = await captureWith([
+        {
+          response: {
+            status: 'error',
+            error:
+              'capture "default" target matched no element: [data-card-field="does-not-exist"]',
+          },
+          evicted: false,
+        },
+      ]);
+      assert.strictEqual(attempts, 1, 'no retry');
+      assert.strictEqual(result.response.status, 'error');
+    });
+
+    test('a capture that timed out is returned without a retry', async function (assert) {
+      let { result, attempts } = await captureWith([
+        {
+          response: { status: 'unusable', error: 'Failed to fetch' },
+          evicted: true,
+          timedOut: true,
+        },
+      ]);
+      assert.strictEqual(attempts, 1, 'no retry: the time is spent');
+      assert.strictEqual(result.response.status, 'unusable');
+    });
+
+    test('an unusable capture that names no failed fetch is returned without a retry', async function (assert) {
+      let { result, attempts } = await captureWith([
+        {
+          response: {
+            status: 'unusable',
+            error: 'Cannot read properties of undefined',
+          },
+          evicted: true,
+        },
+      ]);
+      assert.strictEqual(attempts, 1, 'no retry');
+      assert.strictEqual(result.response.status, 'unusable');
     });
   });
 

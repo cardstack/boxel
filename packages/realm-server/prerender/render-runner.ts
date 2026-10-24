@@ -28,6 +28,7 @@ import type { ConsoleErrorEntry, PagePool } from './page-pool.ts';
 import { renderSessionOf, toAffinityKey } from './affinity.ts';
 import { batchStaleAfterMs } from './prerender-constants.ts';
 import type { UnresponsiveTabReport } from './unresponsive-tab-tracker.ts';
+import { getFailedNetworkRequests } from './network-inflight-tracker.ts';
 import {
   abortable,
   PrerenderCancelledError,
@@ -125,6 +126,12 @@ const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
 // in-page retry can recover it, which is why it evicts the tab.
 const HOST_CHUNK_IMPORT_FAILURE_RE =
   /Failed to fetch dynamically imported module:?\s*(\S*)/;
+
+// Chrome's message for any fetch that failed at the network layer — a
+// `fetch()` that rejected with `TypeError: Failed to fetch`, or a native
+// `import()` whose fetch failed (HOST_CHUNK_IMPORT_FAILURE_RE). A request the
+// server answered, even with a 5xx, never produces it.
+const CAPTURE_FETCH_FAILURE_RE = /\bFailed to fetch\b/;
 
 // Who a render runs as, read from the auth this server hands its tab: the
 // user every session names, when they all name one user and none carries
@@ -876,6 +883,15 @@ export class RenderRunner {
           poolInfo.evicted = true;
         }
         let isUnusable = poolInfo.evicted || renderError.evict === true;
+        if (isUnusable) {
+          this.#logUnusableCapture({
+            url,
+            pageId,
+            page,
+            renderError,
+            renderStart,
+          });
+        }
         response = {
           status: isUnusable ? 'unusable' : 'error',
           error: renderError.error.message ?? 'capture render failed',
@@ -2642,6 +2658,25 @@ export class RenderRunner {
     return failedHostChunkImportIn(renderError);
   }
 
+  // The failed fetch that cost a capture its tab, if that is what its error
+  // reports: Chrome's network-layer failure, either a bare `fetch()`
+  // (`TypeError: Failed to fetch`) or a host chunk's native import (see
+  // HOST_CHUNK_IMPORT_FAILURE_RE). Only an unusable capture qualifies — the
+  // tab was evicted, so the failure was the tab's and not the card's, whose
+  // own failures come back as `error` and keep the tab. A capture that ran
+  // out of time is not one either: its time is spent.
+  captureFetchFailure(result: {
+    response: CapturePrerenderResponse;
+    pool: PoolInfo;
+  }): string | undefined {
+    let { response, pool } = result;
+    if (response.status !== 'unusable' || !pool.evicted || pool.timedOut) {
+      return undefined;
+    }
+    let message = response.error ?? '';
+    return CAPTURE_FETCH_FAILURE_RE.test(message) ? message : undefined;
+  }
+
   #isAuthError(err?: RenderError): boolean {
     let status = Number(err?.error?.status);
     return status === 401 || status === 403;
@@ -2790,6 +2825,49 @@ export class RenderRunner {
       };
     }
     return { result: stepResult.value as DeclaredCaptureVisitResult };
+  }
+
+  // A capture whose tab came back unusable reports only the render error's
+  // message to its caller — for a network failure, a bare
+  // `Failed to fetch` that names neither the URL nor the cause. Log what
+  // the tab saw during this render: the render error's stack, the
+  // console errors, and each network-layer failure with its
+  // `net::ERR_*` detail.
+  #logUnusableCapture({
+    url,
+    pageId,
+    page,
+    renderError,
+    renderStart,
+  }: {
+    url: string;
+    pageId: string;
+    page: Page;
+    renderError: RenderError;
+    renderStart: number;
+  }) {
+    try {
+      let consoleErrors = this.#pagePool
+        .takeConsoleErrors(pageId)
+        .map((entry) => this.#formatConsoleError(entry));
+      let failedRequests = getFailedNetworkRequests(page, renderStart);
+      log.error(
+        `capture of ${url} left its tab unusable after ${
+          Date.now() - renderStart
+        }ms: ${renderError.error?.title ?? ''}: ${
+          renderError.error?.message ?? ''
+        }; stack=${JSON.stringify(
+          renderError.error?.stack ?? null,
+        )} consoleErrors=${JSON.stringify(
+          consoleErrors,
+        )} failedRequests=${JSON.stringify(failedRequests)}`,
+      );
+    } catch (e) {
+      log.warn(
+        `could not gather diagnostics for unusable capture of ${url}:`,
+        e,
+      );
+    }
   }
 
   #captureToError(capture: RenderCapture): RenderError | undefined {
