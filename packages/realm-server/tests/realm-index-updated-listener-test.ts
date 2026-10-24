@@ -43,6 +43,26 @@ function waitFor<T>(
 
 module(basename(import.meta.filename), function () {
   module('RealmIndexUpdatedListener (dispatch)', function () {
+    test("handleReconnect clears every mounted realm's index caches", function (assert) {
+      const cleared: string[] = [];
+      const realms = ['http://x.test/a/', 'http://x.test/b/'].map((url) =>
+        makeFakeRealm(url, () => cleared.push(url)),
+      );
+      const listener = new RealmIndexUpdatedListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        lookupMountedRealm: () => undefined,
+        listMountedRealms: () => realms,
+      });
+
+      listener.handleReconnect();
+
+      assert.deepEqual(
+        cleared,
+        ['http://x.test/a/', 'http://x.test/b/'],
+        'clearRealmIndexCaches called once for each mounted realm',
+      );
+    });
+
     test('handleNotification forwards to the mounted realm', function (assert) {
       let cleared = 0;
       const realmA = makeFakeRealm('http://x.test/a/', () => {
@@ -52,6 +72,7 @@ module(basename(import.meta.filename), function () {
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: (url) =>
           url === 'http://x.test/a/' ? realmA : undefined,
+        listMountedRealms: () => [],
       });
 
       listener.handleNotification('http://x.test/a/');
@@ -67,6 +88,7 @@ module(basename(import.meta.filename), function () {
       const listener = new RealmIndexUpdatedListener({
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: () => undefined,
+        listMountedRealms: () => [],
       });
 
       listener.handleNotification('http://x.test/unmounted/');
@@ -80,6 +102,7 @@ module(basename(import.meta.filename), function () {
         lookupMountedRealm: () => {
           throw new Error('should not be called for empty payloads');
         },
+        listMountedRealms: () => [],
       });
 
       listener.handleNotification(undefined);
@@ -97,6 +120,7 @@ module(basename(import.meta.filename), function () {
       const listener = new RealmIndexUpdatedListener({
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: () => undefined,
+        listMountedRealms: () => [],
       });
 
       listener.handleNotification('http://x.test/unmounted-org/');
@@ -117,6 +141,7 @@ module(basename(import.meta.filename), function () {
         lookupMountedRealm: () => {
           throw new Error('should not be called for empty payloads');
         },
+        listMountedRealms: () => [],
       });
 
       listener.handleNotification('');
@@ -143,6 +168,7 @@ module(basename(import.meta.filename), function () {
       const listener = new RealmIndexUpdatedListener({
         dbAdapter,
         lookupMountedRealm: (url) => (url === realmUrl ? realmA : undefined),
+        listMountedRealms: () => [],
       });
       await listener.start();
       try {
@@ -167,6 +193,7 @@ module(basename(import.meta.filename), function () {
           lookups.push(url);
           return undefined;
         },
+        listMountedRealms: () => [],
       });
       await listener.start();
       try {

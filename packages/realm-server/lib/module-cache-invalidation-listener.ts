@@ -55,6 +55,12 @@ export class ModuleCacheInvalidationListener {
         (notification) => {
           this.#handleNotification(notification.payload);
         },
+        // Any module, realm or global invalidation may have been sent while
+        // the connection was down. Treat the gap as a global one, so no
+        // prerender that started before it persists its result.
+        {
+          onReconnect: () => this.#deps.definitionLookup.bumpGlobalGeneration(),
+        },
       );
     })();
     try {

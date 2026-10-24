@@ -142,6 +142,10 @@ export class PgQueuePublisher implements QueuePublisher {
               await loop.sleep();
             }
           },
+          // A job that finished while the connection was down sent its
+          // notification to no one: look for finished jobs now rather than at
+          // the next poll.
+          { onReconnect: loop.wake.bind(loop) },
         );
       });
     }
@@ -633,12 +637,19 @@ export class PgQueueRunner implements QueueRunner {
     if (!this.#jobRunner && !this.#isDestroyed) {
       this.#jobRunner = new WorkLoop('jobRunner', this.#pollInterval);
       this.#jobRunner.run(async (loop) => {
-        await this.#pgClient.listen('jobs', loop.wake.bind(loop), async () => {
-          while (!loop.shuttingDown) {
-            await this.processJobs(loop);
-            await loop.sleep();
-          }
-        });
+        await this.#pgClient.listen(
+          'jobs',
+          loop.wake.bind(loop),
+          async () => {
+            while (!loop.shuttingDown) {
+              await this.processJobs(loop);
+              await loop.sleep();
+            }
+          },
+          // A job published while the connection was down woke no one: look
+          // for work now rather than at the next poll.
+          { onReconnect: loop.wake.bind(loop) },
+        );
       });
     }
   }
