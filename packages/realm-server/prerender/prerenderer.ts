@@ -784,20 +784,22 @@ export class Prerenderer {
           signal,
         });
       let result = await attempt();
-      // A fetch that failed at the network layer took the tab with it, and
-      // the tab is evicted: a fresh tab fetches anew, so the capture gets
-      // one more attempt there, as a visit does when its tab fails to import
-      // a host chunk. A capture is a read, so repeating it is safe.
+      // A fetch that failed at the network layer failed the capture with it.
+      // The capture gets one more attempt — on a fresh tab when the failure
+      // evicted this one, as a visit does when its tab fails to import a host
+      // chunk. A capture is a read, so repeating it is safe.
       let fetchFailure = this.#renderRunner.captureFetchFailure(result);
       if (fetchFailure) {
         log.warn(
-          `retrying capture of ${url} on a fresh tab: the evicted tab failed a fetch: ${fetchFailure}`,
+          `retrying capture of ${url}${
+            result.pool.evicted ? ' on a fresh tab' : ''
+          }: the attempt failed a fetch: ${fetchFailure}`,
         );
         result = await attempt();
         let again = this.#renderRunner.captureFetchFailure(result);
         if (again) {
           log.error(
-            `capture of ${url} failed a fetch on a fresh tab too: ${again}`,
+            `capture of ${url} failed a fetch on its retry too: ${again}`,
           );
         }
       }

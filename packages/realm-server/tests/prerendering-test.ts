@@ -1102,6 +1102,7 @@ module(basename(import.meta.filename), function () {
     };
     let prerenderer: Prerenderer;
     let realm: RuntimeRealm;
+    let realmHttpServer: RealmHttpServer;
     let auth = () => {
       let sessions = JSON.parse(
         testCreatePrerenderAuth(testUserId, permissions),
@@ -1370,7 +1371,7 @@ module(basename(import.meta.filename), function () {
         },
       ],
       onRealmSetup({ realms: setupRealms }) {
-        ({ realm } = setupRealms[0]);
+        ({ realm, realmHttpServer } = setupRealms[0]);
         permissions = {
           [realmURL]: ['read', 'write', 'realm-owner'],
         };
@@ -1981,6 +1982,66 @@ module(basename(import.meta.filename), function () {
         response.error?.includes('[data-card-field="does-not-exist"]'),
         `the error names the selector (got: ${response.error})`,
       );
+    });
+
+    test('a capture whose realm-info fetch fails at the network layer recovers on a retry', async function (assert) {
+      // While the first attempt runs, the realm closes every connection for
+      // its `_info` unanswered — past the browser's own connection retries —
+      // so the tab's realm-info fetch rejects with a bare `Failed to fetch`,
+      // the shape a connection dropped under load takes. Once that attempt
+      // returns, the realm answers again, so only a retry of the capture can
+      // produce the image.
+      let infoURL = `${realmURL}_info`;
+      let firstAttemptRunning = true;
+      let attempts: string[] = [];
+      let flakyPatch = installFlakyRealmFetchPatch(realmHttpServer, {
+        matcher: (url) => firstAttemptRunning && url.split('?')[0] === infoURL,
+        failuresBeforeSuccess: Infinity,
+        dropConnection: true,
+      });
+      let originalAttempt = RenderRunner.prototype.runCaptureAttempt;
+      RenderRunner.prototype.runCaptureAttempt = async function (
+        this: RenderRunner,
+        args: Parameters<RenderRunner['runCaptureAttempt']>[0],
+      ) {
+        try {
+          let result = await originalAttempt.call(this, args);
+          attempts.push(
+            `${result.response.status}${result.response.error ? `: ${result.response.error}` : ''}`,
+          );
+          return result;
+        } finally {
+          firstAttemptRunning = false;
+        }
+      };
+      try {
+        let { response } = await capture(`${realmURL}disco-card`, {
+          target: '[data-card-field="title"]',
+        });
+        let detail = `attempts: ${JSON.stringify(attempts)}; realm requests:\n${flakyPatch.trace()}`;
+        assert.true(
+          flakyPatch.failuresInjected() > 0,
+          `the first attempt's realm-info fetch was dropped; ${detail}`,
+        );
+        assert.strictEqual(
+          attempts.length,
+          2,
+          `the capture ran again; ${detail}`,
+        );
+        assert.true(
+          /^(error|unusable): Failed to fetch$/.test(attempts[0] ?? ''),
+          `the first attempt failed on the dropped fetch; ${detail}`,
+        );
+        assert.strictEqual(
+          response.status,
+          'ready',
+          `the capture recovered on its retry (got ${response.status}: ${response.error ?? ''}); ${detail}`,
+        );
+        assert.strictEqual(response.width, 200, 'and cropped to the target');
+      } finally {
+        RenderRunner.prototype.runCaptureAttempt = originalAttempt;
+        flakyPatch.restore();
+      }
     });
 
     test('an XPath-shaped target is a named capture error, not a wrong crop', async function (assert) {
@@ -8865,6 +8926,18 @@ module(basename(import.meta.filename), function () {
         { response: ready, evicted: false },
       ]);
       assert.strictEqual(attempts, 2, 'one retry on a fresh tab');
+      assert.strictEqual(result.response.status, 'ready');
+    });
+
+    test('a capture whose render caught a failed fetch is retried', async function (assert) {
+      let { result, attempts } = await captureWith([
+        {
+          response: { status: 'error', error: 'Failed to fetch' },
+          evicted: false,
+        },
+        { response: ready, evicted: false },
+      ]);
+      assert.strictEqual(attempts, 2, 'one retry');
       assert.strictEqual(result.response.status, 'ready');
     });
 

@@ -883,8 +883,12 @@ export class RenderRunner {
           poolInfo.evicted = true;
         }
         let isUnusable = poolInfo.evicted || renderError.evict === true;
-        if (isUnusable) {
-          this.#logUnusableCapture({
+        if (
+          isUnusable ||
+          CAPTURE_FETCH_FAILURE_RE.test(renderError.error?.message ?? '')
+        ) {
+          this.#logFailedCapture({
+            isUnusable,
             url,
             pageId,
             page,
@@ -2658,19 +2662,22 @@ export class RenderRunner {
     return failedHostChunkImportIn(renderError);
   }
 
-  // The failed fetch that cost a capture its tab, if that is what its error
-  // reports: Chrome's network-layer failure, either a bare `fetch()`
-  // (`TypeError: Failed to fetch`) or a host chunk's native import (see
-  // HOST_CHUNK_IMPORT_FAILURE_RE). Only an unusable capture qualifies — the
-  // tab was evicted, so the failure was the tab's and not the card's, whose
-  // own failures come back as `error` and keep the tab. A capture that ran
-  // out of time is not one either: its time is spent.
+  // The failed fetch a capture's error reports, if that is why it failed:
+  // Chrome's network-layer failure, from a bare `fetch()`
+  // (`TypeError: Failed to fetch`) — the realm's `_info`, the card's
+  // document, a card module — or a host chunk's native import (see
+  // HOST_CHUNK_IMPORT_FAILURE_RE). Such a failure says the connection
+  // dropped, not that the card is broken, so the capture is worth another
+  // attempt. It comes back `unusable` when it evicted the tab and `error`
+  // when the render caught it. The capture's own failures — a target that
+  // matches nothing, a page cap — never name one. A capture that ran out of
+  // time is not retried either: its time is spent.
   captureFetchFailure(result: {
     response: CapturePrerenderResponse;
     pool: PoolInfo;
   }): string | undefined {
     let { response, pool } = result;
-    if (response.status !== 'unusable' || !pool.evicted || pool.timedOut) {
+    if (response.status === 'ready' || pool.timedOut) {
       return undefined;
     }
     let message = response.error ?? '';
@@ -2827,19 +2834,21 @@ export class RenderRunner {
     return { result: stepResult.value as DeclaredCaptureVisitResult };
   }
 
-  // A capture whose tab came back unusable reports only the render error's
-  // message to its caller — for a network failure, a bare
-  // `Failed to fetch` that names neither the URL nor the cause. Log what
-  // the tab saw during this render: the render error's stack, the
-  // console errors, and each network-layer failure with its
+  // A capture that failed a fetch, or whose tab came back unusable, reports
+  // only the render error's message to its caller — for a network failure,
+  // often a bare `Failed to fetch` that names neither the URL nor the
+  // cause. Log what the tab saw during this render: the render error's
+  // stack, the console errors, and each network-layer failure with its
   // `net::ERR_*` detail.
-  #logUnusableCapture({
+  #logFailedCapture({
+    isUnusable,
     url,
     pageId,
     page,
     renderError,
     renderStart,
   }: {
+    isUnusable: boolean;
     url: string;
     pageId: string;
     page: Page;
@@ -2852,7 +2861,9 @@ export class RenderRunner {
         .map((entry) => this.#formatConsoleError(entry));
       let failedRequests = getFailedNetworkRequests(page, renderStart);
       log.error(
-        `capture of ${url} left its tab unusable after ${
+        `capture of ${url} ${
+          isUnusable ? 'left its tab unusable' : 'failed a fetch'
+        } after ${
           Date.now() - renderStart
         }ms: ${renderError.error?.title ?? ''}: ${
           renderError.error?.message ?? ''
@@ -2864,7 +2875,7 @@ export class RenderRunner {
       );
     } catch (e) {
       log.warn(
-        `could not gather diagnostics for unusable capture of ${url}:`,
+        `could not gather diagnostics for the failed capture of ${url}:`,
         e,
       );
     }
