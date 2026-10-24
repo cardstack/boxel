@@ -233,8 +233,9 @@ export function installSearchRequestObserverPatch(): {
 
 /**
  * Answer the first `failuresBeforeSuccess` requests the realm server receives
- * for a chosen URL with a transient 5xx, and hand every other request to the
- * server as usual. Used to assert that the loader's transient-retry path
+ * for a chosen URL with a transient 5xx — or, with `dropConnection`, close
+ * the connection unanswered, which the browser reports as a network-layer
+ * `Failed to fetch` — and hand every other request to the server as usual. Used to assert that the loader's transient-retry path
  * actually fires during prerender — without the native-sleep wiring in
  * loader-service the retry hangs at `await sleep(delay)` and the render times
  * out instead of recovering on the next attempt.
@@ -252,6 +253,7 @@ export function installFlakyRealmFetchPatch(
     matcher: (url: string) => boolean;
     failuresBeforeSuccess: number;
     status?: number;
+    dropConnection?: boolean;
   },
 ): {
   failuresInjected: () => number;
@@ -281,6 +283,11 @@ export function installFlakyRealmFetchPatch(
     ) {
       remainingFailures--;
       failuresInjected++;
+      if (opts.dropConnection) {
+        record(`${req.method} ${url} -> drop connection`);
+        req.socket.destroy();
+        return;
+      }
       record(`${req.method} ${url} -> respond ${status}`);
       // Mirror the realm-server's `cors({ origin: '*' })` so the browser
       // surfaces this 5xx to the host loader instead of blocking it as a
