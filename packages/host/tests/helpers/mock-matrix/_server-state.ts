@@ -67,6 +67,7 @@ export class ServerState {
     name?: string,
     timestamp: number = this.#now(),
     id?: string,
+    roomType?: string,
   ): string {
     if (document.querySelector('[data-test-throw-room-error]')) {
       throw new Error('Intentional error thrown');
@@ -92,6 +93,7 @@ export class ServerState {
         content: {
           creator: sender,
           room_version: '0',
+          ...(roomType ? { type: roomType } : {}),
         },
       },
       { origin_server_ts: timestamp, state_key: '' },

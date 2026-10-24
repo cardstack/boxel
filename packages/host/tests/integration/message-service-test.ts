@@ -1,11 +1,21 @@
+import { waitUntil } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
+import {
+  APP_BOXEL_REALM_EVENT_ROOM_TYPE,
+  APP_BOXEL_REALM_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import ENV from '@cardstack/host/config/environment';
 
-import { testRealmURL, setupIntegrationTestRealm } from '../helpers';
+import {
+  testRealmURL,
+  setRealmEventRoom,
+  setupIntegrationTestRealm,
+} from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -114,6 +124,87 @@ module('Integration | message-service | realm subscriptions', function (hooks) {
     } finally {
       unsubscribe();
       virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+});
+
+// A private realm sends its realm events into a room of its own, which the
+// host joins when something first subscribes to the realm.
+module('Integration | message-service | realm event rooms', function (hooks) {
+  setupRenderingTest(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [baseRealm.url, testRealmURL],
+    autostart: true,
+  });
+
+  hooks.beforeEach(async function () {
+    await setupIntegrationTestRealm({ mockMatrixUtils, contents: {} });
+  });
+
+  test('subscribing to a private realm joins the room its events go to', async function (assert) {
+    let privateRealmURL = 'http://localhost:4205/private/';
+    // The realm's own user creates the room and invites the user; the host
+    // is not in it yet.
+    let roomId = mockMatrixUtils.createAndJoinRoom({
+      sender: '@private_realm:localhost',
+      name: `Realm events: ${privateRealmURL}`,
+      id: '!private-realm-events:localhost',
+      roomType: APP_BOXEL_REALM_EVENT_ROOM_TYPE,
+    });
+    setRealmEventRoom(privateRealmURL, roomId);
+    let membership = () => {
+      try {
+        return mockMatrixUtils.getRoomState(
+          roomId,
+          'm.room.member',
+          '@testuser:localhost',
+        ).membership;
+      } catch {
+        return undefined;
+      }
+    };
+    assert.strictEqual(membership(), undefined, 'the host starts outside it');
+    let messageService = getService('message-service');
+
+    let heard: RealmEventContent[] = [];
+    let unsubscribe = messageService.subscribe(privateRealmURL, (event) => {
+      heard.push(event);
+    });
+    try {
+      await waitUntil(() => membership() === 'join', {
+        timeoutMessage: `the host did not join ${roomId}`,
+      });
+      assert.strictEqual(
+        membership(),
+        'join',
+        'the host joined the realm event room',
+      );
+
+      // An event the realm sends into the room reaches the realm's
+      // subscribers, which it would not if the room were taken for an AI room.
+      mockMatrixUtils.simulateRemoteMessage(
+        roomId,
+        '@private_realm:localhost',
+        {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${privateRealmURL}card`],
+          realmURL: privateRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+      await waitUntil(() => heard.length > 0, {
+        timeoutMessage: `no realm event arrived through ${roomId}`,
+      });
+      assert.deepEqual(
+        heard.map((event) => event.eventName),
+        ['index'],
+        "the realm's subscriber heard the event sent into its room",
+      );
+    } finally {
+      unsubscribe();
     }
   });
 });
