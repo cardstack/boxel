@@ -9,6 +9,19 @@ import {
 
 const log = logger('worker-manager');
 
+// The reason to close a dead child's open reservations with, from how it
+// exited. Nothing in the worker-manager sends a child SIGKILL except its own
+// shutdown's straggler phase, so a SIGKILL outside a shutdown came from
+// outside the manager — in practice the kernel's out-of-memory killer.
+export function orphanedReservationReason(
+  signal: NodeJS.Signals | null,
+  managerIsShuttingDown: boolean,
+): 'killed' | 'interrupted' {
+  return signal === 'SIGKILL' && !managerIsShuttingDown
+    ? 'killed'
+    : 'interrupted';
+}
+
 // Free any reservations belonging to a worker that exited unexpectedly so the
 // next worker can claim the job immediately, rather than waiting for the
 // 7200s lease (locked_until) to age out. Without this, a worker dying via
@@ -42,19 +55,6 @@ const log = logger('worker-manager');
 // every retry, taking down whichever worker on that task the kernel picks.
 // The pg-queue's own success/failure finalize path sets `'completed'`
 // separately; this function never owns that case.
-// The reason to close a dead child's open reservations with, from how it
-// exited. Nothing in the worker-manager sends a child SIGKILL except its own
-// shutdown's straggler phase, so a SIGKILL outside a shutdown came from
-// outside the manager — in practice the kernel's out-of-memory killer.
-export function orphanedReservationReason(
-  signal: NodeJS.Signals | null,
-  managerIsShuttingDown: boolean,
-): 'killed' | 'interrupted' {
-  return signal === 'SIGKILL' && !managerIsShuttingDown
-    ? 'killed'
-    : 'interrupted';
-}
-
 export async function finalizeOrphanedReservations(
   dbAdapter: DBAdapter,
   workerId: string | undefined,

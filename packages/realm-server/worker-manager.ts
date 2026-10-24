@@ -142,6 +142,7 @@ let {
   allPriorityCount = 1,
   highPriorityCount = 0,
   userIndexCount = 0,
+  taskMemoryMb: configuredTaskMemoryMb,
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
@@ -170,6 +171,11 @@ let {
     allPriorityCount: {
       description:
         'The number of workers that service all jobs regardless of priority to start (default 1)',
+      type: 'number',
+    },
+    taskMemoryMb: {
+      description:
+        "The memory limit, in MiB, of the task or container the worker manager and its workers share. Each worker's heap limit is sized from it. Without it the container's own cgroup limit is used, and where there is none, workers inherit the manager's heap limit.",
       type: 'number',
     },
     migrateDB: {
@@ -741,7 +747,7 @@ let secretsKeyringMessage: string | undefined;
   // indexing, publish-awaited renders, and ordinary user renders alike — and
   // never system-tier jobs. The all-priority pool floors at the lowest tier
   // and serves everything, including system-initiated prerender-html.
-  let taskMemoryMb = await taskMemoryLimitMb();
+  let taskMemoryMb = await taskMemoryLimitMb(configuredTaskMemoryMb);
   if (taskMemoryMb !== undefined) {
     workerHeapMb = workerHeapLimitMb(
       taskMemoryMb,

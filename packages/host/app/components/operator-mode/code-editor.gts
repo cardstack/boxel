@@ -91,11 +91,16 @@ export default class CodeEditor extends Component<Signature> {
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   @tracked private isFormatting = false;
   @tracked private formattingError: string | undefined;
-  // The UTF-8 size of what the editor holds, for the file at `url`. Edits
-  // update it before they autosave; until the first edit the file's own
-  // content is the answer.
+  // The UTF-8 size of what the editor holds, after an edit made against the
+  // file as it was then (`editedFrom`). It answers until the file changes —
+  // the edit autosaving, or a write from outside the editor, which replaces
+  // the editor's content without an edit — and the file's own size answers
+  // after that.
   @tracked private editorContentSize:
-    | { url: string; bytes: number }
+    | {
+        editedFrom: { content: string; lastModified: string | undefined };
+        bytes: number;
+      }
     | undefined;
 
   private hasUnsavedSourceChanges = false;
@@ -348,7 +353,10 @@ export default class CodeEditor extends Component<Signature> {
     this.hasSavedUnsavedSourceOnClose = false;
     if (isReady(this.args.file)) {
       this.editorContentSize = {
-        url: this.args.file.url,
+        editedFrom: {
+          content: this.args.file.content,
+          lastModified: this.args.file.lastModified,
+        },
         bytes: utf8ByteLength(content),
       };
     }
@@ -635,10 +643,13 @@ export default class CodeEditor extends Component<Signature> {
       return undefined;
     }
     let file = this.readyFile;
+    let edited = this.editorContentSize;
     let bytes =
-      this.editorContentSize?.url === file.url
-        ? this.editorContentSize.bytes
-        : utf8ByteLength(file.content);
+      edited &&
+      edited.editedFrom.content === file.content &&
+      edited.editedFrom.lastModified === file.lastModified
+        ? edited.bytes
+        : file.size;
     if (bytes <= MAX_LINT_SOURCE_BYTES) {
       return undefined;
     }
@@ -674,13 +685,13 @@ export default class CodeEditor extends Component<Signature> {
                   height='14'
                 />
                 <span>
-                  <strong>Linting is off for this file.</strong>
+                  <strong>Boxel can't lint this file.</strong>
                   At
                   {{warning.size}}
                   it's over the
                   {{warning.limit}}
-                  lint limit, so Format with Boxel leaves it as it is. Split it
-                  into smaller modules to lint it again.
+                  limit, so Boxel won't fix or format it. Split it into smaller
+                  modules to turn linting back on.
                 </span>
               </div>
             {{/if}}

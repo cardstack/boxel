@@ -4,7 +4,11 @@ import { Worker } from 'node:worker_threads';
 import type { Task } from './index.ts';
 import type { LintThreadRequest, LintThreadResponse } from './lint-thread.ts';
 
-import { jobIdentity, MAX_LINT_SOURCE_BYTES } from '../index.ts';
+import {
+  jobIdentity,
+  LINT_NOT_RUN_RULE_IDS,
+  MAX_LINT_SOURCE_BYTES,
+} from '../index.ts';
 
 import { LINT_ANCHOR } from './lint-engines.ts';
 
@@ -60,10 +64,17 @@ export interface LintResult {
 // lint exhausts the container's memory and the kernel kills whichever worker
 // it picks, along with the job that worker was running.
 //
-// The loaded engines hold about 200 MB of heap, and a source at the size limit
-// needs at most a few hundred MB more, so this leaves headroom for every
-// source the size limit admits.
-export const LINT_THREAD_HEAP_LIMIT_MB = 512;
+// The loaded engines hold about 200 MB of heap. Every module in this repo up
+// to the size limit lints within this, and a denser one that doesn't gets the
+// out-of-memory warning instead of a lint. The worker-manager budgets this
+// limit into each worker's share of the task's memory.
+export const LINT_THREAD_HEAP_LIMIT_MB = 256;
+
+// How long an idle thread is kept. Loading the engines takes over a second, so
+// a burst of lints (an assistant writing several files) shares one thread;
+// once the burst is over the thread exits, and its few hundred MB go back to
+// the worker rather than sitting in every worker that has ever linted.
+export const LINT_THREAD_IDLE_MS = 60_000;
 
 export class LintThreadOutOfMemoryError extends Error {
   readonly heapLimitMb: number;
@@ -73,10 +84,10 @@ export class LintThreadOutOfMemoryError extends Error {
   }
 }
 
-// One long-lived thread per worker process keeps the engines' config and
-// plugin loading (over a second) off every lint. When the thread dies — out of
-// memory or otherwise — the requests it held are rejected and the next lint
-// starts a fresh thread.
+// One thread per worker process, started on the first lint and stopped once
+// it has been idle for `idleMs`. When the thread dies — out of memory or
+// otherwise — the requests it held are rejected and the next lint starts a
+// fresh thread.
 export class LintThread {
   #worker: Worker | undefined;
   #pending = new Map<
@@ -84,13 +95,25 @@ export class LintThread {
     { resolve: (result: LintResult) => void; reject: (e: Error) => void }
   >();
   #nextId = 0;
+  #idleTimer: ReturnType<typeof setTimeout> | undefined;
   readonly heapLimitMb: number;
+  readonly idleMs: number;
 
-  constructor(heapLimitMb = LINT_THREAD_HEAP_LIMIT_MB) {
+  constructor(
+    heapLimitMb = LINT_THREAD_HEAP_LIMIT_MB,
+    idleMs = LINT_THREAD_IDLE_MS,
+  ) {
     this.heapLimitMb = heapLimitMb;
+    this.idleMs = idleMs;
+  }
+
+  // Whether a thread is running, for tests.
+  get isRunning(): boolean {
+    return this.#worker !== undefined;
   }
 
   lint(source: string, filename: string): Promise<LintResult> {
+    clearTimeout(this.#idleTimer);
     let worker = this.#worker ?? this.#start();
     let id = this.#nextId++;
     return new Promise<LintResult>((resolve, reject) => {
@@ -103,6 +126,7 @@ export class LintThread {
   }
 
   async terminate(): Promise<void> {
+    clearTimeout(this.#idleTimer);
     let worker = this.#worker;
     this.#worker = undefined;
     await worker?.terminate();
@@ -118,6 +142,12 @@ export class LintThread {
       this.#pending.delete(response.id);
       if (this.#pending.size === 0) {
         worker.unref();
+        this.#idleTimer = setTimeout(() => {
+          if (this.#worker === worker && this.#pending.size === 0) {
+            void this.terminate();
+          }
+        }, this.idleMs);
+        this.#idleTimer.unref();
       }
       if ('error' in response) {
         pending?.reject(new Error(response.error));
@@ -199,7 +229,8 @@ export async function lintArgs(
   if (bytes > MAX_LINT_SOURCE_BYTES) {
     return notLinted(
       args.source,
-      `lint-source: source is ${bytes} bytes, over the ${MAX_LINT_SOURCE_BYTES}-byte lint limit, so it was not linted. Split it into smaller modules to have it linted.`,
+      LINT_NOT_RUN_RULE_IDS.tooLarge,
+      `lint-source: skipped linting this file because it is ${bytes} bytes, over the ${MAX_LINT_SOURCE_BYTES}-byte limit. Split it into smaller modules to lint it.`,
     );
   }
   try {
@@ -208,7 +239,8 @@ export async function lintArgs(
     if (e instanceof LintThreadOutOfMemoryError) {
       return notLinted(
         args.source,
-        `lint-source: linting this source ran out of the ${e.heapLimitMb} MB lint memory limit, so it was not linted. Split it into smaller modules to have it linted.`,
+        LINT_NOT_RUN_RULE_IDS.outOfMemory,
+        `lint-source: stopped linting this file because it needed more than the ${e.heapLimitMb} MB lint memory limit. Split it into smaller modules to lint it.`,
       );
     }
     return {
@@ -225,12 +257,16 @@ export async function lintArgs(
   }
 }
 
-function notLinted(source: string, message: string): LintResult {
+function notLinted(
+  source: string,
+  ruleId: string,
+  message: string,
+): LintResult {
   return {
     passed: true,
     output: source,
     fixed: false,
-    messages: [problem(1, message)],
+    messages: [{ ...problem(1, message), ruleId }],
   };
 }
 

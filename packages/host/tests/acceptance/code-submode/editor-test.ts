@@ -19,6 +19,7 @@ import {
   Deferred,
   baseRealm,
   MAX_LINT_SOURCE_BYTES,
+  type Realm,
   rri,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -54,6 +55,7 @@ import type { TestRealmAdapter } from '../../helpers/adapter';
 module('Acceptance | code submode | editor tests', function (hooks) {
   let monacoService: MonacoService;
   let adapter: TestRealmAdapter;
+  let realm: Realm;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -83,7 +85,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
     );
 
-    ({ adapter } = await withCachedRealmSetup(async () =>
+    ({ adapter, realm } = await withCachedRealmSetup(async () =>
       setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
@@ -400,7 +402,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     // await percySnapshot(assert);
   });
 
-  test('a module over the lint size limit says that linting is off for it', async function (assert) {
+  test("a module over the lint size limit says Boxel can't lint it", async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}large-module.ts`,
@@ -409,9 +411,9 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
     assert
       .dom('[data-test-lint-size-warning]')
-      .includesText('Linting is off for this file.')
+      .includesText("Boxel can't lint this file.")
       .includesText(
-        `over the ${Math.round(MAX_LINT_SOURCE_BYTES / 1024)} KB lint limit`,
+        `over the ${Math.round(MAX_LINT_SOURCE_BYTES / 1024)} KB limit`,
       );
 
     setMonacoContent(`export const value = 1;\n`);
@@ -423,6 +425,28 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       .doesNotExist(
         'an edit that brings it under the limit clears the warning',
       );
+  });
+
+  test('a write from outside the editor updates the lint size warning', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}large-module.ts`,
+    });
+    await waitFor('[data-test-lint-size-warning]');
+
+    setMonacoContent(`export const value = 1;\n`);
+    await waitUntil(
+      () => !document.querySelector('[data-test-lint-size-warning]'),
+    );
+    await settled();
+
+    // A write that doesn't come from the editor replaces its content without
+    // an edit, as an assistant's write does.
+    await realm.write('large-module.ts', largeModuleSource());
+    await waitFor('[data-test-lint-size-warning]');
+    assert
+      .dom('[data-test-lint-size-warning]')
+      .includesText("Boxel can't lint this file.");
   });
 
   test('a module under the lint size limit shows no lint size warning', async function (assert) {

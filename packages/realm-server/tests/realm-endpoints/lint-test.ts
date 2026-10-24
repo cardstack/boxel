@@ -6,6 +6,7 @@ import type { Realm } from '@cardstack/runtime-common';
 import {
   encodeLintFilename,
   LINT_FILENAME_HEADER,
+  LINT_NOT_RUN_RULE_IDS,
   MAX_LINT_SOURCE_BYTES,
 } from '@cardstack/runtime-common';
 import { lintArgs, LintThread } from '@cardstack/runtime-common/tasks/lint';
@@ -1531,9 +1532,14 @@ export class MyCard${i} extends CardDef {
       );
       assert.ok(
         body.messages[0].message.includes(
-          `over the ${MAX_LINT_SOURCE_BYTES}-byte lint limit, so it was not linted`,
+          `over the ${MAX_LINT_SOURCE_BYTES}-byte limit. Split it into smaller modules to lint it.`,
         ),
         `the warning names the limit: ${body.messages[0].message}`,
+      );
+      assert.strictEqual(
+        body.messages[0].ruleId,
+        LINT_NOT_RUN_RULE_IDS.tooLarge,
+        'the warning carries a rule id a lint gate can check for',
       );
       assert.ok(
         duration < 5000,
@@ -1543,6 +1549,23 @@ export class MyCard${i} extends CardDef {
   });
 
   module('lint thread', function () {
+    test('an idle thread exits, and the next lint starts a fresh one', async function (assert) {
+      let thread = new LintThread(undefined, 200);
+      try {
+        await lintArgs({ source: `let x = 1\n`, filename: 'a.ts' }, thread);
+        assert.true(thread.isRunning, 'the thread is kept between lints');
+        await new Promise((r) => setTimeout(r, 1000));
+        assert.false(thread.isRunning, 'an idle thread exits');
+        let next = await lintArgs(
+          { source: `let y = 1\n`, filename: 'b.ts' },
+          thread,
+        );
+        assert.strictEqual(next.output, `let y = 1;\n`, 'lint still runs');
+      } finally {
+        await thread.terminate();
+      }
+    });
+
     test('a lint that runs out of the thread heap limit fails only itself, with a warning', async function (assert) {
       // The loaded engines alone need far more than 64 MB, so this thread
       // runs out of memory on any source.
@@ -1564,9 +1587,13 @@ export class MyCard${i} extends CardDef {
         );
         assert.ok(
           result.messages[0].message.includes(
-            'ran out of the 64 MB lint memory limit',
+            'needed more than the 64 MB lint memory limit',
           ),
           `the warning names the limit: ${result.messages[0].message}`,
+        );
+        assert.strictEqual(
+          result.messages[0].ruleId,
+          LINT_NOT_RUN_RULE_IDS.outOfMemory,
         );
 
         // The process that hosted the dead thread keeps linting.
@@ -1579,7 +1606,7 @@ export class MyCard${i} extends CardDef {
         // The dead thread is replaced on its next use.
         let retried = await lintArgs({ source, filename: 'a.gts' }, tinyThread);
         assert.ok(
-          retried.messages[0].message.includes('ran out of'),
+          retried.messages[0].message.includes('needed more than'),
           'a fresh thread is started, and is held to the same limit',
         );
       } finally {
