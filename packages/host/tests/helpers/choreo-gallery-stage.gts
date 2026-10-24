@@ -76,6 +76,8 @@ export function setupChoreoGalleryTest(
   setupBaseRealm(hooks);
   setupChoreo(hooks);
   let loader: Loader | undefined;
+  // built once per test, and linked by every card the helpers build
+  let theme: Promise<CardAPI.CardDef> | undefined;
 
   setupLocalIndexing(hooks);
   setupCardLogs(
@@ -91,6 +93,7 @@ export function setupChoreoGalleryTest(
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
+    theme = undefined;
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: { ...choreoGalleryContents(), ...opts.contents },
@@ -109,18 +112,22 @@ export function setupChoreoGalleryTest(
     /**
      * The gallery's theme card, built from the realm's `theme.json`: the
      * palette and type every gallery component reads. The cards the helpers
-     * build link it, as the realm's own instances do.
+     * build link it, as the realm's own instances do, and share the one
+     * instance a test builds.
      */
-    async theme(): Promise<CardAPI.CardDef> {
-      let doc = JSON.parse(CONTENTS['theme.json'] as string);
-      let { createFromSerialized } = await gallery.loader.import<
-        typeof CardAPI
-      >('@cardstack/base/card-api');
-      return await createFromSerialized<typeof CardAPI.CardDef>(
-        doc.data,
-        doc,
-        new URL(`${testRealmURL}theme`),
-      );
+    theme(): Promise<CardAPI.CardDef> {
+      theme ??= (async () => {
+        let doc = JSON.parse(CONTENTS['theme.json'] as string);
+        let { createFromSerialized } = await gallery.loader.import<
+          typeof CardAPI
+        >('@cardstack/base/card-api');
+        return await createFromSerialized<typeof CardAPI.CardDef>(
+          doc.data,
+          doc,
+          new URL(`${testRealmURL}theme`),
+        );
+      })();
+      return theme;
     },
 
     /** the `cardInfo` of a gallery card: its link to the gallery's theme */

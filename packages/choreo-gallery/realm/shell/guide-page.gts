@@ -191,7 +191,7 @@ export class GuidePage extends Component<Signature> {
         gap: 8px;
         margin: 0 0 8px;
         font-family: var(--boxel-eyebrow-font-family);
-        font-weight: var(--boxel-eyebrow-font-weight);
+        font-weight: 500;
         font-size: calc(var(--boxel-eyebrow-font-size) * 10 / 11);
         line-height: var(--boxel-eyebrow-line-height);
         letter-spacing: calc(var(--boxel-eyebrow-letter-spacing) * 16 / 18);

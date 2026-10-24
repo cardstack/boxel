@@ -360,38 +360,43 @@ console.log(
 
 // ---- the theme -----------------------------------------------------------
 
-/** every card instance in the realm, outside the media and the film app */
-function instanceFiles(dir) {
+/**
+ * every card instance in the realm, as its path and its parsed document,
+ * outside `film-app/`: the film app's build output, which `pnpm push` writes
+ * into the realm and git ignores
+ */
+function instances(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const file = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      return ['asset', 'film-app'].includes(entry.name)
-        ? []
-        : instanceFiles(file);
+      return entry.name === 'film-app' ? [] : instances(file);
     }
-    return entry.name.endsWith('.json') && readJSON(file).data?.meta?.adoptsFrom
-      ? [file]
-      : [];
+    if (!entry.name.endsWith('.json')) {
+      return [];
+    }
+    const doc = readJSON(file);
+    return doc.data?.meta?.adoptsFrom ? [{ file, doc }] : [];
   });
 }
 const themeFile = path.join(realm, 'theme.json');
 // realm.json is the realm's own config card, which no gallery page renders
-const instances = instanceFiles(realm).filter(
-  (file) => ![themeFile, path.join(realm, 'realm.json')].includes(file),
+const cards = instances(realm).filter(
+  ({ file }) => ![themeFile, path.join(realm, 'realm.json')].includes(file),
 );
-const unthemed = instances.filter((file) => {
-  const link =
-    readJSON(file).data.relationships?.['cardInfo.theme']?.links?.self;
-  return (
-    !link || path.resolve(path.dirname(file), `${link}.json`) !== themeFile
-  );
-});
+const unthemed = cards
+  .filter(({ file, doc }) => {
+    const link = doc.data.relationships?.['cardInfo.theme']?.links?.self;
+    return (
+      !link || path.resolve(path.dirname(file), `${link}.json`) !== themeFile
+    );
+  })
+  .map(({ file }) => file);
 assert.deepEqual(
   unthemed.map((file) => path.relative(realm, file)),
   [],
   'Card instances that do not link ./theme.json, so render without the gallery palette',
 );
-console.log(`${instances.length} card instances link the gallery's theme.`);
+console.log(`${cards.length} card instances link the gallery's theme.`);
 
 // ---- the docs ------------------------------------------------------------
 

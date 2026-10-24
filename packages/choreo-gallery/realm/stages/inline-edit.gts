@@ -518,6 +518,7 @@ export class InlineEdit extends Component {
   get plan(): Map<Key, Word[]> {
     // read the generation so a font arriving re-measures everything
     void this.generation;
+    void this.inkVersion;
     const view = origins('view');
     const edit = origins('edit');
     const plan = new Map<Key, Word[]>();
@@ -818,7 +819,8 @@ export class InlineEdit extends Component {
     this.readInk(el);
     // the gallery's theme switch rewrites the tokens under us, and a colour
     // the plan resolved against the old theme is a colour that travels wrong.
-    // The theme is the gallery root's `data-theme`.
+    // The switch is the gallery root's `data-theme`; `toggle` catches a
+    // change to the theme card itself.
     const watch = new MutationObserver(() => {
       this.readInk(el);
       this.generation++;
@@ -839,18 +841,26 @@ export class InlineEdit extends Component {
   /** the resolved value of every ink token the plan needs, this theme */
   private ink = new Map<string, string>();
 
+  /**
+   * Bumped when a pass finds the inks changed. Unlike `generation` it is not
+   * in the words' ids, so the words keep their identity and still fly.
+   */
+  @tracked private inkVersion = 0;
+
+  /** reads the inks, and says whether any of them changed */
   private readInk(el: HTMLElement) {
     const style = getComputedStyle(el);
+    let changed = false;
     for (const token of [
       '--foreground',
       '--muted-foreground',
       '--subtle-foreground',
     ]) {
-      this.ink.set(
-        token,
-        style.getPropertyValue(token).trim() || 'currentColor',
-      );
+      const value = style.getPropertyValue(token).trim() || 'currentColor';
+      changed ||= this.ink.get(token) !== value;
+      this.ink.set(token, value);
     }
+    return changed;
   }
 
   /**
@@ -861,6 +871,11 @@ export class InlineEdit extends Component {
    * four of its subtleties, none of its renders.
    */
   toggle = () => {
+    // The theme card can change the inks without touching the attributes
+    // `hold` watches: a different theme, or an edit to this one.
+    if (this.root && this.readInk(this.root)) {
+      this.inkVersion++;
+    }
     this.moving = true;
     this.root?.setAttribute('data-flying', 'true');
     this.root?.removeAttribute('data-landed');

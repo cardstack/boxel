@@ -24,7 +24,7 @@
         "primaryInk": "#bf2e00",
         "border": "color-mix(in srgb, var(--foreground) 10%, transparent)",
         "borderStrong": "color-mix(in srgb, var(--foreground) 18%, transparent)",
-        "ring": "#bf2e00",
+        "ring": "var(--primary-ink)",
         "fontSans": "'IBM Plex Sans', 'Helvetica Neue', sans-serif",
         "fontMono": "'IBM Plex Mono', ui-monospace, monospace"
       },
@@ -42,7 +42,7 @@
         "primaryInk": "#ff7a4e",
         "border": "color-mix(in srgb, var(--foreground) 9%, transparent)",
         "borderStrong": "color-mix(in srgb, var(--foreground) 16%, transparent)",
-        "ring": "#ff6a3a"
+        "ring": "var(--ember-hot)"
       },
       "typography": {
         "eyebrow": {
