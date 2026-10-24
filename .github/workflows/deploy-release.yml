@@ -193,10 +193,9 @@ jobs:
       service-name: "boxel-realm-server-${{ inputs.environment }}"
       image: ${{ inputs.realm-server-image }}
       # Stability is checked by wait-realm-server-stable below rather than by
-      # the action's waiter: the removal migrations need the rollout to have
-      # completed on this deploy's image, and that job also rejects a
-      # rollback to the previous revision, which the waiter would accept as
-      # stable.
+      # the action's waiter: the removal migrations need the primary
+      # deployment to reach COMPLETED on this deploy's image, and realm-server
+      # rollouts need a longer budget than the action is given here.
       wait-for-service-stability: false
 
   # The drain gate the three jobs below depend on. ECS is the authority on
@@ -337,19 +336,19 @@ jobs:
   # packages/postgres/migrations-removal/ — run HERE, after deploy-realm-server
   # has reached stability. wait-realm-server-stable means the previous
   # realm-server task set has fully drained, and deploy-worker's stability wait
-  # upstream of it means the previous worker task set has drained too, so no
-  # task on the old code revision is expected to be left querying a column
-  # this phase drops. That is the whole point: running drops before the old
-  # tasks drain is what takes the published realms down (old code 500s on
-  # `column i.<x> does not exist`).
+  # upstream of it (the action fails if its deployment was rolled back) means
+  # the previous worker task set has drained too, so no task on the old code
+  # revision is expected to be left querying a column this phase drops. That
+  # is the whole point: running drops before the old tasks drain is what takes
+  # the published realms down (old code 500s on `column i.<x> does not exist`).
   #
   # A failure here is non-fatal to serving: the new code, by definition, no
   # longer reads the removed columns, so it is already live and healthy — the
   # drop simply hasn't happened yet and can be retried on the next deploy.
   #
-  # Gate on deploy-realm-server, NOT post-deploy-realm-server: the latter is a
-  # separate /_post-deployment hook that can fail independently of the only real
-  # precondition here — the old tasks being gone.
+  # Gate on wait-realm-server-stable, NOT post-deploy-realm-server: the latter
+  # is a separate /_post-deployment hook that can fail independently of the
+  # only real precondition here — the old tasks being gone.
   migrate-db-remove:
     needs: [wait-realm-server-stable]
     name: Run DB removal migrations
@@ -400,8 +399,8 @@ jobs:
     # The reusable deploy passes force-new-deployment, so this recycles fresh
     # tasks even though the image is unchanged.
     #
-    # Gate on `deploy-realm-server` (wait-for-service-stability: true → the
-    # new realm server is up and serving the new shell), NOT on
+    # Gate on `wait-realm-server-stable` (the new realm server's rollout has
+    # COMPLETED, so it is serving the new shell), NOT on
     # `post-deploy-realm-server`: that job is a separate post-deploy hook
     # (it POSTs the realm server's `/_post-deployment` endpoint) and can fail
     # independently of the recycle's only real precondition — the new shell
