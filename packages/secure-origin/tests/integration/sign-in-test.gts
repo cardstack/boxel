@@ -464,6 +464,20 @@ module('Integration | sign-in', function (hooks) {
       }
     });
 
+    test('names the CLI and what signing in lets it do, in place of the Google subtitle', async function (assert) {
+      serve(WITH_GOOGLE);
+      visitShell(`?mode=cli-sign-in&port=51234&state=${STATE}&user=someone`);
+      await render(CliSignInPage);
+      await waitFor('[data-test-secure-google]');
+      assert.dom('[data-test-secure-title]').hasText('Authorize Boxel CLI');
+      assert
+        .dom('[data-test-secure-cli-sign-in-subtitle]')
+        .hasText(
+          'Signing in lets the Boxel CLI running on this computer manage your keys.',
+        );
+      assert.dom('[data-test-secure-sign-in-subtitle]').doesNotExist();
+    });
+
     test('fills in the username the CLI named, and starts on the password', async function (assert) {
       serve(NO_GOOGLE);
       visitShell(`?mode=cli-sign-in&port=51234&state=${STATE}&user=someone`);
