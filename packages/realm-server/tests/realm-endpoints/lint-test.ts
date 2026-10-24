@@ -6,7 +6,10 @@ import type { Realm } from '@cardstack/runtime-common';
 import {
   encodeLintFilename,
   LINT_FILENAME_HEADER,
+  LINT_NOT_RUN_RULE_IDS,
+  MAX_LINT_SOURCE_BYTES,
 } from '@cardstack/runtime-common';
+import { lintArgs, LintThread } from '@cardstack/runtime-common/tasks/lint';
 import { setupPermissionedRealmCached, createJWT } from '../helpers/index.ts';
 import {
   benchmarkOperation,
@@ -1492,6 +1495,124 @@ export class MyCard${i} extends CardDef {
         responseJson.output.includes('  @field name0 = contains(StringField);'),
         'Prettier formatting is applied to large files',
       );
+    });
+
+    test('a source over the lint size limit passes through unchanged with a warning', async function (assert) {
+      let source = `import { CardDef } from '@cardstack/base/card-api';\n`;
+      for (let i = 0; Buffer.byteLength(source) <= MAX_LINT_SOURCE_BYTES; i++) {
+        // Unformatted on purpose: a linted result would reformat this.
+        source += `export class MyCard${i} extends CardDef {   @field name${i} = contains(StringField) }\n`;
+      }
+
+      let startTime = Date.now();
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(source);
+      let duration = Date.now() - startTime;
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let body = JSON.parse(response.text);
+      assert.true(body.passed, 'an unlinted source does not fail lint');
+      assert.false(body.fixed, 'nothing was fixed');
+      assert.strictEqual(
+        body.output,
+        source,
+        'the source comes back unchanged',
+      );
+      assert.deepEqual(
+        body.messages.map((m: { severity: number }) => m.severity),
+        [1],
+        'one warning, no errors',
+      );
+      assert.ok(
+        body.messages[0].message.includes(
+          `over the ${MAX_LINT_SOURCE_BYTES}-byte limit. Split it into smaller modules to lint it.`,
+        ),
+        `the warning names the limit: ${body.messages[0].message}`,
+      );
+      assert.strictEqual(
+        body.messages[0].ruleId,
+        LINT_NOT_RUN_RULE_IDS.tooLarge,
+        'the warning carries a rule id a lint gate can check for',
+      );
+      assert.ok(
+        duration < 5000,
+        `answered without running the engines (${duration}ms)`,
+      );
+    });
+  });
+
+  module('lint thread', function () {
+    test('an idle thread exits, and the next lint starts a fresh one', async function (assert) {
+      let thread = new LintThread(undefined, 200);
+      try {
+        await lintArgs({ source: `let x = 1\n`, filename: 'a.ts' }, thread);
+        assert.true(thread.isRunning, 'the thread is kept between lints');
+        await new Promise((r) => setTimeout(r, 1000));
+        assert.false(thread.isRunning, 'an idle thread exits');
+        let next = await lintArgs(
+          { source: `let y = 1\n`, filename: 'b.ts' },
+          thread,
+        );
+        assert.strictEqual(next.output, `let y = 1;\n`, 'lint still runs');
+      } finally {
+        await thread.terminate();
+      }
+    });
+
+    test('a lint that runs out of the thread heap limit fails only itself, with a warning', async function (assert) {
+      // The loaded engines alone need far more than 64 MB, so this thread
+      // runs out of memory on any source.
+      let tinyThread = new LintThread(64);
+      let thread = new LintThread();
+      try {
+        let source = `export const a = 1;\n`;
+        let result = await lintArgs({ source, filename: 'a.gts' }, tinyThread);
+        assert.true(result.passed, 'an unlinted source does not fail lint');
+        assert.strictEqual(
+          result.output,
+          source,
+          'the source comes back unchanged',
+        );
+        assert.deepEqual(
+          result.messages.map((m) => m.severity),
+          [1],
+          'one warning, no errors',
+        );
+        assert.ok(
+          result.messages[0].message.includes(
+            'needed more than the 64 MB lint memory limit',
+          ),
+          `the warning names the limit: ${result.messages[0].message}`,
+        );
+        assert.strictEqual(
+          result.messages[0].ruleId,
+          LINT_NOT_RUN_RULE_IDS.outOfMemory,
+        );
+
+        // The process that hosted the dead thread keeps linting.
+        let next = await lintArgs(
+          { source: `let x = 1\n`, filename: 'b.ts' },
+          thread,
+        );
+        assert.strictEqual(next.output, `let x = 1;\n`, 'lint still runs');
+
+        // The dead thread is replaced on its next use.
+        let retried = await lintArgs({ source, filename: 'a.gts' }, tinyThread);
+        assert.ok(
+          retried.messages[0].message.includes('needed more than'),
+          'a fresh thread is started, and is held to the same limit',
+        );
+      } finally {
+        await tinyThread.terminate();
+        await thread.terminate();
+      }
     });
   });
 });

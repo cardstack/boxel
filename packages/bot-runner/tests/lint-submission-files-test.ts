@@ -1,6 +1,10 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import type { LintResult, QueuePublisher } from '@cardstack/runtime-common';
+import {
+  LINT_NOT_RUN_RULE_IDS,
+  type LintResult,
+  type QueuePublisher,
+} from '@cardstack/runtime-common';
 import {
   makeLintSubmissionFiles,
   type SubmissionFile,
@@ -167,6 +171,33 @@ module('lint-submission-files', () => {
       // A rule-less finding reads `[lint]`; the engine name belongs to the
       // message, not the rule slot.
       'unparseable.gts:1:1 [lint] ESLint failed to process source: Unexpected token',
+    ]);
+  });
+
+  test('a file the engines did not run on fails the submission', async (assert) => {
+    let files: SubmissionFile[] = [
+      { filename: 'catalog/MyListing/huge.gts', contents: 'let a = 1' },
+    ];
+    let { queuePublisher } = makeQueuePublisher({
+      'catalog/MyListing/huge.gts': cleanResult({
+        output: 'let a = 1',
+        messages: [
+          {
+            ruleId: LINT_NOT_RUN_RULE_IDS.tooLarge,
+            severity: 1,
+            message: 'lint-source: source is over the lint limit',
+            line: 1,
+            column: 1,
+          },
+        ],
+      }),
+    });
+
+    let outcome = await makeLintSubmissionFiles(queuePublisher)(files, OPTS);
+
+    assert.false(outcome.passed, 'the submission does not pass');
+    assert.deepEqual(outcome.lintErrors, [
+      `catalog/MyListing/huge.gts:1:1 [${LINT_NOT_RUN_RULE_IDS.tooLarge}] lint-source: source is over the lint limit`,
     ]);
   });
 

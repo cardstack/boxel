@@ -877,20 +877,30 @@ export class PgQueueRunner implements QueueRunner {
           }
 
           // Abandon the job after #maxReservationCount genuine attempts.
-          // Count only reservations that closed with a real verdict
-          // (`completion_reason = 'completed'`) plus still-open ones
-          // (NULL). Reservations closed as `'interrupted'` or
-          // `'timeout-expired'` (deploy, autoscaler, child crash, dropped
-          // PG connection) don't count — the worker never had an
-          // uninterrupted shot at the job, so re-trying isn't a failed
-          // attempt.
-          let priorReservations = (await query([
-            `SELECT COUNT(*)::int as count FROM job_reservations
+          // Count reservations that closed with a real verdict
+          // (`completion_reason = 'completed'`), ones whose worker was
+          // SIGKILLed while running the job (`'killed'`, usually the
+          // container running out of memory), and still-open ones (NULL).
+          // Reservations closed as `'interrupted'` or `'timeout-expired'`
+          // (deploy, autoscaler, child crash, dropped PG connection) don't
+          // count — the worker never had an uninterrupted shot at the job,
+          // so re-trying isn't a failed attempt. A kill does count: a job
+          // that exhausts its container's memory does so again on every
+          // retry, and each time the kernel kills workers running other jobs
+          // on that task too.
+          let [priorReservations] = (await query([
+            `SELECT COUNT(*)::int as count,
+                    COUNT(*) FILTER (WHERE completion_reason = 'killed')::int as killed
+             FROM job_reservations
              WHERE job_id =`,
             param(jobToRun.id),
-            `AND (completion_reason IS NULL OR completion_reason = 'completed')`,
-          ])) as unknown as { count: number }[];
-          if (priorReservations[0].count >= this.#maxReservationCount) {
+            `AND (completion_reason IS NULL OR completion_reason IN ('completed', 'killed'))`,
+          ])) as unknown as { count: number; killed: number }[];
+          if (priorReservations.count >= this.#maxReservationCount) {
+            let killedNote =
+              priorReservations.killed > 0
+                ? `; the worker running it was killed ${priorReservations.killed} time(s), which usually means the job ran its container out of memory`
+                : '';
             await query([
               `UPDATE jobs SET `,
               ...separatedByCommas([
@@ -898,7 +908,7 @@ export class PgQueueRunner implements QueueRunner {
                   `result =`,
                   param({
                     status: 500,
-                    message: `Job abandoned after ${priorReservations[0].count} failed attempts (max=${this.#maxReservationCount})`,
+                    message: `Job abandoned after ${priorReservations.count} failed attempts (max=${this.#maxReservationCount})${killedNote}`,
                   }),
                 ],
                 [`status = 'rejected'`],
@@ -913,7 +923,7 @@ export class PgQueueRunner implements QueueRunner {
               `%s: abandoned job %s after %s prior reservations (max=%s)`,
               this.#workerId,
               jobToRun.id,
-              priorReservations[0].count,
+              priorReservations.count,
               this.#maxReservationCount,
             );
             continue;

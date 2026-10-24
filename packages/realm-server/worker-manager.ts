@@ -78,8 +78,15 @@ import {
   type PendingJob,
 } from './handlers/handle-indexing-dashboard.ts';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
-import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
+import {
+  finalizeOrphanedReservations,
+  orphanedReservationReason,
+} from './lib/finalize-orphan-reservations.ts';
 import { findStuckReservations } from './lib/stuck-reservations.ts';
+import {
+  taskMemoryLimitMb,
+  workerHeapLimitMb,
+} from './lib/worker-heap-limit.ts';
 import {
   markFailedJob,
   type MarkFailedJobResult,
@@ -135,6 +142,7 @@ let {
   allPriorityCount = 1,
   highPriorityCount = 0,
   userIndexCount = 0,
+  taskMemoryMb: configuredTaskMemoryMb,
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
@@ -163,6 +171,11 @@ let {
     allPriorityCount: {
       description:
         'The number of workers that service all jobs regardless of priority to start (default 1)',
+      type: 'number',
+    },
+    taskMemoryMb: {
+      description:
+        "The memory limit, in MiB, of the task or container the worker manager and its workers share. Each worker's heap limit is sized from it. Without it the container's own cgroup limit is used, and where there is none, workers inherit the manager's heap limit.",
       type: 'number',
     },
     migrateDB: {
@@ -210,6 +223,10 @@ let {
 
 let isReady = false;
 let isExiting = false;
+// Each worker child's V8 old-generation limit, derived from the task's memory
+// limit; undefined where there is no limit to divide, so children inherit
+// the manager's.
+let workerHeapMb: number | undefined;
 let workers: ChildProcess[] = [];
 // The indexing dashboard is for development, so it is off unless the start
 // command asks for it.
@@ -730,6 +747,16 @@ let secretsKeyringMessage: string | undefined;
   // indexing, publish-awaited renders, and ordinary user renders alike — and
   // never system-tier jobs. The all-priority pool floors at the lowest tier
   // and serves everything, including system-initiated prerender-html.
+  let taskMemoryMb = await taskMemoryLimitMb(configuredTaskMemoryMb);
+  if (taskMemoryMb !== undefined) {
+    workerHeapMb = workerHeapLimitMb(
+      taskMemoryMb,
+      userIndexCount + highPriorityCount + allPriorityCount,
+    );
+    log.info(
+      `task memory limit is ${taskMemoryMb} MB; limiting each worker's heap to ${workerHeapMb} MB`,
+    );
+  }
   for (let i = 0; i < userIndexCount; i++) {
     await startWorker(userInitiatedPriority, urlMappings, {
       indexJobsOnly: true,
@@ -844,6 +871,11 @@ async function startWorker(
   let worker = spawn(
     'node',
     [
+      // A command-line flag wins over the heap limit the child would
+      // otherwise inherit through NODE_OPTIONS.
+      ...(workerHeapMb !== undefined
+        ? [`--max-old-space-size=${workerHeapMb}`]
+        : []),
       'worker.ts',
       `--matrixURL='${matrixURL}'`,
       `--prerendererUrl=${prerendererUrl}`,
@@ -899,18 +931,25 @@ async function startWorker(
     // able to claim the dead worker's reservation until completed_at is
     // set, so this still races to be useful — but if it stalls, the
     // existing 60s monitorWorker / 7200s lease-expiry path is the
-    // backstop, not this exit handler. A child exit while still holding
-    // a reservation is by definition an interruption, so the row is
-    // marked 'interrupted' and does not count toward the per-job cap.
-    finalizeOrphanedReservations(adapter, workerId, 'interrupted').catch(
-      (e) => {
-        Sentry.captureException(e);
-        log.error(
-          `worker: finalizeOrphanedReservations threw for worker ${workerId}`,
-          e,
-        );
-      },
-    );
+    // backstop, not this exit handler.
+    //
+    // A child that exits while still holding a reservation never finished
+    // the work, so the row is normally marked 'interrupted' and does not
+    // count toward the per-job cap. A SIGKILL from outside our own shutdown
+    // is marked 'killed', which the cap counts, so a job that exhausts the
+    // container's memory is abandoned after a bounded number of attempts
+    // instead of killing workers on every task it is retried on.
+    finalizeOrphanedReservations(
+      adapter,
+      workerId,
+      orphanedReservationReason(signal, isExiting),
+    ).catch((e) => {
+      Sentry.captureException(e);
+      log.error(
+        `worker: finalizeOrphanedReservations threw for worker ${workerId}`,
+        e,
+      );
+    });
   });
 
   if (worker.stdout) {

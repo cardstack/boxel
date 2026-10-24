@@ -54,3 +54,28 @@ export function decodeLintFilename(
   // the same as an absent header and lets the caller's own default stand.
   return stripped === '' ? undefined : stripped;
 }
+
+// The largest source, in UTF-8 bytes, that `_lint` runs the lint engines on.
+// Lint cost grows with the file: ESLint, Prettier and ember-template-lint each
+// parse the whole module, and a dense 900 KB card module needs over 600 MB of
+// heap on top of the ~200 MB the loaded engines hold. Files at or under this
+// size lint well inside the lint thread's heap limit. A larger source is passed
+// through unchanged with a warning instead of being linted, so it still saves;
+// the code editor reads this to tell the author before they ask for a format.
+export const MAX_LINT_SOURCE_BYTES = 300 * 1024;
+
+// The rule ids of the warning a `_lint` result carries when the engines did
+// not run on the source: it was over the size limit, or linting it ran out of
+// the lint thread's memory. Such a result passes, so a save still goes
+// through; a caller that certifies lint (a submission gate) checks for these.
+export const LINT_NOT_RUN_RULE_IDS = {
+  tooLarge: 'lint-source/too-large',
+  outOfMemory: 'lint-source/out-of-memory',
+} as const;
+
+export function isLintNotRunRuleId(ruleId: string | null | undefined): boolean {
+  return (
+    ruleId === LINT_NOT_RUN_RULE_IDS.tooLarge ||
+    ruleId === LINT_NOT_RUN_RULE_IDS.outOfMemory
+  );
+}
