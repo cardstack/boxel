@@ -1069,12 +1069,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   });
 });
 
-// A module just over the lint size limit, made of declarations simple enough
-// that indexing it stays cheap.
+// A module half again over the lint size limit, made of declarations simple
+// enough that indexing it stays cheap.
 function largeModuleSource(): string {
   let lines: string[] = [];
   let bytes = 0;
-  for (let i = 0; bytes <= MAX_LINT_SOURCE_BYTES; i++) {
+  for (let i = 0; bytes <= MAX_LINT_SOURCE_BYTES * 1.5; i++) {
     let line = `export const value${i} = ${i};\n`;
     lines.push(line);
     bytes += line.length;

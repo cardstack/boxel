@@ -642,7 +642,10 @@ export default class CodeEditor extends Component<Signature> {
     if (bytes <= MAX_LINT_SOURCE_BYTES) {
       return undefined;
     }
-    return { size: formatKB(bytes), limit: formatKB(MAX_LINT_SOURCE_BYTES) };
+    return {
+      size: formatSize(bytes),
+      limit: `${Math.round(MAX_LINT_SOURCE_BYTES / 1024)} KB`,
+    };
   }
 
   private computeFormatSupport(): boolean {
@@ -740,15 +743,17 @@ export default class CodeEditor extends Component<Signature> {
         align-items: flex-start;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border-bottom: 1px solid rgba(255, 186, 0, 0.35);
-        background: rgba(255, 186, 0, 0.12);
-        color: var(--boxel-dark);
+        border-bottom: 1px solid rgba(255, 186, 0, 0.3);
+        box-shadow: inset 3px 0 0 var(--boxel-warning-200);
+        background: rgba(255, 186, 0, 0.1);
+        color: rgba(255, 255, 255, 0.78);
         font: var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xs);
       }
 
       .lint-size-warning strong {
         font-weight: 600;
+        color: var(--boxel-light);
       }
 
       .lint-size-warning-icon {
@@ -831,6 +836,9 @@ function utf8ByteLength(content: string): number {
   return new TextEncoder().encode(content).length;
 }
 
-function formatKB(bytes: number): string {
-  return `${Math.round(bytes / 1024)} KB`;
+// One decimal place, so a file just over the limit never reads as the limit
+// itself.
+function formatSize(bytes: number): string {
+  let kb = bytes / 1024;
+  return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb.toFixed(1)} KB`;
 }

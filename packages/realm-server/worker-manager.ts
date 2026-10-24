@@ -84,6 +84,10 @@ import {
 } from './lib/finalize-orphan-reservations.ts';
 import { findStuckReservations } from './lib/stuck-reservations.ts';
 import {
+  taskMemoryLimitMb,
+  workerHeapLimitMb,
+} from './lib/worker-heap-limit.ts';
+import {
   markFailedJob,
   type MarkFailedJobResult,
 } from './lib/mark-failed-job.ts';
@@ -213,6 +217,10 @@ let {
 
 let isReady = false;
 let isExiting = false;
+// Each worker child's V8 old-generation limit, derived from the task's memory
+// limit; undefined where there is no limit to divide, so children inherit
+// the manager's.
+let workerHeapMb: number | undefined;
 let workers: ChildProcess[] = [];
 // The indexing dashboard is for development, so it is off unless the start
 // command asks for it.
@@ -733,6 +741,16 @@ let secretsKeyringMessage: string | undefined;
   // indexing, publish-awaited renders, and ordinary user renders alike — and
   // never system-tier jobs. The all-priority pool floors at the lowest tier
   // and serves everything, including system-initiated prerender-html.
+  let taskMemoryMb = await taskMemoryLimitMb();
+  if (taskMemoryMb !== undefined) {
+    workerHeapMb = workerHeapLimitMb(
+      taskMemoryMb,
+      userIndexCount + highPriorityCount + allPriorityCount,
+    );
+    log.info(
+      `task memory limit is ${taskMemoryMb} MB; limiting each worker's heap to ${workerHeapMb} MB`,
+    );
+  }
   for (let i = 0; i < userIndexCount; i++) {
     await startWorker(userInitiatedPriority, urlMappings, {
       indexJobsOnly: true,
@@ -847,6 +865,11 @@ async function startWorker(
   let worker = spawn(
     'node',
     [
+      // A command-line flag wins over the heap limit the child would
+      // otherwise inherit through NODE_OPTIONS.
+      ...(workerHeapMb !== undefined
+        ? [`--max-old-space-size=${workerHeapMb}`]
+        : []),
       'worker.ts',
       `--matrixURL='${matrixURL}'`,
       `--prerendererUrl=${prerendererUrl}`,
