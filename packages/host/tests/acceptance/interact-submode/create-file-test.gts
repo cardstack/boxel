@@ -538,14 +538,15 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
     });
     await click('[data-test-new-file-button]');
     assert.dom('[data-test-boxel-menu-item]').exists({ count: 5 });
+    // opening the stacks records their top cards, the right-most most recent
     assert
       .dom(
-        '[data-test-boxel-menu-item]:nth-of-type(1) [data-test-boxel-menu-item-text="Garden"]',
+        '[data-test-boxel-menu-item]:nth-of-type(1) [data-test-boxel-menu-item-text="Author"]',
       )
       .exists();
     assert
       .dom(
-        '[data-test-boxel-menu-item]:nth-of-type(2) [data-test-boxel-menu-item-text="Author"]',
+        '[data-test-boxel-menu-item]:nth-of-type(2) [data-test-boxel-menu-item-text="Garden"]',
       )
       .exists();
 

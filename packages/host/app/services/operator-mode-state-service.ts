@@ -1,7 +1,7 @@
 import { getOwner } from '@ember/application';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
-import { scheduleOnce } from '@ember/runloop';
+import { schedule, scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
@@ -23,6 +23,7 @@ import {
   RealmPaths,
   type LocalPath,
   isResolvedCodeRef,
+  isCardDocumentString,
   isCardInstance,
   isRealmIndexCardId,
   isLocalId,
@@ -31,6 +32,7 @@ import {
   SupportedMimeType,
   internalKeyFor,
   realmURL as realmURLSymbol,
+  trimJsonExtension,
 } from '@cardstack/runtime-common';
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
@@ -191,6 +193,11 @@ export default class OperatorModeStateService extends Service {
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
+  // Stack items, top card ids and the code path at the last record, so only a
+  // newly opened card reaches Recents.
+  private recordedStackItems = new WeakSet<StackItem>();
+  private topCardIds = new Set<string>();
+  private recordedCodePath: string | undefined;
 
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
@@ -399,12 +406,74 @@ export default class OperatorModeStateService extends Service {
     this.profileSettingsSection = undefined;
     this.createListingModalPayload = undefined;
     this.expandedStackItems.clear();
+    this.recordedStackItems = new WeakSet();
+    this.topCardIds = new Set();
+    this.recordedCodePath = undefined;
     window.localStorage.removeItem(ModuleInspectorSelections);
     this.schedulePersist();
   }
 
   restore(rawState: SerializedState) {
     this._state = this.deserialize(rawState);
+    this.recordViewedCards();
+  }
+
+  // The one place opened cards reach Recents. Every state change persists, so
+  // calling this from `persist`, `restore` and file loads covers each way a
+  // card can be opened. A card revealed by closing the one above it, or shown
+  // again on returning to a submode, keeps its place.
+  recordViewedCards() {
+    if (this.isDestroyed) {
+      return;
+    }
+    if (this._state.submode === Submodes.Interact) {
+      // a revealed card is an item already recorded, and a moved stack or a
+      // format change keeps its card on top
+      let topItems = this.topMostStackItems();
+      for (let item of topItems) {
+        if (
+          item.id &&
+          !this.recordedStackItems.has(item) &&
+          !this.topCardIds.has(item.id)
+        ) {
+          this.recentCardsService.add(item.id);
+        }
+      }
+      for (let item of this._state.stacks.flat()) {
+        this.recordedStackItems.add(item);
+      }
+      this.topCardIds = new Set(
+        topItems.flatMap((item) => (item.id ? [item.id] : [])),
+      );
+    } else if (this._state.submode === Submodes.Code) {
+      let codePath = this._state.codePath;
+      if (!codePath || codePath === this.recordedCodePath) {
+        return;
+      }
+      if (!this.isViewingCardInCodeMode) {
+        this.recordedCodePath = codePath;
+        return;
+      }
+      // only once loaded, since not every .json file is a card
+      if (!this.openFileIsReady) {
+        return;
+      }
+      this.recordedCodePath = codePath;
+      if (isCardDocumentString(this.readyFile.content)) {
+        this.recentCardsService.add(trimJsonExtension(codePath));
+      }
+    }
+  }
+
+  // A card picked in the playground, not a saved selection shown again
+  recordPlaygroundCard(cardId: string) {
+    // a pick can happen while the playground renders, and Recents is read in
+    // that same render
+    schedule('afterRender', () => {
+      if (!this.isDestroyed) {
+        this.recentCardsService.add(cardId);
+      }
+    });
   }
 
   addItemToStack(item: StackItem) {
@@ -426,9 +495,6 @@ export default class OperatorModeStateService extends Service {
     // already handled by isExpanded = isTopCard && isExpandedIntent
     // — a buried card never renders as expanded.
     this._state.stacks[stackIndex].push(item);
-    if (item.id) {
-      this.recentCardsService.add(item.id);
-    }
     this.schedulePersist();
   }
 
@@ -1022,6 +1088,7 @@ export default class OperatorModeStateService extends Service {
     // solve UX issues with back button referring back to request url of redirect
     // when it should refer back to the previous code path
     this._state.codePath = codePath ? this.toCodePathRRI(codePath.href) : null;
+    this.recordViewedCards();
     this.router.replaceWith('index-root', {
       queryParams: {
         operatorModeState: this.serialize(),
@@ -1124,6 +1191,7 @@ export default class OperatorModeStateService extends Service {
     if (this.isDestroyed) {
       return;
     }
+    this.recordViewedCards();
     this.operatorModeController.operatorModeState = this.serialize();
     // This sets the title of the document for it's appearance in the browser
     // history (which needs to happen after the history pushState)--the
@@ -1466,6 +1534,9 @@ export default class OperatorModeStateService extends Service {
         if (state === 'ready') {
           this.cachedRealmURL = new URL(this.readyFile.realmURL);
           this.updateOpenDirsForNestedPath();
+          // the file can finish loading mid-render, and Recents is read in
+          // that same render
+          schedule('afterRender', () => this.recordViewedCards());
         }
 
         this.openFileSubscribers.forEach((subscriber) =>
