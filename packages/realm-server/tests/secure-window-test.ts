@@ -14,10 +14,16 @@ import {
   setupPermissionedRealmCached,
 } from './helpers/index.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
+import { VirtualNetwork } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
 import {
   describeDestination,
   registrableDomain,
+  secureWindowContext,
+  validateContextRequest,
+  writableRealms,
 } from '../lib/secure-window.ts';
+import { UserKeyError } from '../lib/user-keys.ts';
 
 // What the secure window asks about what it was opened for: a realm, a card
 // or type, and an operation on it, answered from the server's own records,
@@ -111,6 +117,168 @@ module(basename(import.meta.filename), function () {
           registrableDomain: 'localhost',
         },
         'a port is part of the host',
+      );
+    });
+  });
+
+  module('the read boundary', function () {
+    // Two realms on one server, one the user may read and one they may not,
+    // and a prefix that names the readable one. The database answers only
+    // the permission questions the context asks.
+    const OPEN = 'https://realms.example.test/open/';
+    const CLOSED = 'https://realms.example.test/closed/';
+    const USER = '@someone:example.test';
+    const PERMISSIONS: Record<string, Record<string, [boolean, boolean]>> = {
+      [OPEN]: { [USER]: [true, true] },
+      [CLOSED]: { '@owner:example.test': [true, true] },
+    };
+
+    function fakeRealm(url: string, name: string) {
+      return { url, getRealmInfo: async () => ({ name }) } as unknown as Realm;
+    }
+
+    let dbAdapter = {
+      kind: 'pg',
+      async execute(sql: string, opts?: { bind?: unknown[] }) {
+        let bind = (opts?.bind ?? []) as string[];
+        if (sql.includes('SELECT username, read, write, realm_owner')) {
+          return Object.entries(PERMISSIONS[bind[0]] ?? {}).map(
+            ([username, [read, write]]) => ({
+              username,
+              read,
+              write,
+              realm_owner: false,
+            }),
+          );
+        }
+        if (sql.includes('SELECT write FROM realm_user_permissions')) {
+          let row = PERMISSIONS[bind[0]]?.[bind[1]];
+          return row ? [{ write: row[1] }] : [];
+        }
+        if (sql.includes('SELECT realm_url FROM realm_user_permissions')) {
+          return Object.entries(PERMISSIONS)
+            .filter(([, users]) => users[bind[bind.length - 1]]?.[1])
+            .map(([realm_url]) => ({ realm_url }));
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      },
+    } as unknown as DBAdapter;
+
+    let looked: string[] = [];
+    let deps = () => {
+      let virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addRealmMapping('@example/open/', OPEN);
+      return {
+        dbAdapter,
+        realms: [fakeRealm(OPEN, 'Open'), fakeRealm(CLOSED, 'Closed')],
+        virtualNetwork,
+        definitionLookup: {
+          forRealm: () => ({
+            lookupDefinition: async (ref: { module: string; name: string }) => {
+              looked.push(ref.module);
+              return {
+                displayName: 'Weather Report',
+                operations: { forecast: { base: 'callApi' } },
+              };
+            },
+          }),
+        } as any,
+      };
+    };
+
+    async function refusal(promise: Promise<unknown>) {
+      try {
+        await promise;
+      } catch (e) {
+        if (e instanceof UserKeyError) {
+          return `${e.status} ${e.message}`;
+        }
+        throw e;
+      }
+      return 'answered';
+    }
+
+    test('a type whose module is in a realm the user can’t read answers as one that doesn’t exist', async function (assert) {
+      looked = [];
+      let hidden = await refusal(
+        secureWindowContext(
+          deps(),
+          USER,
+          validateContextRequest({
+            target: {
+              kind: 'type',
+              module: `${CLOSED}weather`,
+              name: 'Weather',
+              realm: OPEN,
+            },
+            operation: 'forecast',
+          }),
+        ),
+      );
+      let missing = await refusal(
+        secureWindowContext(
+          deps(),
+          USER,
+          validateContextRequest({
+            realm: 'https://realms.example.test/gone/',
+          }),
+        ),
+      );
+      assert.strictEqual(hidden, missing, 'the two refusals read alike');
+      assert.true(hidden.startsWith('404'), hidden);
+      assert.deepEqual(looked, [], 'the definition is never read');
+    });
+
+    test('a type in a readable realm is described', async function (assert) {
+      let context = await secureWindowContext(
+        deps(),
+        USER,
+        validateContextRequest({
+          target: {
+            kind: 'type',
+            module: `${OPEN}weather`,
+            name: 'Weather',
+            realm: OPEN,
+          },
+          operation: 'forecast',
+        }),
+      );
+      assert.strictEqual(context.card?.name, 'Weather Report');
+      assert.strictEqual(context.operation?.label, 'Forecast');
+    });
+
+    test('takes prefix-form ids, resolved through the virtual network', async function (assert) {
+      let context = await secureWindowContext(
+        deps(),
+        USER,
+        validateContextRequest({
+          target: {
+            kind: 'type',
+            module: '@example/open/weather',
+            name: 'Weather',
+            realm: '@example/open/',
+          },
+        }),
+      );
+      assert.strictEqual(context.realm.url, OPEN);
+      assert.strictEqual(context.realm.name, 'Open');
+      assert.strictEqual(context.card?.module, '@example/open/weather');
+      let byPrefix = await secureWindowContext(
+        deps(),
+        USER,
+        validateContextRequest({ realm: '@example/open/' }),
+      );
+      assert.true(byPrefix.realm.directWriter);
+    });
+
+    test('lists only the realms the user is a direct writer of', async function (assert) {
+      assert.deepEqual(await writableRealms(deps(), USER), [
+        { url: OPEN, name: 'Open' },
+      ]);
+      assert.deepEqual(
+        await writableRealms(deps(), '@node-test_realm:example.test'),
+        [],
+        'a bot account writes nowhere a key could be shared',
       );
     });
   });
@@ -262,10 +430,40 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(none.status, 401);
     });
 
+    test('GET /_secure-window/realms lists the realms the user writes, to the window’s own session', async function (assert) {
+      let realms = async (user: string, authorization?: string) =>
+        await request
+          .get('/_secure-window/realms')
+          .set(
+            'Authorization',
+            authorization ?? (await secureSessionAuth(dbAdapter, user)),
+          );
+      let writer = await realms(WRITER);
+      assert.strictEqual(writer.status, 200, writer.text);
+      assert.deepEqual(writer.body.data, [
+        {
+          type: 'secure-window-realm',
+          id: REALM.href,
+          attributes: { name: 'Team Workspace' },
+        },
+      ]);
+      let reader = await realms(READER);
+      assert.deepEqual(reader.body.data, [], 'a reader writes nowhere');
+      let appSession = await realms(
+        WRITER,
+        `Bearer ${createRealmServerJWT(
+          { user: WRITER, sessionRoom: 'test-session' },
+          realmSecretSeed,
+        )}`,
+      );
+      assert.strictEqual(appSession.status, 403);
+    });
+
     test('refuses a request it can’t make sense of', async function (assert) {
       for (let attributes of [
         {},
         { realm: 'not a url' },
+        { realm: 'ftp://example.test/realm/' },
         { operation: 'forecast' },
         { target: { kind: 'file', url: `${REALM.href}today` } },
         { destination: 'https://evil.example/' },

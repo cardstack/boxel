@@ -1,38 +1,11 @@
-// The realm server's description of what a key page was opened for
-// (`windowContext` in `security/keys.js`).
-import type { DestinationDisplay } from './destination.gts';
-
-export interface WindowContext {
-  realm: { url: string; name: string; directWriter: boolean };
-  card?: { name: string; module: string; exportName: string };
-  operation?: {
-    name: string;
-    label: string;
-    base: string;
-    method?: string;
-    destination?: DestinationDisplay;
-    slots: { name: string; key: string }[];
-  };
-}
-
-export interface UserKey {
-  id: string;
-  name: string;
-  kind: string;
-  state: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface KeyShare {
-  id: string;
-  realm: string;
-  label: string;
-  owner: string;
-  keyId?: string | null;
-  state: 'active' | 'suspended';
-  suspensionReason: string | null;
-}
+// What the key pages read from the realm server, and how they word its
+// refusals. The shapes themselves are `security/keys.ts`'s.
+export type {
+  DestinationDisplay,
+  KeyShare,
+  UserKey,
+  WindowContext,
+} from '../../security/keys.ts';
 
 // What a refused request says to the user: the server's reason, as a
 // sentence.
@@ -48,4 +21,12 @@ export function failureMessage(e: unknown): string {
 
 export function isSignedOut(e: unknown): boolean {
   return (e as { code?: unknown })?.code === 'signed-out';
+}
+
+// Whether a request was refused because what it names doesn't exist, or isn't
+// the user's to see, which the realm server answers alike. Anything else that
+// stops a page loading (the server can't be reached, or fails) is worth trying
+// again.
+export function isNotFound(e: unknown): boolean {
+  return (e as { status?: unknown })?.status === 404;
 }

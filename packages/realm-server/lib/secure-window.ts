@@ -2,29 +2,39 @@ import { getDomain } from 'tldts';
 import {
   codeRefWithAbsoluteIdentifier,
   fetchRealmPermissions,
+  isBotAccount,
   isDirectWriter,
+  isPrefixForm,
   isResolvedCodeRef,
   param,
   query,
+  RealmPaths,
   type CodeRef,
   type DBAdapter,
   type DefinitionLookup,
   type Realm,
+  type RealmResourceIdentifier,
   type ResolvedCodeRef,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { operationDisplayLabel } from '@cardstack/runtime-common/card-operations/label';
-import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { UserKeyError } from './user-keys.ts';
 
 // What the secure window shows about what it was opened for, read here from
 // the realm server's own records: the realm, the card definition and the
 // operation, never anything the page that opened the window supplies. The
-// window is given only names for these (a realm URL, a card or type, an
+// window is given only names for these (a realm, a card or a type, an
 // operation name) and asks this module what they are.
 //
-// It answers only about a realm the user may read, and answers a realm or
-// card the user can't read exactly as one that doesn't exist, so the window
-// can't be used to learn what is in a realm the user has no access to.
+// It answers only when the user may read every realm the answer comes from:
+// the realm named, the realm holding the card, and the realm holding the
+// card's or type's module. Anything else is answered exactly as something
+// that doesn't exist, so the window can't be used to learn what is in a realm
+// the user has no access to, or whether a module exists there.
+//
+// Identifiers arrive in either form, URL or prefix (`@cardstack/catalog/…`).
+// They are resolved only through the VirtualNetwork, and realm membership is
+// decided with `RealmPaths`.
 
 export interface DestinationDisplay {
   // The destination as lowered: an origin and a path prefix ending in `/`.
@@ -56,16 +66,22 @@ export interface SecureWindowContext {
 }
 
 export type SecureWindowTarget =
-  | { kind: 'instance'; url: string }
-  | { kind: 'type'; module: string; name: string; realm: string };
+  | { kind: 'instance'; url: RealmResourceIdentifier }
+  | {
+      kind: 'type';
+      module: RealmResourceIdentifier;
+      name: string;
+      realm: RealmResourceIdentifier;
+    };
 
 export interface SecureWindowContextRequest {
-  realm?: string;
+  realm?: RealmResourceIdentifier;
   target?: SecureWindowTarget;
   operation?: string;
 }
 
 const NOT_FOUND = 'no such realm, card or operation';
+const MAX_IDENTIFIER_LENGTH = 2048;
 
 export function registrableDomain(host: string): string {
   return getDomain(host, { allowPrivateDomains: true }) ?? host;
@@ -81,15 +97,22 @@ export function describeDestination(destination: string): DestinationDisplay {
   };
 }
 
-function parseURL(value: unknown, what: string): URL {
-  if (typeof value !== 'string') {
-    throw new UserKeyError(400, `${what} must be a URL`);
+// An identifier in either form, checked for shape as a string: an `http(s)`
+// URL or a prefix-form identifier. What it names is decided later, by
+// resolving it.
+function identifier(value: unknown, what: string): RealmResourceIdentifier {
+  if (
+    typeof value !== 'string' ||
+    value.length > MAX_IDENTIFIER_LENGTH ||
+    !(
+      isPrefixForm(value) ||
+      value.startsWith('https://') ||
+      value.startsWith('http://')
+    )
+  ) {
+    throw new UserKeyError(400, `${what} must be a URL or a prefix-form id`);
   }
-  try {
-    return new URL(value);
-  } catch {
-    throw new UserKeyError(400, `${what} must be a URL`);
-  }
+  return value as RealmResourceIdentifier;
 }
 
 // The request's names, checked for shape only.
@@ -104,7 +127,7 @@ export function validateContextRequest(
   let { realm, target, operation } = attributes;
   let request: SecureWindowContextRequest = {};
   if (realm !== undefined) {
-    request.realm = normalizeRealmURL(parseURL(realm, 'realm').href)!.href;
+    request.realm = identifier(realm, 'realm');
   }
   if (operation !== undefined) {
     if (typeof operation !== 'string' || operation === '') {
@@ -118,16 +141,16 @@ export function validateContextRequest(
       throw new UserKeyError(400, 'target must be an object');
     }
     if (t.kind === 'instance') {
-      request.target = { kind: 'instance', url: parseURL(t.url, 'url').href };
+      request.target = { kind: 'instance', url: identifier(t.url, 'url') };
     } else if (t.kind === 'type') {
       if (typeof t.name !== 'string' || t.name === '') {
         throw new UserKeyError(400, 'a type target names its export');
       }
       request.target = {
         kind: 'type',
-        module: parseURL(t.module, 'module').href,
+        module: identifier(t.module, 'module'),
         name: t.name,
-        realm: normalizeRealmURL(parseURL(t.realm, 'realm').href)!.href,
+        realm: identifier(t.realm, 'realm'),
       };
     } else {
       throw new UserKeyError(400, `target.kind is 'instance' or 'type'`);
@@ -142,23 +165,63 @@ export function validateContextRequest(
   return request;
 }
 
+interface Deps {
+  dbAdapter: DBAdapter;
+  realms: Realm[];
+  definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
+}
+
+// The served URL an identifier names, or undefined when it names nothing this
+// server can resolve.
+function servedURL(
+  virtualNetwork: VirtualNetwork,
+  id: RealmResourceIdentifier,
+): URL | undefined {
+  try {
+    return virtualNetwork.toURL(id);
+  } catch {
+    return undefined;
+  }
+}
+
+// The innermost realm this server serves that holds `url`.
+function realmHolding(realms: Realm[], url: URL): Realm | undefined {
+  return realms
+    .filter((r) => new RealmPaths(new URL(r.url)).inRealm(url))
+    .sort((a, b) => b.url.length - a.url.length)[0];
+}
+
+// The realm `id` names: its root, written with or without the trailing slash.
+function realmNamed(
+  { realms, virtualNetwork }: Deps,
+  id: RealmResourceIdentifier,
+): Realm | undefined {
+  let url = servedURL(virtualNetwork, id);
+  if (!url) {
+    return undefined;
+  }
+  let root = url.href.endsWith('/') ? url.href : `${url.href}/`;
+  return realms.find((r) => r.url === root);
+}
+
 async function mayRead(
   dbAdapter: DBAdapter,
-  realmURL: URL,
+  realm: Realm,
   user: string,
 ): Promise<boolean> {
-  let permissions = await fetchRealmPermissions(dbAdapter, realmURL);
+  let permissions = await fetchRealmPermissions(dbAdapter, new URL(realm.url));
   return [user, 'users', '*'].some((who) => permissions[who]?.includes('read'));
 }
 
-// The type an indexed card adopts from. A card is named by its URL with or
-// without `.json`; the index keys its instance row by the `.json` file.
+// The type an indexed card adopts from. A card is named with or without
+// `.json`; the index keys its instance row by the `.json` file's served URL.
 async function instanceType(
   dbAdapter: DBAdapter,
   realm: Realm,
-  url: string,
+  url: URL,
 ): Promise<ResolvedCodeRef | undefined> {
-  let indexURL = url.endsWith('.json') ? url : `${url}.json`;
+  let indexURL = url.href.endsWith('.json') ? url.href : `${url.href}.json`;
   let [row] = (await query(dbAdapter, [
     `SELECT pristine_doc FROM boxel_index WHERE url =`,
     param(indexURL),
@@ -172,43 +235,36 @@ async function instanceType(
   }
   let absolute = codeRefWithAbsoluteIdentifier(
     adoptsFrom,
-    new URL(indexURL),
+    indexURL as RealmResourceIdentifier,
     undefined,
   );
   return isResolvedCodeRef(absolute) ? absolute : undefined;
 }
 
 export async function secureWindowContext(
-  {
-    dbAdapter,
-    realms,
-    definitionLookup,
-  }: {
-    dbAdapter: DBAdapter;
-    realms: Realm[];
-    definitionLookup: DefinitionLookup;
-  },
+  deps: Deps,
   user: string,
   request: SecureWindowContextRequest,
 ): Promise<SecureWindowContext> {
+  let { dbAdapter, realms, definitionLookup, virtualNetwork } = deps;
+  let notFound = () => new UserKeyError(404, NOT_FOUND);
   let { target } = request;
-  let realmURL: string | undefined;
-  if (target?.kind === 'type') {
-    realmURL = target.realm;
-  } else if (target?.kind === 'instance') {
-    // The innermost realm the card's URL is in.
-    realmURL = realms
-      .filter((r) => target.url.startsWith(r.url))
-      .sort((a, b) => b.url.length - a.url.length)[0]?.url;
+
+  let realm: Realm | undefined;
+  let instanceURL: URL | undefined;
+  if (target?.kind === 'instance') {
+    instanceURL = servedURL(virtualNetwork, target.url);
+    realm = instanceURL ? realmHolding(realms, instanceURL) : undefined;
   } else {
-    realmURL = request.realm;
+    let named = target?.kind === 'type' ? target.realm : request.realm;
+    realm = named ? realmNamed(deps, named) : undefined;
   }
-  if (request.realm && realmURL !== request.realm) {
+  // A realm named beside a target must be the target's own.
+  if (request.realm && target && realmNamed(deps, request.realm) !== realm) {
     throw new UserKeyError(400, 'the target is not in that realm');
   }
-  let realm = realmURL ? realms.find((r) => r.url === realmURL) : undefined;
-  if (!realm || !(await mayRead(dbAdapter, new URL(realm.url), user))) {
-    throw new UserKeyError(404, NOT_FOUND);
+  if (!realm || !(await mayRead(dbAdapter, realm, user))) {
+    throw notFound();
   }
   let info = await realm.getRealmInfo();
   let context: SecureWindowContext = {
@@ -218,24 +274,34 @@ export async function secureWindowContext(
       directWriter: await isDirectWriter(dbAdapter, new URL(realm.url), user),
     },
   };
-  if (!request.target) {
+  if (!target) {
     return context;
   }
 
-  let codeRef =
-    request.target.kind === 'type'
-      ? { module: request.target.module, name: request.target.name }
-      : await instanceType(dbAdapter, realm, request.target.url);
+  let codeRef: ResolvedCodeRef | undefined =
+    target.kind === 'type'
+      ? { module: target.module, name: target.name }
+      : await instanceType(dbAdapter, realm, instanceURL!);
   if (!codeRef) {
-    throw new UserKeyError(404, NOT_FOUND);
+    throw notFound();
+  }
+  // The definition is read as the owner of whichever realm holds its module,
+  // so that realm must be one the user may read too.
+  let moduleURL = servedURL(
+    virtualNetwork,
+    codeRef.module as RealmResourceIdentifier,
+  );
+  let moduleRealm = moduleURL ? realmHolding(realms, moduleURL) : undefined;
+  if (!moduleRealm || !(await mayRead(dbAdapter, moduleRealm, user))) {
+    throw notFound();
   }
   let definition;
   try {
     definition = await definitionLookup
       .forRealm(realm)
-      .lookupDefinition(codeRef as ResolvedCodeRef);
+      .lookupDefinition(codeRef);
   } catch {
-    throw new UserKeyError(404, NOT_FOUND);
+    throw notFound();
   }
   context.card = {
     name: definition.displayName ?? codeRef.name,
@@ -249,7 +315,7 @@ export async function secureWindowContext(
     ? definition.operations![request.operation]
     : undefined;
   if (!operation) {
-    throw new UserKeyError(404, NOT_FOUND);
+    throw notFound();
   }
   context.operation = {
     name: request.operation,
@@ -267,4 +333,36 @@ export async function secureWindowContext(
       : {}),
   };
   return context;
+}
+
+export interface WritableRealm {
+  url: string;
+  name: string;
+}
+
+// The realms this server serves that `user` is a direct writer of, by name:
+// the realms they may share a key into. A direct writer's own permission row
+// grants write; a `*` or `users` row, a bot account or a policy grant makes no
+// one a direct writer.
+export async function writableRealms(
+  { dbAdapter, realms }: Pick<Deps, 'dbAdapter' | 'realms'>,
+  user: string,
+): Promise<WritableRealm[]> {
+  if (isBotAccount(user)) {
+    return [];
+  }
+  let rows = (await query(dbAdapter, [
+    `SELECT realm_url FROM realm_user_permissions WHERE write = true AND username =`,
+    param(user),
+  ])) as { realm_url: string }[];
+  let urls = new Set(rows.map((row) => row.realm_url));
+  let found: WritableRealm[] = [];
+  for (let realm of realms) {
+    if (urls.has(realm.url)) {
+      found.push({ url: realm.url, name: (await realm.getRealmInfo()).name });
+    }
+  }
+  return found.sort(
+    (a, b) => a.name.localeCompare(b.name) || a.url.localeCompare(b.url),
+  );
 }

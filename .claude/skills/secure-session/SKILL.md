@@ -119,8 +119,11 @@ the password, and ends no session.
 The window checks its stored session with `GET /_secure-session` (204 while
 it's live, 401 `signed-out` once it has ended) when it opens, and again when a
 request it makes under the session is refused with a 403, which is how a key
-write ticket refuses an ended session. An ended session is forgotten, and the
-window shows "Sign in to Boxel" with no error. When the check gets no answer
+write ticket refuses an ended session. An ended session is forgotten. A
+sign-in page then shows "Sign in to Boxel" with no error. A key page never
+signs in, as it never signs out: it says to sign in to Boxel from the page
+that opened it, and shows nothing else (ADR 005 §1.6). The window's session
+for its key pages is the one Boxel's own sign-in on this origin leaves here. When the check gets no answer
 within ten seconds, or the server can't be reached, the window keeps its
 session.
 

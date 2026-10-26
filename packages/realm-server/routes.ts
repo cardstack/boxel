@@ -146,7 +146,10 @@ import {
   handleSwapKeyIntoShare,
   handleUnshareKey,
 } from './handlers/handle-key-shares.ts';
-import { handleSecureWindowContext } from './handlers/handle-secure-window.ts';
+import {
+  handleSecureWindowContext,
+  handleSecureWindowRealms,
+} from './handlers/handle-secure-window.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -404,6 +407,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${SECURE_WINDOW_PATH}/context`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSecureWindowContext(args),
+  );
+  router.get(
+    `${SECURE_WINDOW_PATH}/realms`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSecureWindowRealms(args),
   );
   router.post(
     REQUEST_FORWARD_PATH,

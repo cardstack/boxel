@@ -1,9 +1,12 @@
-// The fields a key is entered in: its name, a label for the user's own use,
-// and its value, masked as it is typed. A key holds no destination; where it
-// may be sent is granted when an operation using it is approved.
+// The fields a key is entered in, as rows of a card's edit format: its name,
+// a label for the user's own use, and its value, masked as it is typed. A key
+// holds no destination; where it may be sent is granted when an operation
+// using it is approved.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import AuthFormField from '../../components/auth-form-field.gts';
+import FieldContainer from '../../components/field-container.gts';
+import KeyRound from '../../components/icons/key-round.gts';
+import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
 import { autofocus } from '../../modifiers/autofocus.ts';
 
@@ -19,7 +22,12 @@ interface Signature {
 
 const KeyFields: TemplateOnlyComponent<Signature> = <template>
   {{#if @onName}}
-    <AuthFormField @label='Name' data-test-key-field='name'>
+    <FieldContainer
+      @tag='label'
+      @label='Name'
+      @icon={{Tag}}
+      data-test-key-field='name'
+    >
       <BoxelInput
         @type='text'
         @autocomplete='off'
@@ -30,9 +38,14 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
         data-test-key-name
         {{autofocus}}
       />
-    </AuthFormField>
+    </FieldContainer>
   {{/if}}
-  <AuthFormField @label='Key' data-test-key-field='value'>
+  <FieldContainer
+    @tag='label'
+    @label='Key'
+    @icon={{KeyRound}}
+    data-test-key-field='value'
+  >
     <BoxelInput
       @type='password'
       @autocomplete='off'
@@ -44,7 +57,7 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
       data-test-key-value
       {{autofocus (if @onName false true)}}
     />
-  </AuthFormField>
+  </FieldContainer>
 </template>;
 
 export default KeyFields;

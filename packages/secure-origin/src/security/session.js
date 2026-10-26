@@ -363,6 +363,7 @@ function signedOut() {
 // answers `signed-out`: a key write ticket refuses an ended session with a
 // 403, as it does any session that isn't a secure one, so a 403 is checked
 // against the server.
+/** @returns {Promise<any>} */
 export async function authorizedRequest(config, path, options = {}) {
   let session = storedSession();
   if (!session) {
@@ -389,10 +390,12 @@ export async function authorizedRequest(config, path, options = {}) {
 // `action` is 'add'; 'replace' or 'delete' with the id of the key; 'share'
 // with the key and the realm it goes into; or 'swap' with the key and the
 // share it goes into.
-export async function mintKeyWriteTicket(
-  config,
-  { action, keyId, realm, shareId },
-) {
+/**
+ * @param {{ action: string, keyId?: string, realm?: string, shareId?: string }} change
+ * @returns {Promise<{ ticket: string, expiresAt: string }>}
+ */
+export async function mintKeyWriteTicket(config, change) {
+  let { action, keyId, realm, shareId } = change;
   let json = await authorizedRequest(config, '_key-write-tickets', {
     body: {
       data: {

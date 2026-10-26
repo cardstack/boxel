@@ -37,9 +37,6 @@ interface Signature {
     // The page's heading, for a page that signs in for something other than
     // the app, such as the CLI's; the sign-in's own when not given.
     title?: string;
-    // The page of this shell a Google sign-in comes back to, as a path with
-    // its query and fragment; the window's own sign-in page when not given.
-    resumePage?: string;
   };
   // What signing in grants, under the heading, in place of the line
   // inviting a new user to start with Google.
@@ -231,7 +228,6 @@ export default class SignInForm extends Component<Signature> {
           client: this.args.client,
           cli: this.args.cli,
           username: this.args.username,
-          page: this.args.resumePage,
         }),
       );
     } catch (e: any) {

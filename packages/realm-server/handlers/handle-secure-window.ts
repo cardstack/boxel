@@ -5,6 +5,7 @@ import { isSecureSession } from '../lib/secure-session.ts';
 import {
   secureWindowContext,
   validateContextRequest,
+  writableRealms,
 } from '../lib/secure-window.ts';
 import { UserKeyError } from '../lib/user-keys.ts';
 import {
@@ -24,6 +25,7 @@ export function handleSecureWindowContext({
   dbAdapter,
   realms,
   definitionLookup,
+  virtualNetwork,
 }: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
@@ -57,12 +59,43 @@ export function handleSecureWindowContext({
       throw new UserKeyError(400, 'attributes must be an object');
     }
     let context = await secureWindowContext(
-      { dbAdapter, realms, definitionLookup },
+      { dbAdapter, realms, definitionLookup, virtualNetwork },
       user,
       validateContextRequest(attributes),
     );
     await sendJSON(ctxt, 200, {
       data: { type: 'secure-window-context', attributes: context },
+    });
+  });
+}
+
+// `GET /_secure-window/realms`: the realms the user is a direct writer of, by
+// name, which the window offers to share a key into. Asked with the window's
+// own session.
+export function handleSecureWindowRealms({
+  dbAdapter,
+  realms,
+}: CreateRoutesArgs): Handler {
+  return keysHandler(async (ctxt) => {
+    let user = ownerOf(ctxt);
+    if (
+      !(await isSecureSession(
+        dbAdapter,
+        ctxt.state.token as RealmServerTokenClaim | undefined,
+      ))
+    ) {
+      throw new UserKeyError(
+        403,
+        'the secure window asks this with its own session',
+      );
+    }
+    let found = await writableRealms({ dbAdapter, realms }, user);
+    await sendJSON(ctxt, 200, {
+      data: found.map(({ url, name }) => ({
+        type: 'secure-window-realm',
+        id: url,
+        attributes: { name },
+      })),
     });
   });
 }

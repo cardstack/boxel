@@ -1,15 +1,16 @@
 // The secure window's key pages, around whichever one is open: a bar with the
 // Boxel logo, what the window is for and a Close button, and the page under
-// it once the window is signed in with its own session.
+// it while the window has a session of its own.
 //
-// Opened signed out, the window signs in first, with the same sign-in as
-// everywhere else, then shows its page. Signed out while it is open (the user
-// signs out of the app, which ends the window's session too, or signs in as
-// someone else in another window), it stops: it shows that the user must sign
-// in again from Boxel, and offers no sign-in of its own, since the app that
-// opened it is signing in again already. It learns of that from this origin's
-// storage, from the realm server when the window comes back into view, and
-// from any request of its pages that the server refuses as signed out.
+// The key pages never sign in, as they never sign out: the window's session
+// is the one signing in to Boxel on this origin leaves here. Without one, or
+// once it ends while the window is open (the user signs out of the app, which
+// ends it too, or signs in as someone else in another window), the window
+// says to sign in to Boxel from the window it was opened from, and shows
+// nothing else. It learns that a session has ended from this origin's
+// storage, from the realm server when the window comes back into view or
+// focus, and from any request of its pages that the server refuses as signed
+// out.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -19,7 +20,6 @@ import {
   liveSession,
   onStoredSessionChange,
   readConfig,
-  storeSession,
 } from '../../security/session.js';
 import type { Session } from '../../security/session.js';
 import BusyMessage from '../../components/busy-message.gts';
@@ -27,11 +27,12 @@ import Button from '../../components/button.gts';
 import BoxelIcon from '../../components/icons/boxel-icon.gts';
 import IconX from '../../components/icons/icon-x.gts';
 import { navigation } from '../navigation.js';
-import SignInForm from '../sign-in/sign-in-form.gts';
+
+import EditPage from './edit-page.gts';
 
 export type Config = ReturnType<typeof readConfig>;
 
-type State = 'checking' | 'signed-out' | 'signed-in' | 'ended';
+type State = 'checking' | 'signed-out' | 'signed-in';
 
 export interface KeysWindowAPI {
   config: Config;
@@ -50,7 +51,7 @@ interface Signature {
 
 export default class KeysWindow extends Component<Signature> {
   <template>
-    <div class='keys-window' data-theme='dark' data-test-secure-page>
+    <div class='keys-window' data-theme='light' data-test-secure-page>
       <header class='bar'>
         <span class='logo' aria-hidden='true'><BoxelIcon /></span>
         <span class='bar-title' data-test-keys-window-title>{{@title}}</span>
@@ -68,34 +69,29 @@ export default class KeysWindow extends Component<Signature> {
       <main class='body'>
         {{#if (this.is 'checking')}}
           <BusyMessage
+            class='checking'
             @title='Checking your sign-in…'
             data-test-keys-checking
           />
         {{else if (this.is 'signed-out')}}
-          <SignInForm
-            @config={{this.config}}
-            @client='window'
-            @resumePage={{this.here}}
-            @title='Sign in to manage your keys'
-            @onSignedIn={{this.signedIn}}
+          <EditPage
+            @heading={{if
+              this.page.wasSignedIn
+              'You’re signed out'
+              'You’re not signed in'
+            }}
+            data-test-keys-signed-out
           >
-            <:intro>Your keys are entered only here, on Boxel's secure page.
-              Check that your address bar shows this page's address before you
-              type one in.</:intro>
-          </SignInForm>
-        {{else if (this.is 'ended')}}
-          <section class='ended' data-test-keys-signed-out>
-            <h1 class='heading'>You’re signed out</h1>
-            <p class='info'>Sign in to Boxel again in the Boxel window you
-              opened this from, then open your keys from there.</p>
-            <Button
-              @kind='secondary'
-              @size='touch'
-              class='ended-close'
-              data-test-keys-signed-out-close
-              {{on 'click' this.close}}
-            >Close this window</Button>
-          </section>
+            <:intro>Sign in to Boxel in the Boxel window you opened this from,
+              then open your keys from there.</:intro>
+            <:actions>
+              <Button
+                @kind='primary'
+                data-test-keys-signed-out-close
+                {{on 'click' this.close}}
+              >Close this window</Button>
+            </:actions>
+          </EditPage>
         {{else}}
           {{yield this.api}}
         {{/if}}
@@ -103,26 +99,21 @@ export default class KeysWindow extends Component<Signature> {
     </div>
 
     <style scoped>
+      /* The window is the sign-in page's purple, and its page sits on it in
+         a white panel with the purple showing all round. */
       .keys-window {
-        --background: #272432;
-        --foreground: var(--boxel-light);
-        --muted-foreground: #a7a5b0;
-        --panel-background: #272432;
-        --panel-border: #3b394a;
-        --keys-background: #191624;
-
         min-height: 100dvh;
         display: flex;
         flex-direction: column;
-        background-color: var(--keys-background);
+        background-color: var(--auth-page-background);
         color: var(--foreground);
       }
       .bar {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-sm) var(--boxel-sp);
-        border-bottom: 1px solid var(--panel-border);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        color: var(--boxel-light);
       }
       .logo {
         --icon-color: var(--boxel-highlight);
@@ -136,7 +127,9 @@ export default class KeysWindow extends Component<Signature> {
       }
       .bar-title {
         flex: 1;
-        font: 600 var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        font-weight: 600;
         letter-spacing: var(--boxel-lsp-xs);
       }
       .close {
@@ -152,33 +145,24 @@ export default class KeysWindow extends Component<Signature> {
         flex: 1;
         display: flex;
         flex-direction: column;
-        width: 100%;
-        max-width: 34rem;
-        margin: 0 auto;
-        padding: var(--boxel-sp-lg) var(--boxel-sp);
+        margin: 0 var(--boxel-sp) var(--boxel-sp);
+        border-radius: var(--boxel-border-radius-lg);
+        background-color: var(--background);
+        overflow: hidden;
       }
-      .heading {
-        font: 600 var(--boxel-font-md);
-        margin: 0 0 var(--boxel-sp-sm);
-      }
-      .info {
-        margin: 0 0 var(--boxel-sp-lg);
-        letter-spacing: var(--boxel-lsp);
-        line-height: 20px;
-      }
-      .ended {
-        margin-top: var(--boxel-sp-xl);
-      }
-      .ended-close {
-        width: 100%;
+      .checking {
+        margin-top: var(--boxel-sp-xxl);
       }
     </style>
   </template>
 
   private config = readConfig();
-  private page = trackedObject<{ state: State }>({ state: 'checking' });
-  // Where a Google sign-in comes back to: this page, as it was opened.
-  private here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  // `wasSignedIn`: whether the session ended while the window was open, rather
+  // than the window opening without one.
+  private page = trackedObject<{ state: State; wasSignedIn: boolean }>({
+    state: 'checking',
+    wasSignedIn: false,
+  });
   private stopListening: (() => void) | undefined;
   private signedInAs: string | undefined;
 
@@ -208,11 +192,6 @@ export default class KeysWindow extends Component<Signature> {
       this.page.state = 'signed-out';
     }
   }
-
-  private signedIn = (session: Session) => {
-    storeSession(session);
-    this.begin(session);
-  };
 
   private begin(session: Session) {
     this.signedInAs = session.user;
@@ -246,10 +225,11 @@ export default class KeysWindow extends Component<Signature> {
     if (this.page.state !== 'signed-in') {
       return;
     }
+    this.page.wasSignedIn = true;
     this.stopListening?.();
     document.removeEventListener('visibilitychange', this.recheck);
     window.removeEventListener('focus', this.recheck);
-    this.page.state = 'ended';
+    this.page.state = 'signed-out';
   };
 
   private close = () => navigation.close();

@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.ts';
-import type { Browser, Page, TestInfo } from '@playwright/test';
+import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test';
 import { appURL, secureOriginURL } from '../support/isolated-realm-server.ts';
 import {
   createRealm,
@@ -12,10 +12,11 @@ import {
 } from '../helpers/index.ts';
 
 // The secure window's key pages, driven in a real browser against the real
-// realm server: entering a key for a card's operation, the key page, sharing
-// a key into a realm, swapping one into a suspended share, and the window
-// going inert when the user signs out of the app while it is open. Each step
-// is attached as a screenshot.
+// realm server: the key page, entering a key for a card's operation, sharing
+// a key into a realm from the key page and from a realm, sharing a key in
+// place of a suspended share, and the window having no session. The key
+// pages never sign in; the window's session is the one Boxel's own sign-in on
+// the secure origin leaves there. Each state is attached as a screenshot.
 
 const STORAGE_KEY = 'boxel-secure-session';
 const serverIndexUrl = new URL(appURL).origin;
@@ -71,7 +72,7 @@ async function openFromApp(page: Page, url: string): Promise<Page> {
 // A page of the secure origin the user opens themselves. Script can't close
 // such a window, so its last page stays to be seen.
 async function openDirectly(
-  context: { newPage(): Promise<Page> },
+  context: BrowserContext,
   url: string,
 ): Promise<Page> {
   let secure = await context.newPage();
@@ -80,10 +81,21 @@ async function openDirectly(
   return secure;
 }
 
-async function signIn(secure: Page, username: string, password: string) {
-  await secure.locator('[data-test-secure-username]').fill(username);
-  await secure.locator('[data-test-secure-password]').fill(password);
-  await secure.locator('[data-test-secure-password-submit]').click();
+// Boxel's own sign-in on the secure origin, which leaves the window its
+// session there.
+async function signInToBoxel(
+  context: BrowserContext,
+  username: string,
+  password: string,
+) {
+  let page = await openDirectly(context, `${secureOriginURL}?mode=sign-in`);
+  await page.locator('[data-test-secure-username]').fill(username);
+  await page.locator('[data-test-secure-password]').fill(password);
+  await page.locator('[data-test-secure-password-submit]').click();
+  await expect(page.locator('[data-test-secure-signed-in]')).toBeVisible({
+    timeout: 60_000,
+  });
+  await page.close();
 }
 
 // Keeps a window open once its change is made, so the page it ends on can be
@@ -128,6 +140,15 @@ async function ticket(secure: Page, attributes: Record<string, unknown>) {
   return response.body.data.attributes.ticket as string;
 }
 
+// Adds a key on the key page, which comes back to the key page.
+async function addKeyOnKeyPage(keys: Page, name: string, value: string) {
+  await keys.locator('[data-test-key-page-add]').click();
+  await keys.locator('[data-test-key-name]').fill(name);
+  await keys.locator('[data-test-key-value]').fill(value);
+  await keys.locator('[data-test-enter-key-save]').click();
+  await expect(keys.locator(`[data-test-key-row="${name}"]`)).toBeVisible();
+}
+
 // A user signed in to the app with a realm of their own holding a card whose
 // operation sends the user's own key to `api.weather.co.uk`.
 async function userWithWeatherCard(page: Page, prefix: string) {
@@ -153,6 +174,64 @@ async function secondUser(browser: Browser, prefix: string) {
 }
 
 test.describe('the secure window’s key pages', () => {
+  test('without a session, the window says to sign in to Boxel and offers no sign-in of its own', async ({
+    page,
+  }, testInfo) => {
+    let secure = await openDirectly(page.context(), keysURL('keys'));
+    await expect(secure.locator('[data-test-keys-heading]')).toHaveText(
+      'You’re not signed in',
+    );
+    await expect(secure.locator('input')).toHaveCount(0);
+    await snapshot(testInfo, secure, 'no session: the window says to sign in');
+  });
+
+  test('the key page: add, replace and delete a key', async ({
+    page,
+  }, testInfo) => {
+    let { username, password } = await createSubscribedUserAndLogin(
+      page,
+      'keys-page',
+      serverIndexUrl,
+    );
+    await signInToBoxel(page.context(), username, password);
+    let keys = await openDirectly(page.context(), keysURL('keys'));
+    await expect(keys.locator('[data-test-key-list-empty]')).toBeVisible({
+      timeout: 60_000,
+    });
+    await snapshot(testInfo, keys, 'your keys: none yet');
+
+    await keys.locator('[data-test-key-page-add]').click();
+    await keys.locator('[data-test-key-name]').fill('Weather service');
+    await keys.locator('[data-test-key-value]').fill('sk-weather-secret');
+    await expect(keys.locator('[data-test-key-value]')).toHaveAttribute(
+      'type',
+      'password',
+    );
+    await snapshot(testInfo, keys, 'add a key: the key typed in, masked');
+    await keys.locator('[data-test-enter-key-save]').click();
+    await addKeyOnKeyPage(keys, 'Maps', 'sk-maps');
+    expect(await keys.content()).not.toContain('sk-weather-secret');
+    await snapshot(testInfo, keys, 'your keys');
+
+    await keys
+      .locator('[data-test-key-row="Maps"] [data-test-key-replace]')
+      .click();
+    await keys.locator('[data-test-key-value]').fill('sk-maps-new');
+    await snapshot(testInfo, keys, 'your keys: replacing a key');
+    await keys.locator('[data-test-key-replace-save]').click();
+    await expect(keys.locator('[data-test-key-replace-form]')).toHaveCount(0);
+
+    await keys
+      .locator('[data-test-key-row="Maps"] [data-test-key-delete]')
+      .click();
+    await expect(
+      keys.locator('[data-test-key-delete-confirm-button]'),
+    ).toBeEnabled();
+    await snapshot(testInfo, keys, 'your keys: deleting a key');
+    await keys.locator('[data-test-key-delete-confirm-button]').click();
+    await expect(keys.locator('[data-test-key-row="Maps"]')).toHaveCount(0);
+  });
+
   test('enters a key for a card’s operation, then closes, and the app page can’t reach it', async ({
     page,
   }, testInfo) => {
@@ -160,6 +239,7 @@ test.describe('the secure window’s key pages', () => {
       page,
       'keys-enter',
     );
+    await signInToBoxel(page.context(), username, password);
 
     let secure = await openFromApp(
       page,
@@ -169,13 +249,6 @@ test.describe('the secure window’s key pages', () => {
         reason: 'Forecasts need your weather service key',
       }),
     );
-    // Signed out on this origin, the window signs in first.
-    await expect(secure.locator('[data-test-secure-sign-in-title]')).toHaveText(
-      'Sign in to manage your keys',
-    );
-    await snapshot(testInfo, secure, 'enter a key 1: signed out, signing in');
-
-    await signIn(secure, username, password);
     await expect(secure.locator('[data-test-enter-key]')).toBeVisible({
       timeout: 60_000,
     });
@@ -202,15 +275,13 @@ test.describe('the secure window’s key pages', () => {
     await expect(secure.locator('[data-test-opened-for-reason]')).toContainText(
       'Forecasts need your weather service key',
     );
-    await snapshot(testInfo, secure, 'enter a key 2: signed in, the key form');
-
     await secure.locator('[data-test-key-name]').fill('Weather service');
     await secure.locator('[data-test-key-value]').fill('sk-weather-secret');
-    await expect(secure.locator('[data-test-key-value]')).toHaveAttribute(
-      'type',
-      'password',
+    await snapshot(
+      testInfo,
+      secure,
+      'enter a key for a card’s operation: what it is for, and the key',
     );
-    await snapshot(testInfo, secure, 'enter a key 3: the key typed in, masked');
 
     let token = JSON.parse(
       (await secure.evaluate((key) => localStorage.getItem(key), STORAGE_KEY))!,
@@ -229,21 +300,7 @@ test.describe('the secure window’s key pages', () => {
       appStorage.some((value) => value.includes('sk-weather-secret')),
     ).toBe(false);
 
-    // The key is the user's now: on the key page, by name, with no value.
-    let keys = await openDirectly(page.context(), keysURL('keys'));
-    await expect(
-      keys.locator('[data-test-key-row="Weather service"]'),
-    ).toBeVisible();
-    expect(await keys.content()).not.toContain('sk-weather-secret');
-    await snapshot(testInfo, keys, 'the key page');
-
     // A window the user opened themselves stays on what it did.
-    await keys.locator('[data-test-key-page-add]').click();
-    await keys.locator('[data-test-key-name]').fill('Maps');
-    await keys.locator('[data-test-key-value]').fill('sk-maps');
-    await keys.locator('[data-test-enter-key-save]').click();
-    await expect(keys.locator('[data-test-key-row="Maps"]')).toBeVisible();
-
     let done = await openDirectly(page.context(), keysURL('enter-key'));
     await keepOpen(done);
     await done.locator('[data-test-key-name]').fill('Geocoding');
@@ -252,7 +309,7 @@ test.describe('the secure window’s key pages', () => {
     await expect(done.locator('[data-test-keys-done-name]')).toHaveText(
       'Geocoding',
     );
-    await snapshot(testInfo, done, 'enter a key 4: done');
+    await snapshot(testInfo, done, 'enter a key: done');
   });
 
   test('a card in the app page can’t read the window it opened', async ({
@@ -263,13 +320,13 @@ test.describe('the secure window’s key pages', () => {
       'keys-isolation',
       serverIndexUrl,
     );
+    await signInToBoxel(page.context(), username, password);
     let opened = page.context().waitForEvent('page');
     // Even opened with a handle, as card code could open it.
     await page.evaluate((url) => {
       (window as any).__secureWindow = window.open(url, '_blank');
     }, keysURL('keys'));
     let secure = await opened;
-    await signIn(secure, username, password);
     await expect(secure.locator('[data-test-key-page]')).toBeVisible({
       timeout: 60_000,
     });
@@ -305,8 +362,8 @@ test.describe('the secure window’s key pages', () => {
       'keys-tickets',
       serverIndexUrl,
     );
+    await signInToBoxel(page.context(), username, password);
     let secure = await openDirectly(page.context(), keysURL('keys'));
-    await signIn(secure, username, password);
     await expect(secure.locator('[data-test-key-page]')).toBeVisible({
       timeout: 60_000,
     });
@@ -368,7 +425,7 @@ test.describe('the secure window’s key pages', () => {
     ).toBe(204);
   });
 
-  test('shares a key into a realm; a reader who isn’t a writer is told an administrator must set it up', async ({
+  test('shares a key from the key page into a realm the user writes; a reader opened for that realm is told an administrator must set it up', async ({
     page,
     browser,
   }, testInfo) => {
@@ -376,36 +433,40 @@ test.describe('the secure window’s key pages', () => {
       page,
       'keys-share',
     );
+    await signInToBoxel(page.context(), username, password);
 
-    let secure = await openDirectly(
-      page.context(),
-      keysURL('share-key', { realm: realmURL }),
-    );
-    await snapshot(testInfo, secure, 'share a key 1: signed out');
-    await signIn(secure, username, password);
-    await expect(secure.locator('[data-test-share-key]')).toBeVisible({
+    let keys = await openDirectly(page.context(), keysURL('keys'));
+    await expect(keys.locator('[data-test-key-page]')).toBeVisible({
       timeout: 60_000,
     });
-    await expect(secure.locator('[data-test-opened-for-realm]')).toHaveText(
-      realmName,
+    await addKeyOnKeyPage(keys, 'Team weather', 'sk-team-weather');
+    await keys
+      .locator('[data-test-key-row="Team weather"] [data-test-key-share]')
+      .click();
+    await expect(keys.locator('[data-test-share-key-key]')).toContainText(
+      'Team weather',
     );
-    // No keys yet: the window offers to add one and share it.
-    await expect(secure.locator('[data-test-key-picker-new]')).toBeVisible();
-    await secure.locator('[data-test-key-name]').fill('Team weather');
-    await secure.locator('[data-test-key-value]').fill('sk-team-weather');
-    await secure
-      .locator('[data-test-share-label]')
-      .fill('Weather for everyone');
-    await snapshot(testInfo, secure, 'share a key 2: a new key, shared as');
-    await keepOpen(secure);
-    await secure.locator('[data-test-share-key-save]').click();
-    await expect(secure.locator('[data-test-keys-done-label]')).toHaveText(
+    await expect(keys.locator('[data-test-key-value]')).toHaveCount(0);
+    await keys.locator('[data-test-workspace-dropdown-trigger]').click();
+    await keys
+      .locator('[data-test-workspace-dropdown-search]')
+      .fill(realmName.slice(0, 8));
+    await snapshot(
+      testInfo,
+      keys,
+      'share a key from your keys: choosing the workspace',
+    );
+    await keys.locator(`[data-test-workspace-option="${realmName}"]`).click();
+    await keys.locator('[data-test-share-label]').fill('Weather for everyone');
+    await snapshot(testInfo, keys, 'share a key from your keys');
+    await keys.locator('[data-test-share-key-save]').click();
+    await expect(keys.locator('[data-test-keys-done-label]')).toHaveText(
       'Weather for everyone',
     );
-    await snapshot(testInfo, secure, 'share a key 3: done');
+    await snapshot(testInfo, keys, 'share a key: done');
 
     let shares = await asWindow(
-      secure,
+      keys,
       `_key-shares?realm=${encodeURIComponent(realmURL)}`,
     );
     expect(shares.status).toBe(200);
@@ -416,17 +477,32 @@ test.describe('the secure window’s key pages', () => {
       ]),
     ).toEqual([['Weather for everyone', 'active']]);
 
+    // Opened for the realm, the owner picks one of their keys.
+    let forRealm = await openDirectly(
+      page.context(),
+      keysURL('share-key', { realm: realmURL }),
+    );
+    await expect(forRealm.locator('[data-test-opened-for-realm]')).toHaveText(
+      realmName,
+      { timeout: 60_000 },
+    );
+    await forRealm
+      .locator('[data-test-key-choice="Team weather"] input')
+      .click();
+    await forRealm.locator('[data-test-share-label]').fill('Second weather');
+    await snapshot(testInfo, forRealm, 'share a key, opened for a workspace');
+
     // A reader of the realm who doesn't write it.
     let reader = await secondUser(browser, 'keys-reader');
     await getSharedSQLExecutor().executeSQL(
       `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
        VALUES ('${realmURL}', '${reader.credentials.userId}', true, false, false)`,
     );
+    await signInToBoxel(reader.context, reader.username, reader.password);
     let readerWindow = await openDirectly(
       reader.context,
       keysURL('share-key', { realm: realmURL }),
     );
-    await signIn(readerWindow, reader.username, reader.password);
     await expect(
       readerWindow.locator('[data-test-keys-needs-admin] h1'),
     ).toHaveText('An administrator of this realm needs to set this up', {
@@ -436,36 +512,45 @@ test.describe('the secure window’s key pages', () => {
     await snapshot(
       testInfo,
       readerWindow,
-      'share a key 4: a reader who isn’t a writer',
+      'share a key: a reader who isn’t a writer',
     );
     await reader.context.close();
   });
 
-  test('a writer swaps a key of their own into a share suspended when its owner lost write', async ({
+  test('a writer shares a key of their own in place of a share suspended when its owner lost write', async ({
     page,
     browser,
   }, testInfo) => {
     let owner = await userWithWeatherCard(page, 'keys-swap-owner');
-    let ownerWindow = await openDirectly(
-      page.context(),
-      keysURL('share-key', { realm: owner.realmURL }),
-    );
-    await signIn(ownerWindow, owner.username, owner.password);
-    await expect(ownerWindow.locator('[data-test-share-key]')).toBeVisible({
+    await signInToBoxel(page.context(), owner.username, owner.password);
+    let ownerKeys = await openDirectly(page.context(), keysURL('keys'));
+    await expect(ownerKeys.locator('[data-test-key-page]')).toBeVisible({
       timeout: 60_000,
     });
-    await ownerWindow.locator('[data-test-key-name]').fill('Owner weather');
-    await ownerWindow.locator('[data-test-key-value]').fill('sk-owner');
-    await ownerWindow.locator('[data-test-share-label]').fill('Weather');
-    await keepOpen(ownerWindow);
-    await ownerWindow.locator('[data-test-share-key-save]').click();
-    await expect(ownerWindow.locator('[data-test-keys-done]')).toBeVisible();
-    let [share] = (
-      await asWindow(
-        ownerWindow,
-        `_key-shares?realm=${encodeURIComponent(owner.realmURL)}`,
-      )
-    ).body.data;
+    await addKeyOnKeyPage(ownerKeys, 'Owner weather', 'sk-owner');
+    let [ownerKey] = (await asWindow(ownerKeys, '_user-keys')).body.data;
+    let shared = await asWindow(ownerKeys, '_key-shares', {
+      method: 'POST',
+      body: {
+        data: {
+          type: 'key-share',
+          attributes: {
+            realm: owner.realmURL,
+            keyId: ownerKey.id,
+            label: 'Weather',
+          },
+        },
+        meta: {
+          ticket: await ticket(ownerKeys, {
+            action: 'share',
+            keyId: ownerKey.id,
+            realm: owner.realmURL,
+          }),
+        },
+      },
+    });
+    expect(shared.status, JSON.stringify(shared.body)).toBe(201);
+    let share = shared.body.data;
 
     // Another writer of the realm, then the owner loses write, which
     // suspends the share.
@@ -481,11 +566,17 @@ test.describe('the secure window’s key pages', () => {
           AND username = '${owner.credentials.userId}'`,
     );
 
+    await signInToBoxel(writer.context, writer.username, writer.password);
+    let writerKeys = await openDirectly(writer.context, keysURL('keys'));
+    await expect(writerKeys.locator('[data-test-key-page]')).toBeVisible({
+      timeout: 60_000,
+    });
+    await addKeyOnKeyPage(writerKeys, 'Writer weather', 'sk-writer');
+
     let swap = await openDirectly(
       writer.context,
       keysURL('swap-key', { realm: owner.realmURL, share: share.id }),
     );
-    await signIn(swap, writer.username, writer.password);
     await expect(swap.locator('[data-test-swap-key]')).toBeVisible({
       timeout: 60_000,
     });
@@ -495,15 +586,25 @@ test.describe('the secure window’s key pages', () => {
     await expect(swap.locator('[data-test-swap-share]')).toContainText(
       'can no longer edit this workspace',
     );
-    await swap.locator('[data-test-key-name]').fill('Writer weather');
-    await swap.locator('[data-test-key-value]').fill('sk-writer');
-    await snapshot(testInfo, swap, 'swap a key 1: a suspended share');
+    await expect(swap.locator('[data-test-key-value]')).toHaveCount(0);
+    await snapshot(
+      testInfo,
+      swap,
+      'share your key in place of one that stopped working',
+    );
     await keepOpen(swap);
     await swap.locator('[data-test-swap-key-save]').click();
     await expect(swap.locator('[data-test-keys-done-label]')).toHaveText(
       'Weather',
     );
-    await snapshot(testInfo, swap, 'swap a key 2: done');
+    await expect(swap.locator('[data-test-keys-heading]')).toHaveText(
+      'Key shared',
+    );
+    await snapshot(
+      testInfo,
+      swap,
+      'share your key in place of one that stopped working: done',
+    );
 
     let after = await asWindow(
       swap,
@@ -527,8 +628,8 @@ test.describe('the secure window’s key pages', () => {
       'keys-inert',
       serverIndexUrl,
     );
+    await signInToBoxel(page.context(), username, password);
     let secure = await openFromApp(page, keysURL('keys'));
-    await signIn(secure, username, password);
     await expect(secure.locator('[data-test-key-page]')).toBeVisible({
       timeout: 60_000,
     });
@@ -545,9 +646,10 @@ test.describe('the secure window’s key pages', () => {
         timeout: 1000,
       });
     }).toPass({ timeout: 30_000 });
-    await expect(secure.locator('[data-test-secure-sign-in-form]')).toHaveCount(
-      0,
+    await expect(secure.locator('[data-test-keys-heading]')).toHaveText(
+      'You’re signed out',
     );
-    await snapshot(testInfo, secure, 'signed out of the app: the window stops');
+    await expect(secure.locator('input')).toHaveCount(0);
+    await snapshot(testInfo, secure, 'signed out while open: the window stops');
   });
 });

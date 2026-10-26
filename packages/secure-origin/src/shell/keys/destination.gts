@@ -6,12 +6,7 @@
 // stands in for the host.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-export interface DestinationDisplay {
-  href: string;
-  host: string;
-  path: string;
-  registrableDomain: string;
-}
+import type { DestinationDisplay } from '../../security/keys.ts';
 
 interface Signature {
   Args: {
@@ -45,20 +40,22 @@ const Destination: TemplateOnlyComponent<Signature> = <template>
 
   <style scoped>
     .destination {
-      padding: var(--boxel-sp);
-      border: 1px solid var(--panel-border);
-      border-radius: var(--boxel-border-radius-lg);
-      background-color: var(--panel-background);
+      padding: var(--boxel-sp-sm) var(--boxel-sp);
+      border-radius: var(--boxel-border-radius);
+      background-color: var(--card, var(--background));
+      box-shadow: 0 0 0 1px var(--border);
       overflow-wrap: anywhere;
     }
     .domain {
-      font: 600 var(--boxel-font-xl);
-      line-height: 1.2;
+      font-size: var(--boxel-font-size-xl);
+      line-height: var(--boxel-line-height-xl);
+      font-weight: 600;
     }
     .where {
       margin-top: var(--boxel-sp-4xs);
-      font: var(--boxel-font-sm);
       font-family: var(--boxel-monospace-font-family);
+      font-size: var(--boxel-font-size-sm);
+      line-height: var(--boxel-line-height-sm);
     }
     .method {
       font-weight: 600;
@@ -66,7 +63,8 @@ const Destination: TemplateOnlyComponent<Signature> = <template>
     }
     .from {
       margin-top: var(--boxel-sp-xs);
-      font: var(--boxel-font-xs);
+      font-size: var(--boxel-font-size-xs);
+      line-height: var(--boxel-line-height-xs);
       color: var(--muted-foreground);
     }
     .name {

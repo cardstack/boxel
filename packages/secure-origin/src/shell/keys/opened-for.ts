@@ -13,6 +13,10 @@
 //   #card=<card URL>&operation=<name>
 //   #module=<module URL>&name=<export>&realm=<realm URL>&operation=<name>
 //   …&reason=<text>
+//   #key=<key id>, for a share started from the key page
+//
+// A realm, card or module is a URL or a prefix-form id (`@cardstack/…`);
+// which it names is the realm server's to decide.
 
 export type OpenedForTarget =
   | { kind: 'instance'; url: string }
@@ -20,6 +24,7 @@ export type OpenedForTarget =
 
 export interface OpenedFor {
   realm?: string;
+  key?: string;
   share?: string;
   target?: OpenedForTarget;
   operation?: string;
@@ -28,8 +33,8 @@ export interface OpenedFor {
 
 export const MAX_REASON_LENGTH = 200;
 
-// A query parameter naming the key page to go back to once a change is made,
-// for a page reached from the key page rather than opened for something. A
+// A query parameter naming the key page to go back to once a key is added,
+// for an enter-key page reached from it rather than opened for something. A
 // plain value, never a URL.
 export const RETURN_PARAM = 'then';
 
@@ -39,9 +44,13 @@ export function returnsToKeyPage(search: string = window.location.search) {
   return new URLSearchParams(search).get(RETURN_PARAM) === 'keys';
 }
 
+// A name for a realm, card or module: an http(s) URL, or a prefix-form id.
 function url(value: string | null): string | undefined {
   if (!value) {
     return undefined;
+  }
+  if (value.startsWith('@')) {
+    return value;
   }
   try {
     let parsed = new URL(value);
@@ -87,6 +96,10 @@ export function openedFor(hash: string = window.location.hash): OpenedFor {
   let share = params.get('share');
   if (share) {
     result.share = share;
+  }
+  let key = params.get('key');
+  if (key) {
+    result.key = key;
   }
   if (target) {
     result.target = target;

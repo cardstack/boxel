@@ -1,7 +1,8 @@
-// The `swap-key` mode: one of the user's own keys, or a new one entered here,
-// put into a realm's suspended share, which then resumes under the same label
-// with the user as its owner, so the cards using it keep working unchanged.
-// Only a direct writer of the realm may swap a key in; anyone else is told an
+// The `swap-key` mode: one of the user's own keys put into a realm's suspended
+// share, which then resumes under the same label with the user as its owner,
+// so the cards using it keep working unchanged. Only a key the user already
+// has goes in: adding one is a change of its own, made on the key page. Only a
+// direct writer of the realm may swap a key in; anyone else is told an
 // administrator needs to set it up.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
@@ -9,20 +10,25 @@ import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
 import {
-  addKey,
   listKeys,
   realmShares,
   swapKey,
   windowContext,
-} from '../../security/keys.js';
-import AuthButton from '../../components/auth-button.gts';
+} from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
+import Button from '../../components/button.gts';
+import FieldContainer from '../../components/field-container.gts';
+import Tag from '../../components/icons/tag.gts';
+import { navigation } from '../navigation.js';
+import { modeURL } from '../urls.js';
 
-import { failureMessage, isSignedOut } from './context.ts';
+import { failureMessage, isNotFound, isSignedOut } from './context.ts';
 import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
-import KeyPicker, { NEW_KEY } from './key-picker.gts';
+import EditPage from './edit-page.gts';
+import KeyPicker from './key-picker.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
+import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import NotFound from './not-found.gts';
 import OpenedForSummary from './opened-for-summary.gts';
@@ -31,6 +37,7 @@ import { openedFor } from './opened-for.ts';
 type State =
   | { name: 'loading' }
   | { name: 'not-found' }
+  | { name: 'load-failed'; message: string }
   | { name: 'needs-admin'; context: WindowContext }
   | { name: 'active'; context: WindowContext; share: KeyShare }
   | { name: 'choosing'; context: WindowContext; share: KeyShare }
@@ -47,21 +54,22 @@ const SUSPENDED_BECAUSE: Record<string, string> = {
 class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   <template>
     {{#if this.loading}}
-      <BusyMessage @title='Loading…' />
+      <BusyMessage class='busy' @title='Loading…' />
     {{else if this.notFound}}
       <NotFound />
+    {{else if this.loadFailed}}
+      <LoadFailed @message={{this.loadFailed.message}} @onRetry={{this.load}} />
     {{else if this.needsAdmin}}
       <NeedsAdmin @realm={{this.needsAdmin.context.realm.name}} />
     {{else if this.active}}
-      <section data-test-swap-key-active>
-        <h1 class='heading'>This shared key is working</h1>
-        <p class='info'><strong>{{this.active.share.label}}</strong>
+      <EditPage @heading='This shared key is working' data-test-swap-key-active>
+        <:intro><strong>{{this.active.share.label}}</strong>
           in
           <strong>{{this.active.context.realm.name}}</strong>
-          isn’t suspended, so there is nothing to replace.</p>
-      </section>
+          isn’t suspended, so there is nothing to replace.</:intro>
+      </EditPage>
     {{else if this.done}}
-      <DonePage @heading='Key swapped in' @onClose={{@api.close}}>
+      <DonePage @heading='Key shared' @onClose={{@api.close}}>
         <strong data-test-keys-done-label>{{this.done.share.label}}</strong>
         in
         <strong>{{this.done.context.realm.name}}</strong>
@@ -69,82 +77,90 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         <strong>{{this.done.key}}</strong>, and works again.
       </DonePage>
     {{else if this.choosing}}
-      <h1 class='heading' data-test-swap-key>Use your key for a shared key</h1>
-      <OpenedForSummary
-        @context={{this.choosing.context}}
-        @reason={{this.opened.reason}}
-      />
-      <div class='share' data-test-swap-share>
-        <div class='share-label' data-test-swap-share-label>
-          {{this.choosing.share.label}}
-        </div>
-        <div class='share-state'>Suspended.
-          {{this.suspendedBecause}}</div>
-      </div>
-      <p class='info'>Put one of your own keys in its place and it works again
-        under the same name, with you as the one sharing it.</p>
       <form novalidate {{on 'submit' this.save}} data-test-swap-key-form>
-        <KeyPicker
-          @keys={{this.form.keys}}
-          @selected={{this.form.selected}}
-          @onSelect={{this.select}}
-          @name={{this.form.name}}
-          @value={{this.form.value}}
-          @onName={{this.setName}}
-          @onValue={{this.setValue}}
-        />
-        {{#if this.form.error}}
-          <div class='error' role='alert' data-test-keys-error>
-            {{this.form.error}}
-          </div>
-        {{/if}}
-        <AuthButton
-          class='submit'
-          type='submit'
-          @variant='primary'
-          @disabled={{this.submitDisabled}}
-          @loading={{this.form.saving}}
-          data-test-swap-key-save
-        >Use this key</AuthButton>
+        <EditPage
+          @heading='Share your key in place of one that stopped working'
+          data-test-swap-key
+        >
+          <:intro>This shared key stopped working. Share one of your own keys in
+            its place, and the cards that use it work again under the same name.
+            You become the person sharing it.</:intro>
+          <:default>
+            <OpenedForSummary
+              @context={{this.choosing.context}}
+              @reason={{this.opened.reason}}
+            />
+            <FieldContainer
+              @tag='div'
+              @label='Shared key'
+              @icon={{Tag}}
+              data-test-swap-share
+            >
+              <div class='share'>
+                <div class='share-label' data-test-swap-share-label>
+                  {{this.choosing.share.label}}
+                </div>
+                <div class='share-state'>Suspended.
+                  {{this.suspendedBecause}}</div>
+              </div>
+            </FieldContainer>
+            <KeyPicker
+              @keys={{this.form.keys}}
+              @selected={{this.form.selected}}
+              @onSelect={{this.select}}
+              @onGoToKeys={{this.goToKeys}}
+            />
+            {{#if this.form.error}}
+              <div class='error' role='alert' data-test-keys-error>
+                {{this.form.error}}
+              </div>
+            {{/if}}
+          </:default>
+          <:actions>
+            <Button
+              type='submit'
+              @kind='primary'
+              @disabled={{this.submitDisabled}}
+              @loading={{this.form.saving}}
+              data-test-swap-key-save
+            >Share this key</Button>
+          </:actions>
+        </EditPage>
       </form>
     {{/if}}
 
     <style scoped>
-      .heading {
-        font: 600 var(--boxel-font-md);
-        margin: 0 0 var(--boxel-sp);
+      form {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
       }
-      .info {
-        margin: 0;
-        letter-spacing: var(--boxel-lsp);
-        line-height: 20px;
-        color: var(--muted-foreground);
-        overflow-wrap: anywhere;
+      .busy {
+        margin-top: var(--boxel-sp-xl);
       }
       .share {
-        margin-bottom: var(--boxel-sp);
-        padding: var(--boxel-sp-sm) var(--boxel-sp);
-        border: 1px solid var(--panel-border);
-        border-radius: var(--boxel-border-radius-lg);
-        background-color: var(--panel-background);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--card, var(--background));
+        box-shadow: 0 0 0 1px var(--border);
         overflow-wrap: anywhere;
       }
       .share-label {
-        font: 600 var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        font-weight: 600;
       }
       .share-state {
         margin-top: var(--boxel-sp-4xs);
-        font: var(--boxel-font-xs);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         color: var(--muted-foreground);
       }
       .error {
         color: var(--destructive-ink, var(--boxel-danger));
-        font: 500 var(--boxel-font-xs);
-        margin-top: var(--boxel-sp-xs);
-      }
-      .submit {
-        margin-top: var(--boxel-sp-lg);
-        width: 100%;
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        font-weight: 500;
       }
     </style>
   </template>
@@ -156,8 +172,6 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   private form = trackedObject({
     keys: [] as UserKey[],
     selected: undefined as string | undefined,
-    name: '',
-    value: '',
     saving: false,
     error: undefined as string | undefined,
   });
@@ -172,6 +186,9 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   }
   private get notFound() {
     return this.page.state.name === 'not-found';
+  }
+  private get loadFailed() {
+    return this.page.state.name === 'load-failed' ? this.page.state : undefined;
   }
   private get needsAdmin() {
     return this.page.state.name === 'needs-admin' ? this.page.state : undefined;
@@ -191,22 +208,23 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     return (reason && SUSPENDED_BECAUSE[reason]) ?? '';
   }
 
-  private async load() {
+  private load = async () => {
     let { realm, share: shareId } = this.opened;
     if (!realm || !shareId) {
       this.page.state = { name: 'not-found' };
       return;
     }
+    this.page.state = { name: 'loading' };
     let { config } = this.args.api;
     try {
-      let context = (await windowContext(config, { realm })) as WindowContext;
+      let context = await windowContext(config, { realm });
       if (!context.realm.directWriter) {
         this.page.state = { name: 'needs-admin', context };
         return;
       }
-      let share = (
-        (await realmShares(config, context.realm.url)) as KeyShare[]
-      ).find((s) => s.id === shareId);
+      let share = (await realmShares(config, context.realm.url)).find(
+        (s) => s.id === shareId,
+      );
       if (!share) {
         this.page.state = { name: 'not-found' };
         return;
@@ -215,25 +233,25 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         this.page.state = { name: 'active', context, share };
         return;
       }
-      let keys = (await listKeys(config)) as UserKey[];
+      let keys = await listKeys(config);
       this.form.keys = keys;
+      let offered = keys.find((k) => k.id === this.opened.key)?.id;
       this.form.selected =
-        keys.length === 1 ? keys[0].id : keys.length ? undefined : NEW_KEY;
+        offered ?? (keys.length === 1 ? keys[0].id : undefined);
       this.page.state = { name: 'choosing', context, share };
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
-        return;
+      } else if (isNotFound(e)) {
+        this.page.state = { name: 'not-found' };
+      } else {
+        this.page.state = { name: 'load-failed', message: failureMessage(e) };
       }
-      this.page.state = { name: 'not-found' };
     }
-  }
+  };
 
   private get submitDisabled() {
-    let { selected, name, value, saving } = this.form;
-    return (
-      saving || !selected || (selected === NEW_KEY && (!name.trim() || !value))
-    );
+    return this.form.saving || !this.form.selected;
   }
 
   private select = (selected: string) => {
@@ -241,49 +259,27 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.error = undefined;
   };
 
-  private setName = (value: string) => {
-    this.form.name = value;
-    this.form.error = undefined;
-  };
-
-  private setValue = (value: string) => {
-    this.form.value = value;
-    this.form.error = undefined;
-  };
+  private goToKeys = () => navigation.replace(modeURL('keys'));
 
   private save = async (event: Event) => {
     event.preventDefault();
     let choosing = this.choosing;
-    if (this.submitDisabled || !choosing) {
+    let keyId = this.form.selected;
+    if (this.submitDisabled || !choosing || !keyId) {
       return;
     }
-    let { config } = this.args.api;
     this.form.saving = true;
     this.form.error = undefined;
     try {
-      let keyId = this.form.selected!;
-      let keyName =
-        this.form.keys.find((k) => k.id === keyId)?.name ?? this.form.name;
-      if (keyId === NEW_KEY) {
-        let key = (await addKey(config, {
-          name: this.form.name.trim(),
-          value: this.form.value,
-        })) as UserKey;
-        this.form.value = '';
-        this.form.keys = [...this.form.keys, key];
-        this.form.selected = key.id;
-        keyId = key.id;
-        keyName = key.name;
-      }
-      let share = (await swapKey(config, {
+      let share = await swapKey(this.args.api.config, {
         keyId,
         shareId: choosing.share.id,
-      })) as KeyShare;
+      });
       this.page.state = {
         name: 'done',
         context: choosing.context,
         share,
-        key: keyName,
+        key: this.form.keys.find((k) => k.id === keyId)?.name ?? '',
       };
       this.args.api.close();
     } catch (e) {

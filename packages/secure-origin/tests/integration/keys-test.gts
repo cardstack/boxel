@@ -3,6 +3,7 @@ import {
   fillIn,
   render,
   settled,
+  triggerKeyEvent,
   waitFor,
   waitUntil,
 } from '@ember/test-helpers';
@@ -14,7 +15,7 @@ import { navigation } from '../../src/shell/navigation.js';
 import EnterKeyPage from '../../src/shell/keys/enter-key-page.gts';
 import KeyPage from '../../src/shell/keys/key-page.gts';
 import { openedFor } from '../../src/shell/keys/opened-for.ts';
-import ShareKeyPage from '../../src/shell/keys/share-key-page.gts';
+import SharePage from '../../src/shell/keys/share-key-page.gts';
 import SwapKeyPage from '../../src/shell/keys/swap-key-page.gts';
 
 // The key pages, against a realm server that answers the requests they make.
@@ -113,8 +114,19 @@ module('Integration | key pages', function (hooks) {
       .map((r) => r.body.data.attributes);
   }
 
-  hooks.beforeEach(function () {
+  // Each test sets the page's address once, and the module puts it back once
+  // at the end: Chrome ignores history.replaceState past about 100 calls in
+  // ten seconds, and a suite that spent its allowance would leave the next
+  // module's addresses unset.
+  hooks.before(function () {
     originalURL = window.location.href;
+  });
+
+  hooks.after(function () {
+    history.replaceState(null, '', originalURL);
+  });
+
+  hooks.beforeEach(function () {
     requests = [];
     tickets = 0;
     navigations = [];
@@ -171,7 +183,6 @@ module('Integration | key pages', function (hooks) {
     meta.remove();
     forgetSession();
     sessionStorage.clear();
-    history.replaceState(null, '', originalURL);
   });
 
   module('what a page was opened for', function () {
@@ -202,9 +213,20 @@ module('Integration | key pages', function (hooks) {
         },
       );
       assert.deepEqual(
+        openedFor(
+          `#card=${encodeURIComponent('@cardstack/catalog/weather/today')}&operation=forecast`,
+        ),
+        {
+          target: { kind: 'instance', url: '@cardstack/catalog/weather/today' },
+          operation: 'forecast',
+        },
+        'a prefix-form id is passed on for the server to resolve',
+      );
+      assert.deepEqual(openedFor('#key=key-2'), { key: 'key-2' });
+      assert.deepEqual(
         openedFor('#realm=javascript%3Aalert(1)&card=data%3Atext%2Fhtml,x'),
         {},
-        'only http(s) URLs name anything',
+        'only http(s) URLs and prefix-form ids name anything',
       );
       let long = openedFor(`#reason=${'a'.repeat(500)}`).reason!;
       assert.strictEqual([...long].length, 200, 'a reason is one short line');
@@ -213,24 +235,21 @@ module('Integration | key pages', function (hooks) {
   });
 
   module('the window', function () {
-    test('opened signed out, signs in first, then shows its page', async function (assert) {
+    test('opened without a session, says to sign in to Boxel, and offers no sign-in of its own', async function (assert) {
       forgetSession();
-      serve({
-        'POST _secure-session': () =>
-          json(201, { data: { attributes: SESSION } }),
-      });
       visitShell('?mode=keys');
       await render(KeyPage);
-      await waitFor('[data-test-secure-sign-in-form]');
+      await waitFor('[data-test-keys-signed-out]');
+      assert.dom('[data-test-keys-heading]').hasText('You’re not signed in');
       assert
-        .dom('[data-test-secure-sign-in-title]')
-        .hasText('Sign in to manage your keys');
+        .dom('[data-test-keys-signed-out]')
+        .includesText('Sign in to Boxel in the Boxel window you opened this');
+      assert.dom('input').doesNotExist('nothing to type');
       assert.dom('[data-test-key-page]').doesNotExist();
-      await fillIn('[data-test-secure-username]', 'someone');
-      await fillIn('[data-test-secure-password]', 'the-password');
-      await click('[data-test-secure-password-submit]');
-      await waitFor('[data-test-key-row="Weather service"]');
-      assert.dom('[data-test-key-page]').hasText('Your keys');
+      assert.false(
+        requests.some((r) => r.path === '_user-keys'),
+        'nothing is asked for',
+      );
     });
 
     test('signed out while open, stops and offers no sign-in of its own', async function (assert) {
@@ -245,11 +264,9 @@ module('Integration | key pages', function (hooks) {
         new StorageEvent('storage', { key: 'boxel-secure-session' }),
       );
       await waitFor('[data-test-keys-signed-out]');
+      assert.dom('[data-test-keys-heading]').hasText('You’re signed out');
       assert.dom('[data-test-key-page]').doesNotExist();
-      assert.dom('[data-test-secure-sign-in-form]').doesNotExist();
-      assert
-        .dom('[data-test-keys-signed-out]')
-        .includesText('Sign in to Boxel again in the Boxel window');
+      assert.dom('input').doesNotExist();
       await click('[data-test-keys-signed-out-close]');
       assert.deepEqual(navigations, [{ how: 'close' }]);
     });
@@ -267,7 +284,7 @@ module('Integration | key pages', function (hooks) {
       await fillIn('[data-test-key-value]', 'new-value');
       await click('[data-test-key-replace-save]');
       await waitFor('[data-test-keys-signed-out]');
-      assert.dom('[data-test-secure-sign-in-form]').doesNotExist();
+      assert.dom('[data-test-keys-heading]').hasText('You’re signed out');
     });
 
     test('the Close button closes the window', async function (assert) {
@@ -351,6 +368,54 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(requests.find((r) => r.method === 'DELETE')!.body, {
         meta: { ticket: 'ticket-1' },
       });
+    });
+
+    test('a delete can’t be confirmed until the shares it would stop have loaded', async function (assert) {
+      let release!: () => void;
+      serve({
+        'GET _key-shares': () =>
+          new Promise((resolve) => {
+            release = () => resolve(json(200, { data: [] }));
+          }),
+      });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      // Not awaited: the share list is held back until released.
+      click('[data-test-key-row="Maps"] [data-test-key-delete]');
+      await waitFor('[data-test-key-delete-loading]');
+      assert.dom('[data-test-key-delete-confirm-button]').isDisabled();
+      release();
+      await waitUntil(
+        () => !document.querySelector('[data-test-key-delete-loading]'),
+      );
+      assert.dom('[data-test-key-delete-confirm-button]').isNotDisabled();
+      assert
+        .dom('[data-test-key-delete-confirm]')
+        .includesText('It isn’t shared into any workspace');
+    });
+
+    test('a delete whose share lookup fails is withdrawn, not offered', async function (assert) {
+      serve({
+        'GET _key-shares': () => refusal(500, 'the server failed'),
+      });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      await click('[data-test-key-row="Maps"] [data-test-key-delete]');
+      await waitFor('[data-test-keys-error]');
+      assert.dom('[data-test-key-delete-confirm]').doesNotExist();
+      assert.false(requests.some((r) => r.method === 'DELETE'));
+    });
+
+    test('Share on a key goes to the share page for that key', async function (assert) {
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      await click('[data-test-key-row="Maps"] [data-test-key-share]');
+      assert.deepEqual(navigations, [
+        { how: 'assign', url: '/secure/?mode=share-key#key=key-2' },
+      ]);
     });
 
     test('Add a key goes to the key entry page, which comes back here', async function (assert) {
@@ -453,6 +518,9 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-opened-for-reason]')
         .includesText('“Forecasts need your weather key”');
+      assert
+        .dom('[data-test-opened-for-reason]')
+        .includesText('Written by the card that opened this window');
     });
 
     test('opened for something the server doesn’t know of, says so', async function (assert) {
@@ -462,6 +530,26 @@ module('Integration | key pages', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-keys-not-found]');
       assert.dom('[data-test-enter-key-form]').doesNotExist();
+    });
+
+    test('a load that fails for another reason offers to try again', async function (assert) {
+      let attempts = 0;
+      serve({
+        'POST _secure-window/context': () =>
+          ++attempts === 1
+            ? refusal(503, 'the server is unavailable')
+            : context({ realm: WORKSPACE }),
+      });
+      visitShell(`?mode=enter-key#realm=${encodeURIComponent(REALM)}`);
+      await render(EnterKeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-keys-load-failed]')
+        .includesText('The server is unavailable.');
+      assert.dom('[data-test-keys-not-found]').doesNotExist();
+      await click('[data-test-keys-retry]');
+      await waitFor('[data-test-enter-key-form]');
+      assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
     });
 
     test('reached from the key page, goes back to it', async function (assert) {
@@ -507,27 +595,61 @@ module('Integration | key pages', function (hooks) {
   });
 
   module('sharing a key', function () {
-    test('shares one of the user’s keys, with a ticket for that key and realm', async function (assert) {
+    const OTHER_REALM = 'https://realm-server.test/someone/dashboard/';
+
+    function shares() {
+      return ({ body }: { body: any }) =>
+        json(201, {
+          data: {
+            type: 'key-share',
+            id: 'share-9',
+            attributes: { ...body.data.attributes, state: 'active' },
+          },
+        });
+    }
+
+    test('from the key page, picks a workspace the user writes, with a ticket for that key and realm', async function (assert) {
       serve({
-        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
-        'POST _key-shares': ({ body }) =>
-          json(201, {
-            data: {
-              type: 'key-share',
-              id: 'share-9',
-              attributes: { ...body.data.attributes, state: 'active' },
-            },
+        'GET _secure-window/realms': () =>
+          json(200, {
+            data: [
+              {
+                type: 'secure-window-realm',
+                id: OTHER_REALM,
+                attributes: { name: 'Dashboard' },
+              },
+              {
+                type: 'secure-window-realm',
+                id: REALM,
+                attributes: { name: 'Team Workspace' },
+              },
+            ],
           }),
+        'POST _key-shares': shares(),
       });
-      visitShell(`?mode=share-key#realm=${encodeURIComponent(REALM)}`);
-      await render(ShareKeyPage);
+      visitShell('?mode=share-key#key=key-2');
+      await render(SharePage);
       await waitFor('[data-test-share-key-form]');
-      assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
-      assert.dom('[data-test-share-key-save]').isDisabled();
-      await click('[data-test-key-choice="Maps"] input');
+      assert.dom('[data-test-share-key-key]').includesText('Maps');
+      assert.dom('[data-test-key-picker]').doesNotExist('the key is chosen');
+      assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       assert
         .dom('[data-test-share-label]')
         .hasValue('Maps', 'labelled with its key’s name until one is typed');
+      assert.dom('[data-test-share-key-save]').isDisabled();
+
+      await click('[data-test-workspace-dropdown-trigger]');
+      assert.dom('[data-test-workspace-option]').exists({ count: 2 });
+      await fillIn('[data-test-workspace-dropdown-search]', 'team');
+      assert.dom('[data-test-workspace-option]').exists({ count: 1 });
+      await triggerKeyEvent(
+        '[data-test-workspace-dropdown-search]',
+        'keydown',
+        'Enter',
+      );
+      assert
+        .dom('[data-test-workspace-dropdown-selected]')
+        .hasText('Team Workspace');
       await fillIn('[data-test-share-label]', 'Team maps');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
@@ -542,41 +664,46 @@ module('Integration | key pages', function (hooks) {
         meta: { ticket: 'ticket-1' },
       });
       assert.dom('[data-test-keys-done-label]').hasText('Team maps');
-      assert.deepEqual(navigations, [{ how: 'close' }]);
+      assert.deepEqual(navigations, [], 'the window stays open');
+      await click('[data-test-keys-done-close]');
+      assert.deepEqual(
+        navigations,
+        [{ how: 'replace', url: '/secure/?mode=keys' }],
+        'and goes back to the key page',
+      );
     });
 
-    test('adds a new key and shares it', async function (assert) {
+    test('opened for a workspace, picks one of the user’s keys, then closes', async function (assert) {
       serve({
-        'GET _user-keys': () => json(200, keyResources([])),
         'POST _secure-window/context': () => context({ realm: WORKSPACE }),
-        'POST _user-keys': () =>
-          json(201, {
-            data: {
-              type: 'user-key',
-              id: 'key-7',
-              attributes: { ...attributesOf(KEYS[0]), name: 'Forecasts' },
-            },
-          }),
-        'POST _key-shares': ({ body }) =>
-          json(201, {
-            data: {
-              type: 'key-share',
-              id: 'share-9',
-              attributes: body.data.attributes,
-            },
-          }),
+        'POST _key-shares': shares(),
       });
       visitShell(`?mode=share-key#realm=${encodeURIComponent(REALM)}`);
-      await render(ShareKeyPage);
-      await waitFor('[data-test-key-picker-new]');
-      await fillIn('[data-test-key-name]', 'Forecasts');
-      await fillIn('[data-test-key-value]', 'sk-forecast');
-      assert.dom('[data-test-share-label]').hasValue('Forecasts');
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
+      assert.dom('[data-test-workspace-dropdown-trigger]').doesNotExist();
+      assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
+      await click('[data-test-key-choice="Maps"] input');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
       assert.deepEqual(ticketRequests(), [
-        { action: 'add' },
-        { action: 'share', keyId: 'key-7', realm: REALM },
+        { action: 'share', keyId: 'key-2', realm: REALM },
+      ]);
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('with no keys, says to add one on the key page first', async function (assert) {
+      serve({
+        'GET _user-keys': () => json(200, keyResources([])),
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+      });
+      visitShell(`?mode=share-key#realm=${encodeURIComponent(REALM)}`);
+      await render(SharePage);
+      await waitFor('[data-test-key-picker-empty]');
+      await click('[data-test-key-picker-go-to-keys]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: '/secure/?mode=keys' },
       ]);
     });
 
@@ -586,7 +713,7 @@ module('Integration | key pages', function (hooks) {
           context({ realm: { ...WORKSPACE, directWriter: false } }),
       });
       visitShell(`?mode=share-key#realm=${encodeURIComponent(REALM)}`);
-      await render(ShareKeyPage);
+      await render(SharePage);
       await waitFor('[data-test-keys-needs-admin]');
       assert
         .dom('[data-test-keys-needs-admin] h1')
@@ -599,7 +726,7 @@ module('Integration | key pages', function (hooks) {
     });
   });
 
-  module('swapping a key into a suspended share', function () {
+  module('sharing a key in place of a suspended one', function () {
     const SHARE = {
       id: 'share-4',
       realm: REALM,
@@ -638,9 +765,11 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-swap-share]')
         .includesText('can no longer edit this workspace');
+      assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       await click('[data-test-key-choice="Weather service"] input');
       await click('[data-test-swap-key-save]');
       await waitFor('[data-test-keys-done]');
+      assert.dom('[data-test-keys-heading]').hasText('Key shared');
       assert.deepEqual(ticketRequests(), [
         { action: 'swap', keyId: 'key-1', shareId: 'share-4' },
       ]);
@@ -654,7 +783,7 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(navigations, [{ how: 'close' }]);
     });
 
-    test('a share that is working has nothing to swap', async function (assert) {
+    test('a share that is working has nothing to put a key in place of', async function (assert) {
       serve({
         'POST _secure-window/context': () => context({ realm: WORKSPACE }),
         'GET _key-shares': shares({

@@ -1,98 +1,102 @@
-// Picks one of the user's keys, or a new one entered here. Nothing names a
-// key but the user: the page that opened the window never does.
+// Picks one of the user's keys, as a row of a card's edit format: each key a
+// tile to choose. Adding a key is a change of its own, made on the key page,
+// so with no keys this says to add one there first. Nothing names a key but
+// the user: the page that opened the window never does.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import Button from '../../components/button.gts';
+import FieldContainer from '../../components/field-container.gts';
+import KeyRound from '../../components/icons/key-round.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
-import type { UserKey } from './context.ts';
-import KeyFields from './key-fields.gts';
 
-export const NEW_KEY = 'new';
+import type { UserKey } from './context.ts';
+import KeyTile from './key-tile.gts';
 
 interface Signature {
   Args: {
     keys: UserKey[];
-    // A key's id, or NEW_KEY.
+    // A key's id.
     selected: string | undefined;
     onSelect: (selected: string) => void;
-    name: string;
-    value: string;
-    onName: (value: string) => void;
-    onValue: (value: string) => void;
+    onGoToKeys: () => void;
   };
 }
 
 const KeyPicker: TemplateOnlyComponent<Signature> = <template>
-  <fieldset class='picker' data-test-key-picker>
-    <legend class='legend'>Which key?</legend>
-    {{#each @keys as |key|}}
-      <label class='choice' data-test-key-choice={{key.name}}>
-        <input
-          type='radio'
-          name='key'
-          value={{key.id}}
-          checked={{eq @selected key.id}}
-          {{on 'change' (fn @onSelect key.id)}}
-        />
-        <span class='choice-name'>{{key.name}}</span>
-      </label>
-    {{/each}}
-    <label class='choice' data-test-key-choice='new'>
-      <input
-        type='radio'
-        name='key'
-        value={{NEW_KEY}}
-        checked={{eq @selected NEW_KEY}}
-        {{on 'change' (fn @onSelect NEW_KEY)}}
-      />
-      <span class='choice-name'>Add a new key</span>
-    </label>
-  </fieldset>
-  {{#if (eq @selected NEW_KEY)}}
-    <div class='new-key' data-test-key-picker-new>
-      <KeyFields
-        @name={{@name}}
-        @value={{@value}}
-        @onName={{@onName}}
-        @onValue={{@onValue}}
-      />
-    </div>
-  {{/if}}
+  <FieldContainer
+    @tag='div'
+    @label='Key'
+    @icon={{KeyRound}}
+    data-test-key-picker
+  >
+    <fieldset class='picker'>
+      <legend class='visually-hidden'>Which key?</legend>
+      {{#each @keys as |key|}}
+        <label class='choice' data-test-key-choice={{key.name}}>
+          <input
+            type='radio'
+            name='key'
+            value={{key.id}}
+            checked={{eq @selected key.id}}
+            {{on 'change' (fn @onSelect key.id)}}
+          />
+          <KeyTile class='tile' @key={{key}} />
+        </label>
+      {{else}}
+        <p class='empty' data-test-key-picker-empty>You haven’t added any keys
+          yet. Add one on your key page first, then share it from there.</p>
+        <Button
+          class='go-to-keys'
+          type='button'
+          @kind='secondary'
+          data-test-key-picker-go-to-keys
+          {{on 'click' @onGoToKeys}}
+        >Go to your keys</Button>
+      {{/each}}
+    </fieldset>
+  </FieldContainer>
 
   <style scoped>
     .picker {
-      margin: var(--boxel-sp) 0 0;
+      margin: 0;
       padding: 0;
       border: 0;
-      display: flex;
-      flex-direction: column;
+      display: grid;
       gap: var(--boxel-sp-xs);
+      min-width: 0;
     }
-    .legend {
-      padding: 0;
-      margin-bottom: var(--boxel-sp-xs);
-      font: 600 var(--boxel-font-sm);
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
     .choice {
-      display: flex;
+      display: grid;
+      grid-template-columns: auto 1fr;
       align-items: center;
       gap: var(--boxel-sp-xs);
-      padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-      border: 1px solid var(--panel-border);
-      border-radius: var(--boxel-border-radius);
-      background-color: var(--panel-background);
       cursor: pointer;
     }
-    .choice:has(input:checked) {
-      border-color: var(--boxel-highlight);
-    }
     .choice input {
-      accent-color: var(--boxel-highlight);
       margin: 0;
+      accent-color: var(--primary, var(--boxel-highlight));
     }
-    .choice-name {
-      overflow-wrap: anywhere;
+    .choice:has(input:checked) .tile {
+      box-shadow: 0 0 0 2px var(--primary, var(--boxel-highlight));
+    }
+    .empty {
+      margin: 0;
+      font-size: var(--boxel-font-size-sm);
+      line-height: var(--boxel-line-height-sm);
+      color: var(--muted-foreground);
+    }
+    .go-to-keys {
+      width: fit-content;
     }
   </style>
 </template>;

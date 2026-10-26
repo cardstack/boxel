@@ -18,7 +18,7 @@ import AuthContainer from '../../components/auth-container.gts';
 import BusyMessage from '../../components/busy-message.gts';
 import { navigation } from '../navigation.js';
 import { asSentence } from '../sign-in-copy.js';
-import { modeURL, resumePage, startURL } from '../urls.js';
+import { modeURL, startURL } from '../urls.js';
 
 import CliHandoff from './cli-handoff.gts';
 import IncompleteCliLink from './incomplete-cli-link.gts';
@@ -148,13 +148,6 @@ export default class GoogleCallback extends Component {
       return;
     }
     storeSession(session);
-    let page = resumePage(resume?.page);
-    if (page) {
-      // Back to the page of this shell the sign-in started on, such as a key
-      // page, which now finds the window signed in.
-      navigation.replace(page);
-      return;
-    }
     // Back to the window's own address, so a reload shows the signed-in window
     // rather than this callback.
     history.replaceState(null, '', modeURL('sign-in'));

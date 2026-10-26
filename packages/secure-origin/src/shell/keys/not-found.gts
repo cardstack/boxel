@@ -3,24 +3,13 @@
 // can't read, which the server answers alike.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-const NotFound: TemplateOnlyComponent = <template>
-  <section data-test-keys-not-found>
-    <h1 class='heading'>This link doesn’t lead anywhere</h1>
-    <p class='info'>The workspace, card or request it names doesn’t exist, or
-      you don’t have access to it. Close this window and try again from Boxel.</p>
-  </section>
+import EditPage from './edit-page.gts';
 
-  <style scoped>
-    .heading {
-      font: 600 var(--boxel-font-md);
-      margin: 0 0 var(--boxel-sp-sm);
-    }
-    .info {
-      margin: 0;
-      letter-spacing: var(--boxel-lsp);
-      line-height: 20px;
-    }
-  </style>
+const NotFound: TemplateOnlyComponent = <template>
+  <EditPage @heading='This link doesn’t lead anywhere' data-test-keys-not-found>
+    <:intro>The workspace, card or request it names doesn’t exist, or you don’t
+      have access to it. Close this window and try again from Boxel.</:intro>
+  </EditPage>
 </template>;
 
 export default NotFound;

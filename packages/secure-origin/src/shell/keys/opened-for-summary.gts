@@ -1,8 +1,13 @@
-// What a key page was opened for, as the realm server describes it: the
-// operation and the card definition and realm it is on, where it sends a key,
-// and the reason the page that opened the window gave, shown as that page's
-// own words.
+// What a key page was opened for, as the realm server describes it, in rows
+// of a card's edit format: the operation and the card definition and realm it
+// is on, where that request sends a key, and the reason the page that opened
+// the window gave, shown as that page's own words.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
+import FieldContainer from '../../components/field-container.gts';
+import Globe from '../../components/icons/globe.gts';
+import MessageSquare from '../../components/icons/message-square.gts';
+import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
 
 import type { WindowContext } from './context.ts';
 import Destination from './destination.gts';
@@ -15,10 +20,14 @@ interface Signature {
 }
 
 const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
-  <section class='opened-for' data-test-opened-for>
-    {{#if @context.operation}}
-      <p class='for'>
-        For
+  <FieldContainer
+    @tag='div'
+    @label='For'
+    @icon={{RectangleEllipsis}}
+    data-test-opened-for
+  >
+    <p class='value'>
+      {{#if @context.operation}}
         <span
           class='name'
           data-test-opened-for-operation
@@ -29,71 +38,61 @@ const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
           data-test-opened-for-card
         >{{@context.card.name}}</span>
         in
-        <span
-          class='name'
-          data-test-opened-for-realm
-        >{{@context.realm.name}}</span>
-      </p>
-      {{#if @context.operation.destination}}
-        <p class='sent-to'>The key will be sent only to</p>
-        <Destination
-          @destination={{@context.operation.destination}}
-          @method={{@context.operation.method}}
-          @card={{@context.card.name}}
-          @realm={{@context.realm.name}}
-        />
-      {{/if}}
-    {{else if @context.card}}
-      <p class='for'>
-        For
+      {{else if @context.card}}
         <span
           class='name'
           data-test-opened-for-card
         >{{@context.card.name}}</span>
         in
-        <span
-          class='name'
-          data-test-opened-for-realm
-        >{{@context.realm.name}}</span>
-      </p>
-    {{else}}
-      <p class='for'>
-        For the workspace
-        <span
-          class='name'
-          data-test-opened-for-realm
-        >{{@context.realm.name}}</span>
-      </p>
-    {{/if}}
-    {{#if @reason}}
-      <p class='reason' data-test-opened-for-reason>
-        <span class='reason-label'>The page that opened this window says:</span>
+      {{else}}
+        The workspace
+      {{/if}}
+      <span
+        class='name'
+        data-test-opened-for-realm
+      >{{@context.realm.name}}</span>
+    </p>
+  </FieldContainer>
+  {{#if @context.operation.destination}}
+    <FieldContainer
+      @tag='div'
+      @label='This request sends it to'
+      @icon={{Globe}}
+    >
+      <Destination
+        @destination={{@context.operation.destination}}
+        @method={{@context.operation.method}}
+        @card={{@context.card.name}}
+        @realm={{@context.realm.name}}
+      />
+    </FieldContainer>
+  {{/if}}
+  {{#if @reason}}
+    <FieldContainer @tag='div' @label='Reason given' @icon={{MessageSquare}}>
+      <p class='value reason' data-test-opened-for-reason>
         “{{@reason}}”
+        <span class='reason-label'>Written by the card that opened this window</span>
       </p>
-    {{/if}}
-  </section>
+    </FieldContainer>
+  {{/if}}
 
   <style scoped>
-    .opened-for {
-      margin-bottom: var(--boxel-sp);
+    .value {
+      margin: 0;
+      padding-top: var(--boxel-sp-xs);
+      font-size: var(--boxel-font-size-sm);
+      line-height: var(--boxel-line-height-sm);
       overflow-wrap: anywhere;
-    }
-    .for,
-    .sent-to {
-      margin: 0 0 var(--boxel-sp-xs);
-      letter-spacing: var(--boxel-lsp);
-      line-height: 20px;
     }
     .name {
       font-weight: 600;
     }
-    .reason {
-      margin: var(--boxel-sp-xs) 0 0;
-      font: var(--boxel-font-xs);
-      color: var(--muted-foreground);
-    }
     .reason-label {
       display: block;
+      margin-top: var(--boxel-sp-4xs);
+      font-size: var(--boxel-font-size-xs);
+      line-height: var(--boxel-line-height-xs);
+      color: var(--muted-foreground);
     }
   </style>
 </template>;

@@ -3,30 +3,21 @@
 // there is nothing for them to enter.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import EditPage from './edit-page.gts';
+
 interface Signature {
   Args: { realm: string };
 }
 
 const NeedsAdmin: TemplateOnlyComponent<Signature> = <template>
-  <section data-test-keys-needs-admin>
-    <h1 class='heading'>An administrator of this realm needs to set this up</h1>
-    <p class='info'>Only someone who can edit
+  <EditPage
+    @heading='An administrator of this realm needs to set this up'
+    data-test-keys-needs-admin
+  >
+    <:intro>Only someone who can edit
       <strong>{{@realm}}</strong>
-      can add a key to it. Ask one of them to set it up.</p>
-  </section>
-
-  <style scoped>
-    .heading {
-      font: 600 var(--boxel-font-md);
-      margin: 0 0 var(--boxel-sp-sm);
-    }
-    .info {
-      margin: 0;
-      letter-spacing: var(--boxel-lsp);
-      line-height: 20px;
-      overflow-wrap: anywhere;
-    }
-  </style>
+      can add a key to it. Ask one of them to set it up.</:intro>
+  </EditPage>
 </template>;
 
 export default NeedsAdmin;

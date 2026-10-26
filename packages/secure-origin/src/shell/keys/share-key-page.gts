@@ -1,134 +1,203 @@
-// The `share-key` mode: one of the user's keys, or a new one entered here, put
-// into a realm under a label the realm's people see, so that others there can
-// use it through the operations approved for it. Only a direct writer of the
-// realm may share into it; anyone else is told an administrator needs to set
-// it up, with nothing to enter.
+// The `share-key` mode: one of the user's existing keys put into a realm under
+// a label the realm's people see, so that others there can use it through the
+// operations approved for it. Sharing is its own change, apart from adding a
+// key: this page never takes a key's value.
+//
+// It is reached two ways. From the key page, for one key (`#key=<id>`), it
+// asks which realm, offering those the user is a direct writer of. Opened for
+// a realm (`#realm=<realm>`), it asks which of the user's keys; only a direct
+// writer of that realm may share into it, and anyone else is told an
+// administrator needs to set it up, with nothing to enter.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
 import {
-  addKey,
   listKeys,
   shareKey,
   windowContext,
-} from '../../security/keys.js';
-import AuthButton from '../../components/auth-button.gts';
-import AuthFormField from '../../components/auth-form-field.gts';
+  writableRealms,
+} from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
+import Button from '../../components/button.gts';
+import FieldContainer from '../../components/field-container.gts';
+import KeyRound from '../../components/icons/key-round.gts';
+import LayoutGrid from '../../components/icons/layout-grid.gts';
+import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
+import { navigation } from '../navigation.js';
+import { modeURL } from '../urls.js';
 
-import { failureMessage, isSignedOut } from './context.ts';
+import { failureMessage, isNotFound, isSignedOut } from './context.ts';
 import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
-import KeyPicker, { NEW_KEY } from './key-picker.gts';
+import EditPage from './edit-page.gts';
+import KeyPicker from './key-picker.gts';
+import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
+import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import NotFound from './not-found.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedFor } from './opened-for.ts';
+import WorkspaceDropdown from './workspace-dropdown.gts';
+
+interface Realm {
+  url: string;
+  name: string;
+}
 
 type State =
   | { name: 'loading' }
   | { name: 'not-found' }
-  | { name: 'needs-admin'; context: WindowContext }
-  | { name: 'choosing'; context: WindowContext }
-  | { name: 'done'; context: WindowContext; share: KeyShare; key: string };
+  | { name: 'load-failed'; message: string }
+  | { name: 'needs-admin'; realm: string }
+  // `key` is the key the page was opened for, if any, and `context` the
+  // realm's, if it was opened for one; the other is chosen here.
+  | {
+      name: 'choosing';
+      key?: UserKey;
+      context?: WindowContext;
+    }
+  | { name: 'done'; realm: string; share: KeyShare; key: string };
 
 class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   <template>
     {{#if this.loading}}
-      <BusyMessage @title='Loading…' />
+      <BusyMessage class='busy' @title='Loading…' />
     {{else if this.notFound}}
       <NotFound />
+    {{else if this.loadFailed}}
+      <LoadFailed @message={{this.loadFailed.message}} @onRetry={{this.load}} />
     {{else if this.needsAdmin}}
-      <NeedsAdmin @realm={{this.needsAdmin.context.realm.name}} />
+      <NeedsAdmin @realm={{this.needsAdmin.realm}} />
     {{else if this.done}}
-      <DonePage @heading='Key shared' @onClose={{@api.close}}>
+      <DonePage @heading='Key shared' @onClose={{this.finish}}>
         <strong>{{this.done.key}}</strong>
         is shared into
-        <strong>{{this.done.context.realm.name}}</strong>
+        <strong>{{this.done.realm}}</strong>
         as
         <strong data-test-keys-done-label>{{this.done.share.label}}</strong>.
       </DonePage>
     {{else if this.choosing}}
-      <h1 class='heading' data-test-share-key>Share a key</h1>
-      <OpenedForSummary
-        @context={{this.choosing.context}}
-        @reason={{this.opened.reason}}
-      />
-      <p class='info'>People in this workspace will be able to use the key
-        through the requests you approve for it. They never see the key itself.</p>
       <form novalidate {{on 'submit' this.save}} data-test-share-key-form>
-        <KeyPicker
-          @keys={{this.form.keys}}
-          @selected={{this.form.selected}}
-          @onSelect={{this.select}}
-          @name={{this.form.name}}
-          @value={{this.form.value}}
-          @onName={{this.setName}}
-          @onValue={{this.setValue}}
-        />
-        <AuthFormField @label='Shared as' data-test-key-field='label'>
-          <BoxelInput
-            @type='text'
-            @autocomplete='off'
-            @placeholder='What people in this workspace will see it as'
-            @value={{this.form.label}}
-            @onInput={{this.setLabel}}
-            name='share-label'
-            data-test-share-label
-          />
-        </AuthFormField>
-        {{#if this.form.error}}
-          <div class='error' role='alert' data-test-keys-error>
-            {{this.form.error}}
-          </div>
-        {{/if}}
-        <AuthButton
-          class='submit'
-          type='submit'
-          @variant='primary'
-          @disabled={{this.submitDisabled}}
-          @loading={{this.form.saving}}
-          data-test-share-key-save
-        >Share key</AuthButton>
+        <EditPage @heading='Share a key' data-test-share-key>
+          <:intro>People in the workspace can use the key through the requests
+            you approve for it. They never see the key itself.</:intro>
+          <:default>
+            {{#if this.choosing.context}}
+              <OpenedForSummary
+                @context={{this.choosing.context}}
+                @reason={{this.opened.reason}}
+              />
+            {{/if}}
+            {{#if this.choosing.key}}
+              <FieldContainer
+                @tag='div'
+                @label='Key'
+                @icon={{KeyRound}}
+                data-test-share-key-key
+              >
+                <KeyTile @key={{this.choosing.key}} />
+              </FieldContainer>
+            {{else}}
+              <KeyPicker
+                @keys={{this.form.keys}}
+                @selected={{this.form.key}}
+                @onSelect={{this.selectKey}}
+                @onGoToKeys={{this.goToKeys}}
+              />
+            {{/if}}
+            {{#unless this.choosing.context}}
+              <FieldContainer
+                @tag='div'
+                @label='Workspace'
+                @icon={{LayoutGrid}}
+                data-test-realm-picker
+                as |labelId|
+              >
+                <WorkspaceDropdown
+                  @workspaces={{this.form.realms}}
+                  @selected={{this.form.realm}}
+                  @onSelect={{this.selectRealm}}
+                  @labelId={{labelId}}
+                />
+              </FieldContainer>
+            {{/unless}}
+            <FieldContainer
+              @tag='label'
+              @label='Shared as'
+              @icon={{Tag}}
+              data-test-key-field='label'
+            >
+              <BoxelInput
+                @type='text'
+                @autocomplete='off'
+                @placeholder='What people in the workspace see it as'
+                @value={{this.form.label}}
+                @onInput={{this.setLabel}}
+                name='share-label'
+                data-test-share-label
+              />
+            </FieldContainer>
+            {{#if this.form.error}}
+              <div class='error' role='alert' data-test-keys-error>
+                {{this.form.error}}
+              </div>
+            {{/if}}
+          </:default>
+          <:actions>
+            {{#if this.fromKeyPage}}
+              <Button
+                type='button'
+                @kind='secondary'
+                data-test-share-key-cancel
+                {{on 'click' this.goToKeys}}
+              >Cancel</Button>
+            {{/if}}
+            <Button
+              type='submit'
+              @kind='primary'
+              @disabled={{this.submitDisabled}}
+              @loading={{this.form.saving}}
+              data-test-share-key-save
+            >Share key</Button>
+          </:actions>
+        </EditPage>
       </form>
     {{/if}}
 
     <style scoped>
-      .heading {
-        font: 600 var(--boxel-font-md);
-        margin: 0 0 var(--boxel-sp);
+      form {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
       }
-      .info {
-        margin: 0;
-        letter-spacing: var(--boxel-lsp);
-        line-height: 20px;
-        color: var(--muted-foreground);
+      .busy {
+        margin-top: var(--boxel-sp-xl);
       }
       .error {
         color: var(--destructive-ink, var(--boxel-danger));
-        font: 500 var(--boxel-font-xs);
-        margin-top: var(--boxel-sp-xs);
-      }
-      .submit {
-        margin-top: var(--boxel-sp-lg);
-        width: 100%;
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        font-weight: 500;
       }
     </style>
   </template>
 
   private opened = openedFor();
+  // Reached from the key page for one of its keys, rather than opened for a
+  // realm by a page elsewhere.
+  private fromKeyPage = Boolean(this.opened.key && !this.opened.realm);
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
   private form = trackedObject({
     keys: [] as UserKey[],
-    selected: undefined as string | undefined,
-    name: '',
-    value: '',
+    realms: [] as Realm[],
+    key: undefined as string | undefined,
+    realm: undefined as string | undefined,
     label: '',
     // Whether the label was typed rather than filled in from the key's name.
     labelTyped: false,
@@ -147,6 +216,9 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   private get notFound() {
     return this.page.state.name === 'not-found';
   }
+  private get loadFailed() {
+    return this.page.state.name === 'load-failed' ? this.page.state : undefined;
+  }
   private get needsAdmin() {
     return this.page.state.name === 'needs-admin' ? this.page.state : undefined;
   }
@@ -157,68 +229,86 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     return this.page.state.name === 'done' ? this.page.state : undefined;
   }
 
-  private async load() {
-    if (!this.opened.realm) {
+  private load = async () => {
+    let { realm, key: keyId } = this.opened;
+    if (!realm && !keyId) {
       this.page.state = { name: 'not-found' };
       return;
     }
+    this.page.state = { name: 'loading' };
     let { config } = this.args.api;
     try {
-      let context = (await windowContext(config, {
-        realm: this.opened.realm,
-      })) as WindowContext;
-      if (!context.realm.directWriter) {
-        this.page.state = { name: 'needs-admin', context };
-        return;
+      let context: WindowContext | undefined;
+      if (realm) {
+        context = await windowContext(config, { realm });
+        if (!context.realm.directWriter) {
+          this.page.state = { name: 'needs-admin', realm: context.realm.name };
+          return;
+        }
+        this.form.realm = context.realm.url;
+      } else {
+        this.form.realms = await writableRealms(config);
+        if (this.form.realms.length === 1) {
+          this.form.realm = this.form.realms[0].url;
+        }
       }
-      let keys = (await listKeys(config)) as UserKey[];
+      let keys = await listKeys(config);
       this.form.keys = keys;
-      this.select(keys.length === 1 ? keys[0].id : keys.length ? '' : NEW_KEY);
-      this.page.state = { name: 'choosing', context };
+      let key: UserKey | undefined;
+      if (keyId) {
+        key = keys.find((k) => k.id === keyId);
+        if (!key) {
+          this.page.state = { name: 'not-found' };
+          return;
+        }
+        this.selectKey(key.id);
+      } else if (keys.length === 1) {
+        this.selectKey(keys[0].id);
+      }
+      this.page.state = { name: 'choosing', key, context };
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
-        return;
+      } else if (isNotFound(e)) {
+        this.page.state = { name: 'not-found' };
+      } else {
+        this.page.state = { name: 'load-failed', message: failureMessage(e) };
       }
-      this.page.state = { name: 'not-found' };
     }
-  }
+  };
 
   private get submitDisabled() {
-    let { selected, name, value, label, saving } = this.form;
     return (
-      saving ||
-      !selected ||
-      !label.trim() ||
-      (selected === NEW_KEY && (!name.trim() || !value))
+      this.form.saving ||
+      !this.form.key ||
+      !this.form.realm ||
+      !this.form.label.trim()
     );
   }
 
-  private keyName(selected: string | undefined): string {
-    return selected === NEW_KEY
-      ? this.form.name
-      : (this.form.keys.find((k) => k.id === selected)?.name ?? '');
+  private keyName(id: string | undefined): string {
+    return this.form.keys.find((k) => k.id === id)?.name ?? '';
+  }
+
+  private realmName(url: string | undefined): string {
+    return (
+      this.choosing?.context?.realm.name ??
+      this.form.realms.find((r) => r.url === url)?.name ??
+      ''
+    );
   }
 
   // Until a label is typed, a share is labelled with its key's name.
-  private select = (selected: string) => {
-    this.form.selected = selected || undefined;
+  private selectKey = (id: string) => {
+    this.form.key = id;
     this.form.error = undefined;
     if (!this.form.labelTyped) {
-      this.form.label = this.keyName(this.form.selected);
+      this.form.label = this.keyName(id);
     }
   };
 
-  private setName = (value: string) => {
-    this.form.name = value;
-    this.form.error = undefined;
-    if (!this.form.labelTyped) {
-      this.form.label = value;
-    }
-  };
-
-  private setValue = (value: string) => {
-    this.form.value = value;
+  private selectRealm = (url: string) => {
+    this.form.realm = url;
     this.form.error = undefined;
   };
 
@@ -228,38 +318,41 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.error = undefined;
   };
 
+  private goToKeys = () => navigation.replace(modeURL('keys'));
+
+  // Done, a share started from the key page goes back to it; one opened for a
+  // realm closes the window.
+  private finish = () => {
+    if (this.fromKeyPage) {
+      this.goToKeys();
+    } else {
+      this.args.api.close();
+    }
+  };
+
   private save = async (event: Event) => {
     event.preventDefault();
-    let context = this.choosing?.context;
-    if (this.submitDisabled || !context) {
+    let { key, realm } = this.form;
+    if (this.submitDisabled || !key || !realm) {
       return;
     }
-    let { config } = this.args.api;
     this.form.saving = true;
     this.form.error = undefined;
     try {
-      let keyId = this.form.selected!;
-      let keyName = this.keyName(keyId);
-      if (keyId === NEW_KEY) {
-        let key = (await addKey(config, {
-          name: this.form.name.trim(),
-          value: this.form.value,
-        })) as UserKey;
-        this.form.value = '';
-        // Added, so a failure to share it next offers it as one of the
-        // user's keys rather than adding it again.
-        this.form.keys = [...this.form.keys, key];
-        this.form.selected = key.id;
-        keyId = key.id;
-        keyName = key.name;
-      }
-      let share = (await shareKey(config, {
-        keyId,
-        realm: context.realm.url,
+      let share = await shareKey(this.args.api.config, {
+        keyId: key,
+        realm,
         label: this.form.label.trim(),
-      })) as KeyShare;
-      this.page.state = { name: 'done', context, share, key: keyName };
-      this.args.api.close();
+      });
+      this.page.state = {
+        name: 'done',
+        realm: this.realmName(realm),
+        share,
+        key: this.keyName(key),
+      };
+      if (!this.fromKeyPage) {
+        this.args.api.close();
+      }
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
