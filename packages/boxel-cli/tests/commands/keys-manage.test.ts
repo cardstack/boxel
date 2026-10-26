@@ -9,6 +9,7 @@ import {
   keysAdd,
   keysDelete,
   keysList,
+  keysShow,
   runKeysCommand,
 } from '../../src/commands/keys/manage.ts';
 import { buildBoxelProgram } from '../../src/build-program.ts';
@@ -252,6 +253,37 @@ describe('boxel keys: managing keys', () => {
     expect(requests.map((r) => `${r.method} ${r.path}`)).toEqual([
       'GET /_user-keys',
     ]);
+  });
+
+  it("shows a key's grants and shares when the server reports them", async () => {
+    let grants = [
+      {
+        id: 'grant-1',
+        destination: 'https://api.weather.test/v1/',
+        state: 'active',
+        approvedAt: '2026-10-02T00:00:00.000Z',
+        approvedVia: 'cli',
+      },
+    ];
+    stubServer(({ path }) =>
+      path === '/_user-keys'
+        ? {
+            body: {
+              data: [{ id: KEY.id, attributes: { ...KEY, grants } }],
+            },
+          }
+        : { body: { data: [] } },
+    );
+    let stdout = captureStdout();
+    try {
+      await keysShow('weather', { profileManager: manager });
+    } finally {
+      stdout.restore();
+    }
+    expect(stdout.text()).toContain(
+      'https://api.weather.test/v1/: active, approved 2026-10-02T00:00:00.000Z in the CLI',
+    );
+    expect(stdout.text()).toContain('shares: none');
   });
 
   it('asks for --yes to delete under --json, after listing nothing and changing nothing', async () => {

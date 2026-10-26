@@ -11,11 +11,22 @@ import { realmServerRequest } from './secure-session.ts';
 
 export type KeyWriteAction = 'add' | 'replace' | 'delete' | 'share' | 'swap';
 
+// Where a key may be sent: one destination its owner approved.
+export interface UserKeyGrant {
+  id: string;
+  destination: string;
+  state: string;
+  approvedAt: string;
+  approvedVia: string;
+}
+
 export interface UserKeyMetadata {
   id: string;
   name: string;
   kind: string;
   state: string;
+  // Present when the realm server records grants.
+  grants?: UserKeyGrant[];
   createdAt: string;
   updatedAt: string;
 }

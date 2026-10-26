@@ -217,6 +217,18 @@ function printKey(key: UserKeyMetadata): void {
   console.log(`  kind: ${key.kind}`);
   console.log(`  state: ${key.state}`);
   console.log(`  updated: ${key.updatedAt}`);
+  if (key.grants) {
+    if (key.grants.length === 0) {
+      console.log('  grants: none');
+    } else {
+      console.log('  grants:');
+      for (let grant of key.grants) {
+        console.log(
+          `    ${grant.destination}: ${grant.state}, approved ${grant.approvedAt} in the ${grant.approvedVia === 'cli' ? 'CLI' : 'secure window'}`,
+        );
+      }
+    }
+  }
 }
 
 export async function keysList(
