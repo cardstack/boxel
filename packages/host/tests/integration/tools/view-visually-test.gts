@@ -223,6 +223,32 @@ module('Integration | tools | view-visually', function (hooks) {
     assert.strictEqual(result.kind, 'file');
   });
 
+  test('one part of a card is captured by a selector, at a phone width', async function (assert) {
+    await tool().execute({
+      url: `${testRealmURL}Pet/mango`,
+      viewportWidth: 390,
+      viewportHeight: 844,
+      target: '.pricing',
+    });
+
+    assert.deepEqual(requests[0].data.attributes.captureSpec, {
+      viewport: { width: 390, height: 844 },
+      target: '.pricing',
+    });
+  });
+
+  test('a selector and a full-page capture together are refused', async function (assert) {
+    await assert.rejects(
+      tool().execute({
+        url: `${testRealmURL}Pet/mango`,
+        target: '.pricing',
+        fullPage: true,
+      }),
+      /Set either target or fullPage, not both/,
+    );
+    assert.strictEqual(requests.length, 0, 'no capture is attempted');
+  });
+
   test("a card's .json is captured as the card, a plain JSON file as a file", async function (assert) {
     let card = await tool().execute({ url: `${testRealmURL}Pet/mango.json` });
     let file = await tool().execute({ url: `${testRealmURL}config.json` });

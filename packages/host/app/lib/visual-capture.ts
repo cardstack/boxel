@@ -36,6 +36,9 @@ export interface ViewOptions {
   viewportWidth?: number;
   viewportHeight?: number;
   fullPage?: boolean;
+  // A CSS selector for one element of the render: the capture is of the first
+  // element it matches, scrolled into view and cropped to it.
+  target?: string;
 }
 
 export interface ViewedImage {
@@ -44,8 +47,8 @@ export interface ViewedImage {
   format: ViewFormat;
   width: number | undefined;
   height: number | undefined;
-  // Set when the image shows less than the capture did (a full-page capture
-  // cut to its top); says what was left out.
+  // Set when the image shows less than the capture did (a tall capture cut to
+  // its top); says what was left out.
   note: string | undefined;
   // The uploaded image, ready to attach to a tool result.
   file: FileDef;
@@ -221,12 +224,20 @@ export async function captureForAgent(
       'viewportWidth and viewportHeight must be provided together.',
     );
   }
+  let selector = options.target?.trim() || undefined;
+  if (selector && options.fullPage) {
+    throw new VisualCaptureError(
+      'Set either target or fullPage, not both: target captures one ' +
+        'element, fullPage the whole page.',
+    );
+  }
   let captureSpec = {
     viewport:
       options.viewportWidth != null && options.viewportHeight != null
         ? { width: options.viewportWidth, height: options.viewportHeight }
         : DEFAULT_VIEWPORT,
     ...(options.fullPage ? { fullPage: true } : {}),
+    ...(selector ? { target: selector } : {}),
   };
 
   // The capture endpoint verifies a realm session the same as a realm-server

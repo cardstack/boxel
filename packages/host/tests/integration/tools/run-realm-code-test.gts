@@ -487,6 +487,7 @@ return { show: 'Pet/missing' };`,
     format: 'embedded',
     viewportWidth: 600,
     viewportHeight: 400,
+    target: '.name',
   }),
 ];`,
     });
@@ -498,6 +499,7 @@ return { show: 'Pet/missing' };`,
     assert.strictEqual(byId.format, 'embedded');
     assert.deepEqual(byId.captureSpec, {
       viewport: { width: 600, height: 400 },
+      target: '.name',
     });
     let [first, second] = JSON.parse(result.scriptResult!);
     assert.strictEqual(first.path, 'Pet/mango');

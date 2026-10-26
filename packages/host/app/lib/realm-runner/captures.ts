@@ -109,5 +109,6 @@ function captureOptions(raw: unknown): ViewOptions {
       ? { viewportHeight: options.viewportHeight }
       : {}),
     ...(options.fullPage === true ? { fullPage: true } : {}),
+    ...(typeof options.target === 'string' ? { target: options.target } : {}),
   };
 }
