@@ -1,6 +1,6 @@
 ## What it is
 
-A phone-number field with as-you-type formatting, E.164 normalisation and region-aware validation. Use it whenever a phone number is collected — the formatting alone is worth it, because a number typed as a continuous digit string is much harder to check by eye than one grouped by the user's region. Do not reach for plain **Input** with `type='tel'`: that gives you a numeric keypad and nothing else.
+A phone-number field with as-you-type formatting, E.164 normalization and region-aware validation. Use it whenever a phone number is collected — the formatting alone is worth it, because a number typed as a continuous digit string is much harder to check by eye than one grouped by the user's region. Do not reach for plain **Input** with `type='tel'`: that gives you a numeric keypad and nothing else.
 
 ## The contract
 
@@ -12,15 +12,15 @@ A phone-number field with as-you-type formatting, E.164 normalisation and region
 
 Identical in shape to **EmailInput**, **UrlInput** and the rest of the typed-input family — which is the point. They are interchangeable at a call site, and learning one teaches the others.
 
-**The two-callback split** is the same adaptation: boxel-ui's underlying control returns a `NormalizePhoneFormatResult` from its `onChange`, carrying the formatted value, the normalised E.164 form and any validation state in one object. Pretui collapses that into `@onInput(value)` — the same signature as every other control in the kit — plus `@onValidation(error | null)`.
+**The two-callback split** is the same adaptation: boxel-ui's underlying control returns a `NormalizePhoneFormatResult` from its `onChange`, carrying the formatted value, the normalized E.164 form and any validation state in one object. Pretui collapses that into `@onInput(value)` — the same signature as every other control in the kit — plus `@onValidation(error | null)`.
 
-Worth being precise about what `@onInput` receives, because it determines what you store: it is the field's value as the user sees it, not necessarily the E.164 normalisation. If you need the canonical form for storage or comparison, read it from the boxel-ui layer rather than assuming the displayed string is it.
+Worth being precise about what `@onInput` receives, because it determines what you store: it is the field's value as the user sees it, not necessarily the E.164 normalization. If you need the canonical form for storage or comparison, read it from the boxel-ui layer rather than assuming the displayed string is it.
 
 `@value` is passed through as `null` when undefined, matching the underlying control's expectation.
 
 ## Prior art
 
-A **thin runtime wrap of boxel-ui's phone input**, whose machinery is `awesome-phonenumber` — a port of Google's libphonenumber. That is the value being reused: as-you-type formatting per region, E.164 normalisation, and validity checks that know a UK mobile from a UK landline. Reimplementing any of that is a multi-year mistake.
+A **thin runtime wrap of boxel-ui's phone input**, whose machinery is `awesome-phonenumber` — a port of Google's libphonenumber. That is the value being reused: as-you-type formatting per region, E.164 normalization, and validity checks that know a UK mobile from a UK landline. Reimplementing any of that is a multi-year mistake.
 
 Against the field: **Web Awesome**, **Radix**, **React Spectrum** and **shadcn** all ship nothing here. Phone input is universally left to `react-phone-number-input`, `intl-tel-input` or an in-house regex — and the regex version is always wrong. So the comparison is: a real libphonenumber-backed field, dressed to match the kit, versus rolling your own.
 
@@ -46,9 +46,9 @@ Gaps, and the first two are specific to phone fields:
 
 ## Theming
 
-Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3` (placeholder), `--control-h`, `--radius`, `--text-ui-md`, `--text-ui-sm`, `--text-ui-xs`, `--track-ui`.
+Input's field style: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus.
 
-Forwarded into boxel-ui through the `--boxel-*` channel — the same height, radius, type-size and spacing knobs **Input** sets, so a phone field and a text field in the same form are pixel-identical.
+It wears Input's field dress (`internal/field-dress`), so its hover, invalid, disabled, read-only and focus states are Input's too; see **Input**'s Theming.
 
 An inline `style` carries font inheritance (the UA font on native controls is one of the two places the token channel cannot reach). The invalid dress arrives from an enclosing **Field** by repointing `--border` and `--background`, so it works here without this component knowing about it — and the same mechanism means a theme redefines "invalid" once for the whole family.
 

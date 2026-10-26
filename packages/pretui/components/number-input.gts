@@ -1,9 +1,15 @@
 // Pretui — NumberInput: a number field that clamps and rounds on commit.
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlNotifyArgs } from '../pretui-primitives';
-import { TYPED_FONT } from '../internal/extras';
+import { TYPED_BLOCK_RULES } from '../internal/extras';
+import { FieldDress } from '../internal/field-dress';
+
+const NUMBER_FONT = htmlSafe(
+  `${TYPED_BLOCK_RULES} font-variant-numeric: tabular-nums;`,
+);
 
 // BoxelInput @type='number' with the numeric knobs surfaced: @min/@max/
 // @step ride the native control (spinners + keyboard), and values clamp to
@@ -26,7 +32,7 @@ export interface NumberInputSignature {
     onInput?: (value: number | null) => void;
     /**
      * Force the committed value back inside `@min`/`@max` (default true —
-     * the behaviour this component has always had). Set false to let an
+     * the behavior this component has always had). Set false to let an
      * out-of-range value stand and be REPORTED instead: a silent clamp tells
      * the reader nothing about why their number changed, which is the whole
      * of the complaint against clamp-only number fields.
@@ -144,8 +150,7 @@ export class NumberInput extends Component<NumberInputSignature> {
     this.notify(next);
   };
   <template>
-    <div
-      class='pretui-boxelwrap'
+    <FieldDress
       data-range-state={{this.rangeState}}
       data-test-pretui-number-input
       ...attributes
@@ -160,32 +165,12 @@ export class NumberInput extends Component<NumberInputSignature> {
         @disabled={{this.disabled}}
         @required={{this.required}}
         @state={{this.state}}
-        @errorMessage={{this.errorMessage}}
+        @errorMessage={{unless this.disabled this.errorMessage}}
         @onInput={{this.handleInput}}
         @onChange={{this.handleChange}}
         id={{@controlId}}
-        style={{TYPED_FONT}}
+        style={{NUMBER_FONT}}
       />
-    </div>
-    <style scoped>
-      @layer PretComponent {
-        /* Same re-skin channel as EmailInput — see that component's note. */
-        .pretui-boxelwrap {
-          width: 100%;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          font-variant-numeric: tabular-nums;
-          --background: var(--field, var(--boxel-light));
-          --border: var(--input);
-          --ring: var(--primary);
-          --muted-foreground: var(--ink-3, var(--boxel-400));
-          --boxel-form-control-height: var(--control-h, 28px);
-          --boxel-input-height: var(--control-h, 28px);
-          --boxel-form-control-border-radius: var(--radius);
-          --boxel-sp-xs: 5px;
-          --boxel-sp-sm: 9px;
-        }
-      }
-    </style>
+    </FieldDress>
   </template>
 }

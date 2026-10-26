@@ -4,6 +4,8 @@ import { PhoneInput as BoxelPhoneInput } from '@cardstack/boxel-ui/components';
 import type { NormalizePhoneFormatResult } from '@cardstack/boxel-ui/helpers';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
+import { TYPED_FONT } from '../internal/extras';
+import { FieldDress } from '../internal/field-dress';
 
 // Same wrap as EmailInput: boxel-ui's awesome-phonenumber machinery
 // (as-you-type formatting, E.164 normalization, region validation) intact,
@@ -48,7 +50,7 @@ export class PhoneInput extends Component<PhoneInputSignature> {
     );
   };
   <template>
-    <div class='pretui-boxelwrap' data-test-pretui-phone-input ...attributes>
+    <FieldDress data-test-pretui-phone-input ...attributes>
       <BoxelPhoneInput
         @value={{this.boxelValue}}
         @onChange={{this.handleChange}}
@@ -56,25 +58,8 @@ export class PhoneInput extends Component<PhoneInputSignature> {
         @disabled={{this.disabled}}
         @required={{this.required}}
         id={{@controlId}}
+        style={{TYPED_FONT}}
       />
-    </div>
-    <style scoped>
-      @layer PretComponent {
-        /* Same re-skin channel as EmailInput — see that component's note. */
-        .pretui-boxelwrap {
-          width: 100%;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          --background: var(--field, var(--boxel-light));
-          --border: var(--input);
-          --ring: var(--primary);
-          --boxel-form-control-height: var(--control-h, 28px);
-          --boxel-input-height: var(--control-h, 28px);
-          --boxel-form-control-border-radius: var(--radius);
-          --boxel-sp-xs: 5px;
-          --boxel-sp-sm: 9px;
-        }
-      }
-    </style>
+    </FieldDress>
   </template>
 }

@@ -4,11 +4,13 @@ import { EmailInput as BoxelEmailInput } from '@cardstack/boxel-ui/components';
 import type { EmailFormatValidationError } from '@cardstack/boxel-ui/helpers';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
+import { TYPED_FONT } from '../internal/extras';
+import { FieldDress } from '../internal/field-dress';
 
 // boxel-ui's validation engine (format checks, debounced feedback,
 // blur-gated error surfacing) is the value; only the cloth changes. The
-// wrapper div carries the re-skin through the semantic-token + --boxel-*
-// custom-property channel — no CSS reaches into boxel-ui markup. Surface
+// shared FieldDress wrapper carries the re-skin through the semantic-token +
+// --boxel-* custom-property channel — no CSS reaches into boxel-ui markup. Surface
 // adaptation: boxel's 3-arg onChange(value, validationError, ev) splits
 // into Pretui's @onInput(value) + @onValidation(errorMessage | null).
 
@@ -47,7 +49,7 @@ export class EmailInput extends Component<EmailInputSignature> {
     this.args.onValidation?.(validation ? validation.message : null);
   };
   <template>
-    <div class='pretui-boxelwrap' data-test-pretui-email-input ...attributes>
+    <FieldDress data-test-pretui-email-input ...attributes>
       <BoxelEmailInput
         @value={{this.boxelValue}}
         @onChange={{this.handleChange}}
@@ -55,29 +57,8 @@ export class EmailInput extends Component<EmailInputSignature> {
         @disabled={{this.disabled}}
         @required={{this.required}}
         id={{@controlId}}
+        style={{TYPED_FONT}}
       />
-    </div>
-    <style scoped>
-      @layer PretComponent {
-        /* Pretui control dress fed into boxel-ui's Input via its token
-           channel: semantic vars (--background/--border/--ring read the
-           Pretui field tokens) plus the --boxel-* dimension knobs. The two
-           --boxel-sp-* overrides tune boxel's inner padding so the control
-           lands on the h28 / 0-9px Pretui input geometry. */
-        .pretui-boxelwrap {
-          width: 100%;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          --background: var(--field, var(--boxel-light));
-          --border: var(--input);
-          --ring: var(--primary);
-          --boxel-form-control-height: var(--control-h, 28px);
-          --boxel-input-height: var(--control-h, 28px);
-          --boxel-form-control-border-radius: var(--radius);
-          --boxel-sp-xs: 5px;
-          --boxel-sp-sm: 9px;
-        }
-      }
-    </style>
+    </FieldDress>
   </template>
 }

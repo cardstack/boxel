@@ -209,8 +209,7 @@ class SelectSearch extends Component<SelectSearchSignature> {
           position: relative;
         }
         .pretui-selectsearch-icon {
-          --icon-color: var(--muted-foreground);
-
+          color: var(--muted-foreground);
           position: absolute;
           /* the box's padding, then the input's */
           inset-inline-start: calc(var(--boxel-sp-xs) + var(--_select-px));
@@ -221,8 +220,9 @@ class SelectSearch extends Component<SelectSearchSignature> {
         /* BoxelSelect's dropdown rules set the input's padding; this makes
            room for the icon */
         .pretui-selectsearch .ember-power-select-search-input {
-          padding-inline-start: calc(var(--_select-px) + 1rem + var(--boxel-sp-2xs));
-          padding-inline-end: var(--_select-px);
+          /* less the box's 1px border */
+          padding-inline-start: calc(var(--_select-px) + 1rem + var(--boxel-sp-2xs) - 1px);
+          padding-inline-end: calc(var(--_select-px) - 1px);
         }
       }
     </style>
@@ -319,10 +319,9 @@ export class Select extends Component<SelectSignature> {
           min-width: 0;
           /* BoxelSelect's knobs, set to theme tokens. The --boxel-dropdown-*
              ones and the radius travel to the wormhole, values resolved. */
-          --boxel-form-control-border-radius: calc(var(--radius) - 2px);
-          /* the trigger spends its hairline as a box-shadow with border: 0,
-             so it pads 1px more than a bordered Input to line its text up */
-          --boxel-select-trigger-padding: 0 0.625rem;
+          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
+          /* Select's 0.625rem text inset, less the trigger's 1px border */
+          --boxel-select-trigger-padding: 0 calc(0.625rem - 1px);
           --boxel-select-trigger-gap: var(--boxel-sp-2xs);
           --boxel-select-trigger-font-size: var(--boxel-font-size-xs);
           --boxel-select-trigger-line-height: var(--boxel-line-height-xs);
@@ -361,29 +360,25 @@ export class Select extends Component<SelectSignature> {
         .pretui-selectwrap :deep(.pretui-selecttrigger) {
           align-items: center;
           height: var(--pretui-select-h);
-          border: 0;
-          box-shadow: 0 0 0 1px var(--input);
+          border: 1px solid var(--input);
           width: 100%;
           text-align: start;
-          transition: box-shadow var(--pretui-dur-snap, 180ms)
+          transition: border-color var(--pretui-dur-snap, 180ms)
             var(--pretui-ease-snap, ease);
         }
         /* before the expanded and focus rules, which win the tie */
         @media (hover: hover) {
           .pretui-selectwrap :deep(.pretui-selecttrigger:hover) {
-            box-shadow: 0 0 0 1px var(--_select-edge-hover);
+            border-color: var(--_select-edge-hover);
           }
         }
         .pretui-selectwrap :deep(.pretui-selecttrigger[aria-expanded='true']),
         .pretui-selectwrap :deep(.pretui-selecttrigger:focus-visible) {
-          /* forced-colors paints no box-shadow, so a transparent outline keeps
-             a focus indicator there */
-          outline: 1.5px solid transparent;
-          outline-offset: 1px;
-          box-shadow: 0 0 0 1.5px var(--ring);
+          outline: 2px solid var(--ring);
+          outline-offset: -1px;
         }
         .pretui-selectwrap :deep(.pretui-selecttrigger[aria-disabled='true']) {
-          opacity: 0.45;
+          opacity: var(--boxel-disabled-opacity);
           /* BoxelSelect paints disabled on --muted; this rule outranks it, so
              the field surface holds and only the opacity says disabled */
           background-color: var(--field);
@@ -447,20 +442,15 @@ export class Select extends Component<SelectSignature> {
           padding-block: 0;
           padding-inline: var(--_select-px);
         }
-        /* the hairline and ring are shadows, as on the trigger, so focus
-           thickens the edge to the trigger's 1.5px instead of stacking a
-           shadow on a border */
+        /* the trigger's 1px edge, and its 2px focus ring laid over it */
         .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
           min-height: var(--_select-h);
           padding-block: 0;
-          border: 0;
-          box-shadow: 0 0 0 1px var(--border);
+          border: 1px solid var(--border);
         }
         .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input:focus {
-          border: 0;
-          outline: 1.5px solid transparent;
-          outline-offset: 1px;
-          box-shadow: 0 0 0 1.5px var(--ring);
+          outline: 2px solid var(--ring);
+          outline-offset: -1px;
         }
         /* iOS zooms into inputs under 16px on focus; the options follow
            the trigger, and their rows grow as Autocomplete's do */

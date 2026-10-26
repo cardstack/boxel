@@ -25,9 +25,9 @@ That three-state model is worth noting because it is richer than the rest of the
 Two ways Pretui is better than the native baseline:
 
 - **The error is styled, positioned and yours.** Native constraint validation fires on submit and pops a UA bubble that cannot be styled, cannot be positioned, and is announced inconsistently. Here the error is a value you route wherever it belongs — usually a **FormField**.
-- **The touched gate** (above). Native validity is available from the first keystroke, so a naive implementation turns the field red while the user is typing "htt". Gating on touch is the behaviour every serious form implements by hand.
+- **The touched gate** (above). Native validity is available from the first keystroke, so a naive implementation turns the field red while the user is typing "htt". Gating on touch is the behavior every serious form implements by hand.
 
-Where it is behind: **no normalisation.** A user typing `example.com` gets a validation error rather than `https://example.com`; a user pasting a URL with tracking parameters gets it stored verbatim. Every mature URL field prepends a scheme when one is missing, and this does not. That is the clearest addition.
+Where it is behind: **no normalization.** A user typing `example.com` gets a validation error rather than `https://example.com`; a user pasting a URL with tracking parameters gets it stored verbatim. Every mature URL field prepends a scheme when one is missing, and this does not. That is the clearest addition.
 
 Also missing versus a richer field: no scheme restriction (you cannot require `https`), no link-preview affordance, and no "open in new tab" companion.
 
@@ -44,14 +44,14 @@ Gaps:
 - **No accessible name of its own.** Outside **Field**/**FormField** and without an explicit `aria-label`, the field is unnamed.
 - **No `autocomplete="url"`**, and no arg for it. **WCAG 1.3.5 Identify Input Purpose** (AA) applies when the field collects the user's own URL. Family-wide hole, passed through `...attributes` for now.
 - **No format instruction.** "Enter a URL" without saying whether a scheme is required is a **WCAG 3.3.2** gap — and it bites harder here than elsewhere because the answer is "yes, and we will not add it for you". Use **FormField**'s `@description`.
-- **WCAG 3.3.3 Error Suggestion** asks for a correction where one is possible, and prepending a missing scheme is exactly such a correction. Not doing the normalisation is therefore an accessibility gap as well as a usability one.
+- **WCAG 3.3.3 Error Suggestion** asks for a correction where one is possible, and prepending a missing scheme is exactly such a correction. Not doing the normalization is therefore an accessibility gap as well as a usability one.
 - **`@disabled` uses the native attribute**, removing the field from the tab order.
 
 ## Theming
 
-Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3` (placeholder), `--control-h`, `--radius`, `--text-ui-md`, `--text-ui-sm`, `--text-ui-xs`, `--track-ui`. The valid state additionally reads `--success` through the boxel-ui validation channel.
+Input's field style: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus. The valid state additionally reads `--success` through the boxel-ui validation channel.
 
-Forwarded into boxel-ui through the `--boxel-*` channel, matching **Input**'s metrics exactly so the family aligns in a shared form.
+It wears Input's field dress (`internal/field-dress`), so its hover, invalid, disabled, read-only and focus states are Input's too; see **Input**'s Theming.
 
 `--success` is the token to check per theme here: unlike the rest of the family, this component has an affirmative state, and a theme that tunes `--success` for a **Delta**'s 11.5px mono ink may find it too light as a field hairline. The invalid dress still arrives from an enclosing **Field** by repointing `--border`/`--background`, so error styling is a theme concern defined once.
 

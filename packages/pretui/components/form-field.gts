@@ -413,6 +413,7 @@ export class FormField
                 @issue={{issue}}
                 @announce={{this.announce}}
                 @showRuleId={{@showRuleId}}
+                @glyph={{false}}
               />
             {{/each}}
           </div>
@@ -448,7 +449,7 @@ export class FormField
           align-items: start;
         }
         .pretui-formfield[data-layout='horizontal'] .pretui-formfield-labelrow {
-          min-height: var(--control-h, 28px);
+          min-height: var(--boxel-form-control-height-sm);
           align-items: center;
         }
         /* Unnamed container query only — the named form silently deletes every
@@ -558,7 +559,7 @@ export class FormField
         .pretui-formfield-static {
           flex: 1 1 auto;
           min-width: 0;
-          min-height: var(--control-h, 28px);
+          min-height: var(--boxel-form-control-height-sm);
           display: flex;
           align-items: center;
           line-height: 18px;
@@ -583,9 +584,12 @@ export class FormField
            both read by Pretui's Input / Textarea / Select. No selector reaches
            into the caller's control, so any control that speaks the Pretui
            tokens re-dresses itself for free. */
-        .pretui-formfield[data-invalid='true'] {
-          --input: var(--destructive);
-          --field: color-mix(in oklch, var(--destructive) 5%, var(--card));
+        /* Input's invalid dress: a --destructive-ink edge (the fill hue
+           misses a field boundary's 3:1) and the usual face. A disabled
+           field can't be fixed, so it drops the error edge; :where keeps the
+           weight low, so the readonly and warning rules below still win. */
+        .pretui-formfield[data-invalid='true']:where(:not([data-disabled='true'])) {
+          --input: var(--destructive-ink);
         }
         .pretui-formfield[data-severity='warning'] {
           --input: var(--warning, var(--boxel-warning));
@@ -598,7 +602,7 @@ export class FormField
           --input: transparent;
         }
         .pretui-formfield[data-disabled='true'] {
-          opacity: var(--pretui-field-disabled-opacity, 0.5);
+          opacity: var(--pretui-field-disabled-opacity, var(--boxel-disabled-opacity));
         }
         .pretui-formfield[data-static='true'] .pretui-formfield-static {
           color: var(--foreground);

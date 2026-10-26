@@ -5,6 +5,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
 import { TYPED_FONT } from '../internal/extras';
+import { FieldDress } from '../internal/field-dress';
 
 // boxel-ui has no URL validation engine (email/phone only), so this pairs
 // BoxelInput @type='url' with an EmailInput-shaped validation surface:
@@ -86,8 +87,7 @@ export class UrlInput extends Component<UrlInputSignature> {
     this.report(this.validate(this.current));
   };
   <template>
-    <div
-      class='pretui-boxelwrap'
+    <FieldDress
       data-state={{this.state}}
       data-test-pretui-url-input
       ...attributes
@@ -99,32 +99,12 @@ export class UrlInput extends Component<UrlInputSignature> {
         @disabled={{this.disabled}}
         @required={{this.required}}
         @state={{this.state}}
-        @errorMessage={{this.errorMessage}}
+        @errorMessage={{unless this.disabled this.errorMessage}}
         @onInput={{this.handleInput}}
         @onBlur={{this.handleBlur}}
         id={{@controlId}}
         style={{TYPED_FONT}}
       />
-    </div>
-    <style scoped>
-      @layer PretComponent {
-        /* Same re-skin channel as EmailInput — see that component's note. */
-        .pretui-boxelwrap {
-          width: 100%;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          --background: var(--field, var(--boxel-light));
-          --border: var(--input);
-          --ring: var(--primary);
-          --muted-foreground: var(--ink-3, var(--boxel-400));
-          --boxel-form-control-height: var(--control-h, 28px);
-          --boxel-input-height: var(--control-h, 28px);
-          --boxel-form-control-border-radius: var(--radius);
-          --boxel-font-size-sm: var(--text-ui-sm, 11.5px);
-          --boxel-sp-xs: 5px;
-          --boxel-sp-sm: 9px;
-        }
-      }
-    </style>
+    </FieldDress>
   </template>
 }

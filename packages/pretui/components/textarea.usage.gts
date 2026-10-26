@@ -13,18 +13,21 @@ export class TextareaUsage extends Component {
   @tracked placeholder = 'Tell us more…';
   @tracked invalid = false;
   @tracked disabled = false;
+  @tracked optional = false;
   @tracked helperText = '';
   @tracked errorMessage = 'This value is invalid.';
   setValue = (v: string) => (this.value = v);
   setPlaceholder = (v: string) => (this.placeholder = v);
   setInvalid = (v: boolean) => (this.invalid = v);
   setDisabled = (v: boolean) => (this.disabled = v);
+  setOptional = (v: boolean) => (this.optional = v);
   setHelperText = (v: string) => (this.helperText = v);
   setErrorMessage = (v: string) => (this.errorMessage = v);
   get usage() {
     let bits = [`@value='${this.value}'`];
     if (this.placeholder) bits.push(`@placeholder='${this.placeholder}'`);
     if (this.invalid) bits.push('@invalid={{true}}');
+    if (this.optional) bits.push('@optional={{true}}');
     bits.push('@onInput={{this.setValue}}');
     return `<Textarea ${bits.join(' ')} />`;
   }
@@ -39,9 +42,10 @@ export class TextareaUsage extends Component {
           <Textarea
             @controlId={{controlId}}
             @value={{this.value}}
-            @placeholder={{this.placeholder}}
+            placeholder={{this.placeholder}}
             @invalid={{this.invalid}}
-            @disabled={{this.disabled}}
+            disabled={{this.disabled}}
+            @optional={{this.optional}}
             @helperText={{this.helperText}}
             @errorMessage={{this.errorMessage}}
             @onInput={{this.setValue}}
@@ -73,6 +77,12 @@ export class TextareaUsage extends Component {
           @name='disabled'
           @value={{this.disabled}}
           @onInput={{this.setDisabled}}
+        />
+        <Args.Bool
+          @name='optional'
+          @value={{this.optional}}
+          @description='Shows the Optional label above the field; @required hides it.'
+          @onInput={{this.setOptional}}
         />
         <Args.String
           @name='errorMessage'

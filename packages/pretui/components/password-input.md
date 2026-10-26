@@ -21,7 +21,7 @@ The reveal is implemented by swapping `type` between `'password'` and `'text'` �
 
 **Web Awesome** folds this into `wa-input`: `password-toggle`, `password-visible`, and `show-password-icon`/`hide-password-icon` slots, with the toggle at **`tabindex="-1"`** and a localized `aria-label`. **React Spectrum** has no password field at all. **shadcn** has none; the reveal is a docs recipe.
 
-So the comparison is really against `wa-input`, and Pretui matches it on the essentials while making it a distinct component rather than a mode of the text input. That is arguably the better factoring — a password field has a different `autocomplete` contract, a different validation story and a different security posture from a text field, and modelling it as `type="password"` on a general input invites people to forget all three.
+So the comparison is really against `wa-input`, and Pretui matches it on the essentials while making it a distinct component rather than a mode of the text input. That is arguably the better factoring — a password field has a different `autocomplete` contract, a different validation story and a different security posture from a text field, and modeling it as `type="password"` on a general input invites people to forget all three.
 
 Where Pretui is ahead: **`@autocomplete` as an explicit arg with a considered default.** Web Awesome inherits `autocomplete` from the generic input and does not default it, so every call site must remember.
 
@@ -49,9 +49,9 @@ Gaps, and the toggle is where most of them live:
 
 ## Theming
 
-Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3` (placeholder), `--control-h`, `--radius`, `--text-ui-md`, `--text-ui-sm`, `--text-ui-xs`, `--track-ui`, plus **IconButton**'s tokens for the toggle.
+Input's field style: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus.
 
-Forwarded into boxel-ui through the `--boxel-*` channel, matching **Input**'s metrics.
+It wears Input's field dress (`internal/field-dress`), so its hover, invalid, disabled, read-only and focus states are Input's too; see **Input**'s Theming.
 
 `data-revealed` is reflected on the wrapper, so a stylesheet can dress the revealed state — a tinted hairline, a changed toggle color — beyond the icon swap. Given that the revealed state has real privacy consequences and is currently signaled only by the glyph, using that hook is worth doing. Note the inline metrics differ between revealable and non-revealable modes, so a theme cannot change the toggle's reserved width through a token.
 
