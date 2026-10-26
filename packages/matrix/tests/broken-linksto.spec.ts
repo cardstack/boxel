@@ -199,11 +199,6 @@ test.describe('Broken linksTo tolerance', () => {
     // The rest of PetPerson is unaffected — only the broken slot becomes
     // the placeholder.
     await expect(page.locator('[data-test-person-name]')).toHaveText('Hassan');
-    await logServedLinkState(page, 'before cold visit', {
-      realmURL,
-      linkingId: hassanId,
-      deletedId: ringoId,
-    });
 
     // Reload to drop all in-memory state, then verify the cold visit. The
     // realm-server must serve PetPerson as a normal 200 instance (broken
@@ -382,11 +377,6 @@ test.describe('Broken linksTo tolerance', () => {
       page.locator('[data-test-pets-slot] [data-test-pet-name]'),
     ).toHaveText('Mango');
     await expect(page.locator('[data-test-person-name]')).toHaveText('Hassan');
-    await logServedLinkState(page, 'before cold visit', {
-      realmURL,
-      linkingId: hassanId,
-      deletedId: ringoId,
-    });
 
     // Cold visit: reload and confirm the per-slot state survives. PetPerson
     // serves as a normal 200 instance and the per-element placeholder
