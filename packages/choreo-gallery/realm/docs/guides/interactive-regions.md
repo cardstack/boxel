@@ -33,6 +33,8 @@ A beacon solves a different problem: it lends geometry without transferring iden
 
 Make the data change that transfers the item as one coherent application operation. If removal and insertion happen in unrelated later turns, the system may no longer see the same pairing opportunity. Read the far-match demo alongside its contract tests when implementing a multi-panel transfer, especially if an enclosing region also moves.
 
+Some state that a pass changes is not markup. A scroll position is the usual example: a list that follows new content moves its scroll offset in the same pass as the content. `registerSettle(fn)` registers a function that runs after the pass's mounts and before any region measures, so that state lands first and every region measures the page as the reader will see it. An element that the scroll kept still then reads as not moved. Settlers run in registration order, and the call returns the function that removes the settler.
+
 ## Verifying Independence
 
 Test local changes in each region before testing the cross-region flight. The editor's ordinary update should not replay every shell animation. Then test interruption halfway through a transfer, movement of both containers, and a scaled outer frame. Check that the arriving item is the usable live representation and that the departing skin is released when its work ends.
