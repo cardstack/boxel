@@ -37,9 +37,12 @@ or destination by a database writer doesn't open: the caller gets
 field is what keeps two secrets on one row, such as an OAuth client secret and
 its refresh token sent to the same token endpoint, from being swapped.
 
-- A secret with no destination yet (a key added before its first approval) is
-  sealed under field, owner and id only. `keyring.reseal(sealed, from, to)` binds it
-  to its destination; after that it opens only with that destination.
+- A secret with no destination of its own, such as a user's key's master
+  copy, is sealed under field, owner and id only. A user's key is never
+  re-bound to a destination: each grant seals its own copy, sealed afresh from
+  the opened master copy (see the `user-keys` skill).
+  `keyring.reseal(sealed, from, to)` opens a value under one binding and seals
+  it under another, as the data-key re-seal pass does under the same binding.
 - A copy of a secret held in another row names that row as `parentId`. A
   grant's copy of a user's key is bound to the grant's id and, as its parent,
   the key's id, so it opens only on that grant of that key. A binding with a

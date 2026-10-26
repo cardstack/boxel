@@ -130,8 +130,9 @@ the error's name and message only, never the request.
 ## Grants
 
 A **grant** is the owner's approval for one key to be sent to one
-destination: an `https:` origin and a path prefix ending in `/`, stored as the
-URL parser's `href`. One key reaches several hosts, or several path prefixes
+destination: an `https:` origin (or `http:`, which the outbound guard refuses
+to send to unless its host is on the development allowlist) and a path prefix
+ending in `/`, stored as the URL parser's `href`. One key reaches several hosts, or several path prefixes
 on one host, through one grant each (`api.openai.com/v1/` and
 `eu.api.openai.com/v1/`, or `/v1/` and `/v1beta/`), and its secret is entered
 once. The code is `lib/user-key-grants.ts` and
@@ -162,8 +163,9 @@ FROM user_key_grants WHERE owner = '@someone:boxel.ai' ORDER BY key_id, destinat
 A key's value is stored once per place it is used:
 
 - **The master copy** on `user_keys`, sealed with field `user_keys.value`,
-  the owner and the key's id. Only creating a grant opens it
-  (`createOrReuseGrant`).
+  the owner and the key's id. Only creating a grant opens it to make a copy
+  (`createOrReuseGrant`); the data-key re-seal pass also opens it, to seal it
+  again under the same binding.
 - **One copy per grant** on `user_key_grants`, sealed with field
   `user_key_grants.value`, the owner, the grant's id, the key's id (as the
   binding's `parentId`) and the grant's destination (`grantCopyBinding`).
@@ -206,6 +208,12 @@ it now sends.
 A destination with a host wildcard (`*`, or `%2A`), user info, a query or
 fragment, a path not ending in `/`, or a trailing dot on the host is refused.
 
+The caller must be able to read both the realm the request names and the
+realm that serves the operation's module (`readsRealmOf`, as for a named
+query's type). A module in a realm they can't read, or in none this server
+serves, answers as no such operation, so a grant request never discloses an
+unreadable realm's destinations.
+
 Creating and removing a grant take a session signed in on the secure origin,
 from a request whose `Origin` is the secure origin or absent, exactly as
 minting a key write ticket does. No ticket is involved.
@@ -219,4 +227,4 @@ minting a key write ticket does. No ticket is involved.
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 400    | Malformed body; an attribute that can't be set (a `destination` included); an operation that sends no request or whose declaration has problems; a refused destination |
 | 403    | No secure session, or a request from another `Origin`                                                                                                                  |
-| 404    | No such key or grant of the user's; a realm the user can't read; no such operation                                                                                     |
+| 404    | No such key or grant of the user's; a realm the user can't read; no such operation, or one whose module is in a realm the user can't read                              |

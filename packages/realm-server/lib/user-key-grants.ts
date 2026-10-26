@@ -31,8 +31,10 @@ import {
 //
 // Each grant holds its own sealed copy of the key's value, bound to the grant,
 // the key and the destination (`grantCopyBinding`). Creating a grant is the
-// only place a key's master copy is opened; sending opens only a grant's copy,
-// under the destination stored on the grant. A grant row written outside the
+// only place a key's master copy is opened to make a copy of it (the data-key
+// re-seal pass also opens every sealed row, to seal it again under its own
+// binding); sending opens only a grant's copy, under the destination stored on
+// the grant. A grant row written outside the
 // realm server, or one whose key or destination is edited, has no copy that
 // opens, so it sends nothing.
 //
@@ -130,15 +132,36 @@ export function operationGrantDestination(
 }
 
 // Reads an operation from the realm's definition cache: the type `codeRef`
-// names, resolved against the realm, and its own operation of that name.
+// names, resolved against the realm, and its own operation of that name. The
+// definition lookup reads a module from any realm this server serves, on the
+// server's own authority, so the module's own realm must be one `caller` may
+// read, as a named query's type must be: a module in a realm they can't read,
+// or in none this server serves, answers as no operation, and its destination
+// is never disclosed.
 export async function lookupGrantOperation(
-  core: Pick<OperationCore, 'resolveCodeRef' | 'definitionLookup'>,
+  core: Pick<
+    OperationCore,
+    'resolveCodeRef' | 'definitionLookup' | 'readsRealmOf'
+  >,
   realmURL: URL,
   codeRef: CodeRef,
   operationName: string,
+  caller: string,
 ): Promise<OperationDefinition | undefined> {
   let resolved = core.resolveCodeRef(codeRef, realmURL);
-  if (!resolved) {
+  if (!resolved || !core.readsRealmOf) {
+    return undefined;
+  }
+  let served;
+  try {
+    served = await core.readsRealmOf(resolved.module, {
+      kind: 'user',
+      actor: caller,
+    });
+  } catch {
+    return undefined;
+  }
+  if (!served?.read) {
     return undefined;
   }
   let operations;
@@ -295,7 +318,10 @@ export async function createOrReuseGrantForOperation(
     keyId,
     via,
   }: {
-    core: Pick<OperationCore, 'resolveCodeRef' | 'definitionLookup'>;
+    core: Pick<
+      OperationCore,
+      'resolveCodeRef' | 'definitionLookup' | 'readsRealmOf'
+    >;
     realmURL: URL;
     codeRef: CodeRef;
     operationName: string;
@@ -305,7 +331,7 @@ export async function createOrReuseGrantForOperation(
   },
 ): Promise<{ grant: UserKeyGrant; created: boolean }> {
   let destination = operationGrantDestination(
-    await lookupGrantOperation(core, realmURL, codeRef, operationName),
+    await lookupGrantOperation(core, realmURL, codeRef, operationName, owner),
   );
   return await createOrReuseGrant(dbAdapter, keyring, {
     owner,

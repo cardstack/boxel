@@ -38,6 +38,7 @@ import {
 } from '../lib/user-keys.ts';
 import {
   createOrReuseGrant,
+  createOrReuseGrantForOperation,
   normalizeGrantDestination,
   openGrantForSending,
   removeGrant,
@@ -441,6 +442,68 @@ module(basename(import.meta.filename), function () {
         });
         assert.strictEqual(opened.value, VALUE);
       }
+    });
+
+    test("an operation whose module is in a realm the caller can't read gets no grant", async function (assert) {
+      let key = await addKey(dbAdapter, keyring);
+      let module = 'https://private.example/realm/vendor';
+      let asked: { href: string; caller: unknown }[] = [];
+      let answer: { realm: string; read: boolean } | undefined;
+      let core = {
+        resolveCodeRef: (ref: any) => ref,
+        definitionLookup: {
+          lookupDefinition: async () => ({
+            operations: {
+              chat: {
+                base: 'callApi',
+                callApi: { destination: 'https://api.openai.com/v1/' },
+                deterministic: true,
+              },
+            },
+          }),
+        },
+        readsRealmOf: async (href: string, caller: unknown) => {
+          asked.push({ href, caller });
+          return answer;
+        },
+      } as any;
+      let approve = () =>
+        createOrReuseGrantForOperation(dbAdapter, keyring, {
+          core,
+          realmURL: new URL('https://readable.example/realm/'),
+          codeRef: { module: rri(module), name: 'Vendor' },
+          operationName: 'chat',
+          owner: OWNER,
+          keyId: key.id,
+          via: 'window',
+        });
+
+      answer = { realm: 'https://private.example/realm/', read: false };
+      await assert.rejects(
+        approve(),
+        /no such operation/,
+        'an unreadable realm',
+      );
+      answer = undefined;
+      await assert.rejects(
+        approve(),
+        /no such operation/,
+        'a realm not served',
+      );
+      assert.deepEqual(
+        asked[0],
+        { href: module, caller: { kind: 'user', actor: OWNER } },
+        "the module's own realm is asked about, for the caller",
+      );
+      let [{ count }] = await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS count FROM user_key_grants`,
+      );
+      assert.strictEqual(count, 0, 'no grant is written');
+
+      answer = { realm: 'https://private.example/realm/', read: true };
+      let { created, grant: made } = await approve();
+      assert.true(created, 'a readable one gets its grant');
+      assert.strictEqual(made.destination, 'https://api.openai.com/v1/');
     });
 
     test('grants go with their key, and only their owner removes one', async function (assert) {
