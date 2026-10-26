@@ -224,8 +224,8 @@ module.exports = function (environment) {
         : `${normalized}/test/`;
     })(),
     featureFlags: {
-      // Dashboard v2 replaces the workspace chooser. Off until the dashboard
-      // has its page shell: until then it shows an empty page.
+      // Dashboard v2 replaces the workspace chooser. On in staging
+      // (config/staging.env); locally, start the host with DASHBOARD_V2=true.
       DASHBOARD_V2: process.env.DASHBOARD_V2 === 'true',
     },
   };

@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import { leadWith } from '@cardstack/host/components/operator-mode/workspace-chooser/index';
+import { leadWith } from '@cardstack/host/lib/utils';
 
 module('Unit | workspace chooser | leadWith', function () {
   const catalog = 'https://example.test/catalog/';
