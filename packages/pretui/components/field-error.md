@@ -55,7 +55,7 @@ Gaps and cautions:
 
 Severity hues: `--destructive` (error), `--warning`, `--pretui-info`, which fill the glyph. The text is the severity's ink: `--destructive-ink`, `--warning-ink`, `--info-ink`. Type: `--text-ui-sm`. Provenance: **Token**'s `--font-mono`, `--inset`, `--muted-foreground`, `--pretui-shadow-hairline`.
 
-Because severity is carried by **glyph and hue together**, it survives WCAG 1.4.1 (Use of Color) even in a theme whose warning and error hues are close. That is why `@glyph={{false}}` drops only the error glyph: FormField uses it, because its control already wears the error edge, and an error without a glyph still differs from a warning or info, which keep theirs.
+Because severity is carried by **glyph and hue together**, it survives WCAG 1.4.1 (Use of Color) even in a theme whose warning and error hues are close. That is why `@glyph={{false}}` drops only the error glyph: an error without a glyph still differs from a warning or info, which keep theirs.
 
 A theme must define `--warning` and `--pretui-info` legibly at 11.5px against `--card`; amber and pale blue at small sizes are the two most common contrast failures in this territory.
 

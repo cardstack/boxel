@@ -47,7 +47,7 @@ Where it is thinner: no icon slot, no dismissal, and no multi-line structure —
 
 ## Theming
 
-A neutral cue is `--muted-foreground` text. Each other tone's text is its `-ink` (`--info-ink`, `--success-ink`, `--warning-ink`, `--destructive-ink`), and its glyph is the tone's fill with the paired `-foreground`. Text is `--boxel-font-size-2xs` on a 1rem line, and a `'label'` cue reads the label role (`--boxel-ui-label-*`) in `--foreground`. Position and kind are structural.
+A neutral cue is `--muted-foreground` text. Each other tone's text is its `-ink` (`--info-ink`, `--success-ink`, `--warning-ink`, `--destructive-ink`), and its glyph is the tone's fill with the paired `-foreground`. Text is `--boxel-font-size-2xs` at `--boxel-lsp` on a `--pretui-cue-line-height` line (1rem by default), and a `'label'` cue reads the label role (`--boxel-ui-label-*`), in `--foreground` unless it has a tone. Success and danger draw Alert's boxel-icons check and x; info and warning are the text `i` and `!`. The glyph's size, type size and weight, and the error and danger weight, are the `--pretui-cue-glyph-size`, `-glyph-font-size`, `-glyph-font-weight` and `-emphasis-font-weight` knobs on the cue; the glyph size is in the glyph's own em, so it scales with `-glyph-font-size`. Only `--pretui-cue-line-height` can be set on an ancestor; the other four are declared on the cue, so set them on the cue itself. Position and kind are structural.
 
 There is no cue-specific palette, which is what keeps an error beside a field the same red as an error anywhere else in the theme.
 

@@ -1,6 +1,8 @@
-// Pretui — Cue: the signage primitive behind Field's label and message line.
+// Pretui — Cue: the signage primitive behind Field's message line.
 import Component from '@glimmer/component';
 import { guidFor } from '@ember/object/internals';
+import CheckIcon from '@cardstack/boxel-icons/check';
+import XIcon from '@cardstack/boxel-icons/x';
 import { resolveTone } from '../pretui-primitives';
 import type { PretuiToneArg } from '../pretui-primitives';
 
@@ -41,12 +43,14 @@ export const CUE_TONES: readonly CueTone[] = [
   'danger',
 ];
 
-const CUE_GLYPHS: Record<CueTone, string> = {
-  neutral: '',
+// Alert's check and x; i and ! stay text, since boxel-icons draws them too
+// faint at this size
+const CUE_GLYPHS = {
+  neutral: undefined,
   info: 'i',
-  success: '✓',
+  success: CheckIcon,
   warning: '!',
-  danger: '✕',
+  danger: XIcon,
 };
 
 export interface CueSignature {
@@ -91,6 +95,12 @@ export class Cue extends Component<CueSignature> {
   get glyph() {
     return this.args.glyph === false ? undefined : CUE_GLYPHS[this.tone];
   }
+  get glyphText() {
+    return typeof this.glyph === 'string' ? this.glyph : undefined;
+  }
+  get glyphIcon() {
+    return typeof this.glyph === 'string' ? undefined : this.glyph;
+  }
   // Held in getters rather than written as `{{if}}` literals in the template:
   // ember-template-lint validates a literal `role` and would reject the
   // branch that renders no role at all.
@@ -116,8 +126,13 @@ export class Cue extends Component<CueSignature> {
       {{#if this.glyph}}<span class='pretui-cue-mark'><span
             class='pretui-cue-glyph'
             aria-hidden='true'
-            data-test-pretui-cue-glyph
-          >{{this.glyph}}</span></span>{{/if}}
+            data-test-pretui-cue-glyph={{this.tone}}
+          >{{#if this.glyphIcon}}<this.glyphIcon
+                class='pretui-cue-icon'
+                width='10'
+                height='10'
+                stroke-width='3.5'
+              />{{else}}{{this.glyphText}}{{/if}}</span></span>{{/if}}
       {{#if @text}}{{@text}}{{else}}{{yield}}{{/if}}
     </span>
     <style scoped>
@@ -126,12 +141,17 @@ export class Cue extends Component<CueSignature> {
         /* the message size matches Input's helper and error rows; the 1rem
            line-height is the row Field reserves for it */
         .pretui-cue {
+          --pretui-cue-glyph-size: 1.5em;
+          --pretui-cue-glyph-font-size: 0.75em;
+          --pretui-cue-glyph-font-weight: 700;
+          --pretui-cue-emphasis-font-weight: 500;
           display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-4xs);
           min-width: 0;
           font-size: var(--boxel-font-size-2xs);
-          line-height: 1rem;
+          line-height: var(--pretui-cue-line-height, 1rem);
+          letter-spacing: var(--boxel-lsp);
           color: var(--muted-foreground);
         }
         /* a tone's text is its -ink; its glyph is the fill with the paired
@@ -157,14 +177,20 @@ export class Cue extends Component<CueSignature> {
           --pretui-cue-on-fill: var(--destructive-foreground);
         }
         .pretui-cue[data-kind='label'] {
+          font-family: var(--boxel-ui-label-font-family);
           font-size: var(--boxel-ui-label-font-size);
           font-weight: var(--boxel-ui-label-font-weight);
           line-height: var(--boxel-ui-label-line-height);
+          letter-spacing: var(--boxel-ui-label-letter-spacing);
+        }
+        /* a toned label keeps its tone's ink */
+        .pretui-cue[data-kind='label'][data-tone='neutral'] {
           color: var(--foreground);
         }
+        /* a label keeps the label role's weight */
         .pretui-cue[data-kind='error'],
         .pretui-cue[data-tone='danger']:not([data-kind='label']) {
-          font-weight: 500;
+          font-weight: var(--pretui-cue-emphasis-font-weight);
         }
         /* top-aligned and one line tall at the cue's own font size, so the glyph
            centers on the first line of a wrapped message */
@@ -179,13 +205,21 @@ export class Cue extends Component<CueSignature> {
         .pretui-cue-glyph {
           display: inline-grid;
           place-items: center;
-          inline-size: 1.1em;
-          block-size: 1.1em;
+          inline-size: var(--pretui-cue-glyph-size);
+          block-size: var(--pretui-cue-glyph-size);
           border-radius: 50%;
-          font-size: 0.75em;
-          font-weight: 700;
+          font-size: var(--pretui-cue-glyph-font-size);
+          font-weight: var(--pretui-cue-glyph-font-weight);
+          /* the cue's line height would overflow the circle */
+          line-height: 1;
           background-color: var(--pretui-cue-fill);
           color: var(--pretui-cue-on-fill);
+        }
+        /* the icon's width/height attributes hold it before this CSS applies;
+           here it scales with the circle */
+        .pretui-cue-icon {
+          inline-size: 78%;
+          block-size: 78%;
         }
         /* logical edges: the inline pair sit on the control's reading start /
            end, the block pair above / below. RTL comes free. */

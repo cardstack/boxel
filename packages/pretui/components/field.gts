@@ -42,11 +42,12 @@ export interface FieldSignature {
 // THE wrapper every input needs: label[for] + reserved message line so
 // side-by-side fields never shift when an error appears (alignment law).
 //
-// The message line is a `Cue`, so its tone carries a glyph as well as a
-// color and a status announces itself. `<:inlineStart>` / `<:inlineEnd>` hold
-// accessories at the LOGICAL edges of the control row (a currency prefix, a
-// unit suffix, a verified tick). The message line's id is the block's second
-// param, so a control can point `aria-describedby` at it.
+// The message line is a `Cue`, so its tone sets the color and a status
+// announces itself. Its glyph keeps the tone from being color alone.
+// `<:inlineStart>` / `<:inlineEnd>` hold accessories at the LOGICAL edges of
+// the control row (a currency prefix, a unit suffix, a verified tick). The
+// message line's id is the block's second param, so a control can point
+// `aria-describedby` at it.
 export class Field extends Component<FieldSignature> {
   get controlId() {
     return `${guidFor(this)}-ctl`;
@@ -107,7 +108,6 @@ export class Field extends Component<FieldSignature> {
             @tone={{this.messageTone}}
             @text={{this.messageText}}
             @id={{this.messageId}}
-            @glyph={{false}}
           />
         {{/if}}
       </div>
@@ -124,9 +124,11 @@ export class Field extends Component<FieldSignature> {
           justify-items: start;
         }
         .pretui-fieldw > label {
+          font-family: var(--boxel-ui-label-font-family);
           font-size: var(--boxel-ui-label-font-size);
           font-weight: var(--boxel-ui-label-font-weight);
           line-height: var(--boxel-ui-label-line-height);
+          letter-spacing: var(--boxel-ui-label-letter-spacing);
           color: var(--foreground);
         }
         /* the control row: accessories sit at the LOGICAL edges, so an RTL
@@ -156,13 +158,12 @@ export class Field extends Component<FieldSignature> {
         .pretui-fieldw > :deep(.pretui-selectwrap) {
           justify-self: stretch;
         }
-        /* a flex row, so the Cue sets the line and the inherited font can't grow it */
+        /* a flex row, so the Cue sets the line and the inherited font can't
+           grow it; reads the Cue's line height, so an ancestor sets both */
         .pretui-fieldmsg {
           display: flex;
-          min-height: 1rem;
+          min-height: var(--pretui-cue-line-height, 1rem);
         }
-        /* the message Cue's glyph is off: the control's edge already shows
-           an error, and the text says it */
         /* the invalid dress is Input's: a --destructive-ink edge (the fill
            hue misses a field boundary's 3:1) and no tint, through --input,
            which the select-type triggers draw their edge from. A disabled

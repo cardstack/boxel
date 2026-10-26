@@ -53,10 +53,11 @@ module('Pretui | components/cue', function (hooks) {
         <Cue @tone='danger' @text='d' />
       </template>,
     );
-    let glyphs = all('[data-test-pretui-cue]').map((e) =>
-      e.querySelector('[data-test-pretui-cue-glyph]')?.textContent?.trim(),
-    );
-    assert.deepEqual(glyphs, ['i', '✓', '!', '✕'], 'color is never the only signal');
+    let glyphs = all('[data-test-pretui-cue]').map((e) => {
+      let g = e.querySelector('[data-test-pretui-cue-glyph]');
+      return g?.querySelector('svg') ? 'icon' : g?.textContent?.trim();
+    });
+    assert.deepEqual(glyphs, ['i', 'icon', '!', 'icon'], 'color is never the only signal');
     assert.deepEqual(
       all('[data-test-pretui-cue-glyph]').map((g) => g.getAttribute('aria-hidden')),
       Array(4).fill('true'),
@@ -92,7 +93,7 @@ module('Pretui | components/cue', function (hooks) {
     let el = cue();
     assert.strictEqual(el.dataset['kind'], 'error');
     assert.strictEqual(el.dataset['tone'], 'danger', 'the tone follows the kind without being restated');
-    assert.strictEqual(el.querySelector('[data-test-pretui-cue-glyph]')?.textContent?.trim(), '✕');
+    assert.dom('[data-test-pretui-cue-glyph="danger"] svg').exists();
   });
 
   test('an explicit tone still wins over the kind default', async function (assert) {
