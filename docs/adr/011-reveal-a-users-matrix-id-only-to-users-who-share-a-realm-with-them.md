@@ -214,3 +214,9 @@ events, as proposed in #6906, breaks §1.3 and §1.5.
   also break §1.6 because they load no module (`modules:`) that implements
   `user_may_invite` to reject invites between end users who don't share a
   realm.
+- The homeserver configurations for staging and production are kept outside
+  this repository, so no entry here can name them. They break §1.6 in the same
+  ways as the files above until each one sets the profile and invite settings
+  and loads the invite module. `.github/workflows/sync-synapse-assets.yml`
+  copies `packages/matrix/support/synapse/modules/` to those homeservers, but
+  each configuration still has to list the module under `modules:`.
