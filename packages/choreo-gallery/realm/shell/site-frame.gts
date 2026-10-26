@@ -109,7 +109,7 @@ export class SiteFrame extends Component<Signature> {
            softens instead of darkening. */
         backdrop-filter: blur(18px);
         background: transparent;
-        border-bottom: 1px solid var(--line);
+        border-bottom: 1px solid var(--border);
         transition: border-color 220ms var(--ease);
       }
 
@@ -146,7 +146,7 @@ export class SiteFrame extends Component<Signature> {
         font-size: 10px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .top-links {
@@ -157,7 +157,7 @@ export class SiteFrame extends Component<Signature> {
         font-size: 11px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       /* a link at rest carries a hairline underline, so it reads as a link
@@ -165,13 +165,13 @@ export class SiteFrame extends Component<Signature> {
       .top-links a,
       .footer a {
         text-decoration: underline;
-        text-decoration-color: var(--line-strong);
+        text-decoration-color: var(--border-strong);
         text-underline-offset: 3px;
       }
 
       @media (hover: hover) {
         .top-links a:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -220,17 +220,17 @@ export class SiteFrame extends Component<Signature> {
         justify-content: center;
         gap: 10px;
         padding: 40px 24px 48px;
-        border-top: 1px solid var(--line);
+        border-top: 1px solid var(--border);
         margin-top: 64px;
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .footer a {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {

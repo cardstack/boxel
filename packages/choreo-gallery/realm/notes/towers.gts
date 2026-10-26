@@ -287,10 +287,10 @@ const TowersNotes: TOC<NotesSignature> = <template>
       align-items: flex-start;
       gap: 0.125rem;
       padding: 0.5rem 0.8125rem;
-      border: 1px solid var(--line);
+      border: 1px solid var(--border);
       border-radius: 0.625rem;
       background: transparent;
-      color: var(--ink);
+      color: var(--foreground);
       font: inherit;
       font-size: 0.8125rem;
       font-weight: 700;
@@ -303,14 +303,14 @@ const TowersNotes: TOC<NotesSignature> = <template>
 
     .dd-join:hover {
       transform: translateY(-0.125rem);
-      border-color: var(--ember);
+      border-color: var(--primary);
     }
 
     .dd-join-sub {
       font-style: normal;
       font-size: 0.625rem;
       font-weight: 500;
-      color: color-mix(in srgb, var(--ink) 60%%, var(--bg-page));
+      color: color-mix(in srgb, var(--foreground) 60%%, var(--background));
     }
   </style>
 </template>;

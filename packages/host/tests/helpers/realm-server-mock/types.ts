@@ -16,6 +16,10 @@ export type RealmServerMockState = {
   // Realms archived via POST /_archive-realm, keyed by normalized URL. The
   // value carries the archived-at timestamp surfaced by GET /_archived-realms.
   archivedRealms: Map<string, { archivedAt: string }>;
+  // The rooms `/_realm-event-rooms` answers with, keyed by normalized realm
+  // URL. Empty unless a test sets one, so the host joins no room and every
+  // realm's events keep arriving in its session room.
+  realmEventRooms: Map<string, string>;
   mountedVirtualNetwork?: unknown;
   ensureSessionRoom?: EnsureSessionRoom;
   // When true, `_realm-auth` responds 503 — used to simulate a trusted realm

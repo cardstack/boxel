@@ -9,8 +9,10 @@ import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
 import { boxelUIChecker } from '../../lib/boxel-ui-change-checker.ts';
 import {
   ensureTrailingSlash,
+  fetchRealmEventRoom,
   fetchRealmPermissions,
   insertPermissions,
+  insertRealmEventRoom,
 } from '@cardstack/runtime-common';
 import {
   ensureMatrixAdminUser,
@@ -19,6 +21,7 @@ import {
   matrixRegistrationSecret,
   matrixURL,
   realmSecretSeed,
+  waitUntil,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import {
@@ -1403,6 +1406,36 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           perms[user].sort(),
           ['read', 'write'],
           'second call replaced the first',
+        );
+      });
+
+      // A stored event room the realm server isn't in shows that a grant
+      // checks the realm's room against its grants: the check forgets it.
+      test("upserts: a grant checks the realm's event room against its grants", async function (assert) {
+        let user = '@op-test-event-room:localhost';
+        await insertRealmEventRoom(
+          context.dbAdapter,
+          testRealmURL.href,
+          '!not-a-room:localhost',
+        );
+        let granted = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(granted.status, 200, 'the grant succeeds');
+        await waitUntil(
+          async () =>
+            (await fetchRealmEventRoom(context.dbAdapter, testRealmURL.href))
+              .roomId === null,
+          {
+            timeout: 10_000,
+            timeoutMessage: "the grant never checked the realm's event room",
+          },
         );
       });
 
