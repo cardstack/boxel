@@ -594,6 +594,85 @@ module(basename(import.meta.filename), function () {
     );
   });
 
+  test("runs a scheduled job in its turn on the realm's line, between the events queued around it", async function (assert) {
+    let h = harness({ maxInFlight: 8 });
+    let order: string[] = [];
+    void h.broadcast(REALM_A, initiation(REALM_A, `${REALM_A}card`), ['!r1']);
+    let job = h.dispatcher.schedule({
+      realmURL: REALM_A,
+      newTxnId: () => 'job-txn',
+      prepare: async () => {
+        order.push('job prepared');
+        return [
+          {
+            roomId: '!r1',
+            send: async () => {
+              order.push('job sent');
+            },
+            onFailure: async () => {},
+          },
+        ];
+      },
+    });
+    // An initiation queued after the job would merge into one queued before
+    // it if the job weren't between them.
+    let after = h.broadcast(REALM_A, initiation(REALM_A, `${REALM_A}other`), [
+      '!r1',
+    ]);
+    await h.settle();
+    assert.deepEqual(order, [], 'the job waits for the event ahead of it');
+    assert.strictEqual(h.started.length, 1);
+
+    h.started[0].done.resolve();
+    await job;
+    assert.deepEqual(order, ['job prepared', 'job sent']);
+    await h.settle();
+    assert.strictEqual(
+      h.started.length,
+      2,
+      'the event queued after the job goes out on its own, unmerged',
+    );
+    assert.strictEqual(
+      (h.started[1].event as { updatedFile: string }).updatedFile,
+      `${REALM_A}other`,
+    );
+    h.releaseAll();
+    await after;
+    assert.strictEqual(h.dispatcher.takeStats().coalesced, 0);
+  });
+
+  test('past the byte bound, drops an event but never a scheduled job', async function (assert) {
+    let eventBytes = Buffer.byteLength(
+      JSON.stringify(incremental(REALM_A, 'card-0')),
+    );
+    let h = harness({ maxInFlight: 1, maxQueuedBytes: eventBytes + 300 });
+    void h.broadcast(REALM_A, incremental(REALM_A, 'sending'));
+    await h.settle();
+
+    let jobRan = false;
+    let job = h.dispatcher.schedule({
+      realmURL: REALM_A,
+      newTxnId: () => 'job-txn',
+      prepare: async () => {
+        jobRan = true;
+        return [];
+      },
+    });
+    let dropped = false;
+    void h
+      .broadcast(REALM_A, incremental(REALM_A, 'card-0'))
+      .then(() => (dropped = true));
+    void h.broadcast(REALM_A, incremental(REALM_A, 'card-1'));
+    await h.settle();
+    assert.true(dropped, 'an event behind the job is dropped');
+    assert.strictEqual(h.dispatcher.takeStats().dropped, 1);
+
+    h.releaseAll();
+    await job;
+    assert.true(jobRan, 'the job still runs');
+    await h.dispatcher.idle();
+  });
+
   module('isBackPressure', function () {
     test('treats overload and unreachable answers as back-pressure, and nothing else', function (assert) {
       for (let status of [429, 502, 503, 504]) {

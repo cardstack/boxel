@@ -170,6 +170,97 @@ module('Integration | Component | matrix/secure-sign-in', function (hooks) {
     }
   });
 
+  test('a sign-in that lands on the app’s root page shows the workspace chooser as soon as the session is up', async function (assert) {
+    window.location.href = '/?loginToken=handed-over';
+    setLoginWithTokenInterceptor(() =>
+      Promise.resolve({
+        access_token: 't',
+        user_id: '@u:s',
+        device_id: 'd',
+      } as any),
+    );
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as any;
+    let service = matrixService(this);
+    let originalStart = service.start.bind(service);
+    let chooserOpenAtStart: boolean | undefined;
+    service.start = (async () => {
+      chooserOpenAtStart = operatorModeStateService.workspaceChooserOpened;
+    }) as typeof service.start;
+    try {
+      await render(<template><SecureSignIn /></template>);
+      await waitUntil(() => chooserOpenAtStart !== undefined);
+      assert.true(
+        chooserOpenAtStart,
+        'the chooser is open before the session that renders it is up',
+      );
+    } finally {
+      service.start = originalStart;
+    }
+  });
+
+  test('a sign-in that lands on the root page with an empty interact state shows the workspace chooser as soon as the session is up', async function (assert) {
+    let emptyInteract = encodeURIComponent(
+      JSON.stringify({
+        stacks: [],
+        submode: 'interact',
+        workspaceChooserOpened: false,
+      }),
+    );
+    window.location.href = `/?operatorModeState=${emptyInteract}&loginToken=handed-over`;
+    setLoginWithTokenInterceptor(() =>
+      Promise.resolve({
+        access_token: 't',
+        user_id: '@u:s',
+        device_id: 'd',
+      } as any),
+    );
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as any;
+    let service = matrixService(this);
+    let originalStart = service.start.bind(service);
+    let chooserOpenAtStart: boolean | undefined;
+    service.start = (async () => {
+      chooserOpenAtStart = operatorModeStateService.workspaceChooserOpened;
+    }) as typeof service.start;
+    try {
+      await render(<template><SecureSignIn /></template>);
+      await waitUntil(() => chooserOpenAtStart !== undefined);
+      assert.true(chooserOpenAtStart);
+    } finally {
+      service.start = originalStart;
+    }
+  });
+
+  test('a sign-in that lands on a page naming its own state leaves the workspace chooser to it', async function (assert) {
+    window.location.href = `${APP_PAGE}&loginToken=handed-over`;
+    setLoginWithTokenInterceptor(() =>
+      Promise.resolve({
+        access_token: 't',
+        user_id: '@u:s',
+        device_id: 'd',
+      } as any),
+    );
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as any;
+    let service = matrixService(this);
+    let originalStart = service.start.bind(service);
+    let chooserOpenAtStart: boolean | undefined;
+    service.start = (async () => {
+      chooserOpenAtStart = operatorModeStateService.workspaceChooserOpened;
+    }) as typeof service.start;
+    try {
+      await render(<template><SecureSignIn /></template>);
+      await waitUntil(() => chooserOpenAtStart !== undefined);
+      assert.false(chooserOpenAtStart);
+    } finally {
+      service.start = originalStart;
+    }
+  });
+
   test('a login token handed over in the fragment is redeemed and taken out of the address', async function (assert) {
     window.location.href = `${APP_PAGE}#loginToken=in-the-fragment`;
     let redeemed: string | undefined;

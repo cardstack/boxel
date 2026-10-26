@@ -60,6 +60,9 @@ export default class HostModeService extends Service {
     this.headTemplateContainsTitle = false;
   }
 
+  // `index.html`'s boot script makes the same decision before the app loads,
+  // to paint the app's boot and leave a published realm's page plain. A change
+  // here is made there too.
   get isActive() {
     if (this.simulatingHostMode) {
       return true;

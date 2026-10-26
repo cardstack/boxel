@@ -356,6 +356,57 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('handleReconnect wakes only the waiters whose winner no longer holds its lock', async function (assert) {
+      const coordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await coordinator.start();
+      let releaseWinner!: () => void;
+      const winnerGate = new Promise<void>((resolve) => {
+        releaseWinner = resolve;
+      });
+      try {
+        // A winner still working holds the lock for 'reconnect-held-key'.
+        const winner = coordinator.tryAcquireAndRun(
+          'reconnect-held-key',
+          async () => {
+            await winnerGate;
+            return 'done';
+          },
+        );
+        await new Promise((r) => setTimeout(r, 50));
+
+        const woken: string[] = [];
+        const heldWaiter = coordinator
+          .waitForKey('reconnect-held-key', 10_000)
+          .then(() => woken.push('held'));
+        // No one holds the lock for 'reconnect-gone-key': its winner finished
+        // or died while the connection was down.
+        const goneWaiter = coordinator
+          .waitForKey('reconnect-gone-key', 10_000)
+          .then(() => woken.push('gone'));
+
+        await coordinator.handleReconnect();
+        await goneWaiter;
+        await new Promise((r) => setTimeout(r, 200));
+        assert.deepEqual(
+          woken,
+          ['gone'],
+          'the waiter with no winner wakes; the one whose winner is working keeps waiting',
+        );
+
+        releaseWinner();
+        assert.deepEqual(await winner, { acquired: true, result: 'done' });
+        await heldWaiter;
+        assert.deepEqual(
+          woken,
+          ['gone', 'held'],
+          "the remaining waiter wakes on its winner's notification",
+        );
+      } finally {
+        releaseWinner();
+        await coordinator.shutDown();
+      }
+    });
+
     test('waitForKey: NOTIFY for an unrelated key does not resolve', async function (assert) {
       const coordinator = new ModuleCacheCoordinator({ dbAdapter });
       await coordinator.start();

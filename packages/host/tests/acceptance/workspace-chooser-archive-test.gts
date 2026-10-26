@@ -1,4 +1,4 @@
-import { click, triggerEvent, waitFor } from '@ember/test-helpers';
+import { click, triggerEvent, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -12,6 +12,7 @@ import {
   visitOperatorMode,
   realmConfigCardJSON,
 } from '../helpers';
+import { setupFeatureFlag } from '../helpers/feature-flags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -19,6 +20,26 @@ import { setupApplicationTest } from '../helpers/setup';
 // test user is not its owner), so archive affordances must never appear on it.
 const ownedRealmURL = 'http://test-realm/testuser/workspace-a/';
 const readOnlyRealmURL = 'http://test-realm/otheruser/workspace-c/';
+
+// The archived tile is gone by the time its modal returns focus, so focus goes
+// to the workspace that took its place. The focus trap returns focus after a
+// timeout that settled() doesn't track, so this waits for it.
+async function assertFocusMovesToRemainingWorkspace(assert: Assert) {
+  await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
+  await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
+  await click('[data-test-confirm-archive-button]');
+
+  await waitUntil(
+    () => document.activeElement?.closest('[data-test-workspace-list]'),
+    { timeoutMessage: 'focus never returned to a workspace tile' },
+  );
+  assert
+    .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
+    .doesNotExist('the archived workspace has left the list');
+  assert
+    .dom('[data-test-workspace-button="Workspace C"]')
+    .isFocused('focus moves to the workspace left in the list');
+}
 
 const cardsGridIndex = {
   data: {
@@ -235,6 +256,21 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
     assert
       .dom('[data-test-archived-empty]')
       .exists('expanding with nothing archived shows the empty state');
+  });
+
+  test('archiving a workspace moves focus to the workspace left in the list', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await assertFocusMovesToRemainingWorkspace(assert);
+  });
+
+  module('on the dashboard', function (hooks) {
+    setupFeatureFlag(hooks, 'DASHBOARD_V2');
+
+    test('archiving a workspace moves focus to the workspace left in the list', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      assert.dom('[data-test-dashboard]').exists();
+      await assertFocusMovesToRemainingWorkspace(assert);
+    });
   });
 
   test('non-owned workspaces have no Archive action', async function (assert) {

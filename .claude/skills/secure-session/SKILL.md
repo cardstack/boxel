@@ -55,7 +55,7 @@ a user's sessions (`isSessionRevoked`) ends these too.
 | Its seven days pass    | —                                        | That session                                                        |
 | Signing out of it      | `DELETE /_secure-session` (the session)  | That session: `boxelSignOut()` in the window, `boxel keys sign-out` |
 | Signing out of the app | `DELETE /_secure-sessions?client=window` | Every unexpired `window` row of the token's user                    |
-| Changing the password  | `POST /_secure-sessions/password-change` | Every unexpired row of the account, `cli` included                  |
+| Changing the password  | `POST /_secure-sessions/password-change` | Every unexpired row of the account, `cli` included, once it is set  |
 | Revoking all sessions  | —                                        | Every session of the user (`isSessionRevoked`)                      |
 
 The app's sign-out (`MatrixService.logout()`) calls `DELETE
@@ -77,34 +77,38 @@ and extends nothing. It ends the user's windows in every browser, since rows
 aren't tied to one, and leaves `cli` rows alone: the CLI usually runs on
 another machine.
 
-Every page that sets a password calls `POST
-/_secure-sessions/password-change` (a `password-change` resource,
-`attributes.{username, password}`) once Synapse has accepted the new
-password. Those pages are the secure origin's `reset-password` page and the
+Every page that sets a password sets it through `POST
+/_secure-sessions/password-change` (a `password-change` resource), in place of
+the Matrix request: the secure origin's `reset-password` page, and the
 credential fields' `set-password`, which the app's own reset and its
-change-password use. `username` is any name a password sign-in takes: the
-email address the reset link was sent to, or the Matrix id the app names in
-`set-password`'s `account`. `password` is the new password. The realm server
-checks the password exactly as a password sign-in does (`confirmPassword`),
-under the same per-account limit (`withPasswordLimit`; one `SignInLimiter`
-serves both routes), and then expires every unexpired row of the account. It
-answers only the secure origin, with the sign-in refusals below, and 204
-whether or not a row ended. Card code never sees the new password, so it
-can't end the CLI's sessions this way (ADR 005 §1.6). The call is best
-effort: the password stays changed when it fails, and a session signed in with
-the old password then lasts until it expires. Whoever holds the old password
-can keep the account's failure limit full to make it fail.
-`endSessionsForNewPassword` in `packages/secure-origin/src/security/session.js` (which the credential
-fields import too) tries a 429 again, after `retryAfterMs`, for up to a
-minute, but that only beats someone filling the limit by hand: a refused
-attempt costs nothing and `retryAfterMs` says when the next one is free, so a
-script that polls faster than the page takes every free attempt and keeps its
-sessions for the week. Don't treat the retry as the defense, and don't drop
-the limit on this route either: a caller holding a session would learn the
-new password from their session ending. Closing the gap needs a proof that
-doesn't share the sign-in limit. A password set any other way,
-such as by an operator through Synapse's admin `reset_password`, ends no
-secure session. To end them, expire the rows.
+change-password use. The realm server makes the Matrix `account/password`
+request itself (`changePassword` in `lib/secure-session.ts`), with
+`logout_devices: true`, and answers with the Matrix server's status and body,
+which the page reads as it would the Matrix server's own. Once the Matrix
+server accepts the change, it expires every unexpired row of the account:
+
+- **A change** (`attributes.{accessToken, currentPassword, newPassword}`): the
+  account is the access token's (`account/whoami`). The Matrix server checks
+  the current password, so card code, which holds the app's token but never
+  sees a password, can't end the CLI's sessions this way. The device that made
+  the change stays signed in; every other device is signed out.
+- **A reset** (`attributes.{sid, clientSecret, email, newPassword}`): the
+  Matrix server finds the account from the validated email and doesn't say
+  which it was, so the realm server checks the new password against the
+  account `email` names (`confirmPassword`), and ends nothing when it doesn't
+  check out. That check is made whatever the per-account limit on failed
+  sign-ins says, so keeping the limit full can't stop a reset from ending
+  sessions. The Matrix server deletes a validation session the first time a
+  reset uses it, so a second request with it is refused (401
+  `M_UNAUTHORIZED`), and each check costs a confirmed reset email.
+
+The route answers only the secure origin (403 `forbidden`), and the same
+whether or not a row ended. When ending the sessions fails after the password
+is set (the Matrix server's admin API is down, say), the failure is logged on
+`realm:secure-session` and the route still answers 200; the sessions then last
+until they expire. A password set any other way, such as by an operator
+through Synapse's admin `reset_password`, ends no secure session. To end them,
+expire the rows.
 
 A reset link carries the email address it was sent to in its fragment, so
 the page it lands on can name the account: `#clientSecret=…&email=…&sid=…` on

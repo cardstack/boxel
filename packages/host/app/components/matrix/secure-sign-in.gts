@@ -4,8 +4,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { Button } from '@cardstack/pretui/components/button';
-import { Spinner } from '@cardstack/pretui/components/spinner';
 import AuthContainer from '@cardstack/secure-origin/components/auth-container.gts';
+import BusyMessage from '@cardstack/secure-origin/components/busy-message.gts';
 import { restartableTask } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
@@ -14,12 +14,14 @@ import { resetPasswordParamsFrom } from '@cardstack/host/lib/reset-password-link
 import {
   clearRedirectGuard,
   framing,
+  landsOnWorkspaceChooser,
   noteRedirect,
   redirectedRecently,
   secureResetPasswordURL,
   secureSignInURL,
 } from '@cardstack/host/lib/secure-sign-in';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import {
   consumeLoginTokenFromUrl,
   peekLoginToken,
@@ -59,10 +61,10 @@ export default class SecureSignIn extends Component {
     <AuthContainer>
       <div class='centered' data-test-secure-sign-in-landing={{this.state}}>
         {{#if this.isBusy}}
-          <span class='title' data-test-secure-sign-in-status>
-            {{this.busyTitle}}
-          </span>
-          <Spinner @size={{24}} class='spinner' aria-label='Signing in' />
+          <BusyMessage
+            @title={{this.busyTitle}}
+            data-test-secure-sign-in-status
+          />
         {{else}}
           <span class='title' data-test-secure-sign-in-status>
             {{this.title}}
@@ -106,13 +108,11 @@ export default class SecureSignIn extends Component {
       .sign-in-button {
         width: 100%;
       }
-      .spinner {
-        color: var(--boxel-highlight);
-      }
     </style>
   </template>
 
   @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   @tracked private state: State = 'redirecting';
   @tracked private error: string | undefined;
@@ -205,6 +205,12 @@ export default class SecureSignIn extends Component {
     if (!token) {
       this.redirect();
       return;
+    }
+    // The session's first screen paints as soon as the session is up, before
+    // the index route opens the workspace chooser, so a page the route will
+    // open it on shows it from that first screen.
+    if (landsOnWorkspaceChooser()) {
+      this.operatorModeStateService.showWorkspaceChooserBeforeBoot();
     }
     try {
       let auth = await this.matrixService.loginWithSsoToken(token);

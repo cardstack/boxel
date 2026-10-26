@@ -65,10 +65,10 @@ export default class CliAuth extends Component {
   <template>
     <AuthContainer>
       {{#if this.redirectError}}
-        <span class='title'>Can't authorize</span>
+        <h1 class='title'>Can't authorize</h1>
         <p class='subtitle' data-test-cli-auth-error>{{this.redirectError}}</p>
       {{else if this.completed}}
-        <span class='title'>You're signed in</span>
+        <h1 class='title'>You're signed in</h1>
         <p class='subtitle' data-test-cli-auth-complete>Return to your terminal
           to continue. You can close this tab.</p>
       {{else if this.showingPasswordReset}}
@@ -78,7 +78,7 @@ export default class CliAuth extends Component {
           @resetPasswordParams={{this.resetPasswordParams}}
         />
       {{else if this.registering}}
-        <span class='title'>Authorize Boxel CLI</span>
+        <h1 class='title'>Authorize Boxel CLI</h1>
         <p class='subtitle'>Create a Boxel account to give the Boxel CLI running
           on this computer access to your workspaces.{{#if
             this.endedSignedInSession
@@ -90,6 +90,7 @@ export default class CliAuth extends Component {
         <RegisterUser
           @setMode={{this.setMode}}
           @onComplete={{this.onRegisterComplete}}
+          @headingLevel={{2}}
         />
       {{else}}
         <SignInScreen
@@ -138,7 +139,7 @@ export default class CliAuth extends Component {
       .title {
         font: 600 var(--boxel-font-md);
         color: var(--foreground);
-        margin-bottom: var(--boxel-sp-sm);
+        margin: 0 0 var(--boxel-sp-sm);
         padding: 0;
       }
       .subtitle {

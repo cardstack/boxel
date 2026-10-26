@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import {
+  APP_BOXEL_REALM_EVENT_ROOM_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
   SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -63,7 +64,7 @@ module(
       );
       assert.deepEqual(
         aiListCalls[0]?.list.filters,
-        { is_dm: false },
+        { is_dm: false, not_room_types: [APP_BOXEL_REALM_EVENT_ROOM_TYPE] },
         'AI-room list filters preserved across the bump',
       );
     });

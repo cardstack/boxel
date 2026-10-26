@@ -94,14 +94,17 @@ MAY take the app's session, since all it can do is end sessions; it MUST NOT
 create, extend, read or list one, and MUST answer alike whether or not a
 session ended. It SHOULD leave the CLI's sessions alone.
 
-A page that changes a user's password MUST then ask the realm server to end
-every secure session of the account, the CLI's included. The page MUST be on
-the secure origin, and it MUST prove the request with the new password. The
-realm server MUST end the sessions only once that password checks out. It
-MUST check the password as a password sign-in does, under the same limit on
-failed attempts. The route MUST answer only a request whose `Origin` is the
-secure origin's, and MUST answer alike whether or not a session ended. The
-password stays changed whatever the route answers.
+A page that changes a user's password MUST make the change through the realm
+server, which sets it on the Matrix server and then ends every secure session
+of the account, the CLI's included. The page MUST be on the secure origin. The
+realm server MUST end the sessions only once the Matrix server has accepted
+the change. A change made with an access token MUST end the sessions of the
+token's account. A reset by email MUST end the sessions of the account the
+page names by email address, and only once the new password checks out for
+that account. That check MUST NOT be refused under the limit on failed
+password sign-ins, and MUST be made at most once for each email validation
+session. The route MUST answer only a request whose `Origin` is the secure
+origin's, and MUST answer alike whether or not a session ended.
 
 A secure window whose session has ended MUST forget it and offer to sign in
 again.
@@ -158,10 +161,11 @@ card code [2]. Reusing Synapse's Google client means existing users see no new
 consent screen [2].
 
 Secure-origin pages reach the Matrix server themselves to create an account
-and to reset a password, so the password and the invite code are typed into,
-and sent from, the secure origin alone [3]. The realm server writes the Matrix
-server's URL into the page from its own configuration, so card code can't
-change where those requests go. The credential fields the app frames, on the
+and to send a reset email, so the password and the invite code are typed
+into, and sent from, the secure origin alone [3]. They set a new password
+through the realm server, for the reason below. The realm server writes the
+Matrix server's URL into the page from its own configuration, so card code
+can't change where those requests go. The credential fields the app frames, on the
 same origin and with the same storage, already connect to it [3].
 
 Signing out of the app has to reach the secure window, or a session the user
@@ -190,28 +194,34 @@ A user who resets a leaked password needs that most: whoever signed in with
 it holds a session that can change their keys for up to a week. The realm
 server can't learn of the change from Synapse. No module callback runs when a
 password is set, and the admin API shows nothing that changes with one, so
-there is nothing to poll [4]. So the page that changed the password tells
-the realm server. Every page that sets a password is on the secure origin:
-the reset page, and the credential fields the app frames for its own reset
-and change-password. The new password is the proof, and card code never sees
-it. So, unlike the app's sign-out, this route may end the CLI's sessions
-without handing card code a way to do so. Whoever knows only the old
-password can't use it here. A reset link carries the email address it was
-sent to in its fragment, because the page it lands on otherwise knows only
-the validation session, which names no account.
+there is nothing to poll [4]. Every page that sets a password is on the
+secure origin: the reset page, and the credential fields the app frames for
+its own reset and change-password. So those pages send the change to the
+realm server, which makes the Matrix request itself. Synapse accepting the
+change is then the proof that the password changed, and nothing else has to
+be checked against the account's limit on failed attempts. Whoever holds the
+old password can keep that limit full with wrong guesses, and a refused
+attempt costs them nothing, so any proof checked under it can be starved [5].
 
-Like sign-out, the request is best effort. When it fails, a session signed in
-with the old password lasts until it expires, at most a week. Whoever holds
-the old password can make it fail on purpose: by keeping the account's limit
-on failed attempts full with wrong passwords, they get the request refused.
-The pages try again for a minute when the limit refuses them, which helps
-only against someone filling it by hand. A refused attempt costs nothing, and
-the limit says exactly when its next attempt is free, so a script that polls
-faster than the page takes every free attempt and keeps its sessions for the
-week. The limit stays anyway: without it, the route would answer guesses at
-the new password without limit to whoever still holds a session, since that
-session ending is the answer. Closing the gap needs a proof that doesn't
-share the sign-in limit. A password set outside Boxel, such as by an
+A change is made with the app's access token and the current password. Card
+code holds the token but not the password, and Synapse checks the password,
+so card code can't end the CLI's sessions this way. Nor can whoever holds
+the old password make a change once the password has changed, whatever token
+they hold, since Synapse asks for the current one.
+
+A reset names no account to Synapse, which finds it from the validated
+email, and doesn't say which it was. So the page names the account by the
+email address the reset was sent to, which a reset link carries in its
+fragment, and the realm server checks the new password against that account
+before it ends anything. Without the check, a reset of an account someone
+controls could end any other account's sessions. The check runs whatever the
+sign-in limit says, which leaves a way to test guesses at another account's
+password: reset an account you control to the guess while naming theirs, and
+a session you hold of theirs ends if it was right. Synapse deletes a
+validation session when a reset uses it [6], so each guess costs a reset
+email to an account the guesser controls, which Synapse's own limits on
+validation emails pace. A link that names no account still resets the
+password, and ends no session. A password set outside Boxel, such as by an
 operator through Synapse's admin API, ends no session.
 
 Signing in to the app on the secure origin (§1.7) closes what the
@@ -272,10 +282,19 @@ as an app already signed in would show the user straight into the app.
   change logs out.** Card code holds the user's access token and can log all
   of the account's tokens out, which would end the CLI's sessions too. And the
   realm server would hold a live Matrix token for every session.
-- **Answering alike whether or not the password checks out, with no limit on
-  failed attempts.** The answer would say nothing, but whoever still holds a
-  session learns from it: it ends only when they guess the new password. With
-  no limit, that is a password oracle without a rate.
+- **Letting the page change the password on Synapse itself, then proving the
+  change to the realm server with the new password, under the limit on
+  failed sign-ins.** Whoever holds the old password can keep the limit full,
+  and the limit says exactly when its next attempt is free, so a script that
+  polls faster than the page takes every attempt and keeps its sessions for
+  the week [5].
+- **The same, with no limit on failed attempts.** Whoever still holds a
+  session learns from it ending that a guess at the new password was right.
+  With no limit, that is a password oracle without a rate.
+- **The same, under a limit of its own that only a live access token of the
+  account can reach.** A secure session mints a Matrix login token
+  (§1.7), so whoever holds one gets a fresh token after the change and can
+  keep that limit full too.
 - **Letting the app's session ask, as sign-out does.** Card code could then
   end the CLI's sessions. While card code keeps the windows signed out, the
   CLI is the only way left to replace a key.
@@ -307,6 +326,10 @@ as an app already signed in would show the user straight into the app.
 4. Synapse v1.126.0: `SetPasswordHandler.set_password` calls no module
    callback, and the admin API's user details
    (`/_synapse/admin/v2/users/<user>`) carry no password hash or change time.
+5. #6866's review: with `SignInLimiter`'s clock, a script polling every 50 ms
+   took all 10 attempts in a minute from a page retrying for that minute.
+6. Synapse v1.126.0: `EmailIdentityAuthChecker._check_threepid` deletes the
+   validation session once it has used it.
 
 ## 5. Remediation
 

@@ -202,11 +202,37 @@ export interface NotificationSubscription {
 // `establishment` resolves when LISTEN has succeeded; concurrent subscribers
 // to the same channel join the same promise so a LISTEN failure rejects all
 // of them atomically rather than leaving later subscribers stranded.
-type HandlerEntry = { fn: NotificationHandler };
+type HandlerEntry = { fn: NotificationHandler; onReconnect?: () => void };
 type ChannelState = {
   handlers: HandlerEntry[];
   establishment: Promise<void>;
 };
+
+export interface SubscribeOptions {
+  // Called after the shared notification client reconnects. Notifications sent
+  // while it was disconnected are lost, so a subscriber that keeps state in
+  // step with them (a cache, a waiter) uses this to catch up as if it had
+  // missed any of them: drop what they would have invalidated, or wake what
+  // they would have woken.
+  onReconnect?: () => void;
+}
+
+// Backoff for reconnecting the shared notification client: the first retry
+// comes quickly, because a dropped connection to a healthy database usually
+// reconnects at once, and later ones slow down to the cap so a database that
+// stays down is not retried in a tight loop.
+const NOTIFICATION_RECONNECT_INITIAL_DELAY_MS = 250;
+const NOTIFICATION_RECONNECT_MAX_DELAY_MS = 30_000;
+
+// A connection can also die without a word: a failover or a network drop that
+// sends no reset leaves the socket open on this side, and an idle LISTEN
+// connection sends nothing that would find out. TCP keepalive notices in the
+// end, but with operating-system defaults that takes minutes, so the shared
+// client is also asked a trivial query on an interval, and a query that gets
+// no answer within the timeout counts as a lost connection.
+const NOTIFICATION_KEEPALIVE_INITIAL_DELAY_MS = 10_000;
+const NOTIFICATION_HEARTBEAT_INTERVAL_MS = 30_000;
+const NOTIFICATION_HEARTBEAT_TIMEOUT_MS = 10_000;
 
 // `pg` reports a connection dying as an `error` event, and an `error` event
 // with no listener is an uncaught exception — so every connection whose
@@ -224,9 +250,8 @@ type ChannelState = {
 //
 // Severity says whether anything recovers. A pooled client is replaced on the
 // next checkout and a short-lived one reports through its caller, so those are
-// `warn`. A connection held for the life of a subscription has no reconnect
-// path — losing it degrades whatever depends on those notifications for the
-// rest of the process's life, which is worth alerting on.
+// `warn`. The shared notification client logs its own loss and reconnect (see
+// `#onNotificationClientLost`).
 //
 // Returns a function that stops recording, for the callers that hand their
 // client back: a pool re-attaches its own idle listener on release, and this
@@ -256,9 +281,16 @@ export class PgAdapter implements DBAdapter {
   // Shared LISTEN connection used by all subscribe() callers. A dedicated
   // Client (not Pool-acquired) is required because LISTEN/NOTIFY is
   // unreliable on pooled connections — see node-postgres#1543. Lazily
-  // opened on first subscribe; closed in close().
+  // opened on first subscribe; reopened after it is lost; closed in close().
   #notificationClient?: Client;
   #notificationClientStarting?: Promise<Client>;
+  #notificationReconnecting?: Promise<void>;
+  // When the shared client was lost, while it is being reopened. The open that
+  // succeeds clears it and calls each subscriber's `onReconnect`.
+  #notificationsLostAt?: number;
+  #reconnectWait?: { timer: ReturnType<typeof setTimeout>; done: () => void };
+  #notificationHeartbeat?: ReturnType<typeof setInterval>;
+  #notificationHeartbeatInFlight = false;
   #channels = new Map<string, ChannelState>();
   // In-process coalescer for the per-user cost-barrier. Multiple concurrent
   // same-user callers in this process chain on the same in-memory promise so
@@ -313,6 +345,17 @@ export class PgAdapter implements DBAdapter {
     return this.#isClosed;
   }
 
+  // Test seam: the backend pid of the shared notification connection, so a
+  // test can terminate exactly that connection. Undefined while there is none.
+  async __testOnlyNotificationBackendPid(): Promise<number | undefined> {
+    let client = this.#notificationClient;
+    if (!client) {
+      return undefined;
+    }
+    let { rows } = await client.query('SELECT pg_backend_pid() AS pid');
+    return Number(rows[0].pid);
+  }
+
   // The connection scheduler's state when read, for the health sampler:
   // connections checked out against the pool's max, acquisitions waiting,
   // and how many of those wait only because their tenant is at its share.
@@ -343,6 +386,14 @@ export class PgAdapter implements DBAdapter {
   async close() {
     log.debug(`closing ${this.url}`);
     this.#isClosed = true;
+    if (this.#notificationHeartbeat) {
+      clearInterval(this.#notificationHeartbeat);
+      this.#notificationHeartbeat = undefined;
+    }
+    // A reconnect waiting out its backoff stops now, rather than at its next
+    // check, so it cannot outlive close().
+    this.#reconnectWait?.done();
+    await this.#notificationReconnecting;
     await this.started;
     // Resolve any in-flight notification-client startup so we can end the
     // resulting Client. Without this await, a close() that races a first
@@ -380,9 +431,15 @@ export class PgAdapter implements DBAdapter {
   // same in-flight LISTEN, so a LISTEN failure rejects all racing callers
   // atomically — no caller is ever stranded with a registered handler that
   // the backend isn't actually delivering to.
+  //
+  // If the shared client's connection is lost, it is reopened with backoff and
+  // every channel that still has subscribers is listened on again. What was
+  // sent in between is lost, so each subscriber's `onReconnect` is then called
+  // for it to catch up.
   async subscribe(
     channel: string,
     handler: NotificationHandler,
+    opts: SubscribeOptions = {},
   ): Promise<NotificationSubscription> {
     await this.started;
     // Loop in case the channel state we joined gets torn down by a concurrent
@@ -423,7 +480,10 @@ export class PgAdapter implements DBAdapter {
       if (this.#channels.get(channel) !== joined) {
         continue;
       }
-      const entry: HandlerEntry = { fn: handler };
+      const entry: HandlerEntry = {
+        fn: handler,
+        onReconnect: opts.onReconnect,
+      };
       joined.handlers.push(entry);
       let unsubscribed = false;
       return {
@@ -466,7 +526,11 @@ export class PgAdapter implements DBAdapter {
       return this.#notificationClientStarting;
     }
     this.#notificationClientStarting = (async () => {
-      const client = new Client(this.config);
+      const client = new Client({
+        ...this.config,
+        keepAlive: true,
+        keepAliveInitialDelayMillis: NOTIFICATION_KEEPALIVE_INITIAL_DELAY_MS,
+      });
       client.on('notification', (n) => {
         log.debug(`heard pg notification for channel %s`, n.channel);
         const state = this.#channels.get(n.channel);
@@ -483,21 +547,203 @@ export class PgAdapter implements DBAdapter {
           }
         }
       });
-      client.on('error', (err) => {
-        // The shared client is the substrate for every subscriber, so a
-        // disconnect silently kills them all. Surface it loudly. Reconnect
-        // is not implemented here; current production has not seen this
-        // path, and the legacy listen() API has the same hazard.
-        log.error(`shared notification client error: ${String(err)}`);
-      });
-      await client.connect();
+      // A connection can die under a healthy process: a failover, a restart,
+      // an administrator terminating the backend. `pg` reports it as `error`
+      // (and then `end`), and nothing else would notice, so both start the
+      // reconnect.
+      client.on('error', (err) => this.#onNotificationClientLost(client, err));
+      client.on('end', () => this.#onNotificationClientLost(client));
+      try {
+        await client.connect();
+        if (this.#isClosed) {
+          throw new Error('PgAdapter is closed');
+        }
+        // After a reconnect, every channel that still has subscribers was
+        // listened on by the client that died: listen on all of them in one
+        // round trip, since notifications sent until then are lost. A first
+        // connect has none yet: subscribe() adds its channel after this
+        // returns.
+        const channels = [...this.#channels.keys()];
+        if (channels.length > 0) {
+          await client.query(
+            channels.map((channel) => `LISTEN ${safeName(channel)}`).join('; '),
+          );
+        }
+      } catch (err: unknown) {
+        // Not the current client yet, so ending it here does not count as
+        // losing the shared one.
+        client.end().catch(() => {});
+        throw err;
+      }
       this.#notificationClient = client;
+      this.#startNotificationHeartbeat();
+      // Whichever call opens the client after a loss, the reconnect loop or a
+      // subscribe() during its backoff, catches the subscribers up at once.
+      if (this.#notificationsLostAt !== undefined) {
+        const lostForMs = Date.now() - this.#notificationsLostAt;
+        this.#notificationsLostAt = undefined;
+        log.info(
+          `shared notification client reconnected after ${lostForMs}ms; listening on ${this.#channels.size} channel(s)`,
+        );
+        this.#callOnReconnect();
+      }
       return client;
     })();
     try {
       return await this.#notificationClientStarting;
     } finally {
       this.#notificationClientStarting = undefined;
+    }
+  }
+
+  // The shared client is the substrate for every subscriber, so losing it
+  // silently stops them all. Log the loss as an error, so it can be alerted
+  // on, and reconnect. `error` and `end` both arrive for one loss, and a
+  // client that is not the current one (one that failed to start, or one
+  // already replaced) changes nothing.
+  #onNotificationClientLost(client: Client, err?: Error): void {
+    if (this.#notificationClient !== client) {
+      if (err) {
+        log.warn(
+          `error on a notification client that is no longer in use: ${String(err)}`,
+        );
+      }
+      return;
+    }
+    this.#notificationClient = undefined;
+    client.end().catch(() => {});
+    if (this.#isClosed) {
+      return;
+    }
+    const reason = err ? `error: ${String(err)}` : 'connection ended';
+    if (this.#channels.size === 0) {
+      // Nobody is listening, so there is nothing to keep open or catch up:
+      // the next subscribe() opens a new client.
+      log.warn(
+        `shared notification client ${reason}; no channel has subscribers, so it is opened again on the next subscribe`,
+      );
+      return;
+    }
+    this.#notificationsLostAt ??= Date.now();
+    log.error(
+      `shared notification client ${reason}; reconnecting and listening again on ${this.#channels.size} channel(s)`,
+    );
+    void this.#reconnectNotificationClient();
+  }
+
+  #reconnectNotificationClient(): Promise<void> {
+    if (this.#notificationReconnecting) {
+      return this.#notificationReconnecting;
+    }
+    this.#notificationReconnecting = (async () => {
+      let delay = NOTIFICATION_RECONNECT_INITIAL_DELAY_MS;
+      for (let attempt = 1; ; attempt++) {
+        // A subscribe() may have opened the client during the backoff, and
+        // the last subscriber may have left: either way the loop is done.
+        if (this.#isClosed || this.#notificationClient) {
+          return;
+        }
+        if (this.#channels.size === 0) {
+          this.#notificationsLostAt = undefined;
+          return;
+        }
+        try {
+          await this.#ensureNotificationClient();
+          return;
+        } catch (err: unknown) {
+          if (this.#isClosed) {
+            return;
+          }
+          log.error(
+            `shared notification client reconnect attempt ${attempt} failed: ${String(err)}; retrying in ${delay}ms`,
+          );
+          await this.#waitBeforeReconnecting(delay);
+          delay = Math.min(delay * 2, NOTIFICATION_RECONNECT_MAX_DELAY_MS);
+        }
+      }
+    })().finally(() => {
+      this.#notificationReconnecting = undefined;
+    });
+    return this.#notificationReconnecting;
+  }
+
+  // Resolves after `ms`, or at once when close() cancels it.
+  #waitBeforeReconnecting(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        if (this.#reconnectWait?.done === done) {
+          this.#reconnectWait = undefined;
+        }
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      (timer as { unref?: () => void }).unref?.();
+      this.#reconnectWait = { timer, done };
+    });
+  }
+
+  #startNotificationHeartbeat(): void {
+    if (this.#notificationHeartbeat || this.#isClosed) {
+      return;
+    }
+    this.#notificationHeartbeat = setInterval(
+      () => void this.#checkNotificationClient(),
+      NOTIFICATION_HEARTBEAT_INTERVAL_MS,
+    );
+    (this.#notificationHeartbeat as { unref?: () => void }).unref?.();
+  }
+
+  // Asks the shared client a trivial query. One that fails, or gets no answer
+  // within the timeout, means the connection is gone even if its socket has
+  // not said so.
+  async #checkNotificationClient(): Promise<void> {
+    const client = this.#notificationClient;
+    if (!client || this.#notificationHeartbeatInFlight) {
+      return;
+    }
+    this.#notificationHeartbeatInFlight = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        client.query('SELECT 1'),
+        new Promise((_resolve, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `no answer to a heartbeat within ${NOTIFICATION_HEARTBEAT_TIMEOUT_MS}ms`,
+                ),
+              ),
+            NOTIFICATION_HEARTBEAT_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } catch (err: unknown) {
+      this.#onNotificationClientLost(
+        client,
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    } finally {
+      clearTimeout(timer);
+      this.#notificationHeartbeatInFlight = false;
+    }
+  }
+
+  #callOnReconnect(): void {
+    for (const [channel, state] of this.#channels) {
+      for (const entry of [...state.handlers]) {
+        if (!entry.onReconnect) {
+          continue;
+        }
+        try {
+          entry.onReconnect();
+        } catch (err: unknown) {
+          log.warn(
+            `onReconnect for a subscriber of channel ${channel} threw: ${String(err)}`,
+          );
+        }
+      }
     }
   }
 
@@ -561,42 +807,34 @@ export class PgAdapter implements DBAdapter {
     });
   }
 
-  // @deprecated — prefer `subscribe(channel, handler)`. Each call to listen()
-  // opens its own dedicated Client connection for the duration of `fn`, which
-  // doesn't scale as the number of LISTEN-using callers grows. subscribe()
-  // multiplexes all callers onto a single shared Client. This entry point is
-  // kept for callers that haven't migrated yet (e.g. pg-queue).
+  // Subscribe `handler` to `channel` for the duration of `fn`. A scoped form of
+  // `subscribe()` on the same shared client, so it is reconnected the same
+  // way: `opts.onReconnect` is called after a reconnect, for the caller to
+  // catch up on what it missed.
   async listen(
     channel: string,
     handler: (notification: Notification) => void,
     fn: () => Promise<void>,
+    opts: SubscribeOptions = {},
   ) {
-    await this.started;
-
-    // we have found that LISTEN/NOTIFY doesn't work reliably on connections from the
-    // Pool, and this is substantiated by commentary on GitHub:
-    //   https://github.com/brianc/node-postgres/issues/1543#issuecomment-353622236
-    // So for listen purposes, we establish a completely separate connection.
-    let client = new Client(this.config);
-    recordConnectionErrors(
-      client,
-      `the LISTEN connection for ${channel}`,
-      // Nothing reconnects this: the subscription is dead for the life of the
-      // process, and every caller waiting on those notifications silently
-      // falls back to whatever polling it has. `error` so it can be alerted
-      // on rather than read afterwards.
-      'error',
-    );
-    await client.connect();
+    // A closed adapter has nothing to listen on: return rather than reject, so
+    // a work loop that starts during shutdown ends quietly.
+    if (this.#isClosed) {
+      return;
+    }
+    let subscription: NotificationSubscription;
     try {
-      client.on('notification', (n) => {
-        log.debug(`heard pg notification for channel %s`, n.channel);
-        handler(n);
-      });
-      await client.query(`LISTEN ${safeName(channel)}`);
+      subscription = await this.subscribe(channel, handler, opts);
+    } catch (err: unknown) {
+      if (this.#isClosed) {
+        return;
+      }
+      throw err;
+    }
+    try {
       await fn();
     } finally {
-      await client.end();
+      await subscription.unsubscribe();
     }
   }
 

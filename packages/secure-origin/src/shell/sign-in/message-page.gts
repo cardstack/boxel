@@ -15,14 +15,7 @@ interface Signature {
 const MessagePage: TemplateOnlyComponent<Signature> = <template>
   <AuthContainer>
     <section class='message' data-test-secure-sign-in>
-      {{! The app's title is a span, laid out by where it sits; this one is
-          marked as the page's heading. }}
-      <span
-        class='title'
-        role='heading'
-        aria-level='1'
-        data-test-secure-title
-      >{{@heading}}</span>
+      <h1 class='title' data-test-secure-title>{{@heading}}</h1>
       {{#if @info}}
         <p class='info' data-test-secure-info>{{@info}}</p>
       {{/if}}

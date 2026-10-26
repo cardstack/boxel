@@ -54,6 +54,7 @@ import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
 import { realmEventDispatcher } from './realm-event-dispatcher.ts';
+import { emptyAllRetiredRealmEventRooms } from './realm-event-rooms.ts';
 import { healthCheckUserAgents } from './middleware/index.ts';
 import {
   isDeployedServerURL,
@@ -1080,6 +1081,16 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // wait for first-request mount via reconciler.lookupOrMount().
   await server.start();
 
+  // A realm event room retired while a process was stopping, or whose
+  // removals failed, is emptied now; a deleted realm never mounts again to
+  // retry it. Not awaited: it is paced with the realms' events and never
+  // rejects.
+  void emptyAllRetiredRealmEventRooms({
+    matrixClient,
+    dbAdapter,
+    dispatcher: realmEventDispatcher(),
+  });
+
   // Now that the HTTP listener is accepting traffic and serving the new host
   // shell, tell the prerender manager which shell we're serving so the fleet
   // recycles after a host redeploy. Reporting earlier (before the listener is
@@ -1104,6 +1115,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   fileChangesListener = new RealmFileChangesListener({
     dbAdapter,
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
+    listMountedRealms: () => realms,
   });
   await fileChangesListener.start();
 
@@ -1115,6 +1127,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   indexUpdatedListener = new RealmIndexUpdatedListener({
     dbAdapter,
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
+    listMountedRealms: () => realms,
   });
   await indexUpdatedListener.start();
 

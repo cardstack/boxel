@@ -120,6 +120,7 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 #### CSS Guidance
 
 - Use scalable units such as rem
+  - Exception: hairline values stay in px — border widths (`1px`), focus outline widths and offsets (`2px`), box-shadow offsets, blurs and spreads, and similar small strokes. They should stay crisp rather than scale with font size.
 - Use CSS variables from packages/boxel-ui/src/styles/variables.css
 
 #### Iterating on host tests with the Chrome MCP server
