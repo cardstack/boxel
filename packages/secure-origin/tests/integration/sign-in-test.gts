@@ -1098,6 +1098,11 @@ module('Integration | sign-in', function (hooks) {
       assert
         .dom('[data-test-secure-title]')
         .hasText('Continue to http://localhost:4200?');
+      assert
+        .dom('[data-test-secure-loopback-confirm]')
+        .hasText(
+          'A program on this computer at http://localhost:4200 wants to sign in to Boxel as you. Continue only if you started this sign-in from that program.',
+        );
       assert.false(
         server.requests.some((r) => r.path === '_secure-session/login-token'),
         'nothing is minted until the user confirms',

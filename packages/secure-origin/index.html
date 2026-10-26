@@ -4,6 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
+    <!--
+      The page is dark from its first frame: until its stylesheets arrive the
+      browser paints the canvas in the dark scheme rather than white, so a
+      redirect between the app and this page doesn't flash white.
+    -->
+    <meta name="color-scheme" content="dark" />
     <meta name="boxel-realm-server-url" content="%REALM_SERVER_URL%" />
     <meta name="boxel-matrix-url" content="%MATRIX_URL%" />
     <meta name="boxel-app-origins" content="%APP_ORIGINS%" />
