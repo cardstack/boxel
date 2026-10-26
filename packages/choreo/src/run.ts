@@ -164,6 +164,13 @@ interface RunOptions {
   inherit?: Velocities;
   /** where the prior run's ambient loops stood, to carry them on from */
   loops?: LoopPhases;
+  /**
+   * The most animation time, in ms, one painted frame may advance. Unset,
+   * a frame advances by the time since the last one (the frame loop caps
+   * that at 40 ms). Set, a run behind a long frame slows down rather than
+   * skipping: it lands later, and no frame jumps.
+   */
+  maxFrameStep?: number;
   /** a camera step landed or the run ended: the frame's new resting state */
   onCamera?(state: CameraState): void;
   /**
@@ -434,6 +441,17 @@ export class ChoreoRun implements Run {
   private ended = false;
   private resolveFinished!: () => void;
   private ticking = false;
+  /**
+   * The next tick is the first since the clock started (or resumed): it
+   * paints the run where it stands and advances nothing. The frame loop's
+   * delta on that tick is the time since ITS last frame, up to 40 ms, and
+   * a run started by a render pass would otherwise open with a 40 ms step:
+   * on an ease-out, half of a move gone before its first frame shows,
+   * which reads as a jump.
+   */
+  private freshClock = false;
+  /** the frame timestamp holdBack saw last, while a maxFrameStep applies */
+  private lastStamp: number | undefined;
   private autoTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(compiled: Compiled, options: RunOptions) {
@@ -817,6 +835,12 @@ export class ChoreoRun implements Run {
       return;
     }
     this.ticking = true;
+    this.freshClock = true;
+    this.lastStamp = undefined;
+    if (this.options.maxFrameStep) {
+      // read runs before update: the animations tick after the hold-back
+      frame.read(this.holdBack, true);
+    }
     frame.update(this.tick, true);
   }
 
@@ -824,15 +848,72 @@ export class ChoreoRun implements Run {
     if (this.ticking) {
       this.ticking = false;
       cancelFrame(this.tick);
+      cancelFrame(this.holdBack);
     }
   }
+
+  /**
+   * maxFrameStep for the animations themselves. The run's own clock is
+   * capped in tick; the tweens and springs it started run on motion-dom's
+   * frame clock, which takes the real time since their start, so a long
+   * frame would still skip that much of them. Before they update, each one
+   * driven on the main thread has its start moved on by the time past the
+   * cap: it resumes from where the last frame left it, plus one step.
+   * Animations on the compositor (WAAPI) kept playing through the long
+   * frame and are left alone.
+   */
+  private holdBack = (data: FrameData) => {
+    const step = this.options.maxFrameStep;
+    const last = this.lastStamp;
+    this.lastStamp = data.timestamp;
+    if (!step) {
+      return;
+    }
+    // The first frame: an animation the render pass started took its start
+    // from motion-dom's clock, which holds one time for a whole task, so a
+    // pass late in a long render dated it back to the task's start and its
+    // first frame skipped that far (a send's follow lost a fifth of its
+    // travel before it showed). It starts from this frame instead.
+    // After that: the time past the cap since the last frame.
+    for (const t of this.tracks) {
+      for (const c of t.controls ?? []) {
+        // the wrapper's resolved animation, read without the getter that
+        // flushes pending keyframes
+        const inner = (c as unknown as { _animation?: object })._animation as
+          | { holdTime?: number | null; startTime?: number | null }
+          | undefined;
+        if (
+          !inner ||
+          'animation' in inner ||
+          typeof inner.startTime !== 'number' ||
+          inner.holdTime !== null
+        ) {
+          continue;
+        }
+        if (last === undefined) {
+          if (data.timestamp - inner.startTime > step) {
+            inner.startTime = data.timestamp;
+          }
+        } else if (data.timestamp - last > step) {
+          inner.startTime += data.timestamp - last - step;
+        }
+      }
+    }
+  };
 
   private tick = (data: FrameData) => {
     if (!this.playing || this.cancelled || this.ended) {
       this.stopTicking();
       return;
     }
-    const next = this.master + data.delta * this.rate;
+    const step = this.options.maxFrameStep;
+    const delta = this.freshClock
+      ? 0
+      : step
+        ? Math.min(data.delta, step)
+        : data.delta;
+    this.freshClock = false;
+    const next = this.master + delta * this.rate;
     const gate = this.gates.find(
       (g) => !g.opened && g.at >= this.master && g.at <= next,
     );

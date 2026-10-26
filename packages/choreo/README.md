@@ -505,15 +505,17 @@ the lower third on its own region, and in exact mode, two Choreo runs that the f
 
 ### `<Choreo>`: the region
 
-| argument      | what                                                                                                                                                |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@id`         | the region's name, for nesting and far matching                                                                                                     |
-| `@route`      | a route swap inside the region is one pass                                                                                                          |
-| `@scroll`     | `'top'` or a thunk, applied inside the pass before the final bounds are measured                                                                    |
-| `@quiet`      | pause the rest of the page for the run's span                                                                                                       |
-| `@onCamera3D` | receives the `c.Camera3D` pose each frame; `@camera3dFrom` is the pose the first run starts from                                                    |
-| `@onPerform`  | dispatches each `c.Perform` command as the clock comes to include it; `@onPerformReset` resets commanded state when the clock moves back before one |
-| `@debug`      | outlines, and a `console.table` per run                                                                                                             |
+| argument        | what                                                                                                                                                |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@id`           | the region's name, for nesting and far matching                                                                                                     |
+| `@route`        | a route swap inside the region is one pass                                                                                                          |
+| `@scroll`       | `'top'` or a thunk, applied inside the pass before the final bounds are measured                                                                    |
+| `@quiet`        | pause the rest of the page for the run's span                                                                                                       |
+| `@idle`         | sit render passes out: no snapshot, no run, no cost; for many regions of which few can change at once                                               |
+| `@maxFrameStep` | the most animation time (ms) one painted frame may advance: behind a long frame a run slows down instead of skipping                                |
+| `@onCamera3D`   | receives the `c.Camera3D` pose each frame; `@camera3dFrom` is the pose the first run starts from                                                    |
+| `@onPerform`    | dispatches each `c.Perform` command as the clock comes to include it; `@onPerformReset` resets commanded state when the clock moves back before one |
+| `@debug`        | outlines, and a `console.table` per run                                                                                                             |
 
 It yields the context:
 
