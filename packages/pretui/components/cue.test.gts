@@ -26,7 +26,7 @@ module('Pretui | components/cue', function (hooks) {
     assert.strictEqual(el.dataset['position'], 'block-end');
     assert.strictEqual(el.dataset['tone'], 'neutral');
     assert.strictEqual(el.textContent?.trim(), 'Two decimal places');
-    assert.notOk(el.querySelector('.pretui-cue-glyph'), 'neutral is the one tone with no glyph');
+    assert.notOk(el.querySelector('[data-test-pretui-cue-glyph]'), 'neutral is the one tone with no glyph');
     assert.strictEqual(el.getAttribute('role'), null, 'a description is not a live region');
   });
 
@@ -54,11 +54,11 @@ module('Pretui | components/cue', function (hooks) {
       </template>,
     );
     let glyphs = all('[data-test-pretui-cue]').map((e) =>
-      e.querySelector('.pretui-cue-glyph')?.textContent?.trim(),
+      e.querySelector('[data-test-pretui-cue-glyph]')?.textContent?.trim(),
     );
     assert.deepEqual(glyphs, ['i', '✓', '!', '✕'], 'color is never the only signal');
     assert.deepEqual(
-      all('.pretui-cue-glyph').map((g) => g.getAttribute('aria-hidden')),
+      all('[data-test-pretui-cue-glyph]').map((g) => g.getAttribute('aria-hidden')),
       Array(4).fill('true'),
       'and the glyph is decorative — the text carries the meaning',
     );
@@ -92,7 +92,7 @@ module('Pretui | components/cue', function (hooks) {
     let el = cue();
     assert.strictEqual(el.dataset['kind'], 'error');
     assert.strictEqual(el.dataset['tone'], 'danger', 'the tone follows the kind without being restated');
-    assert.strictEqual(el.querySelector('.pretui-cue-glyph')?.textContent?.trim(), '✕');
+    assert.strictEqual(el.querySelector('[data-test-pretui-cue-glyph]')?.textContent?.trim(), '✕');
   });
 
   test('an explicit tone still wins over the kind default', async function (assert) {

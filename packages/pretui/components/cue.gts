@@ -113,10 +113,11 @@ export class Cue extends Component<CueSignature> {
       data-test-pretui-cue
       ...attributes
     >
-      {{#if this.glyph}}<span
-          class='pretui-cue-glyph'
-          aria-hidden='true'
-        >{{this.glyph}}</span>{{/if}}
+      {{#if this.glyph}}<span class='pretui-cue-mark'><span
+            class='pretui-cue-glyph'
+            aria-hidden='true'
+            data-test-pretui-cue-glyph
+          >{{this.glyph}}</span></span>{{/if}}
       {{#if @text}}{{@text}}{{else}}{{yield}}{{/if}}
     </span>
     <style scoped>
@@ -165,13 +166,21 @@ export class Cue extends Component<CueSignature> {
         .pretui-cue[data-tone='danger']:not([data-kind='label']) {
           font-weight: 500;
         }
+        /* top-aligned and one line tall at the cue's own font size, so the glyph
+           centers on the first line of a wrapped message */
+        .pretui-cue-mark {
+          display: flex;
+          align-items: center;
+          align-self: flex-start;
+          block-size: 1lh;
+          flex: none;
+        }
         /* the second, non-color channel the source lacked */
         .pretui-cue-glyph {
           display: inline-grid;
           place-items: center;
           inline-size: 1.1em;
           block-size: 1.1em;
-          flex: none;
           border-radius: 50%;
           font-size: 0.75em;
           font-weight: 700;

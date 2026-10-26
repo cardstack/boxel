@@ -50,7 +50,7 @@ Use **FormField** for anything validated. Field is right for a labeled control o
 
 Repointed into descendants when invalid: on Input, Textarea and the other boxel-ui-wrapped controls, `--border` → `--destructive-ink` and `--background` → `--field`, matching Select and Autocomplete; and on the Field itself `--input` → `--destructive-ink`, which the select-type triggers draw their edge from. A Field whose control is disabled keeps the usual edges.
 
-The `--boxel-sp-3xs` row gap and the 1rem reserved message line (the line-height Cue sets on the message) are fixed. A theme must keep `--muted-foreground` and `--destructive-ink` distinguishable at 11px — hint and error occupy the same slot, so weight (500 on the error) plus hue is the only differentiator, and hue alone fails WCAG 1.4.1.
+The row gap is `--boxel-sp-3xs`. The 1rem reserved message line is fixed: it is a flex row with `min-height: 1rem`, and Cue sets the same 1rem line-height on the message. A theme must keep `--muted-foreground` and `--destructive-ink` distinguishable at 11px — hint and error occupy the same slot, so weight (500 on the error) plus hue is the only differentiator, and hue alone fails WCAG 1.4.1.
 
 The styles sit in `@layer PretComposite`, above Input's `PretComponent` layer, so what this component sets on Input wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.
 

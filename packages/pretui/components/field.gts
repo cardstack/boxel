@@ -156,13 +156,13 @@ export class Field extends Component<FieldSignature> {
         .pretui-fieldw > :deep(.pretui-selectwrap) {
           justify-self: stretch;
         }
+        /* a flex row, so the Cue sets the line and the inherited font can't grow it */
         .pretui-fieldmsg {
+          display: flex;
           min-height: 1rem;
-          line-height: 1rem;
         }
-        /* the hint / error spans are gone: the message line is a <Cue>, which
-           brings its own type scale and its own tone. Its glyph is off: the
-           control's edge already shows an error, and the text says it. */
+        /* the message Cue's glyph is off: the control's edge already shows
+           an error, and the text says it */
         /* the invalid dress is Input's: a --destructive-ink edge (the fill
            hue misses a field boundary's 3:1) and no tint, through --input,
            which the select-type triggers draw their edge from. A disabled

@@ -38,7 +38,7 @@ export class CueUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='Cue'
-      @description='A semantic accessory for a control: label, description, live status or error. Tone always carries a second glyph channel, so meaning survives greyscale.'
+      @description='A semantic accessory for a control: label, description, live status or error.'
       @source='<Cue @kind="status" @tone="info" @text="12 matching lots" />'
       @viewportMode='inline'
     >
@@ -69,6 +69,7 @@ export class CueUsage extends GlimmerComponent {
           @name='tone'
           @options={{CUE_TONES}}
           @value={{this.tone}}
+          @description='Every tone but neutral adds a glyph.'
           @defaultValue='neutral'
           @onInput={{this.setTone}}
         />
