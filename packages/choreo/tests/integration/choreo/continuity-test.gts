@@ -16,6 +16,7 @@
  */
 import { Choreo } from '@cardstack/choreo';
 import { setupChoreo } from '@cardstack/choreo/test-support';
+import { array } from '@ember/helper';
 import { render, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -164,5 +165,72 @@ module('Integration | choreo | continuity', function (hooks) {
       )})`,
     );
     await animationsSettled();
+  });
+
+  test('a fade-in cut short by a pass that only moves the sprite still ends opaque', async function (assert) {
+    class Feed extends Component {
+      @tracked shown = false;
+      @tracked low = false;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        feed = this;
+      }
+      <template>
+        <Choreo
+          class='stage'
+          style='position:relative;width:400px;height:200px'
+          as |c|
+        >
+          <div style='padding-top:{{if this.low "60px" "0px"}}'>
+            {{#if this.shown}}
+              <div
+                id='cc-arrival'
+                style='width:80px;height:40px;background:#0af'
+                {{motion id='cc-arrival' role='cc-row'}}
+              ></div>
+            {{/if}}
+          </div>
+          {{! the transcript's shape: arrivals fade in, moves translate only }}
+          <c.Parallel>
+            <c.Tween
+              @of={{c.inserted 'cc-row'}}
+              @opacity={{array 0 1}}
+              @duration={{0.6}}
+            />
+            <c.Move
+              @of={{c.moved 'cc-row'}}
+              @duration={{0.3}}
+              @size={{false}}
+            />
+          </c.Parallel>
+        </Choreo>
+      </template>
+    }
+    let feed: Feed | undefined;
+    await render(<template><Feed /></template>);
+    await animationsSettled();
+
+    feed!.shown = true;
+    await settled();
+    await nextFrame();
+    await nextFrame();
+    await nextFrame();
+    let early = Number(getComputedStyle(el('#cc-arrival')).opacity);
+    assert.true(
+      early < 0.9,
+      `the fade is still going when the next pass comes (${early.toFixed(2)})`,
+    );
+
+    // the next pass: the arrival is now a moved participant, and its score
+    // moves it without naming its opacity
+    feed!.low = true;
+    await settled();
+    await animationsSettled();
+
+    assert.strictEqual(
+      getComputedStyle(el('#cc-arrival')).opacity,
+      '1',
+      'the cut-short fade is carried on to its end',
+    );
   });
 });

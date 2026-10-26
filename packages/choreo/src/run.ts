@@ -95,6 +95,17 @@ export interface Run {
    */
   loopPhases(): LoopPhases;
   /**
+   * The values other than geometry this run is still TWEENING — a fade
+   * cut short — with where each was going and how long its tween had
+   * left. A tween's value is neither moved nor borrowed, so a cancel stops
+   * it where it stands and nothing gives it back: a replacement pass reads
+   * this to carry each one on to its end (§3.1).
+   */
+  midfade(): Map<
+    ChoreoNode,
+    { remaining: number; to: Record<string, unknown> }
+  >;
+  /**
    * The sprites this run is DRIVING through space right now — an
    * unfinished move/spring/tween writing geometry — with each cue's
    * transition. A replacement pass reads this to complete its score: a
@@ -718,6 +729,48 @@ export class ChoreoRun implements Run {
           MIDFLIGHT_KEYS.some((key) => key in cue.target!));
       if (geometry) {
         out.set(cue.sprite.node, cue.transition);
+      }
+    }
+    return out;
+  }
+
+  midfade(): Map<
+    ChoreoNode,
+    { remaining: number; to: Record<string, unknown> }
+  > {
+    const out = new Map<
+      ChoreoNode,
+      { remaining: number; to: Record<string, unknown> }
+    >();
+    if (this.isDone()) {
+      return out;
+    }
+    for (const t of this.tracks) {
+      const { cue } = t;
+      if (
+        !t.started ||
+        t.passed ||
+        cue.kind !== 'tween' ||
+        cue.loop ||
+        cue.borrow ||
+        !cue.target
+      ) {
+        continue;
+      }
+      for (const [key, value] of Object.entries(cue.target)) {
+        if (MIDFLIGHT_KEYS.includes(key)) {
+          continue;
+        }
+        const end = Array.isArray(value) ? value[value.length - 1] : value;
+        if (end === undefined || end === null) {
+          continue;
+        }
+        let fade = out.get(cue.sprite.node);
+        if (!fade) {
+          out.set(cue.sprite.node, (fade = { remaining: 0, to: {} }));
+        }
+        fade.to[key] = end;
+        fade.remaining = Math.max(fade.remaining, t.end - this.master);
       }
     }
     return out;
