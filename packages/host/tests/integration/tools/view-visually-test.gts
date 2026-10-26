@@ -224,7 +224,7 @@ module('Integration | tools | view-visually', function (hooks) {
   });
 
   test('one part of a card is captured by a selector, at a phone width', async function (assert) {
-    await tool().execute({
+    let result = await tool().execute({
       url: `${testRealmURL}Pet/mango`,
       viewportWidth: 390,
       viewportHeight: 844,
@@ -235,6 +235,24 @@ module('Integration | tools | view-visually', function (hooks) {
       viewport: { width: 390, height: 844 },
       target: '.pricing',
     });
+    assert.strictEqual(result.viewportWidth, 390);
+    assert.strictEqual(result.viewportHeight, 844);
+    assert.strictEqual(result.target, '.pricing');
+    assert.strictEqual(
+      result.attachedImages[0].name,
+      'mango (isolated, 390×844, .pricing).png',
+      'the image is named by what it shows',
+    );
+  });
+
+  test('a capture of the page names its window and no selector', async function (assert) {
+    let result = await tool().execute({ url: `${testRealmURL}Pet/mango` });
+
+    assert.strictEqual(result.target, undefined);
+    assert.strictEqual(
+      result.attachedImages[0].name,
+      'mango (isolated, 1280×800).png',
+    );
   });
 
   test('a selector and a full-page capture together are refused', async function (assert) {
@@ -244,9 +262,69 @@ module('Integration | tools | view-visually', function (hooks) {
         target: '.pricing',
         fullPage: true,
       }),
-      /Set either target or fullPage, not both/,
+      /Cannot capture .*: cannot set both target and fullPage/,
     );
     assert.strictEqual(requests.length, 0, 'no capture is attempted');
+  });
+
+  test('a blank selector is no selector', async function (assert) {
+    await tool().execute({
+      url: `${testRealmURL}Pet/mango`,
+      target: '   ',
+      fullPage: true,
+    });
+
+    assert.deepEqual(requests[0].data.attributes.captureSpec, {
+      viewport: { width: 1280, height: 800 },
+      fullPage: true,
+    });
+  });
+
+  test('options the capture endpoint would refuse are refused in their own names', async function (assert) {
+    await assert.rejects(
+      tool().execute({
+        url: `${testRealmURL}Pet/mango`,
+        viewportWidth: 99999,
+        viewportHeight: 800,
+      }),
+      /Cannot capture .*: viewportWidth must be <= \d+\./,
+    );
+    await assert.rejects(
+      tool().execute({
+        url: `${testRealmURL}Pet/mango`,
+        target: '.x'.repeat(600),
+      }),
+      /Cannot capture .*: target must be at most \d+ characters\./,
+    );
+    assert.strictEqual(requests.length, 0, 'no capture is attempted');
+  });
+
+  test('a selector is refused for a file', async function (assert) {
+    await assert.rejects(
+      tool().execute({ url: `${testRealmURL}brand.html`, target: 'h1' }),
+      /a target selects part of a card, and a file renders in its own frame/,
+    );
+    assert.strictEqual(requests.length, 0, 'no capture is attempted');
+  });
+
+  test('a capture of one element still rendering is not retried', async function (assert) {
+    let calls = 0;
+    respondWith = () => {
+      calls++;
+      return calls === 1
+        ? new Response(null, { status: 503, headers: { 'retry-after': '1' } })
+        : ready();
+    };
+
+    await assert.rejects(
+      tool().execute({ url: `${testRealmURL}Pet/mango`, target: '.pricing' }),
+      /A capture of one element is not stored/,
+    );
+    assert.strictEqual(
+      requests.length,
+      1,
+      'no second render is queued behind the first',
+    );
   });
 
   test("a card's .json is captured as the card, a plain JSON file as a file", async function (assert) {

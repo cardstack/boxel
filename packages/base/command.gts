@@ -725,7 +725,7 @@ export class ViewVisuallyInput extends CardDef {
   });
   @field target = contains(StringField, {
     description:
-      'A CSS selector for one part of the card, such as ".pricing" or "footer", read from the card\'s template: the capture is of the first element it matches, scrolled into view and cropped to it. Use it to see a part of the card below the top of the page, or one section up close. Not with fullPage.',
+      'A CSS selector for one part of a card, such as ".pricing" or "footer", read from the card\'s template: the capture is of the first element it matches, scrolled into view and cropped to it. Use it to see a part of the card below the top of the page, or one section up close. Cards only (a file renders in its own frame), and not with fullPage.',
   });
 }
 
@@ -735,6 +735,11 @@ export class ViewVisuallyResult extends CardDef {
   @field sourceUrl = contains(StringField);
   @field kind = contains(StringField); // 'card' | 'file'
   @field format = contains(StringField);
+  // The window the capture rendered in, and the selector it was cropped to
+  // (unset for a capture of the page).
+  @field viewportWidth = contains(NumberField);
+  @field viewportHeight = contains(NumberField);
+  @field target = contains(StringField);
   // Set when the attached image shows less than the capture (a tall capture
   // cut to its top).
   @field note = contains(StringField);

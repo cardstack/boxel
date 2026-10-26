@@ -1784,6 +1784,21 @@ async function captureOneEntry(
       );
     }
     try {
+      // An element's extent is as unknowable at parse time as a fullPage
+      // document's, so the same physical-pixel cap is enforced here, before
+      // Chromium is asked for a texture past it.
+      let box = await handle.boundingBox();
+      if (
+        box &&
+        (box.width * deviceScaleFactor > CAPTURE_MAX_PHYSICAL_EDGE_PX ||
+          box.height * deviceScaleFactor > CAPTURE_MAX_PHYSICAL_EDGE_PX)
+      ) {
+        return buildInvalidRenderResponseError(
+          renderId,
+          `target capture "${entry.name}" of ${Math.round(box.width)}x${Math.round(box.height)} CSS px at ${deviceScaleFactor}x exceeds ${CAPTURE_MAX_PHYSICAL_EDGE_PX} physical pixels per edge`,
+          { title: 'Capture too large' },
+        );
+      }
       let base64 = (await handle.screenshot({
         encoding: 'base64',
         type: 'png',

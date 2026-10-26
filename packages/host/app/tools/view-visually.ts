@@ -40,9 +40,10 @@ export default class ViewVisuallyTool extends HostBaseTool<
     'instance to see a card). It renders in a 1280×800 window unless you ' +
     'give a viewport: when the work is about how something looks on a ' +
     'phone or tablet, view it at that width. It shows the top of the page ' +
-    'unless you ask for more: give a target selector to see one part of ' +
-    'it, or fullPage to see all of it. A capture taller than 4096px is cut ' +
-    'to its top.';
+    'unless you ask for more: give a target selector to see one part of a ' +
+    'card, or fullPage to see all of it. A capture more than twice as tall ' +
+    'as it is wide and taller than 4096px is cut to its top, and the result ' +
+    'says so; any other capture too large to show is scaled down whole.';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -82,6 +83,9 @@ export default class ViewVisuallyTool extends HostBaseTool<
       sourceUrl: viewed.sourceUrl,
       kind: viewed.kind,
       format: viewed.format,
+      viewportWidth: viewed.viewport.width,
+      viewportHeight: viewed.viewport.height,
+      target: viewed.target,
       note: viewed.note,
       attachedImages: [
         new AttachedImageField({

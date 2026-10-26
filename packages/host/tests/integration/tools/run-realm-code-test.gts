@@ -510,6 +510,10 @@ return { show: 'Pet/missing' };`,
       'a URL in the run realm is named by its path',
     );
     assert.strictEqual(second.format, 'embedded');
+    assert.strictEqual(second.viewportWidth, 600);
+    assert.strictEqual(second.viewportHeight, 400);
+    assert.strictEqual(second.target, '.name');
+    assert.strictEqual(first.target, undefined, 'a page capture has none');
     assert.strictEqual(result.captures.length, 2);
   });
 
