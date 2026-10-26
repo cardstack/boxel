@@ -200,6 +200,46 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
     );
   });
 
+  test('in a narrow pane the rail stops short of the pane edge, so its handle stays in reach', async function (assert) {
+    const HANDLE = '[data-test-rail-resize-handle]';
+    let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    let api = await loader.import<typeof import('@cardstack/base/card-api')>(
+      '@cardstack/base/card-api',
+    );
+    let Comp = api.getComponent(new Workspace({})) as ComponentLike<{
+      Args: { format?: Format };
+    }>;
+    await render(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='width: 22rem; height: 30rem'>
+          <Comp @format='isolated' />
+        </div>
+      </template>,
+    );
+    await click(LIBRARY);
+    await waitUntil(() => find(RAIL_SLOT)?.hasAttribute('inert'));
+    await click(TOGGLE);
+
+    let options = { button: 0, pointerId: 1 };
+    await triggerEvent(HANDLE, 'pointerdown', { ...options, clientX: 100 });
+    await triggerEvent(HANDLE, 'pointermove', { ...options, clientX: 2000 });
+    await triggerEvent(HANDLE, 'pointerup', { ...options, clientX: 2000 });
+
+    let library = find('[data-test-library]') as HTMLElement;
+    let rail = find(RAIL_SLOT) as HTMLElement;
+    assert.true(
+      Math.abs(rail.offsetWidth - (library.clientWidth - 3 * rem)) <= 1,
+      `the rail stops 3rem inside the pane (${rail.offsetWidth}px in ${library.clientWidth}px)`,
+    );
+    let handleBox = find(HANDLE)!.getBoundingClientRect();
+    let libraryBox = library.getBoundingClientRect();
+    assert.true(
+      handleBox.right <= libraryBox.right,
+      'the handle is inside the pane',
+    );
+  });
+
   test('a narrow pane starts with the rail closed, and the toggle opens it', async function (assert) {
     let api = await loader.import<typeof import('@cardstack/base/card-api')>(
       '@cardstack/base/card-api',
