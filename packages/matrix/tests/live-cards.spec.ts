@@ -12,12 +12,16 @@ import {
 } from '../helpers/index.ts';
 
 test.describe('Live Cards', () => {
+  // EXPERIMENT (do not merge): no retries, and the private-realm test 12 times.
+  test.describe.configure({ retries: 0 });
   const serverIndexUrl = new URL(appURL).origin;
   const realmName = 'realm1';
 
-  test('it can subscribe to realm events of a private realm', async ({
+  for (let i = 1; i <= 12; i++)
+  test(`it can subscribe to realm events of a private realm #${i}`, async ({
     page,
   }) => {
+    console.log(`[budget] private-realm attempt timeout=${test.info().timeout}`);
     let { username } = await createSubscribedUserAndLogin(
       page,
       'subscriber',
