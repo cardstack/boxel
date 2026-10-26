@@ -191,6 +191,7 @@ export default class KeysWindow extends Component<Signature> {
     super.willDestroy();
     this.stopListening?.();
     document.removeEventListener('visibilitychange', this.recheck);
+    window.removeEventListener('focus', this.recheck);
   }
 
   private is = (state: State) => this.page.state === state;
@@ -224,11 +225,13 @@ export default class KeysWindow extends Component<Signature> {
       },
     );
     document.addEventListener('visibilitychange', this.recheck);
+    window.addEventListener('focus', this.recheck);
   }
 
-  // Coming back into view, the window asks the server whether its session
-  // still stands: one signed out in another browser has no storage event
-  // here.
+  // Coming back into view or focus, the window asks the server whether its
+  // session still stands: the app's sign-out ends it on the server without
+  // touching this origin's storage, and so does signing out in another
+  // browser.
   private recheck = async () => {
     if (document.visibilityState !== 'visible' || !this.is('signed-in')) {
       return;
@@ -245,6 +248,7 @@ export default class KeysWindow extends Component<Signature> {
     }
     this.stopListening?.();
     document.removeEventListener('visibilitychange', this.recheck);
+    window.removeEventListener('focus', this.recheck);
     this.page.state = 'ended';
   };
 

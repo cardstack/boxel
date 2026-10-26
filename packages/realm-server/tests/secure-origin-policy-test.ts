@@ -16,7 +16,8 @@ import { createSecureOrigin, secureOriginGate } from '../lib/secure-origin.ts';
 // The built pages are also where the theme's tokens resolve, so this is where
 // the error and muted text colours are checked against WCAG AA contrast.
 
-// Every mode the shell presents, and the address Google returns to.
+// Every mode the shell presents, the key page its own address presents, and
+// the address Google returns to.
 const SHELL_PAGES = [
   '/secure',
   '/secure?mode=sign-in',
@@ -28,6 +29,10 @@ const SHELL_PAGES = [
   '/secure?mode=forgot-password',
   '/secure?mode=reset-password',
   '/secure?mode=sign-out',
+  '/secure?mode=keys',
+  '/secure?mode=enter-key',
+  '/secure?mode=share-key#realm=https%3A%2F%2Frealm.example%2F',
+  '/secure?mode=swap-key#realm=https%3A%2F%2Frealm.example%2F&share=example',
   '/secure/google-callback',
 ];
 
@@ -181,10 +186,8 @@ module(basename(import.meta.filename), function (hooks) {
           ['content-security-policy']?.includes(`default-src 'self'`),
         `${path}: served with the policy`,
       );
-      if (path !== '/secure') {
-        await page.waitForSelector('#secure-shell > *', { timeout: 10000 });
-        assert.ok(true, `${path}: the mode rendered`);
-      }
+      await page.waitForSelector('#secure-shell > *', { timeout: 10000 });
+      assert.ok(true, `${path}: the mode rendered`);
       assert.deepEqual(await violationsIn(page), [], `${path}: no violation`);
     }
   });

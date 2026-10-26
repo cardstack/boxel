@@ -151,13 +151,14 @@ async function mayRead(
   return [user, 'users', '*'].some((who) => permissions[who]?.includes('read'));
 }
 
-// The type an indexed card adopts from.
+// The type an indexed card adopts from. A card is named by its URL with or
+// without `.json`; the index keys its instance row by the `.json` file.
 async function instanceType(
   dbAdapter: DBAdapter,
   realm: Realm,
   url: string,
 ): Promise<ResolvedCodeRef | undefined> {
-  let indexURL = url.replace(/\.json$/, '');
+  let indexURL = url.endsWith('.json') ? url : `${url}.json`;
   let [row] = (await query(dbAdapter, [
     `SELECT pristine_doc FROM boxel_index WHERE url =`,
     param(indexURL),
