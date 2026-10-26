@@ -112,8 +112,10 @@ limit on failed password sign-ins.
 Once every Matrix login token minted before a change it made has expired, the
 realm server MUST sign out every Matrix device of the account but the one that
 made the change (every device, for a reset), and MUST end every realm-server
-session of the account issued before then. That sweep MUST still run when the
-realm server that scheduled it stops before it is due.
+session of the account issued before then. It MUST end them once more when
+every Matrix OpenID token requested before the sweep has expired. The sweep
+and that revocation MUST still run when the realm server that scheduled them
+stops before they are due.
 
 A secure window whose session has ended MUST forget it and offer to sign in
 again.
@@ -248,17 +250,26 @@ the realm server signs the account's devices out again once the token
 lifetime has passed after it ends the secure sessions, by when every token
 minted before then has expired. A device can mint a realm-server session that
 lasts a week in those minutes, so the sweep ends the account's realm-server
-sessions too; the kept device mints a new one with its Matrix token. The sweep
-also signs out a device signed in with the new password in those minutes,
+sessions too; the kept device mints a new one with its Matrix token. A device
+the sweep signs out can still hold a Matrix OpenID token, which buys a
+realm-server session, belongs to no device, and lasts an hour [8], so the
+realm server ends the account's sessions again once that hour has passed. The
+sweep doesn't stop a device that hands itself on: one signed in with an old
+token can mint another just before the sweep and redeem it after, again and
+again [8]. Requiring the password to mint one would stop that, but would also
+stop the secure origin's own hand-off (§1.7), which mints with an access token
+the admin API made and has no password to give [8]. So the sweep ends a token
+that was only redeemed, not one used to mint the next. The sweep also signs
+out a device signed in with the new password in those minutes,
 since nothing tells it apart, and the user signs in again. After a reset that
 is the usual case, since the reset page offers to sign in straight away. It is
 still the smaller cost: holding back sign-ins until the sweep would make every
 sign-in after a reset wait minutes, and would still miss a device signed in
 with the password directly on Synapse. The sweep is recorded in the database,
 and every realm server looks for due ones each minute, because a deploy can
-stop the realm server that recorded it within those minutes. A page that set the password with
-Synapse itself gets no sweep: the realm server can't tell which device made
-that change.
+stop the realm server that recorded it within those minutes. A page that set
+the password with Synapse itself gets no sweep: the realm server can't tell
+which device made that change.
 
 Signing in to the app on the secure origin (§1.7) closes what the
 credential fields leave open. Those fields are invisible frames inside the
@@ -337,6 +348,11 @@ as an app already signed in would show the user straight into the app.
   any device of the account [7].
 - **Revoking the account's login tokens at the change.** Synapse has no API
   that revokes a login token [7].
+- **Requiring the password to mint a login token**
+  (`login_via_existing_session.require_ui_auth`). It would stop a swept
+  device handing itself on, but the secure origin's hand-off (§1.7) mints
+  with an access token the admin API made, which has no password to give,
+  and Synapse exempts no such token [8].
 - **Holding back login tokens for the account until its sweep has run.** A
   sign-in on the secure origin after a reset would then wait minutes for its
   hand-off, and a device signed in with the password directly on Synapse
@@ -385,6 +401,13 @@ as an app already signed in would show the user straight into the app.
    (`invalidate_login_tokens_by_session_id`); the admin API's device list
    (`/_synapse/admin/v2/users/<user>/devices`) carries no creation time or
    sign-in method.
+8. Synapse v1.126.0 and v1.163.0 alike: `IdTokenServlet` stores an OpenID
+   token in `open_id_tokens` with no device and an hour's lifetime
+   (`EXPIRES_MS`), and neither `set_password` nor `delete_devices` removes
+   one; `LoginTokenRequestServlet` mints a login token for any signed-in
+   device, one a minute per user, and asks for UI auth only when
+   `login_via_existing_session.require_ui_auth` is on, then with no exemption
+   for an access token the admin API made.
 
 ## 5. Remediation
 

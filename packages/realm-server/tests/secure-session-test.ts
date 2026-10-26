@@ -46,6 +46,7 @@ import { keepsMethodAndPathOnly } from '../lib/request-telemetry.ts';
 import {
   changePassword,
   DEVICE_SWEEP_DELAY_MS,
+  SESSION_REVOCATION_DELAY_MS,
   resumeDeviceSweeps,
   runDueDeviceSweeps,
   secureSignInConfigured,
@@ -1806,12 +1807,13 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // The account's device sweep, while it is still to run.
     async function deviceSweeps(userId: string) {
       return (await dbAdapter.execute(
         `SELECT keep_device_id,
                 sweep_at > NOW() + interval '2 minutes' AS after_token_lifetime
            FROM password_change_device_sweeps
-          WHERE user_id = $1`,
+          WHERE user_id = $1 AND sweep_at IS NOT NULL`,
         { bind: [userId] },
       )) as { keep_device_id: string | null; after_token_lifetime: boolean }[];
     }
@@ -1885,10 +1887,10 @@ module(basename(import.meta.filename), function () {
         'a realm-server session issued before the sweep is live until it',
       );
 
-      assert.strictEqual(
-        await runDeviceSweepNow(userId),
-        undefined,
-        'no sweep is left',
+      assert.true(
+        (await runDeviceSweepNow(userId))! >
+          SESSION_REVOCATION_DELAY_MS - 60_000,
+        'what is left is to end the sessions again, once OpenID tokens requested before the sweep have expired',
       );
       assert.strictEqual(
         await whoami(tokenDevice),
@@ -1951,6 +1953,104 @@ module(basename(import.meta.filename), function () {
         await whoami(await matrixLogin(userId, newPassword)),
         200,
         'the new password signs in again after the sweep',
+      );
+    });
+
+    test('a realm-server session bought with an OpenID token a swept device requested ends once the token has expired', async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let appToken = await matrixLogin(userId, password);
+      let session = (await passwordSignIn(username, password)).body.data
+        .attributes;
+      let minted = await mintLoginToken(`Bearer ${session.token}`);
+      assert.strictEqual(minted.status, 201, minted.text);
+      let changed = await passwordChange({
+        accessToken: appToken,
+        currentPassword: password,
+        newPassword: `pw-${randomBytes(12).toString('hex')}`,
+      });
+      assert.strictEqual(changed.status, 200, changed.text);
+      let redeemed = await redeemLoginToken(
+        minted.body.data.attributes.loginToken,
+      );
+      assert.strictEqual(redeemed.status, 200, redeemed.body.error);
+      let tokenDevice = redeemed.body.access_token as string;
+
+      let requested = await fetch(
+        new URL(
+          `_matrix/client/v3/user/${encodeURIComponent(userId)}/openid/request_token`,
+          matrixURL,
+        ),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${tokenDevice}`,
+            'Content-Type': 'application/json',
+          },
+          body: '{}',
+        },
+      );
+      assert.strictEqual(requested.status, 200, 'the device requests one');
+      let openId = (await requested.json()) as {
+        access_token: string;
+        expires_in: number;
+      };
+      assert.true(
+        openId.expires_in * 1000 + 60_000 <= SESSION_REVOCATION_DELAY_MS,
+        'the sessions are ended again once the OpenID token has expired, with a margin',
+      );
+
+      await runDeviceSweepNow(userId);
+      assert.strictEqual(await whoami(tokenDevice), 401, 'the device is swept');
+      let vouched = await fetch(
+        new URL(
+          `_matrix/federation/v1/openid/userinfo?access_token=${encodeURIComponent(openId.access_token)}`,
+          matrixURL,
+        ),
+      );
+      assert.deepEqual(
+        { status: vouched.status, sub: ((await vouched.json()) as any).sub },
+        { status: 200, sub: userId },
+        'but its OpenID token still vouches for the account',
+      );
+
+      // Sessions are revoked by the second they were issued in.
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      let issuedAfterSweep = Math.floor(Date.now() / 1000);
+      assert.false(
+        await isSessionRevoked(dbAdapter, userId, issuedAfterSweep),
+        'a session bought with it after the sweep is live',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      await dbAdapter.execute(
+        `UPDATE password_change_device_sweeps SET revoke_at = NOW()
+          WHERE user_id = $1`,
+        { bind: [userId] },
+      );
+      assert.strictEqual(
+        await runDueDeviceSweeps({
+          dbAdapter,
+          matrixClient: { matrixURL },
+        } as any),
+        undefined,
+        'nothing is left to run',
+      );
+      assert.true(
+        await isSessionRevoked(dbAdapter, userId, issuedAfterSweep),
+        'until the token has expired',
+      );
+      assert.strictEqual(
+        await whoami(appToken),
+        200,
+        'which signs no device out',
+      );
+      assert.deepEqual(
+        await dbAdapter.execute(
+          `SELECT user_id FROM password_change_device_sweeps WHERE user_id = $1`,
+          { bind: [userId] },
+        ),
+        [],
+        'and the row is gone',
       );
     });
 

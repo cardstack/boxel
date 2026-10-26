@@ -122,13 +122,22 @@ a secure session, through `POST /_secure-session/login-token`) can mint, and
 which sign in a new device after the change. So once a change or a reset
 through the route has ended the account's rows, the realm server records a
 **device sweep** in `password_change_device_sweeps` (`user_id`,
-`keep_device_id`, `sweep_at`), due `DEVICE_SWEEP_DELAY_MS` later: a login
+`keep_device_id`, `sweep_at`, `revoke_at`), due `DEVICE_SWEEP_DELAY_MS` later: a login
 token's two-minute lifetime and a margin. The sweep signs out every device of
 the account through the admin API (`_synapse/admin/v2/users/<user>/devices`,
 then `delete_devices`) except `keep_device_id`, the device that made a change
 (none for a reset), revokes every realm-server session of the account issued
-until then (`revokeUserSessions`; the kept device mints a new one), and
-deletes the row. A device signed in with the new password before the sweep is
+until then (`revokeUserSessions`; the kept device mints a new one), and sets
+`revoke_at` `SESSION_REVOCATION_DELAY_MS` later (an OpenID token's hour and a
+margin). A swept device's OpenID token belongs to no device and outlives it,
+and buys a realm-server session, so at `revoke_at` the account's realm-server
+sessions are revoked once more, signing nothing out, and the row is deleted.
+The sweep doesn't stop a device that hands itself on: signed in with an old
+token, it can mint a login token just before the sweep and redeem it after,
+again and again. Requiring the password to mint one
+(`login_via_existing_session.require_ui_auth`) would stop that, and would stop
+`mintLoginToken` too, whose admin-minted access token has no password to
+give. A device signed in with the new password before the sweep is
 signed out too; nothing tells it apart from one an old token signed in. After a
 reset that is usual, since the reset page offers to sign in straight away.
 Each realm-server process arms a timer for the earliest sweep it knows of,

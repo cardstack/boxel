@@ -579,6 +579,10 @@ async function resetAccount(
 // (`login_via_existing_session.token_timeout`, two minutes on every
 // deployment), and a margin for the time the change's requests take.
 export const DEVICE_SWEEP_DELAY_MS = (2 * 60 + 30) * 1000;
+// How long after a sweep the account's realm-server sessions are ended once
+// more: the lifetime of a Matrix OpenID token (an hour, Synapse's
+// `IdTokenServlet.EXPIRES_MS`), and a margin.
+export const SESSION_REVOCATION_DELAY_MS = (60 + 5) * 60 * 1000;
 // How soon a sweep that failed (the Matrix server's admin API is down, say)
 // is tried again, and how often each process looks for sweeps that are due.
 const DEVICE_SWEEP_RETRY_MS = 60 * 1000;
@@ -595,6 +599,18 @@ const DEVICE_SWEEP_RETRY_MS = 60 * 1000;
 // nothing tells the two apart, since a device records neither when nor how it
 // signed in.
 //
+// A device signed out by the sweep may still hold a Matrix OpenID token it
+// requested before, which isn't tied to a device and buys a realm-server
+// session for an hour, so the account's realm-server sessions are ended once
+// more when every such token has expired (`SESSION_REVOCATION_DELAY_MS`).
+//
+// The sweep does not stop a device that hands itself on: one signed in with
+// an old login token can mint a new one just before the sweep and redeem it
+// after, and so on, and Synapse ties that token to no device the sweep could
+// sign out. Requiring the password to mint one (`require_ui_auth`) would stop
+// it, but would stop `mintLoginToken` too, whose admin-minted access token has
+// no password to give.
+//
 // The sweep is recorded in `password_change_device_sweeps` before it is
 // armed, so a realm server that stops before it is due leaves it for the
 // next one to start (`resumeDeviceSweeps`).
@@ -604,7 +620,8 @@ async function scheduleDeviceSweep(
   keepDevice: string | undefined,
 ): Promise<void> {
   // A later change of the same account signed out the device an earlier one
-  // kept, so its device is the one to keep, and its sweep comes later.
+  // kept, so its device is the one to keep, and its sweep comes later. A
+  // revocation still due stays due.
   await deps.dbAdapter.execute(
     `INSERT INTO password_change_device_sweeps (user_id, keep_device_id, sweep_at)
        VALUES ($1, $2, NOW() + $3::integer * interval '1 millisecond')
@@ -675,29 +692,60 @@ function armDeviceSweeps(deps: SecureSessionDeps, delayMs: number): void {
   sweepTimers.set(deps.dbAdapter, { at, timer });
 }
 
-// Runs every sweep that is due, and resolves to how long until the next one
-// is, if any is left. A sweep that fails stays in the table and is tried
-// again within a minute.
+// Runs every sweep and revocation that is due, and resolves to how long until
+// the next one is, if any is left. One that fails stays in the table and is
+// tried again within a minute.
 export async function runDueDeviceSweeps(
   deps: SecureSessionDeps,
 ): Promise<number | undefined> {
   let due = (await deps.dbAdapter.execute(
-    `SELECT user_id, keep_device_id FROM password_change_device_sweeps
-      WHERE sweep_at <= NOW()`,
-  )) as { user_id: string; keep_device_id: string | null }[];
+    `SELECT user_id, keep_device_id, sweep_at <= NOW() AS sweep_due
+       FROM password_change_device_sweeps
+      WHERE sweep_at <= NOW() OR revoke_at <= NOW()`,
+  )) as {
+    user_id: string;
+    keep_device_id: string | null;
+    sweep_due: boolean;
+  }[];
   let failed = false;
-  for (let { user_id: user, keep_device_id: keepDevice } of due) {
+  for (let {
+    user_id: user,
+    keep_device_id: keepDevice,
+    sweep_due: sweepDue,
+  } of due) {
     try {
-      await signOutDevicesExcept(deps, user, keepDevice ?? undefined);
+      if (sweepDue) {
+        await signOutDevicesExcept(deps, user, keepDevice ?? undefined);
+      }
       // A device the sweep signed out may have minted a realm-server session
       // in the meantime, one that can last a week, so every realm-server
       // session issued until now ends with it. The kept device mints a new
-      // one with its Matrix token; the devices signed out can't.
+      // one with its Matrix token.
       await revokeUserSessions(deps.dbAdapter, user);
-      // A sweep a later change moved past now stays for that change.
+      if (sweepDue) {
+        // The devices signed out may hold OpenID tokens that buy sessions
+        // for another hour. A sweep a later change moved past now stays for
+        // that change, whose own sweep moves the revocation later.
+        await deps.dbAdapter.execute(
+          `UPDATE password_change_device_sweeps
+              SET sweep_at = NULL,
+                  revoke_at = GREATEST(
+                    revoke_at,
+                    NOW() + $2::integer * interval '1 millisecond'
+                  )
+            WHERE user_id = $1 AND sweep_at <= NOW()`,
+          { bind: [user, SESSION_REVOCATION_DELAY_MS] },
+        );
+      } else {
+        await deps.dbAdapter.execute(
+          `UPDATE password_change_device_sweeps SET revoke_at = NULL
+            WHERE user_id = $1 AND revoke_at <= NOW()`,
+          { bind: [user] },
+        );
+      }
       await deps.dbAdapter.execute(
         `DELETE FROM password_change_device_sweeps
-          WHERE user_id = $1 AND sweep_at <= NOW()`,
+          WHERE user_id = $1 AND sweep_at IS NULL AND revoke_at IS NULL`,
         { bind: [user] },
       );
     } catch (e: any) {
@@ -708,7 +756,8 @@ export async function runDueDeviceSweeps(
     }
   }
   let [{ ms }] = (await deps.dbAdapter.execute(
-    `SELECT EXTRACT(EPOCH FROM MIN(sweep_at) - NOW()) * 1000 AS ms
+    `SELECT EXTRACT(EPOCH FROM MIN(LEAST(sweep_at, revoke_at)) - NOW()) * 1000
+              AS ms
       FROM password_change_device_sweeps`,
   )) as { ms: string | number | null }[];
   if (ms === null) {
