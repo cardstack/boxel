@@ -106,6 +106,14 @@ password sign-ins, and MUST be made at most once for each email validation
 session. The route MUST answer only a request whose `Origin` is the secure
 origin's, and MUST answer alike whether or not a session ended.
 
+Once every Matrix login token minted before a change it made has expired, the
+realm server MUST sign out every Matrix device of the account but the one that
+made the change (every device, for a reset), and MUST end every realm-server
+session of the account issued before then. It MUST end them once more when
+every Matrix OpenID token requested before the sweep has expired. The sweep
+and that revocation MUST still run when the realm server that scheduled them
+stops before they are due.
+
 A secure window whose session has ended MUST forget it. A sign-in page then
 offers to sign in again. A key page MUST NOT: it offers no sign-in of its own,
 as it offers no sign-out, and says to sign in to Boxel from the page that
@@ -228,6 +236,34 @@ validation emails pace. A link that names no account still resets the
 password, and ends no session. A password set outside Boxel, such as by an
 operator through Synapse's admin API, ends no session.
 
+Synapse signs out the account's other devices when its password changes, but
+leaves the account's unused login tokens [7]. Any device of the account can
+mint one without a password, and so can a secure session (§1.7), and a token
+minted before the change signs in a new device after it. Synapse can't revoke
+a login token, and a device records neither when nor how it signed in [7]. So
+the realm server signs the account's devices out again once the token
+lifetime has passed after it ends the secure sessions, by when every token
+minted before then has expired. A device can mint a realm-server session that
+lasts a week in those minutes, so the sweep ends the account's realm-server
+sessions too; the kept device mints a new one with its Matrix token. A device
+the sweep signs out can still hold a Matrix OpenID token, which buys a
+realm-server session, belongs to no device, and lasts an hour [8], so the
+realm server ends the account's sessions again once that hour has passed. The
+sweep doesn't stop a device that hands itself on: one signed in with an old
+token can mint another just before the sweep and redeem it after, again and
+again [8]. Requiring the password to mint one would stop that, but would also
+stop the secure origin's own hand-off (§1.7), which mints with an access token
+the admin API made and has no password to give [8]. So the sweep ends a token
+that was only redeemed, not one used to mint the next. The sweep also signs
+out a device signed in with the new password in those minutes,
+since nothing tells it apart, and the user signs in again. After a reset that
+is the usual case, since the reset page offers to sign in straight away. It is
+still the smaller cost: holding back sign-ins until the sweep would make every
+sign-in after a reset wait minutes, and would still miss a device signed in
+with the password directly on Synapse. The sweep is recorded in the database,
+and every realm server looks for due ones each minute, because a deploy can
+stop the realm server that recorded it within those minutes.
+
 Signing in to the app on the secure origin (§1.7) closes what the
 credential fields leave open. Those fields are invisible frames inside the
 app's own form, so card code can draw a form that looks the same and the user
@@ -299,6 +335,24 @@ as an app already signed in would show the user straight into the app.
   account can reach.** A secure session mints a Matrix login token
   (§1.7), so whoever holds one gets a fresh token after the change and can
   keep that limit full too.
+- **Ending the secure sessions before Synapse sets a reset's password.** That
+  stops a secure session minting a login token while the reset's own check
+  runs, but not a token minted before the reset, by a secure session or by
+  any device of the account [7].
+- **Revoking the account's login tokens at the change.** Synapse has no API
+  that revokes a login token [7].
+- **Requiring the password to mint a login token**
+  (`login_via_existing_session.require_ui_auth`). It would stop a swept
+  device handing itself on, but the secure origin's hand-off (§1.7) mints
+  with an access token the admin API made, which has no password to give,
+  and Synapse exempts no such token [8].
+- **Holding back login tokens for the account until its sweep has run.** A
+  sign-in on the secure origin after a reset would then wait minutes for its
+  hand-off, and a device signed in with the password directly on Synapse
+  would still be swept.
+- **Sparing the devices that signed in after the change.** A device records
+  neither when nor how it signed in, so one signed in with an old login token
+  can't be told apart [7].
 - **Letting the app's session ask, as sign-out does.** Card code could then
   end the CLI's sessions. While card code keeps the windows signed out, the
   CLI is the only way left to replace a key.
@@ -334,6 +388,19 @@ as an app already signed in would show the user straight into the app.
    took all 10 attempts in a minute from a page retrying for that minute.
 6. Synapse v1.126.0: `EmailIdentityAuthChecker._check_threepid` deletes the
    validation session once it has used it.
+7. Synapse v1.126.0 and v1.163.0 alike: `SetPasswordHandler.set_password`
+   deletes the account's devices and access tokens but not its `login_tokens`
+   rows, and only an OIDC back-channel logout invalidates one
+   (`invalidate_login_tokens_by_session_id`); the admin API's device list
+   (`/_synapse/admin/v2/users/<user>/devices`) carries no creation time or
+   sign-in method.
+8. Synapse v1.126.0 and v1.163.0 alike: `IdTokenServlet` stores an OpenID
+   token in `open_id_tokens` with no device and an hour's lifetime
+   (`EXPIRES_MS`), and neither `set_password` nor `delete_devices` removes
+   one; `LoginTokenRequestServlet` mints a login token for any signed-in
+   device, one a minute per user, and asks for UI auth only when
+   `login_via_existing_session.require_ui_auth` is on, then with no exemption
+   for an access token the admin API made.
 
 ## 5. Remediation
 

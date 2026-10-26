@@ -293,6 +293,10 @@ export async function performCardIndexing({
     types: types!,
     displayNames: displayNames ?? [],
     deps,
+    relationshipDeps: dependencyResolver.extractSerializedRelationshipDeps(
+      serialized ?? null,
+      instanceURL,
+    ),
     // Written on the same entry as `resource`, because it describes the bytes
     // `resource` was serialized from. The render fingerprinted the source it
     // read; pairing the two on one row is what lets the card+json GET report a

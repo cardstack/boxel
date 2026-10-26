@@ -20,16 +20,27 @@ import {
 
 const JSON_API = 'application/vnd.api+json';
 
+// A request the realm server refused. `errors` is the response's `errors`
+// array exactly as the server sent it (empty when the body had none), so a
+// caller can pass a refusal on unchanged; `reason` is those errors as text.
 export class SecureSessionRequestError extends Error {
   readonly status: number;
-  constructor(message: string, status: number) {
+  readonly errors: unknown[];
+  readonly reason: string;
+  constructor(
+    message: string,
+    status: number,
+    { errors = [], reason = '' }: { errors?: unknown[]; reason?: string } = {},
+  ) {
     super(message);
     this.name = 'SecureSessionRequestError';
     this.status = status;
+    this.errors = errors;
+    this.reason = reason;
   }
 }
 
-async function realmServerRequest(
+export async function realmServerRequest(
   realmServerUrl: string,
   path: string,
   {
@@ -63,12 +74,16 @@ async function realmServerRequest(
   if (!response.ok) {
     let text = await response.text().catch(() => '');
     let message = text.slice(0, 300);
+    let errors: unknown[] = [];
     try {
-      let errors = JSON.parse(text)?.errors;
-      if (Array.isArray(errors) && errors.length > 0) {
-        message = errors
+      let parsed = JSON.parse(text)?.errors;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        errors = parsed;
+        message = parsed
           .map((error: any) =>
-            typeof error === 'string' ? error : (error?.detail ?? ''),
+            typeof error === 'string'
+              ? error
+              : (error?.detail ?? error?.title ?? ''),
           )
           .join('; ');
       }
@@ -78,6 +93,7 @@ async function realmServerRequest(
     throw new SecureSessionRequestError(
       `${method} ${url.href} answered HTTP ${response.status}: ${message}`,
       response.status,
+      { errors, reason: message },
     );
   }
   if (response.status === 204) {
@@ -219,62 +235,4 @@ export async function secureSignOut(
       throw e;
     }
   }
-}
-
-export type KeyWriteAction = 'add' | 'replace' | 'delete';
-
-// A key write ticket for one change. The realm server mints one only for a
-// session signed in on the secure origin.
-export async function mintKeyWriteTicket(
-  realmServerUrl: string,
-  token: string,
-  { action, keyId }: { action: KeyWriteAction; keyId?: string },
-  fetchFn: typeof fetch = fetch,
-): Promise<string> {
-  let json = await realmServerRequest(realmServerUrl, '_key-write-tickets', {
-    method: 'POST',
-    token,
-    fetchFn,
-    body: {
-      data: {
-        type: 'key-write-ticket',
-        attributes: { action, ...(keyId ? { keyId } : {}) },
-      },
-    },
-  });
-  return json.data.attributes.ticket;
-}
-
-export interface UserKeyMetadata {
-  id: string;
-  name: string;
-  kind: string;
-  state: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Adds a key, under a ticket minted with `token` for the add.
-export async function addUserKey(
-  realmServerUrl: string,
-  token: string,
-  { name, value }: { name: string; value: string },
-  fetchFn: typeof fetch = fetch,
-): Promise<UserKeyMetadata> {
-  let ticket = await mintKeyWriteTicket(
-    realmServerUrl,
-    token,
-    { action: 'add' },
-    fetchFn,
-  );
-  let json = await realmServerRequest(realmServerUrl, '_user-keys', {
-    method: 'POST',
-    token,
-    fetchFn,
-    body: {
-      data: { type: 'user-key', attributes: { name, value } },
-      meta: { ticket },
-    },
-  });
-  return { id: json.data.id, ...json.data.attributes };
 }

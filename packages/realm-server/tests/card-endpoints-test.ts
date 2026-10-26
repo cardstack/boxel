@@ -5689,6 +5689,198 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        // The delete counterpart of the test above. Removing `hassan` leaves
+        // `jade`'s link in place, now broken, so `jade` is not rewritten. Its
+        // card+json assembled `hassan` into `included` before the delete, so
+        // its validator must move, and neither a cached body nor a 304 may
+        // hand a client the deleted card.
+        test('a card that links a deleted card stops serving it under a new validator', async function (assert) {
+          let before = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(before.status, 200, `HTTP 200: ${before.text}`);
+          let etag = before.get('etag') ?? '';
+          assert.ok(etag, 'the first read carries an ETag');
+          assert.ok(
+            (before.body.included ?? []).some(
+              (resource: { id: string }) =>
+                resource.id === `${testRealmHref}hassan`,
+            ),
+            'the linked card is in included before the delete',
+          );
+          let primed = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            primed.get('x-boxel-card-cache'),
+            'hit',
+            'the linking card is cached before the delete',
+          );
+
+          let deleted = await request
+            .delete('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(deleted.status, 204, `HTTP 204: ${deleted.text}`);
+
+          let gone = await request
+            .get('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(gone.status, 404, 'the deleted card is gone');
+
+          let conditional = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', etag);
+          assert.strictEqual(
+            conditional.status,
+            200,
+            `the old validator no longer matches (x-boxel-card-cache: ${conditional.get(
+              'x-boxel-card-cache',
+            )}, etag before: ${etag}, etag after: ${conditional.get('etag')})`,
+          );
+
+          let plain = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(plain.status, 200, `HTTP 200: ${plain.text}`);
+          assert.notOk(
+            (plain.body.included ?? []).some(
+              (resource: { id: string }) =>
+                resource.id === `${testRealmHref}hassan`,
+            ),
+            `the deleted card is not in included (x-boxel-card-cache: ${plain.get(
+              'x-boxel-card-cache',
+            )}, etag: ${plain.get('etag')})`,
+          );
+          assert.strictEqual(
+            plain.body.data.relationships?.friend?.links?.self,
+            './hassan',
+            'the broken link itself is kept',
+          );
+        });
+
+        // A linking card's rendered links reach `prerendered_html.deps` only
+        // once its `prerender_html` job has run, which can trail its index
+        // pass by seconds under load. Removing `jade`'s HTML row puts it back
+        // in that window: the delete must still move its validator, through
+        // the links its index row records itself.
+        test('a card whose HTML has not been rendered yet stops serving a deleted linked card', async function (assert) {
+          await dbAdapter.execute(
+            `DELETE FROM prerendered_html WHERE realm_url = '${testRealmHref}' AND url = '${testRealmHref}jade.json'`,
+          );
+
+          let before = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(before.status, 200, `HTTP 200: ${before.text}`);
+          let etag = before.get('etag') ?? '';
+          assert.ok(etag, 'the first read carries an ETag');
+          assert.ok(
+            (before.body.included ?? []).some(
+              (resource: { id: string }) =>
+                resource.id === `${testRealmHref}hassan`,
+            ),
+            'the linked card is in included before the delete',
+          );
+
+          let deleted = await request
+            .delete('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(deleted.status, 204, `HTTP 204: ${deleted.text}`);
+
+          let after = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(after.status, 200, `HTTP 200: ${after.text}`);
+          assert.notStrictEqual(
+            after.get('etag'),
+            etag,
+            `the linking card's validator moved (x-boxel-card-cache: ${after.get(
+              'x-boxel-card-cache',
+            )})`,
+          );
+          assert.notOk(
+            (after.body.included ?? []).some(
+              (resource: { id: string }) =>
+                resource.id === `${testRealmHref}hassan`,
+            ),
+            'the deleted card is not in included',
+          );
+        });
+
+        // The same, for cards made the way a client makes them: both created
+        // by POST, the link written as an absolute URL to the target's id.
+        test('a created card that links a deleted created card stops serving it', async function (assert) {
+          let localPathOf = (id: string) =>
+            new URL(id).pathname.replace(new URL(testRealmHref).pathname, '');
+          let createFriend = async (
+            firstName: string,
+            friendId?: string,
+          ): Promise<string> => {
+            let write = await request
+              .post('/')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: { firstName },
+                  ...(friendId
+                    ? {
+                        relationships: {
+                          friend: { links: { self: friendId } },
+                        },
+                      }
+                    : {}),
+                  meta: {
+                    adoptsFrom: {
+                      module: rri(`${testRealmHref}friend`),
+                      name: 'Friend',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+            assert.strictEqual(write.status, 201, `HTTP 201: ${write.text}`);
+            return write.body.data.id;
+          };
+          let targetId = await createFriend('Ringo');
+          let linkingId = await createFriend('Hassan', targetId);
+
+          let before = await request
+            .get(`/${localPathOf(linkingId)}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(before.status, 200, `HTTP 200: ${before.text}`);
+          let etag = before.get('etag') ?? '';
+          assert.ok(
+            (before.body.included ?? []).some(
+              (resource: { id: string }) => resource.id === targetId,
+            ),
+            'the linked card is in included before the delete',
+          );
+
+          let deleted = await request
+            .delete(`/${localPathOf(targetId)}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(deleted.status, 204, `HTTP 204: ${deleted.text}`);
+
+          let after = await request
+            .get(`/${localPathOf(linkingId)}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(after.status, 200, `HTTP 200: ${after.text}`);
+          assert.notStrictEqual(
+            after.get('etag'),
+            etag,
+            `the linking card's validator moved (x-boxel-card-cache: ${after.get(
+              'x-boxel-card-cache',
+            )})`,
+          );
+          assert.notOk(
+            (after.body.included ?? []).some(
+              (resource: { id: string }) => resource.id === targetId,
+            ),
+            'the deleted card is not in included',
+          );
+        });
+
         // `hassan-tag` reads `hassan`'s name into a computed field, so patching
         // `hassan` re-indexes `hassan-tag` in the same pass. The realm computed
         // `hassan-tag`'s new state, so nobody holds it and every client wants

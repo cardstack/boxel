@@ -20,7 +20,7 @@ import {
 } from '../helpers/integration.ts';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import { keysSignIn, keysSignOut } from '../../src/commands/keys/index.ts';
-import { addUserKey } from '../../src/lib/secure-session.ts';
+import { addUserKey } from '../../src/lib/user-keys.ts';
 
 const realmServerUrl = `${TEST_REALM_SERVER_URL}/`;
 const secureOriginURL = new URL('https://secure.cli-keys.test/secure');

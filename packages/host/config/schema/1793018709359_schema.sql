@@ -50,6 +50,7 @@
    diagnostics BLOB,
    host_shell_generation INTEGER,
    source_content_hash TEXT,
+   relationship_deps BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -77,6 +78,7 @@
    source_content_hash TEXT,
    job_id INTEGER,
    staging_id TEXT NOT NULL,
+   relationship_deps BLOB,
    PRIMARY KEY ( realm_url, staging_id, url, type ) 
 );
 
