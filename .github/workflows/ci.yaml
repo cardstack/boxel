@@ -841,6 +841,12 @@ jobs:
         if: matrix.shardIndex == 1
         run: pnpm test:shard-assignment
         working-directory: packages/matrix
+      - name: Run compact-synapse-db unit tests
+        # Runs the script against SQLite fixtures in temp directories. It only
+        # needs docker to list running containers, so once on shard 1.
+        if: matrix.shardIndex == 1
+        run: pnpm test:compact-synapse-db
+        working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
         run: |
           MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &

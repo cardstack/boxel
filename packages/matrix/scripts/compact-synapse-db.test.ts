@@ -13,7 +13,9 @@ after(() => rmSync(scratch, { recursive: true, force: true }));
 interface Setup {
   members: string[];
   cursor: [number, string];
-  maxPruned?: number;
+  // Omitted: no marker table. Null: the table with no row.
+  maxPruned?: number | null;
+  partialJoinStart?: number;
 }
 
 // The synapse tables the script reads, with the columns synapse gives them.
@@ -60,9 +62,17 @@ function createDataDir(name: string, setup: Setup) {
         stream_id BIGINT NOT NULL
       );
     `);
+    if (setup.maxPruned !== null) {
+      db.prepare(
+        'INSERT INTO device_lists_changes_in_room_max_pruned_stream_id (stream_id) VALUES (?)',
+      ).run(setup.maxPruned);
+    }
+  }
+  if (setup.partialJoinStart !== undefined) {
     db.prepare(
-      'INSERT INTO device_lists_changes_in_room_max_pruned_stream_id (stream_id) VALUES (?)',
-    ).run(setup.maxPruned);
+      `INSERT INTO partial_state_rooms (room_id, device_lists_stream_id)
+         VALUES ('!c:elsewhere.example', ?)`,
+    ).run(setup.partialJoinStart);
   }
   let insertChange = db.prepare(
     `INSERT INTO device_lists_changes_in_room
@@ -128,13 +138,13 @@ function readState(dataDir: string) {
     )
     .get();
   let maxPruned = hasMarker
-    ? (
+    ? ((
         db
           .prepare(
             'SELECT stream_id FROM device_lists_changes_in_room_max_pruned_stream_id',
           )
-          .get() as { stream_id: number }
-      ).stream_id
+          .get() as { stream_id: number } | undefined
+      )?.stream_id ?? null)
     : undefined;
   db.close();
   return { streams, cursor: [cursor.stream_id, cursor.room_id], maxPruned };
@@ -166,32 +176,65 @@ test('a federating database keeps the unconverted streams and records the conver
   assert.equal(result.maxPruned, 2);
 });
 
+test('a partial join that started before the cursor keeps the streams it replays', () => {
+  let result = compact(
+    createDataDir('partial-join', {
+      members: ['@local-user:localhost'],
+      cursor: [4, '!a:localhost'],
+      maxPruned: 0,
+      partialJoinStart: 2,
+    }),
+  );
+  assert.deepEqual(result.streams, [2, 3, 4, 5]);
+  assert.deepEqual(result.cursor, [4, '!a:localhost']);
+  assert.equal(result.maxPruned, 1);
+});
+
 test('a pruned-stream marker synapse already raised past the boundary is not lowered', () => {
   let result = compact(
     createDataDir('marker-ahead', {
-      members: ['@local-user:localhost'],
-      cursor: [2, '!a:localhost'],
-      maxPruned: 10,
+      members: ['@local-user:localhost', '@remote-user:elsewhere.example'],
+      cursor: [3, '!a:localhost'],
+      maxPruned: 4,
     }),
   );
-  assert.deepEqual(result.streams, [5]);
-  assert.equal(result.maxPruned, 10);
+  assert.deepEqual(result.streams, [3, 4, 5]);
+  assert.deepEqual(result.cursor, [3, '!a:localhost']);
+  assert.equal(result.maxPruned, 4);
 });
 
-test('a database without the pruned-stream marker table is refused and left as it was', () => {
-  let dataDir = createDataDir('no-marker', {
-    members: ['@local-user:localhost'],
-    cursor: [2, '!a:localhost'],
+for (let [name, maxPruned] of [
+  ['table', undefined],
+  ['row', null],
+] as const) {
+  test(`a database without the pruned-stream marker ${name} is refused and left as it was`, () => {
+    let dataDir = createDataDir(`no-marker-${name}`, {
+      members: ['@local-user:localhost'],
+      cursor: [2, '!a:localhost'],
+      maxPruned,
+    });
+    assert.throws(
+      () => runScript(dataDir),
+      (e: { stderr: string }) =>
+        e.stderr.includes(
+          'has no device_lists_changes_in_room_max_pruned_stream_id row',
+        ),
+    );
+    let result = readState(dataDir);
+    assert.deepEqual(result.streams, [1, 2, 3, 4, 5]);
+    assert.deepEqual(result.cursor, [2, '!a:localhost']);
+    assert.equal(result.maxPruned, maxPruned);
   });
-  assert.throws(
-    () => runScript(dataDir),
-    (e: { stderr: string }) =>
-      e.stderr.includes(
-        'has no device_lists_changes_in_room_max_pruned_stream_id table',
-      ),
+}
+
+test('a database without the pruned-stream marker compacts when nothing is deleted', () => {
+  let result = compact(
+    createDataDir('no-marker-nothing-pruned', {
+      members: ['@local-user:localhost', '@remote-user:elsewhere.example'],
+      cursor: [1, '!a:localhost'],
+    }),
   );
-  let result = readState(dataDir);
   assert.deepEqual(result.streams, [1, 2, 3, 4, 5]);
-  assert.deepEqual(result.cursor, [2, '!a:localhost']);
+  assert.deepEqual(result.cursor, [1, '!a:localhost']);
   assert.equal(result.maxPruned, undefined);
 });
