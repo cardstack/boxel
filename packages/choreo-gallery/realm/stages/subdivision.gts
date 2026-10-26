@@ -236,17 +236,17 @@ export class Subdivision extends Component {
         min-width: 0;
         min-height: 0;
         padding: 10px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 14px;
         background: var(--bg-spot);
-        color: var(--ink);
+        color: var(--foreground);
         text-align: left;
         cursor: pointer;
         overflow: hidden;
       }
 
       .sub-tile.is-on {
-        border-color: rgba(255, 59, 31, 0.45);
+        border-color: color-mix(in srgb, var(--primary) 45%, transparent);
         background: var(--bg-spot);
       }
 
@@ -256,7 +256,7 @@ export class Subdivision extends Component {
       }
 
       .sub-tile small {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 11px;
       }
 
@@ -275,7 +275,7 @@ export class Subdivision extends Component {
         inset: 0;
         margin: auto;
         border-radius: 999px;
-        background: var(--line-strong);
+        background: var(--border-strong);
         transition: background 120ms ease;
       }
 
@@ -288,7 +288,11 @@ export class Subdivision extends Component {
         background: rgb(243 236 227 / 42%);
         border: 1px solid var(--bg-spot);
         box-shadow: 0 2px 8px
-          rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.55 * var(--shadow-a) * 100%),
+            transparent
+          );
         transition:
           background 120ms ease,
           scale 140ms ease;
@@ -357,7 +361,7 @@ export class Subdivision extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .choreo-site:not([data-theme='light']) .sub-tile {

@@ -984,7 +984,7 @@ export class FeatureReel extends Component {
         overflow: hidden;
         border: 1px solid rgb(255 255 255 / 13%);
         border-radius: 30px;
-        background: var(--bg);
+        background: var(--canvas);
         box-shadow: 0 35px 90px rgb(0 0 0 / 32%);
       }
 

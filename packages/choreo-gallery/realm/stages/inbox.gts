@@ -318,8 +318,8 @@ export class Inbox extends Component {
         /* a color tint rather than a neutral one — the bar is chrome the same way
          the topbar or a card is, and everything else on the page that plays that
          role takes its warmth from the brand rather than from plain white */
-        background: rgba(255, 59, 31, 0.05);
-        border: 1px solid rgba(255, 59, 31, 0.14);
+        background: color-mix(in srgb, var(--primary) 5%, transparent);
+        border: 1px solid color-mix(in srgb, var(--primary) 14%, transparent);
       }
 
       .inbox-compose {
@@ -398,14 +398,14 @@ export class Inbox extends Component {
         text-align: right;
         font-size: 13px;
         font-weight: 600;
-        color: rgba(var(--ink-rgb), 0.72);
+        color: color-mix(in srgb, var(--foreground) 72%, transparent);
       }
 
       .inbox-trash svg {
         width: 19px;
         height: 19px;
         fill: none;
-        stroke: rgba(var(--ink-rgb), 0.5);
+        stroke: color-mix(in srgb, var(--foreground) 50%, transparent);
         stroke-width: 1.5;
         stroke-linecap: round;
         stroke-linejoin: round;
@@ -427,8 +427,9 @@ export class Inbox extends Component {
         font: inherit;
         padding: 10px 13px 10px 10px;
         border-radius: 14px;
-        background: rgba(var(--surface-tint-rgb), 0.055);
-        border: 1px solid rgba(var(--surface-tint-rgb), 0.08);
+        background: color-mix(in srgb, var(--surface-tint) 5.5%, transparent);
+        border: 1px solid
+          color-mix(in srgb, var(--surface-tint) 8%, transparent);
         color: inherit;
       }
 
@@ -438,8 +439,12 @@ export class Inbox extends Component {
 
       @media (hover: hover) {
         .mail:hover {
-          background: rgba(var(--surface-tint-rgb), 0.09);
-          border-color: rgba(var(--surface-tint-rgb), 0.14);
+          background: color-mix(in srgb, var(--surface-tint) 9%, transparent);
+          border-color: color-mix(
+            in srgb,
+            var(--surface-tint) 14%,
+            transparent
+          );
         }
       }
 
@@ -468,9 +473,10 @@ export class Inbox extends Component {
         display: grid;
         place-items: center;
         border-radius: 8px;
-        border: 1px solid rgba(var(--surface-tint-rgb), 0.12);
-        background: rgba(var(--surface-tint-rgb), 0.06);
-        color: rgba(var(--ink-rgb), 0.62);
+        border: 1px solid
+          color-mix(in srgb, var(--surface-tint) 12%, transparent);
+        background: color-mix(in srgb, var(--surface-tint) 6%, transparent);
+        color: color-mix(in srgb, var(--foreground) 62%, transparent);
         font: inherit;
         cursor: pointer;
         /* hidden until the row is hovered, but never display:none — the row is a
@@ -549,12 +555,12 @@ export class Inbox extends Component {
         font-size: 10px;
         font-variant-numeric: tabular-nums;
         letter-spacing: 0.02em;
-        color: rgba(var(--ink-rgb), 0.4);
+        color: color-mix(in srgb, var(--foreground) 40%, transparent);
       }
 
       .mail-copy small {
         font-size: 12px;
-        color: rgba(var(--ink-rgb), 0.5);
+        color: color-mix(in srgb, var(--foreground) 50%, transparent);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

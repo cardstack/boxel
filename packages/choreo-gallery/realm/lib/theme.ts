@@ -2,8 +2,9 @@ import { tracked } from '@glimmer/tracking';
 
 /**
  * The gallery's color scheme — every demo included, since they all draw from
- * the same `--bg`/`--ink`/`--line` ladder the gallery root declares rather
- * than hardcoding their own colors.
+ * the same theme-contract ladder (`--canvas`, `--foreground`, `--border`, …)
+ * that the gallery's theme card sets, rather than hardcoding their own
+ * colors.
  *
  * Dark is the default: it is the palette every demo was designed against.
  * Light is there for whoever wants it, remembered once they pick it, but

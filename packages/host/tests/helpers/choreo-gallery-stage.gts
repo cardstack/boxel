@@ -4,6 +4,8 @@ import { render } from '@ember/test-helpers';
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { getService } from '@universal-ember/test-support';
 
+import { CardContainer } from '@cardstack/boxel-ui/components';
+
 import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -24,6 +26,7 @@ import {
 
 import type * as DemoModule from '../../../choreo-gallery/realm/demo';
 import type * as GalleryModule from '../../../choreo-gallery/realm/gallery';
+import type * as CardAPI from '@cardstack/base/card-api';
 import type { ComponentLike } from '@glint/template';
 
 /** a card instance document in the gallery realm, as much as the tests read */
@@ -73,6 +76,8 @@ export function setupChoreoGalleryTest(
   setupBaseRealm(hooks);
   setupChoreo(hooks);
   let loader: Loader | undefined;
+  // built once per test, and linked by every card the helpers build
+  let theme: Promise<CardAPI.CardDef> | undefined;
 
   setupLocalIndexing(hooks);
   setupCardLogs(
@@ -88,6 +93,7 @@ export function setupChoreoGalleryTest(
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
+    theme = undefined;
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: { ...choreoGalleryContents(), ...opts.contents },
@@ -101,6 +107,35 @@ export function setupChoreoGalleryTest(
         throw new Error('the gallery test realm is set up in beforeEach');
       }
       return loader;
+    },
+
+    /**
+     * The gallery's theme card, built from the realm's `theme.json`: the
+     * palette and type every gallery component reads. The cards the helpers
+     * build link it, as the realm's own instances do, and share the one
+     * instance a test builds.
+     */
+    theme(): Promise<CardAPI.CardDef> {
+      theme ??= (async () => {
+        let doc = JSON.parse(CONTENTS['theme.json'] as string);
+        let { createFromSerialized } = await gallery.loader.import<
+          typeof CardAPI
+        >('@cardstack/base/card-api');
+        return await createFromSerialized<typeof CardAPI.CardDef>(
+          doc.data,
+          doc,
+          new URL(`${testRealmURL}theme`),
+        );
+      })();
+      return theme;
+    },
+
+    /** the `cardInfo` of a gallery card: its link to the gallery's theme */
+    async cardInfo(): Promise<CardAPI.CardInfoField> {
+      let { CardInfoField } = await gallery.loader.import<typeof CardAPI>(
+        '@cardstack/base/card-api',
+      );
+      return new CardInfoField({ theme: await gallery.theme() });
     },
 
     /** a module of the gallery realm, by its path there: `stages/fold` */
@@ -119,7 +154,7 @@ export function setupChoreoGalleryTest(
         await gallery.import<typeof GalleryModule>('gallery');
       await renderCard(
         gallery.loader,
-        new ChoreoGallery({ demos }),
+        new ChoreoGallery({ demos, cardInfo: await gallery.cardInfo() }),
         'isolated',
       );
     },
@@ -172,6 +207,7 @@ export function setupChoreoGalleryTest(
           return new classes[name]!({
             id: `${testRealmURL}demos/${slug}`,
             ...attributes,
+            cardInfo: await gallery.cardInfo(),
             lesson: lesson ? new DemoLesson(lesson) : undefined,
             walkthrough: (walkthrough ?? []).map(
               (step) => new WalkthroughStep(step),
@@ -195,8 +231,9 @@ export function setupChoreoGalleryTest(
 
     /**
      * Render a stage the way the demo page places it: inside the gallery's
-     * root (its palette and type), in a well of a fixed size that is the
-     * stage's platter container.
+     * root, under the card container that carries the gallery's theme (its
+     * palette and type), in a well of a fixed size that is the stage's
+     * platter container.
      */
     async renderStage(
       Stage: ComponentLike,
@@ -208,17 +245,27 @@ export function setupChoreoGalleryTest(
           Element: HTMLDivElement;
         }>;
       }>('shell/choreo-root');
+      let theme = (await gallery.theme()) as CardAPI.Theme;
+      let themeCss = theme.cssVariables;
+      let cssImports = theme.cssImports;
       let well = stageWellStyle({ width, height });
       // the stage signature's args are optional, and a test renders a stage
       // on its own with none of them
       let AnyStage = Stage as ComponentLike<{ Args: { face?: string } }>;
       await render(
         <template>
-          <ChoreoRoot>
-            <div class='choreo-stage-well' style={{well}}>
-              <AnyStage @face='stage' />
-            </div>
-          </ChoreoRoot>
+          <CardContainer
+            @isThemed={{true}}
+            @themeCss={{themeCss}}
+            @themeScope='choreo-gallery-theme'
+            @cssImports={{cssImports}}
+          >
+            <ChoreoRoot>
+              <div class='choreo-stage-well' style={{well}}>
+                <AnyStage @face='stage' />
+              </div>
+            </ChoreoRoot>
+          </CardContainer>
         </template>,
       );
     },

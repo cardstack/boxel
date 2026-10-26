@@ -216,8 +216,8 @@ export class FarMatch extends Component {
         top: 14px;
         right: 14px;
         z-index: 3;
-        border: 1px solid var(--line-strong);
-        background: rgba(var(--bg-rgb), 0.72);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--canvas) 72%, transparent);
         backdrop-filter: blur(8px);
         border-radius: 999px;
         padding: 7px 12px;
@@ -225,12 +225,12 @@ export class FarMatch extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {
         .replay:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -251,9 +251,9 @@ export class FarMatch extends Component {
          nothing about the other two. */
       .bay {
         padding: 10px 8px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 12px;
-        background: var(--bg-elev);
+        background: var(--card);
       }
 
       .bay-head {
@@ -262,7 +262,7 @@ export class FarMatch extends Component {
         font-size: 9px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         margin-bottom: 8px;
       }
 
@@ -277,12 +277,12 @@ export class FarMatch extends Component {
 
       .piece {
         position: relative;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 9px;
         padding: 7px 6px 7px 16px;
         background: var(--bg-spot);
-        color: var(--ink);
-        font: 12px var(--font);
+        color: var(--foreground);
+        font: 12px var(--font-sans);
         text-align: left;
         cursor: pointer;
         overflow: hidden;
@@ -302,7 +302,7 @@ export class FarMatch extends Component {
 
       @media (hover: hover) {
         .piece:hover {
-          border-color: var(--line-hot, var(--line-strong));
+          border-color: var(--line-hot, var(--border-strong));
         }
       }
     </style>

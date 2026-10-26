@@ -164,6 +164,10 @@ export const APP_BOXEL_CATALOG_REALMS_EVENT_TYPE = 'app.boxel.catalog-realms';
 export const APP_BOXEL_DASHBOARD_EVENT_TYPE = 'app.boxel.dashboard';
 export const APP_BOXEL_SYSTEM_CARD_EVENT_TYPE = 'app.boxel.system-card';
 export const APP_BOXEL_REALM_EVENT_TYPE = 'app.boxel.realm-event';
+// The room type of the room a private realm sends its realm events into. Its
+// members are the users the realm's grants name, so one copy of each event
+// reaches all of them, in place of a copy in each one's session room.
+export const APP_BOXEL_REALM_EVENT_ROOM_TYPE = 'app.boxel.realm-events';
 export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';
 export const BOT_TRIGGER_EVENT_TYPE = 'app.boxel.bot-trigger';
 export const APP_BOXEL_REASONING_CONTENT_KEY = 'app.boxel.reasoning';
@@ -272,6 +276,7 @@ export const DEFAULT_FALLBACK_MODEL_ID = 'anthropic/claude-haiku-5.5';
 
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
+export const SLIDING_SYNC_REALM_EVENT_ROOM_LIST_NAME = 'realm-event-room';
 export const SLIDING_SYNC_LIST_RANGE_END = 9;
 // Sliding-sync per-room timeline_limit is sized differently per list, and the
 // AI-room list also uses a two-stage value: small during the very first sync
@@ -302,7 +307,9 @@ export const SLIDING_SYNC_LIST_RANGE_END = 9;
 // initiation → update → incremental, plus an extra initiation per file in
 // multi-file batches). The `update` event sits in the middle of that burst and
 // is what DirectoryResource subscribes to for live file-tree refresh; without
-// the higher limit it gets silently dropped from the live Room.timeline.
+// the higher limit it gets silently dropped from the live Room.timeline. The
+// rooms of private realms (realm-event-room list) receive the same bursts, so
+// they use the same limit.
 export const INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
 // The ai-bot's room list window. Sliding sync reports changes only for rooms
 // inside the requested range, and matrix-js-sdk does not backfill a `limited`
@@ -315,4 +322,11 @@ export const INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
 export const SLIDING_SYNC_AI_BOT_ROOM_LIST_RANGE: [number, number] = [0, 99];
 export const SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT = 20;
 export const SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT = 20;
+// Sliding sync orders a list by recent activity and reports changes only for
+// rooms inside its range. A host is in the event room of every private realm
+// it has opened that still names it, which can be more rooms than this
+// window, but a room moves back into the window as soon as it gets an event.
+export const SLIDING_SYNC_REALM_EVENT_ROOM_LIST_RANGE: [number, number] = [
+  0, 99,
+];
 export const SLIDING_SYNC_TIMEOUT = 30000;

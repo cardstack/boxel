@@ -5,8 +5,10 @@ import { tmpdir } from 'os';
 import fsExtra from 'fs-extra';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  fetchRealmEventRoom,
   fetchSessionRoom,
   insertPermissions,
+  insertRealmEventRoom,
   upsertSessionRoom,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -300,6 +302,149 @@ module(basename(import.meta.filename), function (hooks) {
       sentTo,
       ['!room-carol:localhost'],
       "only the named subscriber's room receives the event",
+    );
+  });
+
+  function recordingMatrixClient() {
+    let sentTo: string[] = [];
+    let matrixClient = {
+      login: async () => undefined,
+      getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn',
+      sendEvent: async (roomId: string) => {
+        sentTo.push(roomId);
+        return '$event';
+      },
+    } as unknown as MatrixClient;
+    return { matrixClient, sentTo };
+  }
+
+  async function insertSessionFor(user: string, roomId: string) {
+    let name = user.slice(1, user.indexOf(':'));
+    await insertUser(dbAdapter, user, `cus_${name}`, `${name}@example.com`);
+    await upsertSessionRoom(dbAdapter, user, roomId);
+  }
+
+  test("sends a private realm's event once, into the realm's event room", async function (assert) {
+    await insertSessionFor('@alice:localhost', '!alice:localhost');
+    await insertSessionFor('@bob:localhost', '!bob:localhost');
+    await insertPermissions(dbAdapter, realmURL, {
+      '@alice:localhost': ['read', 'write'],
+      '@bob:localhost': ['read'],
+    });
+    await insertRealmEventRoom(dbAdapter, realmURL.href, '!events:localhost');
+
+    let { matrixClient, sentTo } = recordingMatrixClient();
+    await new NodeAdapter('/tmp').broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.deepEqual(
+      sentTo,
+      ['!events:localhost'],
+      'sent to the realm event room and to no session room',
+    );
+  });
+
+  test("sends a private realm's event to session rooms until it has an event room", async function (assert) {
+    await insertSessionFor('@alice:localhost', '!alice:localhost');
+    await insertSessionFor('@bob:localhost', '!bob:localhost');
+    await insertPermissions(dbAdapter, realmURL, {
+      '@alice:localhost': ['read', 'write'],
+      '@bob:localhost': ['read'],
+    });
+
+    let { matrixClient, sentTo } = recordingMatrixClient();
+    await new NodeAdapter('/tmp').broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.deepEqual(
+      sentTo.sort(),
+      ['!alice:localhost', '!bob:localhost'],
+      "sent to each grantee's session room",
+    );
+  });
+
+  test("sends a world-readable realm's event to session rooms even when it has an event room", async function (assert) {
+    await insertSessionFor('@alice:localhost', '!alice:localhost');
+    await insertPermissions(dbAdapter, realmURL, {
+      '*': ['read'],
+      '@alice:localhost': ['read', 'write'],
+    });
+    await insertRealmEventRoom(dbAdapter, realmURL.href, '!events:localhost');
+
+    let { matrixClient, sentTo } = recordingMatrixClient();
+    await new NodeAdapter('/tmp').broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.deepEqual(
+      sentTo,
+      ['!alice:localhost'],
+      "the room holds only named users, so a world-readable realm's readers would not hear it",
+    );
+  });
+
+  test('sends an event meant for named recipients to their session rooms, not to the event room', async function (assert) {
+    await insertSessionFor('@alice:localhost', '!alice:localhost');
+    await insertSessionFor('@bob:localhost', '!bob:localhost');
+    await insertPermissions(dbAdapter, realmURL, {
+      '@alice:localhost': ['read', 'write'],
+      '@bob:localhost': ['read'],
+    });
+    await insertRealmEventRoom(dbAdapter, realmURL.href, '!events:localhost');
+
+    let { matrixClient, sentTo } = recordingMatrixClient();
+    await new NodeAdapter('/tmp').broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+      { recipients: ['@alice:localhost'] },
+    );
+
+    assert.deepEqual(sentTo, ['!alice:localhost']);
+  });
+
+  test("forgets a private realm's event room the realm server is no longer in", async function (assert) {
+    await insertPermissions(dbAdapter, realmURL, {
+      '@alice:localhost': ['read'],
+    });
+    await insertRealmEventRoom(dbAdapter, realmURL.href, '!events:localhost');
+
+    let matrixClient = {
+      login: async () => undefined,
+      getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn-1',
+      sendEvent: async () => {
+        throw new Error(
+          `Unable to send room event 'app.boxel.realm-event' to room !events:localhost: status 403 - {"errcode":"M_FORBIDDEN","error":"User @realm_server:localhost not in room !events:localhost"}`,
+        );
+      },
+    } as unknown as MatrixClient;
+
+    await new NodeAdapter(
+      '/tmp',
+      false,
+      new RealmEventDispatcher(),
+    ).broadcastRealmEvent(makeEvent(), realmURL.href, matrixClient, dbAdapter);
+
+    assert.deepEqual(
+      await fetchRealmEventRoom(dbAdapter, realmURL.href),
+      { isPrivate: true, roomId: null },
+      'the next host to ask gets a new room',
     );
   });
 });

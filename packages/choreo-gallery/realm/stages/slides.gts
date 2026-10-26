@@ -264,9 +264,9 @@ export class Slides extends Component {
         width: min(82cqw, 320px);
         height: min(74cqh, 430px);
         overflow: hidden;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 22px;
-        background: var(--bg-well);
+        background: var(--inset);
         /* the type is sized against the deck, not the page. inline-size, not size:
            `container-type: size` on the region below it made the projection tree
            measure a contained box and strand its transforms. */
@@ -286,11 +286,11 @@ export class Slides extends Component {
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .slides-next {
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         background: transparent;
         border-radius: 999px;
         padding: 5px 10px;
@@ -298,13 +298,13 @@ export class Slides extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         cursor: pointer;
       }
 
       @media (hover: hover) {
         .slides-next:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -346,7 +346,11 @@ export class Slides extends Component {
           #2a0c08 100%
         );
         box-shadow: 0 12px 28px
-          rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.35 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       /* fit-content on both, so projection scales the type between two real sizes
@@ -362,7 +366,7 @@ export class Slides extends Component {
 
       .slide-kicker {
         width: fit-content;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: clamp(11px, 4cqw, 13px);
       }
 
@@ -372,7 +376,7 @@ export class Slides extends Component {
         font-style: normal;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ember-hot);
+        color: var(--hot-ink);
       }
 
       /* 1 — the title card: a small mark, everything centred */

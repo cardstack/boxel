@@ -182,7 +182,7 @@ export class GuidePage extends Component<Signature> {
       }
 
       .guide-all {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         text-decoration: none;
       }
 
@@ -190,16 +190,17 @@ export class GuidePage extends Component<Signature> {
         display: flex;
         gap: 8px;
         margin: 0 0 8px;
-        font-family: var(--font-mono);
-        font-size: 10px;
+        font-family: var(--boxel-eyebrow-font-family);
         font-weight: 500;
-        letter-spacing: 0.16em;
+        font-size: calc(var(--boxel-eyebrow-font-size) * 10 / 11);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: calc(var(--boxel-eyebrow-letter-spacing) * 16 / 18);
         text-transform: uppercase;
-        color: var(--eyebrow);
+        color: var(--primary-ink);
       }
 
       .guide-section-number {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .guide-section ol {
@@ -216,22 +217,22 @@ export class GuidePage extends Component<Signature> {
         padding: 4px 10px;
         margin-left: -10px;
         border-left: 2px solid transparent;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         text-decoration: none;
       }
 
       .guide-nav a[aria-current='page'] {
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .guide-section a[aria-current='page'] {
-        border-left-color: var(--ember-ink);
-        background: rgba(var(--surface-tint-rgb), 0.05);
+        border-left-color: var(--primary-ink);
+        background: color-mix(in srgb, var(--surface-tint) 5%, transparent);
       }
 
       @media (hover: hover) {
         .guide-nav a:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -243,10 +244,9 @@ export class GuidePage extends Component<Signature> {
       .guide-article {
         min-width: 0;
         max-width: 820px;
-        color: var(--ink);
-        --foreground: var(--ink);
-        --boxel-border: 1px solid var(--line);
-        --markdown-font-family: var(--font);
+        color: var(--foreground);
+        --boxel-border: 1px solid var(--border);
+        --markdown-font-family: var(--font-sans);
         --markdown-font-size: 16px;
         --markdown-line-height: 1.7;
         --markdown-prose-max-width: 68ch;
@@ -262,9 +262,17 @@ export class GuidePage extends Component<Signature> {
         --markdown-h3-font-size: 19px;
         --markdown-h3-margin-block: 32px 8px;
         --markdown-link-color: var(--copper-ink);
-        --markdown-border-color: var(--line);
-        --markdown-muted-background: rgba(var(--surface-tint-rgb), 0.06);
-        --markdown-code-background: rgba(var(--surface-tint-rgb), 0.08);
+        --markdown-border-color: var(--border);
+        --markdown-muted-background: color-mix(
+          in srgb,
+          var(--surface-tint) 6%,
+          transparent
+        );
+        --markdown-code-background: color-mix(
+          in srgb,
+          var(--surface-tint) 8%,
+          transparent
+        );
         --markdown-code-font-size: 0.86em;
         --markdown-code-padding: 0.1em 0.35em;
         --markdown-code-border-radius: 4px;
@@ -297,16 +305,16 @@ export class GuidePage extends Component<Signature> {
           align-items: center;
           justify-content: space-between;
           padding: 0 0 16px;
-          border-bottom: 1px solid var(--line);
+          border-bottom: 1px solid var(--border);
         }
 
         .guide-nav-toggle {
           display: inline-flex;
           padding: 6px 12px;
-          border: 1px solid var(--line-strong);
+          border: 1px solid var(--border-strong);
           border-radius: 999px;
           background: none;
-          color: var(--ink-dim);
+          color: var(--muted-foreground);
         }
 
         .guide-nav-toggle::after {
