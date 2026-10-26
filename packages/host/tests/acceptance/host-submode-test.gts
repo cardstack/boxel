@@ -653,6 +653,33 @@ module('Acceptance | host submode', function (hooks) {
         .exists();
     });
 
+    test('a card opened in host submode appears in Recents, and going back to one keeps its place', async function (assert) {
+      let primaryCardId = `${testRealmURL}ViewCardDemo/1`;
+      let stackCardId = `${testRealmURL}ViewCardDemo/2`;
+      let recentCards = getService('recent-cards-service');
+
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${primaryCardId}.json`],
+      });
+      assert.strictEqual(recentCards.recentCardIds[0], primaryCardId);
+
+      await click(
+        `[data-test-host-mode-card="${primaryCardId}"] [data-test-view-card-demo-button]`,
+      );
+      await waitFor(`[data-test-host-mode-stack-item="${stackCardId}"]`);
+      assert.strictEqual(recentCards.recentCardIds[0], stackCardId);
+
+      await click(`[data-test-host-mode-breadcrumb="${primaryCardId}"]`);
+      await waitUntil(
+        () =>
+          !document.querySelector(
+            `[data-test-host-mode-stack-item="${stackCardId}"]`,
+          ),
+      );
+      assert.strictEqual(recentCards.recentCardIds[0], stackCardId);
+    });
+
     test('viewCard tabs maintain state after stacking and closing cards', async function (assert) {
       let primaryCardId = `${testRealmURL}ViewCardDemo/1`;
       let firstStackCardId = `${testRealmURL}ViewCardDemo/2`;
