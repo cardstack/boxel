@@ -2,30 +2,37 @@
 // log, then rewriting the file without the freed pages.
 //
 // Synapse writes a `device_lists_changes_in_room` row for every room a user
-// has joined each time one of their devices changes, and never deletes those
-// rows. A user that gets a new device on every login and sits in thousands of
-// session rooms grows the table into tens of gigabytes. The rows are a change
-// feed, not room or user data. Synapse reads them for two things:
+// has joined each time one of their devices changes. A user that gets a new
+// device on every login and sits in thousands of session rooms grows the table
+// by gigabytes. Synapse prunes rows older than 30 days itself (rows without an
+// `inserted_ts` once a later row is that old), but never shrinks the file.
+// The rows are a change feed, not room or user data. Synapse reads them for:
 //
 // - Converting each change into outbound pokes for the other homeservers in
 //   the room, in (stream_id, room_id) order up to a cursor kept in
 //   `device_lists_changes_converted_stream_position`.
 // - Answering "which users' devices changed since sync token X?". A token
-//   older than the table's oldest stream id gets a full device-list resync.
+//   below `device_lists_changes_in_room_max_pruned_stream_id`, the highest
+//   stream deleted from the table, gets a full device-list resync.
 // - Replaying a room's changes since its partial federated join started
 //   (`partial_state_rooms.device_lists_stream_id`) once the join completes.
 //
-// So the script deletes only a prefix: every row before a boundary stream.
-// That keeps the oldest-stream check sound, since every token the deleted rows
-// could answer is now older than the table and gets a resync. When no room
-// has a member on another homeserver, converting writes nothing but the
-// cursor, so the boundary is the newest stream and the cursor moves to it.
+// So the script deletes only a prefix: every row before a boundary stream,
+// raising the pruned-stream marker to the highest stream it deletes, so every
+// token the deleted rows could answer gets a resync. When no room has a
+// member on another homeserver, converting writes nothing but the cursor, so
+// the boundary is the newest stream and the cursor moves to it.
 // Otherwise the boundary is the cursor's stream, or the oldest partial join's
 // start if that is earlier, so no row synapse still has to send is lost.
 //
-// Synapse caches the table's oldest stream id, so no running synapse may be
-// using the database. The script refuses while a running container mounts the
-// data directory; when that container is the dev synapse:
+// Synapse creates the marker at 0 when it migrates a database from before the
+// marker existed, assuming nothing was ever deleted, so the script won't delete
+// rows from a database without it; start synapse on the database once to
+// migrate it first. A database it would delete nothing from is still rewritten.
+//
+// The script replaces the database file and removes its write-ahead log, so no
+// running synapse may be using the database. The script refuses while a running
+// container mounts the data directory; when that container is the dev synapse:
 //
 //   pnpm stop:synapse && pnpm compact:synapse-db && pnpm start:synapse
 //
@@ -58,6 +65,7 @@ import {
 
 const TABLE = 'device_lists_changes_in_room';
 const CURSOR_TABLE = 'device_lists_changes_converted_stream_position';
+const PRUNED_TABLE = 'device_lists_changes_in_room_max_pruned_stream_id';
 const KEPT_TABLE = 'compact_kept_device_list_changes';
 
 let args = process.argv.slice(2);
@@ -118,20 +126,7 @@ if (runningIds.length > 0) {
 
 console.log(`Compacting ${dbPath} (${gigabytes(dbPath)})`);
 
-// Fold the write-ahead log into the main file, so the backup copy and the
-// rewrite below both see every committed write.
 let db = new DatabaseSync(dbPath);
-db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-db.close();
-
-let backupPath: string | undefined;
-if (backup) {
-  backupPath = `${dbPath}.bak-${Date.now()}`;
-  console.log(`Backing up to ${backupPath}`);
-  copyFileSync(dbPath, backupPath);
-}
-
-db = new DatabaseSync(dbPath);
 
 function hasTable(name: string) {
   return Boolean(
@@ -171,6 +166,8 @@ function federates() {
   );
 }
 
+// Decide what to delete before the backup and the rewrite, so a database the
+// script refuses is left as it was.
 let newest = db
   .prepare(
     `SELECT stream_id, MAX(room_id) AS room_id FROM ${TABLE}
@@ -181,11 +178,11 @@ let cursor = db
   .prepare(`SELECT MIN(stream_id) AS stream_id FROM ${CURSOR_TABLE}`)
   .get() as { stream_id: number | null };
 
-if (newest.stream_id === null) {
-  console.log(`${TABLE} is empty; nothing to prune`);
-} else {
-  let boundary: number;
-  let advanceCursor = !federates();
+let boundary: number | undefined;
+let advanceCursor = false;
+let pruned: number | null = null;
+if (newest.stream_id !== null) {
+  advanceCursor = !federates();
   if (advanceCursor) {
     // No other homeserver shares a room, so converting a row writes no
     // outbound pokes and only advances the cursor; do that directly.
@@ -207,7 +204,42 @@ if (newest.stream_id === null) {
       partialJoinStart ?? Number.POSITIVE_INFINITY,
     );
   }
+  pruned = (
+    db
+      .prepare(
+        `SELECT MAX(stream_id) AS stream_id FROM ${TABLE} WHERE stream_id < ?`,
+      )
+      .get(boundary) as { stream_id: number | null }
+  ).stream_id;
+}
 
+if (
+  pruned !== null &&
+  !(hasTable(PRUNED_TABLE) && db.prepare(`SELECT 1 FROM ${PRUNED_TABLE}`).get())
+) {
+  db.close();
+  fail(
+    `${dbPath} has no ${PRUNED_TABLE} row to record the deleted streams in, and synapse creates one at 0 when it migrates a database from before it. Start a synapse on ${dataDir} once so it migrates the database (\`pnpm start:synapse\` in the checkout that owns it, then \`pnpm stop:synapse\`), then compact.`,
+  );
+}
+
+// Fold the write-ahead log into the main file, so the backup copy and the
+// rewrite below both see every committed write.
+db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+db.close();
+
+let backupPath: string | undefined;
+if (backup) {
+  backupPath = `${dbPath}.bak-${Date.now()}`;
+  console.log(`Backing up to ${backupPath}`);
+  copyFileSync(dbPath, backupPath);
+}
+
+db = new DatabaseSync(dbPath);
+
+if (boundary === undefined) {
+  console.log(`${TABLE} is empty; nothing to prune`);
+} else {
   console.log(
     `Pruning ${TABLE} rows before stream ${boundary} (newest is ${newest.stream_id})`,
   );
@@ -218,6 +250,11 @@ if (newest.stream_id === null) {
         `UPDATE ${CURSOR_TABLE} SET stream_id = ?, room_id = ?
            WHERE (stream_id, room_id) < (?, ?)`,
       ).run(newest.stream_id, newest.room_id, newest.stream_id, newest.room_id);
+    }
+    if (pruned !== null) {
+      db.prepare(
+        `UPDATE ${PRUNED_TABLE} SET stream_id = ? WHERE stream_id < ?`,
+      ).run(pruned, pruned);
     }
     // Copy the kept rows aside and empty the table with an unconditional
     // DELETE, which drops its pages wholesale instead of deleting row by row.
