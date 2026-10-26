@@ -102,12 +102,6 @@ server accepts the change, it expires every unexpired row of the account:
   reset uses it, so a second request with it is refused (401
   `M_UNAUTHORIZED`), and each check costs a confirmed reset email.
 
-The route also takes `attributes.{username, password}` from a page that set
-the password with the Matrix server itself (a page or credential frame built to set it there, which can stay loaded across a deploy). It ends the account's rows
-once that new password checks out, under the per-account limit on failed
-sign-ins it shares with `POST /_secure-session`, and answers 204; whoever
-holds the old password can keep that limit full against it.
-
 The route answers only the secure origin (403 `forbidden`), and the same
 whether or not a row ended. When ending the sessions fails after the password
 is set (the Matrix server's admin API is down, say), the failure is logged on
@@ -146,9 +140,7 @@ runs the sweeps due when it starts, and looks for due ones every minute
 sweep that fails stays in the table, is logged on `realm:secure-session` as
 "could not sign a changed password's devices out", and is tried again within
 a minute. A later change of the same account moves its sweep later and keeps
-that change's device. A page that set the password with the Matrix server
-itself (the `{username, password}` shape) gets no sweep, since the route can't
-tell which device made that change.
+that change's device.
 
 A reset link carries the email address it was sent to in its fragment, so
 the page it lands on can name the account: `#clientSecret=…&email=…&sid=…` on

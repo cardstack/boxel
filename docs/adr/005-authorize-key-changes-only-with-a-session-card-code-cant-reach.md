@@ -104,10 +104,7 @@ page names by email address, and only once the new password checks out for
 that account. That check MUST NOT be refused under the limit on failed
 password sign-ins, and MUST be made at most once for each email validation
 session. The route MUST answer only a request whose `Origin` is the secure
-origin's, and MUST answer alike whether or not a session ended. It MAY also
-end the sessions for a page that set the password with the Matrix server
-itself and sends the new password, once that password checks out under the
-limit on failed password sign-ins.
+origin's, and MUST answer alike whether or not a session ended.
 
 Once every Matrix login token minted before a change it made has expired, the
 realm server MUST sign out every Matrix device of the account but the one that
@@ -235,12 +232,6 @@ validation emails pace. A link that names no account still resets the
 password, and ends no session. A password set outside Boxel, such as by an
 operator through Synapse's admin API, ends no session.
 
-A page keeps the code it loaded with, and an app tab can stay open for days,
-so a page that sets the password with Synapse itself and then sends only the
-new password can reach a realm server that sets passwords itself. Refusing
-it would leave that page's change with no session ended at all, so the route ends the sessions for it too, checking the new password under the sign-in
-limit as a sign-in does. Only such a page meets the starvation above.
-
 Synapse signs out the account's other devices when its password changes, but
 leaves the account's unused login tokens [7]. Any device of the account can
 mint one without a password, and so can a secure session (§1.7), and a token
@@ -267,9 +258,7 @@ still the smaller cost: holding back sign-ins until the sweep would make every
 sign-in after a reset wait minutes, and would still miss a device signed in
 with the password directly on Synapse. The sweep is recorded in the database,
 and every realm server looks for due ones each minute, because a deploy can
-stop the realm server that recorded it within those minutes. A page that set
-the password with Synapse itself gets no sweep: the realm server can't tell
-which device made that change.
+stop the realm server that recorded it within those minutes.
 
 Signing in to the app on the secure origin (§1.7) closes what the
 credential fields leave open. Those fields are invisible frames inside the

@@ -529,29 +529,6 @@ export async function changePassword(
   return { status: 200, body: {} };
 }
 
-// Ends every secure session of the account a password belongs to, once the
-// password checks out, for a page that has set the password with the Matrix
-// server itself and sends only the account and the new password. A page
-// stays as it loaded, and an app tab can stay open for days, so such a page
-// can reach a realm server that sets passwords itself (`changePassword`).
-// The new password is the proof here, so it is checked, and limited, exactly
-// as a password sign-in is: whoever holds the old password can keep that
-// limit full, which `changePassword` doesn't share.
-export async function endSessionsForNewPassword(
-  deps: SecureSessionDeps,
-  limiter: SignInLimiter,
-  attempt: { username: string; password: string },
-): Promise<void> {
-  await withPasswordLimit(deps, limiter, attempt, async (user) => {
-    await confirmPassword(deps, user, attempt.password);
-    await deps.dbAdapter.execute(
-      `UPDATE secure_sessions SET expires_at = NOW()
-        WHERE user_id = $1 AND expires_at > NOW()`,
-      { bind: [user] },
-    );
-  });
-}
-
 // The account a reset sent to `email` reset, when `password`, the one the
 // reset set, is that account's password. Undefined otherwise.
 async function resetAccount(

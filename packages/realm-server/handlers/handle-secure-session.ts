@@ -11,7 +11,6 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   changePassword,
   endSecureSession,
-  endSessionsForNewPassword,
   endWindowSessions,
   googleSignInStart,
   isSecureSession,
@@ -216,10 +215,9 @@ function optionalTextOf(
 
 // POST /_secure-session: signs in with a username, email address or Matrix id
 // and the account's password. Failed sign-ins are limited per account, with the
-// Matrix server's default limit on failed logins to the app, by `limiter`,
-// which every route that checks a password shares. An account's first sign-in
-// to Boxel makes its personal realm, hence the realm deps, and records the
-// invite code it registered with (`registrationToken`).
+// Matrix server's default limit on failed logins to the app, by `limiter`. An
+// account's first sign-in to Boxel makes its personal realm, hence the realm
+// deps, and records the invite code it registered with (`registrationToken`).
 export function handlePasswordSignIn(
   args: CreateRoutesArgs,
   createRealm: CreateRealmDeps,
@@ -248,27 +246,10 @@ export function handlePasswordSignIn(
 // reset was sent to, or a change with `accessToken` and `currentPassword`;
 // either with `newPassword`. Answered only for the secure origin, with the
 // Matrix server's status and body, alike whether or not a session ended.
-//
-// A body with `username` and `password` instead is from a page that set the
-// password with the Matrix server itself: the route ends the account's
-// sessions once that password checks out, under the sign-in limit
-// (`endSessionsForNewPassword`), and answers 204.
-export function handlePasswordChange(
-  args: CreateRoutesArgs,
-  limiter: SignInLimiter,
-): Handler {
+export function handlePasswordChange(args: CreateRoutesArgs): Handler {
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
     let attributes = await readAttributes(ctxt, 'password-change');
-    if (attributes.newPassword === undefined) {
-      let { username, password } = attributes;
-      await endSessionsForNewPassword(deps(args), limiter, {
-        username: typeof username === 'string' ? username : '',
-        password: typeof password === 'string' ? password : '',
-      });
-      await setContextResponse(ctxt, new Response(null, { status: 204 }));
-      return;
-    }
     let newPassword = textOf(attributes, 'newPassword');
     let accessToken = optionalTextOf(attributes, 'accessToken');
     let change: PasswordChange = accessToken
