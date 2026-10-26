@@ -60,6 +60,26 @@ export interface BoxelIndexTable {
   // The GET then reports no version, which is what it did before this column
   // existed. Nothing that decides row liveness may read it.
   source_content_hash: string | null;
+  // Every card the row's saved relationships link (`relationships.*.links.self`),
+  // in dependency form. This is a different kind of dependency from `deps`:
+  //
+  //  - `deps` holds what the index visit read: modules, and linked cards whose
+  //    data it loaded, through a `searchable` link or a `computeVia` that reads
+  //    one. That data is copied into the search doc and computed values, so a
+  //    change to it re-indexes the row.
+  //  - `relationship_deps` holds every link, read or not. A card+json GET
+  //    assembles `included` from these links when it serves the card, so a
+  //    change to one must move the row's validator, but nothing in the row
+  //    itself changes. The fan-out treats it as a render edge: the row is
+  //    stamped with a new `indexed_at` and generation and its HTML is
+  //    re-rendered, but it is not re-indexed (see `itemsThatReference`).
+  //
+  // A link read by a `computeVia` is in both, and the index edge wins. A plain
+  // `linksTo(Pet)` with no `searchable` option is only here.
+  //
+  // Written on the split path only, for instance rows; null otherwise and on
+  // rows written before the column existed.
+  relationship_deps: string[] | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
   resource_created_at: string | null; // pg represents big integers as strings in javascript
@@ -273,6 +293,7 @@ export function isPartitionedRealmMetaValue(
 export const coerceTypes = Object.freeze({
   deps: 'JSON',
   last_known_good_deps: 'JSON',
+  relationship_deps: 'JSON',
   types: 'JSON',
   pristine_doc: 'JSON',
   error_doc: 'JSON',

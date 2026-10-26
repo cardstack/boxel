@@ -256,6 +256,11 @@ export async function performFileIndexing({
   // itself gates fileRender, so this path does not act on it.
   void hasModulePrerender;
 
+  // No `relationshipDeps`, unlike an instance row. The file-meta GET builds
+  // its document from this row without `included` and serves it with no
+  // validator, and a search that side-loads a file's links is cached on a key
+  // every write in the realm rotates. So nothing serves a file's linked cards
+  // under a validator that only this row's `indexed_at` would move.
   await updateEntry(entryURL, {
     type: 'file',
     lastModified,
