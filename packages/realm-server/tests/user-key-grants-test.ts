@@ -486,6 +486,8 @@ module(basename(import.meta.filename), function () {
     const APP_ORIGIN = 'http://localhost:4200';
     const TESTER = '@grant-tester:localhost';
     const OUTSIDER = '@grant-outsider:localhost';
+    // The realm reads its own files as this user when it indexes them.
+    const REALM_USER = '@node-test_realm:localhost';
     const VENDOR = {
       module: rri(`${realmURL.href}vendor`),
       name: 'Vendor',
@@ -543,7 +545,7 @@ module(basename(import.meta.filename), function () {
       secureOriginURL,
       permissions: {
         [TESTER]: ['read'],
-        [OUTSIDER]: [],
+        [REALM_USER]: ['read', 'write', 'realm-owner'],
       },
       fileSystem: {
         'vendor.gts': vendorModule(
