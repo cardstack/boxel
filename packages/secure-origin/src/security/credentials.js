@@ -35,10 +35,7 @@
 
 import { isListedOrigin } from './app-origins.js';
 import { redactResponse } from './redact.js';
-import {
-  endSessionsForNewPassword,
-  readConfig as readRealmServer,
-} from './session.js';
+import { changePassword, readConfig as readRealmServer } from './session.js';
 
 const MATRIX_CLIENT_PREFIX = '_matrix/client/v3/';
 export const MIN_PASSWORD_LENGTH = 8;
@@ -267,8 +264,9 @@ export function mayStart({ form, appOrigin, appOrigins, framed }) {
 //   password manager see it go.
 // - `onChange()`: called whenever what the fields show changes.
 // - `rendered()`: resolves once the fields show the last change.
-// - `fetch` and `endSessions`: where the Matrix requests, and the realm
-//   server's request that ends a changed password's sessions, go.
+// - `fetch` and `changePassword`: where the Matrix requests go, and the
+//   realm server's request that sets a password and ends the account's
+//   secure sessions.
 export class CredentialFrame {
   /**
    * @param {{
@@ -283,7 +281,7 @@ export class CredentialFrame {
    *   onChange?: () => void,
    *   rendered?: () => Promise<unknown>,
    *   fetch?: (url: URL, init: RequestInit) => Promise<Response>,
-   *   endSessions?: (credentials: { username: string, password: string }) => Promise<void>,
+   *   changePassword?: (change: Record<string, string>) => Promise<{ ok: boolean, status: number, body: any }>,
    * }} options
    */
   constructor({
@@ -298,8 +296,8 @@ export class CredentialFrame {
     onChange = () => {},
     rendered = () => Promise.resolve(),
     fetch = globalThis.fetch.bind(globalThis),
-    endSessions = (credentials) =>
-      endSessionsForNewPassword(readRealmServer(), credentials),
+    changePassword: changePasswordAt = (change) =>
+      changePassword(readRealmServer(), change),
   }) {
     this.form = form;
     this.appOrigin = appOrigin;
@@ -312,7 +310,7 @@ export class CredentialFrame {
     this.onChange = onChange;
     this.rendered = rendered;
     this.fetch = fetch;
-    this.endSessions = endSessions;
+    this.changePassword = changePasswordAt;
 
     // The username a password manager is given for a new password, when the
     // form has a hidden username field.
@@ -647,34 +645,43 @@ const OPERATIONS = {
     });
   },
 
-  // Always signs out the account's other sessions, which is not the app's to
-  // turn off: a session stolen before the change must not outlive it. The
-  // Matrix server signs out the account's devices; its secure sessions are
-  // ended at the realm server, for the account the app names in `account`
-  // (its Matrix id, or the email address a reset was sent to).
+  // Made by the realm server, which sets the password on the Matrix server and
+  // then ends the account's secure sessions: a session signed in with the old
+  // password, perhaps stolen, must not outlive the change. The Matrix server
+  // always signs out the account's other devices, which is not the app's to
+  // turn off.
+  //
+  // What the typed password authorizes is decided by the form, never by what
+  // the app sends. The change form, the one with a current password, makes a
+  // change with the app's `accessToken`: the realm server ends the sessions of
+  // the token's account, once the Matrix server has checked the current
+  // password from the field here. The reset form makes a reset with the email
+  // validation session in `auth`, and ends the sessions of the account the
+  // app names in `account`, the email address the reset was sent to, once the
+  // new password, which the app never sees, checks out for it.
   async 'set-password'({ auth, accessToken, account }) {
-    let result = await this.matrixRequest('account/password', {
-      accessToken,
-      body: {
-        auth: this.withPassword(plainObject(auth)),
-        new_password: this.value('password'),
-        logout_devices: true,
-      },
-    });
-    if (result.ok && typeof account === 'string' && account) {
-      try {
-        await this.endSessions({
-          username: account,
-          password: this.value('password'),
-        });
-      } catch {
-        // The password is changed whatever the answer, so a failure is not
-        // the app's to see; a session the realm server couldn't end runs out
-        // within its week. The app can name any account, but only the new
-        // password, which it never sees, gets a session ended.
+    let newPassword = this.value('password');
+    if (this.fields.has('current')) {
+      if (typeof accessToken !== 'string' || !accessToken) {
+        return {
+          ok: false,
+          status: 0,
+          body: { error: 'A password change needs the app’s access token.' },
+        };
       }
+      return await this.changePassword({
+        newPassword,
+        accessToken,
+        currentPassword: this.value('current'),
+      });
     }
-    return result;
+    let creds = plainObject(plainObject(auth).threepid_creds);
+    return await this.changePassword({
+      newPassword,
+      sid: String(creds.sid ?? ''),
+      clientSecret: String(creds.client_secret ?? ''),
+      ...(typeof account === 'string' && account ? { email: account } : {}),
+    });
   },
 
   async 'add-threepid'({ auth, accessToken, clientSecret, sid }) {

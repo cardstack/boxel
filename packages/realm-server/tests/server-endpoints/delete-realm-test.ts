@@ -8,8 +8,10 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   asExpressions,
   deriveRealmName,
+  fetchRealmEventRoom,
   insert,
   insertPermissions,
+  insertRealmEventRoom,
   PUBLISHED_DIRECTORY_NAME,
   query,
 } from '@cardstack/runtime-common';
@@ -26,8 +28,10 @@ import { setupServerEndpointsTest } from './helpers.ts';
 module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
   let context = setupServerEndpointsTest(hooks);
 
-  async function createRealmFor(ownerUserId: string) {
-    let endpoint = `delete-me-${uuidv4()}`;
+  async function createRealmFor(
+    ownerUserId: string,
+    endpoint = `delete-me-${uuidv4()}`,
+  ) {
     let response = await context.request
       .post('/_create-realm')
       .set('Accept', 'application/vnd.api+json')
@@ -888,6 +892,58 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     assert.ok(
       response.body.errors?.[0]?.includes('Invalid realm URL supplied'),
       'returns an invalid URL error',
+    );
+  });
+
+  // A realm's event room is checked against its grants when the realm mounts,
+  // and retired when the realm is deleted. A stored room the realm server
+  // isn't in shows both: the mount's check forgets it, and the delete moves it
+  // out of the realm's hands before answering.
+  test('mounting a realm checks its stored event room, and deleting it retires the room', async function (assert) {
+    let owner = `kiwi-${uuidv4()}`;
+    let ownerUserId = `@${owner}:localhost`;
+    let first = await createRealmFor(ownerUserId);
+    let endpoint = `event-room-${uuidv4()}`;
+    let realmURL = new URL(`/${owner}/${endpoint}/`, first).href;
+    await insertRealmEventRoom(
+      context.dbAdapter,
+      realmURL,
+      '!not-a-room:localhost',
+    );
+
+    assert.strictEqual(await createRealmFor(ownerUserId, endpoint), realmURL);
+    await waitUntil(
+      async () =>
+        (await fetchRealmEventRoom(context.dbAdapter, realmURL)).roomId ===
+        null,
+      {
+        timeout: 10_000,
+        timeoutMessage: 'mounting the realm never checked its event room',
+      },
+    );
+
+    await insertRealmEventRoom(
+      context.dbAdapter,
+      realmURL,
+      '!another-room:localhost',
+    );
+    let response = await context.request
+      .delete('/_delete-realm')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/json')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user: ownerUserId, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`,
+      )
+      .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+    assert.strictEqual(response.status, 204, 'realm deleted');
+    assert.strictEqual(
+      (await fetchRealmEventRoom(context.dbAdapter, realmURL)).roomId,
+      null,
+      'the deleted realm no longer has an event room',
     );
   });
 });

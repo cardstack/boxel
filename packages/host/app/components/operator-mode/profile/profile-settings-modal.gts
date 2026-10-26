@@ -394,18 +394,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
       this.error = undefined;
       let result = await this.passwordFields.submit({
         operation: 'set-password',
-        args: {
-          auth: {
-            type: 'm.login.password',
-            user: this.matrixService.userId,
-            identifier: {
-              type: 'm.id.user',
-              user: this.matrixService.userId,
-            },
-          },
-          accessToken: this.matrixService.accessToken,
-          account: this.matrixService.userId ?? undefined,
-        },
+        args: { accessToken: this.matrixService.accessToken ?? '' },
       });
       if (!result.ok) {
         throw credentialFieldsError(result);
