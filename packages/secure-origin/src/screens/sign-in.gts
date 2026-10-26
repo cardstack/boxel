@@ -38,13 +38,11 @@ interface Signature {
 }
 
 const SignInScreen: TemplateOnlyComponent<Signature> = <template>
-  <span
-    class='title'
-    role='heading'
-    aria-level='1'
-    data-test-secure-title
-    data-test-secure-sign-in-title
-  >{{if @title @title 'Sign in to your Boxel Account'}}</span>
+  <h1 class='title' data-test-secure-title data-test-secure-sign-in-title>{{if
+      @title
+      @title
+      'Sign in to your Boxel Account'
+    }}</h1>
   {{#if (has-block 'intro')}}
     <div class='intro'>{{yield to='intro'}}</div>
   {{else if @googleSubtitle}}
@@ -54,9 +52,9 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
   {{/if}}
   <form
     novalidate
+    {{on 'submit' @onSubmit}}
     data-test-login-form
     data-test-secure-sign-in-form
-    {{on 'submit' @onSubmit}}
   >
     {{#if @google}}
       <AuthButton
@@ -64,9 +62,9 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
         class='google-button'
         @disabled={{@startingGoogle}}
         @loading={{@startingGoogle}}
+        {{on 'click' @onGoogle}}
         data-test-google-login-btn
         data-test-secure-google
-        {{on 'click' @onGoogle}}
       >
         <GoogleColor class='google-g' aria-hidden='true' />
         Continue with Google
@@ -82,9 +80,9 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       class='forgot-password'
       @kind='link-muted'
       @size='extra-small'
+      {{on 'click' @onForgotPassword}}
       data-test-forgot-password
       data-test-secure-forgot-password
-      {{on 'click' @onForgotPassword}}
     >Forgot password?</Button>
     <AuthButton
       type='submit'
@@ -111,9 +109,9 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
         type='button'
         class='register-link'
         @kind='link-primary'
+        {{on 'click' @onRegister}}
         data-test-register-user
         data-test-secure-register
-        {{on 'click' @onRegister}}
       >Create a new Boxel account</Button>
     </p>
   </form>
@@ -126,7 +124,7 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
     .title {
       font: 600 var(--boxel-font-md);
       color: var(--foreground);
-      margin-bottom: var(--boxel-sp-sm);
+      margin: 0 0 var(--boxel-sp-sm);
       padding: 0;
     }
     .subtitle {
@@ -148,15 +146,13 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       --host-outline-offset: 2px;
       margin-top: var(--boxel-sp-4xs);
       margin-bottom: var(--boxel-sp-lg);
-      margin-left: auto;
+      margin-inline-start: auto;
     }
     .google-button {
       margin-top: var(--boxel-sp-sm);
       gap: var(--boxel-sp-xs);
     }
     .google-g {
-      width: 1.125rem;
-      height: 1.125rem;
       flex-shrink: 0;
     }
     .divider {
@@ -170,7 +166,7 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       content: '';
       flex: 1;
       height: 1px;
-      background-color: rgba(255, 255, 255, 0.18);
+      background-color: var(--border);
     }
     .divider-label {
       color: var(--muted-foreground);
@@ -179,7 +175,7 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       text-transform: uppercase;
     }
     .error {
-      color: var(--boxel-error-100);
+      color: var(--destructive-ink);
       padding: 0;
       font: 500 var(--boxel-font-xs);
       margin: var(--boxel-sp-2xs) auto 0 auto;

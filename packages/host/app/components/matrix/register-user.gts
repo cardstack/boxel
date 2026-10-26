@@ -59,6 +59,9 @@ interface Signature {
     // CLI-auth page uses this to POST the session to the waiting loopback
     // listener.
     onComplete?: (session: LoginResponse) => void;
+    // The heading level of each step's title, for a page that heads itself
+    // above the registration.
+    headingLevel?: number;
   };
 }
 
@@ -66,6 +69,7 @@ export default class RegisterUser extends Component<Signature> {
   <template>
     {{#if (eq this.currentPage 'awaiting-validation')}}
       <AwaitingEmail
+        @headingLevel={{@headingLevel}}
         @resending={{this.validateEmail.isRunning}}
         @onResend={{this.resendValidation}}
       />
@@ -73,6 +77,7 @@ export default class RegisterUser extends Component<Signature> {
       <CreatingAccount />
     {{else if (eq this.currentPage 'token-form')}}
       <InviteCodeForm
+        @headingLevel={{@headingLevel}}
         @token={{this.token}}
         @tokenError={{this.tokenError}}
         @submitDisabled={{this.isNextButtonDisabled}}
@@ -85,6 +90,7 @@ export default class RegisterUser extends Component<Signature> {
         the registration, so the form stays mounted, hidden, while the steps
         after it show. }}
     <RegisterForm
+      @headingLevel={{@headingLevel}}
       @name={{this.name}}
       @email={{this.email}}
       @username={{this.username}}

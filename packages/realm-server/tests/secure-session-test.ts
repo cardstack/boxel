@@ -98,24 +98,6 @@ async function registerPasswordUser(
   return { username, password, userId };
 }
 
-// Sets a new password and signs the account's devices out, as a page that
-// sets the password with the Matrix server itself does.
-async function setPassword(userId: string, newPassword: string) {
-  let response = await adminRequest(
-    `_synapse/admin/v1/reset_password/${encodeURIComponent(userId)}`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        new_password: newPassword,
-        logout_devices: true,
-      }),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`could not set the password: ${response.status}`);
-  }
-}
-
 async function updateAccount(userId: string, body: Record<string, unknown>) {
   let response = await adminRequest(
     `_synapse/admin/v2/users/${encodeURIComponent(userId)}`,
@@ -1955,43 +1937,18 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a page that set the password itself ends the sessions with the new password, under the sign-in limit', async function (assert) {
+    test('a password change that sends no new password is refused and ends nothing', async function (assert) {
       let { username, password, userId } =
         await registerPasswordUser(dbAdapter);
       let cli = await secureSessionAuth(dbAdapter, userId, { client: 'cli' });
-      let newPassword = `pw-${randomBytes(12).toString('hex')}`;
-      await setPassword(userId, newPassword);
 
-      let withOldPassword = await passwordChange({ username, password });
-      assert.strictEqual(withOldPassword.status, 401, withOldPassword.text);
-      assert.strictEqual(
-        withOldPassword.body.errors[0].code,
-        'invalid-credentials',
-        'the old password is refused',
-      );
-      assert.strictEqual((await mint(cli)).status, 201, 'and ends nothing');
-
-      let ended = await passwordChange({
-        username: userId,
-        password: newPassword,
-      });
-      assert.strictEqual(ended.status, 204, ended.text);
+      let response = await passwordChange({ username, password });
+      assert.strictEqual(response.status, 400, response.text);
+      assert.strictEqual(response.body.errors[0].code, 'bad-request');
       assert.strictEqual(
         (await mint(cli)).status,
-        403,
-        'the new password ends the CLI session',
-      );
-
-      let other = await registerPasswordUser(dbAdapter);
-      await holdLimitFull(assert, other.username);
-      let limited = await passwordChange({
-        username: other.username,
-        password: other.password,
-      });
-      assert.strictEqual(
-        limited.status,
-        429,
-        'this shape shares the limit on failed sign-ins',
+        201,
+        'the CLI session is still signed in',
       );
     });
 

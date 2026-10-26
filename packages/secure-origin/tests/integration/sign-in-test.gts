@@ -722,7 +722,7 @@ module('Integration | sign-in', function (hooks) {
       await render(CliAuthPage);
       await signInAs('someone');
       await waitFor('[data-test-secure-cli-handoff-failed]');
-      assert.dom('[data-test-secure-title]').hasText('That didn’t work');
+      assert.dom('h1[data-test-secure-title]').hasText('That didn’t work');
       assert
         .dom('[data-test-secure-error]')
         .hasText('Signing in is unavailable right now.');
