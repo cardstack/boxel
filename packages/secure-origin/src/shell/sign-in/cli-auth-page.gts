@@ -1,7 +1,9 @@
 // The `cli-auth` mode: `boxel profile add` signing in for a Matrix device of
 // its own, for the CLI waiting on the loopback port the URL names with `port`
 // and `state`. Signed in, the CLI is handed a single-use login token (see
-// `CliHandoff`); this window keeps none of it.
+// `CliHandoff`); this window keeps none of it. A CLI whose URL carries
+// `session=secure` is also handed the secure session, which lets it manage
+// the user's keys, and the page says so.
 //
 // A window already signed in asks the same account to confirm its password,
 // as the app's own CLI page does: whoever this browser is signed in as is
@@ -47,16 +49,19 @@ export default class CliAuthPage extends Component {
           >
             <:intro>
               {{#if this.state.signedInAs}}
-                <p class='intro-text'>Confirm your password to give the Boxel
-                  CLI running on this computer access to the workspaces of
+                <p class='intro-text' data-test-secure-cli-auth-confirm>Confirm
+                  your password to give the Boxel CLI running on this computer
+                  access to the workspaces of
                   <span
                     class='signed-in-user'
                     data-test-secure-cli-auth-signed-in-as
-                  >{{this.state.signedInAs}}</span>.</p>
+                  >{{this.state.signedInAs}}</span>{{#if this.managesKeys}}, and
+                    to let it manage their keys{{/if}}.</p>
               {{else}}
                 <p class='intro-text' data-test-secure-cli-auth-subtitle>Signing
                   in gives the Boxel CLI running on this computer access to your
-                  workspaces.</p>
+                  workspaces{{#if this.managesKeys}}, and lets it manage your
+                    keys{{/if}}.</p>
               {{/if}}
             </:intro>
           </SignInForm>
@@ -97,6 +102,11 @@ export default class CliAuthPage extends Component {
     if (this.callback && this.state.page === 'checking') {
       this.checkWindowSession();
     }
+  }
+
+  // Whether the CLI takes the secure session as well as the login token.
+  private get managesKeys() {
+    return Boolean(this.callback?.profile?.secureSession);
   }
 
   private get ready() {
