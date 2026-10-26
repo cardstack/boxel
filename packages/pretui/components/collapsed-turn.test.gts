@@ -19,7 +19,7 @@ module('Pretui | components/collapsed-turn', function (hooks) {
     let el = document.querySelector('[data-test-pretui-collapsed-turn]') as HTMLButtonElement;
     assert.strictEqual(el.tagName, 'BUTTON', 'settled history is one keyboard-reachable stop');
     assert.true(el.textContent?.includes('4 files changed · 2 approvals'), 'a receipt of counts, not content');
-    assert.strictEqual(el.querySelector('.pretui-collapsed-check')?.textContent?.trim(), '✓');
+    assert.strictEqual((el.querySelector('.pretui-collapsed-check') as HTMLElement | null)?.dataset['glyph'], 'done');
     await click(el);
     assert.strictEqual(expanded, 1);
   });

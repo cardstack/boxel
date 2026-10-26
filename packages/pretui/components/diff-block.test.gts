@@ -41,7 +41,7 @@ module('Pretui | components/diff-block', function (hooks) {
   test('a long diff collapses to eight lines with a toggle that says how many are hidden', async function (assert) {
     await render(<template><DiffBlock @lines={{LONG}} /></template>);
     assert.strictEqual(lines().length, 8);
-    assert.strictEqual(toggle()?.textContent?.trim(), '… 4 more lines');
+    assert.strictEqual(toggle()?.textContent?.trim(), '4 more lines');
     await click(toggle() as HTMLElement);
     assert.strictEqual(lines().length, 12);
     assert.strictEqual(toggle()?.textContent?.trim(), 'collapse');
@@ -50,6 +50,6 @@ module('Pretui | components/diff-block', function (hooks) {
   test('takes a different fold point', async function (assert) {
     await render(<template><DiffBlock @lines={{LONG}} @maxLines={{3}} /></template>);
     assert.strictEqual(lines().length, 3);
-    assert.strictEqual(toggle()?.textContent?.trim(), '… 9 more lines');
+    assert.strictEqual(toggle()?.textContent?.trim(), '9 more lines');
   });
 });

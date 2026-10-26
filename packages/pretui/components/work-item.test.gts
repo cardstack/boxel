@@ -45,10 +45,13 @@ module('Pretui | components/work-item', function (hooks) {
       ['running', 'attention', 'done', 'failed', 'idle'],
     );
     assert.ok(items()[0]?.querySelector('[data-test-pretui-spinner]'), 'running spins instead of a glyph');
-    assert.deepEqual(items().slice(1).map((i) => i.querySelector('.pretui-disc')?.textContent?.trim()), ['●', '✓', '✕', '·']);
+    assert.deepEqual(
+      items().slice(1).map((i) => (i.querySelector('.pretui-disc [data-glyph]') as HTMLElement | null)?.dataset['glyph']),
+      ['●', '✓', '✕', '·'],
+    );
     assert.deepEqual(
       items().map((i) => i.querySelector('.pretui-workitem-status')?.textContent?.trim()),
-      ['running…', '● needs you', 'done', 'failed', 'canceled'],
+      ['running…', 'needs you', 'done', 'failed', 'canceled'],
     );
     assert.strictEqual(items()[1]?.dataset['attention'], 'true', 'only the attention family lights the card');
   });
