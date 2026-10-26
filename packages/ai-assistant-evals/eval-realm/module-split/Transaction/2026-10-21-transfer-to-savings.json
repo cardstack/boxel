@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "merchant": "Transfer to savings",
+      "date": "2026-10-21",
+      "amount": 400,
+      "isIncome": false,
+      "category": "savings",
+      "recurrence": "monthly",
+      "memo": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/everyday-checking"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../home-ledger",
+        "name": "Transaction"
+      }
+    }
+  }
+}

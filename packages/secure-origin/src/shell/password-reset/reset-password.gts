@@ -1,20 +1,19 @@
-import { on } from '@ember/modifier';
 import { trackedObject } from '@ember/reactive/collections';
 import Component from '@glimmer/component';
 
-import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
-import { resetPassword } from '../../security/matrix.js';
+import { changePassword, readConfig } from '../../security/session.js';
 import {
-  endSessionsForNewPassword,
-  readConfig,
-} from '../../security/session.js';
+  ResetPasswordDone,
+  ResetPasswordForm,
+} from '../../screens/password-reset.gts';
 import { navigation } from '../navigation.js';
 import NewPasswordFields from '../new-password-fields.gts';
 import { NewPassword } from '../new-password.ts';
 import { cliParams, modeURL } from '../urls.js';
 import { signInURL } from '../cli-links.ts';
 import type { ResetLink } from './reset-link.ts';
+import CliWaitNotice from '../sign-in/cli-wait-notice.gts';
 
 // Where a password reset link lands (`reset-password`), once it was
 // confirmed at the Matrix server: the new password is set here. Setting it
@@ -61,31 +60,24 @@ export default class ResetPassword extends Component<Signature> {
     this.state.resetting = true;
     this.state.error = undefined;
     this.state.paramsError = false;
-    try {
-      await resetPassword({ sid, clientSecret, newPassword });
-    } catch (e) {
+    // The realm server sets the password, and ends the secure sessions of the
+    // account `email` names. A link that names no account resets the password
+    // and ends no session.
+    let result = await changePassword(readConfig(), {
+      sid,
+      clientSecret,
+      newPassword,
+      ...(email ? { email } : {}),
+    });
+    if (!result.ok) {
       this.state.resetting = false;
-      let { status } = e as { status: number };
-      if (status >= 400 && status < 500) {
+      if (result.status >= 400 && result.status < 500) {
         this.state.paramsError = true;
       } else {
         this.state.error =
           'An unknown error happened. Please try again, or contact support if the problem persists.';
       }
       return;
-    }
-    // A link that names no account still resets the password; only ending
-    // the account's secure sessions needs to know whose it is.
-    if (email) {
-      try {
-        await endSessionsForNewPassword(readConfig(), {
-          username: email,
-          password: newPassword,
-        });
-      } catch {
-        // The password is reset either way. A session the realm server
-        // couldn't end runs out within its week.
-      }
     }
     this.state.resetting = false;
     this.state.done = true;
@@ -94,113 +86,31 @@ export default class ResetPassword extends Component<Signature> {
   <template>
     <AuthContainer>
       {{#if this.state.done}}
-        <span
-          class='title'
-          role='heading'
-          aria-level='1'
-          data-test-secure-title
-          data-test-reset-password-success
-        >Your password is now reset</span>
-        <p class='info'>Your password has been successfully reset. You can use
-          the link below to sign into your Boxel account with your new password.</p>
-        <div class='button-wrapper'>
-          <AuthButton
-            data-test-back-to-login-btn
-            type='button'
-            {{on 'click' this.goToSignIn}}
-            @variant='primary'
-          >Sign In to Boxel</AuthButton>
-        </div>
+        <ResetPasswordDone @onSignIn={{this.goToSignIn}}>
+          {{#if @link.cli}}
+            <CliWaitNotice @cli={{@link.cli}} />
+          {{/if}}
+        </ResetPasswordDone>
       {{else}}
-        <form
-          class='step'
-          novalidate
-          data-test-reset-password-form
-          {{on 'submit' this.submit}}
+        <ResetPasswordForm
+          @submitDisabled={{this.submitDisabled}}
+          @submitting={{this.state.resetting}}
+          @paramsError={{this.state.paramsError}}
+          @forgotPasswordURL={{this.forgotPasswordURL}}
+          @error={{this.state.error}}
+          @onSubmit={{this.submit}}
         >
-          <span
-            class='title'
-            role='heading'
-            aria-level='1'
-            data-test-secure-title
-          >Reset your password</span>
+          {{#if @link.cli}}
+            <CliWaitNotice @cli={{@link.cli}} />
+          {{/if}}
           <NewPasswordFields
             @password={{this.password}}
             @passwordLabel='Enter New Password'
             @confirmLabel='Re-Enter New Password'
             @autofocus={{true}}
           />
-          <div class='button-wrapper'>
-            <AuthButton
-              data-test-reset-password-btn
-              type='submit'
-              @variant='primary'
-              @disabled={{this.submitDisabled}}
-              @loading={{this.state.resetting}}
-            >Reset Password</AuthButton>
-          </div>
-          {{#if this.state.paramsError}}
-            <span
-              class='error'
-              role='alert'
-              data-test-reset-password-error
-              data-test-secure-error
-            >Unable to reset your password due to invalid password reset
-              parameters. Please restart the password reset flow by going back
-              to
-              <a
-                href={{this.forgotPasswordURL}}
-                data-test-forgot-password-link
-              >forgot password form</a>
-              and try again.</span>
-          {{else if this.state.error}}
-            <span
-              class='error'
-              role='alert'
-              data-test-reset-password-error
-              data-test-secure-error
-            >{{this.state.error}}</span>
-          {{/if}}
-        </form>
+        </ResetPasswordForm>
       {{/if}}
     </AuthContainer>
-    <style scoped>
-      .step {
-        display: contents;
-      }
-      .title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-        margin-bottom: var(--boxel-sp);
-      }
-      .info {
-        margin-top: 0;
-        margin-bottom: var(--boxel-sp-sm);
-        letter-spacing: var(--boxel-lsp);
-        line-height: 20px;
-        color: var(--foreground);
-      }
-      .button-wrapper {
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        margin-top: var(--boxel-sp-lg);
-        gap: var(--boxel-sp-sm);
-        color: var(--muted-foreground);
-      }
-      .error {
-        color: var(--boxel-error-100);
-        padding: 0;
-        font: 500 var(--boxel-font-xs);
-        margin: var(--boxel-sp-2xs) auto 0 auto;
-        text-align: center;
-      }
-      .error a {
-        color: var(--boxel-highlight);
-        text-decoration: underline;
-      }
-    </style>
   </template>
 }

@@ -47,7 +47,7 @@ test.describe('boxel-cli browser sign-up', () => {
         await page.goto(authUrl);
 
         // Switch from the password form into the reused registration flow.
-        await page.locator('[data-test-cli-auth-register]').click();
+        await page.locator('[data-test-register-user]').click();
 
         await page.locator('[data-test-name-field]').fill(displayName);
         await page.locator('[data-test-email-field]').fill(email);
@@ -162,7 +162,7 @@ test.describe('boxel-cli browser sign-up', () => {
 
         // Entering register mode reloads, keeping the CLI's port and nonce, and
         // says that this browser is no longer signed in.
-        await page.locator('[data-test-cli-auth-register]').click();
+        await page.locator('[data-test-register-user]').click();
         await expect(
           page.locator('[data-test-cli-auth-signed-out-note]'),
         ).toBeVisible();

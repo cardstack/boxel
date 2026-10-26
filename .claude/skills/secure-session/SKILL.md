@@ -20,10 +20,11 @@ A secure session is a realm-server JWT with `user`, `sessionRoom` and
 `secureSession`: the id of a `secure_sessions` row. It works anywhere the
 user's session does, and additionally:
 
-| Gate                       | Requires                                                                    |
-| -------------------------- | --------------------------------------------------------------------------- |
-| `POST /_key-write-tickets` | `isSecureSession`: the claim, naming a row of the token's user, not expired |
-| `GET /_secure-session`     | The same; answers 204, or 401 `signed-out`                                  |
+| Gate                                | Requires                                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `POST /_key-write-tickets`          | `isSecureSession`: the claim, naming a row of the token's user, not expired                      |
+| `GET /_secure-session`              | The same; answers 204, or 401 `signed-out`                                                       |
+| `POST /_secure-session/login-token` | The same, and `Origin` the secure origin's; answers a single-use Matrix login token for the user |
 
 Minting also still requires the request's `Origin` to be the secure origin's
 or absent (the CLI). Only `createSecureSessionJWT` mints the claim (ADR 005
@@ -54,7 +55,7 @@ a user's sessions (`isSessionRevoked`) ends these too.
 | Its seven days pass    | —                                        | That session                                                        |
 | Signing out of it      | `DELETE /_secure-session` (the session)  | That session: `boxelSignOut()` in the window, `boxel keys sign-out` |
 | Signing out of the app | `DELETE /_secure-sessions?client=window` | Every unexpired `window` row of the token's user                    |
-| Changing the password  | `POST /_secure-sessions/password-change` | Every unexpired row of the account, `cli` included                  |
+| Changing the password  | `POST /_secure-sessions/password-change` | Every unexpired row of the account, `cli` included, once it is set  |
 | Revoking all sessions  | —                                        | Every session of the user (`isSessionRevoked`)                      |
 
 The app's sign-out (`MatrixService.logout()`) calls `DELETE
@@ -76,34 +77,38 @@ and extends nothing. It ends the user's windows in every browser, since rows
 aren't tied to one, and leaves `cli` rows alone: the CLI usually runs on
 another machine.
 
-Every page that sets a password calls `POST
-/_secure-sessions/password-change` (a `password-change` resource,
-`attributes.{username, password}`) once Synapse has accepted the new
-password. Those pages are the secure origin's `reset-password` page and the
+Every page that sets a password sets it through `POST
+/_secure-sessions/password-change` (a `password-change` resource), in place of
+the Matrix request: the secure origin's `reset-password` page, and the
 credential fields' `set-password`, which the app's own reset and its
-change-password use. `username` is any name a password sign-in takes: the
-email address the reset link was sent to, or the Matrix id the app names in
-`set-password`'s `account`. `password` is the new password. The realm server
-checks the password exactly as a password sign-in does (`confirmPassword`),
-under the same per-account limit (`withPasswordLimit`; one `SignInLimiter`
-serves both routes), and then expires every unexpired row of the account. It
-answers only the secure origin, with the sign-in refusals below, and 204
-whether or not a row ended. Card code never sees the new password, so it
-can't end the CLI's sessions this way (ADR 005 §1.6). The call is best
-effort: the password stays changed when it fails, and a session signed in with
-the old password then lasts until it expires. Whoever holds the old password
-can keep the account's failure limit full to make it fail.
-`endSessionsForNewPassword` in `packages/secure-origin/src/security/session.js` (which the credential
-fields import too) tries a 429 again, after `retryAfterMs`, for up to a
-minute, but that only beats someone filling the limit by hand: a refused
-attempt costs nothing and `retryAfterMs` says when the next one is free, so a
-script that polls faster than the page takes every free attempt and keeps its
-sessions for the week. Don't treat the retry as the defense, and don't drop
-the limit on this route either: a caller holding a session would learn the
-new password from their session ending. Closing the gap needs a proof that
-doesn't share the sign-in limit. A password set any other way,
-such as by an operator through Synapse's admin `reset_password`, ends no
-secure session. To end them, expire the rows.
+change-password use. The realm server makes the Matrix `account/password`
+request itself (`changePassword` in `lib/secure-session.ts`), with
+`logout_devices: true`, and answers with the Matrix server's status and body,
+which the page reads as it would the Matrix server's own. Once the Matrix
+server accepts the change, it expires every unexpired row of the account:
+
+- **A change** (`attributes.{accessToken, currentPassword, newPassword}`): the
+  account is the access token's (`account/whoami`). The Matrix server checks
+  the current password, so card code, which holds the app's token but never
+  sees a password, can't end the CLI's sessions this way. The device that made
+  the change stays signed in; every other device is signed out.
+- **A reset** (`attributes.{sid, clientSecret, email, newPassword}`): the
+  Matrix server finds the account from the validated email and doesn't say
+  which it was, so the realm server checks the new password against the
+  account `email` names (`confirmPassword`), and ends nothing when it doesn't
+  check out. That check is made whatever the per-account limit on failed
+  sign-ins says, so keeping the limit full can't stop a reset from ending
+  sessions. The Matrix server deletes a validation session the first time a
+  reset uses it, so a second request with it is refused (401
+  `M_UNAUTHORIZED`), and each check costs a confirmed reset email.
+
+The route answers only the secure origin (403 `forbidden`), and the same
+whether or not a row ended. When ending the sessions fails after the password
+is set (the Matrix server's admin API is down, say), the failure is logged on
+`realm:secure-session` and the route still answers 200; the sessions then last
+until they expire. A password set any other way, such as by an operator
+through Synapse's admin `reset_password`, ends no secure session. To end them,
+expire the rows.
 
 A reset link carries the email address it was sent to in its fragment, so
 the page it lands on can name the account: `#clientSecret=…&email=…&sid=…` on
@@ -212,16 +217,104 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
    room, so a sign-in that fails part way sets up again.
 
 Both POSTs answer only a request whose `Origin` is the secure origin's. The
-CLI never calls them: `boxel keys sign-in` opens
-`<secure origin>?mode=cli-sign-in&port=…&state=…`, and the window posts the
-session (`secure_session`, `user_id`, `expires_at`, `state`) to
+CLI never calls them; it opens a page of the window, which signs in with
+`client: 'cli'` and hands the result to the CLI's listener at
 `http://127.0.0.1:<port>/callback` (after a Google round trip too; the CLI's
-port and state wait in session storage). A Google sign-in the user cancels
+port and state wait in session storage):
+
+- `boxel keys sign-in` opens `<secure origin>?mode=cli-sign-in&port=…&state=…`,
+  and the window posts the session (`secure_session`, `user_id`,
+  `expires_at`, `state`).
+- `boxel profile add` opens `<secure origin>?mode=cli-auth&port=…&state=…&session=secure`
+  when `GET /_secure-origin` says `cliAuth: true`, and the host app's
+  `/cli-auth` otherwise or under `--host-url`. Once signed in, the window
+  mints a Matrix login token with the session (`POST
+/_secure-session/login-token`) and posts it as `login_token` beside the
+  session's fields. The CLI redeems it (`m.login.token`) for a Matrix device
+  of its own and keeps the secure session on the profile, so one sign-in
+  serves realm commands and `boxel keys` alike. A `cli-auth` link without
+  `session=secure` is one for a CLI that can't hold a secure session (one
+  from before secure sessions opens the host app's `/cli-auth`, which
+  forwards to this page when the app signs in on the secure origin). For
+  it, the window ends the session it signed in and navigates to the listener
+  with `?state=…&loginToken=…`, the form every released CLI accepts.
+
+The terminal and CI sign-ins (`--no-browser`, `-u` with `BOXEL_PASSWORD`,
+`profile migrate`, and the re-authentication prompt) log in to Matrix with
+`m.login.password` directly and never reach the secure origin, so the Matrix
+server's password login stays enabled. A Google sign-in the user cancels
 (`error=access_denied`) returns the window to the page it started from: the
 `cli-sign-in` page for the same listener, or the window's own sign-in. A
 Google sign-in that fails any other way shows the error, with Start again
 pointing at that same page. The shell's CSP allows that form
 target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1.4).
+
+## Handing a sign-in to the app
+
+With `SIGN_IN_ON_SECURE_ORIGIN=true` on the realm server that serves the app,
+the app draws no sign-in form. The realm server writes the setting into the
+host's config as `signInOnSecureOrigin` when it builds the app's page, so a
+deployment turns it on or off without a rebuild. Outside development the
+realm server builds that page once and keeps it for as long as the process
+runs, so a changed setting takes effect when the realm server next starts,
+as on the next deploy. Unset, the host keeps what its build set, which is
+off.
+
+1. A signed-out app (`components/matrix/secure-sign-in.gts`) replaces itself
+   with `<secure origin>?mode=sign-in#return=<the app page, path and query>`.
+   `return` rides in the fragment, which no firewall or access log sees. The
+   page is also a plain **Sign in to Boxel** link to the same address. A tab
+   that comes back signed out within two minutes of being sent stops and
+   says "Sign-in didn’t complete" (`sessionStorage`), and an app in a frame
+   is never navigated: its link opens a new tab.
+2. The sign-in page keeps `return` for the tab, in `sessionStorage`, once it
+   checks out against the app origins the realm server lists
+   (`boxel-app-origins` in the shell's markup: the credential fields'
+   `--secureOriginAppOrigin` list and the realm server's own origin). Every
+   way the window signs in (password, Google, a new account) ends on
+   `SignedIn`, which then mints a login token, `POST
+/_secure-session/login-token` under the window's secure session, and
+   replaces the location with `return#loginToken=…`, the token in the
+   fragment so no server log or access log records it. A `return` on a
+   loopback origin, `http:` or `https:`, first asks "Continue to
+   http://localhost:4200?", unless it is the realm server's own. A `return` on an
+   origin that isn't listed is dropped, and the window just says it is
+   signed in.
+3. The app redeems the token (from the fragment, or the query, where
+   `boxel browse` and Synapse's SSO put it) with an `m.login.token` login
+   before it loads any card, takes it out of the address, and boots as after any sign-in:
+   realm-server session, realm tokens, service-worker sync.
+   A token for another account than the one stored in the browser switches
+   accounts (`MatrixService.switchAccount`), signing the stored one out. A
+   token for the same account boots alongside it and signs nothing out. This
+   happens when two tabs that signed out together each come back from the
+   secure origin. Signing the stored session out would sign the other tab out,
+   and would end the secure windows the sign-in just came from.
+
+The login token is the Matrix server's own (MSC3882 `login/get_token`),
+asked for with an admin-minted token for the user that is logged out right
+after. The Matrix server binds it to the user, honours it once, and expires
+it after `login_via_existing_session.token_timeout` (two minutes on every
+deployment). It mints one per user a minute, and the route passes a refusal
+on as `429 rate-limited` with `meta.retryAfterMs`. The window's
+`loginToken()` waits and tries again for up to about a minute, so signing in
+again straight after signing out shows "Signing you in…" for a while rather
+than an error. The route answers only the secure origin (403 `forbidden`)
+and only a live secure session (401 `signed-out`).
+
+Signing out of the app (`MatrixService.signOut()`) runs the app's own
+`logout()` first, which ends the Matrix device, clears the service worker's
+realm tokens and asks the realm server to end the user's window sessions.
+It then replaces the location with
+`<secure origin>?mode=sign-out#return=<app root>` (an app in a frame signs
+out of its own session only, since the secure origin can't be framed), which forgets the
+window's session, ends it on the server, and goes back to a listed `return`.
+
+Links already sent keep working through the app: a reset link
+(`?clientSecret=…#email=…&sid=…`) is replaced by the secure origin's
+`reset-password` with all three in its fragment, and an older CLI's
+`/cli-auth?port=&state=` by the secure origin's `cli-auth` mode with the
+same port and state.
 
 ## Refusals
 
@@ -229,8 +322,8 @@ target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 403 `forbidden`           | A sign-in not from the secure origin                                                                                                                                                                                       |
 | 401 `invalid-credentials` | Any failed password sign-in (no account, no password, wrong)                                                                                                                                                               |
-| 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure                                                                                                                                                  |
-| 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`                                                                                                                                                 |
+| 401 `signed-out`          | `GET /_secure-session` or `POST /_secure-session/login-token` with a session that isn't, or is no longer, secure                                                                                                           |
+| 429 `rate-limited`        | Too many failed password sign-ins for the account, or, from `POST /_secure-session/login-token`, a login token already minted for the user within the minute (the Matrix server's limit); see `meta.retryAfterMs`          |
 | 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in                                                                                                                                                        |
 | 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                                                                                                                                                              |
 | 403 `ambiguous-email`     | More than one account holds the unlinked Google account's email                                                                                                                                                            |

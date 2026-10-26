@@ -22,9 +22,11 @@
 //
 //   This runs for EVERY render, not just the ones that time out, so it
 //   must stay cheap: a single Map keyed by CDP requestId, mutated on
-//   request start / finish / fail, with no per-request logging. Reading
-//   the pending list (sort + cap + URL truncation) happens only on the
-//   timeout path, where the work is already bounded by a torn-down tab.
+//   request start / finish / fail, plus a capped list of the most recent
+//   failures, with no per-request logging. Reading the pending list
+//   (sort + cap + URL truncation) happens only on the timeout path, where
+//   the work is already bounded by a torn-down tab; the failure list is
+//   read only when a render fails.
 //
 // Lifecycle:
 //
@@ -47,6 +49,7 @@ const log = logger('prerenderer');
 // can't turn the timeout-path read into expensive work or bloat the
 // persisted diagnostics row.
 const MAX_PENDING_REPORTED = 20;
+const MAX_FAILED_RETAINED = 20;
 const MAX_URL_LENGTH = 200;
 
 // Local subset of the CDP `Network.*` event payloads we read. We
@@ -56,13 +59,18 @@ const MAX_URL_LENGTH = 200;
 //   https://chromedevtools.github.io/devtools-protocol/tot/Network/
 interface CdpRequestWillBeSentEvent {
   requestId: string;
-  request: { url: string };
+  request: { url: string; method?: string };
 }
 interface CdpLoadingFinishedEvent {
   requestId: string;
 }
 interface CdpLoadingFailedEvent {
   requestId: string;
+  type?: string;
+  errorText?: string;
+  canceled?: boolean;
+  blockedReason?: string;
+  corsErrorStatus?: { corsError?: string; failedParameter?: string };
 }
 
 export interface PendingNetworkRequest {
@@ -70,17 +78,71 @@ export interface PendingNetworkRequest {
   ageMs: number;
 }
 
+// A request the browser reports as failed at the network layer — the
+// `net::ERR_*` detail a page-side `TypeError: Failed to fetch` never
+// carries, which is what names the URL and the cause of that error.
+export interface FailedNetworkRequest {
+  url: string;
+  method?: string;
+  type?: string;
+  errorText?: string;
+  canceled?: boolean;
+  blockedReason?: string;
+  corsError?: string;
+  durationMs: number;
+  // Milliseconds between the failure and the snapshot that reports it.
+  ageMs: number;
+}
+
 export class NetworkInflightTracker {
   // requestId -> { url, startedAt }. Bare Map mutated on the CDP
   // event stream; never iterated except on the timeout path.
-  #inFlight = new Map<string, { url: string; startedAt: number }>();
+  #inFlight = new Map<
+    string,
+    { url: string; method?: string; startedAt: number }
+  >();
+  // The most recent network-layer failures, oldest first, capped at
+  // MAX_FAILED_RETAINED. Read only when a render fails.
+  #failed: (Omit<FailedNetworkRequest, 'ageMs'> & { failedAt: number })[] = [];
 
-  recordStarted(requestId: string, url: string): void {
-    this.#inFlight.set(requestId, { url, startedAt: Date.now() });
+  recordStarted(requestId: string, url: string, method?: string): void {
+    this.#inFlight.set(requestId, { url, method, startedAt: Date.now() });
   }
 
   recordSettled(requestId: string): void {
     this.#inFlight.delete(requestId);
+  }
+
+  recordFailed(event: CdpLoadingFailedEvent): void {
+    let started = this.#inFlight.get(event.requestId);
+    this.#inFlight.delete(event.requestId);
+    let now = Date.now();
+    let url = started?.url ?? '';
+    this.#failed.push({
+      url: url.length > MAX_URL_LENGTH ? url.slice(0, MAX_URL_LENGTH) : url,
+      ...(started?.method ? { method: started.method } : {}),
+      ...(event.type ? { type: event.type } : {}),
+      ...(event.errorText ? { errorText: event.errorText } : {}),
+      ...(event.canceled ? { canceled: true } : {}),
+      ...(event.blockedReason ? { blockedReason: event.blockedReason } : {}),
+      ...(event.corsErrorStatus?.corsError
+        ? { corsError: event.corsErrorStatus.corsError }
+        : {}),
+      durationMs: started ? now - started.startedAt : 0,
+      failedAt: now,
+    });
+    if (this.#failed.length > MAX_FAILED_RETAINED) {
+      this.#failed.shift();
+    }
+  }
+
+  // Network-layer failures that landed at or after `sinceMs`, oldest
+  // first — the failures one render saw, when `sinceMs` is its start.
+  getFailedSince(sinceMs: number): FailedNetworkRequest[] {
+    let now = Date.now();
+    return this.#failed
+      .filter((entry) => entry.failedAt >= sinceMs)
+      .map(({ failedAt, ...entry }) => ({ ...entry, ageMs: now - failedAt }));
   }
 
   // Snapshot of requests still outstanding, oldest first (the longest-
@@ -116,7 +178,11 @@ export async function attachNetworkInflightTracker(page: Page): Promise<void> {
       'Network.requestWillBeSent',
       (event: CdpRequestWillBeSentEvent) => {
         try {
-          tracker.recordStarted(event.requestId, event.request?.url ?? '');
+          tracker.recordStarted(
+            event.requestId,
+            event.request?.url ?? '',
+            event.request?.method,
+          );
         } catch {
           // Best-effort: a malformed event must not perturb the render.
         }
@@ -131,7 +197,7 @@ export async function attachNetworkInflightTracker(page: Page): Promise<void> {
     });
     client.on('Network.loadingFailed', (event: CdpLoadingFailedEvent) => {
       try {
-        tracker.recordSettled(event.requestId);
+        tracker.recordFailed(event);
       } catch {
         // Best-effort.
       }
@@ -157,6 +223,24 @@ export function getPendingNetworkRequests(
   }
   try {
     return tracker.getPending();
+  } catch {
+    return null;
+  }
+}
+
+// Reads the network-layer failures a page's tracker saw at or after
+// `sinceMs`. Returns null when no tracker exists, as
+// `getPendingNetworkRequests` does.
+export function getFailedNetworkRequests(
+  page: Page,
+  sinceMs: number,
+): FailedNetworkRequest[] | null {
+  let tracker = trackersByPage.get(page);
+  if (!tracker) {
+    return null;
+  }
+  try {
+    return tracker.getFailedSince(sinceMs);
   } catch {
     return null;
   }

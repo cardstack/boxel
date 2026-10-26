@@ -76,9 +76,9 @@ export class LabPanel extends Component<Signature> {
         font-size: 11px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink);
-        background: var(--bg-elev);
-        border: 1px solid var(--line-strong);
+        color: var(--foreground);
+        background: var(--card);
+        border: 1px solid var(--border-strong);
         border-radius: 8px;
         cursor: pointer;
       }
@@ -92,7 +92,7 @@ export class LabPanel extends Component<Signature> {
       .lab-note {
         margin: 0;
         font-size: 0.82rem;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
     </style>
   </template>

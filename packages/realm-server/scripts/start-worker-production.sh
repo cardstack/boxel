@@ -16,6 +16,19 @@ SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFT
 
 echo "[start-worker-production] pid=$$ ppid=$PPID about to exec node at $(date -Iseconds)" >&2
 
+# ECS sets the memory limit on the task, where the container's own cgroup
+# can't see it, so read it from the task metadata endpoint. The worker manager
+# sizes each worker's heap from it.
+TASK_MEMORY_MB=$(node -e '
+  const uri = process.env.ECS_CONTAINER_METADATA_URI_V4;
+  if (uri) {
+    fetch(uri + "/task", { signal: AbortSignal.timeout(2000) })
+      .then((r) => r.json())
+      .then((t) => console.log(t.Limits?.Memory ?? ""))
+      .catch(() => {});
+  }
+' 2>/dev/null)
+
 NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
@@ -24,6 +37,7 @@ NODE_NO_WARNINGS=1 \
   exec node worker-manager.ts \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
+  ${TASK_MEMORY_MB:+--taskMemoryMb="$TASK_MEMORY_MB"} \
   --prerendererUrl='http://boxel-prerender-manager.boxel-production-internal:4222' \
   --matrixURL='https://matrix.boxel.ai' \
   \

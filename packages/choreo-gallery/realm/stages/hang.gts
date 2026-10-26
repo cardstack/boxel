@@ -673,9 +673,9 @@ export class Hang extends Component {
     </div>
     <style scoped>
       .chip {
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         background: transparent;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         border-radius: 999px;
         padding: 7px 12px;
         font-family: var(--font-mono);
@@ -686,8 +686,8 @@ export class Hang extends Component {
 
       @media (hover: hover) {
         .chip:hover {
-          color: var(--ink);
-          border-color: var(--line-strong);
+          color: var(--foreground);
+          border-color: var(--border-strong);
           background: var(--bg-spot);
         }
       }
@@ -760,21 +760,22 @@ export class Hang extends Component {
 
       .hang-turn {
         border-radius: 999px;
-        color: #fff;
         padding: 5px 11px;
       }
 
       .hang-turn.is-red {
-        background: var(--ember);
+        background: var(--primary);
+        color: var(--primary-foreground);
       }
 
       .hang-turn.is-blue {
         background: var(--azure);
+        color: #fff;
       }
 
       .hang-tally,
       .hang-speed {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .hang-speed {
@@ -783,11 +784,11 @@ export class Hang extends Component {
       }
 
       .hang-standing {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .hang-standing b.is-red {
-        color: var(--ember);
+        color: var(--primary-ink);
       }
 
       .hang-standing b.is-blue {
@@ -795,7 +796,7 @@ export class Hang extends Component {
       }
 
       .hang-standing i {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-style: normal;
       }
 
@@ -805,8 +806,8 @@ export class Hang extends Component {
         gap: 12px;
       }
       .hang-lane {
-        background: var(--bg-well);
-        border: 2px solid var(--line-strong);
+        background: var(--inset);
+        border: 2px solid var(--border-strong);
         border-radius: 14px;
         height: 132px;
         overflow: hidden;
@@ -815,30 +816,30 @@ export class Hang extends Component {
       }
 
       .hang-zone {
-        border-left: 1px solid var(--line);
+        border-left: 1px solid var(--border);
         bottom: 0;
         position: absolute;
         top: 0;
       }
 
       .hang-zone:nth-child(1) {
-        background: rgba(var(--shadow-rgb), 0.04);
+        background: color-mix(in srgb, var(--shadow-ink) 4%, transparent);
       }
 
       .hang-zone:nth-child(2) {
-        background: rgba(var(--shadow-rgb), 0.07);
+        background: color-mix(in srgb, var(--shadow-ink) 7%, transparent);
       }
 
       .hang-zone:nth-child(3) {
-        background: rgba(var(--shadow-rgb), 0.1);
+        background: color-mix(in srgb, var(--shadow-ink) 10%, transparent);
       }
 
       .hang-zone:nth-child(4) {
-        background: rgba(var(--shadow-rgb), 0.14);
+        background: color-mix(in srgb, var(--shadow-ink) 14%, transparent);
       }
 
       .hang-zone i {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-family: var(--font-mono);
         font-size: 9px;
         font-style: normal;
@@ -849,8 +850,8 @@ export class Hang extends Component {
         top: 6px;
       }
       .hang-pen {
-        background: rgba(var(--shadow-rgb), 0.05);
-        border-right: 2px solid var(--line-strong);
+        background: color-mix(in srgb, var(--shadow-ink) 5%, transparent);
+        border-right: 2px solid var(--border-strong);
         bottom: 0;
         left: 0;
         position: absolute;
@@ -860,7 +861,12 @@ export class Hang extends Component {
       .hang-puck {
         align-items: center;
         border-radius: 50%;
-        box-shadow: 0 4px 12px -4px rgba(var(--shadow-rgb), var(--shadow-a));
+        box-shadow: 0 4px 12px -4px
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(var(--shadow-a) * 100%),
+            transparent
+          );
         color: #fff;
         display: flex;
         font-family: var(--font-mono);
@@ -877,7 +883,7 @@ export class Hang extends Component {
       }
 
       .hang-puck.is-red {
-        background: var(--ember);
+        background: var(--primary);
       }
 
       .hang-puck.is-blue {
@@ -893,7 +899,7 @@ export class Hang extends Component {
         cursor: grabbing;
       }
       .hang-lead {
-        background: var(--ink-faint);
+        background: var(--subtle-foreground);
         bottom: 0;
         left: calc(var(--lead, 0) * 100%);
         position: absolute;
@@ -906,9 +912,9 @@ export class Hang extends Component {
       }
       .hang-ghost {
         align-items: center;
-        border: 2px dashed var(--ink-faint);
+        border: 2px dashed var(--subtle-foreground);
         border-radius: 50%;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         display: flex;
         font-family: var(--font-mono);
         font-size: 10px;
@@ -931,7 +937,7 @@ export class Hang extends Component {
       .hang-ghost[data-call='off the end'],
       .hang-ghost[data-call='too soft'] {
         border-color: var(--ember-hot);
-        color: var(--ember-hot);
+        color: var(--hot-ink);
         font-size: 8px;
       }
 
@@ -940,7 +946,7 @@ export class Hang extends Component {
         color: var(--teal);
       }
       .hang-power {
-        background: var(--bg-elev);
+        background: var(--card);
         border-radius: 999px;
         height: 5px;
         overflow: hidden;
@@ -957,14 +963,14 @@ export class Hang extends Component {
       }
 
       .hang-legend {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-size: 11px;
         line-height: 1.6;
         margin: 0;
       }
 
       .hang-legend b {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-family: var(--font-mono);
         font-weight: 400;
       }
@@ -980,19 +986,19 @@ export class Hang extends Component {
       }
 
       .hang-note {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .hang-gutter {
-        border: 1px dashed var(--line-strong);
+        border: 1px dashed var(--border-strong);
         border-radius: 10px;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         padding: 7px 12px;
         text-transform: uppercase;
       }
 
       .hang-gutter b {
-        color: var(--ink);
+        color: var(--foreground);
         font-variant-numeric: tabular-nums;
         margin-left: 6px;
       }

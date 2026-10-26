@@ -35,6 +35,7 @@ import {
   type PublicRealmSummary,
   type RealmServerTokenSource,
 } from '@cardstack/runtime-common';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   joinDMRoom,
   RealmAuthClient,
@@ -42,6 +43,7 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
+import { TokenRefreshSchedule } from '@cardstack/host/lib/token-refresh-schedule';
 import {
   RealmServerSessionLocalStorageKey,
   SessionLocalStorageKey,
@@ -50,12 +52,18 @@ import {
 import { createServerRequestTimingMiddleware } from './client-telemetry';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
+import type MessageService from './message-service';
 import type NetworkService from './network';
 import type RealmService from './realm';
 import type SessionService from './session';
 import type { IEvent } from 'matrix-js-sdk';
 
 const { hostsOwnAssets, resolvedBaseRealmURL } = ENV;
+
+const REALM_EVENT_ROOMS_FIRST_RETRY_MS = 2_000;
+const REALM_EVENT_ROOMS_MAX_RETRY_MS = 60_000;
+// The most realms `/_realm-event-rooms` answers for in one request.
+const REALM_EVENT_ROOMS_PER_REQUEST = 100;
 
 export interface RealmServerTokenClaims {
   user: string;
@@ -121,6 +129,7 @@ export default class RealmServerService
   extends Service
   implements RealmServerTokenSource
 {
+  @service declare private messageService: MessageService;
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
   @service declare private realm: RealmService;
@@ -145,11 +154,31 @@ export default class RealmServerService
   private _ready = new Deferred<void>();
   private eventSubscribers: Map<string, RealmServerEventSubscriber[]> =
     new Map();
+  // A private realm sends its realm events into a room of its own, whose
+  // members are the users its grants name; the host joins it when something
+  // first subscribes to the realm (see
+  // `joinRealmEventRoom`). The realms still to be asked about, and every realm
+  // asked about this session.
+  private realmEventRoomsPending = new Set<string>();
+  private realmEventRoomsRequested = new Set<string>();
+  // How long to wait before asking again about realms whose rooms could not
+  // be provided. Doubles on each failure up to a minute; reset on success.
+  private realmEventRoomsRetryMs = REALM_EVENT_ROOMS_FIRST_RETRY_MS;
 
   constructor(owner: Owner) {
     super(owner);
     this.session.register(this);
     this.fetchCatalogRealms();
+    this.messageService.onFirstSubscription((realm) =>
+      this.joinRealmEventRoom(realm),
+    );
+    // A change to which realms the user can read can also change whether a
+    // realm they have open names them, or is world-readable, and so which
+    // room its events arrive in. Ask again about every realm that has a
+    // subscriber.
+    this.subscribeEvent(REALMS_LIST_UPDATED_EVENT_TYPE, async () => {
+      this.reaskRealmEventRooms();
+    });
   }
 
   get ready() {
@@ -178,6 +207,13 @@ export default class RealmServerService
       0,
       this.unreachableRealmServersList.length,
     );
+    // A run in flight belongs to the session that is ending; it must not put
+    // that session's realms back in line for the next one.
+    this.joinRealmEventRoomsTask.cancelAll();
+    this.retryRealmEventRoomsTask.cancelAll();
+    this.realmEventRoomsPending.clear();
+    this.realmEventRoomsRequested.clear();
+    this.realmEventRoomsRetryMs = REALM_EVENT_ROOMS_FIRST_RETRY_MS;
     // Do NOT clear eventSubscribers here: subscriber *wiring* is app-scoped.
     // Services (e.g. BillingService) call subscribeEvent() once in their
     // constructor, for the app's lifetime. Logout is an in-app reset, not a
@@ -196,10 +232,19 @@ export default class RealmServerService
     return Boolean(this.client);
   }
 
+  // The stored session is the browser's, not the account's: one minted for a
+  // different Matrix user than `client` is discarded, so the next login mints
+  // a session for this user instead of acting as the previous one.
   setClient(client: ExtendedClient) {
     this.client = client;
-    this.token =
-      window.localStorage.getItem(sessionLocalStorageKey) ?? undefined;
+    let stored =
+      window.localStorage.getItem(sessionLocalStorageKey) || undefined;
+    let storedUser = stored ? realmClaimsFromRawToken(stored)?.user : undefined;
+    let userId = client.getUserId();
+    if (stored && userId && storedUser !== userId) {
+      stored = undefined;
+    }
+    this.token = stored;
   }
 
   async createStripeSession(email: string) {
@@ -399,6 +444,7 @@ export default class RealmServerService
   logout(): void {
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
+    this.refreshSchedule.reset();
     this.token = undefined;
     this.client = undefined;
     this.loggingIn = undefined;
@@ -696,7 +742,108 @@ export default class RealmServerService
     for (let [realmURL, token] of Object.entries(tokens)) {
       this.realm.getOrCreateRealmResource(realmURL, token);
     }
+    // Realms subscribed to before there was a session to join with.
+    void this.joinRealmEventRoomsTask.perform();
   }
+
+  // Joins the room the given realm sends its realm events into, when it is a
+  // private realm on this realm server whose grants name the user; the realm
+  // server invites the user before it answers. Other realms' events arrive in
+  // the user's session room. Joining once is enough: the host stays in the
+  // room until a revoked grant removes it, and catches up on what it missed
+  // through sync. Realms asked for in the same turn are asked about together.
+  private joinRealmEventRoom(realmIdentifier: string) {
+    let realmURL = ensureTrailingSlash(
+      resolvedRealmURLHref(this.network.virtualNetwork, realmIdentifier),
+    );
+    if (this.realmEventRoomsRequested.has(realmURL)) {
+      return;
+    }
+    this.realmEventRoomsRequested.add(realmURL);
+    this.realmEventRoomsPending.add(realmURL);
+    void this.joinRealmEventRoomsTask.perform();
+  }
+
+  private reaskRealmEventRooms() {
+    this.realmEventRoomsRequested.clear();
+    for (let realm of this.messageService.subscribedRealms()) {
+      this.joinRealmEventRoom(realm);
+    }
+  }
+
+  private joinRealmEventRoomsTask = task({ keepLatest: true }, async () => {
+    await rawTimeout(0);
+    // Without a matrix client there's no session to join with. Signing in
+    // runs this again (see `authenticateToAllAccessibleRealms`).
+    let client = this.client;
+    if (!client || this.realmEventRoomsPending.size === 0) {
+      return;
+    }
+    // Asked about a request's worth at a time; the rest wait for the next run,
+    // started below once this one succeeds.
+    let realms = [...this.realmEventRoomsPending].slice(
+      0,
+      REALM_EVENT_ROOMS_PER_REQUEST,
+    );
+    for (let realm of realms) {
+      this.realmEventRoomsPending.delete(realm);
+    }
+    try {
+      await this.login();
+      // TODO(ADR 004 §1.7–1.9): every realm is asked about at the home realm
+      // server, which answers only for its own realms. That holds while the
+      // host serves realms from its home server alone (see
+      // `assertOwnRealmServer`). Once realms come from several servers, ask
+      // each server about its own realms with that server's session, and
+      // join the rooms through that server's homeserver.
+      let response = await this.network.fetch(
+        `${this.url.href}_realm-event-rooms`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: SupportedMimeType.JSON,
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify({ realms }),
+        },
+      );
+      // A 503 still carries the rooms the server could provide; the rest are
+      // asked about again below.
+      let { rooms } = (
+        response.ok || response.status === 503 ? await response.json() : {}
+      ) as { rooms?: Record<string, string> };
+      // Joining a room the user is already in changes nothing, and the SDK
+      // answers it locally once sync has the room.
+      for (let roomId of new Set(Object.values(rooms ?? {}))) {
+        await client.joinRoom(roomId);
+      }
+      if (!response.ok) {
+        throw new Error(`${response.status} from _realm-event-rooms`);
+      }
+      this.realmEventRoomsRetryMs = REALM_EVENT_ROOMS_FIRST_RETRY_MS;
+      if (this.realmEventRoomsPending.size > 0) {
+        void this.joinRealmEventRoomsTask.perform();
+      }
+    } catch (e) {
+      // Asked about again after a pause, and again on the next subscription.
+      for (let realm of realms) {
+        this.realmEventRoomsPending.add(realm);
+      }
+      console.warn(`Unable to join the realm event rooms of ${realms}`, e);
+      let retryMs = this.realmEventRoomsRetryMs;
+      this.realmEventRoomsRetryMs = Math.min(
+        retryMs * 2,
+        REALM_EVENT_ROOMS_MAX_RETRY_MS,
+      );
+      void this.retryRealmEventRoomsTask.perform(retryMs);
+    }
+  });
+
+  private retryRealmEventRoomsTask = restartableTask(async (ms: number) => {
+    await rawTimeout(ms);
+    void this.joinRealmEventRoomsTask.perform();
+  });
 
   private async ensureJoinedSessionRoom(tokens: {
     [realmUrl: string]: string;
@@ -1146,26 +1293,41 @@ export default class RealmServerService
     this.tokenRefresher.perform();
   }
 
+  // Re-mints the session on the `TokenRefreshSchedule`, which reports a fresh
+  // session that arrives too close to expiry to be scheduled from its `exp`.
   private tokenRefresher = restartableTask(async () => {
-    if (!this.claims) {
+    if (!this.claims || !this.token) {
       return;
     }
 
-    // token expiration is unix time (seconds)
-    let expirationMs = this.claims.exp * 1000;
-
-    let refreshMs = Math.max(
-      expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
-      0,
+    let { exp } = this.claims;
+    let refreshMs = this.refreshSchedule.refreshDelayMs(
+      this.token,
+      exp,
+      (delayMs) =>
+        console.error(
+          `RealmServerService - the session minted by ${this.url.href} expires at ${new Date(
+            exp * 1000,
+          ).toISOString()}, too soon to schedule a refresh; minting again in ${
+            delayMs / 1000
+          }s`,
+        ),
     );
 
-    await rawTimeout(refreshMs);
+    await this.waitForTokenRefresh(refreshMs);
     if (!this.loggingIn) {
       this.loggingIn = this.loginTask.perform();
       await this.loggingIn;
     }
   });
 
+  // How the token refresher waits for its next mint. Tests replace it to run
+  // the refresher against a virtual clock.
+  async waitForTokenRefresh(ms: number): Promise<void> {
+    await rawTimeout(ms);
+  }
+
+  private refreshSchedule = new TokenRefreshSchedule();
   private loggingIn: Promise<void> | undefined;
   private pendingRegistrationToken: string | undefined;
 
@@ -1202,6 +1364,7 @@ export default class RealmServerService
       );
       this.pendingRegistrationToken = undefined;
       let token = await realmAuthClient.getJWT();
+      this.refreshSchedule.minted(token);
       this.token = token;
     } catch (e: any) {
       if (!this.client) {
@@ -1894,7 +2057,6 @@ export default class RealmServerService
   }
 }
 
-const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
 const sessionLocalStorageKey = RealmServerSessionLocalStorageKey;
 // How long signing the secure window out may take before it is abandoned.
 const secureWindowSignOutTimeoutMs = 10_000;
@@ -1914,7 +2076,9 @@ function isTokenExpired(rawToken: string): boolean {
   return !Number.isFinite(exp) || (exp as number) * 1000 <= Date.now();
 }
 
-function realmClaimsFromRawToken(rawToken: string): JWTPayload | undefined {
+export function realmClaimsFromRawToken(
+  rawToken: string,
+): JWTPayload | undefined {
   try {
     let [_header, payload] = rawToken.split('.');
     return JSON.parse(atob(payload)) as JWTPayload;

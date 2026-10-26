@@ -564,7 +564,7 @@ export class Jump extends Component {
                     being pointed at. }}
                 <c.Hold
                   @of={{c.id this.target}}
-                  @backgroundColor='var(--bg-elev)'
+                  @backgroundColor='var(--card)'
                   @duration={{tuneSeconds 'jump' 0.7 'Hold duration 3'}}
                   @fill={{this.keep}}
                 />
@@ -608,9 +608,9 @@ export class Jump extends Component {
     </div>
     <style scoped>
       .chip {
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         background: transparent;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         border-radius: 999px;
         padding: 7px 12px;
         font-family: var(--font-mono);
@@ -620,22 +620,23 @@ export class Jump extends Component {
       }
 
       .chip.is-on {
-        color: var(--ink);
-        border-color: var(--line-strong);
+        color: var(--foreground);
+        border-color: var(--border-strong);
         background: var(--bg-spot);
       }
 
       @media (hover: hover) {
         .chip:hover {
-          color: var(--ink);
-          border-color: var(--line-strong);
+          color: var(--foreground);
+          border-color: var(--border-strong);
           background: var(--bg-spot);
         }
       }
 
       .chip.is-on {
-        box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.35);
-        color: var(--ember-hot);
+        box-shadow: inset 0 0 0 1px
+          color-mix(in srgb, var(--primary) 35%, transparent);
+        color: var(--hot-ink);
       }
 
       .ex {
@@ -680,8 +681,8 @@ export class Jump extends Component {
          has to escape. Both of those are the point of the stage, so it is a real
          overflow box rather than the page's own scroll. */
       .jump-pane {
-        background: rgba(var(--ink-rgb), 0.03);
-        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--foreground) 3%, transparent);
+        border: 1px solid var(--border);
         border-radius: 10px;
         display: grid;
         flex: 1;
@@ -710,8 +711,8 @@ export class Jump extends Component {
          list travel exactly that far. Without it the pane shows eight rows out of
          sixty and the travel has nothing to mean anything against. */
       .jump-strip {
-        background: rgba(var(--ink-rgb), 0.04);
-        border-right: 1px solid var(--line);
+        background: color-mix(in srgb, var(--foreground) 4%, transparent);
+        border-right: 1px solid var(--border);
         grid-row: 1 / -1;
         display: flex;
         flex-direction: column;
@@ -731,7 +732,7 @@ export class Jump extends Component {
       }
 
       .jump-tick {
-        background: rgba(var(--ink-rgb), 0.16);
+        background: color-mix(in srgb, var(--foreground) 16%, transparent);
         border: 0;
         border-radius: 1px;
         cursor: pointer;
@@ -748,12 +749,12 @@ export class Jump extends Component {
       }
 
       .jump-tick.is-red {
-        background: var(--ember);
+        background: var(--primary);
       }
 
       /* a failure that has been looked at: still there, no longer shouting */
       .jump-tick.is-red.is-seen {
-        background: rgba(255, 59, 31, 0.4);
+        background: color-mix(in srgb, var(--primary) 40%, transparent);
       }
 
       .jump-tick.is-at {
@@ -763,8 +764,8 @@ export class Jump extends Component {
 
       .jump-bar {
         align-items: center;
-        background: rgba(var(--bg-rgb), 0.7);
-        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--canvas) 70%, transparent);
+        border-bottom: 1px solid var(--border);
         display: flex;
         gap: 10px;
         grid-column: 2;
@@ -772,7 +773,7 @@ export class Jump extends Component {
       }
 
       .jump-tally {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         flex: 1;
         font-family: var(--font-mono);
         font-size: 11px;
@@ -806,15 +807,15 @@ export class Jump extends Component {
       }
 
       .jump-back {
-        background: rgba(var(--ink-rgb), 0.08);
+        background: color-mix(in srgb, var(--foreground) 8%, transparent);
         border-radius: 999px 0 0 999px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         padding: 5px 10px;
       }
 
       .jump-back:hover:not(:disabled) {
-        background: rgba(var(--ink-rgb), 0.14);
-        color: var(--ink);
+        background: color-mix(in srgb, var(--foreground) 14%, transparent);
+        color: var(--foreground);
       }
 
       .jump-back:disabled {
@@ -828,13 +829,13 @@ export class Jump extends Component {
          one job or it stops being semantic. The transport is ink, and the copper
          underline in the settings row is the only other accent. */
       .jump-go {
-        background: rgba(var(--ink-rgb), 0.14);
+        background: color-mix(in srgb, var(--foreground) 14%, transparent);
         border-radius: 0 999px 999px 0;
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .jump-go:hover {
-        background: rgba(var(--ink-rgb), 0.22);
+        background: color-mix(in srgb, var(--foreground) 22%, transparent);
       }
 
       /* The region sits in the second column, under the bar. */
@@ -875,7 +876,7 @@ export class Jump extends Component {
          every row, which said "layout" eight times and told you nothing. */
       .jump-group {
         align-items: baseline;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         display: flex;
         font-family: var(--font-mono);
         font-size: 9.5px;
@@ -891,11 +892,11 @@ export class Jump extends Component {
       }
 
       .jump-suite {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .jump-count {
-        border-top: 1px solid var(--line);
+        border-top: 1px solid var(--border);
         flex: 1;
         padding-top: 3px;
         text-align: right;
@@ -908,7 +909,7 @@ export class Jump extends Component {
       .jump-row {
         align-items: baseline;
         border-radius: 5px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         opacity: 0.72;
         display: grid;
         font-size: 11.5px;
@@ -926,8 +927,9 @@ export class Jump extends Component {
          notch or runs into the curve and is clipped into a wedge, and no radius makes
          that look deliberate. A ring follows the shape. */
       .jump-row.is-red {
-        background: rgba(255, 59, 31, 0.07);
-        box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.22);
+        background: color-mix(in srgb, var(--primary) 7%, transparent);
+        box-shadow: inset 0 0 0 1px
+          color-mix(in srgb, var(--primary) 22%, transparent);
         opacity: 0.92;
       }
 
@@ -941,12 +943,12 @@ export class Jump extends Component {
       }
 
       .jump-row.is-red .jump-dot {
-        background: var(--ember);
+        background: var(--primary);
         opacity: 1;
       }
 
       .jump-suite {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-family: var(--font-mono);
         font-size: 10px;
         overflow: hidden;
@@ -962,11 +964,11 @@ export class Jump extends Component {
       }
 
       .jump-row.is-red .jump-name {
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .jump-ms {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-family: var(--font-mono);
         font-size: 10px;
         font-variant-numeric: tabular-nums;
@@ -974,7 +976,7 @@ export class Jump extends Component {
 
       /* the assertion, under the name and indented to it */
       .jump-why {
-        color: var(--ember);
+        color: var(--primary-ink);
         font-family: var(--font-mono);
         font-size: 10px;
         grid-column: 2 / -1;
@@ -993,7 +995,7 @@ export class Jump extends Component {
 
       .jump-row.is-seen .jump-dot {
         background: transparent;
-        box-shadow: inset 0 0 0 1.5px var(--ember);
+        box-shadow: inset 0 0 0 1.5px var(--primary);
       }
 
       /* Preferences, as a line of words rather than a row of chips.
@@ -1003,7 +1005,7 @@ export class Jump extends Component {
          by weight and colour rather than by a box. */
       .jump-set {
         align-items: baseline;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         display: flex;
         flex-wrap: wrap;
         font-size: 11px;
@@ -1011,7 +1013,7 @@ export class Jump extends Component {
       }
 
       .jump-key {
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         font-family: var(--font-mono);
         font-size: 9.5px;
         letter-spacing: 0.1em;
@@ -1026,7 +1028,7 @@ export class Jump extends Component {
         background: none;
         border: 0;
         border-bottom: 1px solid transparent;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         cursor: pointer;
         font-size: 11px;
         padding: 0 0 1px;
@@ -1036,12 +1038,12 @@ export class Jump extends Component {
       }
 
       .jump-opt:hover {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .jump-opt.is-on {
         border-bottom-color: var(--copper);
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       /* honestly a developer control, so it sits apart and stays quiet */

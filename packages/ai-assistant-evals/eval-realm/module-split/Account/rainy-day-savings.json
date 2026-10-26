@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "accountName": "Rainy Day Savings",
+      "institution": "Harbor Credit Union",
+      "kind": "savings",
+      "openingBalance": 8500,
+      "lastFour": "9031",
+      "notes": "Emergency fund. Target is six months of fixed costs."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../home-ledger",
+        "name": "Account"
+      }
+    }
+  }
+}

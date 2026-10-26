@@ -7,7 +7,10 @@ import type {
   JobsTable,
   PgAdapter,
 } from '@cardstack/postgres';
-import { finalizeOrphanedReservations } from '../lib/finalize-orphan-reservations.ts';
+import {
+  finalizeOrphanedReservations,
+  orphanedReservationReason,
+} from '../lib/finalize-orphan-reservations.ts';
 import {
   closeTestPgAdapter,
   createTestPgAdapter,
@@ -63,6 +66,31 @@ async function fetchReservation(
 }
 
 module(basename(import.meta.filename), function () {
+  module('orphanedReservationReason', function () {
+    test('a SIGKILL outside a shutdown is a kill, which the cap counts', function (assert) {
+      assert.strictEqual(orphanedReservationReason('SIGKILL', false), 'killed');
+    });
+
+    test('a SIGKILL during the manager shutdown is an interruption', function (assert) {
+      assert.strictEqual(
+        orphanedReservationReason('SIGKILL', true),
+        'interrupted',
+      );
+    });
+
+    test('other signals and plain exits are interruptions', function (assert) {
+      assert.strictEqual(
+        orphanedReservationReason('SIGTERM', false),
+        'interrupted',
+      );
+      assert.strictEqual(
+        orphanedReservationReason('SIGINT', false),
+        'interrupted',
+      );
+      assert.strictEqual(orphanedReservationReason(null, false), 'interrupted');
+    });
+  });
+
   module('finalizeOrphanedReservations', function (hooks) {
     let adapter: PgAdapter;
 

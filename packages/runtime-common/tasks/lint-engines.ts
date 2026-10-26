@@ -1,0 +1,311 @@
+// The lint engines themselves: ESLint, Prettier and ember-template-lint,
+// configured from host's lint config. This module runs inside the lint thread
+// (see `lint-thread.ts`), so everything the engines allocate counts against
+// that thread's heap limit rather than the worker process's.
+
+import type { Linter } from 'eslint';
+import Module from 'node:module';
+import { delimiter, extname, resolve } from 'node:path';
+
+import type { LintMessage, LintResult } from './lint.ts';
+
+import { resolvePrettierConfig } from '../prettier-config.ts';
+
+// ---------------------------------------------------------------------------
+// Host config — single source of truth shared with `pnpm run lint`
+// ---------------------------------------------------------------------------
+
+// runtime-common lives at <repo>/packages/runtime-common; host is its sibling.
+const HOST_PKG = resolve(import.meta.dirname, '..', '..', 'host');
+const HOST_ESLINTRC = resolve(HOST_PKG, '.eslintrc.js');
+const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
+export const LINT_ANCHOR = resolve(HOST_PKG, '__realm__');
+
+// pnpm doesn't hoist transitive deps, so parsers/plugins host references by
+// string (e.g. `parser: 'ember-eslint-parser'`) won't resolve from here.
+// Mirror pnpm's own eslint bin shim: add .pnpm/node_modules to NODE_PATH.
+let nodePathReady = false;
+function ensurePnpmNodePath() {
+  if (nodePathReady) return;
+  const pnpmNodeModules = resolve(
+    REPO_ROOT,
+    'node_modules',
+    '.pnpm',
+    'node_modules',
+  );
+  process.env.NODE_PATH = process.env.NODE_PATH
+    ? `${pnpmNodeModules}${delimiter}${process.env.NODE_PATH}`
+    : pnpmNodeModules;
+  // _initPaths is a private but stable Node API used by the official
+  // pnpm shim. It re-reads NODE_PATH into Module.globalPaths.
+  (Module as unknown as { _initPaths(): void })._initPaths();
+  nodePathReady = true;
+}
+
+// ---------------------------------------------------------------------------
+// Engine caches — config resolution + plugin loading is heavy and never
+// changes at runtime, so we instantiate once per lint thread.
+// ---------------------------------------------------------------------------
+
+let eslintPromise: Promise<any> | undefined;
+async function getESLint(): Promise<any> {
+  if (eslintPromise) return eslintPromise;
+  eslintPromise = initESLint();
+  return eslintPromise;
+}
+
+async function initESLint(): Promise<any> {
+  ensurePnpmNodePath();
+  // Load ESLint from host's own node_modules so plugin/parser resolution
+  // inside ESLint follows host's dependency tree.
+  const hostRequire = Module.createRequire(resolve(HOST_PKG, 'package.json'));
+  const { ESLint } = hostRequire('eslint');
+
+  const importMappingConfig = await import(
+    // @ts-ignore no types for the import-mapping config
+    /* webpackIgnore: true */ '../etc/eslint/missing-card-api-import-config.js'
+  );
+  const importMappings = (importMappingConfig.default ?? importMappingConfig)
+    .importMappings;
+
+  return new ESLint({
+    cwd: HOST_PKG,
+    overrideConfigFile: HOST_ESLINTRC,
+    fix: true,
+    // Submission/realm files are in-memory; don't apply host's .eslintignore
+    // to them.
+    ignore: false,
+    overrideConfig: {
+      plugins: ['@cardstack/boxel'],
+      rules: {
+        // Prettier runs as a separate pass after ESLint (see lintOne); folding
+        // it in lets the prettier plugin see a mid-fix file (e.g. a not-yet-
+        // deduped duplicate import) and throw.
+        'prettier/prettier': 'off',
+        // Realm files are flat, not laid out like host's tree, so this rule
+        // misreads a realm test file (foo.test.gts, no tests/ dir) as
+        // production code and rejects its legitimate test-support imports.
+        'ember/no-test-support-import': 'off',
+        // Realm-submission autofixes host/.eslintrc.js omits (host source
+        // authors its own imports; realm content gets them injected).
+        '@cardstack/boxel/missing-card-api-import': [
+          'error',
+          { importMappings },
+        ],
+        '@cardstack/boxel/no-duplicate-imports': 'error',
+        // Generated card code routinely carries unused imports (the import
+        // block streams before the template, so plans drift). Removing them
+        // is safe to automate: if a usage appears later, the
+        // missing-card-api-import rule re-injects the import. Unused
+        // *variables* stay reported via @typescript-eslint/no-unused-vars —
+        // deleting those would change behavior. Whole declarations are
+        // deleted only for platform module namespaces that are known
+        // side-effect-free; any other module keeps a bare side-effect
+        // import so its top-level code still runs.
+        '@cardstack/boxel/no-unused-imports': [
+          'error',
+          {
+            sideEffectFreeModules: [
+              '@cardstack/base/*',
+              // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- recognizes legacy alias imports in submitted code
+              'https://cardstack.com/base/*',
+              '@cardstack/boxel-ui/*',
+              '@cardstack/boxel-icons/*',
+            ],
+          },
+        ],
+        '@cardstack/boxel/no-css-position-fixed': 'warn',
+        '@cardstack/boxel/no-forbidden-head-tags': 'warn',
+        '@cardstack/boxel/no-literal-realm-urls': 'error',
+      },
+    },
+  });
+}
+
+let templateLinterPromise: Promise<any> | undefined;
+async function getTemplateLinter(): Promise<any> {
+  if (templateLinterPromise) return templateLinterPromise;
+  templateLinterPromise = initTemplateLinter();
+  return templateLinterPromise;
+}
+
+async function initTemplateLinter(): Promise<any> {
+  ensurePnpmNodePath();
+  const hostRequire = Module.createRequire(resolve(HOST_PKG, 'package.json'));
+  const tlModule = hostRequire('ember-template-lint');
+  const TemplateLinter = (tlModule as any).default ?? tlModule;
+  // Host's config, minus no-whitespace-for-layout. That rule trims each
+  // line of a text node before matching, so what it flags is adjacent
+  // "space or &nbsp;" pairs in the authored text — never the newline plus
+  // indentation that prettier's wrapping (the pass right before this one)
+  // introduces. In realm content those &nbsp; runs are deliberate visual
+  // spacing, the rule has no autofix, and its message ("Excess whitespace
+  // detected") doesn't say which characters offend — so a model trying to
+  // clear it tends to pick a whitespace-only rewrite, which prettier then
+  // restores byte-for-byte, looping forever. The disable is uniform across
+  // .gts/.gjs/.hbs on purpose: the rule keys on authored text, not on
+  // whether the file went through the formatter, so gating it by extension
+  // would lint identical text differently.
+  const hostTemplateLintConfig = hostRequire('./.template-lintrc.js');
+  return new TemplateLinter({
+    workingDir: HOST_PKG,
+    config: {
+      ...hostTemplateLintConfig,
+      rules: {
+        ...hostTemplateLintConfig.rules,
+        'no-whitespace-for-layout': false,
+      },
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// File-extension routing
+// ---------------------------------------------------------------------------
+
+const ESLINT_EXTENSIONS = new Set(['.js', '.ts', '.gjs', '.gts']);
+const TEMPLATE_LINT_EXTENSIONS = new Set(['.hbs', '.gts', '.gjs']);
+
+// Callers that gate work on whether a file reaches an engine at all (e.g. the
+// submission lint fan-out) ask here, so coverage tracks routing.
+export function isLintableFilename(filename: string): boolean {
+  const ext = extname(filename).toLowerCase();
+  return ESLINT_EXTENSIONS.has(ext) || TEMPLATE_LINT_EXTENSIONS.has(ext);
+}
+
+export async function lintOne(
+  source: string,
+  filename: string,
+): Promise<LintResult> {
+  const ext = extname(filename).toLowerCase();
+  const messages: LintMessage[] = [];
+  let working = source;
+  let modified = false;
+
+  if (ESLINT_EXTENSIONS.has(ext)) {
+    // 1. ESLint autofix — dedup imports, inject missing card-api imports,
+    //    resolve template invokables, etc.
+    const fixed = await runESLint(working, filename);
+    if (typeof fixed.output === 'string' && fixed.output !== working) {
+      working = fixed.output;
+      modified = true;
+    }
+    // 2. Prettier as a separate pass over the now-fixed source.
+    const formatted = await runPrettier(working, filename);
+    if (formatted !== working) {
+      working = formatted;
+      modified = true;
+    }
+    // 3. Settle any fixes Prettier's reflow re-triggered, and collect the
+    //    residual messages against the final formatted output.
+    const settled = await runESLint(working, filename);
+    if (typeof settled.output === 'string' && settled.output !== working) {
+      working = settled.output;
+      modified = true;
+    }
+    for (const m of settled.messages) {
+      messages.push({
+        ruleId: m.ruleId ?? null,
+        severity: (m.severity === 2 ? 2 : 1) as 1 | 2,
+        message: m.message,
+        line: m.line ?? 1,
+        column: m.column ?? 1,
+        endLine: m.endLine,
+        endColumn: m.endColumn,
+        source: 'eslint',
+      });
+    }
+  }
+
+  if (TEMPLATE_LINT_EXTENSIONS.has(ext)) {
+    const { output, messages: tlMessages } = await runTemplateLint(
+      working,
+      filename,
+    );
+    if (typeof output === 'string' && output !== working) {
+      working = output;
+      modified = true;
+    }
+    for (const m of tlMessages) {
+      messages.push({
+        ruleId: m.rule ?? null,
+        severity: (m.severity === 2 ? 2 : 1) as 1 | 2,
+        message: m.message,
+        line: m.line ?? 1,
+        column: m.column ?? 1,
+        endLine: m.endLine,
+        endColumn: m.endColumn,
+        source: 'template-lint',
+      });
+    }
+  }
+
+  const passed = !messages.some((m) => m.severity === 2);
+  return {
+    passed,
+    output: working,
+    fixed: modified,
+    messages,
+  };
+}
+
+async function runESLint(
+  source: string,
+  filename: string,
+): Promise<{ output?: string; messages: Linter.LintMessage[] }> {
+  const eslint = await getESLint();
+  let filePath = resolve(LINT_ANCHOR, filename);
+  // Host config has no .gjs parser override; lint as .gts (same parser).
+  if (filePath.endsWith('.gjs')) {
+    filePath = `${filePath.slice(0, -4)}.gts`;
+  }
+  try {
+    const results = await eslint.lintText(source, { filePath });
+    const r = results[0] ?? {};
+    return { output: r.output, messages: r.messages ?? [] };
+  } catch (e) {
+    // A parser/plugin can throw on malformed input. Surface a clean diagnostic
+    // rather than letting a (potentially circular) error object propagate into
+    // the job result, where JSON serialization would crash the worker.
+    return {
+      output: undefined,
+      messages: [
+        {
+          ruleId: null,
+          severity: 2,
+          message: `ESLint failed to process source: ${
+            e && typeof e === 'object' && 'message' in e
+              ? (e as Error).message
+              : String(e)
+          }`,
+          line: 1,
+          column: 1,
+        } as Linter.LintMessage,
+      ],
+    };
+  }
+}
+
+async function runPrettier(source: string, filename: string): Promise<string> {
+  try {
+    const prettier = await import(/* webpackIgnore: true */ 'prettier');
+    const config = await resolvePrettierConfig(filename);
+    return await prettier.format(source, config);
+  } catch {
+    // Prettier can't parse malformed source — keep the ESLint-fixed output.
+    return source;
+  }
+}
+
+async function runTemplateLint(
+  source: string,
+  filename: string,
+): Promise<{ output?: string; messages: any[] }> {
+  const linter = await getTemplateLinter();
+  const result = await linter.verifyAndFix({
+    source,
+    moduleId: filename,
+    filePath: resolve(LINT_ANCHOR, filename),
+  });
+  return { output: result.output, messages: result.messages ?? [] };
+}

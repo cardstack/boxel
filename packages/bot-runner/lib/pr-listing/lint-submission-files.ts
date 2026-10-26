@@ -1,4 +1,5 @@
 import {
+  isLintNotRunRuleId,
   logger,
   userInitiatedPriority,
   type LintArgs,
@@ -67,7 +68,10 @@ export function makeLintSubmissionFiles(queuePublisher: QueuePublisher) {
       }
       fixedFiles.push({ filename: file.filename, contents });
       for (let message of result.messages) {
-        if (message.severity === 2) {
+        // A file the engines did not run on (too large, or out of lint
+        // memory) comes back passing with a warning, so that saving it still
+        // works. A submission must actually pass lint, so here it fails.
+        if (message.severity === 2 || isLintNotRunRuleId(message.ruleId)) {
           lintErrors.push(formatLintError(file.filename, message));
         }
       }

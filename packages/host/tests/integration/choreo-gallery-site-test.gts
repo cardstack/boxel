@@ -166,7 +166,9 @@ module('Integration | Choreo gallery | site', function (hooks) {
     let { getComponent } = (await gallery.loader.import(
       '@cardstack/base/card-api',
     )) as typeof CardAPI;
-    let Gallery = getComponent(new ChoreoGallery({ demos }));
+    let Gallery = getComponent(
+      new ChoreoGallery({ demos, cardInfo: await gallery.cardInfo() }),
+    );
     let narrow = htmlSafe('width: 420px;');
     await render(
       <template>

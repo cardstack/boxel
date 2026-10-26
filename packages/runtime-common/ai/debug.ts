@@ -5,10 +5,29 @@ export const DEBUG_COMMAND_PREFIX = 'boxel-debug';
 // `<!-- /feature:<name> -->`, left out of the prompt unless the room enabled
 // it. A name added to a skill file must be added here too, or no room can
 // enable it.
-export const SKILL_FEATURES: Record<string, string> = {
+export const SKILL_FEATURES = {
   'catalog-reuse':
     'Makes the assistant search the catalog for a listing to install or remix, and for specs to reuse, before it writes any .gts file.',
+} as const satisfies Record<string, string>;
+
+// The realms a feature's skill sections send the assistant to search, by
+// realm prefix. In a room that has not enabled the feature, the host leaves
+// them out of every search a run-realm-code script makes, so turning a
+// feature off removes its realms along with its skill text. Keyed by
+// SKILL_FEATURES names, so a misspelled key is a type error rather than a
+// realm no room can ever enable.
+export const SKILL_FEATURE_REALMS: {
+  [feature in keyof typeof SKILL_FEATURES]?: string[];
+} = {
+  'catalog-reuse': ['@cardstack/catalog/'],
 };
+
+// The realms gated behind a feature that `enabledFeatures` does not include.
+export function realmsOfDisabledFeatures(enabledFeatures: string[]): string[] {
+  return Object.entries(SKILL_FEATURE_REALMS).flatMap(([feature, realms]) =>
+    enabledFeatures.includes(feature) ? [] : (realms ?? []),
+  );
+}
 
 // The command names the bot used before they moved under `boxel-debug:`.
 const LEGACY_DEBUG_COMMAND_RE =

@@ -1,6 +1,4 @@
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-
 import { action } from '@ember/object';
 
 import { service } from '@ember/service';
@@ -8,17 +6,17 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import {
+  AwaitingEmail,
+  CreatingAccount,
+  InviteCodeForm,
+  RegisterForm,
+} from '@cardstack/secure-origin/screens/register.gts';
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import {
-  BoxelInput,
-  BoxelInputGroup,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
-import { CheckMark } from '@cardstack/boxel-ui/icons';
 
 import ENV from '@cardstack/host/config/environment';
 import {
@@ -33,8 +31,6 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import AuthButton from './auth-button';
-import AuthFormField from './auth-form-field';
 import CredentialFieldsFrame from './credential-fields';
 
 import type { AuthMode } from './auth';
@@ -69,216 +65,50 @@ interface Signature {
 export default class RegisterUser extends Component<Signature> {
   <template>
     {{#if (eq this.currentPage 'awaiting-validation')}}
-      <span class='title' data-test-email-validation>Please check your email to
-        complete registration</span>
-      <ul class='email-validation-instruction'>
-        <li>Leave this window open while we verify your email</li>
-        <li>This screen will update once your email is verified</li>
-      </ul>
-      <AuthButton
-        data-test-resend-validation
-        {{on 'click' this.resendValidation}}
-        class='resend-email'
-        @variant='primary'
-        @disabled={{this.validateEmail.isRunning}}
-        @loading={{this.validateEmail.isRunning}}
-      >Resend Email</AuthButton>
+      <AwaitingEmail
+        @resending={{this.validateEmail.isRunning}}
+        @onResend={{this.resendValidation}}
+      />
     {{else if (eq this.currentPage 'account-creation')}}
-      <div class='centered-loading'>
-        <span class='loading-title' data-test-email-validation-complete>Email
-          validation complete</span>
-        <p class='loading-message'>Please wait as we set up your account.</p>
-        <LoadingIndicator class='loading-spinner' />
-      </div>
+      <CreatingAccount />
     {{else if (eq this.currentPage 'token-form')}}
-      <span class='title'>Boxel is currently invite-only.<br />Enter your invite
-        code here.</span>
-      <AuthFormField @label='Your invite code'>
-        <BoxelInput
-          data-test-token-field
-          @state={{this.tokenInputState}}
-          @value={{this.token}}
-          @placeholder='Enter invite code'
-          @errorMessage={{this.tokenError}}
-          @onInput={{this.setToken}}
-        />
-      </AuthFormField>
-      <div class='button-wrapper'>
-        <AuthButton
-          data-test-next-btn
-          @variant='primary'
-          @disabled={{this.isNextButtonDisabled}}
-          @loading={{this.doRegistrationFlow.isRunning}}
-          {{on 'click' this.sendToken}}
-        >Next</AuthButton>
-      </div>
+      <InviteCodeForm
+        @token={{this.token}}
+        @tokenError={{this.tokenError}}
+        @submitDisabled={{this.isNextButtonDisabled}}
+        @submitting={{this.doRegistrationFlow.isRunning}}
+        @onTokenInput={{this.setToken}}
+        @onSubmit={{this.sendToken}}
+      />
     {{/if}}
     {{! The passwords are in a frame that sends them again at each step of
         the registration, so the form stays mounted, hidden, while the steps
         after it show. }}
-    <div
-      class='registration-page'
-      hidden={{not (eq this.currentPage 'registration-form')}}
+    <RegisterForm
+      @name={{this.name}}
+      @email={{this.email}}
+      @username={{this.username}}
+      @serverName={{matrixServerName}}
+      @nameError={{this.nameError}}
+      @emailError={{this.emailError}}
+      @usernameError={{this.usernameError}}
+      @usernameState={{this.usernameInputState}}
+      @usernameAvailable={{this.isUsernameValidAndAvailable}}
+      @formError={{this.formError}}
+      @submitDisabled={{this.isRegisterButtonDisabled}}
+      @submitting={{this.doRegistrationFlow.isRunning}}
+      @hidden={{not (eq this.currentPage 'registration-form')}}
+      @onNameInput={{this.setName}}
+      @onNameBlur={{this.checkName}}
+      @onEmailInput={{this.setEmail}}
+      @onEmailBlur={{this.checkEmail}}
+      @onUsernameInput={{this.setUsername}}
+      @onUsernameBlur={{this.checkUsername}}
+      @onSubmit={{this.register}}
+      @onSignIn={{fn @setMode 'login'}}
     >
-      <span class='title'>Create a Boxel Account</span>
-      <form data-test-register-form {{on 'submit' this.register}}>
-        <AuthFormField @label='Your Name'>
-          <BoxelInput
-            data-test-name-field
-            @state={{this.nameInputState}}
-            @value={{this.name}}
-            @placeholder='Enter your name'
-            @errorMessage={{this.nameError}}
-            @onInput={{this.setName}}
-            @onBlur={{this.checkName}}
-          />
-        </AuthFormField>
-        <AuthFormField @label='Email'>
-          <BoxelInput
-            data-test-email-field
-            name='email'
-            autocomplete='email'
-            @state={{this.emailInputState}}
-            @value={{this.email}}
-            @placeholder='Enter your email'
-            @errorMessage={{this.emailError}}
-            @onInput={{this.setEmail}}
-            @onBlur={{this.checkEmail}}
-          />
-        </AuthFormField>
-        <AuthFormField @label='Username'>
-          <BoxelInputGroup
-            data-test-username-field
-            id='boxel-register-username'
-            @name='username'
-            @autocomplete='username'
-            @state={{this.usernameInputState}}
-            @value={{this.username}}
-            @placeholder='Your username'
-            @errorMessage={{this.usernameError}}
-            @onInput={{this.setUsername}}
-            @onBlur={{this.checkUsername}}
-            @validIcon={{CheckMark}}
-          >
-            <:before as |Accessories|>
-              <Accessories.Text class='username-prefix'>@</Accessories.Text>
-            </:before>
-            <:after as |Accessories|>
-              <Accessories.Text>{{matrixServerName}}</Accessories.Text>
-            </:after>
-          </BoxelInputGroup>
-          {{#if this.isUsernameValidAndAvailable}}
-            <p class='validation-hint' data-test-username-available><CheckMark
-                class='validation-hint-icon'
-              />name available</p>
-          {{/if}}
-        </AuthFormField>
-        <CredentialFieldsFrame @form='register' @fields={{this.credentials}} />
-        {{#if this.formError}}
-          <div
-            class='error-message'
-            data-test-register-user-error
-          >{{this.formError}}</div>
-        {{/if}}
-        <div class='button-wrapper'>
-          <AuthButton
-            data-test-register-btn
-            @variant='primary'
-            @disabled={{this.isRegisterButtonDisabled}}
-            @loading={{this.doRegistrationFlow.isRunning}}
-            {{on 'click' this.register}}
-          >Create Account</AuthButton>
-          <div>or</div>
-          <AuthButton
-            data-test-cancel-btn
-            @variant='secondary'
-            {{on 'click' (fn @setMode 'login')}}
-          >Login with an existing account</AuthButton>
-        </div>
-      </form>
-    </div>
-    <style scoped>
-      .registration-page {
-        display: contents;
-      }
-      .registration-page[hidden] {
-        display: none;
-      }
-      .title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-        margin-bottom: var(--boxel-sp-sm);
-      }
-      p {
-        color: var(--foreground);
-      }
-      .centered-loading {
-        align-self: center;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        text-align: center;
-      }
-      .loading-title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-      }
-      .loading-message {
-        margin: 0;
-        color: var(--foreground);
-        font: 500 var(--boxel-font-sm);
-      }
-      .loading-spinner {
-        --boxel-loading-indicator-size: var(--boxel-icon-md);
-        --loading-indicator-color: var(--boxel-highlight);
-        margin-top: var(--boxel-sp-xs);
-      }
-      .validation-hint {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-3xs);
-        margin: var(--boxel-sp-2xs) 0 0;
-        color: var(--muted-foreground);
-        font: 500 var(--boxel-font-xs);
-      }
-      .validation-hint-icon {
-        --icon-color: var(--boxel-highlight);
-        width: 0.875rem;
-        height: 0.875rem;
-        flex-shrink: 0;
-      }
-      .button-wrapper {
-        width: 100%;
-        margin-top: var(--boxel-sp-xl);
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        color: var(--muted-foreground);
-      }
-      .username-prefix {
-        padding-right: 0;
-      }
-      .email-validation-instruction {
-        padding: 0;
-        list-style-position: inside;
-        margin-top: 0;
-        margin-bottom: var(--boxel-sp);
-        color: var(--foreground);
-      }
-      .email-validation-instruction li {
-        margin-bottom: var(--boxel-sp-sm);
-      }
-      .resend-email {
-        margin-top: var(--boxel-sp);
-      }
-      .error-message {
-        color: var(--boxel-error-100);
-        margin-top: var(--boxel-sp-lg);
-      }
-    </style>
+      <CredentialFieldsFrame @form='register' @fields={{this.credentials}} />
+    </RegisterForm>
   </template>
   @tracked private email = '';
   @tracked private name = '';
@@ -399,10 +229,6 @@ export default class RegisterUser extends Component<Signature> {
     );
   }
 
-  private get nameInputState() {
-    return this.nameError ? 'invalid' : 'initial';
-  }
-
   private get usernameInputState() {
     if (this.usernameError) {
       return 'invalid';
@@ -413,14 +239,6 @@ export default class RegisterUser extends Component<Signature> {
     } else {
       return 'initial';
     }
-  }
-
-  private get tokenInputState() {
-    return this.tokenError ? 'invalid' : 'initial';
-  }
-
-  private get emailInputState() {
-    return this.emailError ? 'invalid' : 'initial';
   }
 
   @action
@@ -523,7 +341,8 @@ export default class RegisterUser extends Component<Signature> {
   }
 
   @action
-  private sendToken() {
+  private sendToken(ev: Event) {
+    ev.preventDefault();
     if (this.state.type !== 'askForToken') {
       throw new Error(
         `invalid state: cannot sendToken() in state ${this.state.type}`,

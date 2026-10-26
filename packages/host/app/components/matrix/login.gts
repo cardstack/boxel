@@ -1,5 +1,4 @@
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
@@ -8,14 +7,13 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import LoadingIndicator from '@cardstack/secure-origin/components/loading-indicator.gts';
+import SignInScreen from '@cardstack/secure-origin/screens/sign-in.gts';
 import { restartableTask } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
 import moment from 'moment';
-
-import { Button, LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { GoogleColor } from '@cardstack/boxel-ui/icons';
 
 import {
   CredentialFields,
@@ -32,7 +30,6 @@ import {
   peekLoginToken,
 } from '@cardstack/host/utils/login-token';
 
-import AuthButton from './auth-button';
 import CredentialFieldsFrame from './credential-fields';
 
 import type { AuthMode } from './auth';
@@ -57,123 +54,23 @@ export default class Login extends Component<Signature> {
         {{/if}}
       </div>
     {{else}}
-      <span class='title'>Sign in to your Boxel Account</span>
-      {{#if this.showGoogleSubtitle}}
-        <p class='subtitle'>Use Google to get started in one tap - we'll create
-          your Boxel account if you don't have one yet.</p>
-      {{/if}}
-      <form data-test-login-form {{on 'submit' this.login}}>
-        {{#if this.showGoogleButton}}
-          <AuthButton
-            class='google-button'
-            data-test-google-login-btn
-            @loading={{this.doGoogleSso.isRunning}}
-            {{on 'click' this.startGoogleSso}}
-          >
-            <GoogleColor class='google-g' aria-hidden='true' />
-            Continue with Google
-          </AuthButton>
-          <div class='divider' aria-hidden='true'>
-            <span class='divider-label'>or use your email</span>
-          </div>
-        {{/if}}
+      <SignInScreen
+        @google={{this.showGoogleButton}}
+        @googleSubtitle={{this.showGoogleSubtitle}}
+        @startingGoogle={{this.doGoogleSso.isRunning}}
+        @submitDisabled={{this.isLoginButtonDisabled}}
+        @submitting={{this.doLogin.isRunning}}
+        @error={{this.error}}
+        @onSubmit={{this.login}}
+        @onGoogle={{this.startGoogleSso}}
+        @onForgotPassword={{fn @setMode 'forgot-password'}}
+        @onRegister={{fn @setMode 'register'}}
+      >
         <CredentialFieldsFrame @form='login' @fields={{this.credentials}} />
-        <Button
-          @kind='link-muted'
-          @size='extra-small'
-          class='forgot-password'
-          data-test-forgot-password
-          {{on 'click' (fn @setMode 'forgot-password')}}
-        >Forgot password?</Button>
-        <AuthButton
-          data-test-login-btn
-          @variant='primary'
-          @disabled={{this.isLoginButtonDisabled}}
-          @loading={{this.doLogin.isRunning}}
-          {{on 'click' this.login}}
-        >
-          Sign In</AuthButton>
-        {{#if this.error}}
-          <div class='error' data-test-login-error>{{this.error}}</div>
-        {{/if}}
-        <p class='register-prompt'>
-          <span class='register-prompt-text'>Don't have an account?</span>
-          <Button
-            type='button'
-            class='register-link'
-            @kind='link-primary'
-            data-test-register-user
-            {{on 'click' (fn @setMode 'register')}}
-          >Create a new Boxel account</Button>
-        </p>
-      </form>
+      </SignInScreen>
     {{/if}}
 
     <style scoped>
-      form {
-        display: flex;
-        flex-direction: column;
-      }
-      .title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-        margin-bottom: var(--boxel-sp-sm);
-        padding: 0;
-      }
-      .subtitle {
-        margin: 0 0 var(--boxel-sp-lg);
-        color: var(--foreground);
-        font: var(--boxel-font-sm);
-        line-height: 1.4;
-      }
-      .forgot-password {
-        --host-outline-offset: 2px;
-        margin-top: var(--boxel-sp-4xs);
-        margin-bottom: var(--boxel-sp-lg);
-        margin-left: auto;
-      }
-      .google-button {
-        margin-top: var(--boxel-sp-sm);
-        gap: var(--boxel-sp-xs);
-      }
-      .google-g {
-        width: 1.125rem;
-        height: 1.125rem;
-        flex-shrink: 0;
-      }
-      .divider {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        margin: var(--boxel-sp-lg) 0 var(--boxel-sp-xs);
-      }
-      .divider::before,
-      .divider::after {
-        content: '';
-        flex: 1;
-        height: 1px;
-        background-color: rgba(255, 255, 255, 0.18);
-      }
-      .divider-label {
-        color: var(--muted-foreground);
-        font: 600 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-lg);
-        text-transform: uppercase;
-      }
-      .register-prompt {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: var(--boxel-sp-3xs);
-        margin: var(--boxel-sp) 0 0;
-        font: 500 var(--boxel-font-sm);
-      }
-      .register-prompt-text {
-        color: var(--muted-foreground);
-      }
-      .register-link {
-        --host-outline-offset: 2px;
-      }
       .centered-loading {
         align-self: center;
         display: flex;

@@ -387,9 +387,40 @@ test.describe('Skills', () => {
       .locator('[data-test-field="codeRef"] input')
       .fill('@cardstack/boxel-host/commands/switch-submode/default');
     await page.waitForSelector('[data-test-last-saved]');
-    const cards = await page.locator('[data-test-card]').all();
-    const skillCard =
-      await cards[cards.length - 1].getAttribute('data-test-card');
+    // The new skill opens as stack item 1, above the workspace index. Take
+    // its id from that stack item: `[data-test-card]` also matches every
+    // card in the index's Library grid (the realm card among them), which
+    // render on their own schedule and sit before the skill in DOM order.
+    // The stack item carries the id only once the card's first save has
+    // returned, which can trail `[data-test-last-saved]` (it shows "Unsaved
+    // changes" while that save is in flight), so wait for the id itself.
+    const newSkillStackItem = page.locator('[data-test-stack-card-index="1"]');
+    const stackCards = () =>
+      page
+        .locator('[data-test-stack-card-index]')
+        .evaluateAll((els) =>
+          els.map(
+            (el) =>
+              `${el.getAttribute('data-test-stack-card-index')}:${el.getAttribute('data-test-stack-card')}`,
+          ),
+        );
+    try {
+      await expect(newSkillStackItem).toHaveAttribute(
+        'data-test-stack-card',
+        /\/Skill\/[^/]+$/,
+      );
+    } catch (e) {
+      console.log(
+        `[skills-overwrite] stack item 1 never held a saved Skill card; stack=${JSON.stringify(await stackCards())}`,
+      );
+      throw e;
+    }
+    const skillCard = await newSkillStackItem.getAttribute(
+      'data-test-stack-card',
+    );
+    console.log(
+      `[skills-overwrite] new skill card=${skillCard} stack=${JSON.stringify(await stackCards())}`,
+    );
 
     // close the Skill card
     await page.locator('[data-test-close-button]').click();

@@ -6,7 +6,6 @@ import {
   MatrixError,
   register,
   requestEmailToken,
-  resetPassword,
 } from '../src/security/matrix.js';
 import { fakeMatrix, type FakeMatrix } from './helpers/fake-matrix.ts';
 
@@ -85,38 +84,33 @@ test('a registration request names its device, and sends auth only when there is
   assert.deepEqual(second.body.auth, { type: 'm.login.dummy', session: 's' });
 });
 
-test('a password reset always signs every other device out', async () => {
-  matrix.on('account/password', () => ({}));
-  await resetPassword({
-    sid: 'sid-1',
-    clientSecret: 'secret',
-    newPassword: 'a-new-password',
-  });
-  assert.deepEqual(matrix.requests('account/password')[0].body, {
-    auth: {
-      type: 'm.login.email.identity',
-      threepid_creds: { sid: 'sid-1', client_secret: 'secret' },
-    },
-    new_password: 'a-new-password',
-    logout_devices: true,
-  });
-});
-
 test('an error carries its status, code and body, and a request that never arrives has status 0', async () => {
-  matrix.on('account/password', () => ({
+  matrix.on('account/password/email/requestToken', () => ({
     status: 401,
     body: { errcode: 'M_UNAUTHORIZED', error: 'Not validated' },
   }));
   await assert.rejects(
-    resetPassword({ sid: 's', clientSecret: 'c', newPassword: 'p' }),
+    requestEmailToken('password', {
+      email: 'ada@example.test',
+      clientSecret: 'c',
+      sendAttempt: 1,
+      nextLink: undefined,
+    }),
     (e: MatrixError) =>
       e.status === 401 &&
       e.errcode === 'M_UNAUTHORIZED' &&
       e.message === 'Not validated',
   );
-  matrix.on('account/password', () => ({ network: 'down' }));
+  matrix.on('account/password/email/requestToken', () => ({
+    network: 'down',
+  }));
   await assert.rejects(
-    resetPassword({ sid: 's', clientSecret: 'c', newPassword: 'p' }),
+    requestEmailToken('password', {
+      email: 'ada@example.test',
+      clientSecret: 'c',
+      sendAttempt: 1,
+      nextLink: undefined,
+    }),
     (e: MatrixError) =>
       e.status === 0 && e.message === 'Could not connect to server',
   );

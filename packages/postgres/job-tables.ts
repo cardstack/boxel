@@ -48,8 +48,16 @@ export interface JobReservationsTable {
   completed_at: Date;
   worker_id: string;
   // NULL while the reservation is open. On close: 'completed' for a
-  // genuine attempt (worker ran the job to a verdict), 'interrupted' for
-  // an operational interruption (child crash, manager SIGTERM, scale-in),
-  // 'timeout-expired' for the pg-pid reaper path.
-  completion_reason: 'completed' | 'interrupted' | 'timeout-expired' | null;
+  // genuine attempt (worker ran the job to a verdict), 'killed' for a
+  // worker SIGKILLed while running it outside a graceful shutdown (typically
+  // the container running out of memory), 'interrupted' for an operational
+  // interruption (child crash, manager SIGTERM, scale-in), 'timeout-expired'
+  // for the pg-pid reaper path. 'completed' and 'killed' count toward the
+  // per-job reservation cap; the others don't.
+  completion_reason:
+    | 'completed'
+    | 'killed'
+    | 'interrupted'
+    | 'timeout-expired'
+    | null;
 }

@@ -508,6 +508,21 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    test("an event masks the app page's login token", function (assert) {
+      let event = scrubRequestTelemetry({
+        request: {
+          method: 'GET',
+          url: 'https://app.telemetry.test/?operatorModeState=kept&loginToken=handed-over',
+          query_string: 'operatorModeState=kept&loginToken=handed-over',
+        },
+      });
+      assert.deepEqual(event.request as unknown, {
+        method: 'GET',
+        url: 'https://app.telemetry.test/?operatorModeState=kept&loginToken=REDACTED',
+        query_string: 'operatorModeState=kept&loginToken=REDACTED',
+      });
+    });
+
     test("a breadcrumb loses a proxy route's query string", function (assert) {
       let line =
         '<-- POST */* https://app.telemetry.test/_request-forward/?caller=marker [job: 1]';

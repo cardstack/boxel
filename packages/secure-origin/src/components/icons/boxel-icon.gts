@@ -1,6 +1,5 @@
-// boxel-ui's BoxelIcon, the logo the app's sign-in screens show top left. The
-// paths are boxel-ui's own, copied in; the realm server's
-// `secure-origin-test.ts` checks them against boxel-ui's. boxel-ui fills the
+// boxel-ui's BoxelIcon, the logo the sign-in screens show top left. The paths
+// are boxel-ui's own, copied in. boxel-ui fills the
 // shapes with a `style` attribute and the backdrop with `var()` presentation
 // attributes, which the page's policy refuses, so the scoped rules below set
 // the same fills.

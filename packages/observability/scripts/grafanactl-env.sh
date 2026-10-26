@@ -7,8 +7,12 @@
 #   source ./scripts/grafanactl-env.sh production
 #
 # Local is a no-op (admin/admin in-config is sufficient).
-# Staging and production fetch the token from SSM at /<env>/grafana/grafanactl_token,
-# which is populated by the cardstack/infra Terraform.
+# Staging and production fetch the token from SSM. The default parameter is
+# /<env>/grafana/grafanactl_token — the Admin service account that applies
+# the canonical dashboards. Set GRAFANA_TOKEN_SSM_PATH to override it: the
+# preview tooling points at /<env>/grafana/preview_grafanactl_token, a
+# Viewer account holding Admin on the `Previews` folder only. Both are
+# populated by the cardstack/infra Terraform.
 #
 # Requires AWS credentials with ssm:GetParameter on /<env>/grafana/* — the same
 # creds devs already use for `/terraform-plan workspace=grafana/<env>`.
@@ -36,12 +40,13 @@ _grafanactl_env_main() {
     staging | production)
       # Capture stderr so we can show it on failure.
       if ! token_val="$(aws ssm get-parameter \
-          --name "/${env_name}/grafana/grafanactl_token" \
+          --name "${GRAFANA_TOKEN_SSM_PATH:-/${env_name}/grafana/grafanactl_token}" \
           --with-decryption \
           --query 'Parameter.Value' \
           --output text 2>&1)"; then
         fetch_err="$token_val"
-        printf 'error: failed to fetch /%s/grafana/grafanactl_token from SSM:\n' "$env_name" >&2
+        printf 'error: failed to fetch %s from SSM:\n' \
+          "${GRAFANA_TOKEN_SSM_PATH:-/${env_name}/grafana/grafanactl_token}" >&2
         printf '%s\n' "$fetch_err" >&2
         printf 'hint: confirm AWS creds active for the right account and ssm:GetParameter is granted.\n' >&2
         return 1

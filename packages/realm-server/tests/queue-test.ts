@@ -47,6 +47,10 @@ import {
 } from '@cardstack/runtime-common/tasks/indexer';
 import { FULL_REINDEX_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/full-reindex';
 import queueTests from '@cardstack/runtime-common/tests/queue-test';
+import {
+  finalizeOrphanedReservations,
+  orphanedReservationReason,
+} from '../lib/finalize-orphan-reservations.ts';
 import { basename } from 'path';
 
 module(basename(import.meta.filename), function () {
@@ -2203,6 +2207,122 @@ module(basename(import.meta.filename), function () {
         'job abandoned with two prior `completed` reservations',
       );
       assert.strictEqual(ranCount, 0, 'handler never ran');
+    });
+
+    test('cap counts reservations whose worker was killed', async function (assert) {
+      // A worker SIGKILLed while running a job (the kernel's out-of-memory
+      // killer) has its reservation closed as 'killed'. Those count toward
+      // the cap, so a job that runs its container out of memory is abandoned
+      // instead of being re-queued after every kill.
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as unknown as { id: number }[];
+
+      for (let workerId of ['oom-killed-worker-A', 'oom-killed-worker-B']) {
+        await adapter.execute(
+          `INSERT INTO job_reservations (job_id, worker_id, locked_until)
+           VALUES ($1, $2, NOW() + INTERVAL '10 seconds')`,
+          { bind: [jobId, workerId] },
+        );
+        // What the worker-manager's exit handler does for a SIGKILLed child.
+        await finalizeOrphanedReservations(
+          adapter,
+          workerId,
+          orphanedReservationReason('SIGKILL', false),
+        );
+      }
+
+      let ranCount = 0;
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-cap-counts-killed',
+        maxTimeoutSec: 2,
+      });
+      runner.register('logJob', async () => {
+        ranCount++;
+        return null;
+      });
+      await runner.start();
+      await new Promise((r) => setTimeout(r, 250));
+      await adapter.execute(`NOTIFY jobs`);
+
+      let started = Date.now();
+      let result: { message?: string } | null = null;
+      while (Date.now() - started < 5000) {
+        let rows = (await adapter.execute(`SELECT * FROM jobs WHERE id = $1`, {
+          bind: [jobId],
+        })) as unknown as {
+          status: string;
+          result: { message?: string } | null;
+        }[];
+        if (rows[0].status === 'rejected') {
+          result = rows[0].result;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      assert.ok(result, 'job abandoned after its worker was killed twice');
+      assert.ok(
+        result?.message?.includes(
+          'abandoned after 2 failed attempts (max=2); the worker running it was killed 2 time(s)',
+        ),
+        `job.result.message says the worker was killed, got: ${result?.message}`,
+      );
+      assert.strictEqual(ranCount, 0, 'handler never ran');
+    });
+
+    test('a kill during the manager shutdown does not count toward the cap', async function (assert) {
+      // The shutdown's straggler phase SIGKILLs any child still running its
+      // handler; that interruption is the deploy's, not the job's.
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as unknown as { id: number }[];
+
+      for (let workerId of [
+        'drained-worker-A',
+        'drained-worker-B',
+        'drained-worker-C',
+      ]) {
+        await adapter.execute(
+          `INSERT INTO job_reservations (job_id, worker_id, locked_until)
+           VALUES ($1, $2, NOW() + INTERVAL '10 seconds')`,
+          { bind: [jobId, workerId] },
+        );
+        await finalizeOrphanedReservations(
+          adapter,
+          workerId,
+          orphanedReservationReason('SIGKILL', true),
+        );
+      }
+
+      let ranDeferred = new Deferred<void>();
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-cap-ignores-drain-kills',
+        maxTimeoutSec: 2,
+      });
+      runner.register('logJob', async () => {
+        ranDeferred.fulfill();
+        return null;
+      });
+      await runner.start();
+      await new Promise((r) => setTimeout(r, 250));
+      await adapter.execute(`NOTIFY jobs`);
+
+      await Promise.race([
+        ranDeferred.promise,
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('handler never ran')), 5000),
+        ),
+      ]);
+      assert.ok(true, 'handler ran despite 3 kills during shutdowns');
     });
 
     test('successful job marks its own reservation completed', async function (assert) {

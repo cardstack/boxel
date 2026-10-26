@@ -152,7 +152,7 @@ export class Keyframes extends Component {
         border-radius: 50%;
         background: radial-gradient(
           circle,
-          rgba(255, 59, 31, 0.45),
+          color-mix(in srgb, var(--primary) 45%, transparent),
           transparent 68%
         );
         filter: blur(8px);

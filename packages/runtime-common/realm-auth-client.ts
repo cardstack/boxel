@@ -153,6 +153,11 @@ export class RealmAuthClient {
       }
 
       let initialResponse = await this.initiateSessionRequest();
+      if (!initialResponse.ok) {
+        throw new Error(
+          `POST ${this.sessionEndpoint} for ${this.realmURL.href} failed with ${initialResponse.status}: ${await initialResponse.text()}`,
+        );
+      }
 
       let jwt = initialResponse.headers.get('Authorization');
 

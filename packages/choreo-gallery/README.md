@@ -33,7 +33,7 @@ the rest).
 | `film-app/`         | The films' own app, built from `packages/choreo-film-app` (see [The films](#the-films)). Not committed.                                        |
 | `reel/`             | The feature reel: three demos, live, in one camera'd world under a title, brand and timecode plane. `feature-reel.json`.                       |
 | `lib/`              | The crossing between the grid and a demo page, tempo and theme preferences, syntax highlighting, and `onstage`/`restWhenOff`.                  |
-| `theme.json`        | The fonts the gallery is set in. The palette is declared by the gallery's root element, `shell/choreo-root.gts`.                               |
+| `theme.json`        | The gallery's theme card: its palette in light and dark, and its type. The gallery reads the theme contract's names.                           |
 | `*.test.gts`        | The gallery's tests, run by `boxel test`.                                                                                                      |
 
 A demo's stage and its long-form notes are components, not data. A demo that

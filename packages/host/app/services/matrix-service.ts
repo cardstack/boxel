@@ -65,6 +65,7 @@ import {
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_REALM_EVENT_ROOM_TYPE,
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
   REALMS_LIST_UPDATED_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
@@ -81,6 +82,8 @@ import {
   SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
   SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
   SLIDING_SYNC_LIST_RANGE_END,
+  SLIDING_SYNC_REALM_EVENT_ROOM_LIST_NAME,
+  SLIDING_SYNC_REALM_EVENT_ROOM_LIST_RANGE,
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
   getToolRequests,
@@ -108,6 +111,13 @@ import {
 
 import { isSkillCard } from '../lib/file-def-manager';
 import { pickableModelIds, usedLLMsFromEvents } from '../lib/pickable-models';
+import {
+  appRootURL,
+  clearRedirectGuard,
+  framing,
+  secureSignOutURL,
+  signInOnSecureOrigin,
+} from '../lib/secure-sign-in';
 import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
 import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
 import { skillsIndexId } from '../lib/utils';
@@ -232,6 +242,10 @@ export default class MatrixService extends Service {
   @service declare private localPersistenceService: LocalPersistenceService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
+  // Set while a sign-out the user asked for is on its way to the secure
+  // origin, so the signed-out page says so rather than sending them to sign
+  // in.
+  @tracked isSigningOutToSecureOrigin = false;
   // "Post-login boot completed" now lives on SessionService as the single
   // tracked authority (`session.isAuthenticated`). MatrixService is its only
   // writer (via setPostLoginCompleted); everyone else reads it.
@@ -881,6 +895,27 @@ export default class MatrixService extends Service {
     }
   }
 
+  // The sign-out the user asks for. With sign-in on the secure origin, the app
+  // signs out of its own session first, exactly as `logout()` always does
+  // (the service worker's realm tokens included, so the next user's images
+  // never carry them), and then sends the user to the secure origin to end
+  // its session too. That page comes back to the app's root, signed out, and
+  // the full navigation drops any card code that was running.
+  //
+  // A framed app is never navigated (the secure origin refuses to be framed):
+  // it signs out of its own session only, and its signed-out page offers
+  // sign-in in a tab of its own.
+  async signOut() {
+    if (!signInOnSecureOrigin() || framing.isFramed()) {
+      await this.logout();
+      return;
+    }
+    this.isSigningOutToSecureOrigin = true;
+    clearRedirectGuard();
+    await this.logout();
+    window.location.replace(secureSignOutURL(appRootURL()));
+  }
+
   // A loginToken next to a session stored in this browser means "switch to the
   // token's account" (`boxel browse --profile B` against a browser signed in as
   // A). Ordered so a bad/expired token is non-destructive:
@@ -907,6 +942,20 @@ export default class MatrixService extends Service {
       // intact and recoverable. Tagged 'redeem' so the caller can show a
       // non-destructive failure page rather than falling to the login form.
       throw new AccountSwitchError('redeem', e);
+    }
+    if (auth.user_id === previousAuth.user_id) {
+      // A token for the account already stored here, as when two tabs signed
+      // out together each come back from signing in on the secure origin,
+      // switches nothing. The new session boots alongside the stored one,
+      // which another tab may be running. Logging the stored one out would
+      // sign that tab out, and would end the secure windows this sign-in
+      // just came from.
+      try {
+        await this.start({ auth, refreshRoutes: true });
+      } catch (e) {
+        throw new AccountSwitchError('boot', e);
+      }
+      return;
     }
     await this.logout({
       skipIndexTransition: true,
@@ -1013,6 +1062,7 @@ export default class MatrixService extends Service {
       deviceId,
     });
 
+    this.realm.dropSessionsNotFor(userId);
     this.realmServer.setClient(this.client);
     this.saveAuth(auth);
   }
@@ -1768,6 +1818,8 @@ export default class MatrixService extends Service {
       ranges: [[0, SLIDING_SYNC_LIST_RANGE_END]],
       filters: {
         is_dm: false,
+        // A private realm's event room isn't a DM either.
+        not_room_types: [APP_BOXEL_REALM_EVENT_ROOM_TYPE],
       },
       timeline_limit: timelineLimit,
       required_state: [['*', '*']],
@@ -1787,6 +1839,18 @@ export default class MatrixService extends Service {
       },
       timeline_limit: SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
       required_state: [['*', '*']],
+    });
+    // The rooms private realms send their realm events into. Like the session
+    // rooms they aren't AI rooms, so their events are relayed as realm events.
+    lists.set(SLIDING_SYNC_REALM_EVENT_ROOM_LIST_NAME, {
+      ranges: [SLIDING_SYNC_REALM_EVENT_ROOM_LIST_RANGE],
+      filters: {
+        room_types: [APP_BOXEL_REALM_EVENT_ROOM_TYPE],
+      },
+      timeline_limit: SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
+      // Only the user's own membership, which event handling checks, rather
+      // than every member of a room many users share.
+      required_state: [['m.room.member', '$ME']],
     });
     this.slidingSync = new this.matrixSdkLoader.SlidingSync(
       this.client.baseUrl,

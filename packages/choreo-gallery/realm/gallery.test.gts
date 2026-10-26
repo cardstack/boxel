@@ -1,11 +1,18 @@
 // The gallery shell, rendered the way the host renders it.
 //
-// `boxel test` stamps the scoped-CSS attribute and delivers no stylesheet, so
-// nothing here asserts a computed style or anything that rests on layout (a
-// tile boots its stage only once it measures room for one): what the shell
-// controls is what each page shows, what links where, and what it leaves
-// alone in the host. Opening a demo card is the host's, and the host's own
-// suite covers it, with the tile's stage.
+// `boxel test` stamps the scoped-CSS attribute and delivers no component
+// stylesheet, so nothing here asserts a component's computed style or anything
+// that rests on layout (a tile boots its stage only once it measures room for
+// one): what the shell controls is what each page shows, what links where, and
+// what it leaves alone in the host. Opening a demo card is the host's, and the
+// host's own suite covers it, with the tile's stage. The one stylesheet that
+// does arrive is a linked theme's, which the card's container writes into the
+// page, so the theme tests read the custom properties it sets.
+import {
+  type CardDef,
+  CardInfoField,
+  createFromSerialized,
+} from '@cardstack/base/card-api';
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
@@ -26,6 +33,7 @@ import { module, test } from 'qunit';
 import { GalleryDemo, WalkthroughStep } from './demo';
 import { ChoreoGallery } from './gallery';
 import { openThroughHost } from './lib/pointer';
+import { realmFile } from './lib/realm-url';
 import { Theater } from './lib/theater';
 import { setThemeMode, theme } from './lib/theme';
 import { DemoPage } from './shell/demo-page';
@@ -430,6 +438,137 @@ module('Choreo gallery | formats', function (hooks) {
     assert.ok(root().textContent?.includes('4 demos'));
     assert.notOk(one('[data-gallery-tile]'), 'no live grid');
     assert.notOk(one('.topbar'), 'no site frame');
+  });
+});
+
+interface ThemeAttributes {
+  darkModeVariables: Record<string, string>;
+  typography: { eyebrow: Record<string, string> };
+}
+
+/** the gallery's theme card, read from `theme.json`, after `edit` */
+async function galleryTheme(
+  edit: (attributes: ThemeAttributes) => void = () => {},
+): Promise<CardDef> {
+  let response = await fetch(realmFile('theme.json'));
+  let doc = await response.json();
+  edit(doc.data.attributes);
+  return await createFromSerialized<typeof CardDef>(
+    doc.data,
+    doc,
+    new URL(realmFile('theme')),
+  );
+}
+
+async function renderThemedGallery(theme: CardDef) {
+  let loader = getService('loader-service').loader;
+  let gallery = new ChoreoGallery({
+    demos: catalog(),
+    cardInfo: new CardInfoField({ theme }),
+  });
+  await renderCard(loader, gallery, 'isolated');
+  await animationsSettled();
+}
+
+/** the contract tokens a control inside the gallery resolves */
+function tokensInside(): Record<string, string> {
+  let style = getComputedStyle(chip('Layout'));
+  return Object.fromEntries(
+    [
+      '--foreground',
+      '--background',
+      '--card',
+      '--muted-foreground',
+      '--subtle-foreground',
+      '--primary',
+      '--primary-ink',
+      '--ring',
+      '--iris-ink',
+    ].map((name) => [name, style.getPropertyValue(name).trim().toLowerCase()]),
+  );
+}
+
+module('Choreo gallery | theme', function (hooks) {
+  setupCardTest(hooks);
+  setupChoreo(hooks);
+
+  let mode = theme.mode;
+  hooks.afterEach(function () {
+    setThemeMode(mode);
+  });
+
+  test('the theme card’s palette reaches a control inside the gallery, in each scheme', async function (assert) {
+    setThemeMode('dark');
+    await renderThemedGallery(await galleryTheme());
+
+    assert.deepEqual(
+      tokensInside(),
+      {
+        '--foreground': '#f3ece3',
+        '--background': '#2e2924',
+        '--card': '#3a342e',
+        '--muted-foreground': '#d2c9bf',
+        '--subtle-foreground': '#b8aea3',
+        '--primary': '#ff3b1f',
+        '--primary-ink': '#ff7a4e',
+        '--ring': '#ff6a3a',
+        '--iris-ink': '#af8bf9',
+      },
+      'dark: the gallery’s values, over the Boxel dark set its data-theme selects',
+    );
+
+    setThemeMode('light');
+    await settled();
+
+    assert.deepEqual(
+      tokensInside(),
+      {
+        '--foreground': '#211d18',
+        '--background': '#f2ece1',
+        '--card': '#f7f3ec',
+        '--muted-foreground': '#5e564b',
+        '--subtle-foreground': '#6d6458',
+        '--primary': '#ff3b1f',
+        '--primary-ink': '#bf2e00',
+        '--ring': '#bf2e00',
+        '--iris-ink': '#7334f5',
+      },
+      'light: the gallery’s values, over the Boxel light set',
+    );
+  });
+
+  test('the theme’s eyebrow role reaches the gallery', async function (assert) {
+    await renderThemedGallery(
+      await galleryTheme((attributes) => {
+        attributes.typography.eyebrow.fontSize = '13px';
+      }),
+    );
+
+    let style = getComputedStyle(one('[data-choreo-site]')!);
+    assert.strictEqual(
+      style.getPropertyValue('--boxel-eyebrow-font-size').trim(),
+      '13px',
+    );
+    assert.strictEqual(
+      style.getPropertyValue('--boxel-eyebrow-letter-spacing').trim(),
+      '0.18em',
+    );
+  });
+
+  test('another theme repaints the gallery', async function (assert) {
+    setThemeMode('dark');
+    await renderThemedGallery(
+      await galleryTheme((attributes) => {
+        attributes.darkModeVariables.foreground = '#e0f0ff';
+        attributes.darkModeVariables.primary = '#2a7de1';
+        attributes.darkModeVariables.primaryInk = '#7fb4f0';
+      }),
+    );
+
+    let tokens = tokensInside();
+    assert.strictEqual(tokens['--foreground'], '#e0f0ff', 'its text');
+    assert.strictEqual(tokens['--primary'], '#2a7de1', 'its accent');
+    assert.strictEqual(tokens['--primary-ink'], '#7fb4f0', 'its accent ink');
   });
 });
 

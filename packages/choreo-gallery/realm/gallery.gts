@@ -82,15 +82,17 @@ class Summary extends Component<typeof ChoreoGallery> {
       .summary-kicker,
       .summary-count {
         margin: 0;
-        font-family: var(--font-mono);
-        font-size: 10px;
-        letter-spacing: 0.16em;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        font-size: calc(var(--boxel-eyebrow-font-size) * 10 / 11);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: calc(var(--boxel-eyebrow-letter-spacing) * 16 / 18);
         text-transform: uppercase;
-        color: var(--eyebrow);
+        color: var(--primary-ink);
       }
 
       .summary-count {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .summary-title {
@@ -118,13 +120,13 @@ class Summary extends Component<typeof ChoreoGallery> {
 
       .summary-groups li {
         padding: 2px 8px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 999px;
         font-family: var(--font-mono);
         font-size: 9px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
     </style>
   </template>

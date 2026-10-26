@@ -1461,7 +1461,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Jobs that pg-queue gave up on after exhausting `maxReservationCount` real attempts (only `completion_reason='completed'` reservations count — `'interrupted'`/`'timeout-expired'` retries from deploys or crashes are not penalised). A non-zero value almost always indicates a deterministic bug in the job handler rather than infrastructure noise.",
+        "description": "Jobs that pg-queue gave up on after exhausting `maxReservationCount` real attempts (only `completion_reason='completed'` reservations and `'killed'` ones — the worker SIGKILLed mid-job outside a shutdown, usually out of memory — count; `'interrupted'`/`'timeout-expired'` retries from deploys or crashes are not penalised). A non-zero value almost always indicates a deterministic bug in the job handler rather than infrastructure noise.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1730,7 +1730,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT jr.worker_id,\n       COUNT(*) FILTER (WHERE jr.completion_reason = 'completed')::int AS completed,\n       COUNT(*) FILTER (WHERE jr.completion_reason = 'interrupted')::int AS interrupted,\n       COUNT(*) FILTER (WHERE jr.completion_reason = 'timeout-expired')::int AS timeout_expired,\n       MAX(EXTRACT(EPOCH FROM (COALESCE(jr.completed_at, NOW()) - jr.created_at)))::int AS longest_held_secs,\n       MAX(jr.created_at) AS last_seen\n  FROM job_reservations jr\n WHERE $__timeFilter(jr.created_at)\n GROUP BY jr.worker_id\n ORDER BY interrupted DESC, timeout_expired DESC, completed DESC\n LIMIT 100;",
+            "rawSql": "SELECT jr.worker_id,\n       COUNT(*) FILTER (WHERE jr.completion_reason = 'completed')::int AS completed,\n       COUNT(*) FILTER (WHERE jr.completion_reason = 'killed')::int AS killed,\n       COUNT(*) FILTER (WHERE jr.completion_reason = 'interrupted')::int AS interrupted,\n       COUNT(*) FILTER (WHERE jr.completion_reason = 'timeout-expired')::int AS timeout_expired,\n       MAX(EXTRACT(EPOCH FROM (COALESCE(jr.completed_at, NOW()) - jr.created_at)))::int AS longest_held_secs,\n       MAX(jr.created_at) AS last_seen\n  FROM job_reservations jr\n WHERE $__timeFilter(jr.created_at)\n GROUP BY jr.worker_id\n ORDER BY interrupted DESC, timeout_expired DESC, completed DESC\n LIMIT 100;",
             "refId": "A"
           }
         ],

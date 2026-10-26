@@ -61,6 +61,7 @@ import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthroug
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
 import handleRealmAuth from './handlers/handle-realm-auth.ts';
+import handleRealmEventRooms from './handlers/handle-realm-event-rooms.ts';
 import handleSetRealmCatalog from './handlers/handle-set-realm-catalog.ts';
 import handleDelegateSession from './handlers/handle-delegate-session.ts';
 import handleWorkerRequest from './handlers/handle-worker-request.ts';
@@ -119,6 +120,7 @@ import {
   handleEndWindowSessions,
   handleGoogleSignIn,
   handleGoogleSignInStart,
+  handleMintLoginToken,
   handlePasswordChange,
   handlePasswordSignIn,
   handleSecureOriginInfo,
@@ -292,11 +294,9 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleCreateUserRequest(args),
   );
   router.get('/_secure-origin', handleSecureOriginInfo(args));
-  // Every route that checks a password counts failures against one limit.
-  let passwordLimiter = new SignInLimiter();
   router.post(
     SECURE_SESSION_PATH,
-    handlePasswordSignIn(args, createRealmDeps, passwordLimiter),
+    handlePasswordSignIn(args, createRealmDeps, new SignInLimiter()),
   );
   router.get(`${SECURE_SESSION_PATH}/google`, handleGoogleSignInStart(args));
   router.post(
@@ -313,6 +313,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleEndSecureSession(args),
   );
+  router.post(
+    `${SECURE_SESSION_PATH}/login-token`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMintLoginToken(args),
+  );
   router.delete(
     SECURE_SESSIONS_PATH,
     // The app asks for this as it signs out, with whatever session it holds,
@@ -326,7 +331,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     `${SECURE_SESSIONS_PATH}/password-change`,
-    handlePasswordChange(args, passwordLimiter),
+    handlePasswordChange(args),
   );
   router.post(
     KEY_WRITE_TICKETS_PATH,
@@ -617,6 +622,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_realm-auth',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRealmAuth(args),
+  );
+  router.post(
+    '/_realm-event-rooms',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleRealmEventRooms(args),
   );
   // Shared-secret authenticated (HMAC over body + timestamp); auth is handled
   // inside the handler because the signature covers the request body.

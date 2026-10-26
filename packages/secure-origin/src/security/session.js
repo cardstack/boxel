@@ -20,11 +20,6 @@ const EXPIRY_MARGIN_MS = 60 * 1000;
 // How long the window waits to learn whether its session is still signed in
 // before it carries on with the session it has.
 const SESSION_CHECK_TIMEOUT_MS = 10 * 1000;
-// How long ending a changed password's sessions keeps trying while the
-// account's limit on failed password attempts refuses it, and how long it
-// waits between tries when the server doesn't say.
-const PASSWORD_CHANGE_RETRY_MS = 60 * 1000;
-const PASSWORD_CHANGE_RETRY_WAIT_MS = 6 * 1000;
 
 export class SecureSessionError extends Error {
   // `retryAfterMs`: for a 429, how long until the next attempt may be made,
@@ -114,47 +109,41 @@ export async function signInWithPassword(
   return json.data.attributes;
 }
 
-// Ends every secure session of the account whose password was just changed
-// here, the CLI's included: a session signed in with the old password must not
-// outlive it. `username` is the username, email address or Matrix id the
-// account goes by, and `password` the new password, which the realm server
-// checks before it ends anything. The password is already changed, so a
-// failure here is reported to the caller, which carries on regardless.
+// Sets an account's password, through the realm server, which then ends every
+// secure session of the account, the CLI's included: a session signed in with
+// the old password must not outlive it. The realm server makes the Matrix
+// request itself, so it knows the change was made, and answers with the
+// Matrix server's response, as `{ ok, status, body }`.
 //
-// The check shares the account's limit on failed password attempts with
-// signing in, which whoever knows the old password can keep full. A 429 is
-// tried again, when the server says it may be, for up to a minute. That beats
-// someone filling the limit by hand, not a script: a refused attempt costs
-// nothing and the server says exactly when the next one is free, so a script
-// polling faster than this takes every free attempt, and its sessions last
-// the week (ADR 005 §2).
-export async function endSessionsForNewPassword(
-  config,
-  { username, password },
-) {
-  let deadline = Date.now() + PASSWORD_CHANGE_RETRY_MS;
-  for (;;) {
-    try {
-      await request(
-        new URL('_secure-sessions/password-change', config.realmServerURL),
-        {
-          body: {
-            data: {
-              type: 'password-change',
-              attributes: { username, password },
-            },
-          },
-        },
-      );
-      return;
-    } catch (e) {
-      let wait = e.retryAfterMs ?? PASSWORD_CHANGE_RETRY_WAIT_MS;
-      if (e.status !== 429 || Date.now() + wait > deadline) {
-        throw e;
-      }
-      await new Promise((resolve) => setTimeout(resolve, wait));
-    }
+// `change` is `{ newPassword }` and either the proof of a reset, `{ sid,
+// clientSecret, email }` (`email` is the address the reset was sent to, which
+// names the account whose sessions end), or of a change, `{ accessToken,
+// currentPassword }`.
+export async function changePassword(config, change) {
+  let response;
+  try {
+    response = await fetch(
+      new URL('_secure-sessions/password-change', config.realmServerURL),
+      {
+        method: 'POST',
+        headers: { Accept: JSON_API, 'Content-Type': JSON_API },
+        body: JSON.stringify({
+          data: { type: 'password-change', attributes: change },
+        }),
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+      },
+    );
+  } catch (e) {
+    return { ok: false, status: 0, body: { error: String(e?.message) } };
   }
+  let body = {};
+  try {
+    body = await response.json();
+  } catch {
+    // A response that isn't JSON is judged by its status alone.
+  }
+  return { ok: response.ok, status: response.status, body };
 }
 
 // The name of the Matrix server Boxel's accounts are on, which a username is
@@ -315,15 +304,21 @@ export function forgetSession() {
 // Signs the window's own session out: forgotten here even when the server
 // can't be reached, and ended on the server.
 export async function signOut(config) {
-  let token = storedSession()?.token;
+  let session = storedSession();
   forgetSession();
-  if (!token) {
+  if (!session) {
     return;
   }
+  await endSession(config, session);
+}
+
+// Ends a secure session on the server. The window ends one it signed in only
+// to hand on, when whoever it was for doesn't take it, as well as its own.
+export async function endSession(config, session) {
   try {
     await request(new URL('_secure-session', config.realmServerURL), {
       method: 'DELETE',
-      token,
+      token: session.token,
     });
   } catch (e) {
     // An ended or expired session is already signed out.
@@ -402,4 +397,46 @@ export async function mintKeyWriteTicket(config, { action, keyId }) {
     },
   });
   return json.data.attributes;
+}
+
+// How long handing a sign-in over keeps waiting while the Matrix server
+// refuses a second login token for the user within its minute.
+const LOGIN_TOKEN_RETRY_MS = 65 * 1000;
+
+// A single-use Matrix login token for the user `session` is signed in as: the
+// hand-off that signs the app, or the CLI, in to Matrix. The secure session
+// itself stays here. The Matrix server mints one login token per user a
+// minute, so a sign-in handed over again within the minute waits for the
+// next, as long as the server says to. A session the server has ended answers
+// `signed-out`, and is forgotten if it is the window's own, as
+// `authorizedRequest` forgets one.
+export async function loginToken(config, session) {
+  let deadline = Date.now() + LOGIN_TOKEN_RETRY_MS;
+  for (;;) {
+    try {
+      let json = await request(
+        new URL('_secure-session/login-token', config.realmServerURL),
+        { token: session.token },
+      );
+      return json.data.attributes;
+    } catch (e) {
+      if (e.status === 401) {
+        // Only the session it was handed: one signed in for the CLI is never
+        // the window's, and the window's own may still be live.
+        if (storedSession()?.token === session.token) {
+          forgetSession();
+        }
+        throw signedOut();
+      }
+      let wait = e.retryAfterMs;
+      if (
+        e.status !== 429 ||
+        wait === undefined ||
+        Date.now() + wait > deadline
+      ) {
+        throw e;
+      }
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
 }

@@ -5,17 +5,15 @@ import Component from '@glimmer/component';
 
 import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
-import AuthFormField from '../../components/auth-form-field.gts';
-import CheckMark from '../../components/icons/check-mark.gts';
-import BoxelInput from '../../components/input.gts';
-import InputGroup, {
-  type InputGroupValidationState,
-} from '../../components/input-group.gts';
-import LoadingIndicator from '../../components/loading-indicator.gts';
-import ValidationHint from '../../components/validation-hint.gts';
+import type { InputGroupValidationState } from '../../components/input-group.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
+import {
+  AwaitingEmail,
+  CreatingAccount,
+  InviteCodeForm,
+  RegisterForm,
+} from '../../screens/register.gts';
 import { navigation } from '../navigation.js';
-import { autofocus } from '../../modifiers/autofocus.ts';
 import { isUsernameAvailable } from '../../security/matrix.js';
 import {
   type Account,
@@ -37,9 +35,10 @@ import MessagePage from '../sign-in/message-page.gts';
 import SignedIn from '../sign-in/signed-in.gts';
 import { asSentence } from '../sign-in-copy.js';
 import { modeURL } from '../urls.js';
+import CliWaitNotice from '../sign-in/cli-wait-notice.gts';
 
-// Creating a Boxel account on the secure origin (`register`), drawn and
-// worded as the app's registration is. `Registration` drives the Matrix
+// Creating a Boxel account on the secure origin (`register`), on the
+// registration screens the app draws too. `Registration` drives the Matrix
 // server's registration; this draws the step it is at. The email validation
 // link lands on `verify-email`, and this page, still waiting, carries on by
 // itself.
@@ -363,231 +362,63 @@ export default class Register extends Component<Signature> {
     {{else}}
       <AuthContainer>
         {{#if (eq this.state.page 'awaiting-email')}}
-          <span
-            class='title'
-            role='heading'
-            aria-level='1'
-            data-test-secure-title
-            data-test-email-validation
-          >Please check your email to complete registration</span>
-          <ul class='email-validation-instruction'>
-            <li>Leave this window open while we verify your email</li>
-            <li>This screen will update once your email is verified</li>
-          </ul>
-          <AuthButton
-            data-test-resend-validation
-            class='resend-email'
-            @variant='primary'
-            @disabled={{this.state.resending}}
-            @loading={{this.state.resending}}
-            {{on 'click' this.resendValidation}}
-          >Resend Email</AuthButton>
-        {{else if (eq this.state.page 'creating')}}
-          <div class='centered-loading'>
-            <span
-              class='loading-title'
-              data-test-email-validation-complete
-            >Email validation complete</span>
-            <p class='loading-message'>Please wait as we set up your account.</p>
-            <LoadingIndicator class='loading-spinner' />
-          </div>
-        {{else if (eq this.state.page 'invite-code')}}
-          <form
-            class='step'
-            novalidate
-            data-test-token-page
-            {{on 'submit' this.sendToken}}
+          <AwaitingEmail
+            @resending={{this.state.resending}}
+            @onResend={{this.resendValidation}}
           >
-            <span
-              class='title'
-              role='heading'
-              aria-level='1'
-              data-test-secure-title
-            >Boxel is currently invite-only.<br />Enter your invite code here.</span>
-            <AuthFormField
-              @label='Your invite code'
-              data-test-secure-field='token'
-              as |labelId|
-            >
-              <BoxelInput
-                aria-labelledby={{labelId}}
-                data-test-token-field
-                name='invite-code'
-                autocomplete='off'
-                @state={{if this.state.tokenError 'invalid' 'initial'}}
-                @value={{this.state.token}}
-                placeholder='Enter invite code'
-                @errorMessage={{this.state.tokenError}}
-                @onInput={{this.setToken}}
-                {{autofocus}}
-              />
-            </AuthFormField>
-            <div class='button-wrapper'>
-              <AuthButton
-                data-test-next-btn
-                type='submit'
-                @variant='primary'
-                @disabled={{this.nextDisabled}}
-                @loading={{this.state.registering}}
-              >Next</AuthButton>
-            </div>
-          </form>
+            {{#if @cli}}
+              <CliWaitNotice @cli={{@cli}} />
+            {{/if}}
+          </AwaitingEmail>
+        {{else if (eq this.state.page 'creating')}}
+          <CreatingAccount />
+        {{else if (eq this.state.page 'invite-code')}}
+          <InviteCodeForm
+            @token={{this.state.token}}
+            @tokenError={{this.state.tokenError}}
+            @submitDisabled={{this.nextDisabled}}
+            @submitting={{this.state.registering}}
+            @autofocus={{true}}
+            @onTokenInput={{this.setToken}}
+            @onSubmit={{this.sendToken}}
+          />
         {{else}}
-          <div class='registration-page' data-test-register-page>
-            <span
-              class='title'
-              role='heading'
-              aria-level='1'
-              data-test-secure-title
-            >Create a Boxel Account</span>
-            <form
-              novalidate
-              data-test-register-form
-              {{on 'submit' this.register}}
-            >
-              <AuthFormField
-                @label='Your Name'
-                data-test-secure-field='name'
-                as |labelId|
-              >
-                <BoxelInput
-                  aria-labelledby={{labelId}}
-                  data-test-name-field
-                  name='name'
-                  autocomplete='name'
-                  @state={{if this.state.nameError 'invalid' 'initial'}}
-                  @value={{this.state.name}}
-                  placeholder='Enter your name'
-                  @errorMessage={{this.state.nameError}}
-                  @onInput={{this.setName}}
-                  @onBlur={{this.checkName}}
-                  {{autofocus}}
-                />
-              </AuthFormField>
-              <AuthFormField
-                @label='Email'
-                data-test-secure-field='email'
-                as |labelId|
-              >
-                <BoxelInput
-                  aria-labelledby={{labelId}}
-                  data-test-email-field
-                  name='email'
-                  autocomplete='email'
-                  @state={{if this.state.emailError 'invalid' 'initial'}}
-                  @value={{this.state.email}}
-                  placeholder='Enter your email'
-                  @errorMessage={{this.state.emailError}}
-                  @onInput={{this.setEmail}}
-                  @onBlur={{this.checkEmail}}
-                />
-              </AuthFormField>
-              <AuthFormField
-                @label='Username'
-                data-test-secure-field='username'
-                as |labelId|
-              >
-                <InputGroup
-                  aria-labelledby={{labelId}}
-                  data-test-username-field
-                  @name='username'
-                  @autocomplete='username'
-                  @state={{this.usernameState}}
-                  @value={{this.state.username}}
-                  @placeholder='Your username'
-                  @errorMessage={{this.state.usernameError}}
-                  @onInput={{this.setUsername}}
-                  @onBlur={{this.checkUsername}}
-                  @validIcon={{CheckMark}}
-                >
-                  <:before as |Accessories|>
-                    <Accessories.Text
-                      class='username-prefix'
-                    >@</Accessories.Text>
-                  </:before>
-                  <:after as |Accessories|>
-                    <Accessories.Text
-                      data-input-group-suffix
-                      data-test-input-group-suffix
-                    >{{this.state.serverName}}</Accessories.Text>
-                  </:after>
-                </InputGroup>
-                {{#if this.usernameValidAndAvailable}}
-                  <ValidationHint data-test-username-available>name available</ValidationHint>
-                {{/if}}
-              </AuthFormField>
-              <NewPasswordFields
-                @password={{this.password}}
-                @passwordLabel='Password'
-                @confirmLabel='Confirm Password'
-                @passwordPlaceholder='Your password'
-                @confirmPlaceholder='Re-enter your password'
-                @hints={{true}}
-              />
-              {{#if this.state.formError}}
-                <div
-                  class='error-message'
-                  role='alert'
-                  data-test-register-user-error
-                  data-test-secure-error
-                >{{this.state.formError}}</div>
-              {{/if}}
-              <div class='button-wrapper'>
-                <AuthButton
-                  data-test-register-btn
-                  type='submit'
-                  @variant='primary'
-                  @disabled={{this.registerDisabled}}
-                  @loading={{this.state.registering}}
-                >Create Account</AuthButton>
-                <div>or</div>
-                <AuthButton
-                  data-test-cancel-btn
-                  type='button'
-                  {{on 'click' this.goToSignIn}}
-                  @variant='secondary'
-                >Login with an existing account</AuthButton>
-              </div>
-            </form>
-          </div>
+          <RegisterForm
+            @name={{this.state.name}}
+            @email={{this.state.email}}
+            @username={{this.state.username}}
+            @serverName={{this.state.serverName}}
+            @nameError={{this.state.nameError}}
+            @emailError={{this.state.emailError}}
+            @usernameError={{this.state.usernameError}}
+            @usernameState={{this.usernameState}}
+            @usernameAvailable={{this.usernameValidAndAvailable}}
+            @formError={{this.state.formError}}
+            @submitDisabled={{this.registerDisabled}}
+            @submitting={{this.state.registering}}
+            @autofocus={{true}}
+            @onNameInput={{this.setName}}
+            @onNameBlur={{this.checkName}}
+            @onEmailInput={{this.setEmail}}
+            @onEmailBlur={{this.checkEmail}}
+            @onUsernameInput={{this.setUsername}}
+            @onUsernameBlur={{this.checkUsername}}
+            @onSubmit={{this.register}}
+            @onSignIn={{this.goToSignIn}}
+          >
+            <NewPasswordFields
+              @password={{this.password}}
+              @passwordLabel='Password'
+              @confirmLabel='Confirm Password'
+              @passwordPlaceholder='Your password'
+              @confirmPlaceholder='Re-enter your password'
+              @hints={{true}}
+            />
+          </RegisterForm>
         {{/if}}
       </AuthContainer>
     {{/if}}
     <style scoped>
-      .registration-page,
-      .step {
-        display: contents;
-      }
-      .title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-        margin-bottom: var(--boxel-sp-sm);
-      }
-      p {
-        color: var(--foreground);
-      }
-      .centered-loading {
-        align-self: center;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        text-align: center;
-      }
-      .loading-title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-      }
-      .loading-message {
-        margin: 0;
-        color: var(--foreground);
-        font: 500 var(--boxel-font-sm);
-      }
-      .loading-spinner {
-        --boxel-loading-indicator-size: var(--boxel-icon-md);
-        --loading-indicator-color: var(--boxel-highlight);
-        margin-top: var(--boxel-sp-xs);
-      }
       .button-wrapper {
         width: 100%;
         margin-top: var(--boxel-sp-xl);
@@ -597,26 +428,6 @@ export default class Register extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-sm);
         color: var(--muted-foreground);
-      }
-      .username-prefix {
-        padding-right: 0;
-      }
-      .email-validation-instruction {
-        padding: 0;
-        list-style-position: inside;
-        margin-top: 0;
-        margin-bottom: var(--boxel-sp);
-        color: var(--foreground);
-      }
-      .email-validation-instruction li {
-        margin-bottom: var(--boxel-sp-sm);
-      }
-      .resend-email {
-        margin-top: var(--boxel-sp);
-      }
-      .error-message {
-        color: var(--boxel-error-100);
-        margin-top: var(--boxel-sp-lg);
       }
       .error {
         color: var(--boxel-error-100);

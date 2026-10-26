@@ -71,8 +71,8 @@ export class TextField extends Component<{
         padding: 0 11px;
         border: 0;
         background: transparent;
-        color: var(--ink);
-        font-family: 'Archivo', var(--font), sans-serif;
+        color: var(--foreground);
+        font-family: 'Archivo', var(--font-sans), sans-serif;
         font-size: 17px;
         font-weight: 400;
         font-stretch: 87.5%;
@@ -130,8 +130,8 @@ export class EmailField extends Component<{
         padding: 0 11px;
         border: 0;
         background: transparent;
-        color: var(--ink);
-        font-family: 'Archivo', var(--font), sans-serif;
+        color: var(--foreground);
+        font-family: 'Archivo', var(--font-sans), sans-serif;
         font-size: 17px;
         font-weight: 400;
         font-stretch: 87.5%;
@@ -303,8 +303,8 @@ export class DateField extends Component<{
         padding: 0 11px;
         border: 0;
         background: transparent;
-        color: var(--ink);
-        font-family: 'Archivo', var(--font), sans-serif;
+        color: var(--foreground);
+        font-family: 'Archivo', var(--font-sans), sans-serif;
         font-size: 17px;
         font-weight: 400;
         font-stretch: 87.5%;

@@ -223,7 +223,11 @@ export class Sequence extends Component {
         cursor: pointer;
         overflow: hidden;
         box-shadow: 0 10px 24px
-          rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.35 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .study-card.is-open {

@@ -39,12 +39,12 @@ export const MotionToggle: TOC<Signature> = <template>
 
     @media (hover: hover) {
       .motion-toggle:hover {
-        color: var(--ink);
+        color: var(--foreground);
       }
     }
 
     .motion-toggle[data-motion-full='true'] {
-      color: var(--ink-dim);
+      color: var(--muted-foreground);
     }
   </style>
 </template>;

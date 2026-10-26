@@ -2,8 +2,8 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import FieldContainer from './field-container.gts';
 
-// The host's AuthFormField, which the sign-in, registration and
-// password-reset pages wrap each field in. Its block is given its label's id,
+// AuthFormField, which the sign-in, registration and password-reset screens
+// wrap each field in, in the app and on the secure origin alike. Its block is given its label's id,
 // as FieldContainer's is.
 interface Signature {
   Element: HTMLElement;
@@ -37,8 +37,11 @@ const AuthFormField: TemplateOnlyComponent<Signature> = <template>
     .auth-form-field :deep(.validation-icon-container) {
       display: none;
     }
+    .auth-form-field :deep(.boxel-input.has-validation-icon) {
+      padding-inline-end: var(--boxel-input-padding-inline-end, 0);
+    }
     .auth-form-field :deep(.error-message) {
-      margin-left: 0;
+      margin-inline-start: 0;
       font: 500 var(--boxel-font-xs);
     }
   </style>

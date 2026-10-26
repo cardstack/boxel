@@ -52,6 +52,7 @@ import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import ENV from '@cardstack/host/config/environment';
 import { realmURLDisplayText } from '@cardstack/host/lib/realm-utils';
+import { TokenRefreshSchedule } from '@cardstack/host/lib/token-refresh-schedule';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
@@ -61,6 +62,8 @@ import {
   clearServiceWorkerTokens,
 } from '../utils/auth-service-worker-registration';
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
+
+import { realmClaimsFromRawToken } from './realm-server';
 
 import type MatrixService from './matrix-service';
 import type MessageService from './message-service';
@@ -274,6 +277,7 @@ class RealmResource {
   }
 
   private loggingIn: Promise<void> | undefined;
+  private refreshSchedule = new TokenRefreshSchedule();
 
   async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
@@ -381,6 +385,7 @@ class RealmResource {
       let token = await this.matrixService.createRealmSession(
         new URL(this.realmURL),
       );
+      this.refreshSchedule.minted(token);
       this.token = token;
     } catch (e: any) {
       console.error(`RealmService - Failed to login to realm: ${e.message}`, e);
@@ -393,8 +398,11 @@ class RealmResource {
     }
   });
 
+  // Unlike `clearRealmSession`, which re-authentication also calls, signing
+  // out starts the next account without this one's refresh backoff.
   logout(): void {
     this.clearRealmSession();
+    this.refreshSchedule.reset();
     window.localStorage.removeItem(SessionLocalStorageKey);
     syncTokenToServiceWorker(this.realmURL, undefined);
   }
@@ -596,24 +604,32 @@ class RealmResource {
     );
   }
 
+  // Re-mints the session on the `TokenRefreshSchedule`, which reports a fresh
+  // session that arrives too close to expiry to be scheduled from its `exp`.
   private tokenRefresher = restartableTask(async () => {
-    if ((globalThis as any).__boxelRenderContext || !this.claims) {
+    if (
+      (globalThis as any).__boxelRenderContext ||
+      !this.claims ||
+      !this.token
+    ) {
       return;
     }
 
-    let refreshMs = 0;
+    let { exp } = this.claims;
+    let refreshMs = this.refreshSchedule.refreshDelayMs(
+      this.token,
+      exp,
+      (delayMs) =>
+        console.error(
+          `RealmService - the session minted for ${this.realmURL} expires at ${new Date(
+            exp * 1000,
+          ).toISOString()}, too soon to schedule a refresh; minting again in ${
+            delayMs / 1000
+          }s`,
+        ),
+    );
 
-    if (this.claims.sessionRoom) {
-      // token expiration is unix time (seconds)
-      let expirationMs = this.claims.exp * 1000;
-
-      refreshMs = Math.max(
-        expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
-        0,
-      );
-    }
-
-    await rawTimeout(refreshMs);
+    await this.realmService.waitForTokenRefresh(refreshMs);
 
     if (!this.loggingIn) {
       this.loggingIn = this.loginTask.perform();
@@ -1385,6 +1401,38 @@ export default class RealmService extends Service {
     clearServiceWorkerTokens();
   }
 
+  // Drops every stored realm session that belongs to someone other than
+  // `userId`. Sessions are kept per browser rather than per account, so after
+  // the browser signs in to a different Matrix account the ones it holds were
+  // minted for the previous account, and would read the previous account's
+  // realms on this one's behalf.
+  dropSessionsNotFor(userId: string): void {
+    for (let resource of this.realms.values()) {
+      let user = resource.claims?.user;
+      if (user && user !== userId) {
+        resource.clearRealmSession();
+      }
+    }
+    for (let [realmURL, token] of Object.entries(
+      SessionStorage.getAll() ?? {},
+    )) {
+      let user = token ? realmClaimsFromRawToken(token)?.user : undefined;
+      if (user && user !== userId) {
+        SessionStorage.remove(realmURL);
+        syncTokenToServiceWorker(realmURL, undefined);
+      }
+    }
+    this.lastRestoredSessionsString = null;
+  }
+
+  // How a realm's token refresher waits for its next mint. Tests replace it to
+  // run refreshers against a virtual clock. A method rather than a field, since
+  // the resources restored from storage start refreshing while this service's
+  // fields are still being initialized.
+  async waitForTokenRefresh(ms: number): Promise<void> {
+    await rawTimeout(ms);
+  }
+
   async publish(realmURL: string, publishedRealmURLs: string[]) {
     let resource = this.getOrCreateRealmResource(realmURL);
     return await resource.publish(publishedRealmURLs);
@@ -1662,7 +1710,8 @@ export default class RealmService extends Service {
     // call signs in afresh rather than waiting on this one.
     try {
       let resource = this.getOrCreateRealmResource(realmURL);
-      resource.logout();
+      // Only this realm's session is discarded; every other realm's stays.
+      resource.clearRealmSession();
       await resource.login();
       let result = resource.token;
       deferred.fulfill(result);
@@ -1757,7 +1806,11 @@ export default class RealmService extends Service {
   }
 }
 
-export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
+export {
+  tokenRefreshPeriodSec,
+  minTokenRefreshIntervalSec,
+  maxTokenRefreshBackoffSec,
+} from '@cardstack/host/lib/token-refresh-schedule';
 
 export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');

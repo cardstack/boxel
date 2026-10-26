@@ -50,7 +50,7 @@ test.describe('boxel-cli browser authorization', () => {
         await credentialFields(page)
           .locator('[data-test-cli-auth-password]')
           .fill(password);
-        await page.locator('[data-test-cli-auth-submit]').click();
+        await page.locator('[data-test-login-btn]').click();
         return true;
       },
     });
@@ -97,7 +97,7 @@ test.describe('boxel-cli browser authorization', () => {
         await credentialFields(page)
           .locator('[data-test-cli-auth-password]')
           .fill(password);
-        await page.locator('[data-test-cli-auth-submit]').click();
+        await page.locator('[data-test-login-btn]').click();
         return true;
       },
     });
@@ -131,7 +131,7 @@ test.describe('boxel-cli browser authorization', () => {
       log: () => {},
       openBrowserFn: async (authUrl) => {
         await page.goto(authUrl);
-        await page.locator('[data-test-cli-auth-google]').click();
+        await page.locator('[data-test-google-login-btn]').click();
         // The mock provider's login form: its `username` field becomes the sub,
         // and `claims` carries the verified email. See `subjectFor` for why the
         // sub is derived rather than fixed.
@@ -180,7 +180,7 @@ test.describe('boxel-cli browser authorization', () => {
       log: () => {},
       openBrowserFn: async (authUrl) => {
         await page.goto(authUrl);
-        await page.locator('[data-test-cli-auth-google]').click();
+        await page.locator('[data-test-google-login-btn]').click();
         await page.locator('input[name="username"]').fill(subjectFor(username));
         await page.locator('textarea[name="claims"]').fill(
           JSON.stringify({
@@ -259,14 +259,14 @@ test.describe('boxel-cli browser authorization', () => {
     // so a user who resets mid-flow can finish authorizing rather than starting
     // over — which only works if the reset lives here rather than in the app.
     await page.goto(`${HOST_URL}cli-auth?port=53412&state=abc123def456`);
-    await page.locator('[data-test-cli-auth-forgot-password]').click();
+    await page.locator('[data-test-forgot-password]').click();
 
     await expect(page.locator('[data-test-email-field]')).toBeVisible();
-    await expect(page.locator('[data-test-cli-auth-form]')).toHaveCount(0);
+    await expect(page.locator('[data-test-login-form]')).toHaveCount(0);
 
     // And back again, with the callback still named in the URL.
     await page.locator('[data-test-cancel-reset-password-btn]').click();
-    await expect(page.locator('[data-test-cli-auth-form]')).toBeVisible();
+    await expect(page.locator('[data-test-login-form]')).toBeVisible();
     expect(new URL(page.url()).searchParams.get('port')).toBe('53412');
   });
 
@@ -276,6 +276,6 @@ test.describe('boxel-cli browser authorization', () => {
     // than collect a password it would have to discard.
     await page.goto(`${HOST_URL}cli-auth?port=0&state=abc123def456`);
     await expect(page.locator('[data-test-cli-auth-error]')).toBeVisible();
-    await expect(page.locator('[data-test-cli-auth-form]')).toHaveCount(0);
+    await expect(page.locator('[data-test-login-form]')).toHaveCount(0);
   });
 });

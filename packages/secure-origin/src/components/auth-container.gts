@@ -1,5 +1,6 @@
-// The host's AuthContainer, the page around every sign-in screen: the logo
-// top left and the page's content in a centred column.
+// AuthContainer, the page around every sign-in screen, in the app and on the
+// secure origin alike: the logo top left and the page's content in a centred
+// column.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import BoxelIcon from './icons/boxel-icon.gts';

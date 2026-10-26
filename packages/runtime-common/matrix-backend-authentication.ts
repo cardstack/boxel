@@ -14,7 +14,22 @@ export interface Utils {
     sessionRoom?: string,
     opts?: { extendedLifetime?: boolean },
   ): Promise<string>;
+  // Rejects with `SessionUserNotFoundError` for a Matrix user with no Boxel
+  // account.
   ensureSessionRoom(user: string, registrationToken?: string): Promise<string>;
+}
+
+// A Matrix user with no Boxel account on this realm server, which is made when
+// they first sign in to Boxel. A session minted for
+// them would carry no session room, so none is minted.
+export class SessionUserNotFoundError extends Error {
+  readonly user: string;
+  constructor(user: string) {
+    super(
+      `${user} has no Boxel account on this realm server; sign in to Boxel as ${user} first`,
+    );
+    this.user = user;
+  }
 }
 
 export class MatrixBackendAuthentication {
@@ -83,7 +98,20 @@ export class MatrixBackendAuthentication {
     // because we can't create DM rooms with ourselves
     // and these are used just for direct messaging.
     if (this.matrixClient.getUserId() !== user) {
-      roomId = await this.utils.ensureSessionRoom(user, registrationToken);
+      try {
+        roomId = await this.utils.ensureSessionRoom(user, registrationToken);
+      } catch (e) {
+        if (e instanceof SessionUserNotFoundError) {
+          return this.utils.createResponse(
+            JSON.stringify({ errors: [e.message] }),
+            {
+              status: 403,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
+        }
+        throw e;
+      }
     }
 
     let jwt = await this.utils.createJWT(user, roomId, opts);

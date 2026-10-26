@@ -88,8 +88,8 @@ export class SharedTabs extends Component {
         border-radius: 999px;
         /* a light tint capped at 4%, like every other panel on the page — not a
            flat near-black fill */
-        background: rgba(var(--surface-tint-rgb), 0.04);
-        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--surface-tint) 4%, transparent);
+        border: 1px solid var(--border);
       }
 
       .tab {
@@ -104,34 +104,35 @@ export class SharedTabs extends Component {
         font-size: 11px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .tab.is-on {
-        /* the pill sliding underneath is var(--ink) — see .tab-line — so the label
-           riding on top needs var(--bg), not a fixed dark, or it goes invisible
-           the moment --ink turns dark in light mode instead of light */
-        color: var(--bg);
+        /* the pill sliding underneath is var(--foreground) — see .tab-line — so the label
+           riding on top needs var(--canvas), not a fixed dark, or it goes invisible
+           the moment --foreground turns dark in light mode instead of light */
+        color: var(--canvas);
       }
 
       .tab-line {
         position: absolute;
         inset: 0;
         border-radius: inherit;
-        background: var(--ink);
-        box-shadow: 0 10px 24px rgba(255, 59, 31, 0.28);
+        background: var(--foreground);
+        box-shadow: 0 10px 24px
+          color-mix(in srgb, var(--primary) 28%, transparent);
         z-index: -1;
       }
 
       .tab-hint {
         margin: 0;
         text-align: center;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 14px;
       }
 
       .tab-hint b {
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       @container (max-width: 420px) {
