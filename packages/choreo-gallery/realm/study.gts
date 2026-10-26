@@ -42,11 +42,13 @@ class Fitted extends Component<typeof GuideStudy> {
       }
 
       .fitted-kicker {
-        font-family: var(--font-mono);
-        font-size: 9px;
-        letter-spacing: 0.16em;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        font-size: calc(var(--boxel-eyebrow-font-size) * 9 / 11);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: calc(var(--boxel-eyebrow-letter-spacing) * 16 / 18);
         text-transform: uppercase;
-        color: var(--eyebrow);
+        color: var(--primary-ink);
       }
 
       .fitted-title {

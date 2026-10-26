@@ -13,6 +13,9 @@ export default class MessageService extends Service {
     new Map();
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
+  // App-scoped wiring, like RealmServerService.eventSubscribers: a service
+  // registers once in its constructor, so logout leaves these in place.
+  private firstSubscriptionListeners = new Set<(realm: string) => void>();
 
   constructor(...args: ConstructorParameters<typeof Service>) {
     super(...args);
@@ -50,6 +53,9 @@ export default class MessageService extends Service {
     let key = this.keyFor(realmURL);
     if (!this.listenerCallbacks.has(key)) {
       this.listenerCallbacks.set(key, []);
+      for (let listener of this.firstSubscriptionListeners) {
+        listener(key);
+      }
     }
 
     // TODO might want to consider making separate subscription methods so that
@@ -62,6 +68,24 @@ export default class MessageService extends Service {
 
     return () => {
       this.removeSubscriptionCallback(key, wrapper);
+    };
+  }
+
+  // The realms that have at least one subscriber.
+  subscribedRealms(): string[] {
+    return [...this.listenerCallbacks.keys()];
+  }
+
+  // Calls `listener` with each realm as it gains its first subscriber, starting
+  // with the realms subscribed to already. A private realm's events arrive in
+  // a room of their own, which RealmServerService joins this way.
+  onFirstSubscription(listener: (realm: string) => void): () => void {
+    this.firstSubscriptionListeners.add(listener);
+    for (let realm of this.listenerCallbacks.keys()) {
+      listener(realm);
+    }
+    return () => {
+      this.firstSubscriptionListeners.delete(listener);
     };
   }
 

@@ -99,8 +99,8 @@ export class SplitView extends Component {
         top: 14px;
         right: 14px;
         z-index: 3;
-        border: 1px solid var(--line-strong);
-        background: rgba(var(--bg-rgb), 0.72);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--canvas) 72%, transparent);
         backdrop-filter: blur(8px);
         border-radius: 999px;
         padding: 7px 12px;
@@ -108,12 +108,12 @@ export class SplitView extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {
         .replay:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -122,10 +122,10 @@ export class SplitView extends Component {
         position: relative;
         width: min(92%, 420px);
         height: 200px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 14px;
         overflow: hidden;
-        background: var(--bg-elev);
+        background: var(--card);
       }
 
       .split.is-split {
@@ -156,7 +156,7 @@ export class SplitView extends Component {
         width: 60%;
         height: 8px;
         border-radius: 999px;
-        background: var(--line-strong);
+        background: var(--border-strong);
       }
 
       .split-content {
@@ -169,7 +169,7 @@ export class SplitView extends Component {
         align-content: center;
         gap: 6px;
         padding: 22px;
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .split-content b {
@@ -178,7 +178,7 @@ export class SplitView extends Component {
       }
 
       .split-content span {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 13px;
       }
     </style>

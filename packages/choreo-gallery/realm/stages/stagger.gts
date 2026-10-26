@@ -108,8 +108,8 @@ export class Stagger extends Component {
         top: 14px;
         right: 14px;
         z-index: 3;
-        border: 1px solid var(--line-strong);
-        background: rgba(var(--bg-rgb), 0.72);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--canvas) 72%, transparent);
         backdrop-filter: blur(8px);
         border-radius: 999px;
         padding: 7px 12px;
@@ -117,12 +117,12 @@ export class Stagger extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {
         .replay:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -150,7 +150,7 @@ export class Stagger extends Component {
 
       .app-tile small {
         font-size: 11px;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @container (max-width: 420px) {

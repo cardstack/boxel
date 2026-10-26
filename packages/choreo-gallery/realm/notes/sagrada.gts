@@ -211,10 +211,10 @@ const SagradaNotes: TOC<NotesSignature> = <template>
       align-items: flex-start;
       gap: 0.125rem;
       padding: 0.5rem 0.8125rem;
-      border: 1px solid var(--line);
+      border: 1px solid var(--border);
       border-radius: 0.625rem;
       background: transparent;
-      color: var(--ink);
+      color: var(--foreground);
       font: inherit;
       font-size: 0.8125rem;
       font-weight: 700;
@@ -227,7 +227,7 @@ const SagradaNotes: TOC<NotesSignature> = <template>
 
     .dd-join:hover {
       transform: translateY(-0.125rem);
-      border-color: var(--ember);
+      border-color: var(--primary);
     }
   </style>
 </template>;

@@ -66,11 +66,13 @@ class Summary extends Component<typeof Guide> {
       }
 
       .guide-summary-kicker {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        letter-spacing: 0.16em;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        font-size: calc(var(--boxel-eyebrow-font-size) * 10 / 11);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: calc(var(--boxel-eyebrow-letter-spacing) * 16 / 18);
         text-transform: uppercase;
-        color: var(--eyebrow);
+        color: var(--primary-ink);
       }
 
       .guide-summary-title {
@@ -87,7 +89,7 @@ class Summary extends Component<typeof Guide> {
         overflow: hidden;
         font-size: 13px;
         line-height: 1.5;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       /* the smaller fitted sizes keep the title, and drop the lede and

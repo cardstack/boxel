@@ -115,8 +115,8 @@ export class PresenceModes extends Component {
         top: 14px;
         right: 14px;
         z-index: 3;
-        border: 1px solid var(--line-strong);
-        background: rgba(var(--bg-rgb), 0.72);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--canvas) 72%, transparent);
         backdrop-filter: blur(8px);
         border-radius: 999px;
         padding: 7px 12px;
@@ -124,12 +124,12 @@ export class PresenceModes extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {
         .replay:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -250,9 +250,9 @@ const ModeColumn = <template>
          what still moves inside it is exactly the thing being demonstrated. */
       height: 196px;
       padding: 10px;
-      border: 1px solid var(--line);
+      border: 1px solid var(--border);
       border-radius: 20px;
-      background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
+      background: linear-gradient(180deg, var(--bg-spot), var(--inset));
       overflow: visible;
     }
 
@@ -263,14 +263,18 @@ const ModeColumn = <template>
       padding: 12px;
       border-radius: 16px;
       background: var(--bg-spot);
-      border: 1px solid var(--line-strong);
+      border: 1px solid var(--border-strong);
       box-shadow: 0 14px 30px
-        rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
+        color-mix(
+          in srgb,
+          var(--shadow-ink) calc(0.45 * var(--shadow-a) * 100%),
+          transparent
+        );
     }
 
     .toast.is-fail {
       background: color-mix(in srgb, var(--steel) 14%, var(--bg-spot));
-      border-color: rgba(139, 150, 156, 0.28);
+      border-color: color-mix(in srgb, var(--steel) 28%, transparent);
     }
 
     .toast.is-fail .toast-mark {
@@ -292,12 +296,12 @@ const ModeColumn = <template>
       padding: 8px 12px;
       border-radius: 12px;
       background: var(--bg-spot);
-      border: 1px dashed var(--line);
+      border: 1px dashed var(--border);
       font-family: var(--font-mono);
       font-size: 10px;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: var(--ink-faint);
+      color: var(--subtle-foreground);
     }
 
     .toast-mark {
@@ -309,7 +313,7 @@ const ModeColumn = <template>
       border-radius: clamp(3px, 1cqw, 8px);
       background:
         radial-gradient(circle at 30% 25%, #fff6, transparent 42%),
-        linear-gradient(160deg, var(--ember-hot), var(--ember));
+        linear-gradient(160deg, var(--ember-hot), var(--primary));
       box-shadow: 0 0 12px var(--glow);
       flex: none;
     }
@@ -336,7 +340,7 @@ const ModeColumn = <template>
       line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
-      color: var(--ink-dim);
+      color: var(--muted-foreground);
       font-size: clamp(9px, calc(5px + 1.2cqw), 11px);
       line-height: 1.35;
     }
@@ -346,14 +350,14 @@ const ModeColumn = <template>
       font-size: 10px;
       letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: var(--ink-dim);
+      color: var(--muted-foreground);
       text-align: center;
     }
 
     .mode-hint {
       margin-top: -6px;
       font-size: 11px;
-      color: var(--ink-faint);
+      color: var(--subtle-foreground);
       text-align: center;
     }
     @container (max-width: 560px) {
