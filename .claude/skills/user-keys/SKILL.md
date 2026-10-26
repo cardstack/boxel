@@ -115,6 +115,14 @@ request log line and Sentry breadcrumbs.
 
 An attribute other than these, such as a `destination`, is refused with 400.
 
+From the terminal, `boxel keys` (`packages/boxel-cli/src/commands/keys/`)
+calls these routes and the shares routes (see the `key-shares` skill). It
+reads with the profile's ordinary session; each change mints its own ticket
+with the profile's secure session, signing in through the browser first when
+the profile has none. It prints a refusal as `Refused (HTTP <status>):
+<reason>`, and under `--json` passes the response's `errors` through
+unchanged, so a user's report carries the server's own words.
+
 | Status | Means                                                                                                                                                                                  |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 400    | Malformed body, a missing or over-long name or value, an attribute that can't be set, a ticket request with no valid action or with the wrong `keyId`, `realm` or `shareId` for it     |
