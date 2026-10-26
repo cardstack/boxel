@@ -88,8 +88,9 @@ export interface StickToBottomApi {
     opts?: { block?: 'start' | 'center'; behavior?: ScrollBehavior },
   ): void;
   /** Hold the anchor now: one step of the scroll anchoring protocol. A host
-   * with a motion layer calls it in its render-pass SETTLE phase (Choreo's
-   * `registerSettle`), so the scroll lands before anything measures. */
+   * with a motion layer calls it after the render pass commits and before
+   * the motion layer measures, so the scroll lands before anything
+   * measures. */
   settle(): void;
   /** With `@holdTail`: rows that arrived after the reader detached, held
    * back from the list until they return to the end. 0 otherwise. */
@@ -212,11 +213,11 @@ const watch = modifier(
  * </StickToBottom>
  * ```
  *
- * Better than the reference (opencode's `createAutoScroll`): its own scrolls
- * are recognised by target position rather than a 1.5 s timer window, a user
- * interaction that grows the content out of view detaches rather than being
- * yanked back, and prepend anchoring is part of the component rather than
- * left to each caller.
+ * Its own scrolls are recognised by the position they aim at, not by a timer
+ * window. Something the reader opens that grows the content out of view
+ * detaches instead of being pulled back to the end. Holding the reader's
+ * line when history loads above is part of the component, not left to each
+ * caller. The rules it holds are ADR 012.
  */
 export class StickToBottom extends Component<StickToBottomSignature> {
   @tracked private internalFollowing = this.args.defaultFollowing ?? true;
@@ -229,6 +230,11 @@ export class StickToBottom extends Component<StickToBottomSignature> {
   /** scrollTop the component itself is scrolling to, until a scroll event
    * shows something else moved the viewport. */
   private ownTarget: number | undefined;
+  /** whether the scroll to `ownTarget` is a smooth one, which spans frames */
+  private ownSmooth = false;
+  private get smoothInFlight(): boolean {
+    return this.ownSmooth && this.ownTarget !== undefined;
+  }
   private lastTop = 0;
   /** when the reader last moved up from the end themselves */
   private leftAt = -Infinity;
@@ -288,17 +294,51 @@ export class StickToBottom extends Component<StickToBottomSignature> {
       this.noteInput();
     }
   };
+  // Listened for on the owner document: after a click on text that cannot
+  // take focus, a scrolling key's target is the body, and the browser
+  // scrolls the viewport the click was in.
   private onScrollKey = (event: KeyboardEvent) => {
-    if (event.key === 'Enter' || event.key === ' ') {
+    let target = event.target;
+    let inViewport =
+      target instanceof Node && Boolean(this.viewport?.contains(target));
+    let onBody =
+      target === this.viewport?.ownerDocument.body ||
+      target === this.viewport?.ownerDocument.documentElement;
+    if (!inViewport && !onBody) {
+      return;
+    }
+    if (inViewport && (event.key === 'Enter' || event.key === ' ')) {
       // a press on a focused control: Space on the viewport itself scrolls
-      if (event.target !== this.viewport) {
-        this.press(event.target);
+      if (target !== this.viewport) {
+        this.press(target);
         return;
       }
     }
     if (SCROLL_KEYS.has(event.key)) {
       this.noteInput();
     }
+  };
+  // Focus that lands in the content, other than by a pointer press, makes
+  // the focused element the anchor: the browser scrolls it into view (Tab,
+  // a skip link, the app's focus()), and that scroll is not a clamp to undo.
+  // The anchor is recorded again at the next settle or scroll, after the
+  // browser's scroll has landed.
+  private onFocusIn = (event: FocusEvent) => {
+    let target = event.target;
+    if (!(target instanceof HTMLElement) || !this.content?.contains(target)) {
+      return;
+    }
+    let pressed = this.pressed;
+    if (
+      pressed &&
+      performance.now() - pressed.at < INPUT_MS &&
+      target.contains(pressed.el)
+    ) {
+      return;
+    }
+    this.noteInput();
+    this.navigation = { el: target, at: performance.now() };
+    this.recorded = undefined;
   };
 
   /** The reader pressed something in the content: it is the anchor while
@@ -416,7 +456,8 @@ export class StickToBottom extends Component<StickToBottomSignature> {
       return;
     }
     this.ownTarget = target;
-    if (behavior === 'smooth' && !prefersReducedMotion()) {
+    this.ownSmooth = behavior === 'smooth' && !prefersReducedMotion();
+    if (this.ownSmooth) {
       el.scrollTo({ top: target, behavior: 'smooth' });
     } else {
       // assigning scrollTop bypasses any CSS scroll-behavior: smooth
@@ -524,7 +565,7 @@ export class StickToBottom extends Component<StickToBottomSignature> {
     let active = Boolean(value);
     if (this.lastActive && !active) {
       // the stream settled: hold the anchor on its final layout
-      this.settle();
+      this.settle({ inRender: true });
     }
     this.lastActive = active;
   };
@@ -533,7 +574,7 @@ export class StickToBottom extends Component<StickToBottomSignature> {
   // commit (not the frame after, when the resize observer would), so a
   // motion layer measuring this pass sees the result, not a jump after it
   revisionChanged = () => {
-    this.settle();
+    this.settle({ inRender: true });
   };
 
   followingArgChanged = (value: unknown) => {
@@ -555,15 +596,31 @@ export class StickToBottom extends Component<StickToBottomSignature> {
 
     let own = false;
     if (this.ownTarget !== undefined) {
-      if (Math.abs(top - this.ownTarget) <= OWN_SCROLL_SLACK) {
+      let before = this.lastTop - this.ownTarget;
+      let now = top - this.ownTarget;
+      if (Math.abs(now) <= OWN_SCROLL_SLACK) {
         own = true;
         this.ownTarget = undefined;
-      } else if (!movedUp && top < this.ownTarget) {
-        // a smooth scroll still on its way down to the target
+      } else if (!movedUp && now < 0) {
+        // still on its way down to the target
+        own = true;
+      } else if (
+        this.ownSmooth &&
+        !this.readerScrolling &&
+        Math.sign(now) === Math.sign(before) &&
+        Math.abs(now) < Math.abs(before)
+      ) {
+        // a smooth scroll still on its way up to the target
         own = true;
       } else {
         this.ownTarget = undefined;
       }
+    }
+
+    if (!own && this.readerScrolling) {
+      // a touch's momentum, or a wheel's, scrolls on after the last input
+      // event: each of its scrolls keeps the move the reader's
+      this.inputAt = performance.now();
     }
 
     if (!own) {
@@ -595,7 +652,7 @@ export class StickToBottom extends Component<StickToBottomSignature> {
 
     let inStartMargin = top <= this.startMargin;
     if (inStartMargin && !this.wasInStartMargin && movedUp) {
-      this.reachStart();
+      void this.reachStart();
     }
     this.wasInStartMargin = inStartMargin;
     this.lastTop = top;
@@ -810,14 +867,33 @@ export class StickToBottom extends Component<StickToBottomSignature> {
 
   /** Hold the recorded anchor through whatever changed since, then record
    * again. Runs at every render commit, every resize, and when a stream
-   * settles. */
-  private settle() {
+   * settles. `inRender` when a render commit calls it: a change to
+   * following then waits for the commit to end, so the caller's
+   * `@onFollowChange` never updates state the render has already read. */
+  private settle(opts?: { inRender?: boolean }) {
     let el = this.viewport;
     let recorded = this.recorded;
     if (!el) {
       return;
     }
-    if (recorded?.kind === 'end') {
+    let minDrift = Math.max(UNPIN_EPSILON, devicePixel());
+    if (this.smoothInFlight) {
+      // The component's own smooth scroll is on its way: writing a position
+      // now would cut it short. Its target moves by what layout moved.
+      let target = this.ownTarget!;
+      if (this.following) {
+        target = el.scrollHeight;
+      } else if (recorded && recorded.kind !== 'end') {
+        let held = recorded.chain.find((entry) => entry.el.isConnected);
+        if (held) {
+          target += this.layoutTop(held.el) - held.top;
+        }
+      }
+      let max = Math.max(0, el.scrollHeight - el.clientHeight);
+      if (Math.abs(Math.min(target, max) - this.ownTarget!) >= minDrift) {
+        this.scrollTo(target, 'smooth');
+      }
+    } else if (recorded?.kind === 'end') {
       if (this.following) {
         this.pinToEnd();
       }
@@ -826,28 +902,45 @@ export class StickToBottom extends Component<StickToBottomSignature> {
       if (held) {
         // While the reader scrolls, the position is theirs: a settle can run
         // between their scroll and its scroll event (a fast wheel), and
-        // holding the recorded offset then took their last step back. Only
+        // holding the recorded offset would take their last step back. Only
         // what layout moved is held. Otherwise the offset is, which also
         // undoes a clamp when content shrank.
         let drift = this.readerScrolling
           ? this.layoutTop(held.el) - held.top
           : this.layoutTop(held.el) - el.scrollTop - held.offset;
         // less than a device pixel of drift is rounding, not movement
-        if (Math.abs(drift) >= Math.max(UNPIN_EPSILON, devicePixel())) {
+        if (Math.abs(drift) >= minDrift) {
           this.scrollTo(el.scrollTop + drift);
         }
       }
-      // a reader at the end who opened something that grew past it is
-      // reading it now, not following the end
+      // a reader at the end who opened something, or moved focus to
+      // something, that grew past it is reading it now, not following the
+      // end
       if (
-        recorded.kind === 'pressed' &&
+        recorded.kind !== 'reading' &&
         this.following &&
         distanceFromEnd(el) > this.threshold
       ) {
-        this.setFollowing(false, 'user');
+        this.detachForAnchor(Boolean(opts?.inRender));
       }
     }
     this.record();
+  }
+
+  private detachForAnchor(inRender: boolean) {
+    if (!inRender) {
+      this.setFollowing(false, 'user');
+      return;
+    }
+    queueMicrotask(() => {
+      if (this.isDestroying || this.isDestroyed) {
+        return;
+      }
+      let el = this.viewport;
+      if (el && this.following && distanceFromEnd(el) > this.threshold) {
+        this.setFollowing(false, 'user');
+      }
+    });
   }
 
   private async reachStart() {
@@ -860,6 +953,10 @@ export class StickToBottom extends Component<StickToBottomSignature> {
     this.record();
     try {
       await load();
+    } catch (error) {
+      // the caller's load failed: the reader can scroll to the start again
+      // to retry, and the error is reported, not left unhandled
+      console.error(error);
     } finally {
       // The prepend may already be laid out, or may land on the next resize:
       // hold the reader's line now and once more a frame later.
@@ -911,7 +1008,9 @@ export class StickToBottom extends Component<StickToBottomSignature> {
     viewport.addEventListener('pointerup', this.onPointerUp);
     viewport.addEventListener('pointerdown', this.onPointerDown);
     viewport.addEventListener('touchmove', this.noteInput, { passive: true });
-    viewport.addEventListener('keydown', this.onScrollKey);
+    viewport.addEventListener('focusin', this.onFocusIn);
+    let doc = viewport.ownerDocument;
+    doc.addEventListener('keydown', this.onScrollKey);
     window.addEventListener('pointerup', this.onPointerRelease);
     window.addEventListener('pointercancel', this.onPointerRelease);
 
@@ -939,7 +1038,8 @@ export class StickToBottom extends Component<StickToBottomSignature> {
       viewport.removeEventListener('pointerup', this.onPointerUp);
       viewport.removeEventListener('pointerdown', this.onPointerDown);
       viewport.removeEventListener('touchmove', this.noteInput);
-      viewport.removeEventListener('keydown', this.onScrollKey);
+      viewport.removeEventListener('focusin', this.onFocusIn);
+      doc.removeEventListener('keydown', this.onScrollKey);
       window.removeEventListener('pointerup', this.onPointerRelease);
       window.removeEventListener('pointercancel', this.onPointerRelease);
       observer?.disconnect();
@@ -1005,8 +1105,8 @@ export class StickToBottom extends Component<StickToBottomSignature> {
           scrollbar-width: thin;
           scrollbar-gutter: stable;
           /* The component owns the scroll position: following, it pins
-             the end; detached, it holds the reader's line (holdReaderAnchor).
-             The browser must not anchor as well. */
+             the end; detached, it holds the anchor (settle). The browser
+             must not anchor as well. */
           overflow-anchor: none;
         }
         .pretui-stick-to-bottom-viewport:focus-visible {
@@ -1020,7 +1120,7 @@ export class StickToBottom extends Component<StickToBottomSignature> {
           position: absolute;
           inset-inline: 0;
           inset-block-start: 0;
-          block-size: var(--pretui-stick-to-bottom-fade, 24px);
+          block-size: var(--pretui-stick-to-bottom-fade, var(--boxel-sp-lg));
           pointer-events: none;
           opacity: 0;
           background: linear-gradient(

@@ -51,6 +51,21 @@ function viewport(): HTMLElement {
   el.setAttribute('style', VIEWPORT_STYLE);
   return el;
 }
+function content(): HTMLElement {
+  return document.querySelector(
+    '[data-test-pretui-stick-to-bottom-content]',
+  ) as HTMLElement;
+}
+/** A block of the given height, put into the content outside the render:
+ * a layout change that lands between a scroll and its scroll event. */
+function spacer(height: number): HTMLElement {
+  let block = document.createElement('div');
+  block.style.height = `${height}px`;
+  return block;
+}
+function pause(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 function distance(el: HTMLElement): number {
   return el.scrollHeight - el.clientHeight - el.scrollTop;
 }
@@ -415,15 +430,280 @@ module('Pretui | components/stick-to-bottom', function (hooks) {
     await userScroll(el, el.scrollTop - 100);
     assert.strictEqual(root().dataset['following'], 'false');
 
-    // a fast wheel: the next step lands, and a render commit settles the
-    // anchor before that step's scroll event arrives
+    // a fast wheel: the next step lands, a row is inserted above the
+    // anchor, and a render commit settles the anchor before that step's
+    // scroll event arrives
     let top = el.scrollTop;
     el.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, bubbles: true }));
     el.scrollTop = top - 60;
+    content().prepend(spacer(50));
     api!.settle();
-    assert.strictEqual(el.scrollTop, top - 60, 'the step is not taken back');
+    assert.strictEqual(
+      el.scrollTop,
+      top - 60 + 50,
+      'the step is not taken back, and the inserted row is held',
+    );
     await frames();
-    assert.strictEqual(el.scrollTop, top - 60, 'and stays where they put it');
+    assert.strictEqual(
+      el.scrollTop,
+      top - 60 + 50,
+      'and stays where they put it',
+    );
+  });
+
+  test("a scrolling key on the body (after a click on text) is the reader's", async function (assert) {
+    let state = new State();
+    await render(
+      <template>
+        <div style={{FRAME}}>
+          <StickToBottom
+            style={{ROOT}}
+            @onFollowChange={{state.onFollowChange}}
+          >
+            {{#each state.rows as |id|}}
+              <p data-transcript-id={{id}} style={{ROW}}>{{id}}</p>
+            {{/each}}
+          </StickToBottom>
+        </div>
+      </template>,
+    );
+    let el = viewport();
+    await waitUntil(() => distance(el) < 1, { timeout: 2000 });
+    // PageUp with the body as its target: the browser scrolls the viewport
+    // up, and a reply grows the content before the scroll event arrives
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'PageUp', bubbles: true }),
+    );
+    let top = el.scrollTop - 150;
+    el.scrollTop = top;
+    content().append(spacer(50));
+    await frames();
+    await frames();
+    assert.strictEqual(el.scrollTop, top, 'the reader is not pulled back');
+    assert.deepEqual(state.changes, [[false, 'user']], 'they left the end');
+  });
+
+  test('focus moved into the content holds the focused element, not the end', async function (assert) {
+    let state = new State();
+    await render(
+      <template>
+        <div style={{FRAME}}>
+          <StickToBottom
+            style={{ROOT}}
+            @onFollowChange={{state.onFollowChange}}
+          >
+            {{#each state.rows as |id|}}
+              <p data-transcript-id={{id}} style={{ROW}}>
+                <button type='button' data-test-row-button={{id}}>{{id}}</button>
+              </p>
+            {{/each}}
+          </StickToBottom>
+        </div>
+      </template>,
+    );
+    let el = viewport();
+    await waitUntil(() => distance(el) < 1, { timeout: 2000 });
+    // Tab back to a row above the view: the browser scrolls it into view,
+    // and a reply grows the content before the scroll event arrives
+    let focusTarget = document.querySelector(
+      "[data-test-row-button='r2']",
+    ) as HTMLElement;
+    focusTarget.focus();
+    let before = rowOffset('r2');
+    content().append(spacer(50));
+    await frames();
+    await frames();
+    assert.ok(
+      Math.abs(rowOffset('r2') - before) <= 1,
+      `the focused row stays where focus put it (${before} → ${rowOffset('r2')})`,
+    );
+    assert.strictEqual(root().dataset['following'], 'false');
+  });
+
+  test("a touch's momentum stays the reader's after the input window", async function (assert) {
+    let state = new State();
+    state.rows = ids(20);
+    await render(
+      <template>
+        <div style={{FRAME}}>
+          <StickToBottom style={{ROOT}}>
+            {{#each state.rows as |id|}}
+              <p data-transcript-id={{id}} style={{ROW}}>{{id}}</p>
+            {{/each}}
+          </StickToBottom>
+        </div>
+      </template>,
+    );
+    let el = viewport();
+    await waitUntil(() => distance(el) < 1, { timeout: 2000 });
+    el.dispatchEvent(new TouchEvent('touchmove', { bubbles: true }));
+    // momentum: scrolls keep arriving long after the last touch event
+    for (let step = 0; step < 5; step++) {
+      el.scrollTop -= 20;
+      await pause(200);
+    }
+    // one more step lands with content growth in the same frame
+    let top = el.scrollTop - 20;
+    el.scrollTop = top;
+    content().append(spacer(50));
+    await frames();
+    await frames();
+    assert.strictEqual(el.scrollTop, top, 'the last step is not taken back');
+  });
+
+  test("a settle during the component's own smooth scroll does not cut it short", async function (assert) {
+    let state = new State();
+    state.rows = ids(30);
+    let api: StickToBottomApi | undefined;
+    let grab = (a: StickToBottomApi) => {
+      api = a;
+      return '';
+    };
+    await render(
+      <template>
+        <div style={{FRAME}}>
+          <StickToBottom style={{ROOT}} as |scroll|>
+            {{grab scroll}}
+            {{#each state.rows as |id|}}
+              <p data-transcript-id={{id}} style={{ROW}}>{{id}}</p>
+            {{/each}}
+          </StickToBottom>
+        </div>
+      </template>,
+    );
+    let el = viewport();
+    await waitUntil(() => distance(el) < 1, { timeout: 2000 });
+    // the smooth scroll is the browser's: record what it is asked for, and
+    // leave the position where a smooth scroll in flight would have it
+    let asked: ScrollToOptions[] = [];
+    el.scrollTo = ((options: ScrollToOptions) => {
+      asked.push(options);
+    }) as typeof el.scrollTo;
+    let start = el.scrollTop;
+    let target = document.querySelector(
+      "[data-transcript-id='r4']",
+    ) as HTMLElement;
+    let aim = Math.round(start + rowOffset('r4'));
+    api!.navigate(target, { block: 'start', behavior: 'smooth' });
+    assert.deepEqual(asked, [{ top: aim, behavior: 'smooth' }]);
+    // a render commit settles while it runs, then a row lands above and
+    // another commit settles
+    api!.settle();
+    content().prepend(spacer(50));
+    api!.settle();
+    assert.strictEqual(
+      el.scrollTop,
+      start,
+      'no position is written over the smooth scroll',
+    );
+    assert.deepEqual(
+      asked[asked.length - 1],
+      { top: aim + 50, behavior: 'smooth' },
+      'its target moves by what layout moved',
+    );
+  });
+
+  test('a press that grows past the end detaches after the render commit, not during it', async function (assert) {
+    class Controlled {
+      @tracked rows: string[] = ids(10);
+      @tracked following = true;
+      @tracked expanded = false;
+      @tracked revision = 0;
+      changes: [boolean, FollowChangeSource][] = [];
+      onFollowChange = (following: boolean, by: FollowChangeSource) => {
+        this.changes.push([following, by]);
+        this.following = following;
+      };
+      toggle = () => {
+        this.expanded = !this.expanded;
+        this.revision++;
+      };
+    }
+    let state = new Controlled();
+    await render(
+      <template>
+        <div style={{FRAME}}>
+          <StickToBottom
+            style={{ROOT}}
+            @following={{state.following}}
+            @onFollowChange={{state.onFollowChange}}
+            @revision={{state.revision}}
+          >
+            {{#each state.rows as |id|}}
+              <p data-transcript-id={{id}} style={{ROW}}>{{id}}</p>
+            {{/each}}
+            <button
+              type='button'
+              data-test-toggle
+              {{on 'click' state.toggle}}
+            >More</button>
+            {{#if state.expanded}}
+              <div style={{TALL}}></div>
+            {{/if}}
+          </StickToBottom>
+        </div>
+      </template>,
+    );
+    let el = viewport();
+    await waitUntil(() => distance(el) < 1, { timeout: 2000 });
+    let toggle = document.querySelector('[data-test-toggle]') as HTMLElement;
+    await triggerEvent(toggle, 'pointerdown');
+    await click(toggle);
+    await settled();
+    assert.deepEqual(state.changes, [[false, 'user']]);
+    assert.strictEqual(root().dataset['following'], 'false');
+  });
+
+  test('a failing @onReachStart is reported, and reaching the start again retries', async function (assert) {
+    let state = new State();
+    state.rows = ids(20);
+    let loads = 0;
+    let loadOlder = async () => {
+      loads++;
+      await Promise.resolve();
+      throw new Error('history unavailable');
+    };
+    let logged: unknown[] = [];
+    let originalError = console.error;
+    console.error = (...args: unknown[]) => logged.push(...args);
+    try {
+      await render(
+        <template>
+          <div style={{FRAME}}>
+            <StickToBottom
+              style={{ROOT}}
+              @onReachStart={{loadOlder}}
+              @startMargin={{100}}
+            >
+              {{#each state.rows as |id|}}
+                <p data-transcript-id={{id}} style={{ROW}}>{{id}}</p>
+              {{/each}}
+            </StickToBottom>
+          </div>
+        </template>,
+      );
+      let el = viewport();
+      await waitUntil(() => distance(el) < 1, { timeout: 2000 });
+      await userScroll(el, 500);
+      await userScroll(el, 50);
+      await waitUntil(() => el.getAttribute('aria-busy') === null, {
+        timeout: 2000,
+      });
+      assert.strictEqual(loads, 1, "the load ran once");
+      assert.ok(
+        logged.some(
+          (entry) =>
+            entry instanceof Error && entry.message === 'history unavailable',
+        ),
+        'the error is reported',
+      );
+      await userScroll(el, 500);
+      await userScroll(el, 50);
+      await waitUntil(() => loads === 2, { timeout: 2000 });
+      assert.strictEqual(loads, 2, 'reaching the start again retries');
+    } finally {
+      console.error = originalError;
+    }
   });
 
   test('scrollToEnd re-pins as an api change, from the overlay slot', async function (assert) {
