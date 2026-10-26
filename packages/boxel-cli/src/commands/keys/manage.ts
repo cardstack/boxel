@@ -188,10 +188,12 @@ async function ordinaryToken(ctx: Context): Promise<string> {
   return await ctx.pm.getOrRefreshServerToken();
 }
 
+// The masked prompt writes to stderr under `--json`, so its asterisks and the
+// characters it reveals never land in the JSON on stdout.
 function readValue(ctx: Context, source: KeyValueSource): Promise<string> {
   return readKeyValue(source, {
     input: ctx.deps.input,
-    output: ctx.deps.output,
+    output: ctx.deps.output ?? (ctx.json ? process.stderr : undefined),
     revealLast: REVEAL_LAST,
     revealNoneAtOrBelow: REVEAL_NONE_AT_OR_BELOW,
   });
@@ -328,17 +330,21 @@ export async function keysDelete(
   options: { json?: boolean; yes?: boolean } & KeysCommandDeps = {},
 ): Promise<{ deleted: UserKeyMetadata; suspended: KeyShare[] }> {
   let ctx = context(options.json, options);
+  // Checked before signing in, so a missing --yes never costs a browser trip.
+  if (
+    !options.yes &&
+    (ctx.json || !(ctx.deps.confirmFn || process.stdin.isTTY))
+  ) {
+    throw new Error(
+      'Pass --yes to delete a key without a terminal to confirm in',
+    );
+  }
   let token = await secureToken(ctx);
   let key = await findUserKey(ctx.realmServerUrl, token, name);
   let shares = (
     await listOwnShares(ctx.realmServerUrl, token, { keyId: key.id })
   ).filter((share) => share.state === 'active');
   if (!options.yes) {
-    if (ctx.json || !(ctx.deps.confirmFn || process.stdin.isTTY)) {
-      throw new Error(
-        'Pass --yes to delete a key without a terminal to confirm in',
-      );
-    }
     if (shares.length > 0) {
       console.log(`Deleting ${name} suspends these shares:`);
       for (let share of shares) {

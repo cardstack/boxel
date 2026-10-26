@@ -12,6 +12,7 @@ import {
   keysShow,
   runKeysCommand,
 } from '../../src/commands/keys/manage.ts';
+import { canonicalRealmUrl } from '../../src/lib/user-keys.ts';
 import { buildBoxelProgram } from '../../src/build-program.ts';
 
 const USER = '@bob:stack.cards';
@@ -286,20 +287,6 @@ describe('boxel keys: managing keys', () => {
     expect(stdout.text()).toContain('shares: none');
   });
 
-  it('asks for --yes to delete under --json, after listing nothing and changing nothing', async () => {
-    let requests = stubServer(({ path }) =>
-      path === '/_secure-session'
-        ? { status: 204 }
-        : path === '/_user-keys'
-          ? { body: { data: [{ id: KEY.id, attributes: KEY }] } }
-          : { body: { data: [] } },
-    );
-    await expect(
-      keysDelete('weather', { profileManager: manager, json: true }),
-    ).rejects.toThrow(/--yes/);
-    expect(requests.every((r) => r.method === 'GET')).toBe(true);
-  });
-
   it("passes a refusal's errors through unchanged under --json", async () => {
     let errors = [
       'a valid key write ticket is required: tickets are single-use, expire, and are minted for one user and one change',
@@ -343,6 +330,65 @@ describe('boxel keys: managing keys', () => {
     process.exitCode = undefined;
     expect(stderr.mock.calls[0][0]).toMatch(
       /Refused \(HTTP 409\): you already have a key named weather/,
+    );
+  });
+
+  it('keeps the masked prompt off stdout under --json, so stdout is only the JSON', async () => {
+    let value = 'sk-weather-0123456789abcdef';
+    stubServer(({ path }) =>
+      path === '/_secure-session'
+        ? { status: 204 }
+        : path === '/_key-write-tickets'
+          ? { status: 201, body: { data: { attributes: { ticket: 't' } } } }
+          : { status: 201, body: { data: { id: KEY.id, attributes: KEY } } },
+    );
+    let terminal = fakeTerminal();
+    let prompted = '';
+    let stderr = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: any) => {
+        prompted += String(chunk);
+        return true;
+      });
+    let stdout = captureStdout();
+    try {
+      let adding = keysAdd('weather', {
+        profileManager: manager,
+        json: true,
+        input: terminal.input,
+      });
+      terminal.type(`${value}\r`);
+      await adding;
+    } finally {
+      stdout.restore();
+      stderr.mockRestore();
+    }
+    expect(JSON.parse(stdout.text())).toEqual(KEY);
+    expect(prompted).toContain('*'.repeat(value.length));
+    expect(stdout.text()).not.toContain(value.slice(-4));
+  });
+
+  it('refuses a delete without --yes and without a terminal before signing in or asking the server anything', async () => {
+    let requests = stubServer(() => ({ status: 500 }));
+    let openBrowserFn = vi.fn(async () => true);
+    manager.clearSecureSession();
+    await expect(
+      keysDelete('weather', {
+        profileManager: manager,
+        json: true,
+        openBrowserFn,
+      }),
+    ).rejects.toThrow(/--yes/);
+    expect(openBrowserFn).not.toHaveBeenCalled();
+    expect(requests).toEqual([]);
+  });
+
+  it('names a realm as the server keys it: no query or fragment, one trailing slash', () => {
+    expect(
+      canonicalRealmUrl('https://realms.example.test/team/realm?x=1#top'),
+    ).toBe('https://realms.example.test/team/realm/');
+    expect(canonicalRealmUrl('https://realms.example.test/team/realm/')).toBe(
+      'https://realms.example.test/team/realm/',
     );
   });
 

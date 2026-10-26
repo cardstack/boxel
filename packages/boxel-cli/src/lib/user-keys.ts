@@ -63,7 +63,8 @@ function fromResource<T>(resource: {
   return { id: resource.id, ...resource.attributes } as T;
 }
 
-// A realm URL as the server stores it: parsed, with a trailing slash.
+// A realm URL as the server stores it: parsed, with no query or fragment and
+// exactly one trailing slash on the path.
 export function canonicalRealmUrl(realm: string): string {
   let url: URL;
   try {
@@ -71,7 +72,10 @@ export function canonicalRealmUrl(realm: string): string {
   } catch {
     throw new Error(`${realm} is not a URL`);
   }
-  return ensureTrailingSlash(url.href);
+  url.search = '';
+  url.hash = '';
+  url.pathname = ensureTrailingSlash(url.pathname);
+  return url.href;
 }
 
 // A key write ticket for one change.
