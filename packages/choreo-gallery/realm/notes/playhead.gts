@@ -551,9 +551,9 @@ const PlayheadNotes: TOC<object> = <template>
       flex-direction: column;
       gap: 5px;
       padding: 13px 14px 15px;
-      border: 1px solid var(--line);
+      border: 1px solid var(--border);
       border-radius: 12px;
-      background: var(--bg-elev);
+      background: var(--card);
     }
 
     .dd-mode b {
@@ -566,7 +566,7 @@ const PlayheadNotes: TOC<object> = <template>
       margin: 0;
       font-size: 13px;
       line-height: 1.55;
-      color: var(--ink-dim);
+      color: var(--muted-foreground);
     }
 
     .dd-tag {
@@ -574,7 +574,7 @@ const PlayheadNotes: TOC<object> = <template>
       font-size: 10px;
       letter-spacing: 0.14em;
       text-transform: uppercase;
-      color: var(--ember);
+      color: var(--primary-ink);
     }
   </style>
 </template>;

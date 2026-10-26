@@ -11,7 +11,9 @@
  *   preamble, the `-start` guides state their motivation and goals, the
  *   guides' index lists each guide once, and each guide's pager names its
  *   neighbours in that order. Each guide, and the index, has its page: a
- *   `Guide` card beside its Markdown that links it and the index.
+ *   `Guide` card beside its Markdown that links it, the index and the theme.
+ * - Every card instance in the realm links the gallery's theme card, which
+ *   carries the palette and the type every gallery component reads.
  * - Every card a realm doc embeds (`::card[…]`) is a card instance in the
  *   realm, and every demo has a guide that embeds it.
  * - The docs and design records in the realm link only to files and
@@ -208,8 +210,9 @@ order.forEach((slug, i) => {
 
 /*
  * Each guide is read on its page: a `Guide` card beside the Markdown, at the
- * Markdown's path without `.md`, linking the Markdown and the index. The
- * index has one too. The card holds no prose, so nothing else belongs in it.
+ * Markdown's path without `.md`, linking the Markdown, the index and the
+ * gallery's theme. The index has one too. The card holds no prose, so
+ * nothing else belongs in it.
  */
 const guideFiles = fs.readdirSync(guidesDir);
 const guideCardProblems = [];
@@ -223,6 +226,7 @@ for (const slug of [...pages.keys(), 'README']) {
     data: {
       type: 'card',
       relationships: {
+        'cardInfo.theme': { links: { self: '../../theme' } },
         document: { links: { self: `./${slug}.md` } },
         index: { links: { self: './README.md' } },
       },
@@ -231,7 +235,7 @@ for (const slug of [...pages.keys(), 'README']) {
   };
   if (!isDeepStrictEqual(readJSON(path.join(guidesDir, file)), expected)) {
     guideCardProblems.push(
-      `${file} must adopt from ../../guide Guide and link only ./${slug}.md and ./README.md`,
+      `${file} must adopt from ../../guide Guide and link only ../../theme, ./${slug}.md and ./README.md`,
     );
   }
 }
@@ -353,6 +357,46 @@ for (const { file, slug, doc } of demos) {
 console.log(
   `${demos.length} demos are well formed, linked from the index, and have guide embeds and complete teaching lessons.`,
 );
+
+// ---- the theme -----------------------------------------------------------
+
+/**
+ * every card instance in the realm, as its path and its parsed document,
+ * outside `film-app/`: the film app's build output, which `pnpm push` writes
+ * into the realm and git ignores
+ */
+function instances(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      return entry.name === 'film-app' ? [] : instances(file);
+    }
+    if (!entry.name.endsWith('.json')) {
+      return [];
+    }
+    const doc = readJSON(file);
+    return doc.data?.meta?.adoptsFrom ? [{ file, doc }] : [];
+  });
+}
+const themeFile = path.join(realm, 'theme.json');
+// realm.json is the realm's own config card, which no gallery page renders
+const cards = instances(realm).filter(
+  ({ file }) => ![themeFile, path.join(realm, 'realm.json')].includes(file),
+);
+const unthemed = cards
+  .filter(({ file, doc }) => {
+    const link = doc.data.relationships?.['cardInfo.theme']?.links?.self;
+    return (
+      !link || path.resolve(path.dirname(file), `${link}.json`) !== themeFile
+    );
+  })
+  .map(({ file }) => file);
+assert.deepEqual(
+  unthemed.map((file) => path.relative(realm, file)),
+  [],
+  'Card instances that do not link ./theme.json, so render without the gallery palette',
+);
+console.log(`${cards.length} card instances link the gallery's theme.`);
 
 // ---- the docs ------------------------------------------------------------
 

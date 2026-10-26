@@ -9,13 +9,22 @@ interface Signature {
 }
 
 /**
- * The boundary every piece of the gallery renders inside: the palette, the
- * type, and the few element defaults the demos were designed against.
+ * The boundary every piece of the gallery renders inside: the ground, the
+ * color-scheme switch, and the few element defaults the demos were designed
+ * against.
  *
- * The tokens are custom properties declared on this element, so everything
- * inside it — the shell's own components and every demo stage — inherits them
- * without the gallery ever styling the host's document. The theme switch is
- * this element's `data-theme`.
+ * The palette and the type are the gallery's theme card (`theme.json`), which
+ * every gallery card links. The gallery reads the theme contract's names
+ * (`--foreground`, `--background`, `--primary`, `--border`, `--ring`, …), so a
+ * theme reaches its text, surfaces, accents and focus ring, and so do the
+ * Pret UI and Boxel components rendered inside it. The names the contract has
+ * no slot for, such as the other accents and their text inks, are the theme's
+ * own custom variables.
+ *
+ * The scheme switch is this element's `data-theme`. The card's theme
+ * stylesheet reapplies the theme's light or dark set to any `data-theme`
+ * element inside the card, above the Boxel defaults that the attribute also
+ * selects, so the gallery's values hold in both schemes.
  */
 export const ChoreoRoot: TOC<Signature> = <template>
   <div
@@ -32,82 +41,6 @@ export const ChoreoRoot: TOC<Signature> = <template>
   <style scoped>
     .choreo-site {
       color-scheme: dark;
-      /* Dark surfaces are a warm charcoal ladder, not near-black.
-         well < bg < page < elev < spot, so recessed chrome still sinks and
-         cards still lift, without a black floor. */
-      --bg-well: #221e1a;
-      --bg: #2a2521;
-      --bg-elev: #3a342e;
-      --bg-spot: #443c35;
-      /* Playhead's own surfaces, a shade above the shared ladder so its
-         small UI sits ON the page rather than cutting a hole in it. */
-      --ph-card-top: #3d362f;
-      --ph-card-bot: #322c27;
-      --ph-go-top: #4a4139;
-      --ph-go-bot: #2c2722;
-      --ph-receipt-top: #403830;
-      --ph-receipt-bot: #2e2924;
-      --ph-row: rgba(0, 0, 0, 0.16);
-      --ph-groove: rgba(0, 0, 0, 0.22);
-      --ph-btn: rgba(0, 0, 0, 0.26);
-      /* the page's own resting tone. --bg is the recessed canvas; cards use
-         --bg-elev, a notch above this, so they lift instead of sinking. */
-      --bg-page: #2e2924;
-      --ink: #f3ece3;
-      /* a step between --ink and --ink-dim, for the notes' headings */
-      --ink-soft: #e6dfd6;
-      --ink-dim: #d2c9bf;
-      --ink-faint: #b8aea3;
-      --line: rgba(var(--ink-rgb), 0.09);
-      --line-strong: rgba(var(--ink-rgb), 0.16);
-      /* bare triplets for rgba(var(--x-rgb), a) call sites that want an
-         alpha no token covers; redefined per theme so they repaint */
-      --bg-rgb: 42, 37, 33;
-      --ink-rgb: 243, 236, 227;
-      /* Shadows were picked against a dark page. Light mode scales the
-         alpha and warms the tint; in dark the multiplier is 1. */
-      --shadow-rgb: 0, 0, 0;
-      --shadow-a: 1;
-      /* a raised panel goes lighter than the page in dark mode and darker
-         in light mode; this is that one bit, so panels flip together */
-      --surface-tint-rgb: 255, 255, 255;
-      --ember: #ff3b1f;
-      --ember-hot: #ff6a3a;
-      --copper: #e4a35a;
-      --iris: #9667f7;
-      --steel: #8b969c;
-      --teal: #4fb8a6;
-      --azure: #6ea8f0;
-      /* An accent as TEXT. The accents above are tuned as fills and rules;
-         small type in them needs 4.5:1 on --bg, --bg-page, --bg-elev and the
-         faint tints laid over them (a code box, a tile's meta, an API pill), so
-         each one an element sets text in has an -ink twin, lifted here and
-         darkened in light mode. Text reads the -ink token; fills,
-         rules and glows keep the accent. */
-      --ember-ink: #ff7a4e;
-      --copper-ink: var(--copper);
-      --iris-ink: #af8bf9;
-      --steel-ink: #96a0a5;
-      /* the small uppercase label over a section, a tile or a code sample */
-      --eyebrow: var(--ember-ink);
-      /* ember text on an ember-tinted fill, such as a diagram's hot box */
-      --hot-ink: #ff9370;
-      /* the theme's focus color, which Boxel's own components read too; a
-         focus indicator needs 3:1 against whatever it is drawn over */
-      --ring: var(--ember-hot);
-      --glow: rgba(255, 59, 31, 0.38);
-      /* the mark's fading tail and its inner orbit. The -dark pair holds in
-         either theme, for a mark that sits on a dark ground. */
-      --mark-tail-dark: rgba(255, 59, 31, 0.35);
-      --mark-orbit-dark: rgba(139, 150, 156, 0.75);
-      --mark-tail: var(--mark-tail-dark);
-      --mark-orbit: var(--mark-orbit-dark);
-      --syn-string: #ffb36a;
-      --gradient-tail: var(--ink);
-      --font-display: 'Syne', 'Avenir Next', sans-serif;
-      --font-display-alt: 'Archivo', 'Avenir Next Condensed', sans-serif;
-      --font: 'IBM Plex Sans', 'Helvetica Neue', sans-serif;
-      --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
       --ease: cubic-bezier(0.22, 1, 0.36, 1);
       --page: 1180px;
       /* one flat color plus two soft radial glows — no texture, so the
@@ -115,20 +48,20 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --wash:
         radial-gradient(
           1200px 640px at 12% -10%,
-          rgba(255, 59, 31, 0.16),
+          color-mix(in srgb, var(--primary) 16%, transparent),
           transparent 55%
         ),
         radial-gradient(
           900px 480px at 110% 8%,
-          rgba(228, 163, 90, 0.08),
+          color-mix(in srgb, var(--copper) 8%, transparent),
           transparent 50%
         ),
-        var(--bg-page);
+        var(--background);
 
       position: relative;
       min-height: 100%;
-      color: var(--ink);
-      font-family: var(--font);
+      color: var(--foreground);
+      font-family: var(--font-sans);
       font-size: 16px;
       line-height: 1.5;
       background: var(--wash);
@@ -137,48 +70,8 @@ export const ChoreoRoot: TOC<Signature> = <template>
         color 220ms var(--ease);
     }
 
-    /* Light mode. The accents carry over unchanged as fills and rules; every
-       ink that sets text gets a darker value that holds 4.5:1 on cream. The
-       one exception is the hero's gradient word in gallery-grid.gts, which
-       keeps the bright accents on purpose (see the comment there). */
     .choreo-site[data-theme='light'] {
       color-scheme: light;
-      --bg-well: #e2dccf;
-      --bg: #efe9df;
-      --bg-elev: #f7f3ec;
-      --bg-spot: #fbf8f3;
-      --shadow-rgb: 72, 56, 44;
-      --shadow-a: 0.3;
-      --ph-card-top: var(--bg-spot);
-      --ph-card-bot: var(--bg-well);
-      --ph-go-top: var(--bg-spot);
-      --ph-go-bot: var(--bg-well);
-      --ph-receipt-top: var(--bg-spot);
-      --ph-receipt-bot: var(--bg-well);
-      --ph-row: var(--bg-well);
-      --ph-groove: var(--bg-well);
-      --ph-btn: var(--bg-well);
-      --bg-page: #f2ece1;
-      --ink: #211d18;
-      --ink-soft: #47423a;
-      --ink-dim: #5e564b;
-      --ink-faint: #6d6458;
-      --line: rgba(33, 29, 24, 0.1);
-      --line-strong: rgba(33, 29, 24, 0.18);
-      --bg-rgb: 239, 233, 223;
-      --ink-rgb: 33, 29, 24;
-      --surface-tint-rgb: 33, 29, 24;
-      --ember-ink: #bf2e00;
-      --copper-ink: #905824;
-      --iris-ink: #7334f5;
-      --steel-ink: #5e686e;
-      --hot-ink: #a02600;
-      --ring: var(--ember-ink);
-      --mark-tail: rgba(255, 59, 31, 0.5);
-      --mark-orbit: rgba(94, 104, 110, 0.85);
-      --syn-string: #a24f00;
-      --gradient-tail: var(--copper);
-      --lightbox-ring: rgba(33, 29, 24, 0.12);
     }
 
     /* The element defaults the demos were designed against. :where() gives
@@ -260,7 +153,7 @@ export const ChoreoRoot: TOC<Signature> = <template>
     }
 
     .choreo-site :deep(.syn-attr) {
-      color: color-mix(in srgb, var(--ink) 80%, var(--bg-page));
+      color: color-mix(in srgb, var(--foreground) 80%, var(--background));
     }
 
     .choreo-site :deep(.syn-string) {
@@ -269,7 +162,7 @@ export const ChoreoRoot: TOC<Signature> = <template>
 
     .choreo-site :deep(.syn-helper),
     .choreo-site :deep(.syn-mustache) {
-      color: var(--ember-ink);
+      color: var(--primary-ink);
     }
 
     .choreo-site :deep(.syn-number) {
@@ -277,11 +170,11 @@ export const ChoreoRoot: TOC<Signature> = <template>
     }
 
     .choreo-site :deep(.syn-comment) {
-      color: var(--ink-faint);
+      color: var(--subtle-foreground);
     }
 
     .choreo-site :deep(.syn-punct) {
-      color: var(--ink-dim);
+      color: var(--muted-foreground);
     }
   </style>
 </template>;

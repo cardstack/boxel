@@ -1,6 +1,7 @@
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { uint8ArrayToHex } from './index.ts';
 import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm.ts';
+import { APP_BOXEL_REALM_EVENT_ROOM_TYPE } from './matrix-constants.ts';
 import type { MatrixEvent } from '@cardstack/base/matrix-event';
 
 type JoinedRoomsResponse = { joined_rooms: string[] };
@@ -311,6 +312,138 @@ export class MatrixClient {
     );
 
     return json.room_id;
+  }
+
+  // The room a private realm sends its realm events into. Only a user this
+  // client invites may join it, and only this client's user, the one the realm
+  // sends its realm events as, may send in it, change its state, invite or
+  // kick. So its members are whoever the realm server put there, and none of
+  // them can forge a realm event. A member sees the room's history from the
+  // moment they were invited, which covers an event sent while their host was
+  // still joining, but nothing from before the invite. The retention policy
+  // bounds how far back the history goes.
+  async createRealmEventRoom(realmURL: string): Promise<string> {
+    let response = await this.request('_matrix/client/v3/createRoom', 'POST', {
+      body: JSON.stringify({
+        preset: 'private_chat',
+        visibility: 'private',
+        name: `Realm events: ${realmURL}`,
+        creation_content: { type: APP_BOXEL_REALM_EVENT_ROOM_TYPE },
+        initial_state: [
+          {
+            type: 'm.room.join_rules',
+            state_key: '',
+            content: { join_rule: 'invite' },
+          },
+          {
+            type: 'm.room.history_visibility',
+            state_key: '',
+            content: { history_visibility: 'invited' },
+          },
+          {
+            type: 'm.room.guest_access',
+            state_key: '',
+            content: { guest_access: 'forbidden' },
+          },
+          {
+            type: 'm.room.retention',
+            state_key: '',
+            content: { max_lifetime: REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME },
+          },
+        ],
+        power_level_content_override: {
+          users_default: 0,
+          events_default: 100,
+          state_default: 100,
+          invite: 100,
+          kick: 100,
+          ban: 100,
+          redact: 100,
+          notifications: { room: 100 },
+        },
+      }),
+    });
+    if (!response.ok) {
+      throw await matrixRequestError(
+        response,
+        `Unable to create realm event room for ${realmURL}`,
+      );
+    }
+    let json = (await response.json()) as { room_id: string };
+    return json.room_id;
+  }
+
+  // The membership of every user the room has a membership event for, other
+  // than this client's user: 'join', 'invite', 'leave', 'ban' or 'knock'.
+  async getRoomMemberships(roomId: string): Promise<Map<string, string>> {
+    let response = await this.request(
+      `_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/members`,
+      'GET',
+      { signal: AbortSignal.timeout(MATRIX_WRITE_TIMEOUT_MS) },
+    );
+    if (!response.ok) {
+      throw await matrixRequestError(
+        response,
+        `Unable to read the members of room ${roomId}`,
+      );
+    }
+    let json = (await response.json()) as {
+      chunk: { state_key: string; content: { membership?: string } }[];
+    };
+    let memberships = new Map<string, string>();
+    for (let event of json.chunk) {
+      if (event.state_key !== this.access?.userId && event.content.membership) {
+        memberships.set(event.state_key, event.content.membership);
+      }
+    }
+    return memberships;
+  }
+
+  async inviteUser(roomId: string, userId: string) {
+    await this.changeMembership(roomId, 'invite', userId);
+  }
+
+  async kickUser(roomId: string, userId: string, reason: string) {
+    await this.changeMembership(roomId, 'kick', userId, reason);
+  }
+
+  async leaveRoom(roomId: string) {
+    let response = await this.request(
+      `_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/leave`,
+      'POST',
+      { body: '{}', signal: AbortSignal.timeout(MATRIX_WRITE_TIMEOUT_MS) },
+    );
+    if (!response.ok) {
+      throw await matrixRequestError(
+        response,
+        `Unable to leave room ${roomId}`,
+      );
+    }
+  }
+
+  private async changeMembership(
+    roomId: string,
+    action: 'invite' | 'kick',
+    userId: string,
+    reason?: string,
+  ) {
+    let response = await this.request(
+      `_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/${action}`,
+      'POST',
+      {
+        body: JSON.stringify({
+          user_id: userId,
+          ...(reason ? { reason } : {}),
+        }),
+        signal: AbortSignal.timeout(MATRIX_WRITE_TIMEOUT_MS),
+      },
+    );
+    if (!response.ok) {
+      throw await matrixRequestError(
+        response,
+        `Unable to ${action} ${userId} in room ${roomId}`,
+      );
+    }
   }
 
   async setRoomRetentionPolicy(roomId: string, maxLifetimeMs: number) {

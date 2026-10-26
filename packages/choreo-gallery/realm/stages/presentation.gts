@@ -1575,11 +1575,15 @@ export class Presentation extends Component {
            way a deck actually presents itself. The bar is not chrome floating near
            the slide, it is the bottom 46px of the same object. */
         width: min(94cqw, calc((92cqh - 46px) * 1.7778), 560px);
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 16px;
-        background: var(--bg-well);
+        background: var(--inset);
         box-shadow: 0 12px 30px
-          rgba(var(--shadow-rgb), calc(0.32 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.32 * var(--shadow-a) * 100%),
+            transparent
+          );
         container-type: inline-size;
       }
 
@@ -1643,8 +1647,8 @@ export class Presentation extends Component {
         overflow: hidden;
         /* top corners only: the bottom two belong to the bar below it */
         border-radius: 15px 15px 0 0;
-        border-bottom: 1px solid var(--line-strong);
-        background: var(--bg-well);
+        border-bottom: 1px solid var(--border-strong);
+        background: var(--inset);
       }
 
       /* ---- the four grounds ----
@@ -1669,11 +1673,11 @@ export class Presentation extends Component {
         cursor: pointer;
         touch-action: pan-y;
         color: var(--sl-ink);
-        --sl-ink: var(--ink);
-        --sl-dim: var(--ink-dim);
-        --sl-faint: var(--ink-faint);
+        --sl-ink: var(--foreground);
+        --sl-dim: var(--muted-foreground);
+        --sl-faint: var(--subtle-foreground);
         --sl-accent: #edce9e;
-        --sl-rule: rgba(var(--ink-rgb), 0.16);
+        --sl-rule: color-mix(in srgb, var(--foreground) 16%, transparent);
         background: var(--bg-spot);
       }
 
@@ -1823,7 +1827,7 @@ export class Presentation extends Component {
         height: 2px;
         margin-top: -1px;
         border-radius: 1px;
-        background: color-mix(in srgb, var(--ink) 14%, transparent);
+        background: color-mix(in srgb, var(--foreground) 14%, transparent);
         transition: background 140ms var(--ease);
       }
 
@@ -1837,7 +1841,7 @@ export class Presentation extends Component {
 
       @media (hover: hover) {
         .pres-seg:hover::before {
-          background: var(--ink-dim);
+          background: var(--muted-foreground);
         }
       }
 
@@ -1873,7 +1877,7 @@ export class Presentation extends Component {
         font-size: 10px;
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .pres.is-hot .pres-keys {
@@ -1893,7 +1897,7 @@ export class Presentation extends Component {
       .pres-keys kbd {
         display: inline-block;
         padding: 1px 4px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 3px;
         font: inherit;
         letter-spacing: 0.08em;
@@ -1905,7 +1909,7 @@ export class Presentation extends Component {
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
       /* the transition picker: a real <select>, so the four kinds are a list you
          read rather than a word you have to press four times to see */
@@ -1923,13 +1927,13 @@ export class Presentation extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .pres-xfade select {
         appearance: none;
         padding: 4px 20px 4px 9px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 999px;
         background:
           /* the chevron, drawn rather than typed */
@@ -1941,13 +1945,13 @@ export class Presentation extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         cursor: pointer;
       }
 
       @media (hover: hover) {
         .pres-xfade:hover select {
-          color: var(--ink);
+          color: var(--foreground);
           border-color: var(--copper);
         }
       }
@@ -1958,19 +1962,19 @@ export class Presentation extends Component {
         flex-shrink: 0;
         margin: 0;
         padding: 4px 9px;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 999px;
         background: transparent;
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {
         .pres-restart:hover {
-          color: var(--ink);
+          color: var(--foreground);
           border-color: var(--copper);
         }
       }
@@ -1988,17 +1992,17 @@ export class Presentation extends Component {
         width: 21px;
         height: 21px;
         padding: 0;
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         border-radius: 999px;
         background: transparent;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 10px;
         line-height: 1;
       }
 
       @media (hover: hover) {
         .pres-arr:hover:not(:disabled) {
-          color: var(--ink);
+          color: var(--foreground);
           border-color: var(--copper);
         }
       }
@@ -2189,7 +2193,7 @@ export class Presentation extends Component {
         font-size: 17cqw;
         line-height: 0.8;
         letter-spacing: -0.06em;
-        color: color-mix(in srgb, var(--ink) 10%, transparent);
+        color: color-mix(in srgb, var(--foreground) 10%, transparent);
         pointer-events: none;
       }
 
@@ -2205,7 +2209,11 @@ export class Presentation extends Component {
           #2a0c08 100%
         );
         box-shadow: -8px 0 24px
-          rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.3 * var(--shadow-a) * 100%),
+            transparent
+          );
       }
 
       .pres-hed,
@@ -2235,7 +2243,7 @@ export class Presentation extends Component {
       .pres-hed em,
       .pres-close em {
         display: block;
-        font-family: var(--font);
+        font-family: var(--font-sans);
         font-weight: 400;
         font-style: italic;
         font-size: 0.88em;

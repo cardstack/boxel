@@ -101,6 +101,7 @@ export {
   resetCatalogRealmURL,
   setRealmArchived,
   setRealmAuthFailure,
+  setRealmEventRoom,
   setupAuthEndpoints,
   setupPublicReadableRealms,
   setCatalogRealmURL,

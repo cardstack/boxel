@@ -334,7 +334,7 @@ export class Escort extends Component {
         /* On the dark ground a cast shadow is invisible — a card lifting off a
            near-black floor has nothing to darken. So dark mode casts LIGHT: an
            ember halo that spreads and softens on exactly the same reading. */
-        --esc-cast: var(--ember);
+        --esc-cast: var(--primary);
         position: relative;
         display: grid;
         /* NO gap: the seat parks at 1/6, 3/6, 5/6 of the rail, and a gap moves a
@@ -352,12 +352,12 @@ export class Escort extends Component {
         min-height: clamp(126px, 34cqw, 176px);
         margin-inline: clamp(3px, 1cqw, 7px);
         padding: clamp(7px, 2cqw, 11px);
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 12px;
         background: linear-gradient(
           180deg,
           transparent 52%,
-          color-mix(in srgb, var(--bg-well) 65%, transparent)
+          color-mix(in srgb, var(--inset) 65%, transparent)
         );
         color: inherit;
         font: inherit;
@@ -371,11 +371,11 @@ export class Escort extends Component {
       }
 
       .esc-bay:hover {
-        border-color: var(--line-strong);
+        border-color: var(--border-strong);
       }
 
       .esc-bay.is-here {
-        border-color: color-mix(in srgb, var(--ember) 45%, transparent);
+        border-color: color-mix(in srgb, var(--primary) 45%, transparent);
       }
 
       /* the lit floor — a pool at the spot the parcel lands, faded in rather than
@@ -386,7 +386,7 @@ export class Escort extends Component {
         border-radius: inherit;
         background: radial-gradient(
           120% 66% at 50% 60%,
-          color-mix(in srgb, var(--ember) 15%, transparent),
+          color-mix(in srgb, var(--primary) 15%, transparent),
           transparent 72%
         );
         opacity: 0;
@@ -405,7 +405,7 @@ export class Escort extends Component {
         font-family: var(--font-mono);
         font-size: clamp(8px, 1.9cqw, 10px);
         letter-spacing: 0.12em;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         opacity: 0.55;
       }
 
@@ -426,7 +426,7 @@ export class Escort extends Component {
         font-size: clamp(8.5px, 2cqw, 10.5px);
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
         transition: color 0.36s var(--ease);
       }
 
@@ -437,11 +437,11 @@ export class Escort extends Component {
       }
 
       .esc-bay.is-here .esc-bay-name {
-        color: var(--ink);
+        color: var(--foreground);
       }
 
       .esc-bay.is-here .esc-bay-tally {
-        color: var(--ember-hot);
+        color: var(--hot-ink);
         opacity: 1;
       }
 
@@ -469,10 +469,11 @@ export class Escort extends Component {
         padding: clamp(6px, 1.8cqw, 9px) clamp(7px, 2cqw, 10px);
         overflow: hidden;
         border: 1px solid
-          color-mix(in srgb, var(--line-strong) 70%, transparent);
+          color-mix(in srgb, var(--border-strong) 70%, transparent);
         border-radius: 8px;
-        background: linear-gradient(160deg, var(--bg-spot), var(--bg-well));
-        box-shadow: 0 1px 0 rgba(var(--bg-rgb), 0.6) inset;
+        background: linear-gradient(160deg, var(--bg-spot), var(--inset));
+        box-shadow: 0 1px 0 color-mix(in srgb, var(--canvas) 60%, transparent)
+          inset;
       }
 
       .esc-card-head {
@@ -486,13 +487,13 @@ export class Escort extends Component {
         font-family: var(--font-mono);
         font-size: clamp(8.5px, 2cqw, 10.5px);
         letter-spacing: 0.02em;
-        color: var(--ember);
+        color: var(--primary-ink);
       }
 
       .esc-card-mass {
         font-family: var(--font-mono);
         font-size: clamp(7.5px, 1.7cqw, 9px);
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .esc-card-to {
@@ -501,7 +502,7 @@ export class Escort extends Component {
         font-weight: 600;
         letter-spacing: -0.01em;
         line-height: 1.2;
-        color: var(--ink);
+        color: var(--foreground);
         white-space: nowrap;
         text-overflow: ellipsis;
       }
@@ -513,11 +514,11 @@ export class Escort extends Component {
         height: clamp(9px, 2.4cqw, 13px);
         background: repeating-linear-gradient(
           90deg,
-          var(--line-strong) 0 1px,
+          var(--border-strong) 0 1px,
           transparent 1px 3px,
-          var(--line-strong) 3px 5px,
+          var(--border-strong) 3px 5px,
           transparent 5px 6px,
-          var(--line-strong) 6px 7px,
+          var(--border-strong) 6px 7px,
           transparent 7px 10px
         );
         opacity: 0.85;
@@ -537,10 +538,14 @@ export class Escort extends Component {
         width: var(--esc-badge-w);
         height: var(--esc-badge-w);
         border-radius: 50%;
-        background: var(--ember);
+        background: var(--primary);
         box-shadow: 0 2px 6px
-          rgba(var(--shadow-rgb), calc(0.5 * var(--shadow-a)));
-        color: #fff;
+          color-mix(
+            in srgb,
+            var(--shadow-ink) calc(0.5 * var(--shadow-a) * 100%),
+            transparent
+          );
+        color: var(--primary-foreground);
         font-family: var(--font-mono);
         font-size: clamp(9px, 2.2cqw, 10.5px);
         line-height: 1;
@@ -569,7 +574,11 @@ export class Escort extends Component {
          that opted out, at rgba(…, 0.8) under opacity 0.72: an effective 0.58 ink
          where light mode's darkest is 0.18. */
       .choreo-site[data-theme='light'] .esc-rail {
-        --esc-cast: rgba(var(--shadow-rgb), calc(1.6 * var(--shadow-a)));
+        --esc-cast: color-mix(
+          in srgb,
+          var(--shadow-ink) calc(1.6 * var(--shadow-a) * 100%),
+          transparent
+        );
       }
 
       .esc-note {
@@ -584,11 +593,11 @@ export class Escort extends Component {
         font-size: clamp(8.5px, 2cqw, 10.5px);
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .esc-note-key {
-        color: var(--ember);
+        color: var(--primary-ink);
       }
 
       .esc-note-dot {
@@ -597,7 +606,7 @@ export class Escort extends Component {
 
       .esc-note b {
         font-weight: 500;
-        color: var(--ink);
+        color: var(--foreground);
       }
     </style>
   </template>

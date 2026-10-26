@@ -1781,8 +1781,8 @@ export class LongTake extends Component {
            with it — and the mode is legible from the picture anyway, which is
            either a still or a room. */
       .lt-seg button:last-child {
-        background: var(--ember-hot, #ff6a3a);
-        border-color: var(--ember-hot, #ff6a3a);
+        background: var(--ember-hot);
+        border-color: var(--ember-hot);
         color: #ffffff;
         font-weight: 700;
       }
@@ -1792,10 +1792,12 @@ export class LongTake extends Component {
       @keyframes lt-beckon {
         0%,
         100% {
-          box-shadow: 0 0 0 0 #ff6a3a00;
+          box-shadow: 0 0 0 0
+            color-mix(in srgb, var(--ember-hot) 0%, transparent);
         }
         50% {
-          box-shadow: 0 0 0 4px #ff6a3a26;
+          box-shadow: 0 0 0 4px
+            color-mix(in srgb, var(--ember-hot) 14.9%, transparent);
         }
       }
       @media (prefers-reduced-motion: reduce) {
@@ -1869,7 +1871,7 @@ export class LongTake extends Component {
         bottom: -12px;
         text-align: center;
         font: 9px/1 var(--font-mono, ui-monospace, monospace);
-        color: var(--ink-faint, #b8aea3);
+        color: var(--subtle-foreground, #b8aea3);
         letter-spacing: 0.04em;
         pointer-events: none;
       }
