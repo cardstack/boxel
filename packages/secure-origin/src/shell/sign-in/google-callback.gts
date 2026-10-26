@@ -65,7 +65,7 @@ export default class GoogleCallback extends Component {
 
     <style scoped>
       .error {
-        color: var(--boxel-error-100);
+        color: var(--destructive-ink);
         padding: 0;
         font: 500 var(--boxel-font-xs);
         margin: var(--boxel-sp-2xs) auto 0 auto;

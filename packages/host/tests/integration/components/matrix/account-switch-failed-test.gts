@@ -20,8 +20,8 @@ module(
 
       assert.dom('[data-test-account-switch-failed]').exists();
       assert
-        .dom('[data-test-account-switch-failed]')
-        .containsText("Couldn't switch accounts");
+        .dom('[data-test-account-switch-failed] h1')
+        .hasText("Couldn't switch accounts", 'the title is the heading');
       assert
         .dom('[data-test-account-switch-failed]')
         .containsText("haven't been signed out");

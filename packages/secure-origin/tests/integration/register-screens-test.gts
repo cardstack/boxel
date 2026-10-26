@@ -35,7 +35,8 @@ module('Integration | register screens', function (hooks) {
       </template>,
     );
 
-    assert.dom('[role="heading"][aria-level="1"]').exists({ count: 3 });
+    assert.dom('h1[data-test-secure-title]').exists({ count: 3 });
+    assert.dom('[role="heading"]').doesNotExist();
   });
 
   test('a page with a heading of its own above them lowers their titles', async function (assert) {
@@ -66,7 +67,7 @@ module('Integration | register screens', function (hooks) {
       </template>,
     );
 
-    assert.dom('[role="heading"][aria-level="2"]').exists({ count: 3 });
-    assert.dom('[role="heading"][aria-level="1"]').doesNotExist();
+    assert.dom('h2[data-test-secure-title]').exists({ count: 3 });
+    assert.dom('h1').doesNotExist();
   });
 });

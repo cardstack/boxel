@@ -66,9 +66,9 @@ export default class SecureSignIn extends Component {
             data-test-secure-sign-in-status
           />
         {{else}}
-          <span class='title' data-test-secure-sign-in-status>
+          <h1 class='title' data-test-secure-sign-in-status>
             {{this.title}}
-          </span>
+          </h1>
           {{#if this.message}}
             <p class='message' data-test-secure-sign-in-message>
               {{this.message}}
@@ -98,6 +98,7 @@ export default class SecureSignIn extends Component {
       .title {
         font: 600 var(--boxel-font-md);
         color: var(--foreground);
+        margin: 0;
       }
       .message {
         margin: 0;

@@ -12,6 +12,9 @@ import { createSecureOrigin, secureOriginGate } from '../lib/secure-origin.ts';
 // anything. The policy has no `unsafe-inline` and no `unsafe-eval`, so a
 // `style` attribute, an inline script or style, or code compiled at run time
 // shows up here as a `securitypolicyviolation` event.
+//
+// The built pages are also where the theme's tokens resolve, so this is where
+// the error and muted text colours are checked against WCAG AA contrast.
 
 // Every mode the shell presents, and the address Google returns to.
 const SHELL_PAGES = [
@@ -225,6 +228,104 @@ module(basename(import.meta.filename), function (hooks) {
       'handing over, and failing to: no violation',
     );
     await page.evaluate(() => localStorage.clear());
+  });
+
+  test('error and muted text on the sign-in pages meet WCAG AA contrast', async function (assert) {
+    // Every mode's stylesheet ships with the shell, so this one page holds
+    // the error rules of all of them. Each colour is resolved inside the
+    // page's AuthContainer, under its theme, and composited over the page
+    // background on a canvas, which turns any CSS colour into sRGB.
+    await page.goto(`${secureOrigin}/secure?mode=sign-in`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-secure-page]', { timeout: 10000 });
+    let { background, colors, nested } = await page.evaluate(() => {
+      let container = document.querySelector('[data-test-secure-page]')!;
+      let canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      let context = canvas.getContext('2d', { willReadFrequently: true })!;
+      let backgroundColor = getComputedStyle(container).backgroundColor;
+      let toRGB = (color: string) => {
+        context.fillStyle = backgroundColor;
+        context.fillRect(0, 0, 1, 1);
+        context.fillStyle = color;
+        context.fillRect(0, 0, 1, 1);
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+      };
+      let resolve = (value: string) => {
+        let probe = document.createElement('span');
+        probe.style.setProperty('color', value);
+        container.append(probe);
+        let color = getComputedStyle(probe).color;
+        probe.remove();
+        return toRGB(color);
+      };
+      let errorRule = /^\.error(-message)?(\[[^\]]+\])?$/;
+      let colors: { label: string; rgb: number[] }[] = [];
+      let nested = 0;
+      // The components' rules sit inside `@layer` blocks, so the walk
+      // descends into every grouping rule.
+      let visit = (rules: CSSRuleList, depth: number) => {
+        for (let rule of rules) {
+          if (rule instanceof CSSGroupingRule) {
+            visit(rule.cssRules, depth + 1);
+            continue;
+          }
+          if (!(rule instanceof CSSStyleRule)) {
+            continue;
+          }
+          let value = rule.style.getPropertyValue('color');
+          if (
+            value &&
+            rule.selectorText.split(',').some((s) => errorRule.test(s.trim()))
+          ) {
+            if (depth > 0) {
+              nested++;
+            }
+            colors.push({
+              label: `${rule.selectorText} { color: ${value} }`,
+              rgb: resolve(value),
+            });
+          }
+        }
+      };
+      for (let sheet of document.styleSheets) {
+        visit(sheet.cssRules, 0);
+      }
+      colors.push({
+        label: 'var(--muted-foreground)',
+        rgb: resolve('var(--muted-foreground)'),
+      });
+      return { background: toRGB(backgroundColor), colors, nested };
+    });
+
+    let luminance = (rgb: number[]) => {
+      let [r, g, b] = rgb.map((channel) => {
+        let c = channel / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    let contrast = (a: number[], b: number[]) => {
+      let [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (light + 0.05) / (dark + 0.05);
+    };
+
+    assert.ok(
+      colors.length > 1,
+      `the shell's stylesheets hold error rules (${colors.length - 1})`,
+    );
+    assert.ok(
+      nested > 0,
+      `error rules inside @layer blocks are checked (${nested})`,
+    );
+    for (let { label, rgb } of colors) {
+      let ratio = contrast(rgb, background);
+      assert.ok(
+        ratio >= 4.5,
+        `${label}: rgb(${rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+      );
+    }
   });
 
   test('each credential form runs under the policy, framed by the app', async function (assert) {

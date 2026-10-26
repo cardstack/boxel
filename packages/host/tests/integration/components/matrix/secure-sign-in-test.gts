@@ -68,8 +68,8 @@ module('Integration | Component | matrix/secure-sign-in', function (hooks) {
       'nothing naming a URL is in the query string',
     );
     assert
-      .dom('[data-test-secure-sign-in-status]')
-      .hasText('Taking you to sign in…');
+      .dom('h1[data-test-secure-sign-in-status]')
+      .hasText('Taking you to sign in…', 'the status is the heading');
     assert
       .dom('[data-test-secure-sign-in-button]')
       .hasAttribute('href', expected, 'a plain link goes there too');
@@ -87,7 +87,7 @@ module('Integration | Component | matrix/secure-sign-in', function (hooks) {
       'the page stays where it is',
     );
     assert
-      .dom('[data-test-secure-sign-in-status]')
+      .dom('h1[data-test-secure-sign-in-status]')
       .hasText('Sign-in didn’t complete');
     assert
       .dom('[data-test-secure-sign-in-button]')
