@@ -13,7 +13,12 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 // dependency graph, so a glyph taken from it costs nothing extra.
 import { Warning } from '@cardstack/boxel-ui/icons';
 
-import { downloadNameFor, fileIconFor, humanSize } from './file-presentation';
+import {
+  downloadNameFor,
+  downloadViaFetch,
+  fileIconFor,
+  humanSize,
+} from './file-presentation';
 import type {
   FileFormat,
   FileModelLike,
@@ -184,6 +189,7 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
                   class='gp-download'
                   href={{@model.url}}
                   download={{downloadNameFor @model}}
+                  {{downloadViaFetch}}
                   data-test-file-generic-download
                 >Download</a>
               {{/if}}

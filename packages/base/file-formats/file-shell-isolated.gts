@@ -16,6 +16,7 @@ import { isSampledContentHash } from '@cardstack/runtime-common';
 import {
   boundedVideoFrameAspectRatio,
   downloadNameFor,
+  downloadViaFetch,
   fileIconFor,
   humanSize,
   shortDate,
@@ -359,6 +360,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
               class='act primary'
               href={{@model.url}}
               download={{downloadNameFor @model}}
+              {{downloadViaFetch}}
               data-test-file-download
             >Download</a>
             {{! The pressed control announces its own success without extra

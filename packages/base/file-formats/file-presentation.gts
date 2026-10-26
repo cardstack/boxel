@@ -100,6 +100,64 @@ export function downloadNameFor(
   return model?.name || undefined;
 }
 
+// Saves a file link's bytes rather than letting the browser follow its `href`.
+// A realm URL followed as a download navigation doesn't yield the file: the
+// navigation's `Accept: text/html` gets the host app shell, the request carries
+// no Authorization header so a private realm answers 401, and a realm on
+// another origin than the host has its `download` attribute ignored. The bytes
+// come from the same authenticated `fetch` the previews use — `same-origin`
+// rather than `include` because the realm answers with
+// `Access-Control-Allow-Origin: *`, and the auth service worker carries the
+// session — and are saved through a `blob:` URL under the link's `download`
+// name. The anchor keeps its `href`, so modified clicks (new tab, new window)
+// and copy-link still work natively.
+export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
+  let inFlight = false;
+  let onClick = async (event: MouseEvent) => {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    if (inFlight || !element.href) {
+      return;
+    }
+    inFlight = true;
+    element.setAttribute('aria-busy', 'true');
+    try {
+      let response = await fetch(element.href, {
+        credentials: 'same-origin',
+      });
+      if (!response.ok) {
+        throw new Error(`File download failed with HTTP ${response.status}`);
+      }
+      let objectURL = URL.createObjectURL(await response.blob());
+      let save = document.createElement('a');
+      save.href = objectURL;
+      save.download = element.getAttribute('download') ?? '';
+      save.hidden = true;
+      document.body.append(save);
+      save.click();
+      save.remove();
+      // The browser reads the blob when the download starts, not
+      // synchronously on click, so the URL stays valid for a while after.
+      setTimeout(() => URL.revokeObjectURL(objectURL), 60_000);
+    } catch (error) {
+      console.error(`Could not download ${element.href}`, error);
+    } finally {
+      inFlight = false;
+      element.removeAttribute('aria-busy');
+    }
+  };
+  element.addEventListener('click', onClick);
+  return () => element.removeEventListener('click', onClick);
+});
+
 // Coerce a timestamp to a Date. A bare number is epoch time, but the server
 // stamps a file's `lastModified` / `resourceCreatedAt` in epoch *seconds* — a
 // value `new Date` would otherwise read as milliseconds and render as 1970 —
