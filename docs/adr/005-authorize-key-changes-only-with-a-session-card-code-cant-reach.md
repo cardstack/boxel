@@ -104,10 +104,7 @@ page names by email address, and only once the new password checks out for
 that account. That check MUST NOT be refused under the limit on failed
 password sign-ins, and MUST be made at most once for each email validation
 session. The route MUST answer only a request whose `Origin` is the secure
-origin's, and MUST answer alike whether or not a session ended. It MAY also
-end the sessions for a page that set the password with the Matrix server
-itself and sends the new password, once that password checks out under the
-limit on failed password sign-ins.
+origin's, and MUST answer alike whether or not a session ended.
 
 A secure window whose session has ended MUST forget it and offer to sign in
 again.
@@ -226,12 +223,6 @@ email to an account the guesser controls, which Synapse's own limits on
 validation emails pace. A link that names no account still resets the
 password, and ends no session. A password set outside Boxel, such as by an
 operator through Synapse's admin API, ends no session.
-
-A page keeps the code it loaded with, and an app tab can stay open for days,
-so a page that sets the password with Synapse itself and then sends only the
-new password can reach a realm server that sets passwords itself. Refusing
-it would leave that page's change with no session ended at all, so the route ends the sessions for it too, checking the new password under the sign-in
-limit as a sign-in does. Only such a page meets the starvation above.
 
 Signing in to the app on the secure origin (§1.7) closes what the
 credential fields leave open. Those fields are invisible frames inside the
