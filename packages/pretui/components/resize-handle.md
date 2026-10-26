@@ -8,7 +8,7 @@ A focusable separator that resizes the pane beside it, in px. Use it to size one
 @size? (px), @onSizeChange(px)
 @min? (0), @max?, @defaultSize?        px numbers, or 'Npx' / 'Nrem' strings
 @orientation? 'vertical' (default) | 'horizontal'
-@placement? 'end' (default) | 'start'   left/right/top/bottom accepted
+@placement? 'end' (default) | 'start' | 'left' | 'right' | 'top' | 'bottom'
 @step? (16), @label? ('Resize'), @controls?
 ```
 
@@ -18,7 +18,7 @@ Three decisions worth understanding.
 
 **Bounds take rem.** A pane designed in rem keeps its bounds in rem: `@min='11rem'` resolves against the root font size. The reported size is always px, since that's what a drag measures.
 
-**The caller places it.** The handle is a strip (`--pretui-resize-handle-size`, 0.5rem; 1rem on a coarse pointer) that fills its cross axis. Position it on the pane's edge, usually absolutely, inside the pane, so it travels with the edge it moves. `@placement` names that edge, so the handle knows which way growing is, and it flips the drag in a right-to-left context.
+**The caller places it.** The handle is a strip (`--pretui-resize-handle-size`, 0.5rem; 1rem on a coarse pointer) that fills its cross axis. Position it on the pane's edge, usually absolutely, inside the pane, so it travels with the edge it moves. `@placement` names that edge, so the handle knows which way growing is. `start` and `end` are logical, so in a right-to-left context the drag flips with them; `left` and `right` are physical and never flip; `top` and `bottom` name the block axis, which the writing direction doesn't affect.
 
 ## Prior art
 
@@ -29,7 +29,7 @@ Where it earns its place:
 - **Keyboard resizing.** Arrow keys step, Shift steps four times as far, and Home/End go to the limits, which SplitPanes' handle can't do.
 - **It says where it is.** `aria-valuenow`/`min`/`max` report the size, so a screen reader hears it.
 - **Absolute units.** px and rem bounds, not percentages of a group.
-- **Total travel, not frame deltas.** Each move applies the distance from where the drag started, so rounding never drifts over a long drag.
+- **Total travel, not frame deltas.** Each move applies the distance from where the drag started, so rounding never drifts over a long drag. The pointer that started a drag owns it: a second finger neither restarts nor steers it, and losing pointer capture ends it.
 - **It works under a scaled ancestor.** Pointer travel is converted to the pane's own px using the handle's on-screen size over its layout size, so the edge stays under the pointer in a zoomed canvas or a scaled preview.
 
 Where it's thin: no collapse (pair it with a toggle, as Sidebar does), no snap points, and no persistence of its own.
@@ -41,7 +41,7 @@ It follows the WAI-ARIA window splitter pattern: `role='separator'` with `tabind
 - `aria-orientation` is the line's own orientation. `aria-valuenow`, `aria-valuemin` and (with `@max`) `aria-valuemax` are the pane's size in px.
 - `@label` is the accessible name. Name the pane: "Resize sidebar", not "Resize".
 - `@controls` sets `aria-controls` to the pane's id.
-- Keys: Left/Right for a vertical handle and Up/Down for a horizontal one, following the screen (in a right-to-left context, the key toward the pane's end edge still grows it). Home and End go to the min and max.
+- Keys: Left/Right for a vertical handle and Up/Down for a horizontal one, following the screen (in a right-to-left context, the key toward the pane's end edge still grows it). Home and End go to the min and max. A key pressed with Alt, Ctrl or Meta is left to the browser (Alt+Left is Back).
 - Double-click restores `@defaultSize`. A keyboard user reaches the same sizes with Home, End and the arrows.
 - Pressing the handle focuses it, and a drag doesn't select the page's text.
 

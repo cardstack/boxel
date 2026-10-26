@@ -5,7 +5,7 @@
 // an `ember-modifier` that removes it. No `!important`, no `:deep()`, no
 // `:global()`, no dark branches.
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 
 // ── ResizeHandle ─────────────────────────────────────────────────────────
@@ -22,8 +22,10 @@ import { modifier } from 'ember-modifier';
 // writes it back. An unset `@size` reads as `@defaultSize`, so a caller can
 // leave its CSS default in charge until the first resize.
 
-/** Logical placement of the handle on its pane. `left`/`right` and
- * `top`/`bottom` are accepted and mapped, as Sidebar does. */
+/** Placement of the handle on its pane. `start`/`end` are logical, so in a
+ * right-to-left context `end` is the left edge. `left`/`right` are physical
+ * and ignore the writing direction. `top`/`bottom` name the block axis,
+ * which the writing direction doesn't flip. */
 export type ResizeHandlePlacement = 'start' | 'end';
 export type ResizeHandlePlacementAlias =
   | ResizeHandlePlacement
@@ -110,13 +112,18 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
     let raw = this.args.placement;
     return (raw === undefined ? undefined : PLACEMENTS[raw]) ?? 'end';
   }
+  // Cached: a rem bound reads the root font size, and a drag reads the
+  // bounds on every pointer move.
+  @cached
   get min(): number {
     return resolveLength(this.args.min) ?? 0;
   }
+  @cached
   get max(): number | undefined {
     let max = resolveLength(this.args.max);
     return max === undefined ? undefined : Math.max(max, this.min);
   }
+  @cached
   get defaultSize(): number | undefined {
     let size = resolveLength(this.args.defaultSize);
     return size === undefined ? undefined : this.clamp(size);
@@ -153,8 +160,11 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
   // pane. Read at the start of each gesture so a `dir` change is honoured.
   private growthSign(el: HTMLElement): 1 | -1 {
     let towardEnd = this.placement === 'end';
+    let physical =
+      this.args.placement === 'left' || this.args.placement === 'right';
     if (
       this.orientation === 'vertical' &&
+      !physical &&
       getComputedStyle(el).direction === 'rtl'
     ) {
       towardEnd = !towardEnd;
@@ -164,28 +174,58 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
 
   // Screen px per layout px along the drag axis, so the edge keeps up with
   // the pointer when an ancestor is scaled (a zoomed canvas, a scaled
-  // preview). An element that isn't laid out reads as unscaled.
+  // preview). The layout size comes from computed style rather than
+  // offsetWidth, which rounds to whole px and would skew the scale for a
+  // fractional strip. An element that isn't laid out reads as unscaled.
   private screenScale(el: HTMLElement): number {
     let rect = el.getBoundingClientRect();
-    let [screen, layout] =
+    let style = getComputedStyle(el);
+    let px = (value: string) => parseFloat(value) || 0;
+    let [screen, size, edges] =
       this.orientation === 'vertical'
-        ? [rect.width, el.offsetWidth]
-        : [rect.height, el.offsetHeight];
+        ? [
+            rect.width,
+            style.width,
+            [
+              style.paddingLeft,
+              style.paddingRight,
+              style.borderLeftWidth,
+              style.borderRightWidth,
+            ],
+          ]
+        : [
+            rect.height,
+            style.height,
+            [
+              style.paddingTop,
+              style.paddingBottom,
+              style.borderTopWidth,
+              style.borderBottomWidth,
+            ],
+          ];
+    let layout =
+      px(size) +
+      (style.boxSizing === 'border-box'
+        ? 0
+        : edges.reduce((sum, edge) => sum + px(edge), 0));
     return screen > 0 && layout > 0 ? screen / layout : 1;
   }
 
   // Pointer capture keeps every event of the gesture on the handle, so it
   // needs no document listeners and survives the pointer leaving the strip.
   // Each move applies the total travel from the origin, never a per-frame
-  // delta, so rounding can't drift over a long drag.
+  // delta, so rounding can't drift over a long drag. One pointer owns the
+  // gesture: a second finger neither restarts nor steers it.
   dragResize = modifier((handle: HTMLElement) => {
     // `factor` turns screen travel into a size change: the growth direction
     // over the screen scale.
-    let origin: { coord: number; size: number; factor: number } | undefined;
+    let origin:
+      | { pointerId: number; coord: number; size: number; factor: number }
+      | undefined;
     let coordOf = (e: PointerEvent) =>
       this.orientation === 'vertical' ? e.clientX : e.clientY;
     let down = (e: PointerEvent) => {
-      if (e.button !== 0) {
+      if (e.button !== 0 || origin) {
         return;
       }
       // Stops the drag selecting the page's text; focus is moved by hand
@@ -201,6 +241,7 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
         // pointermove/pointerup the same caller dispatches on this element.
       }
       origin = {
+        pointerId: e.pointerId,
         coord: coordOf(e),
         size: this.size,
         factor: this.growthSign(handle) / this.screenScale(handle),
@@ -208,13 +249,18 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
       this.dragging = true;
     };
     let move = (e: PointerEvent) => {
-      if (origin) {
+      if (origin?.pointerId === e.pointerId) {
         this.report(origin.size + (coordOf(e) - origin.coord) * origin.factor);
       }
     };
-    let up = () => {
-      origin = undefined;
-      this.dragging = false;
+    // Also runs on lostpointercapture, so a gesture whose pointerup never
+    // reaches the handle (it went inert, or capture was taken away) still
+    // ends instead of resizing on later hovers.
+    let up = (e: PointerEvent) => {
+      if (origin?.pointerId === e.pointerId) {
+        origin = undefined;
+        this.dragging = false;
+      }
     };
     let reset = () => {
       if (this.defaultSize !== undefined) {
@@ -222,6 +268,11 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
       }
     };
     let key = (e: KeyboardEvent) => {
+      // Alt/Ctrl/Meta chords are the browser's and the platform's (Alt+Left
+      // is Back).
+      if (e.altKey || e.ctrlKey || e.metaKey) {
+        return;
+      }
       let step = (this.args.step ?? 16) * (e.shiftKey ? 4 : 1);
       let [less, more] =
         this.orientation === 'vertical'
@@ -245,6 +296,7 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
     handle.addEventListener('pointermove', move);
     handle.addEventListener('pointerup', up);
     handle.addEventListener('pointercancel', up);
+    handle.addEventListener('lostpointercapture', up);
     handle.addEventListener('dblclick', reset);
     handle.addEventListener('keydown', key);
     return () => {
@@ -252,6 +304,7 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
       handle.removeEventListener('pointermove', move);
       handle.removeEventListener('pointerup', up);
       handle.removeEventListener('pointercancel', up);
+      handle.removeEventListener('lostpointercapture', up);
       handle.removeEventListener('dblclick', reset);
       handle.removeEventListener('keydown', key);
     };

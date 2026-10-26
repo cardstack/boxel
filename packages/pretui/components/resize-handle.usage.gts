@@ -95,7 +95,7 @@ class ResizeHandleUsage extends Component {
           @defaultValue='end'
           @value={{this.placement}}
           @options={{this.placementOptions}}
-          @description='The pane edge the handle sits on. Logical, so it follows the writing direction; left, right, top and bottom are accepted too.'
+          @description='The pane edge the handle sits on. start and end are logical and follow the writing direction; left and right are physical; top and bottom name the block axis.'
           @onInput={{this.setPlacement}}
         />
         <Args.Number

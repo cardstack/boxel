@@ -38,21 +38,23 @@ class Pane {
 // Screen px per layout px across a vertical handle. The test container may
 // itself be scaled, so drags are written in layout px and converted.
 function scaleOf(el: HTMLElement): number {
-  return el.getBoundingClientRect().width / el.offsetWidth;
+  return (
+    el.getBoundingClientRect().width / parseFloat(getComputedStyle(el).width)
+  );
 }
 
 async function pointer(
   el: HTMLElement,
   type: string,
   coord: { x?: number; y?: number },
-  button = 0,
+  { button = 0, pointerId = 1 } = {},
 ) {
   el.dispatchEvent(
     new PointerEvent(type, {
       bubbles: true,
       cancelable: true,
       button,
-      pointerId: 1,
+      pointerId,
       clientX: coord.x ?? 0,
       clientY: coord.y ?? 0,
     }),
@@ -206,14 +208,100 @@ module('Pretui | components/resize-handle', function (hooks) {
       </template>,
     );
     let el = handle();
-    await pointer(el, 'pointerdown', { x: 500 }, 2);
+    await pointer(el, 'pointerdown', { x: 500 }, { button: 2 });
     await pointer(el, 'pointermove', { x: 560 });
     assert.deepEqual(pane.reports, [], 'a right-button press is not a drag');
+  });
+
+  test('the pointer that started a drag owns it', async function (assert) {
+    let pane = new Pane(200);
+    await render(
+      <template>
+        <ResizeHandle @size={{pane.size}} @onSizeChange={{pane.set}} />
+      </template>,
+    );
+    let el = handle();
+    let s = scaleOf(el);
+    await pointer(el, 'pointerdown', { x: 500 });
+    await pointer(el, 'pointerdown', { x: 900 }, { pointerId: 2 });
+    await pointer(el, 'pointermove', { x: 950 }, { pointerId: 2 });
+    assert.deepEqual(pane.reports, [], "a second finger doesn't steer it");
+    await pointer(el, 'pointermove', { x: 500 + 40 * s });
+    assert.strictEqual(
+      pane.size,
+      240,
+      "and doesn't restart it: travel still counts from the first press",
+    );
+    await pointer(el, 'pointerup', { x: 900 }, { pointerId: 2 });
+    assert
+      .dom(el)
+      .hasAttribute(
+        'data-dragging',
+        'true',
+        "the second finger's release doesn't end it",
+      );
+  });
+
+  test('losing pointer capture ends the drag', async function (assert) {
+    let pane = new Pane(200);
+    await render(
+      <template>
+        <ResizeHandle @size={{pane.size}} @onSizeChange={{pane.set}} />
+      </template>,
+    );
+    let el = handle();
+    await pointer(el, 'pointerdown', { x: 500 });
+    await pointer(el, 'lostpointercapture', { x: 500 });
+    assert.dom(el).doesNotHaveAttribute('data-dragging');
+    await pointer(el, 'pointermove', { x: 600 });
+    assert.deepEqual(
+      pane.reports,
+      [],
+      'a later hover with no button pressed resizes nothing',
+    );
+  });
+
+  test('a strip that is not a whole number of px still tracks the pointer', async function (assert) {
+    let whole = new Pane(200);
+    let fractional = new Pane(200);
+    await render(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <ResizeHandle
+          style='width: 8px'
+          @size={{whole.size}}
+          @onSizeChange={{whole.set}}
+          data-test-whole
+        />
+        <ResizeHandle
+          style='width: 7.5px'
+          @size={{fractional.size}}
+          @onSizeChange={{fractional.set}}
+          data-test-fractional
+        />
+      </template>,
+    );
+    let travel = 120 * scaleOf(handle('[data-test-whole]'));
+    for (let el of [
+      handle('[data-test-whole]'),
+      handle('[data-test-fractional]'),
+    ]) {
+      await pointer(el, 'pointerdown', { x: 500 });
+      await pointer(el, 'pointermove', { x: 500 + travel });
+      await pointer(el, 'pointerup', { x: 500 + travel });
+    }
+    assert.strictEqual(whole.size, 320);
+    assert.strictEqual(
+      fractional.size,
+      320,
+      'the same screen travel gives the same size change',
+    );
   });
 
   test('a handle on the start edge, or in a right-to-left context, grows the other way', async function (assert) {
     let start = new Pane(200);
     let rtl = new Pane(200);
+    let physical = new Pane(200);
     await render(
       <template>
         <ResizeHandle
@@ -227,6 +315,12 @@ module('Pretui | components/resize-handle', function (hooks) {
             @size={{rtl.size}}
             @onSizeChange={{rtl.set}}
             data-test-rtl
+          />
+          <ResizeHandle
+            @size={{physical.size}}
+            @placement='right'
+            @onSizeChange={{physical.set}}
+            data-test-physical
           />
         </div>
       </template>,
@@ -258,6 +352,17 @@ module('Pretui | components/resize-handle', function (hooks) {
     );
     await triggerKeyEvent(rtlEl, 'keydown', 'ArrowLeft');
     assert.strictEqual(rtl.size, 256, 'and the arrow toward it grows the pane');
+
+    let physicalEl = handle('[data-test-physical]');
+    await pointer(physicalEl, 'pointerdown', { x: 500 });
+    await pointer(physicalEl, 'pointermove', { x: 500 + 40 * s });
+    assert.strictEqual(
+      physical.size,
+      240,
+      "'right' stays the right edge in right-to-left: moving right grows it",
+    );
+    await triggerKeyEvent(physicalEl, 'keydown', 'ArrowRight');
+    assert.strictEqual(physical.size, 256);
   });
 
   test('arrow keys step the size, Shift steps further, Home and End go to the bounds', async function (assert) {
@@ -276,6 +381,25 @@ module('Pretui | components/resize-handle', function (hooks) {
     let el = handle();
     await triggerKeyEvent(el, 'keydown', 'ArrowRight');
     assert.strictEqual(pane.size, 210);
+    for (let chord of [
+      { altKey: true },
+      { ctrlKey: true },
+      { metaKey: true },
+    ]) {
+      let event = new KeyboardEvent('keydown', {
+        key: 'ArrowLeft',
+        bubbles: true,
+        cancelable: true,
+        ...chord,
+      });
+      el.dispatchEvent(event);
+      await settled();
+      assert.false(
+        event.defaultPrevented,
+        `${Object.keys(chord)[0]}+ArrowLeft is left to the browser`,
+      );
+    }
+    assert.strictEqual(pane.size, 210, 'and resizes nothing');
     await triggerKeyEvent(el, 'keydown', 'ArrowRight', { shiftKey: true });
     assert.strictEqual(pane.size, 250, 'Shift moves four steps');
     await triggerKeyEvent(el, 'keydown', 'ArrowLeft');
