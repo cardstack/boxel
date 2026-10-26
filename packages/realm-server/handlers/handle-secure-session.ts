@@ -9,6 +9,7 @@ import type { CreateRoutesArgs } from '../routes.ts';
 import type { CreateRealmDeps } from './create-realm.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
+  changePassword,
   endSecureSession,
   endSessionsForNewPassword,
   endWindowSessions,
@@ -20,6 +21,7 @@ import {
   secureSignInConfigured,
   signInWithGoogle,
   signInWithPassword,
+  type PasswordChange,
   type SecureSessionClient,
   type SecureSessionDeps,
 } from '../lib/secure-session.ts';
@@ -238,13 +240,18 @@ export function handlePasswordSignIn(
   });
 }
 
-// POST /_secure-sessions/password-change: ends every secure session of the
-// account, the CLI's included, once the account's new password checks out.
-// The secure origin's pages send it right after they change a password, with
-// the username, email address or Matrix id the account was named by and the
-// new password. Answered only for the secure origin, checked and limited as a
-// password sign-in is (sharing its `limiter`), and 204 whether or not there
-// was a session to end.
+// POST /_secure-sessions/password-change: sets an account's password on the
+// Matrix server, and then ends every secure session of the account, the CLI's
+// included (`changePassword`). The secure origin's pages send it in place of
+// the Matrix request: a reset with `sid`, `clientSecret` and the `email` the
+// reset was sent to, or a change with `accessToken` and `currentPassword`;
+// either with `newPassword`. Answered only for the secure origin, with the
+// Matrix server's status and body, alike whether or not a session ended.
+//
+// A body with `username` and `password` instead is from a page that set the
+// password with the Matrix server itself: the route ends the account's
+// sessions once that password checks out, under the sign-in limit
+// (`endSessionsForNewPassword`), and answers 204.
 export function handlePasswordChange(
   args: CreateRoutesArgs,
   limiter: SignInLimiter,
@@ -252,12 +259,39 @@ export function handlePasswordChange(
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
     let attributes = await readAttributes(ctxt, 'password-change');
-    let { username, password } = attributes;
-    await endSessionsForNewPassword(deps(args), limiter, {
-      username: typeof username === 'string' ? username : '',
-      password: typeof password === 'string' ? password : '',
-    });
-    await setContextResponse(ctxt, new Response(null, { status: 204 }));
+    if (attributes.newPassword === undefined) {
+      let { username, password } = attributes;
+      await endSessionsForNewPassword(deps(args), limiter, {
+        username: typeof username === 'string' ? username : '',
+        password: typeof password === 'string' ? password : '',
+      });
+      await setContextResponse(ctxt, new Response(null, { status: 204 }));
+      return;
+    }
+    let newPassword = textOf(attributes, 'newPassword');
+    let accessToken = optionalTextOf(attributes, 'accessToken');
+    let change: PasswordChange = accessToken
+      ? {
+          kind: 'change',
+          newPassword,
+          accessToken,
+          currentPassword: textOf(attributes, 'currentPassword'),
+        }
+      : {
+          kind: 'reset',
+          newPassword,
+          sid: textOf(attributes, 'sid'),
+          clientSecret: textOf(attributes, 'clientSecret'),
+          email: optionalTextOf(attributes, 'email'),
+        };
+    let result = await changePassword(deps(args), change);
+    await setContextResponse(
+      ctxt,
+      new Response(JSON.stringify(result.body), {
+        status: result.status,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
   });
 }
 

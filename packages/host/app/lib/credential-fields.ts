@@ -32,14 +32,22 @@ export type CredentialOperation =
     }
   | {
       operation: 'set-password';
-      args: {
-        auth: Record<string, unknown>;
-        accessToken?: string;
-        // The account whose password this is, by Matrix id or email address.
-        // Once the password is changed, the fields end the account's secure
-        // sessions at the realm server, proving it with the new password.
-        account?: string;
-      };
+      // The change form sends the app's access token; the Matrix server
+      // checks the current password from the frame's own field, and the realm
+      // server ends the secure sessions of the token's account. The reset
+      // form sends the email validation session as `auth`, and `account`, the
+      // email address the reset was sent to: the realm server ends the secure
+      // sessions of the account that names once the new password checks out
+      // for it.
+      args:
+        | { accessToken: string }
+        | {
+            auth: {
+              type: 'm.login.email.identity';
+              threepid_creds: { sid: string; client_secret: string };
+            };
+            account?: string;
+          };
     }
   | {
       operation: 'add-threepid';
