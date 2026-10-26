@@ -1115,6 +1115,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   fileChangesListener = new RealmFileChangesListener({
     dbAdapter,
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
+    listMountedRealms: () => realms,
   });
   await fileChangesListener.start();
 
@@ -1126,6 +1127,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   indexUpdatedListener = new RealmIndexUpdatedListener({
     dbAdapter,
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
+    listMountedRealms: () => realms,
   });
   await indexUpdatedListener.start();
 

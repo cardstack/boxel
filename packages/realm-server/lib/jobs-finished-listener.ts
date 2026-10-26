@@ -73,6 +73,9 @@ export class JobsFinishedListener {
           // jobs table. Fire-and-forget: failures are logged, never thrown.
           void this.handleNotification();
         },
+        // Jobs that finished while the connection was down sent their
+        // notifications to no one; the same sweep finds them.
+        { onReconnect: () => void this.handleNotification() },
       );
     })();
     try {
