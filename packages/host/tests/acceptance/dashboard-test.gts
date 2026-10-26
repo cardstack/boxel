@@ -1,10 +1,13 @@
-import { settled } from '@ember/test-helpers';
+import { click, find, settled, triggerKeyEvent } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import { TrackedObject } from 'tracked-built-ins';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
   setupAcceptanceTestRealm,
@@ -17,9 +20,35 @@ import {
 } from '../helpers';
 import { setupFeatureFlag } from '../helpers/feature-flags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import {
+  getRealmServerRoute,
+  registerRealmServerRoute,
+} from '../helpers/realm-server-mock/routes';
 import { setupApplicationTest } from '../helpers/setup';
 
 const realmURL = 'http://test-realm/testuser/workspace-a/';
+
+// Clicks the option's visible label, as a user does; the radio inside it is
+// visually hidden.
+async function clickScopeOption(value: 'all' | 'hosted') {
+  let radio = find(
+    `[data-test-dashboard-filter] [data-test-pretui-segmented-option="${value}"]`,
+  );
+  let label = radio?.closest('label');
+  if (!label) {
+    throw new Error(`no label for the ${value} scope option`);
+  }
+  await click(label);
+}
+
+// Publishing is what makes a workspace hosted.
+function markHosted(url: string) {
+  let realmResource = (getService('realm') as any).realms.get(url);
+  realmResource.info = new TrackedObject({
+    ...realmResource.info,
+    lastPublishedAt: { 'https://published.example.com/': String(Date.now()) },
+  });
+}
 
 module('Acceptance | dashboard', function (hooks) {
   setupApplicationTest(hooks);
@@ -28,6 +57,7 @@ module('Acceptance | dashboard', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
+    displayName: 'Ada Lovelace',
     activeRealms: [realmURL],
     dashboardState: {
       agent: 'codex',
@@ -283,6 +313,179 @@ module('Acceptance | dashboard', function (hooks) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       assert.dom('[data-test-dashboard]').exists();
       assert.dom('[data-test-workspace-chooser]').doesNotExist();
+    });
+
+    test('greets the user by first name', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await settled();
+
+      assert
+        .dom('[data-test-dashboard-greeting]')
+        .hasText(/^Good (morning|afternoon|evening), Ada$/);
+    });
+
+    test('shows the Workspaces, Catalogs and Agents sections in order', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let sections = [
+        ...document.querySelectorAll('[data-test-dashboard-section]'),
+      ].map((section) => section.getAttribute('data-test-dashboard-section'));
+      assert.deepEqual(sections, ['workspaces', 'catalogs', 'agents']);
+      assert
+        .dom('[data-test-dashboard-section="workspaces"] h2')
+        .hasText('Workspaces');
+      assert
+        .dom('[data-test-dashboard-section="catalogs"] h2')
+        .includesText('Catalogs');
+      assert.dom('[data-test-dashboard-section="agents"] h2').hasText('Agents');
+    });
+
+    test('the Workspaces section holds favorites, your workspaces and archived', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let workspaces = '[data-test-dashboard-section="workspaces"]';
+      assert.dom(`${workspaces} [data-test-favorites-section]`).exists();
+      assert
+        .dom(
+          `${workspaces} [data-test-workspace-list] [data-test-add-workspace]`,
+        )
+        .exists();
+      assert
+        .dom(
+          `${workspaces} [data-test-workspace-list] [data-test-workspace="Workspace A"]`,
+        )
+        .exists();
+      assert.dom(`${workspaces} [data-test-archived-section]`).exists();
+    });
+
+    test('a failed archived list says so and can be retried', async function (assert) {
+      let archivedRoute = getRealmServerRoute(
+        new URL('http://test-realm/_archived-realms'),
+      );
+      if (!archivedRoute) {
+        throw new Error('no default archived-realms route');
+      }
+      registerRealmServerRoute({
+        path: '/_archived-realms',
+        handler: async () => new Response(null, { status: 500 }),
+      });
+      try {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await click(
+          '[data-test-archived-section] [data-test-pretui-collapsible-trigger]',
+        );
+      } finally {
+        registerRealmServerRoute(archivedRoute);
+      }
+
+      assert.dom('[data-test-archived-error]').exists();
+      assert.dom('[data-test-archived-empty]').doesNotExist();
+
+      await click('[data-test-archived-retry]');
+
+      assert.dom('[data-test-archived-error]').doesNotExist();
+      assert.dom('[data-test-archived-empty]').exists();
+    });
+
+    test('Enter opens the selected workspace', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      assert
+        .dom('[data-test-workspace-selected="Workspace A"]')
+        .exists('the first workspace is selected on open');
+      await triggerKeyEvent(
+        '[data-test-workspace-button="Workspace A"]',
+        'keydown',
+        'Enter',
+      );
+
+      assert.dom('[data-test-dashboard]').doesNotExist();
+      assert.strictEqual(
+        (getService('operator-mode-state-service') as OperatorModeStateService)
+          .realmURL,
+        realmURL,
+        'Workspace A is the open workspace',
+      );
+    });
+
+    test('All is selected by default', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      assert
+        .dom(
+          '[data-test-dashboard-filter] [data-test-pretui-segmented-option="all"]',
+        )
+        .isChecked();
+      assert
+        .dom(
+          '[data-test-dashboard-filter] [data-test-pretui-segmented-option="hosted"]',
+        )
+        .isNotChecked();
+    });
+
+    test('Hosted keeps only hosted workspaces in Favorites, Your Workspaces and Catalogs', async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      matrixService.workspaceFavorites = [realmURL];
+      await settled();
+
+      await clickScopeOption('hosted');
+
+      assert
+        .dom(
+          '[data-test-dashboard-filter] [data-test-pretui-segmented-option="hosted"]',
+        )
+        .isChecked();
+      assert
+        .dom(
+          '[data-test-dashboard-filter] [data-test-pretui-segmented-option="all"]',
+        )
+        .isNotChecked();
+      assert.dom('[data-test-favorites-empty]').hasText('No matching results');
+      assert.dom('[data-test-workspaces-empty]').hasText('No matching results');
+      assert.dom('[data-test-catalog-empty]').hasText('No matching results');
+
+      markHosted(realmURL);
+      await settled();
+
+      assert
+        .dom('[data-test-favorites-list] [data-test-workspace="Workspace A"]')
+        .exists('a hosted favorite stays');
+      assert
+        .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
+        .exists('a hosted workspace stays');
+    });
+
+    test('a favorite that is no longer listed counts as no favorites under either filter', async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      matrixService.workspaceFavorites = [
+        'http://test-realm/testuser/archived-workspace/',
+      ];
+      await settled();
+
+      assert
+        .dom('[data-test-favorites-empty]')
+        .hasText('You have no favorites yet');
+
+      await clickScopeOption('hosted');
+
+      assert
+        .dom('[data-test-favorites-empty]')
+        .hasText('You have no favorites yet');
+    });
+
+    test('All brings back the workspaces Hosted hid', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      await clickScopeOption('hosted');
+      assert.dom('[data-test-workspaces-empty]').exists();
+
+      await clickScopeOption('all');
+      assert.dom('[data-test-workspaces-empty]').doesNotExist();
+      assert
+        .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
+        .exists();
     });
   });
 });

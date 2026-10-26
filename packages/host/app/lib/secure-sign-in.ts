@@ -1,6 +1,7 @@
 import window from 'ember-window-mock';
 
 import type { ResetPasswordParams } from '@cardstack/host/components/matrix/forgot-password';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 // Signing in to Boxel on the secure origin's own page. With
@@ -41,6 +42,32 @@ export function currentAppPage(): string {
   url.searchParams.delete('loginToken');
   url.hash = '';
   return url.href;
+}
+
+// Whether this page opens on the workspace chooser once the session is up.
+// The index route opens it for the app's root page when the page names no
+// card and its operator-mode state, if any, is an interact submode with no
+// stacks (see `routes/index.gts`).
+export function landsOnWorkspaceChooser(): boolean {
+  let { pathname, search } = window.location;
+  let params = new URLSearchParams(search);
+  if (pathname !== ENV.rootURL || params.has('cardPath')) {
+    return false;
+  }
+  let serialized = params.get('operatorModeState');
+  if (!serialized) {
+    return true;
+  }
+  try {
+    let state = JSON.parse(serialized);
+    return (
+      state?.submode === Submodes.Interact &&
+      Array.isArray(state.stacks) &&
+      state.stacks.length === 0
+    );
+  } catch {
+    return false;
+  }
 }
 
 // Where a signed-out app sends the user to sign in.

@@ -122,3 +122,16 @@ export function skillFileURL(skillName: string): string {
 // links: the prompt resolves those against the skill's own id, and only an
 // absolute id can anchor that resolution.
 export const skillsIndexId = `${skillsRealmURL}${skillsIndexLocalPath}`;
+
+// Moves `first` to the front of `urls` when it's there, keeping the rest in
+// order.
+export function leadWith<T extends string>(
+  urls: T[],
+  first: string | null,
+): T[] {
+  let index = first ? urls.indexOf(first as T) : -1;
+  if (index <= 0) {
+    return urls;
+  }
+  return [urls[index], ...urls.slice(0, index), ...urls.slice(index + 1)];
+}

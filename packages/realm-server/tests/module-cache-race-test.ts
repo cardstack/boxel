@@ -1857,6 +1857,7 @@ module(basename(import.meta.filename), function () {
           dbAdapter,
           lookupMountedRealm: (url) =>
             url === realmURL.href ? testRealm : undefined,
+          listMountedRealms: () => [],
         });
         await listener.start();
       });

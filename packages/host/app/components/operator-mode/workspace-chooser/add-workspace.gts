@@ -182,6 +182,8 @@ interface Signature {
   Element: HTMLButtonElement;
   Args: {
     isSelected?: boolean;
+    // The ring shows only once the user moves the keyboard selection.
+    selectionActive?: boolean;
     navIndex?: number;
   };
 }
@@ -225,6 +227,9 @@ export default class AddWorkspace extends Component<Signature> {
       this.error = e.message;
     }
   });
+  private get showSelectionRing() {
+    return Boolean(this.args.isSelected && this.args.selectionActive);
+  }
   private setIsModalOpen = (value: boolean) => {
     this.isModalOpen = value;
     if (value) {
@@ -236,7 +241,7 @@ export default class AddWorkspace extends Component<Signature> {
     <ItemContainer
       {{on 'click' (fn this.setIsModalOpen true)}}
       {{focusWhenSelected @isSelected}}
-      class='container {{if @isSelected "is-selected"}}'
+      class='container {{if this.showSelectionRing "is-selected"}}'
       title='Create a New Workspace'
       data-nav-index={{@navIndex}}
       data-test-add-workspace

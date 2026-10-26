@@ -36,6 +36,78 @@
       })();
     </script>
 
+    <!-- Until the app renders, the app's page is the colour its loading
+         screen is about to be (see templates/loading.gts): the dark sign-in
+         colour when no session is stored, the operator-mode colour when one
+         is. The dark colour scheme also darkens the frame the browser paints
+         before the page's stylesheets arrive. A redirect into the app, such as
+         back from the secure origin after signing in or out, then never
+         flashes white. Both come off once the app has rendered something, so
+         the app keeps its own colour scheme. A published realm's page (host
+         mode, as services/host-mode-service.ts decides it) keeps the plain
+         page. -->
+    <script>
+      (function () {
+        try {
+          var meta = document.querySelector(
+            'meta[name="@cardstack/host/config/environment"]',
+          );
+          var config = JSON.parse(decodeURIComponent(meta.content));
+          var host = window.location.hostname;
+          var realmServerHost = config.realmServerURL
+            ? new URL(config.realmServerURL).hostname
+            : undefined;
+          var simulatingHostMode = new URLSearchParams(
+            window.location.search,
+          ).has('hostModeOrigin');
+          var isApp =
+            !simulatingHostMode &&
+            (config.hostsOwnAssets ||
+              (realmServerHost !== undefined &&
+                host.endsWith(realmServerHost) &&
+                !host.endsWith('.localhost')));
+          if (!isApp) {
+            return;
+          }
+          var root = document.documentElement;
+          root.setAttribute(
+            'data-boxel-boot',
+            window.localStorage.getItem('auth') ? 'signed-in' : 'signed-out',
+          );
+          var colorScheme = document.createElement('meta');
+          colorScheme.name = 'color-scheme';
+          colorScheme.content = 'dark';
+          document.head.appendChild(colorScheme);
+          var appHasRendered = function () {
+            return Array.prototype.some.call(
+              document.body ? document.body.children : [],
+              function (child) {
+                return (
+                  child.tagName !== 'SCRIPT' &&
+                  child.id !== 'ember-basic-dropdown-wormhole'
+                );
+              },
+            );
+          };
+          new MutationObserver(function (_records, observer) {
+            if (appHasRendered()) {
+              root.removeAttribute('data-boxel-boot');
+              colorScheme.remove();
+              observer.disconnect();
+            }
+          }).observe(root, { childList: true, subtree: true });
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      [data-boxel-boot='signed-in'] body {
+        background-color: #686283;
+      }
+      [data-boxel-boot='signed-out'] body {
+        background-color: #191624;
+      }
+    </style>
+
     <link integrity="" rel="stylesheet" href="/@embroider/virtual/vendor.css" />
     <link integrity="" rel="stylesheet" href="/@embroider/virtual/app.css" />
     <link href="/boxel-favicon.png" rel="icon" type="image/x-icon" />

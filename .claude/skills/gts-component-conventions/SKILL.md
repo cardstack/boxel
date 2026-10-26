@@ -36,16 +36,15 @@ let marker = el.closest('[data-adorn-context]');
 
 ### 2. Use scalable units (`rem`) instead of `px`
 
-Convert dimensional CSS values — `width`/`height`, `padding`, `margin`, `gap`, `border-radius`, `font-size`, `box-shadow` spreads, `clip-path` offsets, positioning insets — to `rem` (divide px by 16). Prefer the existing `--boxel-sp-*`, `--boxel-font-*`, and radius tokens when one fits.
+Convert dimensional CSS values — `width`/`height`, `padding`, `margin`, `gap`, `border-radius`, `font-size`, `clip-path` offsets, positioning insets — to `rem` (divide px by 16). Prefer the existing `--boxel-sp-*`, `--boxel-font-*`, and radius tokens when one fits.
 
 ```css
 gap: 0.3125rem; /* was 5px */
 padding: 0.1875rem 0.4375rem; /* was 3px 7px */
 font-size: 0.625rem; /* was 10px */
-box-shadow: 0 0 0 0.125rem var(--c); /* was 2px */
 ```
 
-**Leave as-is:** SVG-internal coordinates (`viewBox`, `cx`, `r`, `stroke-width`, path `d`), and JS pixel math against `getBoundingClientRect()` — those aren't CSS layout units. Hairline values like `letter-spacing: 0.5px` are fine to leave (converting gains nothing).
+**Leave as-is:** SVG-internal coordinates (`viewBox`, `cx`, `r`, `stroke-width`, path `d`), and JS pixel math against `getBoundingClientRect()` — those aren't CSS layout units. Hairline values stay in px, matching AGENTS.md: border widths (`1px`), focus outline widths and offsets (`2px`), `box-shadow` offsets, blurs and spreads, and `letter-spacing: 0.5px`. They should stay crisp rather than scale with font size.
 
 ### 3. Save hardcoded colors as CSS variables
 

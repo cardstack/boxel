@@ -24,8 +24,15 @@ import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import { logger, ri } from '@cardstack/runtime-common';
 
-import config from '@cardstack/host/config/environment';
-import { catalogRealmURL } from '@cardstack/host/lib/utils';
+import { catalogRealmURL, leadWith } from '@cardstack/host/lib/utils';
+import {
+  favoritesTileWidth,
+  isHostedRealm,
+  listedCatalogRealmURLs,
+  nearestNavIndexInRow,
+  sortByCreatedAtDesc,
+  unreachableRealmServersMessage,
+} from '@cardstack/host/lib/workspace-list';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -33,21 +40,8 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import AddWorkspace from './add-workspace';
 import ArchivedWorkspace from './archived-workspace';
 import ManageCatalogs from './manage-catalogs';
-import Workspace from './workspace';
+import Workspace, { WORKSPACE_TILE_TARGET } from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
-
-// Moves `first` to the front of `urls` when it's there, keeping the rest in
-// order.
-export function leadWith<T extends string>(
-  urls: T[],
-  first: string | null,
-): T[] {
-  let index = first ? urls.indexOf(first as T) : -1;
-  if (index <= 0) {
-    return urls;
-  }
-  return [urls[index], ...urls.slice(0, index), ...urls.slice(index + 1)];
-}
 
 interface SortOption {
   label: string;
@@ -87,20 +81,10 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   private get unreachableRealmServersMessage() {
-    let hosts = this.unreachableRealmServers.map((serverURL) => {
-      try {
-        return new URL(serverURL).host;
-      } catch {
-        return serverURL;
-      }
-    });
-    // Name every unreachable server, per the notice's contract. Trusted
-    // servers are few in practice, so a comma-joined list stays readable.
-    let servers = hosts.join(', ');
-    let reason = `Couldn’t reach ${servers}. Some workspaces may be missing`;
-    return this.isRetryingUnreachableRealmServers
-      ? `${reason} — retrying…`
-      : `${reason} — reload to try again.`;
+    return unreachableRealmServersMessage(
+      this.unreachableRealmServers,
+      this.isRetryingUnreachableRealmServers,
+    );
   }
 
   private get isRetryingUnreachableRealmServers() {
@@ -168,23 +152,13 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   private get communityRealmIdentifiers() {
-    let realmURLs = this.realmServer.displayedCatalogRealmIdentifiers ?? [];
-    if (config.environment !== 'production') {
-      return realmURLs;
-    }
-    return realmURLs.filter(
-      (realmURL) => !realmURL.includes('/boxel-homepage/'),
+    return listedCatalogRealmURLs(
+      this.realmServer.displayedCatalogRealmIdentifiers ?? [],
     );
   }
 
-  private isHosted = (url: string): boolean => {
-    let info = this.realm.info(url);
-    return !!(
-      info.lastPublishedAt &&
-      typeof info.lastPublishedAt === 'object' &&
-      Object.keys(info.lastPublishedAt).length > 0
-    );
-  };
+  private isHosted = (url: string): boolean =>
+    isHostedRealm(this.realm.info(url));
 
   private filterByHosted<T extends string>(urls: T[]): T[] {
     if (this.sortOrder === 'hosted-only') {
@@ -192,25 +166,6 @@ export default class WorkspaceChooser extends Component<Signature> {
     }
     return urls;
   }
-
-  // Newest first. Realms without a createdAt (e.g. a broken/orphaned realm
-  // reference) sort to the end rather than clumping at the front.
-  private sortByCreatedAtDesc = <T extends string>(urls: T[]): T[] => {
-    return [...urls].sort((a, b) => {
-      let aCreatedAt = this.realm.info(a).createdAt;
-      let bCreatedAt = this.realm.info(b).createdAt;
-      if (!aCreatedAt && !bCreatedAt) {
-        return 0;
-      }
-      if (!aCreatedAt) {
-        return 1;
-      }
-      if (!bCreatedAt) {
-        return -1;
-      }
-      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
-    });
-  };
 
   private get filteredUserRealmIdentifiers() {
     // Render in list order: `_realm-auth` enumerates realms
@@ -224,7 +179,7 @@ export default class WorkspaceChooser extends Component<Signature> {
   private get filteredCatalogRealmIdentifiers() {
     return this.filterByHosted(
       leadWith(
-        this.sortByCreatedAtDesc(this.communityRealmIdentifiers),
+        sortByCreatedAtDesc(this.communityRealmIdentifiers, this.realm.info),
         catalogRealmURL,
       ),
     );
@@ -234,7 +189,7 @@ export default class WorkspaceChooser extends Component<Signature> {
     let favorites = this.matrixService.workspaceFavorites;
     let allURLs = new Set<string>([
       ...this.realmServer.userRealmIdentifiers,
-      ...(this.realmServer.displayedCatalogRealmIdentifiers ?? []),
+      ...this.communityRealmIdentifiers,
     ]);
     let filtered = favorites.filter((url) => allURLs.has(url)).map(ri);
     return this.filterByHosted(filtered);
@@ -299,43 +254,15 @@ export default class WorkspaceChooser extends Component<Signature> {
   @tracked private workspaceTileWidth = 0;
   @tracked private workspaceTileGap = 0;
 
-  private get tilesPerRow(): number {
-    if (!this.workspaceTileWidth) {
-      return 3;
-    }
-    let perRow = Math.floor(
-      (this.workspaceGridWidth + this.workspaceTileGap) /
-        (this.workspaceTileWidth + this.workspaceTileGap),
-    );
-    return Math.max(1, perRow);
-  }
-
-  // Two tiles' worth of Favorites-section width for every 3-across, rounded
-  // up — a row of 3 or 4 gives favorited tiles pairs, a row of 5 gives
-  // groups of 3, etc.
-  private get favoritesSlotCount(): number {
-    return Math.ceil(this.tilesPerRow / 2);
-  }
-
-  // The width a single favorited tile should be so that `favoritesSlotCount`
-  // of them, plus the gaps between them, exactly span the measured Your
-  // Workspaces row width. Null before the grid has been measured.
-  private get favoritesSlotWidth(): number | null {
-    if (!this.workspaceTileWidth) {
-      return null;
-    }
-    let n = this.favoritesSlotCount;
-    let rowWidth =
-      this.tilesPerRow * this.workspaceTileWidth +
-      (this.tilesPerRow - 1) * this.workspaceTileGap;
-    return (rowWidth - (n - 1) * this.workspaceTileGap) / n;
-  }
-
   // Applied to real favorited tiles (via cssVar, see workspace.gts) so they
   // take up this responsive width. Undefined before the grid has been
   // measured, so the tile falls back to its static CSS width.
   private get favoritesTileWidthPx(): string | undefined {
-    let width = this.favoritesSlotWidth;
+    let width = favoritesTileWidth(
+      this.workspaceGridWidth,
+      this.workspaceTileWidth,
+      this.workspaceTileGap,
+    );
     return width === null ? undefined : `${width}px`;
   }
 
@@ -345,7 +272,7 @@ export default class WorkspaceChooser extends Component<Signature> {
   private measureWorkspaceGrid = modifier((el: HTMLElement) => {
     let measure = () => {
       this.workspaceGridWidth = el.clientWidth;
-      let tile = el.querySelector('.workspace-card button.workspace');
+      let tile = el.querySelector(WORKSPACE_TILE_TARGET);
       if (tile) {
         this.workspaceTileWidth = tile.getBoundingClientRect().width;
       }
@@ -366,8 +293,7 @@ export default class WorkspaceChooser extends Component<Signature> {
     // additionally catches a scrollbar appearing or a surrounding panel
     // resizing, which a 'resize' event misses.
     if (typeof ResizeObserver === 'undefined') {
-      // Never measured: `tilesPerRow` falls back to 3 and `favoritesSlotWidth`
-      // to null, so the favorite tile keeps its static CSS width.
+      // Never measured, so the favorite tile keeps its static CSS width.
       return;
     }
     let ro = new ResizeObserver(measure);
@@ -541,44 +467,10 @@ export default class WorkspaceChooser extends Component<Signature> {
   // From the selected tile, find the nearest row in the given direction and
   // pick the tile whose horizontal center is closest to the current one.
   private moveVertically(container: HTMLElement, direction: 1 | -1) {
-    let tiles = [...container.querySelectorAll('[data-nav-index]')].map(
-      (element) => ({
-        index: Number((element as HTMLElement).dataset.navIndex),
-        rect: element.getBoundingClientRect(),
-      }),
-    );
-    let current = tiles.find((tile) => tile.index === this.currentIndex);
-    if (!current) {
-      return;
+    let index = nearestNavIndexInRow(container, this.currentIndex, direction);
+    if (index !== undefined) {
+      this.selectedIndex = index;
     }
-    let currentCenterX = current.rect.left + current.rect.width / 2;
-    let candidates = tiles.filter((tile) =>
-      direction === 1
-        ? tile.rect.top > current.rect.top + 1
-        : tile.rect.top < current.rect.top - 1,
-    );
-    if (candidates.length === 0) {
-      return;
-    }
-    // The nearest row is the one whose top is closest to the current tile in
-    // the travel direction; tiles in that row share (near-)identical tops.
-    let targetRowTop =
-      direction === 1
-        ? Math.min(...candidates.map((tile) => tile.rect.top))
-        : Math.max(...candidates.map((tile) => tile.rect.top));
-    let rowTiles = candidates.filter(
-      (tile) => Math.abs(tile.rect.top - targetRowTop) <= 1,
-    );
-    let nearest = rowTiles.reduce((closest, tile) => {
-      let closestDx = Math.abs(
-        closest.rect.left + closest.rect.width / 2 - currentCenterX,
-      );
-      let tileDx = Math.abs(
-        tile.rect.left + tile.rect.width / 2 - currentCenterX,
-      );
-      return tileDx < closestDx ? tile : closest;
-    });
-    this.selectedIndex = nearest.index;
   }
 
   <template>
@@ -685,6 +577,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                 <AddWorkspace
                   @navIndex={{this.addWorkspaceNavIndex}}
                   @isSelected={{eq this.currentIndex this.addWorkspaceNavIndex}}
+                  @selectionActive={{this.isSelectionActive}}
                 />
                 {{#if this.matrixService.isInitializingNewUser}}
                   <WorkspaceLoadingIndicator />

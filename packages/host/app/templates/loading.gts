@@ -1,9 +1,9 @@
 import Component from '@glimmer/component';
 
+import AuthContainer from '@cardstack/secure-origin/components/auth-container.gts';
+import BusyMessage from '@cardstack/secure-origin/components/busy-message.gts';
 import RouteTemplate from 'ember-route-template';
 import window from 'ember-window-mock';
-
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 class Loading extends Component {
   // Use the dark auth palette only when there is no persisted session: the user
@@ -25,48 +25,24 @@ class Loading extends Component {
   }
 
   <template>
-    <div
-      id='host-loading'
-      class={{if this.isAuthBoot 'theme-dark'}}
-      data-test-host-loading
-    >
-      <div class='loading-container'>
-        <div class='loading-indicator'>
-          <LoadingIndicator @color='#00FFBA' />
-        </div>
-        <div class='loading-text'>Loading…</div>
+    {{#if this.isAuthBoot}}
+      <AuthContainer id='host-loading' data-test-host-loading>
+        <BusyMessage @title='Loading…' />
+      </AuthContainer>
+    {{else}}
+      <div id='host-loading' class='session-loading' data-test-host-loading>
+        <BusyMessage @title='Loading…' />
       </div>
-    </div>
+    {{/if}}
 
     <style scoped>
-      #host-loading {
+      .session-loading {
+        --foreground: var(--boxel-light);
         background-color: #686283;
         display: flex;
         align-items: center;
-        justify-items: center;
+        justify-content: center;
         height: 100vh;
-      }
-
-      #host-loading.theme-dark {
-        background-color: #191624;
-      }
-
-      .loading-container {
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 12px;
-      }
-
-      .loading-indicator {
-        --boxel-loading-indicator-size: 20px;
-      }
-
-      .loading-text {
-        color: #fff;
-        font-size: 12px;
-        font-weight: 600;
       }
     </style>
   </template>

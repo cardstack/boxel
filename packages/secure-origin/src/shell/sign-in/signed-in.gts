@@ -24,7 +24,7 @@ import {
 } from '../../security/session.js';
 import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
-import LoadingIndicator from '../../components/loading-indicator.gts';
+import BusyMessage from '../../components/busy-message.gts';
 import { navigation } from '../navigation.js';
 import { asSentence } from '../sign-in-copy.js';
 import { modeURL } from '../urls.js';
@@ -44,8 +44,8 @@ export default class SignedIn extends Component {
         <p class='info' data-test-secure-loopback-confirm>
           A program on this computer at
           {{this.confirming.origin}}
-          is asking to be signed in to Boxel as you. Continue only if you
-          started this sign-in from it.
+          wants to sign in to Boxel as you. Continue only if you started this
+          sign-in from that program.
         </p>
         <div class='button-wrapper'>
           <AuthButton
@@ -64,10 +64,7 @@ export default class SignedIn extends Component {
       </MessagePage>
     {{else if this.handingOff}}
       <AuthContainer>
-        <div class='centered-loading' data-test-secure-handing-off>
-          <span class='loading-title'>Signing you in…</span>
-          <LoadingIndicator class='loading-spinner' />
-        </div>
+        <BusyMessage @title='Signing you in…' data-test-secure-handing-off />
       </AuthContainer>
     {{else if this.failure}}
       <MessagePage @heading='That didn’t work'>
@@ -96,22 +93,6 @@ export default class SignedIn extends Component {
         letter-spacing: var(--boxel-lsp);
         line-height: 20px;
         color: var(--foreground);
-      }
-      .centered-loading {
-        align-self: center;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--boxel-sp);
-        text-align: center;
-      }
-      .loading-title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-      }
-      .loading-spinner {
-        --boxel-loading-indicator-size: var(--boxel-icon-md);
-        --loading-indicator-color: var(--boxel-highlight);
       }
       .error {
         color: var(--destructive-ink);
