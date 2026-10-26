@@ -40,8 +40,13 @@ its refresh token sent to the same token endpoint, from being swapped.
 - A secret with no destination yet (a key added before its first approval) is
   sealed under field, owner and id only. `keyring.reseal(sealed, from, to)` binds it
   to its destination; after that it opens only with that destination.
+- A copy of a secret held in another row names that row as `parentId`. A
+  grant's copy of a user's key is bound to the grant's id and, as its parent,
+  the key's id, so it opens only on that grant of that key. A binding with a
+  parent is laid out under its own label in the additional data, so a value
+  sealed without one never opens as a copy, nor a copy without its parent.
 - `secretEncryptionContext(binding)` is the context a value is bound to:
-  `field`, `owner`, `id` and `destination_sha256`. The destination appears only as its
+  `field`, `owner`, `id`, `parent_id` and `destination_sha256`. The destination appears only as its
   SHA-256, so the context is safe to log or to hand to a service that records
   it.
 - Destinations are compared exactly as given. A caller passes the same
@@ -613,6 +618,7 @@ PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
   -c "SELECT * FROM incoming_webhooks LIMIT 0" \
   -c "SELECT * FROM user_keys LIMIT 0" \
   -c "SELECT * FROM key_write_tickets LIMIT 0" \
+  -c "SELECT * FROM user_key_grants LIMIT 0" \
   -c "SELECT * FROM secure_sessions LIMIT 0" \
   -c "WITH RECURSIVE reader (oid) AS (
         SELECT oid FROM pg_roles WHERE rolname = 'readonly_role'
@@ -624,7 +630,7 @@ PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
       CROSS JOIN pg_class t JOIN pg_attribute c ON c.attrelid = t.oid
       WHERE t.oid IN (to_regclass('proxy_endpoints'), to_regclass('incoming_webhooks'),
                       to_regclass('user_keys'), to_regclass('key_write_tickets'),
-                      to_regclass('secure_sessions'))
+                      to_regclass('user_key_grants'), to_regclass('secure_sessions'))
         AND reader.oid <> t.relowner AND c.attnum > 0 AND NOT c.attisdropped
         AND has_column_privilege(reader.oid, t.oid, c.attnum, 'SELECT')" \
   -c "SELECT attrelid::regclass, attname FROM pg_attribute
@@ -653,7 +659,7 @@ exist` instead. Check that against the revision from step 0 before taking it
 
 The list of tables is the one that migration
 (`check-readonly-role-cant-read-withheld-tables`) checks, plus
-`secure_sessions`, whose own migration checks it. A table added to either one
+`user_key_grants` and `secure_sessions`, whose own migrations check them. A table added to either one
 goes here too.
 
 The role is also denied the wrapped data key itself. Expect

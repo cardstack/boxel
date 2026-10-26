@@ -13,8 +13,11 @@ import type {
 // is sealed by the secrets-at-rest helper before it reaches the database and
 // is never returned by anything here: what callers get back is metadata.
 //
-// A key is only its secret. It records no destination: nothing here says
-// where a key may be sent, and the value is sealed to the key alone.
+// A key is only its secret. It records no destination, and its value, the
+// master copy, is sealed to the key alone. Where a key may be sent is a grant
+// (`lib/user-key-grants.ts`): each holds its own copy of the value, sealed to
+// the grant, the key and the grant's destination. Replacing a key re-seals the
+// master copy and every grant's copy together.
 //
 // A key is added, replaced, deleted, shared into a realm or swapped into a
 // share, and a share suspended by a writer is resumed, only with a key write
@@ -26,6 +29,7 @@ import type {
 // card code in the app page can't change a key from inside the browser.
 
 export const USER_KEY_VALUE_FIELD = 'user_keys.value';
+export const USER_KEY_GRANT_VALUE_FIELD = 'user_key_grants.value';
 
 export const USER_KEY_KINDS = ['static'] as const;
 export type UserKeyKind = (typeof USER_KEY_KINDS)[number];
@@ -290,10 +294,35 @@ function validateUserKeyValue(value: unknown): string {
   return value;
 }
 
-// A value is bound to its field, its owner and its row, so a value moved to
-// another row or owner doesn't open.
-function binding(owner: string, id: string): SecretBinding {
+// A key's master copy is bound to its field, its owner and its row, so a value
+// moved to another row or owner doesn't open.
+export function userKeyBinding(owner: string, id: string): SecretBinding {
   return { field: USER_KEY_VALUE_FIELD, owner, id };
+}
+
+// A grant's copy of a key's value is bound to its field, the owner, the
+// grant's row, the key it copies (as the binding's parent) and the grant's
+// destination. So a copy moved to another grant or key, a grant pointed at
+// another key or destination, or a grant row written outside the realm
+// server, has no copy that opens.
+export function grantCopyBinding({
+  owner,
+  keyId,
+  grantId,
+  destination,
+}: {
+  owner: string;
+  keyId: string;
+  grantId: string;
+  destination: string;
+}): SecretBinding {
+  return {
+    field: USER_KEY_GRANT_VALUE_FIELD,
+    owner,
+    id: grantId,
+    parentId: keyId,
+    destination,
+  };
 }
 
 const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at`;
@@ -353,7 +382,7 @@ function assertKeyId(id: string): void {
   }
 }
 
-const SEALED_COLUMN_VALUES = (sealed: SealedSecret): Expression => [
+export const SEALED_COLUMN_VALUES = (sealed: SealedSecret): Expression => [
   `decode(`,
   param(sealed.ciphertext.toString('base64')),
   `, 'base64'), decode(`,
@@ -392,7 +421,7 @@ export async function addUserKey(
       realmURL: null,
       shareId: null,
     });
-    let sealed = keyring.seal(validValue, binding(owner, id));
+    let sealed = keyring.seal(validValue, userKeyBinding(owner, id));
     let rows = await txQuery([
       `INSERT INTO user_keys (id, owner, name, kind, state, value_ciphertext, value_nonce, value_tag, value_key_id) VALUES (`,
       param(id),
@@ -413,7 +442,9 @@ export async function addUserKey(
   });
 }
 
-// Replaces a key's value, keeping its name and kind.
+// Replaces a key's value, keeping its name and kind. The master copy and every
+// grant's copy are sealed again in the same transaction, so the old value
+// opens nowhere afterwards and no grant asks for approval again.
 export async function replaceUserKeyValue(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -433,7 +464,7 @@ export async function replaceUserKeyValue(
       realmURL: null,
       shareId: null,
     });
-    let sealed = keyring.seal(validValue, binding(owner, id));
+    let sealed = keyring.seal(validValue, userKeyBinding(owner, id));
     let [updated] = await txQuery([
       `UPDATE user_keys SET (value_ciphertext, value_nonce, value_tag, value_key_id, updated_at) = (`,
       ...SEALED_COLUMN_VALUES(sealed),
@@ -446,11 +477,36 @@ export async function replaceUserKeyValue(
     if (!updated) {
       throw notFound();
     }
+    let grants = await txQuery([
+      `SELECT id, destination FROM user_key_grants WHERE key_id = `,
+      param(id),
+      ` AND owner = `,
+      param(owner),
+      ` FOR UPDATE`,
+    ]);
+    for (let grant of grants) {
+      let copy = keyring.seal(
+        validValue,
+        grantCopyBinding({
+          owner,
+          keyId: id,
+          grantId: grant.id as string,
+          destination: grant.destination as string,
+        }),
+      );
+      await txQuery([
+        `UPDATE user_key_grants SET (value_ciphertext, value_nonce, value_tag, value_key_id) = (`,
+        ...SEALED_COLUMN_VALUES(copy),
+        `) WHERE id = `,
+        param(grant.id as string),
+      ]);
+    }
     return toMetadata(updated);
   });
 }
 
-// Deletes a key. Every share holding it is suspended in the same statement,
+// Deletes a key, and its grants with it (`user_key_grants` cascades). Every
+// share holding it is suspended in the same statement,
 // by a trigger on `user_keys`, and keeps its place in its realm for a direct
 // writer to swap another key into; `listOwnShares` with the key's id lists
 // the shares a delete would suspend.

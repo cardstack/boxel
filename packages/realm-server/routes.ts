@@ -112,6 +112,7 @@ import {
   REQUEST_FORWARD_PATH,
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
+  USER_KEY_GRANTS_PATH,
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
 import {
@@ -136,6 +137,10 @@ import {
   handleReplaceUserKey,
   handleShowUserKey,
 } from './handlers/handle-user-keys.ts';
+import {
+  handleCreateUserKeyGrant,
+  handleRemoveUserKeyGrant,
+} from './handlers/handle-user-key-grants.ts';
 import {
   handleListKeyShareNotices,
   handleListKeyShares,
@@ -362,6 +367,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${USER_KEYS_PATH}/:keyId`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteUserKey(args),
+  );
+  router.post(
+    USER_KEY_GRANTS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleCreateUserKeyGrant(args),
+  );
+  router.delete(
+    `${USER_KEY_GRANTS_PATH}/:grantId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleRemoveUserKeyGrant(args),
   );
   router.get(
     KEY_SHARES_PATH,
