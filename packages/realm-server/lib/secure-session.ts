@@ -400,18 +400,120 @@ export async function signInWithPassword(
   });
 }
 
-// Ends every secure session of the account a password belongs to, the
-// window's and the CLI's alike, once the password checks out. The secure
-// origin's pages call it as soon as they have changed an account's password,
-// with the new one: a session signed in with the old password, perhaps by
-// whoever it leaked to, must not outlive the change. The Matrix server signs
-// the account's devices out itself (`logout_devices`), but it has no way to
-// tell the realm server, so the page that changed the password does.
+// A password change the secure origin's pages ask the realm server to make:
+// the new password, and the proof the Matrix server asks for to set it.
 //
-// The new password is the proof, as it is for signing in, so card code, which
-// never sees it, can't end the CLI's sessions this way; and whoever still
-// knows the old password can no longer use it here. It is checked, and
-// limited, exactly as a password sign-in is.
+// - `reset`: the email validation session a reset email confirmed, and the
+//   email address the reset was sent to, when the page knows it.
+// - `change`: the access token of a device the account is signed in on, and
+//   the account's current password.
+export type PasswordChange =
+  | {
+      kind: 'reset';
+      newPassword: string;
+      sid: string;
+      clientSecret: string;
+      email?: string;
+    }
+  | {
+      kind: 'change';
+      newPassword: string;
+      accessToken: string;
+      currentPassword: string;
+    };
+
+// Sets an account's password on the Matrix server, and then ends every secure
+// session of the account, the window's and the CLI's alike: a session signed
+// in with the old password, perhaps by whoever it leaked to, must not outlive
+// the change. Resolves to the Matrix server's answer to the change, which the
+// page reads as it would had it asked the Matrix server itself.
+//
+// The Matrix server accepting the change is the proof, so ending the sessions
+// needs no password check of its own, and no limit on failed attempts that
+// whoever holds the old password could keep full. The Matrix server signs out
+// every device of the account but the one making a change (`logout_devices`),
+// but it has no way to tell the realm server, which is why the change goes
+// through here.
+//
+// - A change is made with the access token, so the account is the token's.
+//   Card code holds the app's token but not the current password, which the
+//   Matrix server checks.
+// - A reset names no account to the Matrix server, which finds it from the
+//   validated email. The realm server can't see which that was, so it ends
+//   the sessions of the account the page names by email address, once the new
+//   password checks out for it. That check isn't refused under the sign-in
+//   limit, or whoever holds the old password could keep it full. Resetting
+//   one account while naming another does test a guess at the other's
+//   password, which someone holding a session of it learns from that session
+//   ending; but the Matrix server deletes a validation session when a reset
+//   uses it, so each guess costs a reset email, confirmed, to an account the
+//   guesser controls.
+export async function changePassword(
+  deps: SecureSessionDeps,
+  change: PasswordChange,
+): Promise<MatrixResult> {
+  let matrixURL = deps.matrixClient.matrixURL;
+  let user: string | undefined;
+  let auth: Record<string, unknown>;
+  if (change.kind === 'change') {
+    let whoami = await matrixClientRequest(matrixURL, 'account/whoami', {
+      method: 'GET',
+      accessToken: change.accessToken,
+    });
+    if (whoami.status !== 200 || typeof whoami.body.user_id !== 'string') {
+      return whoami;
+    }
+    user = whoami.body.user_id;
+    auth = {
+      type: 'm.login.password',
+      identifier: { type: 'm.id.user', user },
+      password: change.currentPassword,
+    };
+  } else {
+    auth = {
+      type: 'm.login.email.identity',
+      threepid_creds: { sid: change.sid, client_secret: change.clientSecret },
+    };
+  }
+  let result = await matrixClientRequest(matrixURL, 'account/password', {
+    accessToken: change.kind === 'change' ? change.accessToken : undefined,
+    body: { auth, new_password: change.newPassword, logout_devices: true },
+  });
+  if (result.status !== 200) {
+    return result;
+  }
+  try {
+    if (change.kind === 'reset') {
+      user = change.email
+        ? await resetAccount(deps, change.email, change.newPassword)
+        : undefined;
+    }
+    if (user) {
+      await deps.dbAdapter.execute(
+        `UPDATE secure_sessions SET expires_at = NOW()
+          WHERE user_id = $1 AND expires_at > NOW()`,
+        { bind: [user] },
+      );
+    }
+  } catch (e: any) {
+    // The password is changed either way, and the page can't make it again:
+    // a reset's validation session is spent. A session left signed in runs
+    // out within its week.
+    log.error(
+      `could not end a changed password's secure sessions: ${e?.name ?? 'Error'}: ${e?.message ?? e}`,
+    );
+  }
+  return { status: 200, body: {} };
+}
+
+// Ends every secure session of the account a password belongs to, once the
+// password checks out, for a page that has set the password with the Matrix
+// server itself and sends only the account and the new password. A page
+// stays as it loaded, and an app tab can stay open for days, so such a page
+// can reach a realm server that sets passwords itself (`changePassword`).
+// The new password is the proof here, so it is checked, and limited, exactly
+// as a password sign-in is: whoever holds the old password can keep that
+// limit full, which `changePassword` doesn't share.
 export async function endSessionsForNewPassword(
   deps: SecureSessionDeps,
   limiter: SignInLimiter,
@@ -425,6 +527,60 @@ export async function endSessionsForNewPassword(
       { bind: [user] },
     );
   });
+}
+
+// The account a reset sent to `email` reset, when `password`, the one the
+// reset set, is that account's password. Undefined otherwise.
+async function resetAccount(
+  deps: SecureSessionDeps,
+  email: string,
+  password: string,
+): Promise<string | undefined> {
+  let user = await userByEmail(deps, email.trim().toLowerCase());
+  if (!user) {
+    return undefined;
+  }
+  try {
+    await confirmPassword(deps, user, password);
+  } catch (e) {
+    if (e instanceof SecureSessionError && e.code === 'invalid-credentials') {
+      return undefined;
+    }
+    throw e;
+  }
+  return user;
+}
+
+// A request to the Matrix client API as a page would make it, answered with
+// the Matrix server's status and body.
+async function matrixClientRequest(
+  matrixURL: URL,
+  path: string,
+  {
+    method = 'POST',
+    accessToken,
+    body,
+  }: {
+    method?: 'GET' | 'POST';
+    accessToken?: string;
+    body?: Record<string, unknown>;
+  },
+): Promise<MatrixResult> {
+  let response = await fetch(new URL(`_matrix/client/v3/${path}`, matrixURL), {
+    method,
+    headers: {
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  let json: Record<string, any> = {};
+  try {
+    json = (await response.json()) as Record<string, any>;
+  } catch {
+    // A response that isn't JSON is judged by its status alone.
+  }
+  return { status: response.status, body: json };
 }
 
 // Runs `fn` for the Matrix user a password attempt names, within the

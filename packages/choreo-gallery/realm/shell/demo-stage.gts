@@ -56,7 +56,7 @@ export class DemoStage extends Component<Signature> {
         font-size: 11px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
     </style>
   </template>

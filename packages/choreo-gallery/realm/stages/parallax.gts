@@ -99,9 +99,9 @@ export class Parallax extends Component {
         overflow-x: hidden;
         overflow-y: auto;
         overscroll-behavior-x: none;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 18px;
-        background: var(--bg-well);
+        background: var(--inset);
         container-type: size;
       }
 
@@ -150,12 +150,12 @@ export class Parallax extends Component {
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ember-hot);
+        color: var(--hot-ink);
       }
 
       .story p {
         margin: 0;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       .para-layer {
@@ -171,7 +171,7 @@ export class Parallax extends Component {
         top: 38cqh;
         background: radial-gradient(
           circle at 40% 40%,
-          #ff6a3a,
+          var(--ember-hot),
           transparent 68%
         );
         opacity: 0.85;
@@ -201,7 +201,7 @@ export class Parallax extends Component {
         color: transparent;
         background: linear-gradient(
           180deg,
-          rgba(var(--ink-rgb), 0.18),
+          color-mix(in srgb, var(--foreground) 18%, transparent),
           transparent
         );
         background-clip: text;
@@ -215,7 +215,7 @@ export class Parallax extends Component {
         padding: 18px;
         border-radius: 18px;
         background: rgba(22, 19, 17, 0.9);
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         backdrop-filter: blur(10px);
       }
 

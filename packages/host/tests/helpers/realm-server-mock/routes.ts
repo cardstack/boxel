@@ -631,6 +631,24 @@ function registerAuthRoutes() {
   });
 
   registerRealmServerRoute({
+    path: '/_realm-event-rooms',
+    handler: async (req, _url, state: RealmServerMockState) => {
+      let { realms } = (await req.json()) as { realms: string[] };
+      let rooms: Record<string, string> = {};
+      for (let realm of realms) {
+        let roomId = state.realmEventRooms.get(ensureTrailingSlash(realm));
+        if (roomId) {
+          rooms[realm] = roomId;
+        }
+      }
+      return new Response(JSON.stringify({ rooms }), {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.JSON },
+      });
+    },
+  });
+
+  registerRealmServerRoute({
     path: '/_server-session',
     handler: async (req) => {
       let data = await req.json();

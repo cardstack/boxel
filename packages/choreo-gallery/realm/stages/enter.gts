@@ -125,8 +125,8 @@ export class Enter extends Component {
         top: 14px;
         right: 14px;
         z-index: 3;
-        border: 1px solid var(--line-strong);
-        background: rgba(var(--bg-rgb), 0.72);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--canvas) 72%, transparent);
         backdrop-filter: blur(8px);
         border-radius: 999px;
         padding: 7px 12px;
@@ -134,12 +134,12 @@ export class Enter extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {
         .replay:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 
@@ -159,7 +159,7 @@ export class Enter extends Component {
         background:
           linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 50%),
           var(--bg-spot);
-        border: 1px solid var(--line-strong);
+        border: 1px solid var(--border-strong);
         box-shadow:
           0 18px 40px rgba(0, 0, 0, 0.4),
           inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -189,12 +189,12 @@ export class Enter extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--subtle-foreground);
       }
 
       .banner-app em {
         font-style: normal;
-        color: var(--ember-hot);
+        color: var(--hot-ink);
       }
 
       .banner strong {
@@ -204,7 +204,7 @@ export class Enter extends Component {
       }
 
       .banner small {
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
         font-size: 12px;
       }
 

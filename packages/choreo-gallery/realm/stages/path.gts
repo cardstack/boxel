@@ -98,10 +98,10 @@ export class PathDraw extends Component {
         background:
           radial-gradient(
             80% 70% at 50% 40%,
-            rgba(255, 59, 31, 0.16),
+            color-mix(in srgb, var(--primary) 16%, transparent),
             transparent 60%
           ),
-          rgba(var(--surface-tint-rgb), 0.14);
+          color-mix(in srgb, var(--surface-tint) 14%, transparent);
       }
 
       .replay {
@@ -109,8 +109,8 @@ export class PathDraw extends Component {
         top: 14px;
         right: 14px;
         z-index: 3;
-        border: 1px solid var(--line-strong);
-        background: rgba(var(--bg-rgb), 0.72);
+        border: 1px solid var(--border-strong);
+        background: color-mix(in srgb, var(--canvas) 72%, transparent);
         backdrop-filter: blur(8px);
         border-radius: 999px;
         padding: 7px 12px;
@@ -118,12 +118,12 @@ export class PathDraw extends Component {
         font-size: 10px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--ink-dim);
+        color: var(--muted-foreground);
       }
 
       @media (hover: hover) {
         .replay:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
 

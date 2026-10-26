@@ -25,7 +25,7 @@ export const LabToggle: TOC<Signature> = <template>
       font-size: 11px;
       letter-spacing: 0.14em;
       text-transform: uppercase;
-      color: var(--ink-dim);
+      color: var(--muted-foreground);
       background: none;
       border: 0;
       cursor: pointer;
@@ -33,7 +33,7 @@ export const LabToggle: TOC<Signature> = <template>
 
     @media (hover: hover) {
       .lab-toggle:hover {
-        color: var(--ink);
+        color: var(--foreground);
       }
     }
 

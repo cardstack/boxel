@@ -51,7 +51,7 @@ export class GuideLink extends Component<Signature> {
 
       @media (hover: hover) {
         .guide-link:hover {
-          color: var(--ink);
+          color: var(--foreground);
         }
       }
     </style>
