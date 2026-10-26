@@ -1,13 +1,11 @@
 import type { Command } from 'commander';
-import { readFile } from 'fs/promises';
 import { cliLog } from '../../lib/cli-log.ts';
 import { FG_GREEN, RESET } from '../../lib/colors.ts';
-import {
-  prompt,
-  promptPassword,
-  resolveRealmSecretSeed,
-} from '../../lib/prompt.ts';
+import { readKeyValue } from '../../lib/key-value.ts';
+import { prompt, resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import { operatorRequest } from '../../lib/seed-auth.ts';
+
+export { readKeyValue, type KeyValueSource } from '../../lib/key-value.ts';
 
 // `boxel realm-server keys`: the realm server's system keys, the platform's
 // own vendor keys that `_request-forward` attaches. Authorized with the realm
@@ -173,58 +171,6 @@ export async function resolveSystemKeyId(
     throw new Error(`No system key has the destination ${destination}`);
   }
   return match.id;
-}
-
-function stripOneTrailingNewline(text: string): string {
-  return text.replace(/\r?\n$/, '');
-}
-
-export interface KeyValueSource {
-  stdin?: boolean;
-  keyFile?: string;
-}
-
-/**
- * The key value, from exactly one source: `--key-file`, `--stdin`, or, when
- * stdin is a terminal, a masked prompt. One trailing newline is dropped from
- * a file or stdin. Without a terminal and without either flag it refuses,
- * rather than hang waiting for keystrokes.
- */
-export async function readKeyValue(
-  source: KeyValueSource,
-  io: {
-    input?: NodeJS.ReadStream;
-    output?: NodeJS.WritableStream;
-  } = {},
-): Promise<string> {
-  let input = io.input ?? process.stdin;
-  if (source.stdin && source.keyFile) {
-    throw new Error('Pass --stdin or --key-file, not both');
-  }
-  let value: string;
-  if (source.keyFile) {
-    value = stripOneTrailingNewline(await readFile(source.keyFile, 'utf8'));
-  } else if (source.stdin) {
-    let chunks: Buffer[] = [];
-    for await (let chunk of input) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
-    value = stripOneTrailingNewline(Buffer.concat(chunks).toString('utf8'));
-  } else if (input.isTTY) {
-    value = await promptPassword('Key value: ', {
-      revealLast: 4,
-      input,
-      output: io.output,
-    });
-  } else {
-    throw new Error(
-      'Cannot prompt for the key value: stdin is not a terminal. Pass --stdin or --key-file',
-    );
-  }
-  if (!value) {
-    throw new Error('The key value is empty');
-  }
-  return value;
 }
 
 /**
