@@ -94,30 +94,47 @@ module('Integration | ai-assistant-panel | turn settling', function (hooks) {
     return roomId;
   }
 
-  // A question, then a reply with one call whose result has landed
-  function simulateAnsweredCall(roomId: string, resultAt?: number) {
-    simulateRemoteMessage(roomId, '@testuser:localhost', {
-      body: 'Make me a card',
-      msgtype: 'm.text',
-    });
-    let replyId = simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      body: 'Writing the card.',
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: true,
-      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
-        {
-          id: 'write-call',
-          name: 'patchCardInstance',
-          arguments: JSON.stringify({
-            attributes: {
-              cardId: `${testRealmURL}Card/1`,
-              patch: { attributes: { title: 'Card' } },
-            },
-          }),
-        },
-      ],
-    });
+  // A question, then a reply with one call whose result has landed. The
+  // question and reply carry `serverNow` as their homeserver time (the
+  // browser's time when unset), and the result `resultAt`.
+  function simulateAnsweredCall(
+    roomId: string,
+    resultAt?: number,
+    serverNow?: number,
+  ) {
+    let at = serverNow ? { origin_server_ts: serverNow } : undefined;
+    simulateRemoteMessage(
+      roomId,
+      '@testuser:localhost',
+      {
+        body: 'Make me a card',
+        msgtype: 'm.text',
+      },
+      at,
+    );
+    let replyId = simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: 'Writing the card.',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: 'write-call',
+            name: 'patchCardInstance',
+            arguments: JSON.stringify({
+              attributes: {
+                cardId: `${testRealmURL}Card/1`,
+                patch: { attributes: { title: 'Card' } },
+              },
+            }),
+          },
+        ],
+      },
+      at,
+    );
     simulateRemoteMessage(
       roomId,
       '@testuser:localhost',
@@ -158,7 +175,7 @@ module('Integration | ai-assistant-panel | turn settling', function (hooks) {
       .exists({ count: 1 }, 'the footer is under the reply that ends it');
   });
 
-  test('a turn whose reply never comes settles once its wait has passed', async function (assert) {
+  test('a turn whose result is already past the wait settles at once', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
     simulateAnsweredCall(roomId, Date.now() - 60_000);
@@ -166,5 +183,39 @@ module('Integration | ai-assistant-panel | turn settling', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-answer-footer]')
       .exists();
+  });
+
+  test('a turn whose reply never comes settles when its wait runs out', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    // the result is 29.7 s older than the room's newest event: 0.3 s is left
+    simulateAnsweredCall(roomId, Date.now() - 29_700);
+    await waitFor(
+      '[data-test-message-idx="1"] [data-test-tool-call-apply="applied"]',
+    );
+    assert
+      .dom('[data-test-answer-footer]')
+      .doesNotExist('the turn waits for the rest of its wait');
+    await waitFor('[data-test-message-idx="1"] [data-test-answer-footer]', {
+      timeout: 3000,
+    });
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-answer-footer]')
+      .exists('the timer settles the turn');
+  });
+
+  test("a browser clock ahead of the homeserver's does not cut the wait short", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    // every event is 40 s behind the browser's clock: the result is fresh
+    let serverNow = Date.now() - 40_000;
+    simulateAnsweredCall(roomId, serverNow, serverNow);
+    await waitFor(
+      '[data-test-message-idx="1"] [data-test-tool-call-apply="applied"]',
+    );
+    await settled();
+    assert
+      .dom('[data-test-answer-footer]')
+      .doesNotExist('the fresh result still holds the turn');
   });
 });
