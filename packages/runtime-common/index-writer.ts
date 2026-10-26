@@ -549,6 +549,9 @@ interface PeerConflicts {
   revisit: string[];
   // Peer-committed URLs outside this pass that the pass extends to.
   extend: string[];
+  // Peer-committed URLs outside this pass that only link one of its URLs,
+  // which the pass adds as render-only dependents.
+  renderOnly: string[];
 }
 
 // What a commit's validation did, reported on `BatchDoneResult` once a check
@@ -1684,9 +1687,11 @@ export class Batch {
           type: 'instance',
           pristine_doc: entry.resource,
           source_content_hash: entry.sourceContentHash ?? null,
-          relationship_deps: entry.relationshipDeps
-            ? [...entry.relationshipDeps]
-            : null,
+          // Only the split path reads it (see `itemsThatReference`).
+          relationship_deps:
+            this.#splitPrerenderHtml && entry.relationshipDeps
+              ? [...entry.relationshipDeps]
+              : null,
           search_doc: entry.searchData,
           icon_html: entry.iconHTML,
           deps: [...entry.deps],
@@ -2542,12 +2547,26 @@ export class Batch {
         );
         report.checked = true;
         report.validationMs += Date.now() - checkStart;
-        if (conflicts.revisit.length > 0 || conflicts.extend.length > 0) {
+        if (
+          conflicts.revisit.length > 0 ||
+          conflicts.extend.length > 0 ||
+          conflicts.renderOnly.length > 0
+        ) {
           if (this.#validationRound < COMMIT_VALIDATION_MAX_ROUNDS) {
             throw new PeerCommitConflict(conflicts);
           }
+          // Out of rounds, a render-only dependent is still stamped by this
+          // commit, so its validator moves; its HTML is left to the
+          // follow-up job with the rest.
+          for (let url of conflicts.renderOnly) {
+            this.#renderOnlyInvalidations.add(url);
+          }
           leftStale = [
-            ...new Set([...conflicts.revisit, ...conflicts.extend]),
+            ...new Set([
+              ...conflicts.revisit,
+              ...conflicts.extend,
+              ...conflicts.renderOnly,
+            ]),
           ].sort();
         }
       }
@@ -2595,9 +2614,15 @@ export class Batch {
   //    has, and its dependents with it. A row that already depended on this
   //    pass's URLs when the pass began is in the pass's invalidation set, so
   //    what this finds is a dependency the peer's commit introduced.
+  //  - render-only: on the split path, the peer committed a row, outside this
+  //    pass, that only links a URL of this pass (`relationship_deps`). Its
+  //    index row read nothing from that URL, so it is not re-visited: like
+  //    the render-only dependents the fan-out finds, it is stamped by this
+  //    commit and re-rendered by the pass's HTML job.
   //
-  // Both read `deps`, so neither sees a query-backed field whose results a
-  // peer's commit moved: a query's matches are not recorded as dependencies.
+  // All three read dependency columns, so none sees a query-backed field
+  // whose results a peer's commit moved: a query's matches are not recorded
+  // as dependencies.
   //
   // `stagedDeps` are this pass's own staged deps, read before the lock was
   // taken. They are read here instead when a peer committed after that read
@@ -2639,16 +2664,26 @@ export class Batch {
     }
 
     let extend = new Set<string>();
+    let renderOnly = new Set<string>();
     let candidates = everyURL
       ? undefined
       : [...peerURLs].filter((url) => !oursSet.has(url));
     if (candidates === undefined || candidates.length > 0) {
-      for (let url of await this.#productionDependents(
+      let dependents = await this.#productionDependents(
         this.#dependencyForms(ours),
         candidates,
-      )) {
+      );
+      for (let url of dependents.index) {
         if (!oursSet.has(url)) {
           extend.add(url);
+        }
+      }
+      // A row that only links one of this pass's URLs is a render-only
+      // dependent: it is stamped and re-rendered, not re-visited, the same
+      // as one the fan-out found through `relationship_deps`.
+      for (let url of dependents.linkOnly) {
+        if (!oursSet.has(url) && !this.#renderOnlyInvalidations.has(url)) {
+          renderOnly.add(url);
         }
       }
     }
@@ -2659,6 +2694,7 @@ export class Batch {
       peerCommits,
       revisit: [...revisit].sort(),
       extend: [...extend].sort(),
+      renderOnly: [...renderOnly].sort(),
     };
   }
 
@@ -2727,14 +2763,21 @@ export class Batch {
   // `depForms`, narrowed to `urls` when given. On Postgres the match is the
   // `?|` operator, which the GIN index on `boxel_index.deps` serves, so a
   // check that has to read the whole realm does not unnest every row's deps.
+  // The production rows, among `urls` (every row when omitted), that depend on
+  // one of `depForms`. `index` holds the rows whose `deps` name one; on the
+  // split path `linkOnly` holds the rows whose `relationship_deps` name one
+  // and whose `deps` name none, which are render edges (see
+  // `itemsThatReference`).
   async #productionDependents(
     depForms: string[],
     urls?: string[],
-  ): Promise<Set<string>> {
-    let found = new Set<string>();
+  ): Promise<{ index: Set<string>; linkOnly: Set<string> }> {
+    let index = new Set<string>();
+    let linkOnly = new Set<string>();
     if (depForms.length === 0 || urls?.length === 0) {
-      return found;
+      return { index, linkOnly };
     }
+    let linkEdges = this.#splitPrerenderHtml && this.#dbAdapter.kind === 'pg';
     // Both lists bind one parameter per entry, so both are chunked to stay
     // within the budget `#upsertWithinBindBudget` keeps to.
     let bindBudget = this.#dbAdapter.kind === 'sqlite' ? 900 : 60000;
@@ -2747,20 +2790,34 @@ export class Batch {
       }
     }
     for (let urlChunk of urlChunks) {
-      // Postgres binds each form twice, once per column it matches.
+      // With link edges, each form is bound three times: twice for `deps`
+      // (the match and the `index_edge` column) and once for
+      // `relationship_deps`.
       let formsPerQuery = Math.floor(
-        (bindBudget - (urlChunk?.length ?? 0) - 1) /
-          (this.#dbAdapter.kind === 'sqlite' ? 1 : 2),
+        (bindBudget - (urlChunk?.length ?? 0) - 1) / (linkEdges ? 3 : 1),
       );
       for (let i = 0; i < depForms.length; i += formsPerQuery) {
         let chunk = depForms.slice(i, i + formsPerQuery);
         let formParams = () =>
           separatedByCommas(chunk.map((form) => [param(form)])) as Expression;
+        let depsMatch = (): Expression => [
+          'i.deps ?| CAST(ARRAY[',
+          ...formParams(),
+          '] AS text[])',
+        ];
         let rows = (await this.#query([
-          dbExpression({
-            pg: `SELECT i.url FROM boxel_index AS i WHERE`,
-            sqlite: `SELECT DISTINCT i.url FROM boxel_index AS i CROSS JOIN json_each(i.deps) AS dep_entry WHERE`,
-          }),
+          ...(linkEdges
+            ? ([
+                'SELECT i.url, (',
+                ...depsMatch(),
+                ') AS index_edge FROM boxel_index AS i WHERE',
+              ] as Expression)
+            : [
+                dbExpression({
+                  pg: `SELECT i.url FROM boxel_index AS i WHERE`,
+                  sqlite: `SELECT DISTINCT i.url FROM boxel_index AS i CROSS JOIN json_each(i.deps) AS dep_entry WHERE`,
+                }),
+              ]),
           ...every([
             ['i.realm_url =', param(this.realmURL.href)],
             any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
@@ -2774,31 +2831,40 @@ export class Batch {
                   ] as Expression,
                 ]
               : []),
-            [
-              dbExpression({
-                // `relationship_deps` too, for a linking card a peer committed
-                // before its HTML recorded the link (see `itemsThatReference`).
-                pg: [
-                  '(i.deps ?| CAST(ARRAY[',
-                  ...formParams(),
-                  '] AS text[]) OR i.relationship_deps ?| CAST(ARRAY[',
+            linkEdges
+              ? ([
+                  '(',
+                  ...depsMatch(),
+                  'OR i.relationship_deps ?| CAST(ARRAY[',
                   ...formParams(),
                   '] AS text[]))',
+                ] as Expression)
+              : [
+                  dbExpression({
+                    pg: depsMatch(),
+                    sqlite: [
+                      'dep_entry.value IN',
+                      ...addExplicitParens(formParams()),
+                    ] as Expression,
+                  }),
                 ],
-                sqlite: [
-                  'dep_entry.value IN',
-                  ...addExplicitParens(formParams()),
-                ] as Expression,
-              }),
-            ],
           ]),
-        ] as Expression)) as Pick<BoxelIndexTable, 'url'>[];
-        for (let { url } of rows) {
-          found.add(url);
+        ] as Expression)) as (Pick<BoxelIndexTable, 'url'> & {
+          index_edge?: boolean;
+        })[];
+        for (let { url, index_edge } of rows) {
+          if (!linkEdges || index_edge) {
+            index.add(url);
+          } else {
+            linkOnly.add(url);
+          }
         }
       }
     }
-    return found;
+    for (let url of index) {
+      linkOnly.delete(url);
+    }
+    return { index, linkOnly };
   }
 
   // Readies the batch to re-visit what `conflicts` found. The pass extends to
@@ -2823,6 +2889,9 @@ export class Batch {
       conflicts.extend.length > 0
         ? await this.#fanOut(conflicts.extend.map((url) => new URL(url)))
         : new Set<string>();
+    if (conflicts.renderOnly.length > 0) {
+      await this.#addRenderOnly(conflicts.renderOnly);
+    }
     let urls = [...new Set([...conflicts.revisit, ...extended])].sort();
     await this.#restageForRevisit(urls.filter((url) => staged.has(url)));
     return {
@@ -4428,6 +4497,28 @@ export class Batch {
     await this.#fanOut(urls);
   }
 
+  // Adds `urls` to the pass as render-only dependents, with every renderer
+  // that reaches them through render or index edges, leaving out what the
+  // pass already visits. Their rows are stamped at commit and their HTML is
+  // re-rendered; nothing is re-visited.
+  async #addRenderOnly(urls: string[]): Promise<void> {
+    let walk: FanOutWalk = {
+      references: new Map(),
+      followRenderEdges: true,
+      visited: new Set(),
+    };
+    for (let url of urls) {
+      for (let renderer of [
+        url,
+        ...(await this.calculateInvalidations(url, walk)),
+      ]) {
+        if (!this.#invalidations.has(renderer)) {
+          this.#renderOnlyInvalidations.add(renderer);
+        }
+      }
+    }
+  }
+
   // Adds `urls` and everything that depends on them to the pass, tombstoning
   // each, and returns every URL the walk put in the index visit, including
   // any the pass already held. `invalidate()` runs it for the pass's
@@ -4731,60 +4822,78 @@ export class Batch {
     let searchBothForms =
       unresolvedPath !== resolvedPath &&
       this.isRegisteredPrefix(unresolvedPath);
+    type ScannedRow = Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+      type: BoxelIndexTable['type'];
+      index_edge?: boolean;
+    };
+    let depCondition = (column: 'deps' | 'relationship_deps'): Expression =>
+      searchBothForms
+        ? (any([
+            [
+              dbExpression({
+                sqlite: `deps_array_element =`,
+                pg: `i.${column} @>`,
+              }),
+              param({
+                sqlite: resolvedPath,
+                pg: `["${resolvedPath}"]`,
+              }),
+            ],
+            [
+              dbExpression({
+                sqlite: `deps_array_element =`,
+                pg: `i.${column} @>`,
+              }),
+              param({
+                sqlite: unresolvedPath,
+                pg: `["${unresolvedPath}"]`,
+              }),
+            ],
+          ]) as Expression)
+        : ([
+            dbExpression({
+              sqlite: `deps_array_element =`,
+              pg: `i.${column} @>`,
+            }),
+            param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
+          ] as Expression);
+    // `withLinks` (Postgres only) matches `deps` or `relationship_deps` in one
+    // query, and says per row whether `deps` matched, so a row found only
+    // through its links is a render edge.
     let scanTable = async (
       tableName: 'boxel_index_pending' | 'prerendered_html' | 'boxel_index',
-      column: 'deps' | 'relationship_deps' = 'deps',
+      {
+        column = 'deps',
+        withLinks = false,
+      }: { column?: 'deps' | 'relationship_deps'; withLinks?: boolean } = {},
     ) => {
-      let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-        type: BoxelIndexTable['type'];
-      })[] = [];
-      let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-        type: BoxelIndexTable['type'];
-      })[] = [];
+      let results: ScannedRow[] = [];
+      let rows: ScannedRow[] = [];
       let pageNumber = 0;
       do {
         // SQLite does not support cursors when used in the worker thread since
         // the API for using cursors cannot be serialized over the postMessage
         // boundary. so we use a handcrafted paging approach
-        let depCondition: Expression = searchBothForms
-          ? (any([
-              [
-                dbExpression({
-                  sqlite: `deps_array_element =`,
-                  pg: `i.${column} @>`,
-                }),
-                param({
-                  sqlite: resolvedPath,
-                  pg: `["${resolvedPath}"]`,
-                }),
-              ],
-              [
-                dbExpression({
-                  sqlite: `deps_array_element =`,
-                  pg: `i.${column} @>`,
-                }),
-                param({
-                  sqlite: unresolvedPath,
-                  pg: `["${unresolvedPath}"]`,
-                }),
-              ],
-            ]) as Expression)
-          : ([
-              dbExpression({
-                sqlite: `deps_array_element =`,
-                pg: `i.${column} @>`,
-              }),
-              param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
-            ] as Expression);
         rows = (await this.#query([
-          'SELECT i.url, i.file_alias, i.type',
+          ...(withLinks
+            ? ([
+                'SELECT i.url, i.file_alias, i.type, (',
+                ...depCondition('deps'),
+                ') AS index_edge',
+              ] as Expression)
+            : ['SELECT i.url, i.file_alias, i.type']),
           `FROM ${tableName} as i`,
           dbExpression({
             sqlite: `CROSS JOIN LATERAL jsonb_array_elements_text(i.${column}) as deps_array_element`,
           }),
           'WHERE',
           ...every([
-            depCondition,
+            withLinks
+              ? (any([
+                  depCondition('deps'),
+                  depCondition('relationship_deps'),
+                ]) as Expression)
+              : depCondition(column),
             // probably need to reevaluate this condition when we get to cross
             // realm invalidation
             [`i.realm_url =`, param(this.realmURL.href)],
@@ -4807,9 +4916,7 @@ export class Batch {
               : []),
           ]),
           `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
-        ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-          type: BoxelIndexTable['type'];
-        })[];
+        ] as Expression)) as ScannedRow[];
         results = [...results, ...rows];
         pageNumber++;
       } while (rows.length === pageSize);
@@ -4831,39 +4938,39 @@ export class Batch {
     // present in both tables collapse in the (url, type) dedup below.
     //
     // On the split path a card's links are a render edge before its HTML
-    // exists too: the index row records them in `relationship_deps`, because a
-    // card+json GET assembles `included` from them, while
-    // `prerendered_html.deps` gains them only once the card's `prerender_html`
-    // job has run. Without this scan a change to a linked card in that window
-    // would leave the linking card's `indexed_at`, and so its validator,
-    // where it was. The fused path renders the HTML in the same pass, so its
+    // exists too. A card+json GET assembles `included` from the card's links,
+    // so the served document depends on each of them, but a link the index
+    // visit did not read is in neither `deps` nor, until the card's
+    // `prerender_html` job runs, `prerendered_html.deps`. The index row
+    // records every link in `relationship_deps`, and the production scan
+    // reads it. The pending scan need not: every row this pass staged is
+    // already in its invalidation set, so a link edge from one adds nothing.
+    // The fused path renders the HTML in the same pass, so its
     // `prerendered_html.deps` has no such window.
-    let noRows = { results: [], pageNumber: 0 };
-    let [
-      pendingScan,
-      prerenderedScan,
-      productionScan,
-      pendingLinkScan,
-      productionLinkScan,
-    ] = await Promise.all([
-      scanTable('boxel_index_pending'),
-      scanTable('prerendered_html'),
-      scanTable('boxel_index'),
-      this.#splitPrerenderHtml
-        ? scanTable('boxel_index_pending', 'relationship_deps')
-        : noRows,
-      this.#splitPrerenderHtml
-        ? scanTable('boxel_index', 'relationship_deps')
-        : noRows,
-    ]);
+    let linkEdges = this.#splitPrerenderHtml;
+    let combined = linkEdges && this.#dbAdapter.kind === 'pg';
+    let [pendingScan, prerenderedScan, productionScan, productionLinkScan] =
+      await Promise.all([
+        scanTable('boxel_index_pending'),
+        scanTable('prerendered_html'),
+        scanTable('boxel_index', { withLinks: combined }),
+        linkEdges && !combined
+          ? scanTable('boxel_index', { column: 'relationship_deps' })
+          : { results: [] as ScannedRow[], pageNumber: 0 },
+      ]);
+    let productionIndexRows = productionScan.results.filter(
+      (row) => !combined || row.index_edge,
+    );
+    let productionLinkRows = combined
+      ? productionScan.results.filter((row) => !row.index_edge)
+      : productionLinkScan.results;
     let seen = new Set<string>();
     let results: ReferencingItem[] = [];
     for (let [rows, renderEdge] of [
       [pendingScan.results, false],
-      [productionScan.results, false],
+      [productionIndexRows, false],
       [prerenderedScan.results, true],
-      [pendingLinkScan.results, true],
-      [productionLinkScan.results, true],
+      [productionLinkRows, true],
     ] as const) {
       for (let { url, file_alias, type } of rows) {
         let key = `${url}|${type}`;
@@ -4881,7 +4988,6 @@ export class Batch {
         pendingScan.pageNumber +
         prerenderedScan.pageNumber +
         productionScan.pageNumber +
-        pendingLinkScan.pageNumber +
         productionLinkScan.pageNumber
       })`,
     );
