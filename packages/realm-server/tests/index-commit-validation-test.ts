@@ -75,11 +75,16 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   // The write an index visit makes for one card. `deps` are the URLs its
-  // render read, and `label` records which visit wrote the row.
+  // render read, `relationshipDeps` the cards it links, and `label` records
+  // which visit wrote the row.
   async function writeCard(
     batch: Batch,
     name: string,
-    { deps = [], label = name }: { deps?: string[]; label?: string } = {},
+    {
+      deps = [],
+      relationshipDeps,
+      label = name,
+    }: { deps?: string[]; relationshipDeps?: string[]; label?: string } = {},
   ) {
     let cardURL = new URL(url(name));
     await batch.updateEntry(cardURL, {
@@ -96,6 +101,9 @@ module(basename(import.meta.filename), function (hooks) {
       resourceCreatedAt: Date.now(),
       searchData: { name, label },
       deps: new Set(deps),
+      ...(relationshipDeps
+        ? { relationshipDeps: new Set(relationshipDeps) }
+        : {}),
       displayNames: [name],
       types: [personKey, cardDefKey],
       isolatedHtml: `<div>${label}</div>`,
@@ -106,7 +114,7 @@ module(basename(import.meta.filename), function (hooks) {
   async function stageCard(
     batch: Batch,
     name: string,
-    opts?: { deps?: string[]; label?: string },
+    opts?: { deps?: string[]; relationshipDeps?: string[]; label?: string },
   ) {
     await batch.invalidate([new URL(url(name))]);
     await writeCard(batch, name, opts);
@@ -347,6 +355,58 @@ module(basename(import.meta.filename), function (hooks) {
       (await production('student'))?.label,
       'student (b)',
       "the student stays as B published it, since A's pass never touched it",
+    );
+  });
+
+  // A row that only links a card reads nothing from it, so a peer-committed
+  // one is a render-only dependent, like those the fan-out finds through
+  // `relationship_deps`: the commit stamps it and its HTML job re-renders it,
+  // and nothing re-visits it.
+  test('a peer-committed row that only links the pass is added as render-only, not extended to', async function (assert) {
+    let a = await createBatch();
+    let b = await createBatch();
+    await stageCard(a, 'student', { label: 'student (a)' });
+    await stageCard(b, 'roster', {
+      relationshipDeps: [url('student')],
+      label: 'roster (b)',
+    });
+    await b.done();
+
+    let { validation, rounds } = recordingValidation(a);
+    let result = await a.done({ validation });
+
+    assert.deepEqual(
+      rounds.map(({ round, urls, addedURLs, addedRenderOnlyURLs }) => ({
+        round,
+        urls,
+        addedURLs,
+        addedRenderOnlyURLs,
+      })),
+      [
+        {
+          round: 1,
+          urls: [],
+          addedURLs: [],
+          addedRenderOnlyURLs: [url('roster')],
+        },
+      ],
+      "A adds B's roster as render-only and re-visits nothing",
+    );
+    assert.deepEqual(
+      { revisitCount: result.revisitCount, extendCount: result.extendCount },
+      { revisitCount: 0, extendCount: 0 },
+      'nothing was extended to or re-visited',
+    );
+    let roster = await production('roster');
+    assert.strictEqual(
+      roster?.label,
+      'roster (b)',
+      'the roster keeps the row B published',
+    );
+    assert.strictEqual(
+      roster?.generation,
+      a.committedGeneration,
+      "A's commit stamped the roster with its generation, which moves its validator",
     );
   });
 

@@ -87,6 +87,28 @@ The other ways in don't open a browser and work as before:
 
 A realm server whose secure origin can't sign the CLI in gets the host app's own `/cli-auth` page instead, and so does `--host-url`, which names the origin whose page to open. Profiles you already have keep working; nothing asks you to sign in again.
 
+### Managing your keys with `boxel keys`
+
+Your keys belong to you, not to a realm, so the key commands name no realm; only the share commands do.
+
+```bash
+boxel keys list
+boxel keys show    <name>                            # the key and the shares it's in
+boxel keys add     <name> [--stdin | --key-file <path>]
+boxel keys replace <name> [--stdin | --key-file <path>]
+boxel keys delete  <name> [--yes]                    # lists the shares it suspends, then asks
+boxel keys share   <name> --realm <url> [--as <label>]
+boxel keys unshare <label> --realm <url>
+boxel keys swap    <label> --realm <url> --key <your-key>
+boxel keys shares  --realm <url>
+```
+
+A key's value is never a command-line argument. `add` and `replace` ask for it at a masked prompt that shows a `*` for each character and, once you press Enter, the last few characters (at most 4, never more than a quarter of it, and none of a value of 8 characters or fewer), so you can tell it's the one you meant. Without a terminal, pass `--stdin` or `--key-file`; otherwise the command refuses rather than wait. No command prints a value.
+
+Adding, replacing, deleting, sharing and swapping need you signed in on the secure origin, which `boxel profile add` or `boxel keys sign-in` does. If you aren't, the command opens the sign-in in your browser first. `boxel keys status` says whether you are, and `boxel keys sign-out` ends it. A key you add here can't be sent anywhere yet: where it may go is granted when you approve an operation that uses it.
+
+`swap` puts one of your keys into a suspended share in a realm you write to; the share resumes with you as its owner. Every command takes `--json`. A refusal prints the server's status and reason, and under `--json` it prints `{ "error": { "status", "reason", "errors" } }` with the server's `errors` unchanged.
+
 ### Choosing an environment for `boxel profile add`
 
 `boxel profile add` targets **production**. Whichever environment it lands on is resolved the same way for the interactive and non-interactive paths, in this order:

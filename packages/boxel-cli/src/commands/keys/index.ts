@@ -1,16 +1,29 @@
 import type { Command } from 'commander';
 import {
   getProfileManager,
-  getUsernameFromMatrixId,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager.ts';
 import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors.ts';
-import { secureSignIn, secureSignOut } from '../../lib/secure-session.ts';
+import { secureSignOut } from '../../lib/secure-session.ts';
+import {
+  keysAdd,
+  keysDelete,
+  keysList,
+  keysReplace,
+  keysShare,
+  keysShares,
+  keysShow,
+  keysSwap,
+  keysUnshare,
+  runKeysCommand,
+  signInToManageKeys,
+} from './manage.ts';
 
 // `boxel keys`: the signed-in user's own keys. Changing a key needs a session
 // signed in on the secure origin, which the CLI gets through the browser
-// (`boxel keys sign-in`); the profile's ordinary session can't authorize one.
+// (`boxel keys sign-in`, or the first change that needs one); the profile's
+// ordinary session can't authorize one.
 
 interface SignInOptions {
   timeout?: string;
@@ -38,21 +51,10 @@ export async function keysSignIn(
   options: SignInOptions & SignInDeps = {},
 ): Promise<void> {
   let pm = options.profileManager ?? getProfileManager();
-  let { profile } = activeProfile(pm);
-  let session = await secureSignIn({
-    realmServerUrl: profile.realmServerUrl,
-    ...(options.openBrowserFn ? { openBrowserFn: options.openBrowserFn } : {}),
-    username: getUsernameFromMatrixId(profile.matrixUserId),
+  let session = await signInToManageKeys(pm, {
+    openBrowserFn: options.openBrowserFn,
     ...(options.timeout ? { timeoutMs: Number(options.timeout) * 1000 } : {}),
   });
-  if (session.userId !== profile.matrixUserId) {
-    await secureSignOut(profile.realmServerUrl, session.token).catch(() => {});
-    throw new Error(
-      `The browser signed in ${session.userId}, but this profile is ` +
-        `${profile.matrixUserId}. Run it again and sign in as ${profile.matrixUserId}.`,
-    );
-  }
-  pm.setSecureSession(session);
   console.log(
     `${FG_GREEN}Signed in to manage keys${RESET} as ${session.userId} until ${formatTime(session.expiresAt)}.`,
   );
@@ -123,4 +125,117 @@ export function registerKeysCommand(program: Command): void {
     .command('status')
     .description('Say whether this CLI is signed in to change your keys')
     .action(() => run(() => keysStatus()));
+
+  keys
+    .command('list')
+    .description('List your keys, without their values')
+    .option('--json', 'Output JSON')
+    .action((options: { json?: boolean }) =>
+      runKeysCommand(options.json, () => keysList(options)),
+    );
+
+  keys
+    .command('show')
+    .description("Show one of your keys and the shares it's in")
+    .argument('<name>', 'The key')
+    .option('--json', 'Output JSON')
+    .action((name: string, options: { json?: boolean }) =>
+      runKeysCommand(options.json, () => keysShow(name, options)),
+    );
+
+  valueOptions(
+    keys
+      .command('add')
+      .description(
+        'Add a key. The value is typed at a masked prompt, or read with --stdin or --key-file',
+      )
+      .argument('<name>', 'A name for the key, unique among your keys'),
+  ).action((name: string, options: ValueCommandOptions) =>
+    runKeysCommand(options.json, () => keysAdd(name, options)),
+  );
+
+  valueOptions(
+    keys
+      .command('replace')
+      .description(
+        "Replace a key's value. The value is typed at a masked prompt, or read with --stdin or --key-file",
+      )
+      .argument('<name>', 'The key'),
+  ).action((name: string, options: ValueCommandOptions) =>
+    runKeysCommand(options.json, () => keysReplace(name, options)),
+  );
+
+  keys
+    .command('delete')
+    .description(
+      'Delete a key, after listing the shares it would suspend and asking you to confirm',
+    )
+    .argument('<name>', 'The key')
+    .option('--yes', "Don't ask to confirm")
+    .option('--json', 'Output JSON')
+    .action((name: string, options: { json?: boolean; yes?: boolean }) =>
+      runKeysCommand(options.json, () => keysDelete(name, options)),
+    );
+
+  keys
+    .command('share')
+    .description(
+      'Share a key into a realm you write to, for the people there to use',
+    )
+    .argument('<name>', 'The key')
+    .requiredOption('--realm <url>', 'The realm')
+    .option('--as <label>', 'The label the realm knows it by (default: <name>)')
+    .option('--json', 'Output JSON')
+    .action(
+      (name: string, options: { realm: string; as?: string; json?: boolean }) =>
+        runKeysCommand(options.json, () => keysShare(name, options)),
+    );
+
+  keys
+    .command('unshare')
+    .description('Take one of your shares out of a realm')
+    .argument('<label>', 'The share')
+    .requiredOption('--realm <url>', 'The realm')
+    .option('--json', 'Output JSON')
+    .action((label: string, options: { realm: string; json?: boolean }) =>
+      runKeysCommand(options.json, () => keysUnshare(label, options)),
+    );
+
+  keys
+    .command('swap')
+    .description(
+      "Put one of your keys into a realm's suspended share, which resumes with you as its owner",
+    )
+    .argument('<label>', 'The share')
+    .requiredOption('--realm <url>', 'The realm')
+    .requiredOption('--key <name>', 'Your key')
+    .option('--json', 'Output JSON')
+    .action(
+      (
+        label: string,
+        options: { realm: string; key: string; json?: boolean },
+      ) => runKeysCommand(options.json, () => keysSwap(label, options)),
+    );
+
+  keys
+    .command('shares')
+    .description("List a realm's shares, for one of its writers")
+    .requiredOption('--realm <url>', 'The realm')
+    .option('--json', 'Output JSON')
+    .action((options: { realm: string; json?: boolean }) =>
+      runKeysCommand(options.json, () => keysShares(options)),
+    );
+}
+
+interface ValueCommandOptions {
+  stdin?: boolean;
+  keyFile?: string;
+  json?: boolean;
+}
+
+function valueOptions(command: Command): Command {
+  return command
+    .option('--stdin', 'Read the key value from stdin')
+    .option('--key-file <path>', 'Read the key value from a file')
+    .option('--json', 'Output JSON');
 }
