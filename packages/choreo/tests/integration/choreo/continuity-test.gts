@@ -21,7 +21,7 @@ import { render, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import { motion } from 'glimmer-motion';
+import { motion, setMotionSpeed } from 'glimmer-motion';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -31,6 +31,90 @@ import { nextFrame } from '../../helpers/motion';
 const SLOW = { damping: 30, stiffness: 120 };
 
 const el = (sel: string) => document.querySelector(sel) as HTMLElement;
+
+/**
+ * A row that arrives and fades in the way `@fade` says, then moves down when
+ * `low` is set: the moving pass's score does not name the row's fade.
+ */
+let row: Row | undefined;
+class Row extends Component<{ Args: { fade: string } }> {
+  @tracked shown = false;
+  @tracked low = false;
+  constructor(owner: unknown, args: { fade: string }) {
+    super(owner as never, args as never);
+    row = this;
+  }
+  get is() {
+    return (name: string) => this.args.fade === name;
+  }
+  <template>
+    <Choreo
+      class='stage'
+      style='position:relative;width:400px;height:200px'
+      as |c|
+    >
+      <div style='padding-top:{{if this.low "60px" "0px"}}'>
+        {{#if this.shown}}
+          <div
+            id='cc-row'
+            style='width:80px;height:40px;background:#0af'
+            {{motion id='cc-row' role='cc-row'}}
+          ></div>
+        {{/if}}
+      </div>
+      <c.Parallel>
+        {{#if (this.is 'delayed')}}
+          <c.Tween
+            @of={{c.inserted 'cc-row'}}
+            @opacity={{array 0 1}}
+            @duration={{0.6}}
+            @delay={{0.5}}
+          />
+        {{else if (this.is 'blink')}}
+          <c.Tween
+            @of={{c.inserted 'cc-row'}}
+            @opacity={{array 1 0.3}}
+            @duration={{0.4}}
+            @repeat={{1}}
+            @repeatType='reverse'
+          />
+        {{else if (this.is 'two')}}
+          <c.Tween
+            @of={{c.inserted 'cc-row'}}
+            @opacity={{array 0 1}}
+            @duration={{0.3}}
+          />
+          <c.Tween
+            @of={{c.inserted 'cc-row'}}
+            @filter={{array 'blur(4px)' 'blur(0px)'}}
+            @duration={{2}}
+          />
+        {{else}}
+          <c.Tween
+            @of={{c.inserted 'cc-row'}}
+            @opacity={{array 0 1}}
+            @duration={{0.6}}
+          />
+        {{/if}}
+        <c.Move @of={{c.moved 'cc-row'}} @duration={{0.3}} @size={{false}} />
+      </c.Parallel>
+    </Choreo>
+  </template>
+}
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const opacity = () => Number(getComputedStyle(el('#cc-row')).opacity);
+
+/** show the row, let its fade run a few frames, then move it */
+async function interrupt() {
+  row!.shown = true;
+  await settled();
+  await nextFrame();
+  await nextFrame();
+  await nextFrame();
+  row!.low = true;
+  await nextFrame();
+}
 
 module('Integration | choreo | continuity', function (hooks) {
   setupRenderingTest(hooks);
@@ -232,5 +316,65 @@ module('Integration | choreo | continuity', function (hooks) {
       '1',
       'the cut-short fade is carried on to its end',
     );
+  });
+
+  test('a fade-in that had not begun when the pass came still ends opaque', async function (assert) {
+    await render(<template><Row @fade='delayed' /></template>);
+    await animationsSettled();
+    await interrupt();
+    await settled();
+    await animationsSettled();
+    assert.strictEqual(opacity(), 1, 'the delayed fade is carried on');
+    row = undefined;
+  });
+
+  test('a tween that repeats in reverse is carried on to the keyframe Motion ends it on', async function (assert) {
+    await render(<template><Row @fade='blink' /></template>);
+    await animationsSettled();
+    await interrupt();
+    await settled();
+    await animationsSettled();
+    assert.strictEqual(
+      opacity(),
+      1,
+      'an odd reverse repeat ends on its first keyframe',
+    );
+    row = undefined;
+  });
+
+  test('each tween cut short keeps the time it had left', async function (assert) {
+    await render(<template><Row @fade='two' /></template>);
+    await animationsSettled();
+    await interrupt();
+    // the opacity tween had well under 0.3 s left; the blur, nearly 2 s
+    await wait(450);
+    assert.true(
+      opacity() > 0.97,
+      `the short fade lands in its own time, not the blur's (${opacity().toFixed(2)})`,
+    );
+    await settled();
+    await animationsSettled();
+    row = undefined;
+  });
+
+  test('the time a fade had left is counted once under a slowed motion speed', async function (assert) {
+    setMotionSpeed(2);
+    try {
+      await render(<template><Row @fade='plain' /></template>);
+      await animationsSettled();
+      await interrupt();
+      // 0.6 s at speed 2 is 1.2 s, and most of it is left: carried on in
+      // that time, not scaled again into twice that
+      await wait(1450);
+      assert.true(
+        opacity() > 0.97,
+        `the fade lands in the time it had left (${opacity().toFixed(2)})`,
+      );
+      await settled();
+      await animationsSettled();
+    } finally {
+      setMotionSpeed(1);
+      row = undefined;
+    }
   });
 });

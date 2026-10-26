@@ -786,7 +786,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
       // the same for a tween cut short: a fade the new score does not take
       // over is carried on to its end, never left where the cancel stops it
-      for (const [node, fade] of this.run.midfade()) {
+      for (const [node, fades] of this.run.midfade()) {
         const s = changeset.kept.find((k) => k.node === node);
         if (!s) {
           continue;
@@ -799,11 +799,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
               ...Object.keys(c.hold?.values ?? {}),
             ]),
         );
-        const to = Object.fromEntries(
-          Object.entries(fade.to).filter(([key]) => !driven.has(key)),
-        );
-        if (Object.keys(to).length) {
-          cues.push(fadeOn(s, to, fade.remaining));
+        for (const fade of fades) {
+          const to = Object.fromEntries(
+            Object.entries(fade.to).filter(([key]) => !driven.has(key)),
+          );
+          if (Object.keys(to).length) {
+            cues.push(fadeOn(s, to, fade.remaining, fade.delay));
+          }
         }
       }
     }

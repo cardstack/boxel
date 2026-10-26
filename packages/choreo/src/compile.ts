@@ -1445,18 +1445,20 @@ export function continuation(
  * prior run was taking these values (an opacity, mostly) somewhere and the
  * new score does not. Stopped where they stood they would stay there for
  * good — a fade-in frozen at a few percent — so the region carries each on
- * from its painted value to where it was going, over the time it had left.
+ * from its painted value to where it was going, over the time it had left,
+ * after the delay it had left (a staggered arrival that had not begun).
  */
 export function fadeOn(
   sprite: Sprite,
   to: Record<string, unknown>,
   remaining: number,
+  delay = 0,
 ): Cue {
   return {
     duration: remaining,
     kind: 'tween',
     sprite,
-    start: 0,
+    start: delay,
     target: { ...to },
     transition: { duration: remaining / 1000, ease: 'easeOut' },
   };
