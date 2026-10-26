@@ -1830,6 +1830,126 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('the write buffer drains once the rows it holds reach its size budget, before the row-count threshold', async function (assert) {
+      // A row is as large as what it carries, and a large text file's row
+      // carries the file's whole text. The buffer drains on the size of what
+      // it holds as well as on its row count, so a run of such rows is written
+      // as it goes instead of piling up in the worker until the pass ends.
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      let text = 'x'.repeat(5 * 1024 * 1024);
+      let file = (name: string) => ({
+        type: 'file' as const,
+        lastModified: 1,
+        resourceCreatedAt: 1,
+        deps: new Set<string>(),
+        searchData: { name, content: text },
+      });
+      let pendingCount = async () =>
+        Number(
+          (
+            (await adapter.execute(
+              `SELECT COUNT(*) AS count FROM boxel_index_pending WHERE realm_url = $1`,
+              { bind: [testRealm] },
+            )) as { count: string | number }[]
+          )[0]?.count,
+        );
+
+      await batch.bufferEntry(new URL(`${testRealm}a.txt`), file('a.txt'));
+      assert.strictEqual(
+        await pendingCount(),
+        0,
+        'a row under the size budget stays buffered',
+      );
+
+      await batch.bufferEntry(new URL(`${testRealm}b.txt`), file('b.txt'));
+      assert.strictEqual(
+        await pendingCount(),
+        2,
+        'the row that takes the buffer past its size budget drains both buffered rows, far short of the row-count threshold',
+      );
+    });
+
+    test('a flush upserts error rows in slices bounded by their size once they take on their last-known-good rows', async function (assert) {
+      // An error row is small in the buffer, but preparing it folds in the
+      // row's last-known-good production version, which for a large text file
+      // carries the file's whole text. Each upsert the flush sends is bounded
+      // by the prepared rows' size, so error rows over large files are not
+      // sent as one statement.
+      let text = 'x'.repeat(9 * 1024 * 1024);
+      let urls = [new URL(`${testRealm}a.txt`), new URL(`${testRealm}b.txt`)];
+      let published = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      await published.invalidate(urls);
+      for (let url of urls) {
+        await published.bufferEntry(url, {
+          type: 'file',
+          lastModified: 1,
+          resourceCreatedAt: 1,
+          deps: new Set<string>(),
+          searchData: { content: text },
+        });
+      }
+      await published.done();
+
+      let failing = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      for (let url of urls) {
+        await failing.bufferEntry(url, {
+          type: 'file-error',
+          error: {
+            message: 'render failed',
+            status: 500,
+            additionalErrors: null,
+          },
+        });
+      }
+
+      let upserts = 0;
+      let execute = adapter.execute.bind(adapter);
+      adapter.execute = (async (sql: string, opts?: unknown) => {
+        if (/^INSERT INTO boxel_index_pending\b/.test(sql)) {
+          upserts++;
+        }
+        return await execute(sql, opts as any);
+      }) as typeof adapter.execute;
+      try {
+        await failing.flushWriteBuffer();
+      } finally {
+        adapter.execute = execute;
+      }
+
+      assert.strictEqual(
+        upserts,
+        2,
+        'each error row, prepared to the size of its last-known-good row, is upserted on its own',
+      );
+      let rows = (await adapter.execute(
+        `SELECT url, has_error, octet_length(search_doc::text) AS search_doc_bytes
+           FROM boxel_index_pending WHERE realm_url = $1 AND has_error
+          ORDER BY url`,
+        { bind: [testRealm] },
+      )) as { url: string; has_error: boolean; search_doc_bytes: number }[];
+      assert.deepEqual(
+        rows.map((row) => [row.url, row.has_error]),
+        urls.map((url) => [url.href, true]),
+        'both error rows landed',
+      );
+      assert.true(
+        rows.every((row) => Number(row.search_doc_bytes) > text.length),
+        'each error row carries its last-known-good search doc',
+      );
+    });
+
     test('a retry resumes rows the prior attempt rendered instead of tombstoning them', async function (assert) {
       let url = `${testRealm}1.json`;
       let info = jobInfo();

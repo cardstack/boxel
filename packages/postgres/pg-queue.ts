@@ -581,6 +581,15 @@ function olderPendingExclusive(): string {
              AND (p.created_at, p.id) < (j.created_at, j.id)`;
 }
 
+// Called as a worker starts running a job; the function it returns is called
+// once the job settles or is abandoned at its deadline. Lets the process that
+// hosts the runner record what a job costs it (memory, for one) without the
+// queue knowing what is measured.
+export type JobObserver = (job: {
+  jobId: number;
+  jobType: string;
+}) => (() => void) | undefined;
+
 export class PgQueueRunner implements QueueRunner {
   #isDestroyed = false;
   #pgClient: PgAdapter;
@@ -592,6 +601,7 @@ export class PgQueueRunner implements QueueRunner {
   #handlers: Map<string, Function> = new Map();
   #jobRunner: WorkLoop | undefined;
   #priority: number;
+  #observeJob: JobObserver | undefined;
 
   constructor({
     adapter,
@@ -600,6 +610,7 @@ export class PgQueueRunner implements QueueRunner {
     maxReservationCount = MAX_RESERVATION_COUNT_PER_JOB,
     maxWriterLanesPerFamily = MAX_CONCURRENT_WRITER_LANES_PER_FAMILY,
     priority = 0,
+    observeJob,
   }: {
     adapter: PgAdapter;
     workerId: string;
@@ -607,6 +618,7 @@ export class PgQueueRunner implements QueueRunner {
     maxTimeoutSec?: number;
     maxReservationCount?: number;
     maxWriterLanesPerFamily?: number;
+    observeJob?: JobObserver;
   }) {
     this.#pgClient = adapter;
     this.#workerId = workerId;
@@ -614,6 +626,7 @@ export class PgQueueRunner implements QueueRunner {
     this.#maxReservationCount = maxReservationCount;
     this.#maxWriterLanesPerFamily = maxWriterLanesPerFamily;
     this.#priority = priority;
+    this.#observeJob = observeJob;
   }
 
   get priority() {
@@ -1032,6 +1045,10 @@ export class PgQueueRunner implements QueueRunner {
                 });
             };
             let jobStartedAt = Date.now();
+            let stopObservingJob = this.#observeJob?.({
+              jobId: jobToRun.id,
+              jobType: jobToRun.job_type,
+            });
             registerJobHeartbeat(jobReservationId, () => {
               armDeadline();
               extendLease();
@@ -1067,6 +1084,7 @@ export class PgQueueRunner implements QueueRunner {
               // keep arming timers nobody is waiting on.
               unregisterJobHeartbeat(jobReservationId);
               clearTimeout(deadlineTimer);
+              stopObservingJob?.();
             });
             if (result === 'timeout') {
               // The number is the silence window, not the elapsed time: a job
