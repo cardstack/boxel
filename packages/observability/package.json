@@ -5,6 +5,7 @@
   "license": "MIT",
   "description": "Self-host Grafana dashboards as code: grafanactl resource manifests + local docker-compose preview",
   "scripts": {
-    "lint": "bash ./scripts/lint.sh"
+    "lint": "bash ./scripts/lint.sh",
+    "test": "node --test 'collectors/*.test.ts'"
   }
 }
