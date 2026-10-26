@@ -30,6 +30,10 @@ import {
   type Saved,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
+import {
+  realmsOfDisabledFeatures,
+  sessionSkillFeatures,
+} from '@cardstack/runtime-common/ai/debug';
 
 import {
   generateImage,
@@ -49,6 +53,7 @@ import {
   type RequestedRoomChanges,
 } from '../lib/realm-runner/room-actions';
 import runRealmCode from '../lib/realm-runner/runner';
+import { canonicalRealmIdentifier } from '../lib/realm-utils';
 import { loadSkillSource } from '../lib/skill-tools';
 import {
   captureDeadline,
@@ -1756,6 +1761,11 @@ function decodeBase64(base64: string): Uint8Array {
   return bytes;
 }
 
+// What a search answers when every realm it would reach is gated.
+function noSearchResults() {
+  return { data: [], meta: { page: { total: 0 } } };
+}
+
 export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeInput,
   typeof BaseToolModule.RunRealmCodeResult
@@ -1858,6 +1868,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
       : 0;
     let runTimeoutMs = RUN_TIMEOUT_MS + imageTime;
     let callDeadlineMs = CALL_DEADLINE_MS + imageTime;
+    // The room's features can't change during a run, so read them once, on
+    // the first search: reading the room's events loads the room.
+    let gatedRealmsOfRun: RealmIdentifier[] | undefined;
+    let gatedRealms = () => (gatedRealmsOfRun ??= this.gatedRealms(roomId));
     let session = new RealmFsSession(
       this.realmRootURL(realmURL),
       (url) => this.readSource(url),
@@ -1869,15 +1883,24 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url, maxBytes, signal) => this.downloadFile(url, maxBytes, signal),
       (url) => this.listDirectory(url),
       // The run reads only the rows' own data, so the linked cards' resources
-      // are not asked for.
-      (query) =>
-        this.store.searchEntries(query, [realmURL], { linksOnly: true }),
+      // are not asked for. A script run in a feature-gated realm finds
+      // nothing there unless the room enabled the feature.
+      async (query) =>
+        this.isGatedRealm(gatedRealms(), realmURL)
+          ? noSearchResults()
+          : await this.store.searchEntries(query, [realmURL], {
+              linksOnly: true,
+            }),
       (reference, base) =>
         this.network.virtualNetwork.resolveURL(reference, base).href,
       (id) => this.readCard(id),
-      (query, realms) => {
+      async (query, realms) => {
         this.assertKnownRealmIdentifiers(realms);
-        return this.store.searchEntries(query, realms);
+        let searchable = this.searchableRealms(gatedRealms(), realms);
+        // An empty list would make the store search every realm.
+        return searchable?.length === 0
+          ? noSearchResults()
+          : await this.store.searchEntries(query, searchable);
       },
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
@@ -2620,6 +2643,51 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return virtualNetwork.isRegisteredPrefix(realm)
       ? virtualNetwork.toURL(realm).href
       : new URL(realm).href;
+  }
+
+  // A realm gated behind a skill feature (SKILL_FEATURE_REALMS) is searched
+  // only in a room that enabled the feature; elsewhere it is left out of every
+  // entry and card search, whether the script named it, ran in it, or relied
+  // on the default of every readable realm.
+  private gatedRealms(roomId: string): RealmIdentifier[] {
+    // Only delivered events: one still sending, or that failed to send, has
+    // not reached the bot that built the prompt.
+    let events = (
+      this.matrixService.roomResources.get(roomId)?.events ?? []
+    ).filter((event) => event.status == null);
+    // The bot's id is derived from the signed-in user's server; with no one
+    // signed in no sender is excluded, and the bot never sends a feature command.
+    let aiBotUserId = this.matrixService.userId
+      ? this.matrixService.aiBotUserId
+      : '';
+    // Named by prefix, which every build registers: a test build clears the
+    // catalog's URL but keeps the prefix.
+    return realmsOfDisabledFeatures(
+      sessionSkillFeatures(events, aiBotUserId),
+    ).map((realm) =>
+      canonicalRealmIdentifier(this.network.virtualNetwork, realm),
+    );
+  }
+
+  // A path beneath a gated realm, such as one of its folders, is gated too.
+  private isGatedRealm(gated: RealmIdentifier[], realm: string): boolean {
+    let identifier = canonicalRealmIdentifier(
+      this.network.virtualNetwork,
+      realm,
+    );
+    return gated.some((gatedRealm) => identifier.startsWith(gatedRealm));
+  }
+
+  private searchableRealms(
+    gated: RealmIdentifier[],
+    realms: string[] | undefined,
+  ): string[] | undefined {
+    if (gated.length === 0) {
+      return realms;
+    }
+    return (
+      realms?.length ? realms : this.realmServer.availableRealmIdentifiers
+    ).filter((realm) => !this.isGatedRealm(gated, realm));
   }
 
   // A scoped identifier the host has no mapping for would reach the realm
