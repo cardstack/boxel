@@ -90,7 +90,7 @@ export class PlanMark extends Component<PlanMarkSignature> {
         /* done and failed: a soft tint of the state behind a thin mark, the
            old glyph's weight in the new shape */
         .pretui-planmark[data-state='done'] {
-          color: var(--success, var(--boxel-highlight));
+          color: var(--success-ink);
         }
         .pretui-planmark[data-state='done'] .pretui-planmark-ring circle,
         .pretui-planmark[data-state='failed'] .pretui-planmark-ring circle {
@@ -106,19 +106,19 @@ export class PlanMark extends Component<PlanMarkSignature> {
         }
         /* what comes next: a dashed circle, quieter */
         .pretui-planmark[data-state='next'] {
-          color: var(--subtle-foreground, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
         .pretui-planmark[data-state='next'] .pretui-planmark-ring circle {
           stroke-dasharray: 2.2 2.3;
         }
         .pretui-planmark[data-state='skipped'] {
-          color: var(--subtle-foreground, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
         .pretui-planmark[data-state='skipped'] .pretui-planmark-icon {
           stroke-width: 2.25;
         }
         .pretui-planmark[data-state='current'] {
-          color: var(--success, var(--boxel-highlight));
+          color: var(--success-ink);
         }
         /* under way: a ring with a gap that turns */
         .pretui-planmark[data-state='current'] .pretui-planmark-ring circle {

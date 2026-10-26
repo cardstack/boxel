@@ -208,13 +208,12 @@ export class SlidingHighlight extends Component<SlidingHighlightSignature> {
             cubic-bezier(0.23, 1, 0.32, 1)
           );
         }
-        /* a strong edge, so the pill reads even when its track blends into
-           the surface behind it */
-        /* the pill is raised above its rail: --card on a light theme's
-           inset rail; a dark theme, whose card is darker than its inset,
-           sets --pretui-highlight-pill to a lighter face */
+        /* the pill is a --card face on its --inset rail (the default
+           theme's card is the lighter of the two in light and dark mode);
+           a strong edge and a small shadow keep it raised under any theme,
+           even when the rail blends into the surface behind it */
         .pretui-highlight[data-variant='pill'] {
-          background-color: var(--pretui-highlight-pill, var(--card));
+          background-color: var(--card);
           box-shadow:
             0 0 0 1px var(--border-strong),
             var(--shadow-sm);

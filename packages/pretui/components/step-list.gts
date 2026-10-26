@@ -378,7 +378,7 @@ export class StepList extends Component<StepListSignature> {
           );
           --pretui-step-marker-fg: var(
             --pretui-step-current-marker-fg,
-            var(--card, var(--background))
+            var(--card)
           );
           --pretui-step-ring: var(
             --pretui-step-current-ring,
@@ -555,6 +555,15 @@ export class StepList extends Component<StepListSignature> {
           border-radius: 0;
           background-color: transparent;
           box-shadow: none;
+        }
+        /* the track's marker has no fill, so the current step's number,
+           which the steps rail writes in --card on its solid disc, takes
+           the step's tone instead; a caller's marker-fg knob still wins */
+        .pretui-steplist[data-variant='track'] .pretui-step[data-state='current'] {
+          --pretui-step-marker-fg: var(
+            --pretui-step-current-marker-fg,
+            var(--pretui-step-tone)
+          );
         }
         .pretui-steplist[data-variant='track'] .pretui-step-label {
           grid-area: label;

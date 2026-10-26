@@ -166,20 +166,31 @@ export class WorkItem extends Component<WorkItemSignature> {
       ...attributes
     >
       <div class='pretui-workitem-row'>
-        <span class='pretui-disc' data-tone={{this.tone}}>
+        <span
+          class='pretui-disc'
+          data-tone={{this.tone}}
+          data-test-pretui-work-item-disc
+        >
           {{#if this.isRunning}}<Spinner @size={{9}} />{{else}}<StateGlyph
               @glyph={{this.glyph}}
             />{{/if}}
         </span>
-        {{#if @verb}}<span class='pretui-verb'>{{@verb}}</span>{{/if}}
-        <span class='pretui-workitem-title'>{{@title}}</span>
+        {{#if @verb}}<span
+            class='pretui-verb'
+            data-test-pretui-work-item-verb
+          >{{@verb}}</span>{{/if}}
+        <span
+          class='pretui-workitem-title'
+          data-test-pretui-work-item-title
+        >{{@title}}</span>
         <span
           class='pretui-workitem-status'
           data-tone={{this.tone}}
+          data-test-pretui-work-item-status
         >{{this.statusText}}</span>
       </div>
       {{#if this.hasBody}}
-        <div class='pretui-workitem-body'>
+        <div class='pretui-workitem-body' data-test-pretui-work-item-body>
           {{#if this.hasProgress}}
             <ProgressBar
               @value={{this.progressValue}}
@@ -189,6 +200,7 @@ export class WorkItem extends Component<WorkItemSignature> {
           {{/if}}
           {{#if @activity}}<div
               class='pretui-activity'
+              data-test-pretui-work-item-activity
             >{{@activity}}</div>{{/if}}
           {{yield}}
         </div>
@@ -200,18 +212,26 @@ export class WorkItem extends Component<WorkItemSignature> {
     <style scoped>
       @layer PretComponent {
         .pretui-workitem {
+          /* the row's inset, disc and gap, which the body's leading edge
+             adds up to so its text lines up under the title */
+          --_workitem-inset: var(--boxel-sp-sm);
+          --_workitem-disc: 1rem;
+          --_workitem-gap: var(--boxel-sp-xs);
           display: flex;
           flex-direction: column;
-          background: var(--card);
-          border-radius: 10px;
+          background-color: var(--card);
+          border-radius: var(--boxel-border-radius);
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
           font-size: var(--boxel-font-size-xs);
         }
+        /* needs you: the attention hue tints the face and draws the edge;
+           the status words and the disc's mark take its ink (below) */
         .pretui-workitem[data-attention] {
           box-shadow:
             0 0 0 1px color-mix(in oklch, var(--attention) 60%, var(--border)),
-            0 2px 10px color-mix(in oklch, var(--attention) 14%, transparent);
-          background: linear-gradient(
+            0 0.125rem 0.625rem
+              color-mix(in oklch, var(--attention) 14%, transparent);
+          background-image: linear-gradient(
             180deg,
             color-mix(in oklch, var(--attention) 7%, var(--card)),
             var(--card) 55%
@@ -233,40 +253,52 @@ export class WorkItem extends Component<WorkItemSignature> {
         .pretui-workitem-row {
           display: flex;
           align-items: center;
-          gap: 9px;
-          padding: 7px 11px;
-          min-height: 32px;
+          gap: var(--_workitem-gap);
+          padding: var(--boxel-sp-2xs) var(--_workitem-inset);
+          min-height: 2rem;
         }
         .pretui-workitem-body {
-          padding: 0 11px 9px 36px;
+          padding: 0 var(--_workitem-inset) var(--boxel-sp-xs)
+            calc(
+              var(--_workitem-inset) + var(--_workitem-disc) +
+                var(--_workitem-gap)
+            );
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          gap: var(--boxel-sp-xs);
         }
         .pretui-disc {
-          width: 16px;
-          height: 16px;
+          width: var(--_workitem-disc);
+          height: var(--_workitem-disc);
           border-radius: 50%;
           display: grid;
           place-items: center;
           flex: none;
-          font-size: 9px;
+          font-size: 0.5625rem;
           font-weight: 700;
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
           color: var(--muted-foreground);
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
         }
         .pretui-disc[data-tone='failed'] {
-          background: color-mix(in oklch, var(--destructive) 15%, var(--card));
+          background-color: color-mix(
+            in oklch,
+            var(--destructive) 15%,
+            var(--card)
+          );
           color: var(--destructive-ink);
         }
         .pretui-disc[data-tone='attention'] {
-          background: color-mix(in oklch, var(--attention) 22%, var(--card));
+          background-color: color-mix(
+            in oklch,
+            var(--attention) 22%,
+            var(--card)
+          );
           color: var(--attention-ink);
         }
         .pretui-verb {
           font-family: var(--font-mono);
-          font-size: 10px;
+          font-size: 0.625rem;
           font-weight: 600;
           letter-spacing: 0.06em;
           color: var(--muted-foreground);
@@ -287,7 +319,7 @@ export class WorkItem extends Component<WorkItemSignature> {
           color: var(--muted-foreground);
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: var(--boxel-sp-3xs);
           font-variant-numeric: tabular-nums;
         }
         .pretui-workitem-status[data-tone='attention'] {

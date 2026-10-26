@@ -105,8 +105,8 @@ export class TaskChecklist extends Component<TaskChecklistSignature> {
           margin: 0;
           padding: 0;
           border: 0;
-          background: none;
-          font: inherit;
+          background-color: transparent;
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           text-align: start;
@@ -156,7 +156,7 @@ export class TaskChecklist extends Component<TaskChecklistSignature> {
         @media (prefers-reduced-motion: reduce) {
           .pretui-checklist[data-running] .pretui-checklist-activity-text {
             animation: none;
-            background: none;
+            background-image: none;
             color: var(--muted-foreground);
           }
         }
@@ -167,7 +167,7 @@ export class TaskChecklist extends Component<TaskChecklistSignature> {
           padding: var(--boxel-sp-sm);
           border-radius: var(--boxel-border-radius-lg);
           box-shadow: inset 0 0 0 1px var(--border);
-          background: var(--card, var(--background));
+          background-color: var(--card);
         }
         /* the count is for a screen reader; the marks say it to the eye */
         .pretui-checklist-summary {

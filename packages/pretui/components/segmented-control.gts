@@ -51,17 +51,19 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
   get value() {
     return this.args.value ?? this.internal;
   }
-  pick = (option: SegmentOption) => {
+  pick = (option: SegmentOption, event: Event) => {
     if (this.args.value === undefined) {
       this.internal = option.value;
     }
     emit([this.args.onValueChange, this.args.onChange], option.value);
     // controlled: the browser already moved the radio; move it back unless the
-    // owner took the new value
+    // owner took the new value. The radios are found inside this control, so
+    // the lookup holds in a shadow root or another document too.
     if (this.args.value !== undefined && this.args.value !== option.value) {
-      for (let radio of document.getElementsByName(
-        this.name,
-      ) as NodeListOf<HTMLInputElement>) {
+      let group = (event.target as HTMLElement).closest('[data-pretui-seg]');
+      for (let radio of group?.querySelectorAll<HTMLInputElement>(
+        '[data-pretui-seg-radio]',
+      ) ?? []) {
         radio.checked = radio.value === this.args.value;
       }
     }
@@ -72,6 +74,7 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
       class='pretui-seg'
       role='radiogroup'
       aria-label={{@label}}
+      data-pretui-seg
       {{slidingHighlight}}
       data-test-pretui-segmented
       ...attributes
@@ -89,6 +92,7 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
             value={{option.value}}
             checked={{this.isActive option}}
             disabled={{@disabled}}
+            data-pretui-seg-radio
             {{on 'change' (fn this.pick option)}}
             data-test-pretui-segmented-option={{option.value}}
           />
@@ -104,14 +108,14 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
         .pretui-seg {
           /* the rail's gap, padding and radius offset move together, so the
              pill's corner stays concentric with the rail's */
-          /* the kit's own 2px, not a host spacing scale, so the control
-             draws the same in every host */
-          --pretui-seg-inset: 2px;
+          --pretui-seg-inset: var(--boxel-sp-6xs);
           /* the active label's weight; the hidden copy below must match it */
           --pretui-seg-active-weight: 600;
           /* Button's corner, shared by the segments and the pill; the rail
              adds the inset so the pill's corner stays concentric */
-          --pretui-seg-radius: calc(var(--boxel-border-radius) - 2px);
+          --pretui-seg-radius: calc(
+            var(--boxel-border-radius) - var(--pretui-seg-inset)
+          );
           --pretui-highlight-radius: var(--pretui-seg-radius);
 
           position: relative;
@@ -168,10 +172,7 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
         }
         /* the label sits on the pill's --card face */
         .pretui-seg-item[data-state='active'] {
-          color: var(
-            --pretui-seg-active-ink,
-            var(--card-foreground, var(--foreground))
-          );
+          color: var(--pretui-seg-active-ink, var(--card-foreground));
           font-weight: var(--pretui-seg-active-weight);
         }
         /* a hidden bold copy under the label holds every segment at its bold

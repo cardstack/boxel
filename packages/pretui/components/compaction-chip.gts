@@ -141,9 +141,10 @@ export class CompactionChip extends Component<CompactionChipSignature> {
             {{#if this.failed}}
               <XIcon
                 class='pretui-compaction-failed'
-                width='11'
-                height='11'
+                width='13'
+                height='13'
                 aria-hidden='true'
+                data-test-pretui-compaction-failed-mark
               />
             {{else}}
               <Spinner @size={{11}} />
@@ -184,32 +185,32 @@ export class CompactionChip extends Component<CompactionChipSignature> {
           align-items: center;
           gap: var(--boxel-sp-xs);
         }
-        /* a failure colours its mark, not its words */
+        /* a failure colours its mark, not its words. The mark's rule names
+           the chip as well, so it outranks the quiet colour every icon in
+           the chip takes below */
         .pretui-compaction[data-state='failed'] .pretui-compaction-chip {
           color: var(--foreground);
         }
-        .pretui-compaction-failed {
-          font-size: var(--boxel-caption-font-size);
-          line-height: 1;
+        .pretui-compaction-chip > .pretui-compaction-failed {
           color: var(--destructive-ink);
         }
         .pretui-compaction-rule {
           flex: 1;
           height: 1px;
-          min-width: 12px;
-          background: var(--border);
+          min-width: var(--boxel-sp-sm);
+          background-color: var(--border);
         }
         .pretui-compaction-chip {
           display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-xs);
-          min-height: 26px;
+          min-height: 1.625rem;
           padding: 0 var(--boxel-sp-sm);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-          font: inherit;
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           color: var(--muted-foreground);
@@ -223,7 +224,7 @@ export class CompactionChip extends Component<CompactionChipSignature> {
           cursor: pointer;
         }
         button.pretui-compaction-chip:hover {
-          background: var(--hover, var(--boxel-100));
+          background-color: var(--hover);
           color: var(--foreground);
         }
         button.pretui-compaction-chip:focus-visible {
@@ -231,8 +232,6 @@ export class CompactionChip extends Component<CompactionChipSignature> {
           outline-offset: 2px;
         }
         .pretui-compaction-chip > svg {
-          width: 13px;
-          height: 13px;
           flex: none;
           color: var(--subtle-foreground);
         }
@@ -257,10 +256,10 @@ export class CompactionChip extends Component<CompactionChipSignature> {
         }
         .pretui-compaction-summary {
           margin: var(--boxel-sp-4xs) auto 0;
-          max-inline-size: var(--measure-read, 68ch);
+          max-inline-size: 68ch;
           padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
           border-radius: var(--boxel-border-radius-sm);
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
           color: var(--muted-foreground);
         }
@@ -278,8 +277,8 @@ export class CompactionChip extends Component<CompactionChipSignature> {
         }
         @media (any-pointer: coarse) {
           button.pretui-compaction-chip {
-            min-height: 44px;
-            padding: 0 16px;
+            min-height: 2.75rem;
+            padding: 0 var(--boxel-sp);
           }
         }
       }

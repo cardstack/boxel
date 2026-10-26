@@ -63,7 +63,7 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
         .pretui-speaker {
           display: flex;
           align-items: center;
-          /* the mark is the thread's 16px glyph column, its words 8px after,
+          /* the mark is the thread's glyph column, its words one gap after,
              as every mark in the transcript */
           gap: var(--pretui-toolrow-gap, var(--boxel-sp-xs));
           min-width: 0;
@@ -71,12 +71,12 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
           line-height: var(--boxel-ui-label-line-height);
           color: var(--muted-foreground);
         }
-        /* the host's avatar, held to the mark's 16px circle */
+        /* the host's avatar, held to the mark's circle */
         .pretui-speaker-avatar {
           flex: none;
           display: inline-flex;
-          width: 16px;
-          height: 16px;
+          width: var(--pretui-toolrow-disc, 1rem);
+          height: var(--pretui-toolrow-disc, 1rem);
           overflow: hidden;
           border-radius: 50%;
         }
@@ -84,10 +84,10 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
           flex: none;
           display: grid;
           place-items: center;
-          width: 16px;
-          height: 16px;
+          width: var(--pretui-toolrow-disc, 1rem);
+          height: var(--pretui-toolrow-disc, 1rem);
           border-radius: 50%;
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
           box-shadow: inset 0 0 0 1px var(--border);
           /* one initial, not a kicker: caption, set to the circle's height */
           font-size: var(--boxel-caption-font-size);

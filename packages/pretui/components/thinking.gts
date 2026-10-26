@@ -223,26 +223,24 @@ export class Thinking extends Component<ThinkingSignature> {
           display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-xs);
-          min-height: 28px;
+          min-height: 1.75rem;
           padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
           margin: calc(-1 * var(--boxel-sp-4xs)) calc(-1 * var(--boxel-sp-xs));
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: none;
-          font: inherit;
+          background-color: transparent;
+          font-family: inherit;
           color: var(--muted-foreground);
           cursor: pointer;
         }
         .pretui-trace-head:hover {
-          background: var(--hover, var(--boxel-100));
+          background-color: var(--hover);
         }
         .pretui-trace-head:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 1px;
         }
         .pretui-trace-spark {
-          width: 15px;
-          height: 15px;
           flex: none;
           color: var(--subtle-foreground);
         }
@@ -275,8 +273,6 @@ export class Thinking extends Component<ThinkingSignature> {
           }
         }
         .pretui-trace-chev {
-          width: 14px;
-          height: 14px;
           flex: none;
           color: var(--subtle-foreground);
           transition: transform 300ms
@@ -287,39 +283,37 @@ export class Thinking extends Component<ThinkingSignature> {
         }
         .pretui-trace-rail {
           position: relative;
-          margin: 6px 0 0 5px;
-          padding-left: 16px;
+          margin: var(--boxel-sp-3xs) 0 0 var(--boxel-sp-3xs);
+          padding-left: var(--boxel-sp);
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: var(--boxel-sp-6xs);
         }
         .pretui-trace-rail::before {
           content: '';
           position: absolute;
-          left: 3px;
-          top: 4px;
-          bottom: 6px;
+          left: var(--boxel-sp-5xs);
+          top: var(--boxel-sp-4xs);
+          bottom: var(--boxel-sp-3xs);
           width: 1px;
-          background: var(--border);
+          background-color: var(--border);
         }
         .pretui-trace-row {
           display: flex;
           align-items: center;
           gap: var(--boxel-sp-xs);
-          min-height: 26px;
-          padding: 2px var(--boxel-sp-xs);
+          min-height: 1.625rem;
+          padding: var(--boxel-sp-6xs) var(--boxel-sp-xs);
           border-radius: var(--boxel-border-radius-sm);
           color: var(--foreground);
         }
         .pretui-trace-row:hover {
-          background: var(--hover, var(--boxel-100));
+          background-color: var(--hover);
         }
         .pretui-trace-row[data-kind='query'] {
           color: var(--muted-foreground);
         }
         .pretui-trace-row > svg {
-          width: 13px;
-          height: 13px;
           flex: none;
         }
         .pretui-trace-check {
@@ -360,7 +354,7 @@ export class Thinking extends Component<ThinkingSignature> {
           font-variant-numeric: tabular-nums;
         }
         .pretui-trace-add {
-          color: var(--success, var(--boxel-success));
+          color: var(--success-ink);
         }
         .pretui-trace-del {
           color: var(--destructive-ink);
@@ -378,7 +372,7 @@ export class Thinking extends Component<ThinkingSignature> {
         @keyframes pretui-trace-in {
           from {
             opacity: 0;
-            transform: translateY(4px);
+            transform: translateY(var(--boxel-sp-4xs));
           }
           to {
             opacity: 1;
@@ -388,7 +382,7 @@ export class Thinking extends Component<ThinkingSignature> {
         @media (prefers-reduced-motion: reduce) {
           .pretui-trace-label[data-shimmer] {
             animation: none;
-            background: none;
+            background-image: none;
             -webkit-background-clip: border-box;
             background-clip: border-box;
             color: var(--foreground);

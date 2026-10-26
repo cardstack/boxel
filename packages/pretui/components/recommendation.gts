@@ -119,7 +119,7 @@ export class Recommendation extends Component<RecommendationSignature> {
 
   accept = () => {
     let option = this.active;
-    if (!option) {
+    if (!option || this.accepted) {
       return;
     }
     this.innerAccepted = true;
@@ -204,6 +204,7 @@ export class Recommendation extends Component<RecommendationSignature> {
             @tone={{if this.accepted 'neutral' 'primary'}}
             @appearance={{if this.accepted 'plain' 'accent'}}
             @disabled={{unless this.active true}}
+            aria-disabled={{if this.accepted 'true'}}
             data-test-pretui-recommendation-accept
             {{on 'click' this.accept}}
           >{{#if this.accepted}}<CheckIcon
@@ -221,25 +222,25 @@ export class Recommendation extends Component<RecommendationSignature> {
           width: 100%;
           overflow: hidden;
           border-radius: var(--boxel-border-radius-lg);
-          background: var(--card);
+          background-color: var(--card);
           box-shadow: var(
             --pretui-shadow-card,
             0 0 0 1px var(--border),
-            0 1px 2px rgb(0 0 0 / 0.08)
+            var(--shadow-xs)
           );
           container-type: inline-size;
         }
         .pretui-reco[data-surface='plain'] {
           border-radius: 0;
-          background: none;
+          background-color: transparent;
           box-shadow: none;
         }
         .pretui-reco[data-surface='plain'] .pretui-reco-head {
           padding: 0 0 var(--boxel-sp-xs);
         }
         .pretui-reco[data-surface='plain'] .pretui-reco-foot {
-          padding: var(--boxel-sp-xs) 0 2px;
-          background: none;
+          padding: var(--boxel-sp-xs) 0 var(--boxel-sp-6xs);
+          background-color: transparent;
         }
         .pretui-reco-head {
           padding: var(--boxel-sp-sm);
@@ -256,14 +257,14 @@ export class Recommendation extends Component<RecommendationSignature> {
            reading measure */
         .pretui-reco-body {
           margin-top: var(--boxel-sp-4xs);
-          min-height: 40px;
-          max-inline-size: var(--measure-read, 68ch);
+          min-height: 2.5rem;
+          max-inline-size: 68ch;
           font-size: var(--boxel-body-font-size);
           line-height: var(--boxel-body-line-height);
           color: var(--foreground);
         }
         .pretui-reco-drawer {
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
           box-shadow: 0 -1px 0 var(--border);
           padding: var(--boxel-sp-xs);
         }
@@ -285,12 +286,12 @@ export class Recommendation extends Component<RecommendationSignature> {
           width: 100%;
           align-items: center;
           gap: var(--boxel-sp-xs);
-          min-height: 32px;
+          min-height: 2rem;
           padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: none;
-          font: inherit;
+          background-color: transparent;
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           text-align: left;
@@ -298,7 +299,7 @@ export class Recommendation extends Component<RecommendationSignature> {
           cursor: pointer;
         }
         .pretui-reco-alt:hover {
-          background: var(--hover, var(--boxel-100));
+          background-color: var(--hover);
         }
         .pretui-reco-alt:focus-visible {
           outline: 2px solid var(--ring);
@@ -318,7 +319,7 @@ export class Recommendation extends Component<RecommendationSignature> {
           gap: var(--boxel-sp-xs);
           flex-wrap: wrap;
           padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
           box-shadow: 0 -1px 0 var(--border);
         }
         .pretui-reco-foot-actions {
@@ -337,7 +338,7 @@ export class Recommendation extends Component<RecommendationSignature> {
         }
         @media (any-pointer: coarse) {
           .pretui-reco-alt {
-            min-height: 44px;
+            min-height: 2.75rem;
           }
         }
       }

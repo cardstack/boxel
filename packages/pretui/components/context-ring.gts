@@ -22,9 +22,10 @@ function compact(n: number): string {
 }
 
 /**
- * A 14px ring and its percentage, beside the model picker: how full the
+ * A small ring and its percentage, beside the model picker: how full the
  * context is, so a reader sees compaction coming before it happens. The
- * ring turns to the attention colour past @warnAt.
+ * ring turns to the attention colour past @warnAt, and its name says
+ * "nearly full".
  */
 export class ContextRing extends Component<ContextRingSignature> {
   get share(): number {
@@ -40,8 +41,11 @@ export class ContextRing extends Component<ContextRingSignature> {
   get ringStyle() {
     return htmlSafe(`--pretui-ring-share: ${this.share * 360}deg`);
   }
+  /** the accessible name and tooltip; past @warnAt it says so in words, so
+   * the warning never rests on the ring's colour alone */
   get label(): string {
-    return `Context ${this.percent}% used: ${compact(this.args.used)} of ${compact(this.args.limit)} tokens`;
+    let warning = this.warns ? ', nearly full' : '';
+    return `Context ${this.percent}% used${warning}: ${compact(this.args.used)} of ${compact(this.args.limit)} tokens`;
   }
   <template>
     <span
@@ -75,22 +79,28 @@ export class ContextRing extends Component<ContextRingSignature> {
           color: var(--muted-foreground);
         }
         .pretui-contextring-ring {
-          width: 14px;
-          height: 14px;
+          --_contextring-ink: var(--muted-foreground);
+          width: 0.875rem;
+          height: 0.875rem;
           border-radius: 50%;
           background: conic-gradient(
-            var(--pretui-contextring-ink, var(--muted-foreground))
-              var(--pretui-ring-share),
-            var(--border-strong, var(--border)) 0
+            var(--_contextring-ink) var(--pretui-ring-share),
+            var(--border-strong) 0
           );
-          -webkit-mask: radial-gradient(circle, transparent 4px, #000 4.5px);
-          mask: radial-gradient(circle, transparent 4px, #000 4.5px);
+          -webkit-mask: radial-gradient(
+            circle,
+            transparent 0.25rem,
+            black 0.28125rem
+          );
+          mask: radial-gradient(circle, transparent 0.25rem, black 0.28125rem);
         }
         /* past the warning share the ring (the mark) takes the attention
-           state; the digits step up to ink-1 */
+           ink, and the digits step up to the full foreground */
         .pretui-contextring[data-warn] {
-          --pretui-contextring-ink: var(--attention-ink);
           color: var(--foreground);
+        }
+        .pretui-contextring[data-warn] .pretui-contextring-ring {
+          --_contextring-ink: var(--attention-ink);
         }
       }
     </style>

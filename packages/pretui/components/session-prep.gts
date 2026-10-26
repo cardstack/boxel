@@ -130,11 +130,11 @@ export class SessionPrep extends Component<SessionPrepSignature> {
           gap: var(--boxel-sp-sm);
           padding: var(--boxel-sp-sm) var(--boxel-sp);
           border-radius: var(--boxel-border-radius-lg);
-          background: var(--card);
+          background-color: var(--card);
           box-shadow: var(
             --pretui-shadow-card,
             0 0 0 1px var(--border),
-            0 1px 2px rgb(0 0 0 / 0.08)
+            var(--shadow-xs)
           );
         }
         .pretui-prep-head {
@@ -154,7 +154,7 @@ export class SessionPrep extends Component<SessionPrepSignature> {
         }
         .pretui-prep-note {
           margin: 0;
-          max-width: var(--measure-read, 68ch);
+          max-width: 68ch;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           color: var(--muted-foreground);

@@ -1,6 +1,7 @@
 // Pretui — AgentMark: the assistant's own icon, still when settled and animated while it works.
 import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
+import { cssNumber } from '../pretui-css';
 
 export interface AgentMarkSignature {
   Args: {
@@ -28,8 +29,11 @@ export interface AgentMarkSignature {
  * the assistant works. Decorative: the label beside it says who.
  */
 export class AgentMark extends Component<AgentMarkSignature> {
+  /** the size in rem (the argument is px, as icon sizes are), through the
+   * kit's number guard so a stray value cannot write other declarations */
   get style() {
-    return htmlSafe(`--pretui-agent-mark-size: ${this.args.size ?? 16}px`);
+    let px = cssNumber(this.args.size, 0, 1000) ?? 16;
+    return htmlSafe(`--pretui-agent-mark-size: ${px / 16}rem`);
   }
   <template>
     <span

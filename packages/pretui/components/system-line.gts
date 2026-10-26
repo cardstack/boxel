@@ -66,15 +66,14 @@ export class SystemLine extends Component<SystemLineSignature> {
       @layer PretComponent {
         .pretui-systemline {
           display: grid;
-          grid-template-columns: var(--pretui-toolrow-disc, 16px) minmax(
-              0,
-              1fr
-            ) auto auto;
-          column-gap: var(--pretui-toolrow-gap, 8px);
+          grid-template-columns:
+            var(--pretui-toolrow-disc, 1rem) minmax(0, 1fr)
+            auto auto;
+          column-gap: var(--pretui-toolrow-gap, var(--boxel-sp-xs));
           align-items: baseline;
           margin: 0;
           /* on the transcript's text edge; inside a row, the row's inset */
-          padding-inline: var(--pretui-toolrow-inset, 0px);
+          padding-inline: var(--pretui-toolrow-inset, 0);
           font-size: var(--boxel-caption-font-size);
           line-height: var(--boxel-caption-line-height);
           color: var(--subtle-foreground);
@@ -84,39 +83,46 @@ export class SystemLine extends Component<SystemLineSignature> {
         }
         .pretui-systemline-text {
           min-width: 0;
-          overflow-wrap: anywhere;
+          overflow-wrap: break-word;
         }
-        /* a checkpoint is a rule across the thread with its name on it */
+        /* a checkpoint is a rule across the thread with its name on it. A
+           flex row, not a grid, so the two rules take the slack on either
+           side of whatever sits between them: the name alone, or the name
+           with an action, a dismiss button or both, all on one line */
         .pretui-systemline[data-variant='checkpoint'] {
-          grid-template-columns:
-            minmax(var(--boxel-sp-sm), 1fr) auto auto
-            minmax(var(--boxel-sp-sm), 1fr);
+          display: flex;
+          align-items: center;
           column-gap: var(--boxel-sp-xs);
         }
         .pretui-systemline[data-variant='checkpoint']::before,
         .pretui-systemline[data-variant='checkpoint']::after {
           content: '';
+          flex: 1 1 var(--boxel-sp-sm);
+          min-width: var(--boxel-sp-sm);
           height: 1px;
-          align-self: center;
-          background: var(--border);
-        }
-        .pretui-systemline[data-variant='checkpoint']::before {
-          grid-column: 1;
-          grid-row: 1;
-        }
-        .pretui-systemline[data-variant='checkpoint']::after {
-          grid-column: 4;
-          grid-row: 1;
+          background-color: var(--border);
         }
         .pretui-systemline[data-variant='checkpoint'] .pretui-systemline-glyph {
           display: none;
         }
+        /* a 24px target (WCAG 2.5.8) inside a caption line: the negative
+           block margin gives back what the height adds, so the line keeps
+           its caption height */
         .pretui-systemline-act {
+          --_systemline-target: 1.5rem;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: var(--_systemline-target);
+          min-height: var(--_systemline-target);
+          margin-block: calc((1lh - var(--_systemline-target)) / 2);
           padding: 0 var(--boxel-sp-4xs);
           border: 0;
           border-radius: var(--boxel-border-radius-xs);
-          background: none;
-          font: inherit;
+          background-color: transparent;
+          font-family: inherit;
+          font-size: inherit;
+          line-height: inherit;
           font-weight: 600;
           color: var(--muted-foreground);
           cursor: pointer;
