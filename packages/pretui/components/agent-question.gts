@@ -1,10 +1,10 @@
 // Pretui — AgentQuestion: a question the agent is waiting on, answered in place.
 import Component from '@glimmer/component';
 import { StateGlyph } from './state-glyph';
-import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { cssStyle } from '../pretui-css';
 
 export interface AgentQuestionSignature {
   Args: {
@@ -54,16 +54,22 @@ export interface AgentChoice {
   swatch?: string;
 }
 
-const swatchStyle = (choice: AgentChoice) =>
-  htmlSafe(choice.swatch ? `--swatch: ${choice.swatch}` : '');
-const imageStyle = (choice: AgentChoice) =>
-  htmlSafe(choice.image ? `background-image: url("${choice.image}")` : '');
+// a swatch is agent-supplied, so it is validated as one CSS value before it
+// reaches the style attribute; a rejected value draws no colour
+const swatchStyle = (choice: AgentChoice) => cssStyle('--swatch', choice.swatch);
 
 const choiceValue = (choice: AgentChoice) => choice.value ?? choice.label;
 
 // ASK verb: option pills + free answer; settles to a quiet answered line.
 export class AgentQuestion extends Component<AgentQuestionSignature> {
-  @tracked picked?: string = this.args.answered;
+  /** the reader's own answer, before the caller reports it back */
+  @tracked private localPicked?: string;
+  /** the settled answer: the caller's `@answered` wins, so a question that
+   * is answered elsewhere (a teammate's, a read-only transcript) settles
+   * when the answer arrives */
+  get picked(): string | undefined {
+    return this.args.answered ?? this.localPicked;
+  }
   /** the choice picked but not yet confirmed (with @confirm) */
   @tracked selected?: AgentChoice;
   /** the settled answer as words: a choice's label, not its value */
@@ -104,7 +110,7 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
     if (this.args.readonly || this.args.pending) {
       return;
     }
-    this.picked = value;
+    this.localPicked = value;
     this.args.onAnswer?.(value);
   };
   onKey = (e: Event) => {
@@ -166,22 +172,24 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
                     @confirm
                     (if (this.isSelected choice) 'true' 'false')
                   }}
-                  data-test-pretui-agent-choice={{choice.label}}
                   {{on 'click' (fn this.pick choice)}}
+                  data-test-pretui-agent-choice={{choice.label}}
                 >
                   {{#if (has-block 'choice')}}
                     <span class='pretui-qchoice-content'>{{yield
                         choice
                         to='choice'
                       }}</span>
-                  {{else if choice.image}}<span
+                  {{else if choice.image}}<img
                       class='pretui-qchoice-image'
-                      style={{imageStyle choice}}
-                      aria-hidden='true'
-                    ></span>{{/if}}
+                      src={{choice.image}}
+                      alt=''
+                      data-test-pretui-agent-choice-image
+                    />{{/if}}
                   {{#if choice.swatch}}<span
                       class='pretui-qchoice-swatch'
                       aria-hidden='true'
+                      data-test-pretui-agent-choice-swatch
                     ></span>{{/if}}
                   <span class='pretui-qchoice-label'>{{choice.label}}</span>
                   {{#if choice.sub}}<span
@@ -195,8 +203,8 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
                 type='button'
                 class='pretui-qconfirm'
                 disabled={{if this.selected false true}}
-                data-test-pretui-agent-confirm
                 {{on 'click' this.confirmPick}}
+                data-test-pretui-agent-confirm
               >{{this.confirmLabel}}</button>
             {{/if}}
           {{/if}}
@@ -235,13 +243,13 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
         .pretui-qpill {
           display: inline-flex;
           align-items: center;
-          height: 28px;
+          height: 1.75rem;
           padding: 0 var(--boxel-sp-sm);
           border-radius: var(--boxel-border-radius-sm);
           border: 0;
-          background: none;
+          background-color: transparent;
           box-shadow: inset 0 0 0 1px var(--border);
-          font: inherit;
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           font-weight: 400;
@@ -249,8 +257,8 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
           color: var(--foreground);
         }
         .pretui-qpill:hover {
-          background: var(--hover);
-          box-shadow: inset 0 0 0 1px var(--border-strong, var(--border));
+          background-color: var(--hover);
+          box-shadow: inset 0 0 0 1px var(--border-strong);
         }
         .pretui-qpill:focus-visible {
           outline: 2px solid var(--ring);
@@ -260,30 +268,30 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
            colours; a choice is one button, its label the answer */
         .pretui-question-choices {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
           gap: var(--boxel-sp-xs);
         }
         .pretui-question-choices[data-layout='swatches'] {
-          grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(5.25rem, 1fr));
         }
         .pretui-qchoice {
           display: grid;
           align-content: start;
-          gap: 2px;
+          gap: var(--boxel-sp-6xs);
           min-width: 0;
           padding: var(--boxel-sp-xs);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: none;
+          background-color: transparent;
           box-shadow: inset 0 0 0 1px var(--border);
-          font: inherit;
+          font-family: inherit;
           text-align: start;
           color: var(--foreground);
           cursor: pointer;
         }
         .pretui-qchoice:hover {
-          background: var(--hover);
-          box-shadow: inset 0 0 0 1px var(--border-strong, var(--border));
+          background-color: var(--hover);
+          box-shadow: inset 0 0 0 1px var(--border-strong);
         }
         .pretui-qchoice:focus-visible {
           outline: 2px solid var(--ring);
@@ -304,13 +312,13 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
         /* Confirm is the one answer: the moment's primary */
         .pretui-qconfirm {
           justify-self: start;
-          height: 28px;
+          height: 1.75rem;
           padding: 0 var(--boxel-sp-sm);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: var(--primary);
+          background-color: var(--primary);
           color: var(--primary-foreground);
-          font: inherit;
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
@@ -326,17 +334,19 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
         }
         .pretui-qchoice-image {
           display: block;
+          width: 100%;
           aspect-ratio: 16 / 10;
           margin-bottom: var(--boxel-sp-4xs);
           border-radius: var(--boxel-border-radius-xs);
-          background: var(--inset) center / cover no-repeat;
+          background-color: var(--inset);
+          object-fit: cover;
         }
         .pretui-qchoice-swatch {
           display: block;
-          height: 22px;
+          height: 1.375rem;
           margin-bottom: var(--boxel-sp-4xs);
           border-radius: var(--boxel-border-radius-xs);
-          background: var(--swatch);
+          background-color: var(--swatch, var(--muted));
           box-shadow: inset 0 0 0 1px var(--border);
         }
         .pretui-qchoice-label {
@@ -368,16 +378,16 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
         .pretui-qinput {
           display: flex;
           align-items: center;
-          height: var(--control-h, 28px);
+          height: 1.75rem;
           padding: 0 var(--boxel-sp-xs);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          font: inherit;
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           color: var(--foreground);
-          background: var(--field, var(--background));
-          box-shadow: inset 0 0 0 1px var(--input, var(--border));
+          background-color: var(--field);
+          box-shadow: inset 0 0 0 1px var(--input);
           width: 100%;
         }
         .pretui-qinput::placeholder {

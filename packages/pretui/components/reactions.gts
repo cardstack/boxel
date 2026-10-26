@@ -59,8 +59,8 @@ export class Reactions extends Component<ReactionsSignature> {
             aria-pressed={{if reaction.mine 'true' 'false'}}
             aria-label={{this.label reaction}}
             title={{this.label reaction}}
-            data-test-pretui-reaction={{reaction.key}}
             {{on 'click' (fn this.toggle reaction.key)}}
+            data-test-pretui-reaction={{reaction.key}}
           ><span
               class='pretui-reaction-key'
               aria-hidden='true'
@@ -91,30 +91,31 @@ export class Reactions extends Component<ReactionsSignature> {
         .pretui-reactions {
           display: flex;
           flex-wrap: wrap;
-          gap: 4px;
+          gap: var(--boxel-sp-4xs);
         }
         .pretui-reaction {
           display: inline-flex;
           align-items: center;
-          gap: 4px;
-          height: 22px;
-          padding: 0 8px 0 6px;
+          gap: var(--boxel-sp-4xs);
+          /* the least a pointer target takes */
+          height: 1.5rem;
+          padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-2xs);
           border: 0;
-          border-radius: 999px;
-          background: var(--muted, var(--inset));
+          border-radius: var(--boxel-border-radius-pill);
+          background-color: var(--muted);
           box-shadow: inset 0 0 0 1px var(--border);
-          font: inherit;
+          font-family: inherit;
           font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           line-height: 1;
           color: var(--muted-foreground);
         }
         .pretui-reaction-key {
-          font-size: 12px;
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-reaction[data-mine],
         .pretui-reaction[aria-pressed='true'] {
-          background: color-mix(in oklch, var(--primary) 14%, var(--card));
+          background-color: color-mix(in oklch, var(--primary) 14%, var(--card));
           box-shadow: inset 0 0 0 1px
             color-mix(in oklch, var(--primary) 45%, transparent);
           color: var(--foreground);

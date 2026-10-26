@@ -4,6 +4,7 @@ import XIcon from '@cardstack/boxel-icons/x';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { CopyButton } from './copy-button';
+import { VisuallyHidden } from './visually-hidden';
 
 export interface AnswerFooterDiff {
   files: number;
@@ -16,7 +17,7 @@ export interface AnswerFooterSignature {
     /** the reply as markdown, for Copy */
     text: string;
     /** keep the reply as a card; resolves to the saved card's name, which
-     * the footer then shows in the button's place */
+     * the same button then shows, and opens with `@onOpenSaved` */
     onSave?: () => Promise<string | void>;
     /** open what was saved */
     onOpenSaved?: () => void;
@@ -68,6 +69,22 @@ export class AnswerFooter extends Component<AnswerFooterSignature> {
     }
   };
   openSaved = () => this.args.onOpenSaved?.();
+  /** one button saves, waits and then opens what was saved, so focus stays
+   * on it through each step */
+  pressSave = () => (this.savedName ? this.openSaved() : this.save());
+  get saveText(): string {
+    if (this.savedName) {
+      return `Saved · ${this.savedName}`;
+    }
+    return this.saving ? 'Saving…' : 'Save as card';
+  }
+  /** what the status region says: the outcome of a save, once */
+  get saveAnnouncement(): string {
+    if (this.savedName) {
+      return `Saved as ${this.savedName}`;
+    }
+    return this.saveError ? `Couldn’t save: ${this.saveError}` : '';
+  }
   review = (event: Event) =>
     this.args.onReview?.(event.currentTarget as HTMLElement);
   retry = () => this.args.onRetry?.();
@@ -87,30 +104,31 @@ export class AnswerFooter extends Component<AnswerFooterSignature> {
         @size='s'
         data-test-pretui-answer-copy
       />
-      {{#if this.savedName}}
+      {{#if @onSave}}
+        {{! aria-disabled, not disabled, while saving: a disabled button
+            drops focus to the page }}
         <button
           type='button'
           class='pretui-answerfooter-action'
-          data-test-pretui-answer-saved
-          {{on 'click' this.openSaved}}
-        >Saved · {{this.savedName}}</button>
-      {{else if @onSave}}
-        <button
-          type='button'
-          class='pretui-answerfooter-action'
-          disabled={{this.saving}}
+          aria-disabled={{if this.saving 'true'}}
           aria-busy={{if this.saving 'true'}}
+          data-saved={{if this.savedName 'true'}}
+          {{on 'click' this.pressSave}}
           data-test-pretui-answer-save
-          {{on 'click' this.save}}
-        >{{if this.saving 'Saving…' 'Save as card'}}</button>
+        >{{this.saveText}}</button>
+        <VisuallyHidden
+          role='status'
+          aria-atomic='true'
+          data-test-pretui-answer-save-status
+        >{{this.saveAnnouncement}}</VisuallyHidden>
       {{/if}}
       {{#if @diff}}
         <button
           type='button'
           class='pretui-answerfooter-action'
           data-diff='true'
-          data-test-pretui-answer-diff
           {{on 'click' this.review}}
+          data-test-pretui-answer-diff
         >{{this.files}}
           <span
             class='pretui-answerfooter-count'
@@ -126,12 +144,15 @@ export class AnswerFooter extends Component<AnswerFooterSignature> {
         <button
           type='button'
           class='pretui-answerfooter-action'
-          data-test-pretui-answer-retry
           {{on 'click' this.retry}}
+          data-test-pretui-answer-retry
         >Retry</button>
       {{/if}}
       {{#if this.saveError}}
-        <span class='pretui-answerfooter-error' role='status'><XIcon
+        <span
+          class='pretui-answerfooter-error'
+          data-test-pretui-answer-save-error
+        ><XIcon
             class='pretui-answerfooter-error-mark'
             width='11'
             height='11'
@@ -158,8 +179,8 @@ export class AnswerFooter extends Component<AnswerFooterSignature> {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          gap: 2px;
-          min-height: 28px;
+          gap: var(--boxel-sp-6xs);
+          min-height: 1.75rem;
           /* plain-row hang: the first action's text stays on the edge */
           margin-inline-start: calc(-1 * var(--boxel-sp-xs));
           font-size: var(--boxel-ui-label-font-size);
@@ -170,12 +191,12 @@ export class AnswerFooter extends Component<AnswerFooterSignature> {
           color: inherit;
         }
         .pretui-answerfooter-action {
-          height: 28px;
+          height: 1.75rem;
           padding: 0 var(--boxel-sp-xs);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: none;
-          font: inherit;
+          background-color: transparent;
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           font-weight: 400;
@@ -183,22 +204,22 @@ export class AnswerFooter extends Component<AnswerFooterSignature> {
           cursor: pointer;
           white-space: nowrap;
         }
-        .pretui-answerfooter-action:hover:not(:disabled) {
-          background: var(--hover, var(--inset, var(--boxel-100)));
+        .pretui-answerfooter-action:hover:not([aria-disabled='true']) {
+          background-color: var(--hover);
           color: var(--primary-ink);
         }
         .pretui-answerfooter-action:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: -2px;
         }
-        .pretui-answerfooter-action:disabled {
+        .pretui-answerfooter-action[aria-disabled='true'] {
           cursor: default;
         }
         .pretui-answerfooter-action[data-diff] {
           font-variant-numeric: tabular-nums;
         }
         .pretui-answerfooter-count[data-op='add'] {
-          color: var(--success, var(--boxel-highlight));
+          color: var(--success-ink);
         }
         .pretui-answerfooter-count[data-op='del'] {
           color: var(--destructive-ink);
@@ -211,13 +232,13 @@ export class AnswerFooter extends Component<AnswerFooterSignature> {
         }
         .pretui-answerfooter-error-mark {
           margin-inline-end: var(--boxel-sp-4xs);
-          vertical-align: -1px;
+          vertical-align: -0.0625rem;
           color: var(--destructive-ink);
         }
         /* a receipt, not a string to paste: sans with tabular figures */
         .pretui-answerfooter-cost {
           margin-inline-start: auto;
-          padding-inline-end: 2px;
+          padding-inline-end: var(--boxel-sp-6xs);
           font-size: var(--boxel-caption-font-size);
           line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;

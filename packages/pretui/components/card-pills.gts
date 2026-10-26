@@ -4,8 +4,8 @@ import { StateGlyph } from './state-glyph';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
+import { VisuallyHidden } from './visually-hidden';
 
 export interface CardPillItem {
   /** stable: the card's id. Default: its title */
@@ -65,9 +65,6 @@ export interface CardPillsSignature {
   };
   Element: HTMLDivElement;
 }
-
-const imageStyle = (card: CardPillItem) =>
-  htmlSafe(card.image ? `background-image: url("${card.image}")` : '');
 
 /**
  * What a `cards.search`, `cards.get` or `entries.search` returned, as the
@@ -205,6 +202,9 @@ export class CardPills extends Component<CardPillsSignature> {
     this.showAll = false;
     this.focusIndex = Math.min(this.focusIndex, (this.args.limit ?? 1) - 1);
   };
+  /** one button folds and unfolds, so focus stays on it when its words
+   * change */
+  toggleAll = () => (this.showAll ? this.collapse() : this.expand());
 
   private focusAt(index: number) {
     let n = this.shown.length;
@@ -255,18 +255,23 @@ export class CardPills extends Component<CardPillsSignature> {
         next = this.shown.length - 1;
         break;
       case 'Escape': {
+        // an Escape the set uses stops here, so a host's document-level
+        // Escape does not also close what holds it
         if (this.peekId) {
           event.preventDefault();
+          event.stopPropagation();
           this.peekId = undefined;
           return;
         }
         if (this.args.selectable && this.hasPicks) {
           event.preventDefault();
+          event.stopPropagation();
           this.clear();
         } else {
           let open = this.args.cards.find((c) => this.isOpen(c));
           if (open) {
             event.preventDefault();
+            event.stopPropagation();
             this.args.onClose?.(open);
           }
         }
@@ -321,19 +326,21 @@ export class CardPills extends Component<CardPillsSignature> {
               aria-describedby={{if (this.isPeeking card) (this.peekIdOf card)}}
               data-card-pill
               data-state={{this.stateOf card}}
-              data-test-pretui-card-pill={{card.title}}
               {{on 'click' (fn this.press card index)}}
+              data-test-pretui-card-pill={{card.title}}
             >
               <span
                 class='pretui-cardpill-mark'
-                style={{imageStyle card}}
                 aria-hidden='true'
               >{{#if (this.isPicked card)}}<StateGlyph
                     @glyph='done'
                     @size={{10}}
-                  />{{else if card.image}}{{else}}{{this.initial
-                    card
-                  }}{{/if}}</span>
+                  />{{else if card.image}}<img
+                    class='pretui-cardpill-image'
+                    src={{card.image}}
+                    alt=''
+                    data-test-pretui-card-pill-image
+                  />{{else}}{{this.initial card}}{{/if}}</span>
               <span class='pretui-cardpill-text'>
                 <span class='pretui-cardpill-title'>{{card.title}}</span>
                 {{#if card.sub}}<span
@@ -376,20 +383,15 @@ export class CardPills extends Component<CardPillsSignature> {
           </li>
         {{/each}}
       </ul>
-      {{#if this.hidden}}
+      {{#if this.folds}}
         <button
           type='button'
           class='pretui-cardpills-all'
+          aria-expanded={{if this.showAll 'true' 'false'}}
+          {{on 'click' this.toggleAll}}
           data-test-pretui-card-pills-all
-          {{on 'click' this.expand}}
-        >Show all {{@cards.length}}</button>
-      {{else if (if this.folds this.showAll)}}
-        <button
-          type='button'
-          class='pretui-cardpills-all'
-          data-test-pretui-card-pills-fewer
-          {{on 'click' this.collapse}}
-        >Show fewer</button>
+        >{{#if this.showAll}}Show fewer{{else}}Show all
+            {{@cards.length}}{{/if}}</button>
       {{/if}}
       {{#if this.expandedCard}}
         <div
@@ -401,41 +403,47 @@ export class CardPills extends Component<CardPillsSignature> {
             <button
               type='button'
               class='pretui-cardpills-act'
-              data-test-pretui-card-pills-collapse
               {{on 'click' this.collapse_}}
+              data-test-pretui-card-pills-collapse
             >Hide</button>
           </div>
           {{yield this.expandedCard to='expanded'}}
         </div>
       {{/if}}
       {{#if (if @selectable this.hasPicks)}}
-        <div
-          class='pretui-cardpills-bar'
-          role='status'
-          data-test-pretui-card-pills-bar
-        >
+        <div class='pretui-cardpills-bar' data-test-pretui-card-pills-bar>
           <span class='pretui-cardpills-count'>{{this.pickedLabel}}</span>
           {{#if @onUseSelection}}
             <button
               type='button'
               class='pretui-cardpills-act'
               data-kind='primary'
-              data-test-pretui-card-pills-use
               {{on 'click' this.use}}
+              data-test-pretui-card-pills-use
             >{{if @useLabel @useLabel 'Attach'}}</button>
           {{/if}}
           <button
             type='button'
             class='pretui-cardpills-act'
-            data-test-pretui-card-pills-clear
             {{on 'click' this.clear}}
+            data-test-pretui-card-pills-clear
           >Clear</button>
         </div>
       {{/if}}
+      {{! the count is announced from a region that is always there, apart
+          from the bar's buttons, so a change says the count and nothing else }}
+      <VisuallyHidden
+        role='status'
+        aria-atomic='true'
+        data-test-pretui-card-pills-status
+      >{{if (if @selectable this.hasPicks) this.pickedLabel}}</VisuallyHidden>
     </div>
     <style scoped>
       @layer PretComponent {
         .pretui-cardpills {
+          /* the peek's distance from its pill, which the bridge over it
+             must span */
+          --_cardpills-peek-gap: var(--boxel-sp-2xs);
           display: grid;
           gap: var(--boxel-sp-xs);
           justify-items: start;
@@ -453,25 +461,25 @@ export class CardPills extends Component<CardPillsSignature> {
         }
         .pretui-cardpills[data-layout='grid'] .pretui-cardpills-list {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
           gap: var(--boxel-sp-xs);
         }
         /* a pill: an outlined token on the inset, the card's mark and its
-           title in ink-1. Inline it is 18 px tall, so it sits inside reading
-           leading without moving the line */
+           title in ink-1. It is 1.5rem tall, the least a pointer target
+           takes */
         .pretui-cardpill {
           position: relative;
           display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-4xs);
           max-width: 100%;
-          height: 18px;
-          padding: 0 6px 0 2px;
+          height: 1.5rem;
+          padding: 0 var(--boxel-sp-2xs) 0 var(--boxel-sp-5xs);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: var(--inset, var(--muted));
+          background-color: var(--inset);
           box-shadow: inset 0 0 0 1px var(--border);
-          font: inherit;
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
@@ -483,8 +491,8 @@ export class CardPills extends Component<CardPillsSignature> {
             box-shadow 120ms ease-out;
         }
         .pretui-cardpill:hover {
-          background: var(--hover, var(--inset));
-          box-shadow: inset 0 0 0 1px var(--border-strong, var(--border));
+          background-color: var(--hover);
+          box-shadow: inset 0 0 0 1px var(--border-strong);
         }
         .pretui-cardpill:active {
           transform: translateY(0.5px);
@@ -503,21 +511,27 @@ export class CardPills extends Component<CardPillsSignature> {
           box-shadow: inset 0 0 0 1px var(--foreground);
         }
         .pretui-cardpill[data-state='picked'] .pretui-cardpill-mark {
-          background: var(--foreground);
+          background-color: var(--foreground);
           color: var(--background);
         }
         .pretui-cardpill-mark {
           flex: none;
           display: grid;
           place-items: center;
-          width: 14px;
-          height: 14px;
+          width: 0.875rem;
+          height: 0.875rem;
+          overflow: hidden;
           border-radius: 50%;
-          background: var(--card) center / cover no-repeat;
+          background-color: var(--card);
           font-size: var(--boxel-caption-font-size);
           line-height: 1;
           font-weight: 600;
           color: var(--muted-foreground);
+        }
+        .pretui-cardpill-image {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
         }
         .pretui-cardpill-text {
           display: grid;
@@ -534,7 +548,7 @@ export class CardPills extends Component<CardPillsSignature> {
           display: none;
         }
         .pretui-cardpill-open {
-          margin-inline-start: 2px;
+          margin-inline-start: var(--boxel-sp-6xs);
           font-size: var(--boxel-caption-font-size);
           line-height: var(--boxel-caption-line-height);
           font-weight: 400;
@@ -545,13 +559,13 @@ export class CardPills extends Component<CardPillsSignature> {
           width: 100%;
           height: auto;
           gap: var(--boxel-sp-xs);
-          padding: 6px var(--boxel-sp-xs) 6px 6px;
+          padding: var(--boxel-sp-2xs) var(--boxel-sp-xs) var(--boxel-sp-2xs)
+            var(--boxel-sp-2xs);
           border-radius: var(--boxel-border-radius-sm);
         }
         .pretui-cardpills[data-layout='grid'] .pretui-cardpill-mark {
-          width: 26px;
-          height: 26px;
-          background-color: var(--card);
+          width: 1.625rem;
+          height: 1.625rem;
         }
         .pretui-cardpills[data-layout='grid'] .pretui-cardpill-sub {
           display: block;
@@ -563,14 +577,15 @@ export class CardPills extends Component<CardPillsSignature> {
         .pretui-cardpills[data-layout='grid'] .pretui-cardpill-open {
           position: absolute;
           inset-block-start: var(--boxel-sp-4xs);
-          inset-inline-end: 6px;
+          inset-inline-end: var(--boxel-sp-2xs);
         }
         .pretui-cardpills-all {
+          min-height: 1.5rem;
           padding: 0 var(--boxel-sp-4xs);
           border: 0;
           border-radius: var(--boxel-border-radius-xs);
-          background: none;
-          font: inherit;
+          background-color: transparent;
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           font-weight: 400;
@@ -594,18 +609,19 @@ export class CardPills extends Component<CardPillsSignature> {
         }
         .pretui-cardpill-peek {
           position: absolute;
-          inset-block-start: calc(100% + 6px);
+          inset-block-start: calc(100% + var(--_cardpills-peek-gap));
           inset-inline-start: 0;
           z-index: var(--pretui-z-popover, 30);
           display: grid;
           gap: var(--boxel-sp-xs);
-          width: 240px;
+          width: 15rem;
           padding: var(--boxel-sp-xs);
           border-radius: var(--boxel-border-radius-lg);
-          background: var(--popover, var(--card));
+          background-color: var(--popover);
+          color: var(--popover-foreground);
           box-shadow:
             0 0 0 1px var(--border),
-            var(--shadow-md, 0 8px 24px rgb(0 0 0 / 0.2));
+            var(--shadow-md);
           animation: pretui-peek-in 160ms ease-out 280ms both;
         }
         /* a bridge over the gap, so moving from the pill into the peek
@@ -614,13 +630,13 @@ export class CardPills extends Component<CardPillsSignature> {
           content: '';
           position: absolute;
           inset-inline: 0;
-          inset-block-start: -8px;
-          height: 8px;
+          inset-block-start: calc(-1 * var(--_cardpills-peek-gap));
+          height: var(--_cardpills-peek-gap);
         }
         @keyframes pretui-peek-in {
           from {
             opacity: 0;
-            transform: translateY(-2px);
+            transform: translateY(-0.125rem);
           }
           to {
             opacity: 1;
@@ -629,7 +645,7 @@ export class CardPills extends Component<CardPillsSignature> {
         }
         .pretui-cardpill-peek-card {
           display: grid;
-          min-height: 64px;
+          min-height: 4rem;
           overflow: hidden;
           border-radius: var(--boxel-border-radius-sm);
         }
@@ -664,9 +680,11 @@ export class CardPills extends Component<CardPillsSignature> {
           align-items: center;
           gap: var(--boxel-sp-xs);
           justify-self: stretch;
-          padding: 2px 2px 2px var(--boxel-sp-sm);
+          padding: var(--boxel-sp-6xs) var(--boxel-sp-6xs) var(--boxel-sp-6xs)
+            var(--boxel-sp-sm);
           border-radius: var(--boxel-border-radius-sm);
-          background: var(--inset, var(--card));
+          background-color: var(--inset);
+          color: var(--foreground);
           box-shadow: inset 0 0 0 1px var(--border);
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
@@ -675,22 +693,22 @@ export class CardPills extends Component<CardPillsSignature> {
           margin-inline-end: auto;
           font-weight: 600;
           font-variant-numeric: tabular-nums;
-          color: var(--foreground);
         }
         .pretui-cardpills-act {
-          height: 28px;
+          height: 1.75rem;
           padding: 0 var(--boxel-sp-sm);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: none;
-          font: inherit;
+          background-color: transparent;
+          font-family: inherit;
+          font-size: inherit;
           font-weight: 600;
           color: var(--muted-foreground);
           cursor: pointer;
         }
         /* the bar's verb is the moment's one action */
         .pretui-cardpills-act[data-kind='primary'] {
-          background: var(--primary);
+          background-color: var(--primary);
           color: var(--primary-foreground);
         }
         .pretui-cardpills-act:not([data-kind='primary']):hover {

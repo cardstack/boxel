@@ -2,8 +2,8 @@
 import Component from '@glimmer/component';
 import { StateGlyph } from './state-glyph';
 import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
 import type { ComponentLike } from '@glint/template';
+import { cssDeclaration, cssStyleFrom } from '../pretui-css';
 
 export type CardEmbedState =
   | 'pending'
@@ -28,8 +28,8 @@ export interface CardEmbedSignature {
      * '320px', '100%' */
     width?: string;
     height?: string;
-    /** the least height the card gets. Default: fitted 64px, embedded
-     * 120px, isolated 200px */
+    /** the least height the card gets. Default: fitted 4rem, embedded
+     * 7.5rem, isolated 12.5rem */
     minHeight?: string;
     /** past this, the card scrolls in its own box */
     maxHeight?: string;
@@ -46,7 +46,7 @@ export interface CardEmbedSignature {
     /** the corner button's words. Default 'Open'; 'Open in Boxel' inside
      * an MCP App, where `@onOpen` calls the host's openLink */
     openLabel?: string;
-    /** the hat: one 26px line over the card with its type, its title and
+    /** the hat: one 1.625rem line over the card with its type, its title and
      * its actions (Open, and `<:actions>`). Default: on for embedded,
      * isolated and edit, which are big enough to carry one; off for fitted
      * and atom, which keep a quiet corner Open */
@@ -80,11 +80,11 @@ export interface CardEmbedSignature {
 }
 
 const MIN: Record<CardEmbedFormat, string> = {
-  fitted: '64px',
-  embedded: '120px',
-  isolated: '200px',
-  edit: '200px',
-  atom: '20px',
+  fitted: '4rem',
+  embedded: '7.5rem',
+  isolated: '12.5rem',
+  edit: '12.5rem',
+  atom: '1.25rem',
 };
 
 /**
@@ -138,19 +138,22 @@ export class CardEmbed extends Component<CardEmbedSignature> {
   get showsCard() {
     return this.state === 'ready' || this.state === 'loading';
   }
+  /** each size is validated as one CSS value; a rejected one is dropped
+   * and the frame keeps its default */
   get boxStyle() {
-    let envelope = this.args.envelope;
-    let rules = [
-      `--pretui-embed-min: ${this.args.minHeight ?? MIN[this.format]}`,
-      envelope && envelope.includes('/') ? `aspect-ratio: ${envelope}` : '',
-      envelope && !envelope.includes('/')
-        ? `--pretui-embed-h: ${envelope}`
-        : '',
-      this.args.width ? `--pretui-embed-w: ${this.args.width}` : '',
-      this.args.height ? `--pretui-embed-h: ${this.args.height}` : '',
-      this.args.maxHeight ? `--pretui-embed-max-h: ${this.args.maxHeight}` : '',
-    ].filter(Boolean);
-    return htmlSafe(rules.join('; '));
+    let { envelope, minHeight, width, height, maxHeight } = this.args;
+    let ratio = envelope?.includes('/');
+    return cssStyleFrom([
+      cssDeclaration('--pretui-embed-min', minHeight) ??
+        `--pretui-embed-min: ${MIN[this.format]}`,
+      ratio ? cssDeclaration('aspect-ratio', envelope) : undefined,
+      envelope && !ratio
+        ? cssDeclaration('--pretui-embed-h', envelope)
+        : undefined,
+      cssDeclaration('--pretui-embed-w', width),
+      cssDeclaration('--pretui-embed-h', height),
+      cssDeclaration('--pretui-embed-max-h', maxHeight),
+    ]);
   }
   get pendingText(): string {
     let what = this.args.label ?? this.args.kind ?? 'the card';
@@ -213,8 +216,8 @@ export class CardEmbed extends Component<CardEmbedSignature> {
                 type='button'
                 class='pretui-embed-hat-open'
                 aria-label={{this.openLabel}}
-                data-test-pretui-card-embed-open
                 {{on 'click' this.open}}
+                data-test-pretui-card-embed-open
               >{{this.openText}}
                 <StateGlyph @glyph='open' @size={{11}} /></button>
             {{/if}}
@@ -278,8 +281,8 @@ export class CardEmbed extends Component<CardEmbedSignature> {
               type='button'
               class='pretui-embed-open'
               aria-label={{this.openLabel}}
-              data-test-pretui-card-embed-open
               {{on 'click' this.open}}
+              data-test-pretui-card-embed-open
             >{{this.openText}}
               <StateGlyph @glyph='open' @size={{11}} /></button>
           {{/if}}
@@ -306,17 +309,19 @@ export class CardEmbed extends Component<CardEmbedSignature> {
           contain: layout paint;
           /* the transcript's prose stops at the frame: the card brings
              its own measure, leading and link colour */
-          font: initial;
+          font-family: var(--font-sans);
+          font-size: var(--boxel-font-size);
+          font-weight: 400;
+          font-style: normal;
           line-height: normal;
           letter-spacing: normal;
           text-align: start;
           white-space: normal;
-          color: initial;
+          color: var(--foreground);
         }
         /* the hat: one quiet line in the frame's own chrome over the card's
-           surface. Main's card header is a 30px-minimum bar with 24px
-           icons and 13px semibold text; this is 26px, the type as a mono
-           eyebrow, the title at 12px, and the actions as text */
+           surface, lower than the host's card header: the type as a mono
+           eyebrow, the title at the small size, and the actions as text */
         .pretui-embed[data-hat] {
           display: grid;
           grid-template-rows: auto minmax(0, 1fr);
@@ -327,14 +332,13 @@ export class CardEmbed extends Component<CardEmbedSignature> {
           z-index: 1;
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: var(--boxel-sp-2xs);
           min-width: 0;
-          height: 26px;
-          padding: 0 6px 0 10px;
-          background: var(--card, var(--background));
+          height: 1.625rem;
+          padding: 0 var(--boxel-sp-2xs) 0 var(--boxel-sp-xs);
+          background-color: var(--card);
           box-shadow: 0 1px 0 var(--border);
-          font-family: var(--font-sans, system-ui, sans-serif);
-          color: var(--foreground);
+          color: var(--card-foreground);
         }
         .pretui-embed-hat-icon {
           flex: none;
@@ -343,36 +347,36 @@ export class CardEmbed extends Component<CardEmbedSignature> {
         .pretui-embed-hat-kind {
           flex: none;
           font-family: var(--font-mono);
-          font-size: 10px;
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           letter-spacing: 0.06em;
           text-transform: uppercase;
-          color: var(--subtle-foreground, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
         .pretui-embed-hat-title {
           min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          font-size: 12px;
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
         }
         .pretui-embed-hat-actions {
           display: flex;
           align-items: center;
-          gap: 2px;
+          gap: var(--boxel-sp-6xs);
           margin-inline-start: auto;
         }
         .pretui-embed-hat-open {
           display: inline-flex;
           align-items: center;
-          gap: 3px;
-          height: 20px;
-          padding: 0 6px;
+          gap: var(--boxel-sp-5xs);
+          height: 1.5rem;
+          padding: 0 var(--boxel-sp-2xs);
           border: 0;
-          border-radius: 5px;
-          background: none;
-          font: inherit;
+          border-radius: var(--boxel-border-radius-xs);
+          background-color: transparent;
+          font-family: inherit;
           font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           color: var(--muted-foreground);
@@ -380,7 +384,7 @@ export class CardEmbed extends Component<CardEmbedSignature> {
         }
         .pretui-embed-hat-open:hover {
           color: var(--primary-ink);
-          background: var(--hover, var(--inset));
+          background-color: var(--hover);
         }
         .pretui-embed-hat-open:focus-visible {
           outline: 2px solid var(--ring);
@@ -403,19 +407,18 @@ export class CardEmbed extends Component<CardEmbedSignature> {
         .pretui-embed-error {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: var(--boxel-sp-xs);
           box-sizing: border-box;
           height: 100%;
           min-height: var(--pretui-embed-min);
-          padding: 12px;
-          background: var(--inset, var(--boxel-100));
-          font-family: var(--font-sans, system-ui, sans-serif);
+          padding: var(--boxel-sp-sm);
+          background-color: var(--inset);
           font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
         }
         /* the shimmer is a moving gradient in CSS: no clock */
         .pretui-embed-shimmer {
-          background: linear-gradient(
+          background-image: linear-gradient(
             90deg,
             var(--muted-foreground) 0%,
             var(--foreground) 50%,
@@ -439,21 +442,23 @@ export class CardEmbed extends Component<CardEmbedSignature> {
           color: var(--foreground);
         }
         .pretui-embed-act[data-kind='primary'] {
-          height: 24px;
-          padding: 0 10px;
-          border-radius: 12px;
-          background: var(--primary, var(--boxel-highlight));
-          color: var(--primary-foreground, var(--boxel-dark));
+          padding: 0 var(--boxel-sp-xs);
+          border-radius: var(--boxel-border-radius-pill);
+          background-color: var(--primary);
+          color: var(--primary-foreground);
         }
         .pretui-embed[data-state='error'] .pretui-embed-error {
           color: var(--destructive-ink);
         }
+        /* 1.5rem tall, the least a pointer target takes */
         .pretui-embed-act {
-          padding: 0 4px;
+          min-height: 1.5rem;
+          padding: 0 var(--boxel-sp-4xs);
           border: 0;
-          border-radius: 4px;
-          background: none;
-          font: inherit;
+          border-radius: var(--boxel-border-radius-xs);
+          background-color: transparent;
+          font-family: inherit;
+          font-size: inherit;
           font-weight: 600;
           color: var(--foreground);
           cursor: pointer;
@@ -466,10 +471,10 @@ export class CardEmbed extends Component<CardEmbedSignature> {
            focus order: it comes after the card */
         .pretui-embed-corner {
           position: absolute;
-          inset-block-start: 6px;
-          inset-inline-end: 6px;
+          inset-block-start: var(--boxel-sp-2xs);
+          inset-inline-end: var(--boxel-sp-2xs);
           display: flex;
-          gap: 4px;
+          gap: var(--boxel-sp-4xs);
           opacity: 0;
           transition: opacity 120ms ease-out;
         }
@@ -483,16 +488,16 @@ export class CardEmbed extends Component<CardEmbedSignature> {
           }
         }
         .pretui-embed-open {
-          height: 22px;
-          padding: 0 8px;
+          height: 1.5rem;
+          padding: 0 var(--boxel-sp-xs);
           border: 0;
-          border-radius: 11px;
-          background: var(--popover, var(--card));
-          box-shadow: 0 0 0 1px var(--border-strong, var(--border));
-          font-family: var(--font-sans, system-ui, sans-serif);
+          border-radius: var(--boxel-border-radius-pill);
+          background-color: var(--popover);
+          box-shadow: 0 0 0 1px var(--border-strong);
+          font-family: inherit;
           font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
-          color: var(--foreground);
+          color: var(--popover-foreground);
           cursor: pointer;
         }
         .pretui-embed-open:hover {

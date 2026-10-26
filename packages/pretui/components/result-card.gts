@@ -16,6 +16,10 @@ export interface ResultCardSignature {
 // What you approve is card-shaped, never a JSON blob.
 export class ResultCard extends Component<ResultCardSignature> {
   menu = () => this.args.onMenu?.();
+  /** the menu button's name says whose actions it holds */
+  get menuLabel(): string {
+    return `More actions for ${this.args.title}`;
+  }
   <template>
     <div class='pretui-resultcard' data-test-pretui-result-card ...attributes>
       <div class='pretui-resultcard-head'>
@@ -25,8 +29,9 @@ export class ResultCard extends Component<ResultCardSignature> {
           <button
             type='button'
             class='pretui-resultcard-menu'
-            aria-label='More'
+            aria-label={{this.menuLabel}}
             {{on 'click' this.menu}}
+            data-test-pretui-result-card-menu
           ><DotsIcon width='14' height='14' aria-hidden='true' /></button>
         {{/if}}
       </div>
@@ -37,8 +42,8 @@ export class ResultCard extends Component<ResultCardSignature> {
     <style scoped>
       @layer PretComponent {
         .pretui-resultcard {
-          background: var(--card, var(--background));
-          color: var(--card-foreground, var(--foreground));
+          background-color: var(--card);
+          color: var(--card-foreground);
           border-radius: var(--boxel-border-radius-sm);
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
           padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
@@ -64,13 +69,29 @@ export class ResultCard extends Component<ResultCardSignature> {
           font-weight: 400;
           color: var(--subtle-foreground);
         }
+        /* 1.5rem square, the least a pointer target takes */
         .pretui-resultcard-menu {
-          margin-left: auto;
+          display: inline-grid;
+          place-items: center;
+          flex: none;
+          align-self: center;
+          width: 1.5rem;
+          height: 1.5rem;
+          margin-inline-start: auto;
+          padding: 0;
+          border: 0;
+          border-radius: var(--boxel-border-radius-xs);
+          background-color: transparent;
           color: var(--subtle-foreground);
           cursor: pointer;
-          border: 0;
-          background: none;
-          font: inherit;
+        }
+        .pretui-resultcard-menu:hover {
+          background-color: var(--hover);
+          color: var(--foreground);
+        }
+        .pretui-resultcard-menu:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
         }
         .pretui-resultcard-line {
           font-size: var(--boxel-ui-label-font-size);

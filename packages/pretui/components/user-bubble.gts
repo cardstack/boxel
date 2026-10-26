@@ -3,10 +3,10 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
-import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import { SpeakerLabel } from './speaker-label';
 import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
+import { cssNumber, cssStyleFrom } from '../pretui-css';
 
 export type UserBubbleDelivery =
   | 'sent'
@@ -18,7 +18,8 @@ export type UserBubbleDelivery =
 export interface UserBubbleSignature {
   Args: {
     /** the message, as text. Or pass the message as the default block
-     * (rendered HTML, attachments), as the host does */
+     * (rendered HTML, attachments), as the host does; with a block, still
+     * pass `@text` (the message's source) for Edit to start from */
     text?: string;
     /** lines shown before "Show more". Default: all */
     maxLines?: number;
@@ -31,7 +32,8 @@ export interface UserBubbleSignature {
     /** send a rejected message again */
     onRetry?: () => void;
     /** edit the message, which rewinds the thread to it: the bubble turns
-     * into an editor and hands the new text back */
+     * into an editor and hands the new text back. Edit shows only with
+     * `@text`, the source it edits; an unchanged draft saves nothing */
     onEdit?: (text: string) => void;
     /** when, as the caller formats it; on hover */
     time?: string;
@@ -91,8 +93,18 @@ export class UserBubble extends Component<UserBubbleSignature> {
       : text;
   }
   get clampStyle() {
-    let n = this.args.maxLines;
-    return htmlSafe(n && !this.expanded ? `--pretui-bubble-lines: ${n}` : '');
+    let n = cssNumber(this.args.maxLines, 1, 1000);
+    return n && !this.expanded
+      ? cssStyleFrom([`--pretui-bubble-lines: ${Math.round(n)}`])
+      : undefined;
+  }
+  /** Edit needs the message's source to start from */
+  get canEdit(): boolean {
+    return Boolean(this.args.onEdit) && this.args.text !== undefined;
+  }
+  /** nothing to save: an empty draft */
+  get draftEmpty(): boolean {
+    return this.draft.trim() === '';
   }
   /** the name over the bubble: the author, "You" for the reader's own,
    * none for a continued run */
@@ -133,23 +145,40 @@ export class UserBubble extends Component<UserBubbleSignature> {
 
   toggle = () => (this.expanded = !this.expanded);
   retry = () => this.args.onRetry?.();
+  /** set when the editor closes, so the Edit button that comes back takes
+   * focus; plain, not tracked, because the modifier reads it once */
+  private returnFocusToEdit = false;
+
   startEdit = () => {
     this.draft = this.args.text ?? '';
     this.editing = true;
   };
-  cancelEdit = () => (this.editing = false);
+  private closeEditor() {
+    this.returnFocusToEdit = true;
+    this.editing = false;
+  }
+  cancelEdit = () => this.closeEditor();
   typeDraft = (event: Event) =>
     (this.draft = (event.target as HTMLTextAreaElement).value);
+  /** an empty draft keeps the editor open; an unchanged one is a Cancel,
+   * since saving rewinds the thread */
   saveEdit = () => {
     let text = this.draft.trim();
-    if (text) {
+    if (!text) {
+      return;
+    }
+    if (text !== (this.args.text ?? '').trim()) {
       this.args.onEdit?.(text);
     }
-    this.editing = false;
+    this.closeEditor();
   };
+  /** the editor's own keys stop here, so a host's document-level Escape
+   * does not also run */
   editKey = (e: Event) => {
     let event = e as KeyboardEvent;
     if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
       this.cancelEdit();
     } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
@@ -159,6 +188,12 @@ export class UserBubble extends Component<UserBubbleSignature> {
   focusField = modifier((element: HTMLTextAreaElement) => {
     element.focus();
     element.setSelectionRange(element.value.length, element.value.length);
+  });
+  focusEditOnReturn = modifier((element: HTMLButtonElement) => {
+    if (this.returnFocusToEdit) {
+      this.returnFocusToEdit = false;
+      element.focus();
+    }
   });
 
   <template>
@@ -209,13 +244,15 @@ export class UserBubble extends Component<UserBubbleSignature> {
               type='button'
               class='pretui-bubble-act'
               {{on 'click' this.cancelEdit}}
+              data-test-pretui-user-bubble-cancel
             >Cancel</button>
             <button
               type='button'
               class='pretui-bubble-act'
               data-kind='primary'
-              data-test-pretui-user-bubble-save
+              disabled={{this.draftEmpty}}
               {{on 'click' this.saveEdit}}
+              data-test-pretui-user-bubble-save
             >Save and resend</button>
           </div>
         </div>
@@ -234,8 +271,8 @@ export class UserBubble extends Component<UserBubbleSignature> {
               id={{this.textId}}
               data-clamped={{if this.clamped 'true'}}
               style={{this.clampStyle}}
-              data-test-pretui-user-bubble-text
               {{this.measure @text this.clamped}}
+              data-test-pretui-user-bubble-text
             >{{yield}}</div>
           {{else}}
             <p
@@ -243,8 +280,8 @@ export class UserBubble extends Component<UserBubbleSignature> {
               id={{this.textId}}
               data-clamped={{if this.clamped 'true'}}
               style={{this.clampStyle}}
-              data-test-pretui-user-bubble-text
               {{this.measure @text this.clamped}}
+              data-test-pretui-user-bubble-text
             >{{@text}}</p>
           {{/if}}
           {{#if (if @maxLines (if this.expanded true this.overflows))}}
@@ -253,8 +290,8 @@ export class UserBubble extends Component<UserBubbleSignature> {
               class='pretui-bubble-more'
               aria-expanded={{if this.expanded 'true' 'false'}}
               aria-controls={{this.textId}}
-              data-test-pretui-user-bubble-more
               {{on 'click' this.toggle}}
+              data-test-pretui-user-bubble-more
             ><span>{{if
                   this.expanded
                   'Show less'
@@ -263,6 +300,7 @@ export class UserBubble extends Component<UserBubbleSignature> {
                 class='pretui-bubble-more-icon'
                 width='12'
                 height='12'
+                aria-hidden='true'
               /></button>
           {{/if}}
         </div>
@@ -282,16 +320,17 @@ export class UserBubble extends Component<UserBubbleSignature> {
           <button
             type='button'
             class='pretui-bubble-link'
-            data-test-pretui-user-bubble-retry
             {{on 'click' this.retry}}
+            data-test-pretui-user-bubble-retry
           >Retry</button>
         {{/if}}
-        {{#if @onEdit}}{{#unless this.editing}}
+        {{#if this.canEdit}}{{#unless this.editing}}
             <button
               type='button'
               class='pretui-bubble-link pretui-bubble-hover'
-              data-test-pretui-user-bubble-edit
               {{on 'click' this.startEdit}}
+              {{this.focusEditOnReturn}}
+              data-test-pretui-user-bubble-edit
             >Edit</button>
           {{/unless}}{{/if}}
         {{#if (if @time (if this.authorName false true))}}<span
@@ -326,7 +365,7 @@ export class UserBubble extends Component<UserBubbleSignature> {
           padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
           border-radius: var(--boxel-border-radius-lg);
           border-top-left-radius: var(--boxel-border-radius-xs);
-          background: var(--pretui-bubble-bg, var(--inset, var(--muted)));
+          background-color: var(--pretui-bubble-bg, var(--inset));
           color: var(--pretui-bubble-ink, var(--foreground));
           font-size: var(--boxel-body-font-size);
           line-height: var(--boxel-body-line-height);
@@ -369,8 +408,8 @@ export class UserBubble extends Component<UserBubbleSignature> {
         .pretui-bubble-text[data-clamped] {
           mask-image: linear-gradient(
             to bottom,
-            #000 calc(100% - var(--boxel-body-line-height)),
-            rgb(0 0 0 / 35%)
+            black calc(100% - var(--boxel-body-line-height)),
+            color-mix(in srgb, black 35%, transparent)
           );
         }
         /* Show more: a quiet control in ink-2 with a chevron, so it never
@@ -378,15 +417,15 @@ export class UserBubble extends Component<UserBubbleSignature> {
         .pretui-bubble-more {
           display: inline-flex;
           align-items: center;
-          gap: 2px;
+          gap: var(--boxel-sp-6xs);
           margin-top: var(--boxel-sp-4xs);
           margin-inline-start: calc(-1 * var(--boxel-sp-xs));
-          height: 22px;
+          height: 1.5rem;
           padding: 0 var(--boxel-sp-xs);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: none;
-          font: inherit;
+          background-color: transparent;
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           font-weight: 400;
@@ -394,7 +433,7 @@ export class UserBubble extends Component<UserBubbleSignature> {
           cursor: pointer;
         }
         .pretui-bubble-more:hover {
-          background: var(--hover);
+          background-color: var(--hover);
           color: var(--foreground);
         }
         .pretui-bubble-more[aria-expanded='true'] .pretui-bubble-more-icon {
@@ -427,11 +466,17 @@ export class UserBubble extends Component<UserBubbleSignature> {
         .pretui-bubble-turn[data-delivery='rejected'] .pretui-bubble-delivery {
           color: var(--destructive-ink);
         }
+        /* a text action, 1.5rem tall so it is a whole pointer target */
         .pretui-bubble-link {
+          display: inline-flex;
+          align-items: center;
+          min-height: 1.5rem;
           padding: 0;
           border: 0;
-          background: none;
-          font: inherit;
+          background-color: transparent;
+          font-family: inherit;
+          font-size: inherit;
+          line-height: inherit;
           font-weight: 600;
           color: var(--muted-foreground);
           cursor: pointer;
@@ -477,9 +522,11 @@ export class UserBubble extends Component<UserBubbleSignature> {
           padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: var(--field, var(--background));
+          background-color: var(--field);
           box-shadow: inset 0 0 0 1px var(--border);
-          font: inherit;
+          font-family: inherit;
+          font-size: inherit;
+          line-height: inherit;
           color: inherit;
           resize: vertical;
         }
@@ -499,13 +546,13 @@ export class UserBubble extends Component<UserBubbleSignature> {
           gap: var(--boxel-sp-xs);
         }
         .pretui-bubble-act {
-          height: 28px;
+          height: 1.75rem;
           padding: 0 var(--boxel-sp-sm);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: none;
+          background-color: transparent;
           box-shadow: inset 0 0 0 1px var(--border);
-          font: inherit;
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
@@ -515,8 +562,12 @@ export class UserBubble extends Component<UserBubbleSignature> {
         /* Save and resend is the moment's one action */
         .pretui-bubble-act[data-kind='primary'] {
           box-shadow: none;
-          background: var(--primary);
+          background-color: var(--primary);
           color: var(--primary-foreground);
+        }
+        .pretui-bubble-act:disabled {
+          opacity: 0.5;
+          cursor: default;
         }
       }
     </style>
