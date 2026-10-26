@@ -25,9 +25,13 @@
 // Otherwise the boundary is the cursor's stream, or the oldest partial join's
 // start if that is earlier, so no row synapse still has to send is lost.
 //
-// Synapse caches the table's oldest stream id, so no running synapse may be
-// using the database. The script refuses while a running container mounts the
-// data directory; when that container is the dev synapse:
+// Synapse creates the marker at 0 when it migrates a database from before the
+// marker existed, assuming nothing was ever deleted, so the script refuses a
+// database without it; start synapse once to migrate the database first.
+//
+// The script replaces the database file and removes its write-ahead log, so no
+// running synapse may be using the database. The script refuses while a running
+// container mounts the data directory; when that container is the dev synapse:
 //
 //   pnpm stop:synapse && pnpm compact:synapse-db && pnpm start:synapse
 //
@@ -124,6 +128,12 @@ console.log(`Compacting ${dbPath} (${gigabytes(dbPath)})`);
 // Fold the write-ahead log into the main file, so the backup copy and the
 // rewrite below both see every committed write.
 let db = new DatabaseSync(dbPath);
+if (!hasTable(PRUNED_TABLE)) {
+  db.close();
+  fail(
+    `${dbPath} has no ${PRUNED_TABLE} table, which synapse would create at 0 after the rows are gone. Start synapse once (\`pnpm start:synapse\`) so it migrates the database, stop it again (\`pnpm stop:synapse\`), then compact.`,
+  );
+}
 db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
 db.close();
 
@@ -222,18 +232,15 @@ if (newest.stream_id === null) {
            WHERE (stream_id, room_id) < (?, ?)`,
       ).run(newest.stream_id, newest.room_id, newest.stream_id, newest.room_id);
     }
-    // A database from before synapse kept the marker has none to raise.
-    if (hasTable(PRUNED_TABLE)) {
-      let pruned = db
-        .prepare(
-          `SELECT MAX(stream_id) AS stream_id FROM ${TABLE} WHERE stream_id < ?`,
-        )
-        .get(boundary) as { stream_id: number | null };
-      if (pruned.stream_id !== null) {
-        db.prepare(
-          `UPDATE ${PRUNED_TABLE} SET stream_id = ? WHERE stream_id < ?`,
-        ).run(pruned.stream_id, pruned.stream_id);
-      }
+    let pruned = db
+      .prepare(
+        `SELECT MAX(stream_id) AS stream_id FROM ${TABLE} WHERE stream_id < ?`,
+      )
+      .get(boundary) as { stream_id: number | null };
+    if (pruned.stream_id !== null) {
+      db.prepare(
+        `UPDATE ${PRUNED_TABLE} SET stream_id = ? WHERE stream_id < ?`,
+      ).run(pruned.stream_id, pruned.stream_id);
     }
     // Copy the kept rows aside and empty the table with an unconditional
     // DELETE, which drops its pages wholesale instead of deleting row by row.

@@ -87,7 +87,7 @@ function createDataDir(name: string, setup: Setup) {
   return dataDir;
 }
 
-function compact(dataDir: string) {
+function runScript(dataDir: string) {
   execFileSync(
     process.execPath,
     ['./scripts/compact-synapse-db.ts', '--no-backup'],
@@ -95,8 +95,17 @@ function compact(dataDir: string) {
       cwd: packageDir,
       env: { ...process.env, SYNAPSE_DATA_DIR: dataDir },
       stdio: 'pipe',
+      encoding: 'utf8',
     },
   );
+}
+
+function compact(dataDir: string) {
+  runScript(dataDir);
+  return readState(dataDir);
+}
+
+function readState(dataDir: string) {
   let db = new DatabaseSync(join(dataDir, 'db', 'homeserver.db'), {
     readOnly: true,
   });
@@ -169,13 +178,20 @@ test('a pruned-stream marker synapse already raised past the boundary is not low
   assert.equal(result.maxPruned, 10);
 });
 
-test('a database without the pruned-stream marker table still compacts', () => {
-  let result = compact(
-    createDataDir('no-marker', {
-      members: ['@local-user:localhost'],
-      cursor: [2, '!a:localhost'],
-    }),
+test('a database without the pruned-stream marker table is refused and left as it was', () => {
+  let dataDir = createDataDir('no-marker', {
+    members: ['@local-user:localhost'],
+    cursor: [2, '!a:localhost'],
+  });
+  assert.throws(
+    () => runScript(dataDir),
+    (e: { stderr: string }) =>
+      e.stderr.includes(
+        'has no device_lists_changes_in_room_max_pruned_stream_id table',
+      ),
   );
-  assert.deepEqual(result.streams, [5]);
+  let result = readState(dataDir);
+  assert.deepEqual(result.streams, [1, 2, 3, 4, 5]);
+  assert.deepEqual(result.cursor, [2, '!a:localhost']);
   assert.equal(result.maxPruned, undefined);
 });
