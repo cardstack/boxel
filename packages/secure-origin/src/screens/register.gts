@@ -22,6 +22,9 @@ import { autofocus } from '../modifiers/autofocus.ts';
 
 interface RegisterFormSignature {
   Args: {
+    // The title's heading level, 1 when not given. A page with a heading of
+    // its own above the screen passes 2.
+    headingLevel?: number;
     name: string;
     email: string;
     username: string;
@@ -63,7 +66,7 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
       <span
         class='title'
         role='heading'
-        aria-level='1'
+        aria-level={{if @headingLevel @headingLevel 1}}
         data-test-secure-title
       >Create a Boxel Account</span>
       <form novalidate data-test-register-form {{on 'submit' @onSubmit}}>
@@ -197,6 +200,9 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
 
 interface InviteCodeFormSignature {
   Args: {
+    // The title's heading level, 1 when not given. A page with a heading of
+    // its own above the screen passes 2.
+    headingLevel?: number;
     token: string;
     tokenError?: string;
     submitDisabled?: boolean;
@@ -219,7 +225,7 @@ export const InviteCodeForm: TemplateOnlyComponent<InviteCodeFormSignature> =
       <span
         class='title'
         role='heading'
-        aria-level='1'
+        aria-level={{if @headingLevel @headingLevel 1}}
         data-test-secure-title
       >Boxel is currently invite-only.<br />Enter your invite code here.</span>
       <AuthFormField
@@ -274,6 +280,9 @@ export const InviteCodeForm: TemplateOnlyComponent<InviteCodeFormSignature> =
 
 interface AwaitingEmailSignature {
   Args: {
+    // The title's heading level, 1 when not given. A page with a heading of
+    // its own above the screen passes 2.
+    headingLevel?: number;
     resending?: boolean;
     onResend: (event: Event) => void;
   };
@@ -287,7 +296,7 @@ export const AwaitingEmail: TemplateOnlyComponent<AwaitingEmailSignature> =
     <span
       class='title'
       role='heading'
-      aria-level='1'
+      aria-level={{if @headingLevel @headingLevel 1}}
       data-test-secure-title
       data-test-email-validation
     >Please check your email to complete registration</span>
