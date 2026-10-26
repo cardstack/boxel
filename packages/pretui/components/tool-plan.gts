@@ -2,7 +2,12 @@
 import Component from '@glimmer/component';
 import { PlanMark } from './plan-mark';
 
-export type ToolPlanStepState = 'done' | 'current' | 'next' | 'failed' | 'skipped';
+export type ToolPlanStepState =
+  | 'done'
+  | 'current'
+  | 'next'
+  | 'failed'
+  | 'skipped';
 
 export interface ToolPlanStep {
   label: string;
@@ -69,12 +74,15 @@ export class ToolPlan extends Component<ToolPlanSignature> {
           aria-current={{this.isCurrent step.state}}
           data-test-pretui-tool-plan-step={{step.state}}
         >
-          <PlanMark class='pretui-toolplan-glyph' @state={{step.state}} @size={{this.markSize}} />
+          <PlanMark
+            class='pretui-toolplan-glyph'
+            @state={{step.state}}
+            @size={{this.markSize}}
+          />
           <span class='pretui-toolplan-label'>
             {{step.label}}
-            <span class='pretui-toolplan-spoken'>, {{this.spoken
-                step.state
-              }}</span>
+            <span class='pretui-toolplan-spoken'>,
+              {{this.spoken step.state}}</span>
             {{#if step.note}}<span
                 class='pretui-toolplan-note'
               >{{step.note}}</span>{{/if}}
@@ -105,8 +113,8 @@ export class ToolPlan extends Component<ToolPlanSignature> {
           grid-template-columns: var(--pretui-toolrow-disc, 16px) minmax(0, 1fr);
           column-gap: var(--pretui-toolrow-gap, 8px);
           align-items: center;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           color: var(--pretui-toolrow-settled-ink, var(--foreground));
         }
         .pretui-toolplan-glyph {
@@ -116,7 +124,7 @@ export class ToolPlan extends Component<ToolPlanSignature> {
         /* done steps step back; the step under way and what is left keep
            the ink, so the eye lands on the work still to do */
         .pretui-toolplan-step[data-state='done'] {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-toolplan-step[data-state='current'] {
           color: var(--foreground);
@@ -125,7 +133,7 @@ export class ToolPlan extends Component<ToolPlanSignature> {
           color: var(--foreground);
         }
         .pretui-toolplan-step[data-state='skipped'] {
-          color: var(--ink-3, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
         .pretui-toolplan-step[data-state='skipped'] .pretui-toolplan-label {
           text-decoration: line-through;
@@ -135,11 +143,11 @@ export class ToolPlan extends Component<ToolPlanSignature> {
           color: var(--foreground);
         }
         .pretui-toolplan[data-density='comfortable'] {
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
         }
         .pretui-toolplan[data-density='comfortable'] .pretui-toolplan-step {
           grid-template-columns: 16px minmax(0, 1fr);
-          column-gap: var(--step-8, 8px);
+          column-gap: var(--boxel-sp-xs);
           align-items: center;
         }
         .pretui-toolplan-label {
@@ -147,12 +155,12 @@ export class ToolPlan extends Component<ToolPlanSignature> {
           overflow-wrap: anywhere;
         }
         .pretui-toolplan-note {
-          margin-inline-start: var(--step-8, 8px);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          margin-inline-start: var(--boxel-sp-xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 400;
           font-variant-numeric: tabular-nums;
-          color: var(--ink-3, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
         /* what a step did sits under its words, smaller and quieter: it
            belongs to the step, it is not a step of its own */
@@ -160,12 +168,12 @@ export class ToolPlan extends Component<ToolPlanSignature> {
           grid-column: 2;
           display: grid;
           gap: 2px;
-          margin: 2px 0 var(--step-4, 4px);
+          margin: 2px 0 var(--boxel-sp-4xs);
           padding: 0;
           list-style: none;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-3, var(--muted-foreground));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--subtle-foreground);
         }
         .pretui-toolplan-detail {
           min-width: 0;

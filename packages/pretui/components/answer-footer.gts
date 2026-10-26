@@ -112,7 +112,10 @@ export class AnswerFooter extends Component<AnswerFooterSignature> {
           data-test-pretui-answer-diff
           {{on 'click' this.review}}
         >{{this.files}}
-          <span class='pretui-answerfooter-count' data-op='add'>+{{@diff.added}}</span>
+          <span
+            class='pretui-answerfooter-count'
+            data-op='add'
+          >+{{@diff.added}}</span>
           <span
             class='pretui-answerfooter-count'
             data-op='del'
@@ -158,23 +161,23 @@ export class AnswerFooter extends Component<AnswerFooterSignature> {
           gap: 2px;
           min-height: 28px;
           /* plain-row hang: the first action's text stays on the edge */
-          margin-inline-start: calc(-1 * var(--step-8, 8px));
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          margin-inline-start: calc(-1 * var(--boxel-sp-xs));
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
+          color: var(--subtle-foreground);
         }
         .pretui-answerfooter-copy {
           color: inherit;
         }
         .pretui-answerfooter-action {
           height: 28px;
-          padding: 0 var(--step-8, 8px);
+          padding: 0 var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 400;
           color: inherit;
           cursor: pointer;
@@ -182,7 +185,7 @@ export class AnswerFooter extends Component<AnswerFooterSignature> {
         }
         .pretui-answerfooter-action:hover:not(:disabled) {
           background: var(--hover, var(--inset, var(--boxel-100)));
-          color: var(--pretui-link, var(--primary));
+          color: var(--primary-ink);
         }
         .pretui-answerfooter-action:focus-visible {
           outline: 2px solid var(--ring);
@@ -198,28 +201,25 @@ export class AnswerFooter extends Component<AnswerFooterSignature> {
           color: var(--success, var(--boxel-highlight));
         }
         .pretui-answerfooter-count[data-op='del'] {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         /* a failure colours its mark, not its words */
         .pretui-answerfooter-error {
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           color: var(--foreground);
         }
         .pretui-answerfooter-error-mark {
-          margin-inline-end: var(--step-4, 4px);
+          margin-inline-end: var(--boxel-sp-4xs);
           vertical-align: -1px;
-          color: var(
-            --state-failed,
-            var(--pretui-destructive-ink, var(--boxel-danger))
-          );
+          color: var(--destructive-ink);
         }
         /* a receipt, not a string to paste: sans with tabular figures */
         .pretui-answerfooter-cost {
           margin-inline-start: auto;
           padding-inline-end: 2px;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
         }
       }

@@ -729,17 +729,17 @@ export class ToolGroup extends Component<ToolGroupSignature> {
         .pretui-toolgroup {
           display: flex;
           flex-direction: column;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
         }
         .pretui-toolgroup-header {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-height: 32px;
-          padding: var(--step-4, 4px) var(--step-8, 8px);
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           color: inherit;
           font: inherit;
@@ -777,34 +777,25 @@ export class ToolGroup extends Component<ToolGroupSignature> {
           display: grid;
           place-items: center;
           flex: none;
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          color: var(--subtle-foreground);
         }
         .pretui-toolgroup-icon {
           display: block;
           stroke-width: 1.75;
         }
         .pretui-toolgroup-disc[data-tone='failed'] {
-          color: var(
-            --state-failed,
-            var(--pretui-destructive-ink, var(--boxel-danger))
-          );
+          color: var(--destructive-ink);
         }
         .pretui-toolgroup-disc[data-tone='attention'] {
-          color: var(
-            --state-attention,
-            var(
-              --pretui-attention-ink,
-              var(--pretui-attention, var(--boxel-fuschia))
-            )
-          );
+          color: var(--attention-ink);
         }
         .pretui-toolgroup-receipt {
           display: flex;
           align-items: baseline;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-width: 0;
           flex: 1;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-toolgroup-phrases {
           min-width: 0;
@@ -820,7 +811,7 @@ export class ToolGroup extends Component<ToolGroupSignature> {
           background: linear-gradient(
             90deg,
             var(--foreground) 0%,
-            var(--ink-2, var(--muted-foreground)) 50%,
+            var(--muted-foreground) 50%,
             var(--foreground) 100%
           );
           background-size: 200% 100%;
@@ -838,7 +829,7 @@ export class ToolGroup extends Component<ToolGroupSignature> {
         .pretui-toolgroup-sep {
           flex: none;
           align-self: center;
-          color: var(--ink-3, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
         .pretui-toolgroup-used {
           flex: none;
@@ -856,34 +847,25 @@ export class ToolGroup extends Component<ToolGroupSignature> {
         .pretui-toolgroup-failed {
           flex: none;
           font-variant-numeric: tabular-nums;
-          color: var(
-            --state-failed,
-            var(--pretui-destructive-ink, var(--boxel-danger))
-          );
+          color: var(--destructive-ink);
         }
         .pretui-toolgroup-status {
           flex: none;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(--ink-3, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
         .pretui-toolgroup-status[data-tone='attention'] {
-          color: var(
-            --state-attention,
-            var(
-              --pretui-attention-ink,
-              var(--pretui-attention, var(--boxel-fuschia))
-            )
-          );
+          color: var(--attention-ink);
           font-weight: 600;
         }
         .pretui-toolgroup-chevron {
           flex: none;
           width: 6px;
           height: 6px;
-          border-inline-end: 1.5px solid var(--ink-3, var(--muted-foreground));
-          border-block-end: 1.5px solid var(--ink-3, var(--muted-foreground));
+          border-inline-end: 1.5px solid var(--subtle-foreground);
+          border-block-end: 1.5px solid var(--subtle-foreground);
           transform: rotate(-45deg);
           transition: transform 160ms
             var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
@@ -906,8 +888,8 @@ export class ToolGroup extends Component<ToolGroupSignature> {
           overscroll-behavior: contain;
           scrollbar-width: thin;
           gap: 1px;
-          padding: 2px 0 var(--step-4, 4px) var(--step-8, 8px);
-          margin-inline-start: var(--step-16, 16px);
+          padding: 2px 0 var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          margin-inline-start: var(--boxel-sp);
           box-shadow: inset 1px 0 0 var(--border);
         }
         /* rows inside a group are one step quieter than rows on their own */
@@ -917,13 +899,13 @@ export class ToolGroup extends Component<ToolGroupSignature> {
         }
         .pretui-toolgroup-merged {
           margin: 0;
-          padding: 0 0 0 var(--step-16, 16px);
+          padding: 0 0 0 var(--boxel-sp);
           /* each line is a call's subtitle (a path, a command) or its name:
              a pasteable string, so the mono voice */
           font-family: var(--font-mono);
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
+          color: var(--muted-foreground);
           display: flex;
           flex-direction: column;
           gap: 2px;

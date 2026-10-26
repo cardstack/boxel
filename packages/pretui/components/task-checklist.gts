@@ -61,30 +61,45 @@ export class TaskChecklist extends Component<TaskChecklistSignature> {
             {{on 'click' this.activity}}
           >
             <span class='pretui-checklist-activity-text'>{{@activity}}</span>
-            <ChevronRightIcon class='pretui-checklist-chevron' width='14' height='14' />
+            <ChevronRightIcon
+              class='pretui-checklist-chevron'
+              width='14'
+              height='14'
+            />
           </button>
         {{else}}
-          <p class='pretui-checklist-activity' data-test-pretui-task-checklist-activity>
+          <p
+            class='pretui-checklist-activity'
+            data-test-pretui-task-checklist-activity
+          >
             <span class='pretui-checklist-activity-text'>{{@activity}}</span>
           </p>
         {{/if}}
       {{/if}}
       <div class='pretui-checklist-card'>
-        <ToolPlan @steps={{@steps}} @density='comfortable' @label={{if @label @label 'Tasks'}} />
-        <span class='pretui-checklist-summary' role='status' data-test-pretui-task-checklist-summary>{{this.summary}}</span>
+        <ToolPlan
+          @steps={{@steps}}
+          @density='comfortable'
+          @label={{if @label @label 'Tasks'}}
+        />
+        <span
+          class='pretui-checklist-summary'
+          role='status'
+          data-test-pretui-task-checklist-summary
+        >{{this.summary}}</span>
       </div>
     </section>
     <style scoped>
       @layer PretComponent {
         .pretui-checklist {
           display: grid;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-width: 0;
         }
         .pretui-checklist-activity {
           display: inline-flex;
           align-items: center;
-          gap: var(--step-4, 4px);
+          gap: var(--boxel-sp-4xs);
           justify-self: start;
           max-width: 100%;
           margin: 0;
@@ -92,10 +107,10 @@ export class TaskChecklist extends Component<TaskChecklistSignature> {
           border: 0;
           background: none;
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           text-align: start;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         button.pretui-checklist-activity {
           cursor: pointer;
@@ -106,7 +121,7 @@ export class TaskChecklist extends Component<TaskChecklistSignature> {
         button.pretui-checklist-activity:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 2px;
-          border-radius: var(--round-chip, 4px);
+          border-radius: var(--boxel-border-radius-xs);
         }
         .pretui-checklist-activity-text {
           min-width: 0;
@@ -118,11 +133,11 @@ export class TaskChecklist extends Component<TaskChecklistSignature> {
         .pretui-checklist[data-running] .pretui-checklist-activity-text {
           background: linear-gradient(
               90deg,
-              var(--ink-2, var(--muted-foreground)) 0%,
-              var(--ink-2, var(--muted-foreground)) 40%,
+              var(--muted-foreground) 0%,
+              var(--muted-foreground) 40%,
               var(--foreground) 50%,
-              var(--ink-2, var(--muted-foreground)) 60%,
-              var(--ink-2, var(--muted-foreground)) 100%
+              var(--muted-foreground) 60%,
+              var(--muted-foreground) 100%
             )
             0 0 / 300% 100%;
           -webkit-background-clip: text;
@@ -142,15 +157,15 @@ export class TaskChecklist extends Component<TaskChecklistSignature> {
           .pretui-checklist[data-running] .pretui-checklist-activity-text {
             animation: none;
             background: none;
-            color: var(--ink-2, var(--muted-foreground));
+            color: var(--muted-foreground);
           }
         }
         .pretui-checklist-chevron {
           flex: none;
         }
         .pretui-checklist-card {
-          padding: var(--step-12, 12px);
-          border-radius: var(--round-surface, var(--radius-surface, 12px));
+          padding: var(--boxel-sp-sm);
+          border-radius: var(--boxel-border-radius-lg);
           box-shadow: inset 0 0 0 1px var(--border);
           background: var(--card, var(--background));
         }

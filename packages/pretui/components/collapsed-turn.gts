@@ -59,22 +59,23 @@ export class CollapsedTurn extends Component<CollapsedTurnSignature> {
         .pretui-collapsed {
           display: inline-flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           max-width: 100%;
           min-height: 24px;
           padding: 0
             calc(
-              5px * var(--pretui-capsule-base, 1.35) + var(--round-row, 8px) *
+              5px * var(--pretui-capsule-base, 1.35) +
+                var(--boxel-border-radius-sm) *
                 var(--pretui-radius-encroach, 0.35)
             );
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           border: 0;
           background: var(--inset, var(--boxel-100));
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
+          color: var(--muted-foreground);
           cursor: pointer;
           font-variant-numeric: tabular-nums;
           text-align: start;
@@ -131,22 +132,22 @@ export class CollapsedTurn extends Component<CollapsedTurnSignature> {
           gap: var(--pretui-toolrow-gap, 8px);
           margin-inline: calc(-1 * var(--pretui-toolrow-inset, 8px));
           padding: 0 var(--pretui-toolrow-inset, 8px);
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           box-shadow: none;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--subtle-foreground);
         }
         .pretui-collapsed[data-variant='row']:hover {
           background: var(--inset, var(--boxel-100));
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-collapsed[data-variant='row'] .pretui-collapsed-check {
           width: var(--pretui-toolrow-disc, 16px);
           text-align: center;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
         }
       }
     </style>

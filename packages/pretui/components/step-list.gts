@@ -309,24 +309,21 @@ export class StepList extends Component<StepListSignature> {
         .pretui-steplist-wrap {
           container-type: inline-size;
           display: grid;
-          gap: var(--pretui-step-summary-gap, var(--step-8, 8px));
+          gap: var(--pretui-step-summary-gap, var(--boxel-sp-xs));
           min-width: 0;
         }
         .pretui-steplist-summary {
           justify-self: end;
           margin: 0;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(
-            --pretui-step-summary-color,
-            var(--ink-3, var(--muted-foreground))
-          );
+          color: var(--pretui-step-summary-color, var(--subtle-foreground));
         }
         .pretui-steplist {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           margin: 0;
           padding: 0;
           list-style: none;
@@ -335,10 +332,10 @@ export class StepList extends Component<StepListSignature> {
         .pretui-step {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-width: 0;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 400;
         }
         .pretui-step:not(:last-child) {
@@ -354,7 +351,7 @@ export class StepList extends Component<StepListSignature> {
         .pretui-step[data-state='upcoming'] {
           --pretui-step-tone: var(
             --pretui-step-upcoming-tone,
-            var(--ink-2, var(--muted-foreground))
+            var(--muted-foreground)
           );
           --pretui-step-marker-bg: var(
             --pretui-step-upcoming-marker-bg,
@@ -362,7 +359,7 @@ export class StepList extends Component<StepListSignature> {
           );
           --pretui-step-marker-fg: var(
             --pretui-step-upcoming-marker-fg,
-            var(--ink-3, var(--muted-foreground))
+            var(--subtle-foreground)
           );
           --pretui-step-ring: var(--pretui-step-upcoming-ring, var(--border));
           --pretui-step-bar-fill: var(
@@ -395,7 +392,7 @@ export class StepList extends Component<StepListSignature> {
         .pretui-step[data-state='complete'] {
           --pretui-step-tone: var(
             --pretui-step-complete-tone,
-            var(--ink-2, var(--muted-foreground))
+            var(--muted-foreground)
           );
           --pretui-step-marker-bg: var(
             --pretui-step-complete-marker-bg,
@@ -405,35 +402,26 @@ export class StepList extends Component<StepListSignature> {
             --pretui-step-complete-marker-fg,
             var(--foreground)
           );
-          --pretui-step-ring: var(
-            --pretui-step-complete-ring,
-            var(--border)
-          );
+          --pretui-step-ring: var(--pretui-step-complete-ring, var(--border));
           --pretui-step-bar-fill: var(
             --pretui-step-complete-bar,
-            var(--ink-2, var(--muted-foreground))
+            var(--muted-foreground)
           );
         }
         .pretui-step[data-state='error'] {
-          --pretui-step-tone: var(
-            --pretui-step-error-tone,
-            var(--foreground)
-          );
+          --pretui-step-tone: var(--pretui-step-error-tone, var(--foreground));
           --pretui-step-marker-bg: var(
             --pretui-step-error-marker-bg,
             var(--inset)
           );
           --pretui-step-marker-fg: var(
             --pretui-step-error-marker-fg,
-            var(--state-failed, var(--destructive-ink))
+            var(--destructive-ink)
           );
-          --pretui-step-ring: var(
-            --pretui-step-error-ring,
-            var(--state-failed, var(--destructive))
-          );
+          --pretui-step-ring: var(--pretui-step-error-ring, var(--destructive));
           --pretui-step-bar-fill: var(
             --pretui-step-error-bar,
-            var(--state-failed, var(--destructive))
+            var(--destructive)
           );
         }
         /* running now: the live hue on the mark's play triangle and ring, so
@@ -450,15 +438,15 @@ export class StepList extends Component<StepListSignature> {
           );
           --pretui-step-marker-fg: var(
             --pretui-step-in-progress-marker-fg,
-            var(--state-live, var(--info-ink))
+            var(--primary-ink)
           );
           --pretui-step-ring: var(
             --pretui-step-in-progress-ring,
-            var(--state-live, var(--info))
+            var(--primary)
           );
           --pretui-step-bar-fill: var(
             --pretui-step-in-progress-bar,
-            var(--state-live, var(--info))
+            var(--primary)
           );
         }
         /* cannot proceed: the attention hue, not failed — nothing has failed */
@@ -473,15 +461,12 @@ export class StepList extends Component<StepListSignature> {
           );
           --pretui-step-marker-fg: var(
             --pretui-step-blocked-marker-fg,
-            var(--state-attention, var(--warning-ink))
+            var(--attention-ink)
           );
-          --pretui-step-ring: var(
-            --pretui-step-blocked-ring,
-            var(--state-attention, var(--warning))
-          );
+          --pretui-step-ring: var(--pretui-step-blocked-ring, var(--attention));
           --pretui-step-bar-fill: var(
             --pretui-step-blocked-bar,
-            var(--state-attention, var(--warning))
+            var(--attention)
           );
         }
         .pretui-step-marker {
@@ -491,8 +476,8 @@ export class StepList extends Component<StepListSignature> {
           height: 1.125rem;
           border-radius: 50%;
           flex: none;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
           background-color: var(--pretui-step-marker-bg);
           color: var(--pretui-step-marker-fg);
@@ -513,19 +498,19 @@ export class StepList extends Component<StepListSignature> {
            declares a detail, and reserves a line's height, so a message
            arriving mid-run does not shove the whole rail down. */
         .pretui-step-detail {
-          min-height: var(--leading-caption, 16px);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          min-height: var(--boxel-caption-line-height);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 400;
           white-space: normal;
           overflow-wrap: break-word;
-          color: var(--pretui-step-detail-color, var(--ink-3, var(--muted-foreground)));
+          color: var(--pretui-step-detail-color, var(--subtle-foreground));
         }
         /* a blocked or failed step's reason steps up to ink-2; the mark
            carries the state's hue */
         .pretui-step[data-state='blocked'] .pretui-step-detail,
         .pretui-step[data-state='error'] .pretui-step-detail {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-step-connector {
           flex: 1;
@@ -534,7 +519,7 @@ export class StepList extends Component<StepListSignature> {
           background-color: var(--border);
         }
         .pretui-step[data-state='complete'] .pretui-step-connector {
-          background-color: var(--ink-3, var(--border));
+          background-color: var(--subtle-foreground);
         }
         /* ── track variant ── equal-width bars, caption beneath each. The
            caption keeps the marker glyph, so 'complete' is carried by shape
@@ -545,7 +530,7 @@ export class StepList extends Component<StepListSignature> {
           grid-auto-flow: column;
           grid-auto-columns: minmax(0, 1fr);
           align-items: start;
-          gap: var(--pretui-step-track-gap, var(--step-4, 4px));
+          gap: var(--pretui-step-track-gap, var(--boxel-sp-4xs));
         }
         .pretui-steplist[data-variant='track'] .pretui-step {
           display: grid;
@@ -554,7 +539,7 @@ export class StepList extends Component<StepListSignature> {
             'bar bar'
             'marker label';
           align-items: center;
-          gap: var(--step-8, 8px) var(--step-4, 4px);
+          gap: var(--boxel-sp-xs) var(--boxel-sp-4xs);
         }
         .pretui-steplist[data-variant='track'] .pretui-step-bar {
           grid-area: bar;
@@ -586,7 +571,7 @@ export class StepList extends Component<StepListSignature> {
           .pretui-steplist[data-variant='steps'] {
             flex-direction: column;
             align-items: stretch;
-            gap: var(--step-8, 8px);
+            gap: var(--boxel-sp-xs);
           }
           .pretui-steplist[data-variant='steps'] .pretui-step {
             flex: none;
@@ -606,12 +591,12 @@ export class StepList extends Component<StepListSignature> {
           .pretui-steplist[data-variant='track'] {
             grid-auto-flow: row;
             grid-auto-columns: auto;
-            gap: var(--step-8, 8px);
+            gap: var(--boxel-sp-xs);
           }
           .pretui-steplist[data-variant='track'] .pretui-step {
             grid-template-columns: 2rem auto minmax(0, 1fr);
             grid-template-areas: 'bar marker label';
-            gap: var(--step-8, 8px);
+            gap: var(--boxel-sp-xs);
           }
         }
         .pretui-vh {

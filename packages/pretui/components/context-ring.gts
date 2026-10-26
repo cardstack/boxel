@@ -53,26 +53,33 @@ export class ContextRing extends Component<ContextRingSignature> {
       data-test-pretui-context-ring
       ...attributes
     >
-      <span class='pretui-contextring-ring' style={{this.ringStyle}} aria-hidden='true'></span>
-      {{#unless @compact}}<span class='pretui-contextring-pct' aria-hidden='true'>{{this.percent}}%</span>{{/unless}}
+      <span
+        class='pretui-contextring-ring'
+        style={{this.ringStyle}}
+        aria-hidden='true'
+      ></span>
+      {{#unless @compact}}<span
+          class='pretui-contextring-pct'
+          aria-hidden='true'
+        >{{this.percent}}%</span>{{/unless}}
     </span>
     <style scoped>
       @layer PretComponent {
         .pretui-contextring {
           display: inline-flex;
           align-items: center;
-          gap: var(--step-4, 4px);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          gap: var(--boxel-sp-4xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-contextring-ring {
           width: 14px;
           height: 14px;
           border-radius: 50%;
           background: conic-gradient(
-            var(--pretui-contextring-ink, var(--ink-2, var(--muted-foreground)))
+            var(--pretui-contextring-ink, var(--muted-foreground))
               var(--pretui-ring-share),
             var(--border-strong, var(--border)) 0
           );
@@ -82,10 +89,7 @@ export class ContextRing extends Component<ContextRingSignature> {
         /* past the warning share the ring (the mark) takes the attention
            state; the digits step up to ink-1 */
         .pretui-contextring[data-warn] {
-          --pretui-contextring-ink: var(
-            --state-attention,
-            var(--pretui-attention)
-          );
+          --pretui-contextring-ink: var(--attention-ink);
           color: var(--foreground);
         }
       }

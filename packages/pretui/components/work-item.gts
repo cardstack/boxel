@@ -6,18 +6,36 @@ import { StateGlyph } from './state-glyph';
 
 type Tone = 'idle' | 'running' | 'attention' | 'done' | 'failed';
 const TONES: Record<string, Tone> = {
-  pending: 'idle', preparing: 'running', running: 'running', applying: 'running',
-  handoff: 'running', starting: 'running',
+  pending: 'idle',
+  preparing: 'running',
+  running: 'running',
+  applying: 'running',
+  handoff: 'running',
+  starting: 'running',
   // a reload lost the page that watched the run, not the run: grey, never red
-  reconnecting: 'idle', 'host-attached': 'running',
-  fallback: 'running', ready: 'attention', 'awaiting-approval': 'attention',
-  ask: 'attention', input: 'attention', completed: 'done', kept: 'done',
-  delivered: 'done', failed: 'failed', invalid: 'failed', reverted: 'idle',
-  canceled: 'idle', superseded: 'idle', stopped: 'idle',
+  reconnecting: 'idle',
+  'host-attached': 'running',
+  fallback: 'running',
+  ready: 'attention',
+  'awaiting-approval': 'attention',
+  ask: 'attention',
+  input: 'attention',
+  completed: 'done',
+  kept: 'done',
+  delivered: 'done',
+  failed: 'failed',
+  invalid: 'failed',
+  reverted: 'idle',
+  canceled: 'idle',
+  superseded: 'idle',
+  stopped: 'idle',
   // staged writes: the preview waits on the reader, the commit runs, a file
   // that moved since the preview waits again; a partial keep is still done
-  previewed: 'attention', committing: 'running', conflict: 'attention',
-  partial: 'done', resumed: 'running',
+  previewed: 'attention',
+  committing: 'running',
+  conflict: 'attention',
+  partial: 'done',
+  resumed: 'running',
   // a transient failure that will try again by itself is not red yet
   retrying: 'idle',
   // the run spent its budget: it stopped with what it had, and can continue
@@ -25,19 +43,44 @@ const TONES: Record<string, Tone> = {
   // the decision belongs to someone else in the room
   routed: 'idle',
 };
-const GLYPHS: Record<Tone, string> = { idle: '·', running: '', attention: '●', done: '✓', failed: '✕' };
+const GLYPHS: Record<Tone, string> = {
+  idle: '·',
+  running: '',
+  attention: '●',
+  done: '✓',
+  failed: '✕',
+};
 const DEFAULT_STATUS: Record<string, string> = {
-  pending: 'queued', preparing: 'preparing…', running: 'running…',
-  applying: 'applying…', handoff: 'handing off…', starting: 'starting…',
+  pending: 'queued',
+  preparing: 'preparing…',
+  running: 'running…',
+  applying: 'applying…',
+  handoff: 'handing off…',
+  starting: 'starting…',
   reconnecting: 'reconnecting…',
-  'host-attached': 'attached', fallback: 'fallback…', ready: 'needs you',
-  'awaiting-approval': 'needs you', ask: 'needs you', input: 'needs you',
-  completed: 'done', kept: 'kept', delivered: 'delivered', failed: 'failed',
-  invalid: 'invalid', reverted: 'reverted', canceled: 'canceled',
-  superseded: 'retried below', stopped: 'stopped',
-  previewed: 'review', committing: 'writing…', conflict: 'conflict',
-  partial: 'partly kept', resumed: 'resumed…', retrying: 'retrying soon',
-  budget: 'budget reached', routed: 'waiting on someone',
+  'host-attached': 'attached',
+  fallback: 'fallback…',
+  ready: 'needs you',
+  'awaiting-approval': 'needs you',
+  ask: 'needs you',
+  input: 'needs you',
+  completed: 'done',
+  kept: 'kept',
+  delivered: 'delivered',
+  failed: 'failed',
+  invalid: 'invalid',
+  reverted: 'reverted',
+  canceled: 'canceled',
+  superseded: 'retried below',
+  stopped: 'stopped',
+  previewed: 'review',
+  committing: 'writing…',
+  conflict: 'conflict',
+  partial: 'partly kept',
+  resumed: 'resumed…',
+  retrying: 'retrying soon',
+  budget: 'budget reached',
+  routed: 'waiting on someone',
 };
 
 /** The tone an agent state collapses to. Exported so components built on the
@@ -124,18 +167,29 @@ export class WorkItem extends Component<WorkItemSignature> {
     >
       <div class='pretui-workitem-row'>
         <span class='pretui-disc' data-tone={{this.tone}}>
-          {{#if this.isRunning}}<Spinner @size={{9}} />{{else}}<StateGlyph @glyph={{this.glyph}} />{{/if}}
+          {{#if this.isRunning}}<Spinner @size={{9}} />{{else}}<StateGlyph
+              @glyph={{this.glyph}}
+            />{{/if}}
         </span>
         {{#if @verb}}<span class='pretui-verb'>{{@verb}}</span>{{/if}}
         <span class='pretui-workitem-title'>{{@title}}</span>
-        <span class='pretui-workitem-status' data-tone={{this.tone}}>{{this.statusText}}</span>
+        <span
+          class='pretui-workitem-status'
+          data-tone={{this.tone}}
+        >{{this.statusText}}</span>
       </div>
       {{#if this.hasBody}}
         <div class='pretui-workitem-body'>
           {{#if this.hasProgress}}
-            <ProgressBar @value={{this.progressValue}} @max={{@progressMax}} @count={{this.countText}} />
+            <ProgressBar
+              @value={{this.progressValue}}
+              @max={{@progressMax}}
+              @count={{this.countText}}
+            />
           {{/if}}
-          {{#if @activity}}<div class='pretui-activity'>{{@activity}}</div>{{/if}}
+          {{#if @activity}}<div
+              class='pretui-activity'
+            >{{@activity}}</div>{{/if}}
           {{yield}}
         </div>
       {{else}}
@@ -151,26 +205,29 @@ export class WorkItem extends Component<WorkItemSignature> {
           background: var(--card);
           border-radius: 10px;
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-workitem[data-attention] {
-          box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 60%, var(--border)),
-            0 2px 10px color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 14%, transparent);
+          box-shadow:
+            0 0 0 1px color-mix(in oklch, var(--attention) 60%, var(--border)),
+            0 2px 10px color-mix(in oklch, var(--attention) 14%, transparent);
           background: linear-gradient(
             180deg,
-            color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 7%, var(--card)),
+            color-mix(in oklch, var(--attention) 7%, var(--card)),
             var(--card) 55%
           );
         }
         .pretui-workitem[data-state='failed'],
         .pretui-workitem[data-state='invalid'] {
-          box-shadow: 0 0 0 1px color-mix(in oklch, var(--destructive) 45%, var(--border));
+          box-shadow: 0 0 0 1px
+            color-mix(in oklch, var(--destructive) 45%, var(--border));
         }
         .pretui-workitem[data-recede] > .pretui-workitem-row {
           opacity: var(--pretui-recede-opacity, 1);
           transition: opacity 200ms linear;
         }
-        .pretui-workitem[data-recede]:is(:hover, :focus-within) > .pretui-workitem-row {
+        .pretui-workitem[data-recede]:is(:hover, :focus-within)
+          > .pretui-workitem-row {
           opacity: 1;
         }
         .pretui-workitem-row {
@@ -201,11 +258,11 @@ export class WorkItem extends Component<WorkItemSignature> {
         }
         .pretui-disc[data-tone='failed'] {
           background: color-mix(in oklch, var(--destructive) 15%, var(--card));
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-disc[data-tone='attention'] {
-          background: color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 22%, var(--card));
-          color: var(--pretui-attention-ink, var(--pretui-attention, var(--boxel-fuschia)));
+          background: color-mix(in oklch, var(--attention) 22%, var(--card));
+          color: var(--attention-ink);
         }
         .pretui-verb {
           font-family: var(--font-mono);
@@ -226,7 +283,7 @@ export class WorkItem extends Component<WorkItemSignature> {
         .pretui-workitem-status {
           margin-left: auto;
           flex: none;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
           display: flex;
           align-items: center;
@@ -234,17 +291,17 @@ export class WorkItem extends Component<WorkItemSignature> {
           font-variant-numeric: tabular-nums;
         }
         .pretui-workitem-status[data-tone='attention'] {
-          color: var(--pretui-attention-ink, var(--pretui-attention, var(--boxel-fuschia)));
+          color: var(--attention-ink);
           font-weight: 600;
         }
         .pretui-workitem-status[data-tone='failed'] {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
           font-weight: 500;
         }
         .pretui-activity {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;

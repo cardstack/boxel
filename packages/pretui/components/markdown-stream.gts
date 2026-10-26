@@ -711,10 +711,10 @@ export class MarkdownStream extends Component<MarkdownStreamSignature> {
           margin-block-end: 0;
         }
         .pretui-md-block + .pretui-md-block {
-          margin-block-start: var(--step-12, 12px);
+          margin-block-start: var(--boxel-sp-sm);
         }
         .pretui-md-block[data-kind='code'] {
-          margin-block: var(--step-12, 12px);
+          margin-block: var(--boxel-sp-sm);
         }
         /* an unconfirmed relative link reads as the plain text it is */
         .pretui-md-block :deep([data-markdown-link='pending']) {
@@ -725,7 +725,7 @@ export class MarkdownStream extends Component<MarkdownStreamSignature> {
         .pretui-md-block :deep(code[data-markdown-link='resolved']) {
           cursor: pointer;
           text-decoration: underline;
-          text-decoration-color: var(--ink-2, var(--muted-foreground));
+          text-decoration-color: var(--muted-foreground);
           text-underline-offset: 0.18em;
         }
         .pretui-md-block
@@ -752,9 +752,9 @@ export class MarkdownStream extends Component<MarkdownStreamSignature> {
            quieter ink rather than faded */
         .pretui-md-math-pending {
           font-family: var(--font-mono);
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
+          color: var(--muted-foreground);
         }
         .pretui-md-live {
           position: absolute;

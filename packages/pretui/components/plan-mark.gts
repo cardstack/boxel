@@ -46,11 +46,23 @@ export class PlanMark extends Component<PlanMarkSignature> {
         <circle cx='8' cy='8' r='6.75' />
       </svg>
       {{#if (this.is @state 'done')}}
-        <Check class='pretui-planmark-icon' width={{this.inner}} height={{this.inner}} />
+        <Check
+          class='pretui-planmark-icon'
+          width={{this.inner}}
+          height={{this.inner}}
+        />
       {{else if (this.is @state 'failed')}}
-        <X class='pretui-planmark-icon' width={{this.inner}} height={{this.inner}} />
+        <X
+          class='pretui-planmark-icon'
+          width={{this.inner}}
+          height={{this.inner}}
+        />
       {{else if (this.is @state 'skipped')}}
-        <Minus class='pretui-planmark-icon' width={{this.inner}} height={{this.inner}} />
+        <Minus
+          class='pretui-planmark-icon'
+          width={{this.inner}}
+          height={{this.inner}}
+        />
       {{/if}}
     </span>
     <style scoped>
@@ -90,7 +102,7 @@ export class PlanMark extends Component<PlanMarkSignature> {
           stroke-width: 2.5;
         }
         .pretui-planmark[data-state='failed'] {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         /* what comes next: a dashed circle, quieter */
         .pretui-planmark[data-state='next'] {

@@ -56,11 +56,11 @@ export class AgentMark extends Component<AgentMarkSignature> {
           font-size: calc(var(--pretui-agent-mark-size) * 0.75);
           line-height: 1;
           /* settled, the fallback glyph is ink; teal is for live work */
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           vertical-align: -0.2em;
         }
         .pretui-agentmark[data-working] {
-          color: var(--state-live, var(--primary, var(--boxel-highlight)));
+          color: var(--primary-ink);
         }
         .pretui-agentmark::before {
           content: var(--pretui-agent-glyph, '✦');

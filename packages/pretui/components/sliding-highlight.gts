@@ -190,7 +190,10 @@ export class SlidingHighlight extends Component<SlidingHighlightSignature> {
             var(--pretui-highlight-y, 0px)
           );
           opacity: var(--pretui-highlight-on, 0);
-          border-radius: var(--pretui-highlight-radius, var(--radius));
+          border-radius: var(
+            --pretui-highlight-radius,
+            var(--boxel-border-radius)
+          );
           pointer-events: none;
           z-index: 0;
           transition-property: transform, width, height, opacity;

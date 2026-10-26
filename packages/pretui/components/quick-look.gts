@@ -196,13 +196,13 @@ export class QuickLook extends Component<QuickLookSignature> {
           position: absolute;
           inset: var(
             --pretui-quick-look-inset,
-            var(--step-48, 48px) var(--step-12, 12px) var(--step-12, 12px)
+            var(--boxel-sp-3xl) var(--boxel-sp-sm) var(--boxel-sp-sm)
           );
           display: flex;
           flex-direction: column;
           min-height: 0;
           overflow: hidden;
-          border-radius: var(--round-surface, 12px);
+          border-radius: var(--boxel-border-radius-lg);
           background: var(--card, var(--background));
           color: var(--card-foreground, var(--foreground));
           box-shadow:
@@ -220,10 +220,10 @@ export class QuickLook extends Component<QuickLookSignature> {
         .pretui-quick-look-bar {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
-          min-height: var(--step-48, 48px);
-          padding: var(--step-8, 8px) var(--step-8, 8px) var(--step-8, 8px)
-            var(--step-16, 16px);
+          gap: var(--boxel-sp-xs);
+          min-height: var(--boxel-sp-3xl);
+          padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
+            var(--boxel-sp);
           border-bottom: 1px solid var(--border);
         }
         .pretui-quick-look-heading {
@@ -233,17 +233,17 @@ export class QuickLook extends Component<QuickLookSignature> {
           min-width: 0;
         }
         .pretui-quick-look-kind {
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-3, var(--subtle-foreground));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--subtle-foreground);
           overflow: hidden;
           white-space: nowrap;
           text-overflow: ellipsis;
         }
         .pretui-quick-look-title {
           margin: 0;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
           overflow: hidden;
           white-space: nowrap;
@@ -252,7 +252,7 @@ export class QuickLook extends Component<QuickLookSignature> {
         .pretui-quick-look-actions {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           flex-shrink: 0;
         }
         .pretui-quick-look-actions:empty {
@@ -260,7 +260,7 @@ export class QuickLook extends Component<QuickLookSignature> {
         }
         .pretui-quick-look-close {
           flex-shrink: 0;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-quick-look-body {
           flex: 1;

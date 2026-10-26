@@ -91,7 +91,10 @@ export class CompactionChip extends Component<CompactionChipSignature> {
   }
   get expanded(): boolean {
     return (
-      this.args.expanded ?? this.innerExpanded ?? this.args.defaultExpanded ?? false
+      this.args.expanded ??
+      this.innerExpanded ??
+      this.args.defaultExpanded ??
+      false
     );
   }
 
@@ -172,26 +175,23 @@ export class CompactionChip extends Component<CompactionChipSignature> {
         .pretui-compaction {
           display: flex;
           flex-direction: column;
-          gap: var(--step-4, 4px);
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          gap: var(--boxel-sp-4xs);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
         }
         .pretui-compaction-marker {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
         }
         /* a failure colours its mark, not its words */
         .pretui-compaction[data-state='failed'] .pretui-compaction-chip {
           color: var(--foreground);
         }
         .pretui-compaction-failed {
-          font-size: var(--type-caption, 11px);
+          font-size: var(--boxel-caption-font-size);
           line-height: 1;
-          color: var(
-            --state-failed,
-            var(--pretui-destructive-ink, var(--destructive))
-          );
+          color: var(--destructive-ink);
         }
         .pretui-compaction-rule {
           flex: 1;
@@ -202,20 +202,17 @@ export class CompactionChip extends Component<CompactionChipSignature> {
         .pretui-compaction-chip {
           display: inline-flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-height: 26px;
-          padding: 0 var(--step-12, 12px);
+          padding: 0 var(--boxel-sp-sm);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: var(--inset, var(--boxel-100));
-          box-shadow: var(
-            --pretui-shadow-hairline,
-            0 0 0 1px var(--border)
-          );
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
+          color: var(--muted-foreground);
           /* shrinks between its rules, so a narrow panel truncates the
              label instead of pushing the chip past the edge */
           flex: 0 1 auto;
@@ -237,7 +234,7 @@ export class CompactionChip extends Component<CompactionChipSignature> {
           width: 13px;
           height: 13px;
           flex: none;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-compaction-label {
           font-weight: 400;
@@ -248,7 +245,7 @@ export class CompactionChip extends Component<CompactionChipSignature> {
         }
         .pretui-compaction-counts {
           flex: none;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
         }
         .pretui-compaction-chev {
@@ -259,22 +256,19 @@ export class CompactionChip extends Component<CompactionChipSignature> {
           transform: rotate(180deg);
         }
         .pretui-compaction-summary {
-          margin: var(--step-4, 4px) auto 0;
+          margin: var(--boxel-sp-4xs) auto 0;
           max-inline-size: var(--measure-read, 68ch);
-          padding: var(--step-8, 8px) var(--step-12, 12px);
-          border-radius: var(--round-row, 8px);
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+          border-radius: var(--boxel-border-radius-sm);
           background: var(--inset, var(--boxel-100));
-          box-shadow: var(
-            --pretui-shadow-hairline,
-            0 0 0 1px var(--border)
-          );
-          color: var(--ink-2, var(--muted-foreground));
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          color: var(--muted-foreground);
         }
         .pretui-compaction-summary p {
           margin: 0;
         }
         .pretui-compaction-none {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           font-style: italic;
         }
         @media (prefers-reduced-motion: reduce) {

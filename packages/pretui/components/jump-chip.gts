@@ -119,7 +119,7 @@ export class JumpChip extends Component<JumpChipSignature> {
         .pretui-jump {
           position: absolute;
           inset-inline: 0;
-          bottom: var(--pretui-jump-offset, var(--step-12, 12px));
+          bottom: var(--pretui-jump-offset, var(--boxel-sp-sm));
           display: flex;
           justify-content: center;
           pointer-events: none;
@@ -127,16 +127,16 @@ export class JumpChip extends Component<JumpChipSignature> {
         }
         .pretui-jump[data-direction='up'] {
           bottom: auto;
-          top: var(--pretui-jump-offset, var(--step-12, 12px));
+          top: var(--pretui-jump-offset, var(--boxel-sp-sm));
         }
         .pretui-jump-btn {
           display: inline-flex;
           align-items: center;
           gap: 6px;
           min-height: 28px;
-          padding: 0 var(--step-12, 12px);
+          padding: 0 var(--boxel-sp-sm);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: var(--card);
           box-shadow: var(
             --pretui-shadow-overlay,
@@ -144,8 +144,8 @@ export class JumpChip extends Component<JumpChipSignature> {
             0 8px 28px rgb(0 0 0 / 0.18)
           );
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
           font-variant-numeric: tabular-nums;
           white-space: nowrap;
@@ -183,7 +183,7 @@ export class JumpChip extends Component<JumpChipSignature> {
           width: 13px;
           height: 13px;
           flex: none;
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          color: var(--subtle-foreground);
         }
         .pretui-jump[data-direction='up'] .pretui-jump-btn > svg {
           transform: rotate(180deg);
@@ -191,7 +191,7 @@ export class JumpChip extends Component<JumpChipSignature> {
         /* news is never colour alone — the count is in the label; the
            arrow (the mark) takes the live state, the chip stays the card */
         .pretui-jump[data-news] .pretui-jump-btn > svg {
-          color: var(--state-live, var(--primary));
+          color: var(--primary-ink);
         }
         @media (any-pointer: coarse) {
           .pretui-jump-btn {

@@ -40,7 +40,11 @@ export class SystemLine extends Component<SystemLineSignature> {
       data-test-pretui-system-line
       ...attributes
     >
-      <StateGlyph class='pretui-systemline-glyph' @glyph={{if @glyph @glyph '·'}} @size={{11}} />
+      <StateGlyph
+        class='pretui-systemline-glyph'
+        @glyph={{if @glyph @glyph '·'}}
+        @size={{11}}
+      />
       <span class='pretui-systemline-text'>{{@text}}{{#if @by}}<span
             class='pretui-systemline-by'
           > · by {{@by}}</span>{{/if}}</span>
@@ -62,15 +66,18 @@ export class SystemLine extends Component<SystemLineSignature> {
       @layer PretComponent {
         .pretui-systemline {
           display: grid;
-          grid-template-columns: var(--pretui-toolrow-disc, 16px) minmax(0, 1fr) auto auto;
+          grid-template-columns: var(--pretui-toolrow-disc, 16px) minmax(
+              0,
+              1fr
+            ) auto auto;
           column-gap: var(--pretui-toolrow-gap, 8px);
           align-items: baseline;
           margin: 0;
           /* on the transcript's text edge; inside a row, the row's inset */
           padding-inline: var(--pretui-toolrow-inset, 0px);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--subtle-foreground);
         }
         .pretui-systemline-glyph {
           text-align: center;
@@ -82,9 +89,9 @@ export class SystemLine extends Component<SystemLineSignature> {
         /* a checkpoint is a rule across the thread with its name on it */
         .pretui-systemline[data-variant='checkpoint'] {
           grid-template-columns:
-            minmax(var(--step-12, 12px), 1fr) auto auto
-            minmax(var(--step-12, 12px), 1fr);
-          column-gap: var(--step-8, 8px);
+            minmax(var(--boxel-sp-sm), 1fr) auto auto
+            minmax(var(--boxel-sp-sm), 1fr);
+          column-gap: var(--boxel-sp-xs);
         }
         .pretui-systemline[data-variant='checkpoint']::before,
         .pretui-systemline[data-variant='checkpoint']::after {
@@ -105,24 +112,24 @@ export class SystemLine extends Component<SystemLineSignature> {
           display: none;
         }
         .pretui-systemline-act {
-          padding: 0 var(--step-4, 4px);
+          padding: 0 var(--boxel-sp-4xs);
           border: 0;
-          border-radius: var(--round-chip, 4px);
+          border-radius: var(--boxel-border-radius-xs);
           background: none;
           font: inherit;
           font-weight: 600;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           cursor: pointer;
         }
         .pretui-systemline-act:hover {
-          color: var(--pretui-link, var(--primary));
+          color: var(--primary-ink);
         }
         .pretui-systemline-act:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 1px;
         }
         .pretui-systemline-by {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
       }
     </style>

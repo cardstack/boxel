@@ -245,13 +245,14 @@ export class ComposerCap extends Component<ComposerCapSignature> {
       }}
     </div>
     <style scoped>
-        @layer PretComponent {
+      @layer PretComponent {
         .pretui-cap {
           --pretui-cap-ink: var(--foreground);
           display: flex;
           flex-direction: column;
-          margin-inline: var(--pretui-cap-inset, var(--step-12, 12px));
-          border-radius: var(--round-surface, 12px) var(--round-surface, 12px) 0 0;
+          margin-inline: var(--pretui-cap-inset, var(--boxel-sp-sm));
+          border-radius: var(--boxel-border-radius-lg)
+            var(--boxel-border-radius-lg) 0 0;
           background: var(
             --pretui-cap-surface,
             color-mix(in oklch, var(--foreground) 8%, var(--background))
@@ -273,11 +274,11 @@ export class ComposerCap extends Component<ComposerCapSignature> {
         .pretui-cap :deep(.pretui-cap-row) {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-height: 28px;
-          padding: 0 var(--step-4, 4px) 0 var(--step-8, 8px);
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          padding: 0 var(--boxel-sp-4xs) 0 var(--boxel-sp-xs);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 400;
           min-width: 0;
         }
@@ -289,17 +290,17 @@ export class ComposerCap extends Component<ComposerCapSignature> {
            queue by weight (its title is 600) and height, never by size */
         .pretui-cap :deep(.pretui-cap-status) {
           min-height: 36px;
-          padding: 0 var(--step-4, 4px) 0 var(--step-8, 8px);
+          padding: 0 var(--boxel-sp-4xs) 0 var(--boxel-sp-xs);
         }
         .pretui-cap :deep(.pretui-cap-status[data-wrap]) {
           align-items: flex-start;
-          padding-block: var(--step-8, 8px);
+          padding-block: var(--boxel-sp-xs);
         }
         .pretui-cap :deep(.pretui-cap-status[data-wrap] .pretui-cap-lead) {
           margin-top: 0;
         }
         .pretui-cap :deep(.pretui-cap-status[data-wrap] .pretui-cap-actions) {
-          margin-top: calc(-1 * var(--step-4, 4px));
+          margin-top: calc(-1 * var(--boxel-sp-4xs));
         }
         .pretui-cap :deep(.pretui-cap-lead) {
           flex: none;
@@ -312,9 +313,10 @@ export class ComposerCap extends Component<ComposerCapSignature> {
         .pretui-cap :deep(.pretui-cap-queued .pretui-cap-lead) {
           width: 16px;
           height: 16px;
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          color: var(--subtle-foreground);
         }
-        .pretui-cap :deep(.pretui-cap-status[data-tone='idle'] .pretui-cap-lead) {
+        .pretui-cap
+          :deep(.pretui-cap-status[data-tone='idle'] .pretui-cap-lead) {
           opacity: 0.55;
         }
         .pretui-cap :deep(.pretui-cap-dot) {
@@ -328,14 +330,17 @@ export class ComposerCap extends Component<ComposerCapSignature> {
         }
         /* a state colours the mark only: waiting on you is attention, a
            problem is failed, done and live work are live */
-        .pretui-cap :deep(.pretui-cap-status[data-tone='waiting'] .pretui-cap-lead) {
-          color: var(--state-attention, var(--pretui-attention, #f0b44c));
+        .pretui-cap
+          :deep(.pretui-cap-status[data-tone='waiting'] .pretui-cap-lead) {
+          color: var(--attention-ink);
         }
-        .pretui-cap :deep(.pretui-cap-status[data-tone='problem'] .pretui-cap-lead) {
-          color: var(--state-failed, var(--destructive, #f07272));
+        .pretui-cap
+          :deep(.pretui-cap-status[data-tone='problem'] .pretui-cap-lead) {
+          color: var(--destructive-ink);
         }
-        .pretui-cap :deep(.pretui-cap-status[data-tone='done'] .pretui-cap-lead) {
-          color: var(--state-live, var(--success, var(--primary)));
+        .pretui-cap
+          :deep(.pretui-cap-status[data-tone='done'] .pretui-cap-lead) {
+          color: var(--primary-ink);
         }
         /* the title holds its words; the detail gives way first */
         .pretui-cap :deep(.pretui-cap-text) {
@@ -366,7 +371,7 @@ export class ComposerCap extends Component<ComposerCapSignature> {
           display: block;
           white-space: normal;
           overflow-wrap: anywhere;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-cap :deep(.pretui-cap-status[data-wrap] .pretui-cap-title) {
           font-weight: 400;
@@ -375,10 +380,10 @@ export class ComposerCap extends Component<ComposerCapSignature> {
           font-weight: 600;
         }
         .pretui-cap :deep(.pretui-cap-queued .pretui-cap-text) {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-cap :deep(.pretui-cap-detail) {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           font-weight: 400;
           font-variant-numeric: tabular-nums;
         }
@@ -393,12 +398,12 @@ export class ComposerCap extends Component<ComposerCapSignature> {
           animation-delay: 0.4s;
         }
         @keyframes pretui-cap-blink {
-        0%,
-        80%,
-        100% {
+          0%,
+          80%,
+          100% {
             opacity: 0.4;
           }
-        40% {
+          40% {
             opacity: 1;
           }
         }
@@ -406,30 +411,30 @@ export class ComposerCap extends Component<ComposerCapSignature> {
           flex: none;
           display: flex;
           align-items: center;
-          gap: var(--step-4, 4px);
+          gap: var(--boxel-sp-4xs);
         }
         .pretui-cap :deep(.pretui-cap-actions:empty) {
           display: none;
         }
         .pretui-cap :deep(.pretui-cap-section) {
-          padding: var(--step-4, 4px) var(--step-12, 12px) var(--step-8, 8px)
-            var(--step-32, 32px);
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-sm) var(--boxel-sp-xs)
+            var(--boxel-sp-xl);
         }
         .pretui-cap :deep(.pretui-cap-button) {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: var(--step-4, 4px);
+          gap: var(--boxel-sp-4xs);
           height: 24px;
           min-width: 24px;
-          padding: 0 var(--step-8, 8px);
+          padding: 0 var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
           white-space: nowrap;
           cursor: pointer;
@@ -437,9 +442,10 @@ export class ComposerCap extends Component<ComposerCapSignature> {
         .pretui-cap :deep(.pretui-cap-status .pretui-cap-button) {
           height: 28px;
           min-width: 28px;
-          padding: 0 var(--step-12, 12px);
+          padding: 0 var(--boxel-sp-sm);
         }
-        .pretui-cap :deep(.pretui-cap-status .pretui-cap-button[data-kind='icon']) {
+        .pretui-cap
+          :deep(.pretui-cap-status .pretui-cap-button[data-kind='icon']) {
           padding: 0;
         }
         .pretui-cap :deep(.pretui-cap-button[data-kind='icon']) {
@@ -450,28 +456,42 @@ export class ComposerCap extends Component<ComposerCapSignature> {
           background: var(--primary);
           color: var(--primary-foreground);
         }
-        .pretui-cap :deep(.pretui-cap-button[data-kind='primary']:hover:not(:disabled)) {
-          background: color-mix(in oklch, var(--primary) 88%, var(--pretui-cap-ink));
+        .pretui-cap
+          :deep(.pretui-cap-button[data-kind='primary']:hover:not(:disabled)) {
+          background: color-mix(
+            in oklch,
+            var(--primary) 88%,
+            var(--pretui-cap-ink)
+          );
         }
         .pretui-cap :deep(.pretui-cap-button[data-kind='secondary']) {
-          box-shadow: inset 0 0 0 1px
-            var(--border-strong, var(--border));
+          box-shadow: inset 0 0 0 1px var(--border-strong, var(--border));
           color: var(--pretui-cap-ink);
         }
         .pretui-cap :deep(.pretui-cap-button[data-kind='quiet']),
         .pretui-cap :deep(.pretui-cap-button[data-kind='icon']) {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
-        .pretui-cap :deep(.pretui-cap-button[data-kind='quiet']:hover:not(:disabled)),
-        .pretui-cap :deep(.pretui-cap-button[data-kind='icon']:hover:not(:disabled)) {
+        .pretui-cap
+          :deep(.pretui-cap-button[data-kind='quiet']:hover:not(:disabled)),
+        .pretui-cap
+          :deep(.pretui-cap-button[data-kind='icon']:hover:not(:disabled)) {
           color: var(--pretui-cap-ink);
-          background: color-mix(in oklch, var(--pretui-cap-ink) 8%, transparent);
+          background: color-mix(
+            in oklch,
+            var(--pretui-cap-ink) 8%,
+            transparent
+          );
         }
         .pretui-cap :deep(.pretui-cap-button:disabled),
         .pretui-cap :deep(.pretui-cap-button[data-busy]) {
           cursor: default;
-          background: color-mix(in oklch, var(--pretui-cap-ink) 10%, transparent);
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          background: color-mix(
+            in oklch,
+            var(--pretui-cap-ink) 10%,
+            transparent
+          );
+          color: var(--subtle-foreground);
           box-shadow: none;
         }
         .pretui-cap :deep(.pretui-cap-button:focus-visible) {
@@ -483,7 +503,8 @@ export class ComposerCap extends Component<ComposerCapSignature> {
           height: 12px;
           flex: none;
         }
-        .pretui-cap :deep(.pretui-cap-status .pretui-cap-button .pretui-cap-glyph) {
+        .pretui-cap
+          :deep(.pretui-cap-status .pretui-cap-button .pretui-cap-glyph) {
           width: 13px;
           height: 13px;
         }
@@ -492,7 +513,7 @@ export class ComposerCap extends Component<ComposerCapSignature> {
           height: 13px;
         }
         @media (prefers-reduced-motion: reduce) {
-        .pretui-cap :deep(.pretui-cap-dots span) {
+          .pretui-cap :deep(.pretui-cap-dots span) {
             animation: none;
             opacity: 0.7;
           }

@@ -13,7 +13,12 @@ export type CardEmbedState =
   | 'missing'
   | 'auth-required'
   | 'cancelled';
-export type CardEmbedFormat = 'fitted' | 'embedded' | 'isolated' | 'edit' | 'atom';
+export type CardEmbedFormat =
+  | 'fitted'
+  | 'embedded'
+  | 'isolated'
+  | 'edit'
+  | 'atom';
 
 export interface CardEmbedSignature {
   Args: {
@@ -104,7 +109,11 @@ export class CardEmbed extends Component<CardEmbedSignature> {
     return this.state === 'loading';
   }
   get isError() {
-    return this.state === 'error' || this.state === 'missing' || this.state === 'cancelled';
+    return (
+      this.state === 'error' ||
+      this.state === 'missing' ||
+      this.state === 'cancelled'
+    );
   }
   get needsAuth() {
     return this.state === 'auth-required';
@@ -121,8 +130,10 @@ export class CardEmbed extends Component<CardEmbedSignature> {
       return this.args.hat;
     }
     let f = this.format;
-    return (f === 'embedded' || f === 'isolated' || f === 'edit') &&
-      Boolean(this.args.label ?? this.args.kind);
+    return (
+      (f === 'embedded' || f === 'isolated' || f === 'edit') &&
+      Boolean(this.args.label ?? this.args.kind)
+    );
   }
   get showsCard() {
     return this.state === 'ready' || this.state === 'loading';
@@ -132,7 +143,9 @@ export class CardEmbed extends Component<CardEmbedSignature> {
     let rules = [
       `--pretui-embed-min: ${this.args.minHeight ?? MIN[this.format]}`,
       envelope && envelope.includes('/') ? `aspect-ratio: ${envelope}` : '',
-      envelope && !envelope.includes('/') ? `--pretui-embed-h: ${envelope}` : '',
+      envelope && !envelope.includes('/')
+        ? `--pretui-embed-h: ${envelope}`
+        : '',
       this.args.width ? `--pretui-embed-w: ${this.args.width}` : '',
       this.args.height ? `--pretui-embed-h: ${this.args.height}` : '',
       this.args.maxHeight ? `--pretui-embed-max-h: ${this.args.maxHeight}` : '',
@@ -180,9 +193,19 @@ export class CardEmbed extends Component<CardEmbedSignature> {
     >
       {{#if this.hasHat}}
         <div class='pretui-embed-hat' data-test-pretui-card-embed-hat>
-          {{#if @icon}}<@icon class='pretui-embed-hat-icon' width='14' height='14' aria-hidden='true' />{{/if}}
-          {{#if @kind}}<span class='pretui-embed-hat-kind'>{{@kind}}</span>{{/if}}
-          {{#if @label}}<span class='pretui-embed-hat-title' title={{@label}}>{{@label}}</span>{{/if}}
+          {{#if @icon}}<@icon
+              class='pretui-embed-hat-icon'
+              width='14'
+              height='14'
+              aria-hidden='true'
+            />{{/if}}
+          {{#if @kind}}<span
+              class='pretui-embed-hat-kind'
+            >{{@kind}}</span>{{/if}}
+          {{#if @label}}<span
+              class='pretui-embed-hat-title'
+              title={{@label}}
+            >{{@label}}</span>{{/if}}
           <span class='pretui-embed-hat-actions'>
             {{yield to='actions'}}
             {{#if (if @onOpen this.showsCard)}}
@@ -192,7 +215,8 @@ export class CardEmbed extends Component<CardEmbedSignature> {
                 aria-label={{this.openLabel}}
                 data-test-pretui-card-embed-open
                 {{on 'click' this.open}}
-              >{{this.openText}} <StateGlyph @glyph='open' @size={{11}} /></button>
+              >{{this.openText}}
+                <StateGlyph @glyph='open' @size={{11}} /></button>
             {{/if}}
           </span>
         </div>
@@ -204,7 +228,12 @@ export class CardEmbed extends Component<CardEmbedSignature> {
           {{/if}}
         </div>
       {{else if this.needsAuth}}
-        <div class='pretui-embed-error' data-kind='auth' role='status' data-test-pretui-card-embed-auth>
+        <div
+          class='pretui-embed-error'
+          data-kind='auth'
+          role='status'
+          data-test-pretui-card-embed-auth
+        >
           <span>{{this.authText}}</span>
           {{#if @onAuthorize}}<button
               type='button'
@@ -212,10 +241,18 @@ export class CardEmbed extends Component<CardEmbedSignature> {
               data-kind='primary'
               data-test-pretui-card-embed-authorize
               {{on 'click' this.authorize}}
-            >{{if @authorizeLabel @authorizeLabel 'Ask for access'}}</button>{{/if}}
+            >{{if
+                @authorizeLabel
+                @authorizeLabel
+                'Ask for access'
+              }}</button>{{/if}}
         </div>
       {{else if this.isError}}
-        <div class='pretui-embed-error' role='status' data-test-pretui-card-embed-error>
+        <div
+          class='pretui-embed-error'
+          role='status'
+          data-test-pretui-card-embed-error
+        >
           <span>{{this.errorText}}</span>
           {{#if this.canRetry}}<button
               type='button'
@@ -227,7 +264,13 @@ export class CardEmbed extends Component<CardEmbedSignature> {
       {{else}}
         <div class='pretui-embed-card'>{{yield}}</div>
       {{/if}}
-      {{#if (if this.hasHat false (if this.showsCard (if @onOpen true (has-block 'actions'))))}}
+      {{#if
+        (if
+          this.hasHat
+          false
+          (if this.showsCard (if @onOpen true (has-block 'actions')))
+        )
+      }}
         <div class='pretui-embed-corner'>
           {{yield to='actions'}}
           {{#if @onOpen}}
@@ -237,7 +280,8 @@ export class CardEmbed extends Component<CardEmbedSignature> {
               aria-label={{this.openLabel}}
               data-test-pretui-card-embed-open
               {{on 'click' this.open}}
-            >{{this.openText}} <StateGlyph @glyph='open' @size={{11}} /></button>
+            >{{this.openText}}
+              <StateGlyph @glyph='open' @size={{11}} /></button>
           {{/if}}
         </div>
       {{/if}}
@@ -256,7 +300,7 @@ export class CardEmbed extends Component<CardEmbedSignature> {
           height: var(--pretui-embed-h, auto);
           max-height: var(--pretui-embed-max-h, none);
           overflow: auto;
-          border-radius: var(--radius-surface, 10px);
+          border-radius: var(--boxel-border-radius);
           box-shadow: 0 0 0 1px var(--border);
           isolation: isolate;
           contain: layout paint;
@@ -329,13 +373,13 @@ export class CardEmbed extends Component<CardEmbedSignature> {
           border-radius: 5px;
           background: none;
           font: inherit;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           color: var(--muted-foreground);
           cursor: pointer;
         }
         .pretui-embed-hat-open:hover {
-          color: var(--pretui-link, var(--primary));
+          color: var(--primary-ink);
           background: var(--hover, var(--inset));
         }
         .pretui-embed-hat-open:focus-visible {
@@ -366,7 +410,7 @@ export class CardEmbed extends Component<CardEmbedSignature> {
           padding: 12px;
           background: var(--inset, var(--boxel-100));
           font-family: var(--font-sans, system-ui, sans-serif);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
         }
         /* the shimmer is a moving gradient in CSS: no clock */
@@ -402,7 +446,7 @@ export class CardEmbed extends Component<CardEmbedSignature> {
           color: var(--primary-foreground, var(--boxel-dark));
         }
         .pretui-embed[data-state='error'] .pretui-embed-error {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-embed-act {
           padding: 0 4px;
@@ -415,7 +459,7 @@ export class CardEmbed extends Component<CardEmbedSignature> {
           cursor: pointer;
         }
         .pretui-embed-act:hover {
-          color: var(--pretui-link, var(--primary));
+          color: var(--primary-ink);
         }
         /* Open sits in the corner, quiet until the frame is hovered or
            focused (always on touch), never over the card's own controls'
@@ -446,13 +490,13 @@ export class CardEmbed extends Component<CardEmbedSignature> {
           background: var(--popover, var(--card));
           box-shadow: 0 0 0 1px var(--border-strong, var(--border));
           font-family: var(--font-sans, system-ui, sans-serif);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           color: var(--foreground);
           cursor: pointer;
         }
         .pretui-embed-open:hover {
-          color: var(--pretui-link, var(--primary));
+          color: var(--primary-ink);
         }
         .pretui-embed-open:focus-visible,
         .pretui-embed-act:focus-visible {

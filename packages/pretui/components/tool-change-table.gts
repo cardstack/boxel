@@ -55,7 +55,8 @@ export class ToolChangeTable extends Component<ToolChangeTableSignature> {
     return this.args.rows.length - this.shown.length;
   }
   expand = () => (this.showAll = true);
-  isSelected = (row: ToolChangeRow) => (this.args.selected ?? []).includes(row.card);
+  isSelected = (row: ToolChangeRow) =>
+    (this.args.selected ?? []).includes(row.card);
   get allSelected(): boolean {
     let chosen = this.args.selected ?? [];
     return this.args.rows.every((r) => r.skipped || chosen.includes(r.card));
@@ -68,7 +69,9 @@ export class ToolChangeTable extends Component<ToolChangeTableSignature> {
     } else {
       chosen.delete(row.card);
     }
-    this.args.onSelectionChange?.(this.args.rows.map((r) => r.card).filter((c) => chosen.has(c)));
+    this.args.onSelectionChange?.(
+      this.args.rows.map((r) => r.card).filter((c) => chosen.has(c)),
+    );
   };
   toggleAll = (event: Event) => {
     let on = (event.target as HTMLInputElement).checked;
@@ -77,7 +80,11 @@ export class ToolChangeTable extends Component<ToolChangeTableSignature> {
     );
   };
   <template>
-    <div class='pretui-changetable' data-test-pretui-tool-change-table ...attributes>
+    <div
+      class='pretui-changetable'
+      data-test-pretui-tool-change-table
+      ...attributes
+    >
       <table>
         <caption class='pretui-changetable-caption'>{{if
             @caption
@@ -86,7 +93,10 @@ export class ToolChangeTable extends Component<ToolChangeTableSignature> {
           }}</caption>
         <thead>
           <tr>
-            {{#if @selectable}}<th scope='col' class='pretui-changetable-pick'><input
+            {{#if @selectable}}<th
+                scope='col'
+                class='pretui-changetable-pick'
+              ><input
                   type='checkbox'
                   aria-label='Keep every change'
                   checked={{this.allSelected}}
@@ -140,21 +150,21 @@ export class ToolChangeTable extends Component<ToolChangeTableSignature> {
     <style scoped>
       @layer PretComponent {
         .pretui-changetable-from {
-          color: var(--ink-3, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
         .pretui-changetable-arrow {
           width: 12px;
           height: 12px;
-          margin-inline: var(--step-4, 4px);
+          margin-inline: var(--boxel-sp-4xs);
           vertical-align: -1px;
-          color: var(--ink-3, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
       }
       @layer PretComponent {
         .pretui-changetable {
           display: grid;
           justify-items: start;
-          gap: var(--step-4, 4px);
+          gap: var(--boxel-sp-4xs);
           padding-inline-start: calc(
             var(--pretui-toolrow-disc, 16px) + var(--pretui-toolrow-gap, 8px)
           );
@@ -162,8 +172,8 @@ export class ToolChangeTable extends Component<ToolChangeTableSignature> {
         table {
           width: 100%;
           border-collapse: collapse;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-variant-numeric: tabular-nums;
         }
         .pretui-changetable-caption {
@@ -177,26 +187,26 @@ export class ToolChangeTable extends Component<ToolChangeTableSignature> {
         /* table headers are the one place tracked caps stay: sans, caption
            size, 0.04em */
         thead th {
-          padding: 0 var(--step-8, 8px) var(--step-4, 4px) 0;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          padding: 0 var(--boxel-sp-xs) var(--boxel-sp-4xs) 0;
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 600;
           letter-spacing: 0.04em;
           text-align: start;
           text-transform: uppercase;
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          color: var(--subtle-foreground);
           box-shadow: inset 0 -1px 0 var(--border);
         }
         tbody th,
         tbody td {
-          padding: var(--step-4, 4px) var(--step-8, 8px) var(--step-4, 4px) 0;
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs) var(--boxel-sp-4xs) 0;
           text-align: start;
           vertical-align: baseline;
           box-shadow: inset 0 -1px 0 var(--border);
         }
         .pretui-changetable-pick {
           width: 20px;
-          padding-inline-end: var(--step-8, 8px);
+          padding-inline-end: var(--boxel-sp-xs);
         }
         .pretui-changetable-pick input {
           accent-color: var(--primary, var(--boxel-highlight));
@@ -215,37 +225,31 @@ export class ToolChangeTable extends Component<ToolChangeTableSignature> {
         }
         tr[data-skipped] th,
         tr[data-skipped] td {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         tr[data-skipped] td {
           text-decoration: line-through;
         }
         .pretui-changetable-skipped {
           display: block;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           text-decoration: none;
-          color: var(
-            --state-attention,
-            var(
-              --pretui-attention-ink,
-              var(--pretui-attention, var(--boxel-fuschia))
-            )
-          );
+          color: var(--attention-ink);
         }
         .pretui-changetable-more {
           padding: 0;
           border: 0;
           background: none;
           font: inherit;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           cursor: pointer;
         }
         .pretui-changetable-more:hover {
-          color: var(--pretui-link, var(--primary));
+          color: var(--primary-ink);
         }
         .pretui-changetable-more:focus-visible {
           outline: 2px solid var(--ring);

@@ -206,7 +206,7 @@ class GenericToolBody extends Component<ToolBodySignature> {
         .pretui-toolrow-generic {
           display: flex;
           flex-direction: column;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
         }
       }
     </style>
@@ -316,8 +316,8 @@ export class ToolLine extends Component<ToolLineSignature> {
           grid-template-columns: var(--pretui-toolline-disc) minmax(0, 1fr);
           column-gap: var(--pretui-toolline-gap);
           align-items: baseline;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           /* what happened reads in the settled ink; only a line still in
              progress takes the bright foreground */
           color: var(--pretui-toolrow-settled-ink, var(--foreground));
@@ -350,8 +350,8 @@ export class ToolLine extends Component<ToolLineSignature> {
         }
         .pretui-toolline-glyph {
           text-align: center;
-          font-size: var(--type-caption, 11px);
-          color: var(--ink-3, var(--muted-foreground));
+          font-size: var(--boxel-caption-font-size);
+          color: var(--subtle-foreground);
         }
         /* done is ink with its check, not green; a state colours the mark
            only, and the line's words stay in the row's ink */
@@ -359,30 +359,21 @@ export class ToolLine extends Component<ToolLineSignature> {
           color: var(--foreground);
         }
         .pretui-toolline[data-tone='live'] .pretui-toolline-glyph {
-          color: var(--state-live, var(--boxel-highlight));
+          color: var(--primary-ink);
         }
         .pretui-toolline[data-tone='failed'] .pretui-toolline-glyph {
-          color: var(
-            --state-failed,
-            var(--pretui-destructive-ink, var(--boxel-danger))
-          );
+          color: var(--destructive-ink);
         }
         .pretui-toolline[data-tone='attention'] .pretui-toolline-glyph {
-          color: var(
-            --state-attention,
-            var(
-              --pretui-attention-ink,
-              var(--pretui-attention, var(--boxel-fuschia))
-            )
-          );
+          color: var(--attention-ink);
         }
         .pretui-toolline[data-tone='muted'] .pretui-toolline-text {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-toolline[data-mono] .pretui-toolline-text {
           font-family: var(--font-mono);
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
         }
         .pretui-toolline-text {
           min-width: 0;
@@ -393,8 +384,8 @@ export class ToolLine extends Component<ToolLineSignature> {
           display: block;
           width: 72px;
           height: 72px;
-          margin-block: var(--step-4, 4px) 2px;
-          border-radius: var(--round-chip, 4px);
+          margin-block: var(--boxel-sp-4xs) 2px;
+          border-radius: var(--boxel-border-radius-xs);
           object-fit: cover;
           background: var(--inset, var(--boxel-100));
           box-shadow: 0 0 0 1px var(--border);
@@ -402,10 +393,10 @@ export class ToolLine extends Component<ToolLineSignature> {
         .pretui-toolline-sub {
           display: block;
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(--ink-3, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
       }
     </style>
@@ -475,13 +466,13 @@ export class ToolChange extends Component<ToolChangeSignature> {
         .pretui-toolchange {
           display: grid;
           grid-template-columns: minmax(0, 7.5em) minmax(0, 1fr);
-          column-gap: var(--step-12, 12px);
+          column-gap: var(--boxel-sp-sm);
           align-items: baseline;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
         }
         .pretui-toolchange-label {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -499,19 +490,19 @@ export class ToolChange extends Component<ToolChangeSignature> {
         .pretui-toolchange-from,
         .pretui-toolchange-to {
           font-family: var(--font-mono);
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
         }
         .pretui-toolchange-from {
-          color: var(--ink-2, var(--muted-foreground));
-          text-decoration-color: var(--ink-3, var(--muted-foreground));
+          color: var(--muted-foreground);
+          text-decoration-color: var(--subtle-foreground);
         }
         .pretui-toolchange-arrow {
           width: 12px;
           height: 12px;
-          margin-inline: var(--step-4, 4px);
+          margin-inline: var(--boxel-sp-4xs);
           vertical-align: -1px;
-          color: var(--ink-3, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
         .pretui-toolchange-to {
           text-decoration: none;
@@ -521,30 +512,20 @@ export class ToolChange extends Component<ToolChangeSignature> {
         /* a value the assistant did not read plainly says so, in the
            attention ink: the reader checks it before keeping it */
         .pretui-toolchange-confidence {
-          margin-inline-start: var(--step-8, 8px);
-          padding: 0 var(--step-4, 4px);
-          border-radius: var(--round-chip, 4px);
-          box-shadow: inset 0 0 0 1px
-            var(
-              --state-attention,
-              var(--pretui-attention, var(--boxel-fuschia))
-            );
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(
-            --state-attention,
-            var(
-              --pretui-attention-ink,
-              var(--pretui-attention, var(--boxel-fuschia))
-            )
-          );
+          margin-inline-start: var(--boxel-sp-xs);
+          padding: 0 var(--boxel-sp-4xs);
+          border-radius: var(--boxel-border-radius-xs);
+          box-shadow: inset 0 0 0 1px var(--attention);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--attention-ink);
         }
         .pretui-toolchange-count {
-          margin-inline-start: var(--step-8, 8px);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          margin-inline-start: var(--boxel-sp-xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
       }
     </style>
@@ -647,20 +628,20 @@ export class ToolDiff extends Component<ToolDiffSignature> {
           border-radius: 0;
           background: var(--pretui-tooldiff-well);
           box-shadow: none;
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
         }
         .pretui-tooldiff :deep(.pretui-diff-head) {
-          padding: var(--step-4, 4px) var(--step-8, 8px);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 400;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           box-shadow: 0 1px 0
             color-mix(in oklch, var(--border) 60%, transparent);
         }
         .pretui-tooldiff :deep(.pretui-diff-line) {
-          padding-inline: var(--step-4, 4px) var(--step-8, 8px);
+          padding-inline: var(--boxel-sp-4xs) var(--boxel-sp-xs);
         }
         .pretui-tooldiff :deep(.pretui-diff-line[data-op='add']) {
           /* mixed in sRGB: oklch would carry a teal through blue on its
@@ -680,18 +661,18 @@ export class ToolDiff extends Component<ToolDiffSignature> {
         }
         .pretui-tooldiff :deep(.pretui-diff-skip) {
           background: none;
-          padding-inline-start: var(--step-8, 8px);
+          padding-inline-start: var(--boxel-sp-xs);
         }
         .pretui-tooldiff :deep(.pretui-diff-toggle) {
-          padding-inline-start: var(--step-8, 8px);
+          padding-inline-start: var(--boxel-sp-xs);
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 600;
         }
         .pretui-tooldiff :deep(.pretui-diff-receipt) {
           box-shadow: none;
-          padding: 2px var(--step-8, 8px) var(--step-4, 4px);
+          padding: 2px var(--boxel-sp-xs) var(--boxel-sp-4xs);
         }
       }
     </style>
@@ -766,24 +747,21 @@ export class ToolReceiptAction extends Component<ToolReceiptActionSignature> {
         .pretui-toolaction {
           flex: none;
           min-height: 22px;
-          margin-inline-end: calc(-1 * var(--step-8, 8px));
-          padding: 0 var(--step-8, 8px);
+          margin-inline-end: calc(-1 * var(--boxel-sp-xs));
+          padding: 0 var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-chip, 4px);
+          border-radius: var(--boxel-border-radius-xs);
           background: none;
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 600;
-          color: var(
-            --pretui-toolrow-settled-ink,
-            var(--ink-2, var(--foreground))
-          );
+          color: var(--pretui-toolrow-settled-ink, var(--muted-foreground));
           cursor: pointer;
         }
         /* a text action says it acts under the pointer in the link ink */
         .pretui-toolaction:hover:not(:disabled) {
-          color: var(--pretui-link, var(--primary));
+          color: var(--primary-ink);
         }
         .pretui-toolaction:focus-visible {
           outline: 2px solid var(--ring);
@@ -791,19 +769,13 @@ export class ToolReceiptAction extends Component<ToolReceiptActionSignature> {
         }
         .pretui-toolaction-refusal {
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(
-            --state-attention,
-            var(
-              --pretui-attention-ink,
-              var(--pretui-attention, var(--boxel-fuschia))
-            )
-          );
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--attention-ink);
         }
         .pretui-toolaction:disabled {
           cursor: default;
-          color: var(--ink-3, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
       }
     </style>
@@ -939,41 +911,33 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
           place-items: center;
           flex: none;
           margin-block-start: calc(
-            (var(--leading-ui, 18px) - var(--pretui-toolrow-disc, 16px)) / 2
+            (
+                var(--boxel-ui-label-line-height) -
+                  var(--pretui-toolrow-disc, 16px)
+              ) /
+              2
           );
           /* the tool's icon in the quiet ink; a failure or a question tints
              it, and the words beside it say which */
-          color: var(
-            --ink-3,
-            var(--subtle-foreground, var(--muted-foreground))
-          );
+          color: var(--subtle-foreground);
         }
         .pretui-toolrow-icon {
           display: block;
           stroke-width: 1.75;
         }
         .pretui-toolrow-disc[data-tone='failed'] {
-          color: var(
-            --state-failed,
-            var(--pretui-destructive-ink, var(--boxel-danger))
-          );
+          color: var(--destructive-ink);
         }
         .pretui-toolrow-disc[data-tone='attention'] {
-          color: var(
-            --state-attention,
-            var(
-              --pretui-attention-ink,
-              var(--pretui-attention, var(--boxel-fuschia))
-            )
-          );
+          color: var(--attention-ink);
         }
         /* titles can be a whole sentence (an assistant's description of the
            call), so the title shrinks before the status does: the state in
            words must always stay visible */
         .pretui-toolrow-title[data-register='machine'] {
           font-family: var(--font-mono);
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
         }
         /* the reader's answer, kept in the settled title as the thing they
            picked, not as prose */
@@ -983,12 +947,12 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
           align-items: center;
           max-width: 40%;
           height: 18px;
-          padding: 0 var(--step-8, 8px);
-          border-radius: var(--round-row, 8px);
+          padding: 0 var(--boxel-sp-xs);
+          border-radius: var(--boxel-border-radius-sm);
           background: var(--inset, var(--boxel-100));
           box-shadow: inset 0 0 0 1px var(--border);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 400;
           color: var(--foreground);
           white-space: nowrap;
@@ -996,8 +960,11 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
           text-overflow: ellipsis;
         }
         .pretui-toolrow-title {
-          font-size: var(--pretui-toolrow-title-size, var(--type-ui, 12.5px));
-          line-height: var(--leading-ui, 18px);
+          font-size: var(
+            --pretui-toolrow-title-size,
+            var(--boxel-ui-label-font-size)
+          );
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
           flex: 0 1 auto;
           min-width: 3em;
@@ -1012,10 +979,7 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
         .pretui-toolrow-title[data-tone='done'],
         .pretui-toolrow-title[data-tone='idle'] {
           font-weight: 400;
-          color: var(
-            --pretui-toolrow-settled-ink,
-            var(--ink-2, var(--foreground))
-          );
+          color: var(--pretui-toolrow-settled-ink, var(--muted-foreground));
         }
         /* the state in the words: a running call's title shimmers, a queued
            one waits dimmed, a canceled or superseded one is struck */
@@ -1051,7 +1015,7 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
         }
         /* queued: the quietest ink, never faded with opacity */
         .pretui-toolrow-title[data-state='pending'] {
-          color: var(--ink-3, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
         .pretui-toolrow-title[data-state='canceled'],
         .pretui-toolrow-title[data-state='superseded'],
@@ -1067,16 +1031,16 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
           min-width: 0;
           flex: 0 1 auto;
           font-family: var(--font-mono);
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
+          color: var(--muted-foreground);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
         .pretui-toolrow-source {
           flex: none;
-          --pretui-chip-font-size: var(--type-caption, 11px);
+          --pretui-chip-font-size: var(--boxel-caption-font-size);
         }
         .pretui-toolrow-status {
           margin-inline-start: auto;
@@ -1085,35 +1049,23 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
           flex: none;
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(
-            --ink-3,
-            var(--subtle-foreground, var(--muted-foreground))
-          );
+          gap: var(--boxel-sp-xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
         }
         /* a state colours the word, never the row */
         .pretui-toolrow-status[data-tone='attention'] {
-          color: var(
-            --state-attention,
-            var(
-              --pretui-attention-ink,
-              var(--pretui-attention, var(--boxel-fuschia))
-            )
-          );
+          color: var(--attention-ink);
           font-weight: 600;
         }
         .pretui-toolrow-status[data-tone='failed'] {
-          color: var(
-            --state-failed,
-            var(--pretui-destructive-ink, var(--boxel-danger))
-          );
+          color: var(--destructive-ink);
           font-weight: 600;
         }
         .pretui-toolrow-duration {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           font-weight: 400;
         }
         .pretui-toolrow-chevron {
@@ -1121,8 +1073,8 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
           width: 6px;
           height: 6px;
           margin-block-start: 6px;
-          border-inline-end: 1.5px solid var(--ink-3, var(--muted-foreground));
-          border-block-end: 1.5px solid var(--ink-3, var(--muted-foreground));
+          border-inline-end: 1.5px solid var(--subtle-foreground);
+          border-block-end: 1.5px solid var(--subtle-foreground);
           transform: rotate(-45deg);
           transition: transform 160ms
             var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
@@ -1724,18 +1676,18 @@ export class ToolRow extends Component<ToolRowSignature> {
           margin-inline: calc(-1 * var(--pretui-toolrow-inset));
         }
         .pretui-toolrow {
-          --pretui-toolrow-inset: var(--step-8, 8px);
-          --pretui-toolrow-disc: var(--step-16, 16px);
-          --pretui-toolrow-gap: var(--step-8, 8px);
+          --pretui-toolrow-inset: var(--boxel-sp-xs);
+          --pretui-toolrow-disc: var(--boxel-sp);
+          --pretui-toolrow-gap: var(--boxel-sp-xs);
           --pretui-toolrow-text: calc(
             var(--pretui-toolrow-inset) + var(--pretui-toolrow-disc) +
               var(--pretui-toolrow-gap)
           );
           display: flex;
           flex-direction: column;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
-          border-radius: var(--round-row, 8px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
+          border-radius: var(--boxel-border-radius-sm);
           /* one rounded box per row: it clips what meets its edge (the
              header's hover, the receipt's rule), and nothing inside it
              rounds again */
@@ -1773,7 +1725,7 @@ export class ToolRow extends Component<ToolRowSignature> {
         .pretui-toolrow-row {
           display: flex;
           align-items: center;
-          gap: var(--step-4, 4px);
+          gap: var(--boxel-sp-4xs);
           min-width: 0;
         }
         /* everything in the header sits on the title's first line, so a
@@ -1815,17 +1767,17 @@ export class ToolRow extends Component<ToolRowSignature> {
         .pretui-toolrow-actions {
           display: flex;
           align-items: center;
-          gap: var(--step-4, 4px);
+          gap: var(--boxel-sp-4xs);
           flex: none;
           padding-inline-end: var(--pretui-toolrow-inset);
         }
         /* a failure's first line reads in ink: the status word and the
            mark carry the state, never red text */
         .pretui-toolrow-errorline {
-          padding: 0 var(--pretui-toolrow-inset) var(--step-8, 8px)
+          padding: 0 var(--pretui-toolrow-inset) var(--boxel-sp-xs)
             var(--pretui-toolrow-text);
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           color: var(--foreground);
           white-space: nowrap;
           overflow: hidden;
@@ -1834,8 +1786,8 @@ export class ToolRow extends Component<ToolRowSignature> {
         .pretui-toolrow-body {
           display: flex;
           flex-direction: column;
-          gap: var(--step-8, 8px);
-          padding: 2px var(--pretui-toolrow-inset) var(--step-8, 8px)
+          gap: var(--boxel-sp-xs);
+          padding: 2px var(--pretui-toolrow-inset) var(--boxel-sp-xs)
             var(--pretui-toolrow-text);
           min-width: 0;
         }
@@ -1844,14 +1796,14 @@ export class ToolRow extends Component<ToolRowSignature> {
         .pretui-toolrow-progress {
           display: flex;
           flex-direction: column;
-          gap: var(--step-4, 4px);
-          padding: 0 var(--pretui-toolrow-inset) var(--step-8, 8px)
+          gap: var(--boxel-sp-4xs);
+          padding: 0 var(--pretui-toolrow-inset) var(--boxel-sp-xs)
             var(--pretui-toolrow-text);
         }
         .pretui-toolrow-progress-label {
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--muted-foreground);
           font-variant-numeric: tabular-nums;
         }
         .pretui-toolrow-progress-track {
@@ -1864,26 +1816,26 @@ export class ToolRow extends Component<ToolRowSignature> {
         .pretui-toolrow-progress-fill {
           display: block;
           height: 100%;
-          background: var(--state-live, var(--boxel-highlight));
+          background: var(--primary);
           transition: width 200ms
             var(--pretui-ease, cubic-bezier(0.2, 0, 0.2, 1));
         }
         .pretui-toolrow-rows {
           display: flex;
           flex-direction: column;
-          gap: var(--step-4, 4px);
-          padding: 0 var(--pretui-toolrow-inset) var(--step-8, 8px)
+          gap: var(--boxel-sp-4xs);
+          padding: 0 var(--pretui-toolrow-inset) var(--boxel-sp-xs)
             var(--pretui-toolrow-text);
           min-width: 0;
         }
         .pretui-toolrow-gate {
           display: flex;
           flex-direction: column;
-          gap: var(--step-8, 8px);
-          margin: 0 var(--pretui-toolrow-inset) var(--step-8, 8px)
+          gap: var(--boxel-sp-xs);
+          margin: 0 var(--pretui-toolrow-inset) var(--boxel-sp-xs)
             var(--pretui-toolrow-text);
-          padding: var(--step-12, 12px);
-          border-radius: var(--round-row, 8px);
+          padding: var(--boxel-sp-sm);
+          border-radius: var(--boxel-border-radius-sm);
           /* the question is a surface, not an alarm: the row's status word
              and mark carry the attention colour */
           background: var(--inset, var(--card));
@@ -1900,21 +1852,21 @@ export class ToolRow extends Component<ToolRowSignature> {
           box-shadow: none;
         }
         .pretui-toolrow-result {
-          padding: 0 var(--pretui-toolrow-inset) var(--step-8, 8px)
+          padding: 0 var(--pretui-toolrow-inset) var(--boxel-sp-xs)
             var(--pretui-toolrow-text);
           min-width: 0;
         }
         .pretui-toolrow-receipt {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-height: 30px;
           padding: 0 var(--pretui-toolrow-inset) 0 var(--pretui-toolrow-text);
           box-shadow: 0 -1px 0 var(--border);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(--ink-3, var(--muted-foreground));
+          color: var(--subtle-foreground);
         }
         .pretui-toolrow-receipt-text {
           flex: 1;
@@ -1941,7 +1893,7 @@ export class ToolRow extends Component<ToolRowSignature> {
              inset framed or not, and a 6px gap, so the text column sits at
              30px. Every part reads these, so they move together */
           .pretui-toolrow > * {
-            --pretui-toolrow-inset: var(--step-8, 8px);
+            --pretui-toolrow-inset: var(--boxel-sp-xs);
             --pretui-toolrow-gap: 6px;
             --pretui-toolrow-text: calc(
               var(--pretui-toolrow-inset) + var(--pretui-toolrow-disc) +
@@ -1976,8 +1928,8 @@ export class ToolRow extends Component<ToolRowSignature> {
            carries the state. A framed row closes with its own padding when
            it has no receipt to close it. */
         .pretui-toolrow[data-framed] {
-          --pretui-toolrow-inset: var(--step-12, 12px);
-          border-radius: var(--round-row, 8px);
+          --pretui-toolrow-inset: var(--boxel-sp-sm);
+          border-radius: var(--boxel-border-radius-sm);
           background: var(--card);
           box-shadow: 0 0 0 1px var(--border);
           overflow: hidden;
@@ -2014,7 +1966,7 @@ export class ToolRow extends Component<ToolRowSignature> {
               > .pretui-toolrow-receipt .pretui-toolrow-receipt-text:not(:empty)
             )
           ) {
-          --pretui-toolrow-inset: var(--step-8, 8px);
+          --pretui-toolrow-inset: var(--boxel-sp-xs);
           background: none;
           box-shadow: none;
           padding-block: 0;
@@ -2028,11 +1980,11 @@ export class ToolRow extends Component<ToolRowSignature> {
            well, not a red box */
         .pretui-toolrow-error {
           margin: 0;
-          padding: var(--step-8, 8px) var(--step-12, 12px);
-          border-radius: var(--round-chip, 4px);
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+          border-radius: var(--boxel-border-radius-xs);
           font-family: var(--font-mono);
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
           white-space: pre-wrap;
           overflow-wrap: anywhere;
           color: var(--foreground);

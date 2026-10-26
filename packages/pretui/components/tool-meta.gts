@@ -44,9 +44,9 @@ export class ToolMeta extends Component<ToolMetaSignature> {
           padding-inline-start: calc(
             var(--pretui-toolrow-disc, 16px) + var(--pretui-toolrow-gap, 8px)
           );
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
           white-space: nowrap;
           overflow: hidden;

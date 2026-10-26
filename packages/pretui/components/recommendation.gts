@@ -220,7 +220,7 @@ export class Recommendation extends Component<RecommendationSignature> {
         .pretui-reco {
           width: 100%;
           overflow: hidden;
-          border-radius: var(--round-surface, var(--radius-surface, 12px));
+          border-radius: var(--boxel-border-radius-lg);
           background: var(--card);
           box-shadow: var(
             --pretui-shadow-card,
@@ -235,45 +235,45 @@ export class Recommendation extends Component<RecommendationSignature> {
           box-shadow: none;
         }
         .pretui-reco[data-surface='plain'] .pretui-reco-head {
-          padding: 0 0 var(--step-8, 8px);
+          padding: 0 0 var(--boxel-sp-xs);
         }
         .pretui-reco[data-surface='plain'] .pretui-reco-foot {
-          padding: var(--step-8, 8px) 0 2px;
+          padding: var(--boxel-sp-xs) 0 2px;
           background: none;
         }
         .pretui-reco-head {
-          padding: var(--step-12, 12px);
+          padding: var(--boxel-sp-sm);
         }
         /* the card's title: reading size in 600, no tracking */
         .pretui-reco-question {
           margin: 0;
-          font-size: var(--type-read, 14px);
-          line-height: var(--leading-read, 22px);
+          font-size: var(--boxel-body-font-size);
+          line-height: var(--boxel-body-line-height);
           font-weight: 600;
           color: var(--foreground);
         }
         /* the recommendation is answer prose: reading type, full ink, the
            reading measure */
         .pretui-reco-body {
-          margin-top: var(--step-4, 4px);
+          margin-top: var(--boxel-sp-4xs);
           min-height: 40px;
           max-inline-size: var(--measure-read, 68ch);
-          font-size: var(--type-read, 14px);
-          line-height: var(--leading-read, 22px);
+          font-size: var(--boxel-body-font-size);
+          line-height: var(--boxel-body-line-height);
           color: var(--foreground);
         }
         .pretui-reco-drawer {
           background: var(--inset, var(--boxel-100));
           box-shadow: 0 -1px 0 var(--border);
-          padding: var(--step-8, 8px);
+          padding: var(--boxel-sp-xs);
         }
         .pretui-reco-drawer-cap {
-          margin: 0 0 var(--step-4, 4px);
-          padding: 0 var(--step-8, 8px);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          margin: 0 0 var(--boxel-sp-4xs);
+          padding: 0 var(--boxel-sp-xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 400;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-reco-drawer ul {
           margin: 0;
@@ -284,15 +284,15 @@ export class Recommendation extends Component<RecommendationSignature> {
           display: flex;
           width: 100%;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-height: 32px;
-          padding: var(--step-4, 4px) var(--step-8, 8px);
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           text-align: left;
           color: var(--foreground);
           cursor: pointer;
@@ -315,16 +315,16 @@ export class Recommendation extends Component<RecommendationSignature> {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           flex-wrap: wrap;
-          padding: var(--step-8, 8px) var(--step-12, 12px);
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
           background: var(--inset, var(--boxel-100));
           box-shadow: 0 -1px 0 var(--border);
         }
         .pretui-reco-foot-actions {
           display: inline-flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           margin-left: auto;
         }
         .pretui-sr {

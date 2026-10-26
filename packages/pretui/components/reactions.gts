@@ -39,7 +39,9 @@ export class Reactions extends Component<ReactionsSignature> {
     `${reaction.key} by ${reaction.by.join(', ')}`;
   toggle = (key: string) => this.args.onToggle?.(key);
   get groupLabel(): string {
-    return this.args.subject ? `Reactions to ${this.args.subject}` : 'Reactions';
+    return this.args.subject
+      ? `Reactions to ${this.args.subject}`
+      : 'Reactions';
   }
   <template>
     <div
@@ -59,7 +61,10 @@ export class Reactions extends Component<ReactionsSignature> {
             title={{this.label reaction}}
             data-test-pretui-reaction={{reaction.key}}
             {{on 'click' (fn this.toggle reaction.key)}}
-          ><span class='pretui-reaction-key' aria-hidden='true'>{{reaction.key}}</span><span
+          ><span
+              class='pretui-reaction-key'
+              aria-hidden='true'
+            >{{reaction.key}}</span><span
               class='pretui-reaction-by'
               aria-hidden='true'
             >{{this.names reaction}}</span></button>
@@ -71,7 +76,10 @@ export class Reactions extends Component<ReactionsSignature> {
             aria-label={{this.label reaction}}
             title={{this.label reaction}}
             data-test-pretui-reaction={{reaction.key}}
-          ><span class='pretui-reaction-key' aria-hidden='true'>{{reaction.key}}</span><span
+          ><span
+              class='pretui-reaction-key'
+              aria-hidden='true'
+            >{{reaction.key}}</span><span
               class='pretui-reaction-by'
               aria-hidden='true'
             >{{this.names reaction}}</span></span>
@@ -96,7 +104,7 @@ export class Reactions extends Component<ReactionsSignature> {
           background: var(--muted, var(--inset));
           box-shadow: inset 0 0 0 1px var(--border);
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           line-height: 1;
           color: var(--muted-foreground);

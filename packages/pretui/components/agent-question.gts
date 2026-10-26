@@ -116,57 +116,99 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
   };
   <template>
     {{#if this.picked}}
-      <div class='pretui-answered' data-test-pretui-agent-question ...attributes>
+      <div
+        class='pretui-answered'
+        data-test-pretui-agent-question
+        ...attributes
+      >
         <StateGlyph class='pretui-answered-check' @glyph='done' />
         {{@question}}
         <b>{{this.pickedLabel}}</b>
       </div>
     {{else}}
-      <div class='pretui-question' aria-busy={{if @pending 'true'}} data-pending={{if @pending 'true'}} data-test-pretui-agent-question ...attributes>
+      <div
+        class='pretui-question'
+        aria-busy={{if @pending 'true'}}
+        data-pending={{if @pending 'true'}}
+        data-test-pretui-agent-question
+        ...attributes
+      >
         <div class='pretui-question-text'>{{@question}}</div>
         {{#if @readonly}}
-          <p class='pretui-question-readonly' data-test-pretui-agent-question-readonly>Waiting for an answer</p>
+          <p
+            class='pretui-question-readonly'
+            data-test-pretui-agent-question-readonly
+          >Waiting for an answer</p>
         {{else}}
-        {{#if @options.length}}
-          <div class='pretui-question-opts'>
-            {{#each @options as |option|}}
-              <button type='button' class='pretui-qpill' {{on 'click' (fn this.settle option)}}>{{option}}</button>
-            {{/each}}
-          </div>
-        {{/if}}
-        {{#if @choices.length}}
-          <div class='pretui-question-choices' data-layout={{if @layout @layout 'cards'}} data-test-pretui-agent-choices>
-            {{#each @choices as |choice|}}
+          {{#if @options.length}}
+            <div class='pretui-question-opts'>
+              {{#each @options as |option|}}
+                <button
+                  type='button'
+                  class='pretui-qpill'
+                  {{on 'click' (fn this.settle option)}}
+                >{{option}}</button>
+              {{/each}}
+            </div>
+          {{/if}}
+          {{#if @choices.length}}
+            <div
+              class='pretui-question-choices'
+              data-layout={{if @layout @layout 'cards'}}
+              data-test-pretui-agent-choices
+            >
+              {{#each @choices as |choice|}}
+                <button
+                  type='button'
+                  class='pretui-qchoice'
+                  style={{swatchStyle choice}}
+                  aria-pressed={{if
+                    @confirm
+                    (if (this.isSelected choice) 'true' 'false')
+                  }}
+                  data-test-pretui-agent-choice={{choice.label}}
+                  {{on 'click' (fn this.pick choice)}}
+                >
+                  {{#if (has-block 'choice')}}
+                    <span class='pretui-qchoice-content'>{{yield
+                        choice
+                        to='choice'
+                      }}</span>
+                  {{else if choice.image}}<span
+                      class='pretui-qchoice-image'
+                      style={{imageStyle choice}}
+                      aria-hidden='true'
+                    ></span>{{/if}}
+                  {{#if choice.swatch}}<span
+                      class='pretui-qchoice-swatch'
+                      aria-hidden='true'
+                    ></span>{{/if}}
+                  <span class='pretui-qchoice-label'>{{choice.label}}</span>
+                  {{#if choice.sub}}<span
+                      class='pretui-qchoice-sub'
+                    >{{choice.sub}}</span>{{/if}}
+                </button>
+              {{/each}}
+            </div>
+            {{#if @confirm}}
               <button
                 type='button'
-                class='pretui-qchoice'
-                style={{swatchStyle choice}}
-                aria-pressed={{if @confirm (if (this.isSelected choice) 'true' 'false')}}
-                data-test-pretui-agent-choice={{choice.label}}
-                {{on 'click' (fn this.pick choice)}}
-              >
-                {{#if (has-block 'choice')}}
-                  <span class='pretui-qchoice-content'>{{yield choice to='choice'}}</span>
-                {{else if choice.image}}<span class='pretui-qchoice-image' style={{imageStyle choice}} aria-hidden='true'></span>{{/if}}
-                {{#if choice.swatch}}<span class='pretui-qchoice-swatch' aria-hidden='true'></span>{{/if}}
-                <span class='pretui-qchoice-label'>{{choice.label}}</span>
-                {{#if choice.sub}}<span class='pretui-qchoice-sub'>{{choice.sub}}</span>{{/if}}
-              </button>
-            {{/each}}
-          </div>
-          {{#if @confirm}}
-            <button
-              type='button'
-              class='pretui-qconfirm'
-              disabled={{if this.selected false true}}
-              data-test-pretui-agent-confirm
-              {{on 'click' this.confirmPick}}
-            >{{this.confirmLabel}}</button>
+                class='pretui-qconfirm'
+                disabled={{if this.selected false true}}
+                data-test-pretui-agent-confirm
+                {{on 'click' this.confirmPick}}
+              >{{this.confirmLabel}}</button>
+            {{/if}}
           {{/if}}
-        {{/if}}
-        {{#if this.offersFreeAnswer}}
-          <input class='pretui-qinput' aria-label='Answer' placeholder={{if @otherLabel @otherLabel 'Or type an answer…'}} disabled={{@pending}} {{on 'keydown' this.onKey}} />
-        {{/if}}
+          {{#if this.offersFreeAnswer}}
+            <input
+              class='pretui-qinput'
+              aria-label='Answer'
+              placeholder={{if @otherLabel @otherLabel 'Or type an answer…'}}
+              disabled={{@pending}}
+              {{on 'keydown' this.onKey}}
+            />
+          {{/if}}
         {{/if}}
       </div>
     {{/if}}
@@ -174,34 +216,34 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
       @layer PretComponent {
         .pretui-question {
           display: grid;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
         }
         /* the question is the agent speaking: reading size, its weight the
            one step up */
         .pretui-question-text {
-          font-size: var(--type-read, 14px);
-          line-height: var(--leading-read, 22px);
+          font-size: var(--boxel-body-font-size);
+          line-height: var(--boxel-body-line-height);
           font-weight: 600;
           color: var(--foreground);
         }
         .pretui-question-opts {
           display: flex;
           flex-wrap: wrap;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
         }
         /* a quick answer: outlined and quiet, so no one option shouts */
         .pretui-qpill {
           display: inline-flex;
           align-items: center;
           height: 28px;
-          padding: 0 var(--step-12, 12px);
-          border-radius: var(--round-row, 8px);
+          padding: 0 var(--boxel-sp-sm);
+          border-radius: var(--boxel-border-radius-sm);
           border: 0;
           background: none;
           box-shadow: inset 0 0 0 1px var(--border);
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 400;
           cursor: pointer;
           color: var(--foreground);
@@ -219,7 +261,7 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
         .pretui-question-choices {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
         }
         .pretui-question-choices[data-layout='swatches'] {
           grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
@@ -229,9 +271,9 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
           align-content: start;
           gap: 2px;
           min-width: 0;
-          padding: var(--step-8, 8px);
+          padding: var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           box-shadow: inset 0 0 0 1px var(--border);
           font: inherit;
@@ -254,23 +296,23 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
         .pretui-qchoice-content {
           display: block;
           height: var(--pretui-qchoice-content-h, 6rem);
-          margin-bottom: var(--step-4, 4px);
+          margin-bottom: var(--boxel-sp-4xs);
           overflow: hidden;
-          border-radius: var(--round-chip, 4px);
+          border-radius: var(--boxel-border-radius-xs);
           pointer-events: none;
         }
         /* Confirm is the one answer: the moment's primary */
         .pretui-qconfirm {
           justify-self: start;
           height: 28px;
-          padding: 0 var(--step-12, 12px);
+          padding: 0 var(--boxel-sp-sm);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: var(--primary);
           color: var(--primary-foreground);
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
           cursor: pointer;
         }
@@ -285,61 +327,61 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
         .pretui-qchoice-image {
           display: block;
           aspect-ratio: 16 / 10;
-          margin-bottom: var(--step-4, 4px);
-          border-radius: var(--round-chip, 4px);
+          margin-bottom: var(--boxel-sp-4xs);
+          border-radius: var(--boxel-border-radius-xs);
           background: var(--inset) center / cover no-repeat;
         }
         .pretui-qchoice-swatch {
           display: block;
           height: 22px;
-          margin-bottom: var(--step-4, 4px);
-          border-radius: var(--round-chip, 4px);
+          margin-bottom: var(--boxel-sp-4xs);
+          border-radius: var(--boxel-border-radius-xs);
           background: var(--swatch);
           box-shadow: inset 0 0 0 1px var(--border);
         }
         .pretui-qchoice-label {
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
         .pretui-qchoice-sub {
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--muted-foreground);
         }
         /* sent, waiting on the agent: the options step down to ink-3 and
            take no more presses */
         .pretui-question[data-pending] .pretui-qpill,
         .pretui-question[data-pending] .pretui-qchoice {
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          color: var(--subtle-foreground);
           pointer-events: none;
         }
         .pretui-question-readonly {
           margin: 0;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--muted-foreground);
         }
         .pretui-qinput {
           display: flex;
           align-items: center;
           height: var(--control-h, 28px);
-          padding: 0 var(--step-8, 8px);
+          padding: 0 var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           color: var(--foreground);
           background: var(--field, var(--background));
           box-shadow: inset 0 0 0 1px var(--input, var(--border));
           width: 100%;
         }
         .pretui-qinput::placeholder {
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          color: var(--subtle-foreground);
         }
         .pretui-qinput:focus {
           outline: 2px solid var(--ring);
@@ -349,10 +391,10 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
         .pretui-answered {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
-          color: var(--ink-2, var(--muted-foreground));
+          gap: var(--boxel-sp-xs);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
+          color: var(--muted-foreground);
         }
         .pretui-answered-check {
           color: var(--foreground);

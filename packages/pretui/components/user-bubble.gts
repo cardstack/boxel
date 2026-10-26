@@ -8,7 +8,12 @@ import { modifier } from 'ember-modifier';
 import { SpeakerLabel } from './speaker-label';
 import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
 
-export type UserBubbleDelivery = 'sent' | 'pending' | 'steer' | 'queued' | 'rejected';
+export type UserBubbleDelivery =
+  | 'sent'
+  | 'pending'
+  | 'steer'
+  | 'queued'
+  | 'rejected';
 
 export interface UserBubbleSignature {
   Args: {
@@ -99,7 +104,9 @@ export class UserBubble extends Component<UserBubbleSignature> {
   }
   get canRetry(): boolean {
     return (
-      this.delivery === 'rejected' && Boolean(this.args.onRetry) && !this.editing
+      this.delivery === 'rejected' &&
+      Boolean(this.args.onRetry) &&
+      !this.editing
     );
   }
   get clamped(): boolean {
@@ -107,17 +114,22 @@ export class UserBubble extends Component<UserBubbleSignature> {
   }
 
   // a clamped message shows "Show more" only when it really is cut
-  measure = modifier((element: HTMLElement, [_text, _clamped]: [string | undefined, boolean]) => {
-    if (typeof ResizeObserver !== 'function') {
-      return;
-    }
-    let check = () => {
-      this.overflows = element.scrollHeight > element.clientHeight + 1;
-    };
-    let observer = new ResizeObserver(check);
-    observer.observe(element);
-    return () => observer.disconnect();
-  });
+  measure = modifier(
+    (
+      element: HTMLElement,
+      [_text, _clamped]: [string | undefined, boolean],
+    ) => {
+      if (typeof ResizeObserver !== 'function') {
+        return;
+      }
+      let check = () => {
+        this.overflows = element.scrollHeight > element.clientHeight + 1;
+      };
+      let observer = new ResizeObserver(check);
+      observer.observe(element);
+      return () => observer.disconnect();
+    },
+  );
 
   toggle = () => (this.expanded = !this.expanded);
   retry = () => this.args.onRetry?.();
@@ -159,15 +171,28 @@ export class UserBubble extends Component<UserBubbleSignature> {
     >
       {{#if this.authorName}}
         {{#if (has-block 'avatar')}}
-          <SpeakerLabel class='pretui-bubble-author' @name={{this.authorName}} @time={{@time}} data-test-pretui-user-bubble-author={{this.authorName}}>
+          <SpeakerLabel
+            class='pretui-bubble-author'
+            @name={{this.authorName}}
+            @time={{@time}}
+            data-test-pretui-user-bubble-author={{this.authorName}}
+          >
             <:mark>{{yield to='avatar'}}</:mark>
           </SpeakerLabel>
         {{else}}
-          <SpeakerLabel class='pretui-bubble-author' @name={{this.authorName}} @time={{@time}} data-test-pretui-user-bubble-author={{this.authorName}} />
+          <SpeakerLabel
+            class='pretui-bubble-author'
+            @name={{this.authorName}}
+            @time={{@time}}
+            data-test-pretui-user-bubble-author={{this.authorName}}
+          />
         {{/if}}
       {{/if}}
       {{#if this.editing}}
-        <div class='pretui-bubble pretui-bubble-editor' data-test-pretui-user-bubble-editor>
+        <div
+          class='pretui-bubble pretui-bubble-editor'
+          data-test-pretui-user-bubble-editor
+        >
           <textarea
             class='pretui-bubble-field'
             aria-label='Edit your message'
@@ -177,9 +202,14 @@ export class UserBubble extends Component<UserBubbleSignature> {
             {{on 'keydown' this.editKey}}
             {{this.focusField}}
           ></textarea>
-          <p class='pretui-bubble-editnote'>Saving rewinds the thread to this message.</p>
+          <p class='pretui-bubble-editnote'>Saving rewinds the thread to this
+            message.</p>
           <div class='pretui-bubble-editactions'>
-            <button type='button' class='pretui-bubble-act' {{on 'click' this.cancelEdit}}>Cancel</button>
+            <button
+              type='button'
+              class='pretui-bubble-act'
+              {{on 'click' this.cancelEdit}}
+            >Cancel</button>
             <button
               type='button'
               class='pretui-bubble-act'
@@ -192,7 +222,10 @@ export class UserBubble extends Component<UserBubbleSignature> {
       {{else}}
         <div class='pretui-bubble'>
           {{#if (has-block 'attachments')}}
-            <div class='pretui-bubble-attachments' data-test-pretui-user-bubble-attachments>{{yield to='attachments'}}</div>
+            <div
+              class='pretui-bubble-attachments'
+              data-test-pretui-user-bubble-attachments
+            >{{yield to='attachments'}}</div>
           {{/if}}
           {{#if (has-block)}}
             <div
@@ -222,7 +255,11 @@ export class UserBubble extends Component<UserBubbleSignature> {
               aria-controls={{this.textId}}
               data-test-pretui-user-bubble-more
               {{on 'click' this.toggle}}
-            ><span>{{if this.expanded 'Show less' 'Show more'}}</span><ChevronDownIcon
+            ><span>{{if
+                  this.expanded
+                  'Show less'
+                  'Show more'
+                }}</span><ChevronDownIcon
                 class='pretui-bubble-more-icon'
                 width='12'
                 height='12'
@@ -250,14 +287,16 @@ export class UserBubble extends Component<UserBubbleSignature> {
           >Retry</button>
         {{/if}}
         {{#if @onEdit}}{{#unless this.editing}}
-          <button
-            type='button'
-            class='pretui-bubble-link pretui-bubble-hover'
-            data-test-pretui-user-bubble-edit
-            {{on 'click' this.startEdit}}
-          >Edit</button>
-        {{/unless}}{{/if}}
-        {{#if (if @time (if this.authorName false true))}}<span class='pretui-bubble-time pretui-bubble-hover'>{{@time}}</span>{{/if}}
+            <button
+              type='button'
+              class='pretui-bubble-link pretui-bubble-hover'
+              data-test-pretui-user-bubble-edit
+              {{on 'click' this.startEdit}}
+            >Edit</button>
+          {{/unless}}{{/if}}
+        {{#if (if @time (if this.authorName false true))}}<span
+            class='pretui-bubble-time pretui-bubble-hover'
+          >{{@time}}</span>{{/if}}
       </div>
     </div>
     <style scoped>
@@ -270,13 +309,13 @@ export class UserBubble extends Component<UserBubbleSignature> {
           /* left-justified, as main draws it: its one small corner, top
              left, points at the edge it hangs from */
           justify-items: start;
-          gap: var(--step-4, 4px);
+          gap: var(--boxel-sp-4xs);
         }
         /* a continued run sits closer to the message above it */
         .pretui-bubble-turn[data-continued] {
           margin-block-start: calc(
-            -1 * var(--pretui-block-gap, var(--step-12, 12px)) +
-              var(--step-4, 4px)
+            -1 * var(--pretui-block-gap, var(--boxel-sp-sm)) +
+              var(--boxel-sp-4xs)
           );
         }
         /* the reader's bubble steps back: the theme's inset with ink-1
@@ -284,13 +323,13 @@ export class UserBubble extends Component<UserBubbleSignature> {
         .pretui-bubble {
           box-sizing: border-box;
           max-width: 70%;
-          padding: var(--step-8, 8px) var(--step-12, 12px);
-          border-radius: var(--round-surface, 12px);
-          border-top-left-radius: var(--round-chip, 4px);
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+          border-radius: var(--boxel-border-radius-lg);
+          border-top-left-radius: var(--boxel-border-radius-xs);
           background: var(--pretui-bubble-bg, var(--inset, var(--muted)));
           color: var(--pretui-bubble-ink, var(--foreground));
-          font-size: var(--type-read, 14px);
-          line-height: var(--leading-read, 22px);
+          font-size: var(--boxel-body-font-size);
+          line-height: var(--boxel-body-line-height);
           font-weight: 400;
         }
         .pretui-bubble-text {
@@ -317,8 +356,8 @@ export class UserBubble extends Component<UserBubbleSignature> {
         .pretui-bubble-attachments {
           display: flex;
           flex-wrap: wrap;
-          gap: var(--step-4, 4px);
-          margin-bottom: var(--step-8, 8px);
+          gap: var(--boxel-sp-4xs);
+          margin-bottom: var(--boxel-sp-xs);
         }
         /* a host that always passes the block, with nothing to attach this
            time, gets no empty line */
@@ -330,7 +369,7 @@ export class UserBubble extends Component<UserBubbleSignature> {
         .pretui-bubble-text[data-clamped] {
           mask-image: linear-gradient(
             to bottom,
-            #000 calc(100% - var(--leading-read, 22px)),
+            #000 calc(100% - var(--boxel-body-line-height)),
             rgb(0 0 0 / 35%)
           );
         }
@@ -340,18 +379,18 @@ export class UserBubble extends Component<UserBubbleSignature> {
           display: inline-flex;
           align-items: center;
           gap: 2px;
-          margin-top: var(--step-4, 4px);
-          margin-inline-start: calc(-1 * var(--step-8, 8px));
+          margin-top: var(--boxel-sp-4xs);
+          margin-inline-start: calc(-1 * var(--boxel-sp-xs));
           height: 22px;
-          padding: 0 var(--step-8, 8px);
+          padding: 0 var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 400;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           cursor: pointer;
         }
         .pretui-bubble-more:hover {
@@ -365,7 +404,7 @@ export class UserBubble extends Component<UserBubbleSignature> {
            the bubble says why */
         .pretui-bubble-turn[data-delivery='pending'] .pretui-bubble,
         .pretui-bubble-turn[data-delivery='queued'] .pretui-bubble {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-bubble-context {
           display: flex;
@@ -375,18 +414,18 @@ export class UserBubble extends Component<UserBubbleSignature> {
         .pretui-bubble-foot {
           display: flex;
           align-items: baseline;
-          gap: var(--step-8, 8px);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          gap: var(--boxel-sp-xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          color: var(--subtle-foreground);
         }
         /* a state colours the word, never the bubble */
         .pretui-bubble-turn[data-delivery='steer'] .pretui-bubble-delivery {
-          color: var(--state-attention, var(--pretui-attention-ink, var(--pretui-attention)));
+          color: var(--attention-ink);
         }
         .pretui-bubble-turn[data-delivery='rejected'] .pretui-bubble-delivery {
-          color: var(--state-failed, var(--pretui-destructive-ink, var(--destructive)));
+          color: var(--destructive-ink);
         }
         .pretui-bubble-link {
           padding: 0;
@@ -394,7 +433,7 @@ export class UserBubble extends Component<UserBubbleSignature> {
           background: none;
           font: inherit;
           font-weight: 600;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           cursor: pointer;
         }
         .pretui-bubble-link:hover {
@@ -410,7 +449,7 @@ export class UserBubble extends Component<UserBubbleSignature> {
            and they hang in the gap below the bubble */
         .pretui-bubble-turn[data-delivery='sent'] .pretui-bubble-foot {
           height: 0;
-          margin-top: calc(-1 * var(--step-4, 4px));
+          margin-top: calc(-1 * var(--boxel-sp-4xs));
           overflow: visible;
         }
         /* edit and the time are for the reader who looks for them */
@@ -428,16 +467,16 @@ export class UserBubble extends Component<UserBubbleSignature> {
         }
         .pretui-bubble-editor {
           display: grid;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           width: 100%;
           max-width: 100%;
         }
         .pretui-bubble-field {
           box-sizing: border-box;
           width: 100%;
-          padding: var(--step-4, 4px) var(--step-8, 8px);
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: var(--field, var(--background));
           box-shadow: inset 0 0 0 1px var(--border);
           font: inherit;
@@ -450,25 +489,25 @@ export class UserBubble extends Component<UserBubbleSignature> {
         }
         .pretui-bubble-editnote {
           margin: 0;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--muted-foreground);
         }
         .pretui-bubble-editactions {
           display: flex;
           justify-content: flex-end;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
         }
         .pretui-bubble-act {
           height: 28px;
-          padding: 0 var(--step-12, 12px);
+          padding: 0 var(--boxel-sp-sm);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           box-shadow: inset 0 0 0 1px var(--border);
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
           color: inherit;
           cursor: pointer;

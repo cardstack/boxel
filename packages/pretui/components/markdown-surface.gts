@@ -18,7 +18,11 @@ export interface MarkdownSurfaceSignature {
 // through :deep().
 export const MarkdownSurface: TemplateOnlyComponent<MarkdownSurfaceSignature> =
   <template>
-    <div class='pretui-md-surface' data-test-pretui-markdown-surface ...attributes>
+    <div
+      class='pretui-md-surface'
+      data-test-pretui-markdown-surface
+      ...attributes
+    >
       <Prose class='pretui-md-surface-prose'>{{yield}}</Prose>
     </div>
     <style scoped>
@@ -29,12 +33,12 @@ export const MarkdownSurface: TemplateOnlyComponent<MarkdownSurfaceSignature> =
            tables can take a wider panel; the line length is capped per text
            block below instead. */
         .pretui-md-surface {
-          --text-body: var(--type-read, 14px);
-          --leading-body: var(--leading-read, 22px);
+          --text-body: var(--boxel-body-font-size);
+          --leading-body: var(--boxel-body-line-height);
           --pretui-prose-measure: none;
           min-width: 0;
-          font-size: var(--type-read, 14px);
-          line-height: var(--leading-read, 22px);
+          font-size: var(--boxel-body-font-size);
+          line-height: var(--boxel-body-line-height);
           color: var(--foreground);
         }
         /* wider panels widen tables, diffs and cards, never line length */
@@ -45,41 +49,41 @@ export const MarkdownSurface: TemplateOnlyComponent<MarkdownSurfaceSignature> =
         /* the heading ladder: the first heading at heading size, h2 at
            reading size, h3 at UI size in tracked caps; all 600 */
         .pretui-md-surface :deep(:is(h1, h2, h3, h4, h5, h6)) {
-          margin: var(--step-24, 24px) 0 var(--step-8, 8px);
+          margin: var(--boxel-sp-lg) 0 var(--boxel-sp-xs);
           font-weight: 600;
           letter-spacing: normal;
           text-transform: none;
         }
         .pretui-md-surface :deep(h1) {
-          font-size: var(--type-head, 17px);
-          line-height: var(--leading-head, 24px);
+          font-size: var(--boxel-font-size-sm);
+          line-height: var(--boxel-line-height-sm);
         }
         .pretui-md-surface :deep(h2) {
-          font-size: var(--type-read, 14px);
-          line-height: var(--leading-read, 22px);
+          font-size: var(--boxel-body-font-size);
+          line-height: var(--boxel-body-line-height);
         }
         .pretui-md-surface :deep(h3) {
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           letter-spacing: 0.04em;
           text-transform: uppercase;
         }
         .pretui-md-surface :deep(:is(h4, h5, h6)) {
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
         }
         .pretui-md-surface :deep(:is(h1, h2, h3, h4, h5, h6):first-child) {
           margin-block-start: 0;
         }
         /* code is a pasteable string: mono at the data size */
         .pretui-md-surface :deep(code) {
-          font-size: var(--type-data, 12px);
-          border-radius: var(--round-chip, 4px);
+          font-size: var(--boxel-font-size-xs);
+          border-radius: var(--boxel-border-radius-xs);
         }
         .pretui-md-surface :deep(pre) {
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
-          border-radius: var(--round-row, 8px);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
+          border-radius: var(--boxel-border-radius-sm);
         }
         .pretui-md-surface :deep(pre code) {
           font-size: inherit;
@@ -88,17 +92,17 @@ export const MarkdownSurface: TemplateOnlyComponent<MarkdownSurfaceSignature> =
         /* answer table cells read at reading size; headers are caption in
            tracked caps, the only other tracked caps an answer has */
         .pretui-md-surface :deep(table) {
-          font-size: var(--type-read, 14px);
-          line-height: var(--leading-read, 22px);
+          font-size: var(--boxel-body-font-size);
+          line-height: var(--boxel-body-line-height);
         }
         .pretui-md-surface :deep(th) {
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 600;
           letter-spacing: 0.04em;
           text-transform: uppercase;
           vertical-align: bottom;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
       }
     </style>

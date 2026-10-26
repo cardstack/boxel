@@ -28,7 +28,12 @@ export interface TurnChangesSignature {
   Element: HTMLDivElement;
 }
 
-const STATUS: Record<string, string> = { added: 'A', deleted: 'D', renamed: 'R', modified: 'M' };
+const STATUS: Record<string, string> = {
+  added: 'A',
+  deleted: 'D',
+  renamed: 'R',
+  modified: 'M',
+};
 
 /**
  * "3 files changed +24 −7 · Review" over the files a turn touched, each a
@@ -55,8 +60,17 @@ export class TurnChanges extends Component<TurnChangesSignature> {
     <div class='pretui-turnchanges' data-test-pretui-turn-changes ...attributes>
       <div class='pretui-turnchanges-head'>
         <span class='pretui-turnchanges-summary'>{{this.summary}}</span>
-        <DiffStat @added={{this.added}} @removed={{this.removed}} @blocks={{0}} />
-        {{#if @onReview}}<button type='button' class='pretui-turnchanges-review' data-test-pretui-turn-changes-review {{on 'click' this.review}}>Review</button>{{/if}}
+        <DiffStat
+          @added={{this.added}}
+          @removed={{this.removed}}
+          @blocks={{0}}
+        />
+        {{#if @onReview}}<button
+            type='button'
+            class='pretui-turnchanges-review'
+            data-test-pretui-turn-changes-review
+            {{on 'click' this.review}}
+          >Review</button>{{/if}}
       </div>
       <ul class='pretui-turnchanges-list' aria-label='Changed files'>
         {{#each @files as |file|}}
@@ -70,13 +84,18 @@ export class TurnChanges extends Component<TurnChangesSignature> {
               data-test-pretui-turn-changes-file={{file.path}}
               {{on 'click' (fn this.open file)}}
             >
-              <span class='pretui-turnchanges-letter' title={{if file.status file.status 'modified'}}>{{this.letter file}}</span>
+              <span
+                class='pretui-turnchanges-letter'
+                title={{if file.status file.status 'modified'}}
+              >{{this.letter file}}</span>
               <span class='pretui-turnchanges-path'>{{file.path}}</span>
-              {{#if file.state}}<span class='pretui-turnchanges-state'>{{#if (this.isKept file)}}<CheckIcon
-                    width='11'
-                    height='11'
-                    aria-hidden='true'
-                  />{{/if}}{{file.state}}</span>{{/if}}
+              {{#if file.state}}<span class='pretui-turnchanges-state'>{{#if
+                    (this.isKept file)
+                  }}<CheckIcon
+                      width='11'
+                      height='11'
+                      aria-hidden='true'
+                    />{{/if}}{{file.state}}</span>{{/if}}
               <DiffStat @added={{file.added}} @removed={{file.removed}} />
             </button>
           </li>
@@ -88,13 +107,13 @@ export class TurnChanges extends Component<TurnChangesSignature> {
         .pretui-turnchanges {
           display: grid;
           gap: 2px;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
         }
         .pretui-turnchanges-head {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-height: 28px;
         }
         .pretui-turnchanges-summary {
@@ -104,9 +123,9 @@ export class TurnChanges extends Component<TurnChangesSignature> {
         .pretui-turnchanges-review {
           margin-inline-start: auto;
           height: 28px;
-          padding: 0 var(--step-12, 12px);
+          padding: 0 var(--boxel-sp-sm);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           box-shadow: inset 0 0 0 1px var(--border-strong, var(--border));
           font: inherit;
@@ -115,7 +134,7 @@ export class TurnChanges extends Component<TurnChangesSignature> {
           cursor: pointer;
         }
         .pretui-turnchanges-review:hover {
-          color: var(--pretui-link, var(--primary));
+          color: var(--primary-ink);
         }
         .pretui-turnchanges-list {
           display: grid;
@@ -126,12 +145,12 @@ export class TurnChanges extends Component<TurnChangesSignature> {
         .pretui-turnchanges-file {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           width: 100%;
           min-height: 28px;
-          padding: 0 var(--step-8, 8px);
+          padding: 0 var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           font: inherit;
           text-align: start;
@@ -151,16 +170,18 @@ export class TurnChanges extends Component<TurnChangesSignature> {
         /* the status letter is the row's mark, not a string to paste: sans */
         .pretui-turnchanges-letter {
           width: 12px;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 600;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
-        .pretui-turnchanges-file[data-status='added'] .pretui-turnchanges-letter {
+        .pretui-turnchanges-file[data-status='added']
+          .pretui-turnchanges-letter {
           color: var(--success, var(--boxel-highlight));
         }
-        .pretui-turnchanges-file[data-status='deleted'] .pretui-turnchanges-letter {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+        .pretui-turnchanges-file[data-status='deleted']
+          .pretui-turnchanges-letter {
+          color: var(--destructive-ink);
         }
         .pretui-turnchanges-path {
           flex: 1 1 auto;
@@ -170,23 +191,24 @@ export class TurnChanges extends Component<TurnChangesSignature> {
           white-space: nowrap;
           /* a path is a pasteable string: mono at the data size */
           font-family: var(--font-mono);
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
         }
-        .pretui-turnchanges-file[data-state='reverted'] .pretui-turnchanges-path {
+        .pretui-turnchanges-file[data-state='reverted']
+          .pretui-turnchanges-path {
           text-decoration: line-through;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-turnchanges-state {
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--muted-foreground);
         }
         /* kept is done: ink with a check, not green */
         .pretui-turnchanges-file[data-state='kept'] .pretui-turnchanges-state {
           display: inline-flex;
           align-items: center;
-          gap: var(--step-4, 4px);
+          gap: var(--boxel-sp-4xs);
           color: var(--foreground);
         }
       }

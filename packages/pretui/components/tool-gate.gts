@@ -92,7 +92,12 @@ export class ToolGate extends Component<ToolGateSignature> {
   readonly promptId = guidFor(this) + '-prompt';
 
   get actions(): ToolGateAction[] {
-    if (this.args.waitingOn || this.args.auto || this.args.resolution || this.args.readonly) {
+    if (
+      this.args.waitingOn ||
+      this.args.auto ||
+      this.args.resolution ||
+      this.args.readonly
+    ) {
       return [];
     }
     let actions = this.args.actions ?? [];
@@ -180,7 +185,10 @@ export class ToolGate extends Component<ToolGateSignature> {
       ...attributes
     >
       <p class='pretui-toolgate-prompt' id={{this.promptId}}>
-        {{#if @auto}}<span class='pretui-toolgate-auto' data-test-pretui-tool-gate-auto><StateGlyph
+        {{#if @auto}}<span
+            class='pretui-toolgate-auto'
+            data-test-pretui-tool-gate-auto
+          ><StateGlyph
               class='pretui-toolgate-auto-mark'
               @glyph='done'
             />{{@auto}}</span>{{else}}{{this.prompt}}{{/if}}
@@ -240,7 +248,10 @@ export class ToolGate extends Component<ToolGateSignature> {
           {{/each}}
         </div>
         {{#if this.hasAlways}}
-          <p class='pretui-toolgate-scope' data-test-pretui-tool-gate-scope>“Always” allows {{@scope}}</p>
+          <p
+            class='pretui-toolgate-scope'
+            data-test-pretui-tool-gate-scope
+          >“Always” allows {{@scope}}</p>
         {{/if}}
       {{/if}}
     </div>
@@ -250,17 +261,17 @@ export class ToolGate extends Component<ToolGateSignature> {
            and its answers, with no box of its own (the row is the box) */
         .pretui-toolgate {
           display: grid;
-          gap: var(--step-8, 8px);
-          padding-block: var(--step-4, 4px) 2px;
+          gap: var(--boxel-sp-xs);
+          padding-block: var(--boxel-sp-4xs) 2px;
           padding-inline-start: calc(
             var(--pretui-toolrow-disc, 16px) +
-              var(--pretui-toolrow-gap, var(--step-8, 8px))
+              var(--pretui-toolrow-gap, var(--boxel-sp-xs))
           );
         }
         .pretui-toolgate-prompt {
           margin: 0;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
           color: var(--foreground);
         }
@@ -274,61 +285,58 @@ export class ToolGate extends Component<ToolGateSignature> {
           margin-inline-end: 6px;
           border-radius: 50%;
           vertical-align: 0.1em;
-          background: var(
-            --state-attention,
-            var(--pretui-attention-ink, var(--pretui-attention))
-          );
+          background: var(--attention);
         }
         .pretui-toolgate[data-routed] .pretui-toolgate-prompt {
           font-weight: 400;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-toolgate[data-resolution] .pretui-toolgate-prompt {
           font-weight: 400;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-toolgate-destructive {
           display: block;
           font-weight: 600;
-          color: var(--pretui-destructive-ink, var(--destructive));
+          color: var(--destructive-ink);
         }
         .pretui-toolgate-auto {
           font-weight: 400;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-toolgate-auto-mark {
           display: inline-grid;
-          margin-inline-end: var(--step-4, 4px);
+          margin-inline-end: var(--boxel-sp-4xs);
           vertical-align: -1px;
         }
         .pretui-toolgate-scope {
           margin: 0;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--subtle-foreground);
         }
         .pretui-toolgate-decline {
           display: flex;
           flex-wrap: wrap;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           align-items: center;
         }
         .pretui-toolgate-reason {
           flex: 1 1 160px;
           min-width: 0;
           height: 28px;
-          padding: 0 var(--step-8, 8px);
+          padding: 0 var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: var(--field, var(--inset));
           box-shadow: inset 0 0 0 1px var(--input, var(--border));
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           color: var(--foreground);
         }
         .pretui-toolgate-reason::placeholder {
-          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
+          color: var(--subtle-foreground);
         }
         .pretui-toolgate-reason:focus {
           outline: 2px solid var(--ring);
@@ -336,29 +344,29 @@ export class ToolGate extends Component<ToolGateSignature> {
         }
         .pretui-toolgate-detail {
           display: block;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 400;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-toolgate-actions {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
         }
         /* answers: the one answer is --primary; the rest are outlined
            (secondary) or quiet text */
         .pretui-toolgate-action {
           min-height: 28px;
-          padding: 0 var(--step-12, 12px);
+          padding: 0 var(--boxel-sp-sm);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           box-shadow: inset 0 0 0 1px var(--border-strong, var(--border));
           font: inherit;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
           color: var(--foreground);
           cursor: pointer;
@@ -372,7 +380,7 @@ export class ToolGate extends Component<ToolGateSignature> {
         .pretui-toolgate-action[data-kind='quiet'] {
           box-shadow: none;
           font-weight: 400;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-toolgate-action:hover:not(:disabled) {
           background: var(--hover, var(--inset));

@@ -127,9 +127,9 @@ export class SessionPrep extends Component<SessionPrepSignature> {
         .pretui-prep {
           display: flex;
           flex-direction: column;
-          gap: var(--step-12, 12px);
-          padding: var(--step-12, 12px) var(--step-16, 16px);
-          border-radius: var(--round-surface, 12px);
+          gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-sm) var(--boxel-sp);
+          border-radius: var(--boxel-border-radius-lg);
           background: var(--card);
           box-shadow: var(
             --pretui-shadow-card,
@@ -140,24 +140,24 @@ export class SessionPrep extends Component<SessionPrepSignature> {
         .pretui-prep-head {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           flex-wrap: wrap;
         }
         .pretui-prep-title {
           margin: 0;
           flex: 1;
           min-width: 0;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
           color: var(--foreground);
         }
         .pretui-prep-note {
           margin: 0;
           max-width: var(--measure-read, 68ch);
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
+          color: var(--muted-foreground);
         }
       }
     </style>

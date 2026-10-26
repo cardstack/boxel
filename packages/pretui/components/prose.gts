@@ -16,11 +16,13 @@ export const Prose: TemplateOnlyComponent<ProseSignature> = <template>
     @layer PretComponent {
       .pretui-prose {
         max-width: var(--pretui-prose-measure, 62ch);
-        line-height: calc(var(--leading-body, 24px) / var(--text-body, 15px));
+        line-height: calc(
+          var(--boxel-body-line-height) / var(--text-body, 15px)
+        );
         overflow-wrap: break-word;
       }
       .pretui-prose :deep(p) {
-        margin: 0 0 var(--space-4, 11px);
+        margin: 0 0 var(--boxel-sp-sm);
         text-wrap: pretty;
       }
       .pretui-prose :deep(code) {
@@ -41,7 +43,7 @@ export const Prose: TemplateOnlyComponent<ProseSignature> = <template>
       .pretui-prose :deep(h4),
       .pretui-prose :deep(h5),
       .pretui-prose :deep(h6) {
-        margin: var(--space-6, 22px) 0 var(--space-3, 7px);
+        margin: var(--boxel-sp-lg) 0 var(--boxel-sp-2xs);
         font-weight: 600;
         line-height: 1.25;
         text-wrap: balance;
@@ -65,7 +67,7 @@ export const Prose: TemplateOnlyComponent<ProseSignature> = <template>
       /* Lists on the spacing scale, nested lists without extra gap. */
       .pretui-prose :deep(ul),
       .pretui-prose :deep(ol) {
-        margin: 0 0 var(--space-4, 11px);
+        margin: 0 0 var(--boxel-sp-sm);
         padding-inline-start: 1.4em;
       }
       .pretui-prose :deep(li) {
@@ -88,7 +90,7 @@ export const Prose: TemplateOnlyComponent<ProseSignature> = <template>
         /* a link is words in the sentence: it wraps like them, even where
            a host's reset makes anchors inline-block */
         display: inline;
-        color: var(--pretui-link, var(--primary));
+        color: var(--primary-ink);
         text-decoration: underline;
         text-decoration-thickness: 1px;
         text-underline-offset: 0.18em;
@@ -103,16 +105,16 @@ export const Prose: TemplateOnlyComponent<ProseSignature> = <template>
       }
 
       .pretui-prose :deep(blockquote) {
-        margin: 0 0 var(--space-4, 11px);
-        padding: 0 0 0 var(--space-4, 11px);
+        margin: 0 0 var(--boxel-sp-sm);
+        padding: 0 0 0 var(--boxel-sp-sm);
         box-shadow: inset 2px 0 0 var(--border);
         color: var(--muted-foreground);
       }
 
       /* Preformatted blocks scroll inside themselves; the page never does. */
       .pretui-prose :deep(pre) {
-        margin: 0 0 var(--space-4, 11px);
-        padding: var(--space-3, 7px) var(--space-4, 11px);
+        margin: 0 0 var(--boxel-sp-sm);
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
         overflow-x: auto;
         border-radius: 8px;
         background: var(--inset, var(--boxel-100));
@@ -132,7 +134,7 @@ export const Prose: TemplateOnlyComponent<ProseSignature> = <template>
         display: block;
         max-width: 100%;
         overflow-x: auto;
-        margin: 0 0 var(--space-4, 11px);
+        margin: 0 0 var(--boxel-sp-sm);
         border-collapse: collapse;
         font-size: 0.94em;
         font-variant-numeric: tabular-nums;
@@ -151,7 +153,7 @@ export const Prose: TemplateOnlyComponent<ProseSignature> = <template>
       }
 
       .pretui-prose :deep(hr) {
-        margin: var(--space-6, 22px) 0;
+        margin: var(--boxel-sp-lg) 0;
         border: 0;
         height: 1px;
         background: var(--border);

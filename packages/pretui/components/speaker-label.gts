@@ -43,12 +43,14 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
       {{#if @agent}}
         <AgentMark class='pretui-speaker-agent' @working={{@working}} />
       {{else if (has-block 'mark')}}
-        <span
-          class='pretui-speaker-avatar'
-          aria-hidden='true'
-        >{{yield to='mark'}}</span>
+        <span class='pretui-speaker-avatar' aria-hidden='true'>{{yield
+            to='mark'
+          }}</span>
       {{else}}
-        <span class='pretui-speaker-mark' aria-hidden='true'>{{this.initial}}</span>
+        <span
+          class='pretui-speaker-mark'
+          aria-hidden='true'
+        >{{this.initial}}</span>
       {{/if}}
       <span class='pretui-speaker-name'>{{@name}}</span>
       {{#if @via}}<span class='pretui-speaker-via' data-test-pretui-speaker-via>
@@ -63,11 +65,11 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
           align-items: center;
           /* the mark is the thread's 16px glyph column, its words 8px after,
              as every mark in the transcript */
-          gap: var(--pretui-toolrow-gap, var(--step-8, 8px));
+          gap: var(--pretui-toolrow-gap, var(--boxel-sp-xs));
           min-width: 0;
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
+          color: var(--muted-foreground);
         }
         /* the host's avatar, held to the mark's 16px circle */
         .pretui-speaker-avatar {
@@ -88,8 +90,8 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
           background: var(--inset, var(--boxel-100));
           box-shadow: inset 0 0 0 1px var(--border);
           /* one initial, not a kicker: caption, set to the circle's height */
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 600;
           text-transform: uppercase;
           color: var(--foreground);
@@ -119,7 +121,7 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
         .pretui-speaker-via::before,
         .pretui-speaker-time::before {
           content: '·';
-          margin-inline-end: var(--step-8, 8px);
+          margin-inline-end: var(--boxel-sp-xs);
         }
         .pretui-speaker-time {
           font-variant-numeric: tabular-nums;

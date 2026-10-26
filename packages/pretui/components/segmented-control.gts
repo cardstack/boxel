@@ -111,7 +111,7 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
           --pretui-seg-active-weight: 600;
           /* Button's corner, shared by the segments and the pill; the rail
              adds the inset so the pill's corner stays concentric */
-          --pretui-seg-radius: calc(var(--radius) - 2px);
+          --pretui-seg-radius: calc(var(--boxel-border-radius) - 2px);
           --pretui-highlight-radius: var(--pretui-seg-radius);
 
           position: relative;
@@ -120,7 +120,9 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
           padding: var(--pretui-seg-inset);
           background-color: var(--inset);
           color: var(--foreground);
-          border-radius: calc(var(--pretui-seg-radius) + var(--pretui-seg-inset));
+          border-radius: calc(
+            var(--pretui-seg-radius) + var(--pretui-seg-inset)
+          );
           box-shadow: 0 0 0 1px var(--border);
         }
         .pretui-seg:has(.pretui-seg-input:disabled) {
@@ -200,4 +202,3 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
     </style>
   </template>
 }
-

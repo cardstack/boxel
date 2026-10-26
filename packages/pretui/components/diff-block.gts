@@ -292,19 +292,21 @@ export class DiffBlock extends Component<DiffBlockSignature> {
     return view === 'split' || (view === 'auto' && this.wide);
   }
   // 'auto' measures its own width: split from 640px
-  watchWidth = modifier((element: HTMLElement, [view]: [string | undefined]) => {
-    if (view !== 'auto' || typeof ResizeObserver !== 'function') {
-      return;
-    }
-    let observer = new ResizeObserver(([entry]) => {
-      let wide = (entry?.contentRect.width ?? 0) >= 640;
-      if (wide !== this.wide) {
-        this.wide = wide;
+  watchWidth = modifier(
+    (element: HTMLElement, [view]: [string | undefined]) => {
+      if (view !== 'auto' || typeof ResizeObserver !== 'function') {
+        return;
       }
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  });
+      let observer = new ResizeObserver(([entry]) => {
+        let wide = (entry?.contentRect.width ?? 0) >= 640;
+        if (wide !== this.wide) {
+          this.wide = wide;
+        }
+      });
+      observer.observe(element);
+      return () => observer.disconnect();
+    },
+  );
 
   @cached
   get hunks(): DiffHunk[] {
@@ -330,7 +332,9 @@ export class DiffBlock extends Component<DiffBlockSignature> {
   revertHunk = (hunk: DiffHunk) => this.args.onRevertHunk?.(hunk);
 
   commentsOn = (n: number | undefined) =>
-    n === undefined ? [] : (this.args.comments ?? []).filter((c) => c.line === n);
+    n === undefined
+      ? []
+      : (this.args.comments ?? []).filter((c) => c.line === n);
   isCommenting = (n: number | undefined) =>
     n !== undefined && this.commentingOn === n;
   openComment = (n: number) => {
@@ -432,9 +436,7 @@ export class DiffBlock extends Component<DiffBlockSignature> {
     }
     let hidden = this.args.lines.length - this.maxLines;
     let more = `${hidden} more ${hidden === 1 ? 'line' : 'lines'}`;
-    return this.args.expandLabel
-      ? `${this.args.expandLabel} · ${more}`
-      : more;
+    return this.args.expandLabel ? `${this.args.expandLabel} · ${more}` : more;
   }
   get toggleExpanded() {
     return this.collapsed ? 'false' : 'true';
@@ -477,94 +479,151 @@ export class DiffBlock extends Component<DiffBlockSignature> {
       {{else if this.split}}
         {{#each this.splitRows as |row|}}
           {{#if row.skip}}
-            <div class='pretui-diff-line pretui-diff-skip' data-skip>{{row.skip}}</div>
+            <div
+              class='pretui-diff-line pretui-diff-skip'
+              data-skip
+            >{{row.skip}}</div>
           {{else}}
             <div class='pretui-diff-split' data-test-pretui-diff-split-row>
-              <div class='pretui-diff-line' data-op={{row.left.op}} data-side='old'>{{#if row.left}}{{#if @lineNumbers}}<span class='pretui-diff-n' aria-hidden='true'>{{row.left.n}}</span>{{/if}}<span class='pretui-diff-sign'>{{row.left.sign}}</span>{{#each row.left.tokens key='@index' as |part|}}<span class={{part.cls}}>{{part.text}}</span>{{/each}}{{/if}}</div>
-              <div class='pretui-diff-line' data-op={{row.right.op}} data-side='new'>{{#if row.right}}{{#if @lineNumbers}}<span class='pretui-diff-n' aria-hidden='true'>{{row.right.n}}</span>{{/if}}<span class='pretui-diff-sign'>{{row.right.sign}}</span>{{#each row.right.tokens key='@index' as |part|}}<span class={{part.cls}}>{{part.text}}</span>{{/each}}{{/if}}</div>
+              <div
+                class='pretui-diff-line'
+                data-op={{row.left.op}}
+                data-side='old'
+              >{{#if row.left}}{{#if @lineNumbers}}<span
+                      class='pretui-diff-n'
+                      aria-hidden='true'
+                    >{{row.left.n}}</span>{{/if}}<span
+                    class='pretui-diff-sign'
+                  >{{row.left.sign}}</span>{{#each
+                    row.left.tokens key='@index'
+                    as |part|
+                  }}<span
+                      class={{part.cls}}
+                    >{{part.text}}</span>{{/each}}{{/if}}</div>
+              <div
+                class='pretui-diff-line'
+                data-op={{row.right.op}}
+                data-side='new'
+              >{{#if row.right}}{{#if @lineNumbers}}<span
+                      class='pretui-diff-n'
+                      aria-hidden='true'
+                    >{{row.right.n}}</span>{{/if}}<span
+                    class='pretui-diff-sign'
+                  >{{row.right.sign}}</span>{{#each
+                    row.right.tokens key='@index'
+                    as |part|
+                  }}<span
+                      class={{part.cls}}
+                    >{{part.text}}</span>{{/each}}{{/if}}</div>
             </div>
           {{/if}}
         {{/each}}
       {{else}}
-      {{#each this.shown as |line index|}}
-        {{#let (this.hunkAt index) as |hunk|}}
-          {{#if hunk}}
+        {{#each this.shown as |line index|}}
+          {{#let (this.hunkAt index) as |hunk|}}
+            {{#if hunk}}
+              <div
+                class='pretui-diff-hunk'
+                data-state={{this.stateOf hunk}}
+                data-test-pretui-diff-hunk={{hunk.index}}
+              >
+                <span class='pretui-diff-hunk-label'>{{this.hunkLabel
+                    hunk
+                  }}</span>
+                {{#if (this.stateOf hunk)}}
+                  <span
+                    class='pretui-diff-hunk-state'
+                    data-test-pretui-diff-hunk-state
+                  >{{#if (this.isKept hunk)}}<CheckIcon
+                        width='11'
+                        height='11'
+                        aria-hidden='true'
+                      />{{/if}}{{this.stateOf hunk}}</span>
+                {{else}}
+                  {{#if @onKeepHunk}}<button
+                      type='button'
+                      class='pretui-diff-action'
+                      data-test-pretui-diff-keep={{hunk.index}}
+                      {{on 'click' (fn this.keepHunk hunk)}}
+                    >Keep</button>{{/if}}
+                  {{#if @onRevertHunk}}<button
+                      type='button'
+                      class='pretui-diff-action'
+                      data-kind='quiet'
+                      data-test-pretui-diff-revert={{hunk.index}}
+                      {{on 'click' (fn this.revertHunk hunk)}}
+                    >Revert</button>{{/if}}
+                {{/if}}
+              </div>
+            {{/if}}
+          {{/let}}
+          {{#if line.skip}}
             <div
-              class='pretui-diff-hunk'
-              data-state={{this.stateOf hunk}}
-              data-test-pretui-diff-hunk={{hunk.index}}
-            >
-              <span class='pretui-diff-hunk-label'>{{this.hunkLabel hunk}}</span>
-              {{#if (this.stateOf hunk)}}
-                <span class='pretui-diff-hunk-state' data-test-pretui-diff-hunk-state>{{#if (this.isKept hunk)}}<CheckIcon
-                      width='11'
-                      height='11'
-                      aria-hidden='true'
-                    />{{/if}}{{this.stateOf hunk}}</span>
-              {{else}}
-                {{#if @onKeepHunk}}<button
+              class='pretui-diff-line pretui-diff-skip'
+              data-skip
+            >{{line.skip}}</div>
+          {{else}}<div
+              class='pretui-diff-line'
+              data-op={{line.op}}
+              data-state={{this.lineState index}}
+            >{{#if @lineNumbers}}{{#if @onComment}}<button
                     type='button'
-                    class='pretui-diff-action'
-                    data-test-pretui-diff-keep={{hunk.index}}
-                    {{on 'click' (fn this.keepHunk hunk)}}
-                  >Keep</button>{{/if}}
-                {{#if @onRevertHunk}}<button
+                    class='pretui-diff-n'
+                    aria-label='Comment on line {{line.n}}'
+                    data-test-pretui-diff-comment-on={{line.n}}
+                    {{on 'click' (fn this.openComment line.n)}}
+                  >{{line.n}}</button>{{else}}<span
+                    class='pretui-diff-n'
+                    aria-hidden='true'
+                  >{{line.n}}</span>{{/if}}{{/if}}<span
+                class='pretui-diff-sign'
+              >{{line.sign}}</span>{{#each
+                line.tokens key='@index'
+                as |part|
+              }}<span class={{part.cls}}>{{part.text}}</span>{{/each}}</div>
+            {{#each (this.commentsOn line.n) as |comment|}}
+              <div
+                class='pretui-diff-comment'
+                data-test-pretui-diff-comment={{comment.line}}
+              >
+                <span
+                  class='pretui-diff-comment-author'
+                >{{comment.author}}</span>
+                <span class='pretui-diff-comment-text'>{{comment.text}}</span>
+              </div>
+            {{/each}}
+            {{#if (this.isCommenting line.n)}}
+              <div
+                class='pretui-diff-comment pretui-diff-comment-new'
+                data-test-pretui-diff-comment-editor
+              >
+                <textarea
+                  class='pretui-diff-comment-field'
+                  aria-label='Comment on line {{line.n}}'
+                  rows='2'
+                  value={{this.commentDraft}}
+                  {{on 'input' this.typeComment}}
+                  {{on 'keydown' this.commentKey}}
+                  {{this.focusComment}}
+                ></textarea>
+                <span class='pretui-diff-comment-actions'>
+                  <button
                     type='button'
                     class='pretui-diff-action'
                     data-kind='quiet'
-                    data-test-pretui-diff-revert={{hunk.index}}
-                    {{on 'click' (fn this.revertHunk hunk)}}
-                  >Revert</button>{{/if}}
-              {{/if}}
-            </div>
+                    {{on 'click' this.cancelComment}}
+                  >Cancel</button>
+                  <button
+                    type='button'
+                    class='pretui-diff-action'
+                    data-test-pretui-diff-comment-save
+                    {{on 'click' this.saveComment}}
+                  >Comment</button>
+                </span>
+              </div>
+            {{/if}}
           {{/if}}
-        {{/let}}
-        {{#if line.skip}}
-          <div
-            class='pretui-diff-line pretui-diff-skip'
-            data-skip
-          >{{line.skip}}</div>
-        {{else}}<div class='pretui-diff-line' data-op={{line.op}} data-state={{this.lineState index}}>{{#if
-              @lineNumbers
-            }}{{#if @onComment}}<button
-                  type='button'
-                  class='pretui-diff-n'
-                  aria-label='Comment on line {{line.n}}'
-                  data-test-pretui-diff-comment-on={{line.n}}
-                  {{on 'click' (fn this.openComment line.n)}}
-                >{{line.n}}</button>{{else}}<span
-                class='pretui-diff-n'
-                aria-hidden='true'
-              >{{line.n}}</span>{{/if}}{{/if}}<span
-            class='pretui-diff-sign'
-          >{{line.sign}}</span>{{#each line.tokens key='@index' as |part|}}<span
-              class={{part.cls}}
-            >{{part.text}}</span>{{/each}}</div>
-          {{#each (this.commentsOn line.n) as |comment|}}
-            <div class='pretui-diff-comment' data-test-pretui-diff-comment={{comment.line}}>
-              <span class='pretui-diff-comment-author'>{{comment.author}}</span>
-              <span class='pretui-diff-comment-text'>{{comment.text}}</span>
-            </div>
-          {{/each}}
-          {{#if (this.isCommenting line.n)}}
-            <div class='pretui-diff-comment pretui-diff-comment-new' data-test-pretui-diff-comment-editor>
-              <textarea
-                class='pretui-diff-comment-field'
-                aria-label='Comment on line {{line.n}}'
-                rows='2'
-                value={{this.commentDraft}}
-                {{on 'input' this.typeComment}}
-                {{on 'keydown' this.commentKey}}
-                {{this.focusComment}}
-              ></textarea>
-              <span class='pretui-diff-comment-actions'>
-                <button type='button' class='pretui-diff-action' data-kind='quiet' {{on 'click' this.cancelComment}}>Cancel</button>
-                <button type='button' class='pretui-diff-action' data-test-pretui-diff-comment-save {{on 'click' this.saveComment}}>Comment</button>
-              </span>
-            </div>
-          {{/if}}
-        {{/if}}
-      {{/each}}
+        {{/each}}
       {{/if}}
       {{#if (if this.overflows (if this.tooLarge false true))}}
         <button
@@ -593,13 +652,13 @@ export class DiffBlock extends Component<DiffBlockSignature> {
         .pretui-diff-hunk {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-height: 26px;
-          padding: 0 var(--step-12, 12px);
+          padding: 0 var(--boxel-sp-sm);
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--muted-foreground);
           box-shadow: inset 0 1px 0 var(--border);
         }
         /* "Change 1 of 3 · +2 −1" is a count, not a string to paste: sans */
@@ -614,7 +673,7 @@ export class DiffBlock extends Component<DiffBlockSignature> {
         .pretui-diff-hunk[data-state='kept'] .pretui-diff-hunk-state {
           display: inline-flex;
           align-items: center;
-          gap: var(--step-4, 4px);
+          gap: var(--boxel-sp-4xs);
           color: var(--foreground);
         }
         .pretui-diff-line[data-state='reverted'] {
@@ -623,25 +682,25 @@ export class DiffBlock extends Component<DiffBlockSignature> {
         }
         .pretui-diff-action {
           height: 22px;
-          padding: 0 var(--step-8, 8px);
+          padding: 0 var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           box-shadow: inset 0 0 0 1px var(--border-strong, var(--border));
           font: inherit;
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 400;
           color: var(--foreground);
           cursor: pointer;
         }
         .pretui-diff-action[data-kind='quiet'] {
           box-shadow: none;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-diff-action:hover {
-          color: var(--pretui-link, var(--primary));
+          color: var(--primary-ink);
         }
         .pretui-diff-action:focus-visible,
         button.pretui-diff-n:focus-visible {
@@ -657,19 +716,19 @@ export class DiffBlock extends Component<DiffBlockSignature> {
           cursor: pointer;
         }
         button.pretui-diff-n:hover {
-          color: var(--pretui-link, var(--primary));
+          color: var(--primary-ink);
         }
         .pretui-diff-comment {
           display: grid;
           gap: 2px;
-          margin: 2px var(--step-8, 8px) var(--step-4, 4px) 40px;
-          padding: var(--step-4, 4px) var(--step-8, 8px);
-          border-radius: var(--round-row, 8px);
+          margin: 2px var(--boxel-sp-xs) var(--boxel-sp-4xs) 40px;
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          border-radius: var(--boxel-border-radius-sm);
           background: var(--card);
           box-shadow: 0 0 0 1px var(--border);
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           color: var(--foreground);
           white-space: normal;
         }
@@ -679,9 +738,9 @@ export class DiffBlock extends Component<DiffBlockSignature> {
         .pretui-diff-comment-field {
           width: 100%;
           box-sizing: border-box;
-          padding: var(--step-4, 4px) var(--step-8, 8px);
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--round-chip, 4px);
+          border-radius: var(--boxel-border-radius-xs);
           background: var(--field, var(--inset));
           box-shadow: inset 0 0 0 1px var(--input, var(--border));
           font: inherit;
@@ -691,37 +750,37 @@ export class DiffBlock extends Component<DiffBlockSignature> {
         .pretui-diff-comment-actions {
           display: flex;
           justify-content: flex-end;
-          gap: var(--step-4, 4px);
+          gap: var(--boxel-sp-4xs);
         }
         .pretui-diff-large {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: var(--step-8, 8px);
-          padding: var(--step-12, 12px);
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-sm);
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
+          color: var(--muted-foreground);
         }
         /* a diff is pasteable: mono at the data size */
         .pretui-diff {
           font-family: var(--font-mono);
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
           background: var(--inset, var(--boxel-100));
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
           overflow: hidden;
         }
         .pretui-diff-head {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
-          padding: var(--step-4, 4px) var(--step-12, 12px);
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-sm);
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 400;
           box-shadow: 0 1px 0 var(--border);
         }
@@ -733,19 +792,19 @@ export class DiffBlock extends Component<DiffBlockSignature> {
           text-overflow: ellipsis;
           white-space: nowrap;
           font-family: var(--font-mono);
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
         }
         /* the counts are figures: sans, tabular */
         .pretui-diff-counts {
           display: flex;
-          gap: var(--step-4, 4px);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          gap: var(--boxel-sp-4xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
         }
         .pretui-diff-line {
-          padding: 0 var(--step-12, 12px);
+          padding: 0 var(--boxel-sp-sm);
           white-space: pre;
         }
         .pretui-diff-line[data-op='add'] {
@@ -775,7 +834,7 @@ export class DiffBlock extends Component<DiffBlockSignature> {
           text-align: end;
           /* ink-2, not ink-3: the number sits on the add and remove tints,
              where ink-3 falls under 4.5:1 */
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           user-select: none;
         }
         /* With a language, the tint says added or removed and the tokens
@@ -849,29 +908,29 @@ export class DiffBlock extends Component<DiffBlockSignature> {
           background: none;
           font: inherit;
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(--pretui-primary-ink, var(--primary));
+          color: var(--primary-ink);
           cursor: pointer;
         }
         /* the unchanged run between two hunks: a quiet gap, never a line
            of the file */
         .pretui-diff-skip {
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
-          color: var(--ink-2, var(--muted-foreground));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          color: var(--muted-foreground);
           background: color-mix(in oklch, var(--border) 35%, transparent);
           user-select: none;
         }
         .pretui-diff-receipt {
-          padding: var(--step-4, 4px) var(--step-12, 12px);
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-sm);
           font-family: var(--font-sans, inherit);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           box-shadow: 0 -1px 0 var(--border);
         }
       }

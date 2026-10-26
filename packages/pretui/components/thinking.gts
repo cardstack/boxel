@@ -141,7 +141,9 @@ export class Thinking extends Component<ThinkingSignature> {
           aria-hidden='true'
         />
         {{#if this.working}}
-          <span class='pretui-trace-label' data-shimmer='true'
+          <span
+            class='pretui-trace-label'
+            data-shimmer='true'
           >{{this.label}}</span>
         {{else}}
           <span class='pretui-trace-label'>{{this.doneLabel}}</span>
@@ -206,8 +208,8 @@ export class Thinking extends Component<ThinkingSignature> {
     <style scoped>
       @layer PretComponent {
         .pretui-trace {
-          font-size: var(--type-ui, 12.5px);
-          line-height: var(--leading-ui, 18px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
         }
         .pretui-sr {
           position: absolute;
@@ -220,15 +222,15 @@ export class Thinking extends Component<ThinkingSignature> {
         .pretui-trace-head {
           display: inline-flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-height: 28px;
-          padding: var(--step-4, 4px) var(--step-8, 8px);
-          margin: calc(-1 * var(--step-4, 4px)) calc(-1 * var(--step-8, 8px));
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          margin: calc(-1 * var(--boxel-sp-4xs)) calc(-1 * var(--boxel-sp-xs));
           border: 0;
-          border-radius: var(--round-row, 8px);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           font: inherit;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
           cursor: pointer;
         }
         .pretui-trace-head:hover {
@@ -242,10 +244,10 @@ export class Thinking extends Component<ThinkingSignature> {
           width: 15px;
           height: 15px;
           flex: none;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-trace-head[data-working] .pretui-trace-spark {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-trace-label {
           font-weight: 600;
@@ -276,7 +278,7 @@ export class Thinking extends Component<ThinkingSignature> {
           width: 14px;
           height: 14px;
           flex: none;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           transition: transform 300ms
             var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
         }
@@ -303,17 +305,17 @@ export class Thinking extends Component<ThinkingSignature> {
         .pretui-trace-row {
           display: flex;
           align-items: center;
-          gap: var(--step-8, 8px);
+          gap: var(--boxel-sp-xs);
           min-height: 26px;
-          padding: 2px var(--step-8, 8px);
-          border-radius: var(--round-row, 8px);
+          padding: 2px var(--boxel-sp-xs);
+          border-radius: var(--boxel-border-radius-sm);
           color: var(--foreground);
         }
         .pretui-trace-row:hover {
           background: var(--hover, var(--boxel-100));
         }
         .pretui-trace-row[data-kind='query'] {
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-trace-row > svg {
           width: 13px;
@@ -321,7 +323,7 @@ export class Thinking extends Component<ThinkingSignature> {
           flex: none;
         }
         .pretui-trace-check {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-trace-primary {
           min-width: 0;
@@ -332,36 +334,36 @@ export class Thinking extends Component<ThinkingSignature> {
         }
         .pretui-trace-primary[data-wrap] {
           white-space: normal;
-          color: var(--ink-2, var(--muted-foreground));
+          color: var(--muted-foreground);
         }
         .pretui-trace-sec {
           margin-left: auto;
           flex: none;
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         /* a machine value is a pasteable string: mono at the data size */
         .pretui-trace-sec[data-mono] {
           font-family: var(--font-mono);
-          font-size: var(--type-data, 12px);
-          line-height: var(--leading-data, 18px);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
         }
         /* the counts are figures, not strings to paste: sans, tabular */
         .pretui-trace-diff {
           flex: none;
           display: inline-flex;
-          gap: var(--step-4, 4px);
-          font-size: var(--type-caption, 11px);
-          line-height: var(--leading-caption, 16px);
+          gap: var(--boxel-sp-4xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
         }
         .pretui-trace-add {
           color: var(--success, var(--boxel-success));
         }
         .pretui-trace-del {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         /* the stagger is a precomputed delay, retriggered by the open flip.
            The flag lives on the rail, not on Collapse's own element: a

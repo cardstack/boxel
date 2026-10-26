@@ -22,8 +22,12 @@ export class DiffStat extends Component<DiffStatSignature> {
     let total = added + removed;
     // a side with any change gets at least one block; together they never
     // exceed the bar
-    let adds = total ? Math.max(added ? 1 : 0, Math.round((added / total) * n)) : 0;
-    let dels = total ? Math.max(removed ? 1 : 0, Math.round((removed / total) * n)) : 0;
+    let adds = total
+      ? Math.max(added ? 1 : 0, Math.round((added / total) * n))
+      : 0;
+    let dels = total
+      ? Math.max(removed ? 1 : 0, Math.round((removed / total) * n))
+      : 0;
     while (adds + dels > n) {
       adds > dels ? adds-- : dels--;
     }
@@ -35,10 +39,30 @@ export class DiffStat extends Component<DiffStatSignature> {
     return `${this.args.added} added, ${this.args.removed} removed`;
   }
   <template>
-    <span class='pretui-diffstat' role='img' aria-label={{this.label}} data-test-pretui-diff-stat ...attributes>
-      <span class='pretui-diffstat-n' data-op='add' aria-hidden='true'>+{{@added}}</span>
-      <span class='pretui-diffstat-n' data-op='del' aria-hidden='true'>−{{@removed}}</span>
-      {{#if this.bar.length}}<span class='pretui-diffstat-bar' aria-hidden='true'>{{#each this.bar as |block|}}<span class='pretui-diffstat-block' data-op={{block}}></span>{{/each}}</span>{{/if}}
+    <span
+      class='pretui-diffstat'
+      role='img'
+      aria-label={{this.label}}
+      data-test-pretui-diff-stat
+      ...attributes
+    >
+      <span
+        class='pretui-diffstat-n'
+        data-op='add'
+        aria-hidden='true'
+      >+{{@added}}</span>
+      <span
+        class='pretui-diffstat-n'
+        data-op='del'
+        aria-hidden='true'
+      >−{{@removed}}</span>
+      {{#if this.bar.length}}<span
+          class='pretui-diffstat-bar'
+          aria-hidden='true'
+        >{{#each this.bar as |block|}}<span
+              class='pretui-diffstat-block'
+              data-op={{block}}
+            ></span>{{/each}}</span>{{/if}}
     </span>
     <style scoped>
       @layer PretComponent {
@@ -47,14 +71,14 @@ export class DiffStat extends Component<DiffStatSignature> {
           align-items: center;
           gap: 5px;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
         }
         .pretui-diffstat-n[data-op='add'] {
           color: var(--success, var(--boxel-highlight));
         }
         .pretui-diffstat-n[data-op='del'] {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-diffstat-bar {
           display: inline-flex;
@@ -70,7 +94,7 @@ export class DiffStat extends Component<DiffStatSignature> {
           background: var(--success, var(--boxel-highlight));
         }
         .pretui-diffstat-block[data-op='del'] {
-          background: var(--pretui-destructive-ink, var(--boxel-danger));
+          background: var(--destructive);
         }
       }
     </style>
