@@ -112,6 +112,7 @@ import {
   REQUEST_FORWARD_PATH,
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
+  SECURE_WINDOW_PATH,
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
 import {
@@ -145,6 +146,7 @@ import {
   handleSwapKeyIntoShare,
   handleUnshareKey,
 } from './handlers/handle-key-shares.ts';
+import { handleSecureWindowContext } from './handlers/handle-secure-window.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -397,6 +399,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     KEY_SHARE_NOTICES_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListKeyShareNotices(args),
+  );
+  router.post(
+    `${SECURE_WINDOW_PATH}/context`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSecureWindowContext(args),
   );
   router.post(
     REQUEST_FORWARD_PATH,

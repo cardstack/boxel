@@ -3676,6 +3676,9 @@ importers:
       puppeteer:
         specifier: ^25.0.2
         version: 25.2.1
+      tldts:
+        specifier: ^6.1.86
+        version: 6.1.86
     devDependencies:
       '@aws-crypto/sha256-js':
         specifier: 'catalog:'

@@ -73,13 +73,33 @@ export function cliSignInMode(cli) {
 
 // The page a Google sign-in started from, rebuilt from the `resume` the window
 // kept when it sent the user to Google: the CLI's sign-in, for the same
-// listener and with the same username, or else the window's own. The CLI keeps
+// listener and with the same username; the page of this shell it began on,
+// such as a key page; or else the window's own sign-in. The CLI keeps
 // waiting on its listener while the user starts again there.
 export function startURL(resume) {
   let cli = resume?.client === 'cli' ? resume.cli : undefined;
   let params = cliParams(cli, resume?.username);
   if (!params.port || !params.state) {
-    return modeURL('sign-in');
+    return (!cli && resumePage(resume?.page)) || modeURL('sign-in');
   }
   return modeURL(cliSignInMode(cli), params);
+}
+
+// The page of this shell a Google sign-in started on, to go back to once it is
+// signed in: a path at the shell's own, with its query and fragment, and
+// nothing that leaves this origin. Anything else is undefined.
+export function resumePage(page) {
+  if (typeof page !== 'string' || !page.startsWith('/')) {
+    return undefined;
+  }
+  let url;
+  try {
+    url = new URL(page, window.location.origin);
+  } catch {
+    return undefined;
+  }
+  if (url.origin !== window.location.origin || url.pathname !== shellPath()) {
+    return undefined;
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
 }
