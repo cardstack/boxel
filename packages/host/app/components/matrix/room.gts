@@ -171,6 +171,10 @@ const CAP_CLOSE_FALLBACK_MS = 400;
 const UNREAD_SETTLE_MS = 400;
 // how long a question or approval waits before the cap points back to it
 const POINTER_SETTLE_MS = 2000;
+// how long a turn waits for the bot's answer to its last calls' results
+// before it settles anyway: a bot that never answers must not leave the turn
+// working forever
+const CONTINUATION_WAIT_MS = 30_000;
 
 interface CapState {
   gates: Gate[];
@@ -2935,7 +2939,8 @@ export default class Room extends Component<Signature> {
             !this.toolService.currentlyExecutingToolRequestIds.has(
               tool.id ?? '',
             ),
-        );
+        ) &&
+        !(end === messages.length && this.awaitsContinuation(turn.at(-1)!));
       let key = turn[0]!.eventId;
       let thinking = turn.some((message) => !!message.reasoningContent);
       for (let index = start; index < end; index++) {
@@ -3061,6 +3066,51 @@ export default class Room extends Component<Signature> {
       }
     }
     return { folds, footers, heads, places };
+  }
+
+  // The bot answers the results of its last message's calls with another
+  // reply (getShouldRespond), but that reply's first event comes a moment
+  // after the last result. Until it does, the turn is still going: settling
+  // it would show the footer and the fold for that moment, and take them
+  // away again as the reply lands. The turn's own check has already asked
+  // that each call has its outcome (an approval is a result event too, but
+  // its call reads as applying until ai-bot posts the outcome).
+  private lapsedContinuations = new TrackedSet<string>();
+  private continuationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private awaitsContinuation(last: Message): boolean {
+    let tools = last.tools ?? [];
+    if (
+      !tools.length ||
+      last.author.userId !== this.matrixService.aiBotUserId ||
+      !last.isStreamingFinished ||
+      last.isCanceled ||
+      last.errorMessage ||
+      this.args.roomResource.isStopped(last.eventId) ||
+      this.lapsedContinuations.has(last.eventId) ||
+      tools.some(
+        (tool) =>
+          !tool.toolResultEventTs ||
+          tool.failureReason?.startsWith(STOPPED_BY_USER),
+      )
+    ) {
+      return false;
+    }
+    let answeredAt = Math.max(...tools.map((tool) => tool.toolResultEventTs!));
+    let wait = answeredAt + CONTINUATION_WAIT_MS - Date.now();
+    if (wait <= 0) {
+      return false;
+    }
+    if (!this.continuationTimers.has(last.eventId)) {
+      this.continuationTimers.set(
+        last.eventId,
+        setTimeout(() => {
+          if (!this.isDestroying && !this.isDestroyed) {
+            this.lapsedContinuations.add(last.eventId);
+          }
+        }, wait),
+      );
+    }
+    return true;
   }
 
   // What a turn's calls changed in source files, summed from their rows,
