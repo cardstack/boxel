@@ -444,10 +444,10 @@ export class ChoreoRun implements Run {
   /**
    * The next tick is the first since the clock started (or resumed): it
    * paints the run where it stands and advances nothing. The frame loop's
-   * delta on that tick is the time since ITS last frame, up to 40 ms, and
-   * a run started by a render pass would otherwise open with a 40 ms step:
-   * on an ease-out, half of a move gone before its first frame shows,
-   * which reads as a jump.
+   * delta on that tick is the time since ITS last frame, up to 40 ms, so a
+   * run started by a render pass would otherwise open with that whole step
+   * on its own clock: every cue the clock starts, gates, or drives frame by
+   * frame (a camera, a wire, a later cue's start) would begin that far in.
    */
   private freshClock = false;
   /** the frame timestamp holdBack saw last, while a maxFrameStep applies */

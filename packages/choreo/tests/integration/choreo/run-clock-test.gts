@@ -3,11 +3,12 @@
  * much animation time one frame may advance.
  *
  * The frame loop hands each tick the time since ITS last frame, up to 40 ms.
- * A run started by a render pass used to open with that whole step, and a
- * long frame in the middle of a move skipped up to 40 ms of it: on a busy
- * page, both read as a jump.
+ * A run's first tick advances nothing, so the run does not open with that
+ * whole step; with `@maxFrameStep`, a long frame in the middle of a move
+ * advances it by the cap at most, so a busy page slows a move rather than
+ * making it jump.
  */
-import { Choreo } from '@cardstack/choreo';
+import { Choreo, type ChoreoContext } from '@cardstack/choreo';
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { run } from '@ember/runloop';
 import { render, settled } from '@ember/test-helpers';
@@ -21,6 +22,11 @@ import { module, test } from 'qunit';
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
 
 let stage: Stage | undefined;
+let ctx: ChoreoContext | undefined;
+const grab = (c: ChoreoContext) => {
+  ctx = c;
+  return '';
+};
 const seize = (s: Stage) => {
   stage = s;
 };
@@ -46,6 +52,7 @@ class Stage extends Component<{
       @maxFrameStep={{@maxFrameStep}}
       as |c|
     >
+      {{grab c}}
       <div style={{this.aboveStyle}}></div>
       <div
         data-box
@@ -85,9 +92,10 @@ module('Integration | choreo | run clock', function (hooks) {
 
   hooks.afterEach(() => {
     stage = undefined;
+    ctx = undefined;
   });
 
-  test('the first frame a run paints shows where it starts', async function (assert) {
+  test("a run's clock advances nothing on the first frame it paints", async function (assert) {
     await render(<template><Stage @seize={{seize}} /></template>);
     await nextFrame();
     // the frame loop's last frame is long gone: its next delta is the cap
@@ -95,9 +103,13 @@ module('Integration | choreo | run clock', function (hooks) {
     stage!.above = 200;
     await nextFrame();
     await nextFrame();
+    let time = ctx!.run!.time;
+    // the run has ticked once: that first tick paints where the run starts
+    // and advances nothing. A first tick that took the frame loop's delta
+    // would read a whole frame (or up to 40 ms after a long one).
     assert.true(
-      offset() < -180,
-      `one frame in, the box has barely left its start (${offset().toFixed(1)}px of -200)`,
+      time < 0.008,
+      `two frames in, the run's clock reads ${(time * 1000).toFixed(1)} ms`,
     );
     await settled();
   });

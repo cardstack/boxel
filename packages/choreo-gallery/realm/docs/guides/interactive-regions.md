@@ -33,6 +33,8 @@ A beacon solves a different problem: it lends geometry without transferring iden
 
 Make the data change that transfers the item as one coherent application operation. If removal and insertion happen in unrelated later turns, the system may no longer see the same pairing opportunity. Read the far-match demo alongside its contract tests when implementing a multi-panel transfer, especially if an enclosing region also moves.
 
+A region over a long scrolling list can pass `@inView={{true}}`. It then measures and animates only the participants inside the nearest vertical scroller's view, or within `@inViewMargin` views of it (default 1). The rest are left to layout, and a participant that comes near the view, or leaves it, counts as neither an arrival nor a removal. A pass that moves something farther than the margin is a jump: it lands as layout puts it, with no animation. A page with many regions of which few can change at once can also keep the others `@idle`, so they sit render passes out.
+
 Some state that a pass changes is not markup. A scroll position is the usual example: a list that follows new content moves its scroll offset in the same pass as the content. `registerSettle(fn)` registers a function that runs after the pass's mounts and before any region measures, so that state lands first and every region measures the page as the reader will see it. An element that the scroll kept still then reads as not moved. Settlers run in registration order, and the call returns the function that removes the settler.
 
 ## Verifying Independence

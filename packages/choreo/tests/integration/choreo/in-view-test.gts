@@ -23,23 +23,26 @@ const seize = (s: Stage) => {
 const ROWS = Array.from({ length: 40 }, (_, i) => i);
 
 class Stage extends Component<{
-  Args: { idle?: boolean; seize: (self: Stage) => void };
+  Args: { idle?: boolean; inView?: boolean; seize: (self: Stage) => void };
 }> {
   @tracked above = 0;
   @tracked rows = ROWS;
   constructor(
     owner: unknown,
-    args: { idle?: boolean; seize: (self: Stage) => void },
+    args: { idle?: boolean; inView?: boolean; seize: (self: Stage) => void },
   ) {
     super(owner as never, args as never);
     args.seize(this);
+  }
+  get inView() {
+    return this.args.inView ?? true;
   }
   get aboveStyle() {
     return `height:${this.above}px`;
   }
   <template>
     <div data-scroller style='height:200px;overflow-y:auto'>
-      <Choreo @inView={{true}} @idle={{@idle}} as |c|>
+      <Choreo @inView={{this.inView}} @idle={{@idle}} as |c|>
         <div style={{this.aboveStyle}}></div>
         {{#each this.rows as |row|}}
           <div
@@ -102,7 +105,7 @@ module('Integration | choreo | in view', function (hooks) {
     await settled();
   });
 
-  test('rows that arrived while the region sat out are not played on waking', async function (assert) {
+  test('a region that starts idle does not play its first rows as arrivals on waking', async function (assert) {
     class Host {
       @tracked idle = true;
     }
@@ -118,6 +121,24 @@ module('Integration | choreo | in view', function (hooks) {
       '1',
       'the first render is not an arrival',
     );
+    await settled();
+  });
+
+  test('switched on after the first render, it wires the rows near the view', async function (assert) {
+    class Host {
+      @tracked inView = false;
+    }
+    const host = new Host();
+    await render(
+      <template><Stage @seize={{seize}} @inView={{host.inView}} /></template>,
+    );
+    host.inView = true;
+    await settled();
+    stage!.above = 60;
+    await nextFrame();
+    await nextFrame();
+    assert.true(moving(0), 'a row in view glides');
+    assert.false(moving(30), 'a row far below is not wired');
     await settled();
   });
 });

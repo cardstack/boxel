@@ -6,8 +6,9 @@
  * Measured after the settle, the box has not moved, so it gets no motion.
  * Without the settle, the same change moves it, and the region animates it.
  */
-import { Choreo, registerSettle } from '@cardstack/choreo';
+import { Choreo, type ChoreoContext, registerSettle } from '@cardstack/choreo';
 import { setupChoreo } from '@cardstack/choreo/test-support';
+import type { TOC } from '@ember/component/template-only';
 import { render, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -22,11 +23,16 @@ const seize = (s: Stage) => {
   stage = s;
 };
 
-class Stage extends Component<{ Args: { seize: (self: Stage) => void } }> {
+class Stage extends Component<{
+  Args: { grab?: (c: ChoreoContext) => string; seize: (self: Stage) => void };
+}> {
   @tracked above = 0;
   // renders outside every participant: a pass that changes nothing else
   @tracked noise = 0;
-  constructor(owner: unknown, args: { seize: (self: Stage) => void }) {
+  constructor(
+    owner: unknown,
+    args: { grab?: (c: ChoreoContext) => string; seize: (self: Stage) => void },
+  ) {
     super(owner as never, args as never);
     args.seize(this);
   }
@@ -39,6 +45,7 @@ class Stage extends Component<{ Args: { seize: (self: Stage) => void } }> {
       style='height:120px;overflow-y:auto;overflow-anchor:none'
     >
       <Choreo class='stage' style='position:relative' as |c|>
+        {{#if @grab}}{{@grab c}}{{/if}}
         <div style={{this.aboveStyle}}></div>
         <div
           data-box
@@ -57,6 +64,21 @@ function moving(): boolean {
   let transform = getComputedStyle(box()).transform;
   return transform !== 'none' && transform !== '';
 }
+let ctx: ChoreoContext | undefined;
+const grab = (c: ChoreoContext) => {
+  ctx = c;
+  return '';
+};
+
+/** the settle stage, inside a second scroller around it */
+const Nested: TOC<{ Args: { seize: (self: Stage) => void } }> = <template>
+  <div data-outer style='height:150px;overflow-y:auto'>
+    <div style='height:60px'></div>
+    <Stage @seize={{@seize}} @grab={{grab}} />
+    <div style='height:600px'></div>
+  </div>
+</template>;
+
 function box(): HTMLElement {
   return document.querySelector('[data-box]') as HTMLElement;
 }
@@ -127,6 +149,25 @@ module('Integration | choreo | settle', function (hooks) {
     stage!.above = 100;
     await new Promise((resolve) => requestAnimationFrame(resolve));
     assert.true(moving(), 'the region animates the box from where it was');
+    await settled();
+  });
+
+  test('a scroll of a scroller around the region does not replace its run', async function (assert) {
+    await render(<template><Nested @seize={{seize}} /></template>);
+    stage!.above = 100;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    assert.true(moving(), 'the box is in flight');
+    let first = ctx?.run;
+    (document.querySelector('[data-outer]') as HTMLElement).scrollTop = 30;
+    stage!.noise++;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    assert.strictEqual(
+      ctx?.run,
+      first,
+      'the pass after the outer scroll keeps the run in flight',
+    );
+    ctx = undefined;
     await settled();
   });
 });

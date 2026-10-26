@@ -382,12 +382,14 @@ function reducesMotion(root: Element): boolean {
   );
 }
 
-/**
- * The barrier books one post-render callback for every region taking part in a
- * pass. `joinPass(this)` is where the region's PassHost contract (measurePass /
- * finishPass) is type-checked — it is not on the class, because a `.gts` class
- * header cannot carry two `implements` clauses through the build.
- */
+/** whether an element scrolls its content on either axis */
+function scrolls(el: Element): boolean {
+  const { overflowX, overflowY } = getComputedStyle(el);
+  return [overflowX, overflowY].some(
+    (o) => o === 'auto' || o === 'scroll' || o === 'overlay',
+  );
+}
+
 /** the nearest ancestor that scrolls vertically: what `@inView` calls the view */
 function scrollerOf(el: Element): HTMLElement | null {
   for (let p = el.parentElement; p; p = p.parentElement) {
@@ -403,6 +405,12 @@ function scrollerOf(el: Element): HTMLElement | null {
   return null;
 }
 
+/**
+ * The barrier books one post-render callback for every region taking part in a
+ * pass. `joinPass(this)` is where the region's PassHost contract (measurePass /
+ * finishPass) is type-checked — it is not on the class, because a `.gts` class
+ * header cannot carry two `implements` clauses through the build.
+ */
 setPassScheduler((run) => postRender(run));
 setBeforeMeasure(() => flushPendingMounts());
 
@@ -436,10 +444,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private arrived = new Set<ChoreoNode>();
   /** destroyed before the pass that removed them has been processed */
   private claimed = new Set<ChoreoNode>();
-  /** removed participants this region is keeping alive in its orphan layer */
   /** every beacon name this region's score has read, so a pass measures
    *  those beacons and not the whole page's */
   readonly beaconNames = new Set<string>();
+  /** removed participants this region is keeping alive in its orphan layer */
   private orphans = new Set<ChoreoNode>();
   /** participants whose Presence is letting them go: removed once, not on every pass while they leave */
   private leaving = new Set<ChoreoNode>();
@@ -597,6 +605,35 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     this.viewObserver.observe(el);
   }
 
+  /**
+   * `@inView` can change after participants registered: switched on, it
+   * observes every current participant and wires the ones already near the
+   * view now (the observer reports only after the next frame); switched off,
+   * it lets the observer go and wires everything again.
+   */
+  private syncViewWatch() {
+    if (this.args.inView && !this.viewObserver) {
+      for (const node of this.participants) {
+        this.watchView(node);
+      }
+      if (this.viewObserver) {
+        const near = this.nearViewBand();
+        for (const node of this.participants) {
+          const r = node.element?.getBoundingClientRect();
+          if (r && r.bottom >= near.top && r.top <= near.bottom) {
+            this.nearView.add(node);
+          }
+        }
+      }
+    } else if (!this.args.inView && this.viewObserver) {
+      this.viewObserver.disconnect();
+      this.viewObserver = undefined;
+      this.viewRoot = null;
+      this.nearView.clear();
+      this.flying.clear();
+    }
+  }
+
   private unwatchView(node: ChoreoNode) {
     this.nearView.delete(node);
     if (node.element) {
@@ -649,6 +686,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     }
     if (!this.passPending) {
       this.passPending = true;
+      this.syncViewWatch();
       this.snapshot();
       // every region announces here, while Glimmer is still rendering, so the
       // barrier knows the whole cast before anybody measures
@@ -1230,16 +1268,21 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       );
     }
     // A scroll moves every participant in page space and none of them in
-    // the offsets above: a region inside a scroller that followed new
-    // content mid-run read as "nothing changed", the pass was declined, and
-    // the follow landed in one frame. The scroll offsets of the region's
-    // ancestors are part of where its participants stand. (This is not the
-    // page above reflowing, which the walk above keeps out.)
+    // the offsets above, so the scroll offset of the scroller the region
+    // sits in is part of where its participants stand: a follow settled into
+    // a pass mid-run is a real move, and the run is recompiled to carry it.
+    // The walk stops at that scroller (the document's own scroll counts only
+    // when no element scroller holds the region), so scrolling an outer
+    // scroller or the page around it does not cancel the region's runs, for
+    // the same reason the offset walk above stops at the region's edge.
     let sx = 0;
     let sy = 0;
     for (let a = root?.parentElement; a; a = a.parentElement) {
       sx += a.scrollLeft;
       sy += a.scrollTop;
+      if (a !== document.documentElement && scrolls(a)) {
+        break;
+      }
     }
     parts.push(`scroll@${Math.round(sx)},${Math.round(sy)}`);
     return parts.join('|');
