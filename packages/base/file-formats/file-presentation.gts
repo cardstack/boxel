@@ -139,7 +139,13 @@ export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
       let objectURL = URL.createObjectURL(await response.blob());
       let save = document.createElement('a');
       save.href = objectURL;
-      save.download = element.getAttribute('download') ?? '';
+      // A blob: URL has no meaningful name of its own, so a nameless file
+      // falls back to the last segment of its URL rather than a random id.
+      save.download =
+        element.getAttribute('download') ||
+        decodeURIComponent(
+          new URL(element.href).pathname.split('/').pop() ?? '',
+        );
       save.hidden = true;
       document.body.append(save);
       save.click();
