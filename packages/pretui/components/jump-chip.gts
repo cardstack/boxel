@@ -1,5 +1,6 @@
 // Pretui — JumpChip: scroll orientation for a growing stream, plus the scrollEdge measurement modifier it pairs with.
 import Component from '@glimmer/component';
+import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 
@@ -106,16 +107,7 @@ export class JumpChip extends Component<JumpChipSignature> {
         data-test-pretui-jump-chip-button
         {{on 'click' this.jump}}
       >
-        <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'>
-          <path
-            d='M12 5v14M6 13l6 6 6-6'
-            fill='none'
-            stroke='currentColor'
-            stroke-width='2.2'
-            stroke-linecap='round'
-            stroke-linejoin='round'
-          />
-        </svg>
+        <ArrowDownIcon width='14' height='14' aria-hidden='true' />
         <span>{{this.label}}</span>
       </button>
     </div>
@@ -127,7 +119,7 @@ export class JumpChip extends Component<JumpChipSignature> {
         .pretui-jump {
           position: absolute;
           inset-inline: 0;
-          bottom: var(--pretui-jump-offset, 12px);
+          bottom: var(--pretui-jump-offset, var(--step-12, 12px));
           display: flex;
           justify-content: center;
           pointer-events: none;
@@ -135,16 +127,16 @@ export class JumpChip extends Component<JumpChipSignature> {
         }
         .pretui-jump[data-direction='up'] {
           bottom: auto;
-          top: var(--pretui-jump-offset, 12px);
+          top: var(--pretui-jump-offset, var(--step-12, 12px));
         }
         .pretui-jump-btn {
           display: inline-flex;
           align-items: center;
-          gap: 7px;
-          min-height: 30px;
-          padding: 0 13px;
+          gap: 6px;
+          min-height: 28px;
+          padding: 0 var(--step-12, 12px);
           border: 0;
-          border-radius: 999px;
+          border-radius: var(--round-row, 8px);
           background: var(--card);
           box-shadow: var(
             --pretui-shadow-overlay,
@@ -152,8 +144,11 @@ export class JumpChip extends Component<JumpChipSignature> {
             0 8px 28px rgb(0 0 0 / 0.18)
           );
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
-          font-weight: 500;
+          font-size: var(--type-ui, 12.5px);
+          line-height: var(--leading-ui, 18px);
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+          white-space: nowrap;
           color: var(--foreground);
           cursor: pointer;
           pointer-events: auto;
@@ -178,7 +173,7 @@ export class JumpChip extends Component<JumpChipSignature> {
             visibility 0s linear 220ms;
         }
         .pretui-jump-btn:hover {
-          background: var(--hover, var(--boxel-100));
+          background: var(--hover, var(--inset));
         }
         .pretui-jump-btn:focus-visible {
           outline: 2px solid var(--ring);
@@ -188,29 +183,15 @@ export class JumpChip extends Component<JumpChipSignature> {
           width: 13px;
           height: 13px;
           flex: none;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--ink-3, var(--subtle-foreground, var(--muted-foreground)));
         }
         .pretui-jump[data-direction='up'] .pretui-jump-btn > svg {
           transform: rotate(180deg);
         }
-        /* news is never colour alone — the count is in the label */
-        .pretui-jump[data-news] .pretui-jump-btn {
-          background: color-mix(
-            in oklch,
-            var(--primary) 12%,
-            var(--card)
-          );
-          box-shadow:
-            0 0 0 1px
-              color-mix(in oklch, var(--primary) 45%, var(--border)),
-            0 8px 28px rgb(0 0 0 / 0.18);
-        }
+        /* news is never colour alone — the count is in the label; the
+           arrow (the mark) takes the live state, the chip stays the card */
         .pretui-jump[data-news] .pretui-jump-btn > svg {
-          color: color-mix(
-            in oklch,
-            var(--foreground) 18%,
-            var(--primary)
-          );
+          color: var(--state-live, var(--primary));
         }
         @media (any-pointer: coarse) {
           .pretui-jump-btn {

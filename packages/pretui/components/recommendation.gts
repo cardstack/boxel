@@ -5,6 +5,7 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { guidFor } from '@ember/object/internals';
 import { Collapse } from '../internal/agentic-chat';
+import CheckIcon from '@cardstack/boxel-icons/check';
 import { Button } from './button';
 import { Meter } from './meter';
 
@@ -38,6 +39,9 @@ export interface RecommendationOption {
 
 export interface RecommendationSignature {
   Args: {
+    /** 'card' (default): its own raised surface. 'plain': no surface of its
+     * own, for a place that already frames it, such as a tool row */
+    surface?: 'card' | 'plain';
     /** what is being decided */
     question: string;
     /** the options, best first */
@@ -76,7 +80,9 @@ export class Recommendation extends Component<RecommendationSignature> {
     return this.args.selectedKey ?? this.innerKey ?? this.options[0]?.key ?? '';
   }
   get active(): RecommendationOption | undefined {
-    return this.options.find((o) => o.key === this.activeKey) ?? this.options[0];
+    return (
+      this.options.find((o) => o.key === this.activeKey) ?? this.options[0]
+    );
   }
   get others(): RecommendationOption[] {
     return this.options.filter((o) => o.key !== this.activeKey);
@@ -125,6 +131,7 @@ export class Recommendation extends Component<RecommendationSignature> {
   <template>
     <div
       class='pretui-reco'
+      data-surface={{if @surface @surface 'card'}}
       data-accepted={{if this.accepted 'true'}}
       data-test-pretui-recommendation
       ...attributes
@@ -194,11 +201,16 @@ export class Recommendation extends Component<RecommendationSignature> {
           {{/if}}
           <Button
             @size='s'
-            @tone={{if this.accepted 'success' 'primary'}}
+            @tone={{if this.accepted 'neutral' 'primary'}}
+            @appearance={{if this.accepted 'plain' 'accent'}}
             @disabled={{unless this.active true}}
             data-test-pretui-recommendation-accept
             {{on 'click' this.accept}}
-          >{{this.acceptLabel}}</Button>
+          >{{#if this.accepted}}<CheckIcon
+                width='14'
+                height='14'
+                aria-hidden='true'
+              />{{/if}}{{this.acceptLabel}}</Button>
         </span>
       </div>
     </div>
@@ -208,7 +220,7 @@ export class Recommendation extends Component<RecommendationSignature> {
         .pretui-reco {
           width: 100%;
           overflow: hidden;
-          border-radius: var(--radius-surface, 14px);
+          border-radius: var(--round-surface, var(--radius-surface, 12px));
           background: var(--card);
           box-shadow: var(
             --pretui-shadow-card,
@@ -217,33 +229,50 @@ export class Recommendation extends Component<RecommendationSignature> {
           );
           container-type: inline-size;
         }
-        .pretui-reco-head {
-          padding: 12px 14px;
+        .pretui-reco[data-surface='plain'] {
+          border-radius: 0;
+          background: none;
+          box-shadow: none;
         }
+        .pretui-reco[data-surface='plain'] .pretui-reco-head {
+          padding: 0 0 var(--step-8, 8px);
+        }
+        .pretui-reco[data-surface='plain'] .pretui-reco-foot {
+          padding: var(--step-8, 8px) 0 2px;
+          background: none;
+        }
+        .pretui-reco-head {
+          padding: var(--step-12, 12px);
+        }
+        /* the card's title: reading size in 600, no tracking */
         .pretui-reco-question {
           margin: 0;
-          font-size: 13px;
+          font-size: var(--type-read, 14px);
+          line-height: var(--leading-read, 22px);
           font-weight: 600;
-          letter-spacing: -0.01em;
+          color: var(--foreground);
         }
+        /* the recommendation is answer prose: reading type, full ink, the
+           reading measure */
         .pretui-reco-body {
-          margin-top: 6px;
+          margin-top: var(--step-4, 4px);
           min-height: 40px;
-          max-width: 62ch;
-          font-size: var(--text-ui-md, 12.5px);
-          line-height: 1.6;
-          color: var(--muted-foreground);
+          max-inline-size: var(--measure-read, 68ch);
+          font-size: var(--type-read, 14px);
+          line-height: var(--leading-read, 22px);
+          color: var(--foreground);
         }
         .pretui-reco-drawer {
           background: var(--inset, var(--boxel-100));
           box-shadow: 0 -1px 0 var(--border);
-          padding: 8px;
+          padding: var(--step-8, 8px);
         }
         .pretui-reco-drawer-cap {
-          margin: 0 0 4px;
-          padding: 0 8px;
-          font-size: 11px;
-          font-weight: 500;
+          margin: 0 0 var(--step-4, 4px);
+          padding: 0 var(--step-8, 8px);
+          font-size: var(--type-caption, 11px);
+          line-height: var(--leading-caption, 16px);
+          font-weight: 400;
           color: var(--ink-3, var(--boxel-400));
         }
         .pretui-reco-drawer ul {
@@ -255,14 +284,15 @@ export class Recommendation extends Component<RecommendationSignature> {
           display: flex;
           width: 100%;
           align-items: center;
-          gap: 10px;
-          min-height: 34px;
-          padding: 6px 8px;
+          gap: var(--step-8, 8px);
+          min-height: 32px;
+          padding: var(--step-4, 4px) var(--step-8, 8px);
           border: 0;
-          border-radius: 8px;
+          border-radius: var(--round-row, 8px);
           background: none;
           font: inherit;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--type-ui, 12.5px);
+          line-height: var(--leading-ui, 18px);
           text-align: left;
           color: var(--foreground);
           cursor: pointer;
@@ -285,16 +315,16 @@ export class Recommendation extends Component<RecommendationSignature> {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
+          gap: var(--step-8, 8px);
           flex-wrap: wrap;
-          padding: 8px 12px;
+          padding: var(--step-8, 8px) var(--step-12, 12px);
           background: var(--inset, var(--boxel-100));
           box-shadow: 0 -1px 0 var(--border);
         }
         .pretui-reco-foot-actions {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
+          gap: var(--step-8, 8px);
           margin-left: auto;
         }
         .pretui-sr {

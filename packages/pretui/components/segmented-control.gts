@@ -104,7 +104,9 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
         .pretui-seg {
           /* the rail's gap, padding and radius offset move together, so the
              pill's corner stays concentric with the rail's */
-          --pretui-seg-inset: var(--boxel-sp-6xs);
+          /* the kit's own 2px, not a host spacing scale, so the control
+             draws the same in every host */
+          --pretui-seg-inset: 2px;
           /* the active label's weight; the hidden copy below must match it */
           --pretui-seg-active-weight: 600;
           /* Button's corner, shared by the segments and the pill; the rail
@@ -164,7 +166,10 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
         }
         /* the label sits on the pill's --card face */
         .pretui-seg-item[data-state='active'] {
-          color: var(--card-foreground);
+          color: var(
+            --pretui-seg-active-ink,
+            var(--card-foreground, var(--foreground))
+          );
           font-weight: var(--pretui-seg-active-weight);
         }
         /* a hidden bold copy under the label holds every segment at its bold

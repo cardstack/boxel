@@ -420,6 +420,9 @@ export interface CodeBlockSignature {
     highlight?: string | number[];
     /** soft-wrap long lines instead of scrolling sideways */
     wrap?: boolean;
+    /** 'compact': a slim header, 11px type and tight padding, for code inside
+     * a transcript row. Default 'regular' */
+    density?: 'regular' | 'compact';
     /** scroll ceiling, in lines. The source this replaced had none, so a
      * five-hundred-line snippet rendered five hundred lines tall. */
     maxLines?: number;
@@ -580,6 +583,7 @@ export class CodeBlock extends Component<CodeBlockSignature> {
     <figure
       class='pretui-code'
       data-wrap={{if @wrap 'true' 'false'}}
+      data-density={{if @density @density 'regular'}}
       data-gutter={{if this.showGutter 'true' 'false'}}
       style={{this.gutterStyle}}
       data-test-pretui-code
@@ -662,6 +666,24 @@ export class CodeBlock extends Component<CodeBlockSignature> {
           box-shadow: var(--pretui-shadow-card, 0 0 0 1px var(--border));
           overflow: hidden;
           container-type: inline-size;
+        }
+        /* compact: code inside a row is a glance, not a read: small, short,
+           and scrolled */
+        .pretui-code[data-density='compact'] {
+          --pretui-code-size: 11px;
+          --pretui-code-leading: 1.45;
+        }
+        .pretui-code[data-density='compact'] .pretui-code-head {
+          padding: 2px var(--space-2, 6px) 2px var(--space-3, 8px);
+        }
+        .pretui-code[data-density='compact'] .pretui-code-body {
+          padding-block: var(--space-1, 4px);
+        }
+        .pretui-code[data-density='compact'] .pretui-code-body[data-clamped='true'] {
+          max-height: calc(
+            var(--pretui-code-max, 24) * var(--pretui-code-leading, 1.6) *
+              var(--pretui-code-size, 12px) + var(--space-1, 4px) * 2
+          );
         }
         .pretui-code-head {
           display: flex;
