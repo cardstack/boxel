@@ -16,8 +16,6 @@
 // output carries the mounted body and nothing waits on a frame that never
 // comes. A microtask rather than a synchronous call, because the caller is
 // usually mid-render and must not write tracked state there.
-//
-// Adapted from opencode `packages/session-ui/src/components/basic-tool.tsx`.
 
 interface Entry {
   active: boolean;

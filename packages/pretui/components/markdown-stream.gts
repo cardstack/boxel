@@ -128,12 +128,17 @@ export interface MarkdownStreamSignature {
 }
 
 interface RenderedEntry {
+  /** the src the HTML on screen was rendered from */
   src: string;
   html: string;
+  /** the request number the HTML on screen came from: a result from an
+   * older request than this one is dropped */
+  seq: number;
   /** reused while the HTML is unchanged, so Glimmer leaves the DOM (and any
    * selection in it) alone and the link scan does not re-run */
   safe?: SafeString;
-  /** the src a pending promise was asked for; a stale result is dropped */
+  /** the src the newest pending promise was asked for, so the same src is
+   * not requested twice */
   requested?: string;
 }
 
@@ -315,6 +320,8 @@ export class MarkdownStream extends Component<MarkdownStreamSignature> {
   @tracked refSlots: RefSlot[] = [];
   private projection: Projection | undefined;
   private rendered = new Map<string, RenderedEntry>();
+  /** numbers each render request, so results apply in request order */
+  private renderSeq = 0;
 
   get streaming(): boolean {
     return Boolean(this.args.streaming);
@@ -419,8 +426,12 @@ export class MarkdownStream extends Component<MarkdownStreamSignature> {
   }
 
   /** The block's HTML, rendering only when its source changed. An async
-   * renderer keeps the previous HTML on screen until the new one lands, and
-   * a result for a source that has since changed again is discarded. */
+   * renderer keeps the previous HTML on screen until a result lands. Every
+   * request is numbered, and a result replaces the HTML on screen whenever
+   * it comes from a newer request than that HTML did, even when a still
+   * newer request is pending: under a steady stream with a slow renderer,
+   * the tail then advances with each result instead of waiting for the
+   * stream to pause. A result older than the HTML on screen is dropped. */
   private htmlFor(
     key: string,
     blockSrc: string,
@@ -438,9 +449,10 @@ export class MarkdownStream extends Component<MarkdownStreamSignature> {
       return entry.html;
     }
     let render = this.args.render;
+    let seq = ++this.renderSeq;
     if (!render) {
       let html = renderPlain(blockSrc);
-      this.rendered.set(key, { src, html });
+      this.rendered.set(key, { src, html, seq });
       return html;
     }
     let result = render({
@@ -451,32 +463,33 @@ export class MarkdownStream extends Component<MarkdownStreamSignature> {
       definitions,
     });
     if (typeof result === 'string') {
-      this.rendered.set(key, { src, html: result });
+      this.rendered.set(key, { src, html: result, seq });
       return result;
     }
     let previous = entry?.html ?? '';
     this.rendered.set(key, {
       src: entry?.src ?? '',
       html: previous,
+      seq: entry?.seq ?? 0,
+      safe: entry?.safe,
       requested: src,
     });
-    result.then(
-      (html) => {
-        let current = this.rendered.get(key);
-        if (!current || current.requested !== src || this.isDestroyed) {
-          return; // superseded
-        }
-        this.rendered.set(key, { src, html });
-        this.version++;
-      },
-      () => {
-        let current = this.rendered.get(key);
-        if (current?.requested === src && !this.isDestroyed) {
-          this.rendered.set(key, { src, html: renderPlain(blockSrc) });
-          this.version++;
-        }
-      },
-    );
+    let land = (html: string) => {
+      let current = this.rendered.get(key);
+      if (!current || seq <= current.seq || this.isDestroyed) {
+        return; // the block is gone, or newer HTML is already on screen
+      }
+      this.rendered.set(key, {
+        src,
+        html,
+        seq,
+        safe: current.safe,
+        // a newer request still pending stays pending
+        requested: current.requested === src ? undefined : current.requested,
+      });
+      this.version++;
+    };
+    result.then(land, () => land(renderPlain(blockSrc)));
     return previous;
   }
 
@@ -610,8 +623,8 @@ export class MarkdownStream extends Component<MarkdownStreamSignature> {
       class='pretui-md'
       aria-busy={{if this.streaming 'true'}}
       data-streaming={{if this.streaming 'true' 'false'}}
-      data-test-pretui-markdown-stream
       {{listen this.onClick this.onKeyDown}}
+      data-test-pretui-markdown-stream
       ...attributes
     >
       <MarkdownSurface class='pretui-md-prose'>
@@ -672,9 +685,9 @@ export class MarkdownStream extends Component<MarkdownStreamSignature> {
               data-scroll-anchor
               data-kind='text'
               data-mode={{block.mode}}
-              data-test-pretui-markdown-block='text'
               {{linkified this.linkify block.html block.key}}
               {{caretAtEnd block.html block.caret}}
+              data-test-pretui-markdown-block='text'
             >{{block.html}}</div>
           {{/if}}
         {{/each}}
@@ -705,16 +718,27 @@ export class MarkdownStream extends Component<MarkdownStreamSignature> {
         .pretui-md-block {
           min-width: 0;
         }
-        /* each block wraps the HTML its renderer returned; the block itself
-           adds no spacing, so Prose's own margins between paragraphs hold */
-        .pretui-md-block > :deep(:last-child) {
-          margin-block-end: 0;
+        /* Each block wraps the HTML its renderer returned and adds no
+           spacing of its own: the block has no padding or border, so its
+           children's margins collapse through it and Prose's margins
+           between paragraphs and around headings hold exactly as in a
+           static render. Prose zeroes the outer edges of its own first and
+           last child, which here are blocks, so the same edges are zeroed
+           one level down. */
+        .pretui-md-block:first-child > :deep(:first-child) {
+          margin-block-start: 0;
         }
-        .pretui-md-block + .pretui-md-block {
-          margin-block-start: var(--boxel-sp-sm);
+        .pretui-md-block:last-child > :deep(:last-child) {
+          margin-block-end: 0;
         }
         .pretui-md-block[data-kind='code'] {
           margin-block: var(--boxel-sp-sm);
+        }
+        .pretui-md-block[data-kind='code']:first-child {
+          margin-block-start: 0;
+        }
+        .pretui-md-block[data-kind='code']:last-child {
+          margin-block-end: 0;
         }
         /* an unconfirmed relative link reads as the plain text it is */
         .pretui-md-block :deep([data-markdown-link='pending']) {
@@ -737,10 +761,10 @@ export class MarkdownStream extends Component<MarkdownStreamSignature> {
           display: inline-block;
           width: 0.5em;
           height: 1em;
-          margin-inline-start: 2px;
+          margin-inline-start: var(--boxel-sp-6xs);
           vertical-align: text-bottom;
-          border-radius: 1px;
-          background: color-mix(in oklch, var(--foreground) 60%, transparent);
+          border-radius: var(--boxel-border-radius-2xs);
+          background-color: color-mix(in oklch, var(--foreground) 60%, transparent);
           animation: pretui-md-caret 1s steps(2, start) infinite;
         }
         @keyframes pretui-md-caret {

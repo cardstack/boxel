@@ -69,13 +69,13 @@ export class DiffStat extends Component<DiffStatSignature> {
         .pretui-diffstat {
           display: inline-flex;
           align-items: center;
-          gap: 5px;
+          gap: var(--boxel-sp-3xs);
           font-family: var(--font-mono);
           font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
         }
         .pretui-diffstat-n[data-op='add'] {
-          color: var(--success, var(--boxel-highlight));
+          color: var(--success-ink);
         }
         .pretui-diffstat-n[data-op='del'] {
           color: var(--destructive-ink);
@@ -85,16 +85,16 @@ export class DiffStat extends Component<DiffStatSignature> {
           gap: 1px;
         }
         .pretui-diffstat-block {
-          width: 7px;
-          height: 7px;
-          border-radius: 1px;
-          background: var(--border-strong, var(--border));
+          width: 0.4375rem;
+          height: 0.4375rem;
+          border-radius: var(--boxel-border-radius-2xs);
+          background-color: var(--border-strong);
         }
         .pretui-diffstat-block[data-op='add'] {
-          background: var(--success, var(--boxel-highlight));
+          background-color: var(--success);
         }
         .pretui-diffstat-block[data-op='del'] {
-          background: var(--destructive);
+          background-color: var(--destructive);
         }
       }
     </style>

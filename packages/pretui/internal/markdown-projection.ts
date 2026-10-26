@@ -3,11 +3,8 @@
 // functions, no DOM, no markdown engine (Law 9): turning a block's markdown
 // into HTML is the caller's renderer's job. What this module decides is
 // where blocks begin and end, which of them are finished, and how to make a
-// half-written tail render sensibly.
-//
-// Adapted from opencode `packages/session-ui/src/components/markdown-stream.ts`,
-// which leans on marked's lexer for the split; this one is line-based so the
-// kit carries no parser.
+// half-written tail render sensibly. The split is line-based, so the kit
+// carries no markdown parser.
 
 export type BlockKind = 'text' | 'code' | 'directive';
 export type BlockMode = 'frozen' | 'live';
