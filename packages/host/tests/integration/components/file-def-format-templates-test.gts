@@ -1,5 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { click, find, settled } from '@ember/test-helpers';
+import { click, find, settled, waitFor } from '@ember/test-helpers';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -157,6 +157,22 @@ module('Integration | FileDef format templates', function (hooks) {
     } finally {
       URL.revokeObjectURL(sourceURL);
     }
+  });
+
+  test('a Download whose bytes cannot be fetched marks the link failed', async function (assert) {
+    let sourceURL = URL.createObjectURL(new Blob(['gone']));
+    URL.revokeObjectURL(sourceURL);
+    await renderCard(
+      loader,
+      makeFile({ id: sourceURL, url: sourceURL, sourceUrl: sourceURL }),
+      'isolated',
+    );
+    await click('[data-test-file-download]');
+    await waitFor('[data-test-file-download][data-download-state="failed"]');
+    assert
+      .dom('[data-test-file-download]')
+      .hasAttribute('title', 'Download failed. Click to try again.')
+      .doesNotHaveAttribute('aria-busy');
   });
 
   test('a file with no resource URL renders no download action', async function (assert) {

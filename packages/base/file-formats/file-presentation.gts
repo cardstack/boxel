@@ -110,7 +110,9 @@ export function downloadNameFor(
 // `Access-Control-Allow-Origin: *`, and the auth service worker carries the
 // session — and are saved through a `blob:` URL under the link's `download`
 // name. The anchor keeps its `href`, so modified clicks (new tab, new window)
-// and copy-link still work natively.
+// and copy-link still work natively. The whole body is read before the save
+// starts, so the link carries `data-download-state` — `pending` while the
+// bytes arrive, `failed` when they don't — for the views to style.
 export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
   let inFlight = false;
   let onClick = async (event: MouseEvent) => {
@@ -129,6 +131,8 @@ export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
     }
     inFlight = true;
     element.setAttribute('aria-busy', 'true');
+    element.dataset.downloadState = 'pending';
+    element.removeAttribute('title');
     try {
       let response = await fetch(element.href, {
         credentials: 'same-origin',
@@ -153,8 +157,11 @@ export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
       // The browser reads the blob when the download starts, not
       // synchronously on click, so the URL stays valid for a while after.
       setTimeout(() => URL.revokeObjectURL(objectURL), 60_000);
+      delete element.dataset.downloadState;
     } catch (error) {
       console.error(`Could not download ${element.href}`, error);
+      element.dataset.downloadState = 'failed';
+      element.title = 'Download failed. Click to try again.';
     } finally {
       inFlight = false;
       element.removeAttribute('aria-busy');

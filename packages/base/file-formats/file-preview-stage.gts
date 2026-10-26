@@ -317,6 +317,15 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
         padding: 5px 14px;
         line-height: 1.4;
       }
+      .gp-download[data-download-state='pending'] {
+        cursor: progress;
+        opacity: 0.6;
+      }
+      .gp-download[data-download-state='failed'] {
+        background: transparent;
+        border-color: var(--fd-warn, #e8710a);
+        color: var(--fd-warn, #e8710a);
+      }
       /* The glyph paints with `fill`, so tint it rather than setting `color`. */
       .warn-icon {
         fill: var(--fd-warn, #e8710a);
