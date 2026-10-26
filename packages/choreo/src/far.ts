@@ -105,14 +105,23 @@ export function setBeforeMeasure(fn: () => void) {
 
 /**
  * SETTLE: state that the pass implies but that is not markup, settled after
- * this pass's mounts and before any region measures. A scroll owner holds
- * its anchor here (StickToBottom's scroll anchoring protocol): a scroll
- * position is state, so it lands in the same pass as the change that moved
- * it, and every region measures the page as the reader will see it. An
- * element the scroll kept still then reads as not moved and gets no motion;
- * only what really moved on screen does.
+ * this pass's mounts and before any region measures. A scroll owner (a list
+ * that keeps its scroll at the newest content, or holds a row in place while
+ * rows above it change) holds its anchor here: a scroll position is state,
+ * so it lands in the same pass as the change that moved it, and every region
+ * measures the page as the reader will see it. An element the scroll kept
+ * still then reads as not moved and gets no motion; only what really moved
+ * on screen does.
  *
- * Settlers run in registration order. Returns the unregister function.
+ * A settler only runs inside a barrier, and a barrier runs only when a
+ * region joins a pass: with no region mounted, every region idle, or motion
+ * off, no settler runs. So the owner sets its scroll through its own path as
+ * well (on render or on resize, as it would with no Choreo on the page), and
+ * the settler only makes that happen before regions measure. State never
+ * depends on a settler (ADR 007 §1.1).
+ *
+ * Settlers run in registration order; one that throws is reported and the
+ * pass goes on. Returns the unregister function.
  */
 const settlers = new Set<() => void>();
 export function registerSettle(fn: () => void): () => void {
@@ -128,7 +137,15 @@ function runBarrier() {
   intents.clear();
   beforeMeasure();
   for (const settle of [...settlers]) {
-    settle();
+    // a settler is app code: one that throws must not keep the regions that
+    // joined this pass from measuring, or they would stay pending for good
+    try {
+      settle();
+    } catch (e) {
+      queueMicrotask(() => {
+        throw e;
+      });
+    }
   }
   const passes: Pass[] = [];
   for (const host of hosts) {

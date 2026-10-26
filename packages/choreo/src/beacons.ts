@@ -49,10 +49,11 @@ export function registerBeacon(name: string, element: Element): () => void {
  * Re-measured every pass, never cached: the trash can move without the list
  * rendering at all — a header that hides, a column that resizes, a scroll.
  *
- * A region passes the names its score asked for: a page can claim hundreds of
- * beacons (every chip a sheet may open from), and measuring each one in every
- * region on every pass cost seconds of layout reads in a long transcript.
- * Without `names`, every claimed beacon is measured.
+ * A region passes the names its score asked for, so a pass measures only
+ * those: a page can claim hundreds of beacons (every chip a sheet may open
+ * from), and each region measuring every one on every pass would cost a
+ * layout read per beacon per region. Without `names`, every claimed beacon
+ * is measured.
  */
 export function measureBeacons(
   root: DOMRect,

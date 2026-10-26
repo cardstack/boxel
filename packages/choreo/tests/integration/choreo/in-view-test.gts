@@ -23,13 +23,23 @@ const seize = (s: Stage) => {
 const ROWS = Array.from({ length: 40 }, (_, i) => i);
 
 class Stage extends Component<{
-  Args: { idle?: boolean; inView?: boolean; seize: (self: Stage) => void };
+  Args: {
+    idle?: boolean;
+    inView?: boolean;
+    inViewMargin?: number;
+    seize: (self: Stage) => void;
+  };
 }> {
   @tracked above = 0;
   @tracked rows = ROWS;
   constructor(
     owner: unknown,
-    args: { idle?: boolean; inView?: boolean; seize: (self: Stage) => void },
+    args: {
+      idle?: boolean;
+      inView?: boolean;
+      inViewMargin?: number;
+      seize: (self: Stage) => void;
+    },
   ) {
     super(owner as never, args as never);
     args.seize(this);
@@ -42,7 +52,12 @@ class Stage extends Component<{
   }
   <template>
     <div data-scroller style='height:200px;overflow-y:auto'>
-      <Choreo @inView={{this.inView}} @idle={{@idle}} as |c|>
+      <Choreo
+        @inView={{this.inView}}
+        @inViewMargin={{@inViewMargin}}
+        @idle={{@idle}}
+        as |c|
+      >
         <div style={{this.aboveStyle}}></div>
         {{#each this.rows as |row|}}
           <div
@@ -139,6 +154,30 @@ module('Integration | choreo | in view', function (hooks) {
     await nextFrame();
     assert.true(moving(0), 'a row in view glides');
     assert.false(moving(30), 'a row far below is not wired');
+    await settled();
+  });
+
+  test('a new margin widens what is wired', async function (assert) {
+    class Host {
+      @tracked margin = 0;
+    }
+    const host = new Host();
+    await render(
+      <template>
+        <Stage @seize={{seize}} @inViewMargin={{host.margin}} />
+      </template>,
+    );
+    await nextFrame();
+    await nextFrame();
+    host.margin = 2;
+    await settled();
+    await nextFrame();
+    await nextFrame();
+    stage!.above = 60;
+    await nextFrame();
+    await nextFrame();
+    assert.true(moving(7), 'a row within two views below glides in');
+    assert.false(moving(30), 'a row far below is still not wired');
     await settled();
   });
 });

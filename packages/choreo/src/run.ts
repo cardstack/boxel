@@ -383,6 +383,18 @@ interface Track {
   wire?: SVGPathElement;
 }
 
+let warnedPrivateFields = false;
+/** @maxFrameStep reads motion-dom's private animation fields; say once when they are gone */
+function warnPrivateFieldsMoved() {
+  if (warnedPrivateFields) {
+    return;
+  }
+  warnedPrivateFields = true;
+  console.warn(
+    '@cardstack/choreo: motion-dom no longer exposes the animation fields @maxFrameStep reads (_animation, startTime, holdTime); a long frame will skip tweens ahead instead of slowing them',
+  );
+}
+
 export class ChoreoRun implements Run {
   cues: Cue[];
   velocities: Velocities = new Map();
@@ -869,19 +881,29 @@ export class ChoreoRun implements Run {
     if (!step) {
       return;
     }
-    // The first frame: an animation the render pass started took its start
+    // The first frame: an animation the render pass started takes its start
     // from motion-dom's clock, which holds one time for a whole task, so a
-    // pass late in a long render dated it back to the task's start and its
-    // first frame skipped that far (a send's follow lost a fifth of its
-    // travel before it showed). It starts from this frame instead.
+    // pass late in a long render would date it back to the task's start and
+    // its first frame would skip that far. Its start moves to this frame.
     // After that: the time past the cap since the last frame.
     for (const t of this.tracks) {
       for (const c of t.controls ?? []) {
         // the wrapper's resolved animation, read without the getter that
-        // flushes pending keyframes
+        // flushes pending keyframes. These are motion-dom's private fields
+        // (VENDORED.md lists them for a bump to check): past the first frame
+        // every control has resolved, so a control without them means the
+        // fields moved and the cap no longer reaches the tweens.
         const inner = (c as unknown as { _animation?: object })._animation as
           | { holdTime?: number | null; startTime?: number | null }
           | undefined;
+        if (
+          last !== undefined &&
+          (!inner ||
+            (!('animation' in inner) &&
+              !('startTime' in inner && 'holdTime' in inner)))
+        ) {
+          warnPrivateFieldsMoved();
+        }
         if (
           !inner ||
           'animation' in inner ||

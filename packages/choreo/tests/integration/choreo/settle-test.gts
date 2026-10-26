@@ -170,4 +170,34 @@ module('Integration | choreo | settle', function (hooks) {
     ctx = undefined;
     await settled();
   });
+
+  test('a settler that throws does not leave the region pending', async function (assert) {
+    await render(<template><Stage @seize={{seize}} /></template>);
+    let reported: unknown[] = [];
+    let onerror = window.onerror;
+    // the throw is reported on its own task; keep it out of QUnit's handler
+    window.onerror = (_message, _source, _line, _column, error) => {
+      reported.push(error);
+      return true;
+    };
+    try {
+      unregister = registerSettle(() => {
+        throw new Error('settler failed');
+      });
+      stage!.above = 100;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      assert.strictEqual(reported.length, 1, 'the error is reported');
+      assert.true(moving(), 'the region measured the pass and animates it');
+      unregister();
+      unregister = undefined;
+      await settled();
+      stage!.above = 0;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      assert.true(moving(), 'the next pass animates as well');
+      await settled();
+    } finally {
+      window.onerror = onerror;
+    }
+  });
 });

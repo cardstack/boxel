@@ -112,7 +112,7 @@ module('Integration | choreo | idle', function (hooks) {
   test('waking does not replay what arrived while the region sat out', async function (assert) {
     await render(<template><List /></template>);
     // the region has watched a pass: its next arrival would fade in
-    
+
     list!.idle = true;
     await settled();
     list!.rows = ['a', 'b'];

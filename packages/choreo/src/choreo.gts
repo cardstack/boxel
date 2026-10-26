@@ -569,6 +569,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private viewNodes = new WeakMap<Element, ChoreoNode>();
   private viewObserver?: IntersectionObserver;
   private viewRoot: HTMLElement | null = null;
+  /** the `@inViewMargin` the current observer was made with */
+  private viewMarginUsed?: number;
 
   private get viewMargin() {
     return this.args.inViewMargin ?? 1;
@@ -581,6 +583,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     }
     if (!this.viewObserver) {
       this.viewRoot = this.element ? scrollerOf(this.element) : null;
+      this.viewMarginUsed = this.viewMargin;
       this.viewObserver = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
@@ -606,12 +609,24 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   }
 
   /**
-   * `@inView` can change after participants registered: switched on, it
-   * observes every current participant and wires the ones already near the
-   * view now (the observer reports only after the next frame); switched off,
-   * it lets the observer go and wires everything again.
+   * `@inView` and `@inViewMargin` can change after participants registered:
+   * switched on (or given a new margin), the region observes every current
+   * participant and wires the ones already near the view now (the observer
+   * reports only after the next frame); switched off, it lets the observer
+   * go and wires everything again.
    */
   private syncViewWatch() {
+    if (
+      this.args.inView &&
+      this.viewObserver &&
+      this.viewMarginUsed !== this.viewMargin
+    ) {
+      // the observer's margin is fixed when it is made: a new margin makes a
+      // new observer
+      this.viewObserver.disconnect();
+      this.viewObserver = undefined;
+      this.nearView.clear();
+    }
     if (this.args.inView && !this.viewObserver) {
       for (const node of this.participants) {
         this.watchView(node);
