@@ -78,6 +78,11 @@ export interface PromptPasswordOptions {
    * than a quarter of the value is shown.
    */
   revealLast?: number;
+  /**
+   * Reveal nothing of a value this many characters long or shorter, where
+   * even a quarter of it is too much to show.
+   */
+  revealNoneAtOrBelow?: number;
   /** @internal The streams to read from and write to; tests pass their own. */
   input?: NodeJS.ReadStream;
   output?: NodeJS.WritableStream;
@@ -85,9 +90,18 @@ export interface PromptPasswordOptions {
 
 /**
  * The trailing characters of `value` that `revealLast` may show: at most
- * `revealLast`, and at most a quarter of the value.
+ * `revealLast`, at most a quarter of the value, and none of a value no longer
+ * than `revealNoneAtOrBelow` characters.
  */
-export function revealedSuffix(value: string, revealLast: number): string {
+export function revealedSuffix(
+  value: string,
+  revealLast: number,
+  revealNoneAtOrBelow = 0,
+): string {
+  let length = [...value].length;
+  if (length <= revealNoneAtOrBelow) {
+    return '';
+  }
   let count = Math.min(revealLast, Math.floor(value.length / 4));
   return count > 0 ? value.slice(-count) : '';
 }
@@ -147,7 +161,11 @@ export function promptPassword(
             cleanup();
             stdout.write('\n');
             const suffix = options.revealLast
-              ? revealedSuffix(password, options.revealLast)
+              ? revealedSuffix(
+                  password,
+                  options.revealLast,
+                  options.revealNoneAtOrBelow,
+                )
               : '';
             if (suffix) {
               stdout.write(

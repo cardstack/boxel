@@ -20,10 +20,8 @@ import {
 } from '../helpers/integration.ts';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import { addProfile, resolveEnvironment } from '../../src/commands/profile.ts';
-import {
-  addUserKey,
-  secureOriginForProfiles,
-} from '../../src/lib/secure-session.ts';
+import { secureOriginForProfiles } from '../../src/lib/secure-session.ts';
+import { addUserKey } from '../../src/lib/user-keys.ts';
 import { browserLogin } from '../../src/lib/sso-login.ts';
 import { requestLoginToken } from '../../src/lib/auth.ts';
 import { pull } from '../../src/commands/realm/pull.ts';
