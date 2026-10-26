@@ -377,9 +377,6 @@ test.describe('Room creation', () => {
   test('it opens latest room available (or creates new) when current room is deleted', async ({
     page,
   }) => {
-    // This test creates 3 rooms, sends messages, deletes all 3, then waits
-    // for auto-creation — needs more than the default 60s timeout.
-    test.setTimeout(120_000);
     await login(page, firstUser.username, firstUser.password, {
       url: appURL,
       openAiAssistant: true,

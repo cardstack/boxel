@@ -100,8 +100,11 @@ export default defineConfig({
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'retry-with-trace',
   },
-  // General timeout per test
-  timeout: 60000,
+  // General timeout per test. It is set here and not with a file-scope
+  // `test.setTimeout` in `tests/fixtures.ts`: a file-scope call applies only
+  // to the spec file that first imports the module in each worker, so every
+  // other spec in that worker silently kept the default.
+  timeout: 120_000,
 
   // For expect calls
   expect: {
