@@ -124,6 +124,7 @@ import {
   handlePasswordChange,
   handlePasswordSignIn,
   handleSecureOriginInfo,
+  resumePasswordChangeDeviceSweeps,
 } from './handlers/handle-secure-session.ts';
 import { SignInLimiter } from './lib/sign-in-limiter.ts';
 import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
@@ -333,6 +334,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${SECURE_SESSIONS_PATH}/password-change`,
     handlePasswordChange(args),
   );
+  resumePasswordChangeDeviceSweeps(args);
   router.post(
     KEY_WRITE_TICKETS_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
