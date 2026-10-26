@@ -19,8 +19,9 @@ exports.shorthands = undefined;
 //
 // Nullable, with no default and no backfill. A row a pass wrote before this
 // column existed already has its HTML rendered, so `prerendered_html.deps`
-// carries its rendered links. The GIN index backs the same jsonb containment
-// predicate the fan-out uses on `deps`.
+// carries its rendered links. Adding such a column is a catalog edit and is
+// instant; the GIN index the fan-out's containment predicate needs is built
+// by the next migration, concurrently.
 //
 // `boxel_index_pending` takes the column too: a commit copies every
 // production column out of the pending row.
@@ -30,11 +31,9 @@ exports.up = (pgm) => {
       relationship_deps: { type: 'jsonb' },
     });
   }
-  pgm.createIndex('boxel_index', 'relationship_deps', { method: 'gin' });
 };
 
 exports.down = (pgm) => {
-  pgm.dropIndex('boxel_index', 'relationship_deps', { method: 'gin' });
   for (let table of ['boxel_index', 'boxel_index_pending']) {
     pgm.dropColumn(table, 'relationship_deps');
   }
