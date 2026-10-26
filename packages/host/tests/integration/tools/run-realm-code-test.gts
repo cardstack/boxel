@@ -326,6 +326,8 @@ boxel:
       path: 'task.json',
       kind: 'file',
       format: 'isolated',
+      viewportWidth: 1280,
+      viewportHeight: 800,
       width: 1,
       height: 1,
       attached: true,
