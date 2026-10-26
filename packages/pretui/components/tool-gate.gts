@@ -4,10 +4,13 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { guidFor } from '@ember/object/internals';
+import { modifier } from 'ember-modifier';
 import { StateGlyph } from './state-glyph';
 
 export interface ToolGateAction {
-  /** the button's words: 'Allow once', 'Keep 40', 'Revert' */
+  /** the button's words: 'Allow once', 'Keep 40', 'Revert'. On a
+   * destructive gate the primary answer names the act it runs: 'Delete 3
+   * files', never 'OK' or 'Allow' */
   label: string;
   /** 'primary' (the one filled button), 'secondary' (outlined), or 'quiet'
    * (text). Default 'secondary' */
@@ -43,9 +46,11 @@ export interface ToolGateSignature {
     /** 'attention' (default) for a question, 'conflict' when the call found
      * that something moved since it asked */
     tone?: 'attention' | 'conflict';
-    /** the call cannot be undone: the gate says so in words, and drops any
-     * "always" answer, since a standing yes to a delete is not a yes the
-     * reader can see the cost of */
+    /** the call cannot be undone: the gate says so in words, draws its
+     * primary answer in the destructive colour (so that answer's label must
+     * name the act: 'Delete 3 files'), and drops any "always" answer, since
+     * a standing yes to a delete is not a yes the reader can see the cost
+     * of */
     destructive?: boolean;
     /** what an "always" answer grants, said under the answers while it is
      * focused or hovered: "realm.fs.delete in showcase/scratch/" */
@@ -90,6 +95,9 @@ export class ToolGate extends Component<ToolGateSignature> {
   @tracked declining = false;
   @tracked reason = '';
   readonly promptId = guidFor(this) + '-prompt';
+  /** the declining answer, which takes focus back when the reader leaves
+   * the reason field with Back or Escape */
+  private returnTo: ToolGateAction | undefined;
 
   get actions(): ToolGateAction[] {
     if (
@@ -127,6 +135,7 @@ export class ToolGate extends Component<ToolGateSignature> {
       return;
     }
     if (action.declines && this.args.onDecline) {
+      this.returnTo = action;
       this.declining = true;
       return;
     }
@@ -146,6 +155,19 @@ export class ToolGate extends Component<ToolGateSignature> {
     this.declining = false;
     this.reason = '';
   };
+  /** the reason field takes focus as it appears: the answer that opened it
+   * has just left the page */
+  focusOnInsert = modifier((element: HTMLElement) => {
+    element.focus();
+  });
+  /** the declining answer takes focus back as it reappears after Back or
+   * Escape */
+  refocus = modifier((element: HTMLElement, [action]: [ToolGateAction]) => {
+    if (this.returnTo?.label === action.label && !this.declining) {
+      this.returnTo = undefined;
+      element.focus();
+    }
+  });
   confirmDecline = async () => {
     if (this.busy) {
       return;
@@ -166,6 +188,9 @@ export class ToolGate extends Component<ToolGateSignature> {
       event.preventDefault();
       this.confirmDecline();
     } else if (event.key === 'Escape') {
+      // the field's own Escape: a host listening at the document must not
+      // also close what holds the gate
+      event.stopPropagation();
       this.cancelDecline();
     }
   };
@@ -211,20 +236,23 @@ export class ToolGate extends Component<ToolGateSignature> {
             value={{this.reason}}
             {{on 'input' this.typeReason}}
             {{on 'keydown' this.reasonKey}}
+            {{this.focusOnInsert}}
+            data-test-pretui-tool-gate-reason
           />
           <button
             type='button'
             class='pretui-toolgate-action'
             data-kind='primary'
-            disabled={{if this.busy true}}
-            data-test-pretui-tool-gate-decline-confirm
+            aria-disabled={{if this.busy 'true'}}
             {{on 'click' this.confirmDecline}}
+            data-test-pretui-tool-gate-decline-confirm
           >Decline</button>
           <button
             type='button'
             class='pretui-toolgate-action'
             data-kind='quiet'
             {{on 'click' this.cancelDecline}}
+            data-test-pretui-tool-gate-decline-back
           >Back</button>
         </div>
       {{else if this.actions.length}}
@@ -234,16 +262,17 @@ export class ToolGate extends Component<ToolGateSignature> {
               type='button'
               class='pretui-toolgate-action'
               data-kind={{this.kindOf answer}}
-              disabled={{if this.busy true}}
-              aria-busy={{if (this.isBusy answer) 'true'}}
+              data-busy={{if (this.isBusy answer) 'true'}}
+              aria-disabled={{if this.busy 'true'}}
               aria-describedby={{this.promptId}}
               data-tool-gate-action={{answer.id}}
+              {{on 'click' (fn this.act answer)}}
+              {{this.refocus answer}}
               data-test-pretui-tool-gate-action={{if
                 answer.id
                 answer.id
                 answer.label
               }}
-              {{on 'click' (fn this.act answer)}}
             >{{this.labelOf answer}}</button>
           {{/each}}
         </div>
@@ -262,9 +291,9 @@ export class ToolGate extends Component<ToolGateSignature> {
         .pretui-toolgate {
           display: grid;
           gap: var(--boxel-sp-xs);
-          padding-block: var(--boxel-sp-4xs) 2px;
+          padding-block: var(--boxel-sp-4xs) var(--boxel-sp-6xs);
           padding-inline-start: calc(
-            var(--pretui-toolrow-disc, 16px) +
+            var(--pretui-toolrow-disc, var(--boxel-sp)) +
               var(--pretui-toolrow-gap, var(--boxel-sp-xs))
           );
         }
@@ -280,12 +309,12 @@ export class ToolGate extends Component<ToolGateSignature> {
         .pretui-toolgate[data-tone='conflict'] .pretui-toolgate-prompt::before {
           content: '';
           display: inline-block;
-          width: 6px;
-          height: 6px;
-          margin-inline-end: 6px;
+          width: 0.375rem;
+          height: 0.375rem;
+          margin-inline-end: var(--boxel-sp-2xs);
           border-radius: 50%;
           vertical-align: 0.1em;
-          background: var(--attention);
+          background-color: var(--attention);
         }
         .pretui-toolgate[data-routed] .pretui-toolgate-prompt {
           font-weight: 400;
@@ -307,7 +336,7 @@ export class ToolGate extends Component<ToolGateSignature> {
         .pretui-toolgate-auto-mark {
           display: inline-grid;
           margin-inline-end: var(--boxel-sp-4xs);
-          vertical-align: -1px;
+          vertical-align: -0.1em;
         }
         .pretui-toolgate-scope {
           margin: 0;
@@ -322,15 +351,15 @@ export class ToolGate extends Component<ToolGateSignature> {
           align-items: center;
         }
         .pretui-toolgate-reason {
-          flex: 1 1 160px;
+          flex: 1 1 10rem;
           min-width: 0;
-          height: 28px;
+          height: 1.75rem;
           padding: 0 var(--boxel-sp-xs);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: var(--field, var(--inset));
-          box-shadow: inset 0 0 0 1px var(--input, var(--border));
-          font: inherit;
+          background-color: var(--field);
+          box-shadow: inset 0 0 0 1px var(--input);
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           color: var(--foreground);
@@ -358,13 +387,13 @@ export class ToolGate extends Component<ToolGateSignature> {
         /* answers: the one answer is --primary; the rest are outlined
            (secondary) or quiet text */
         .pretui-toolgate-action {
-          min-height: 28px;
+          min-height: 1.75rem;
           padding: 0 var(--boxel-sp-sm);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: none;
-          box-shadow: inset 0 0 0 1px var(--border-strong, var(--border));
-          font: inherit;
+          background-color: transparent;
+          box-shadow: inset 0 0 0 1px var(--border-strong);
+          font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
@@ -374,33 +403,57 @@ export class ToolGate extends Component<ToolGateSignature> {
         }
         .pretui-toolgate-action[data-kind='primary'] {
           box-shadow: none;
-          background: var(--primary);
+          background-color: var(--primary);
           color: var(--primary-foreground);
+        }
+        /* the answer that runs an act that cannot be undone looks like one */
+        .pretui-toolgate[data-destructive]
+          .pretui-toolgate-action[data-kind='primary'] {
+          background-color: var(--destructive);
+          color: var(--destructive-foreground);
         }
         .pretui-toolgate-action[data-kind='quiet'] {
           box-shadow: none;
           font-weight: 400;
           color: var(--muted-foreground);
         }
-        .pretui-toolgate-action:hover:not(:disabled) {
-          background: var(--hover, var(--inset));
+        .pretui-toolgate-action:hover:not([aria-disabled='true']) {
+          background-color: var(--hover);
         }
-        .pretui-toolgate-action[data-kind='quiet']:hover:not(:disabled) {
-          background: none;
+        .pretui-toolgate-action[data-kind='quiet']:hover:not(
+            [aria-disabled='true']
+          ) {
+          background-color: transparent;
           color: var(--foreground);
         }
-        .pretui-toolgate-action[data-kind='primary']:hover:not(:disabled) {
-          background: color-mix(in srgb, var(--primary) 88%, var(--foreground));
+        .pretui-toolgate-action[data-kind='primary']:hover:not(
+            [aria-disabled='true']
+          ) {
+          background-color: color-mix(
+            in srgb,
+            var(--primary) 88%,
+            var(--foreground)
+          );
+        }
+        .pretui-toolgate[data-destructive]
+          .pretui-toolgate-action[data-kind='primary']:hover:not(
+            [aria-disabled='true']
+          ) {
+          background-color: color-mix(
+            in srgb,
+            var(--destructive) 88%,
+            var(--foreground)
+          );
         }
         .pretui-toolgate-action:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 2px;
         }
-        .pretui-toolgate-action:disabled {
+        .pretui-toolgate-action[aria-disabled='true'] {
           cursor: default;
           opacity: 0.6;
         }
-        .pretui-toolgate-action[aria-busy='true'] {
+        .pretui-toolgate-action[data-busy] {
           opacity: 1;
         }
       }

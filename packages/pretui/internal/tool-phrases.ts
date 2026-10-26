@@ -3,9 +3,6 @@
 // queries, and edited 1 file" instead of "Used 6 tools · Read, Search,
 // Patch". While the run is still going, the phrase for the newest call reads
 // in the present tense ("editing 1 file"); the rest are past.
-//
-// Adapted from bb's timeline bundles (`packages/thread-view/src/timeline-view.ts`,
-// activeSummaryPhrase / completedSummaryPhrase).
 
 export type ToolKind =
   | 'read'
@@ -113,13 +110,18 @@ export function phraseRun<T>(
   });
 }
 
+// English, like every verb and noun around it: a list joined in the
+// browser's locale would read "Read 3 files und edited 1 file". Change this
+// together with the phrases when they are localised.
+const LIST_LOCALE = 'en';
+
 function formatter(): Intl.ListFormat | undefined {
   return typeof Intl !== 'undefined' && 'ListFormat' in Intl
-    ? new Intl.ListFormat(undefined, { style: 'long', type: 'conjunction' })
+    ? new Intl.ListFormat(LIST_LOCALE, { style: 'long', type: 'conjunction' })
     : undefined;
 }
 
-/** The phrases as one localized list. */
+/** The phrases as one list, in English. */
 export function joinPhrases(texts: string[]): string {
   if (texts.length < 2) {
     return texts[0] ?? '';
@@ -132,7 +134,7 @@ export function joinPhrases(texts: string[]): string {
 }
 
 /**
- * The literal separators a localized list puts between `count` items, so a
+ * The literal separators the list puts between `count` items, so a
  * template can lay the items out as components (a rolling count each) and
  * still read as one grammatical list. separators[i] goes before item i; the
  * first is ''.

@@ -42,7 +42,8 @@ export class ToolMeta extends Component<ToolMetaSignature> {
       @layer PretComponent {
         .pretui-toolmeta {
           padding-inline-start: calc(
-            var(--pretui-toolrow-disc, 16px) + var(--pretui-toolrow-gap, 8px)
+            var(--pretui-toolrow-disc, var(--boxel-sp)) +
+              var(--pretui-toolrow-gap, var(--boxel-sp-xs))
           );
           font-size: var(--boxel-caption-font-size);
           line-height: var(--boxel-caption-line-height);

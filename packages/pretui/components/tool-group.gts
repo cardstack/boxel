@@ -68,11 +68,11 @@ export interface ToolGroupEntry {
 export interface ToolGroupSummary {
   /** what the calls did, grouped by phrase in order of first use */
   phrases: PhraseItem[];
-  /** the phrases as one localized list */
+  /** the phrases as one list, in English */
   text: string;
   count: number;
   names: string[];
-  /** the names as one localized list, truncated after @maxNames */
+  /** the names as one list, in English, truncated after @maxNames */
   list: string;
   failed: number;
   tone: WorkTone;
@@ -133,19 +133,6 @@ function toneOf(state: string): WorkTone {
   return state === 'streaming' ? 'running' : workTone(state);
 }
 
-function listFormat(items: string[]): string {
-  if (items.length < 2) {
-    return items[0] ?? '';
-  }
-  if (typeof Intl !== 'undefined' && 'ListFormat' in Intl) {
-    return new Intl.ListFormat(undefined, {
-      style: 'long',
-      type: 'conjunction',
-    }).format(items);
-  }
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
-}
-
 function scrollParent(el: HTMLElement): HTMLElement | undefined {
   let node = el.parentElement;
   while (node) {
@@ -187,10 +174,9 @@ const noteOpen = modifier(
  *            @pending={{group.isLive}} @stickyOffset='var(--session-header-height)' />
  * ```
  *
- * Better than the reference (opencode's "Used N" context group): the
- * attention state is part of the group's tone, so a call that needs the
- * reader opens a collapsed group instead of hiding inside it; merging is a
- * knob; and the rows inside a group that has never been opened are not
+ * The attention state is part of the group's tone, so a call that needs
+ * the reader opens a collapsed group instead of hiding inside it; merging
+ * is a knob; and the rows inside a group that has never been opened are not
  * rendered at all.
  */
 export class ToolGroup extends Component<ToolGroupSignature> {
@@ -270,10 +256,10 @@ export class ToolGroup extends Component<ToolGroupSignature> {
   get nameList(): string {
     let names = this.names;
     if (names.length <= this.maxNames) {
-      return listFormat(names);
+      return joinPhrases(names);
     }
     let shown = names.slice(0, this.maxNames);
-    return listFormat([...shown, `${names.length - shown.length} more`]);
+    return joinPhrases([...shown, `${names.length - shown.length} more`]);
   }
   get failedCount(): number {
     return this.tools.filter((part) => toneOf(part.state) === 'failed').length;
@@ -369,8 +355,13 @@ export class ToolGroup extends Component<ToolGroupSignature> {
 
     for (let part of this.tools) {
       let kind = this.kindOf(part);
+      // a failed call keeps its own row for its error, and a call that
+      // needs the reader keeps its own for its gate and body: a merged row
+      // is a plain list with nothing to act on
+      let tone = toneOf(part.state);
       let mergeable =
-        toneOf(part.state) !== 'failed' &&
+        tone !== 'failed' &&
+        tone !== 'attention' &&
         ((kind === 'read' && this.merge !== 'none') ||
           (kind === 'write' && this.merge === 'all'));
       if (!mergeable) {
@@ -483,7 +474,7 @@ export class ToolGroup extends Component<ToolGroupSignature> {
     // what a nested sticky header (a diff's file header) sticks below
     let top = this.args.stickyOffset ?? '0px';
     let rows = cssNumber(this.args.maxRows ?? 8, 0, 1000) ?? 8;
-    let max = rows > 0 ? `calc(${rows} * 1.875rem + 6px)` : 'none';
+    let max = rows > 0 ? `calc(${rows} * 1.875rem + 0.375rem)` : 'none';
     return htmlSafe(
       `--pretui-tool-group-header: calc(${top} + 2rem); --pretui-tool-group-max: ${max}`,
     );
@@ -553,9 +544,9 @@ export class ToolGroup extends Component<ToolGroupSignature> {
       data-tone={{this.tone}}
       data-open={{if this.isOpen 'true' 'false'}}
       data-recede={{if this.recedes 'true'}}
-      data-test-pretui-tool-group
       style={{this.rootStyle}}
       {{registerElement this.registerRoot}}
+      data-test-pretui-tool-group
       ...attributes
     >
       <button
@@ -566,8 +557,8 @@ export class ToolGroup extends Component<ToolGroupSignature> {
         aria-label={{this.receipt}}
         style={{this.headerStyle}}
         data-sticky={{if this.sticky 'true'}}
-        data-test-pretui-tool-group-header
         {{on 'click' this.toggle}}
+        data-test-pretui-tool-group-header
       >
         <span
           class='pretui-toolgroup-disc'
@@ -736,13 +727,16 @@ export class ToolGroup extends Component<ToolGroupSignature> {
           display: flex;
           align-items: center;
           gap: var(--boxel-sp-xs);
-          min-height: 32px;
+          min-height: 2rem;
           padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
           border: 0;
           border-radius: var(--boxel-border-radius-sm);
-          background: none;
+          background-color: transparent;
           color: inherit;
-          font: inherit;
+          font-family: inherit;
+          font-size: inherit;
+          font-weight: inherit;
+          line-height: inherit;
           text-align: start;
           cursor: pointer;
           min-width: 0;
@@ -758,22 +752,22 @@ export class ToolGroup extends Component<ToolGroupSignature> {
           opacity: 1;
         }
         .pretui-toolgroup-header:hover {
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
         }
         .pretui-toolgroup-header:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: -2px;
         }
         .pretui-toolgroup-header[data-sticky] {
-          background: var(--card);
+          background-color: var(--card);
           box-shadow: 0 1px 0 var(--border);
           border-radius: 0;
         }
         /* the group's mark is a stack of calls in the quiet ink, as each
            row's is its tool's icon; a failure or a question tints it */
         .pretui-toolgroup-disc {
-          width: 16px;
-          height: 16px;
+          width: var(--boxel-sp);
+          height: var(--boxel-sp);
           display: grid;
           place-items: center;
           flex: none;
@@ -862,8 +856,8 @@ export class ToolGroup extends Component<ToolGroupSignature> {
         }
         .pretui-toolgroup-chevron {
           flex: none;
-          width: 6px;
-          height: 6px;
+          width: 0.375rem;
+          height: 0.375rem;
           border-inline-end: 1.5px solid var(--subtle-foreground);
           border-block-end: 1.5px solid var(--subtle-foreground);
           transform: rotate(-45deg);
@@ -874,10 +868,10 @@ export class ToolGroup extends Component<ToolGroupSignature> {
           transform: rotate(45deg);
         }
         /* the group's rows hang on ToolRow's grid: the rail runs under the
-           group's disc centre (8px inset + 8px half-disc), and the 8px
-           after it plus each row's own 8px inset puts every child's disc
-           on the group's text edge (8 + 16 + 8 = 32px). A group nested in
-           a group repeats the same step. */
+           group's disc centre (the inset plus half the disc), and the
+           padding after it plus each row's own inset puts every child's
+           disc on the group's text edge. A group nested in a group repeats
+           the same step. */
         .pretui-toolgroup-rows {
           display: flex;
           flex-direction: column;
@@ -888,14 +882,14 @@ export class ToolGroup extends Component<ToolGroupSignature> {
           overscroll-behavior: contain;
           scrollbar-width: thin;
           gap: 1px;
-          padding: 2px 0 var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          padding: var(--boxel-sp-6xs) 0 var(--boxel-sp-4xs) var(--boxel-sp-xs);
           margin-inline-start: var(--boxel-sp);
           box-shadow: inset 1px 0 0 var(--border);
         }
         /* rows inside a group are one step quieter than rows on their own */
         .pretui-toolgroup-rows > :deep(.pretui-toolrow .pretui-toolrow-header) {
           min-height: 1.75rem;
-          padding-block: 5px;
+          padding-block: 0.3125rem;
         }
         .pretui-toolgroup-merged {
           margin: 0;
@@ -908,7 +902,7 @@ export class ToolGroup extends Component<ToolGroupSignature> {
           color: var(--muted-foreground);
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: var(--boxel-sp-6xs);
         }
         @media (prefers-reduced-motion: reduce) {
           .pretui-toolgroup-chevron {

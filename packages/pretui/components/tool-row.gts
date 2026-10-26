@@ -17,6 +17,7 @@ import { Chip } from './chip';
 import { CodeBlock } from './code-block';
 import { DiffBlock, lineDiff } from './diff-block';
 import { StateGlyph } from './state-glyph';
+import { VisuallyHidden } from './visually-hidden';
 import type { DiffBlockSignature, DiffLine } from './diff-block';
 import { PlanMark } from './plan-mark';
 import { toolIcon } from './tool-icon';
@@ -260,6 +261,13 @@ const NOTE_GLYPHS = new Set([
 ]);
 const UNDER_WAY_GLYPHS = new Set(['◐', 'current']);
 
+// the glyph and its colour are decorative, so a tone a reader must not miss
+// is also said in words, before the line's text
+const SPOKEN_TONES: Partial<Record<ToolLineTone, string>> = {
+  failed: 'Failed:',
+  attention: 'Needs attention:',
+};
+
 export class ToolLine extends Component<ToolLineSignature> {
   get underWay(): boolean {
     return UNDER_WAY_GLYPHS.has(this.args.glyph ?? '');
@@ -269,6 +277,9 @@ export class ToolLine extends Component<ToolLineSignature> {
   }
   get depth(): number {
     return Math.min(Math.max(Math.round(this.args.depth ?? 0), 0), 3);
+  }
+  get spokenTone(): string | undefined {
+    return this.args.tone ? SPOKEN_TONES[this.args.tone] : undefined;
   }
   <template>
     <div
@@ -289,6 +300,9 @@ export class ToolLine extends Component<ToolLineSignature> {
         <span class='pretui-toolline-glyph' aria-hidden='true'></span>
       {{/if}}
       <span class='pretui-toolline-text'>
+        {{#if this.spokenTone}}<VisuallyHidden
+            data-test-pretui-tool-line-tone
+          >{{this.spokenTone}} </VisuallyHidden>{{/if}}
         {{yield}}
         {{#if @sub}}<span
             class='pretui-toolline-sub'
@@ -307,8 +321,8 @@ export class ToolLine extends Component<ToolLineSignature> {
       @layer PretComponent {
         .pretui-toolline {
           /* a ToolLine reads the row's grid; alone it falls back to it */
-          --pretui-toolline-disc: var(--pretui-toolrow-disc, 16px);
-          --pretui-toolline-gap: var(--pretui-toolrow-gap, 8px);
+          --pretui-toolline-disc: var(--pretui-toolrow-disc, var(--boxel-sp));
+          --pretui-toolline-gap: var(--pretui-toolrow-gap, var(--boxel-sp-xs));
           --pretui-toolline-step: calc(
             var(--pretui-toolline-disc) + var(--pretui-toolline-gap)
           );
@@ -340,13 +354,13 @@ export class ToolLine extends Component<ToolLineSignature> {
           margin-inline-start: calc(
             var(--pretui-toolline-step) + var(--pretui-toolline-disc) / 2
           );
-          box-shadow: inset 1px 0 0 var(--border-strong, var(--border));
+          box-shadow: inset 1px 0 0 var(--border-strong);
         }
         .pretui-toolline[data-depth='3'] {
           margin-inline-start: calc(
             var(--pretui-toolline-step) * 2 + var(--pretui-toolline-disc) / 2
           );
-          box-shadow: inset 1px 0 0 var(--border-strong, var(--border));
+          box-shadow: inset 1px 0 0 var(--border-strong);
         }
         .pretui-toolline-glyph {
           text-align: center;
@@ -382,17 +396,17 @@ export class ToolLine extends Component<ToolLineSignature> {
         /* square, small, inside the text column: a look, not a preview */
         .pretui-toolline-thumb {
           display: block;
-          width: 72px;
-          height: 72px;
-          margin-block: var(--boxel-sp-4xs) 2px;
+          width: 4.5rem;
+          height: 4.5rem;
+          margin-block: var(--boxel-sp-4xs) var(--boxel-sp-6xs);
           border-radius: var(--boxel-border-radius-xs);
           object-fit: cover;
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
           box-shadow: 0 0 0 1px var(--border);
         }
         .pretui-toolline-sub {
           display: block;
-          font-family: var(--font-sans, inherit);
+          font-family: var(--font-sans);
           font-size: var(--boxel-caption-font-size);
           line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
@@ -443,6 +457,8 @@ export class ToolChange extends Component<ToolChangeSignature> {
           >{{@from}}</del>
           <ArrowRight
             class='pretui-toolchange-arrow'
+            width='12'
+            height='12'
             role='img'
             aria-label='changed to'
           />
@@ -498,10 +514,8 @@ export class ToolChange extends Component<ToolChangeSignature> {
           text-decoration-color: var(--subtle-foreground);
         }
         .pretui-toolchange-arrow {
-          width: 12px;
-          height: 12px;
           margin-inline: var(--boxel-sp-4xs);
-          vertical-align: -1px;
+          vertical-align: -0.1em;
           color: var(--subtle-foreground);
         }
         .pretui-toolchange-to {
@@ -617,16 +631,13 @@ export class ToolDiff extends Component<ToolDiffSignature> {
              on a light theme and dark on a dark one, so the code always
              reads in the foreground ink. A theme that wants a deeper well
              sets --pretui-code-well */
-          --pretui-tooldiff-well: var(
-            --pretui-code-well,
-            var(--muted, var(--inset, var(--boxel-100)))
-          );
-          margin-block: 2px 0;
+          --pretui-tooldiff-well: var(--pretui-code-well, var(--muted));
+          margin-block: var(--boxel-sp-6xs) 0;
           min-width: 0;
           overflow-x: auto;
           /* square: inside a row, only the row rounds */
           border-radius: 0;
-          background: var(--pretui-tooldiff-well);
+          background-color: var(--pretui-tooldiff-well);
           box-shadow: none;
           font-size: var(--boxel-font-size-xs);
           line-height: var(--boxel-line-height-xs);
@@ -646,14 +657,14 @@ export class ToolDiff extends Component<ToolDiffSignature> {
         .pretui-tooldiff :deep(.pretui-diff-line[data-op='add']) {
           /* mixed in sRGB: oklch would carry a teal through blue on its
              way to a purple well, and an added line must read green */
-          background: color-mix(
+          background-color: color-mix(
             in srgb,
-            var(--success, var(--boxel-success)) 9%,
+            var(--success) 9%,
             var(--pretui-tooldiff-well)
           );
         }
         .pretui-tooldiff :deep(.pretui-diff-line[data-op='del']) {
-          background: color-mix(
+          background-color: color-mix(
             in srgb,
             var(--destructive) 11%,
             var(--pretui-tooldiff-well)
@@ -665,14 +676,14 @@ export class ToolDiff extends Component<ToolDiffSignature> {
         }
         .pretui-tooldiff :deep(.pretui-diff-toggle) {
           padding-inline-start: var(--boxel-sp-xs);
-          font-family: var(--font-sans, inherit);
+          font-family: var(--font-sans);
           font-size: var(--boxel-caption-font-size);
           line-height: var(--boxel-caption-line-height);
           font-weight: 600;
         }
         .pretui-tooldiff :deep(.pretui-diff-receipt) {
           box-shadow: none;
-          padding: 2px var(--boxel-sp-xs) var(--boxel-sp-4xs);
+          padding: var(--boxel-sp-6xs) var(--boxel-sp-xs) var(--boxel-sp-4xs);
         }
       }
     </style>
@@ -683,7 +694,9 @@ export class ToolDiff extends Component<ToolDiffSignature> {
 // The one action a receipt still offers: Undo, Revert, Stop. It acts once.
 // While its action runs it is busy and refuses a second press, so an Undo
 // can never be applied twice by an impatient click; the host keeps the
-// durable gate (the call's state), this keeps the instant one.
+// durable gate (the call's state), this keeps the instant one. Busy and
+// disabled are aria-disabled, never the disabled attribute, so a pressed
+// button keeps focus.
 
 export interface ToolReceiptActionSignature {
   Args: {
@@ -696,7 +709,8 @@ export interface ToolReceiptActionSignature {
     onAct: () => unknown;
     disabled?: boolean;
     /** the action was refused, and why: "Not undone · file changed since
-     * the run". The button gives way to the refusal, in words */
+     * the run". The button gives way to the refusal, in words, in a live
+     * region; when the button had focus, the refusal takes it */
     refusal?: string;
   };
   Element: HTMLButtonElement;
@@ -704,10 +718,15 @@ export interface ToolReceiptActionSignature {
 
 export class ToolReceiptAction extends Component<ToolReceiptActionSignature> {
   @tracked busy = false;
+  /** the button holds focus, or held it when it was removed */
+  private hadFocus = false;
   get text(): string {
     return this.busy
       ? (this.args.busyLabel ?? `${this.args.label}…`)
       : this.args.label;
+  }
+  get inert(): boolean {
+    return this.busy || Boolean(this.args.disabled);
   }
   act = async () => {
     if (this.busy || this.args.disabled) {
@@ -722,37 +741,62 @@ export class ToolReceiptAction extends Component<ToolReceiptActionSignature> {
       }
     }
   };
+  noteFocus = () => {
+    this.hadFocus = true;
+  };
+  // a removed button can blur with no related target: only focus that moved
+  // somewhere real clears the flag
+  noteBlur = (event: Event) => {
+    if ((event as FocusEvent).relatedTarget) {
+      this.hadFocus = false;
+    }
+  };
+  /** the refusal takes focus when the button it replaced had it, so a
+   * keyboard reader is not left on the page's body */
+  takeFocus = modifier((element: HTMLElement) => {
+    let active = document.activeElement;
+    if (this.hadFocus && (!active || active === document.body)) {
+      element.focus({ preventScroll: true });
+    }
+    this.hadFocus = false;
+  });
   <template>
-    {{#if @refusal}}
-      <span
-        class='pretui-toolaction-refusal'
-        role='status'
-        data-test-pretui-tool-receipt-refusal
-      >{{@refusal}}</span>
-    {{else}}
+    {{! one live region, present from the first render, whose text changes:
+        a region created already holding its text is often not announced }}
+    <span class='pretui-toolaction-status' role='status'>{{#if
+        @refusal
+      }}<span
+          class='pretui-toolaction-refusal'
+          tabindex='-1'
+          {{this.takeFocus}}
+          data-test-pretui-tool-receipt-refusal
+        >{{@refusal}}</span>{{/if}}</span>
+    {{#unless @refusal}}
       <button
         type='button'
         class='pretui-toolaction'
-        disabled={{either this.busy @disabled}}
-        aria-busy={{if this.busy 'true'}}
-        data-test-pretui-tool-receipt-action={{@label}}
+        aria-disabled={{if this.inert 'true'}}
         {{on 'click' this.act}}
+        {{on 'focus' this.noteFocus}}
+        {{on 'blur' this.noteBlur}}
+        data-test-pretui-tool-receipt-action={{@label}}
         ...attributes
       >{{this.text}}</button>
-    {{/if}}
+    {{/unless}}
     <style scoped>
       @layer PretComponent {
         /* the receipt's one verb, as text: the settled ink at rest, the
-           foreground under the pointer */
+           foreground under the pointer. 1.5rem tall, the smallest target
+           a pointer is asked to hit */
         .pretui-toolaction {
           flex: none;
-          min-height: 22px;
+          min-height: 1.5rem;
           margin-inline-end: calc(-1 * var(--boxel-sp-xs));
           padding: 0 var(--boxel-sp-xs);
           border: 0;
           border-radius: var(--boxel-border-radius-xs);
-          background: none;
-          font-family: var(--font-sans, inherit);
+          background-color: transparent;
+          font-family: var(--font-sans);
           font-size: var(--boxel-caption-font-size);
           line-height: var(--boxel-caption-line-height);
           font-weight: 600;
@@ -760,7 +804,7 @@ export class ToolReceiptAction extends Component<ToolReceiptActionSignature> {
           cursor: pointer;
         }
         /* a text action says it acts under the pointer in the link ink */
-        .pretui-toolaction:hover:not(:disabled) {
+        .pretui-toolaction:hover:not([aria-disabled='true']) {
           color: var(--primary-ink);
         }
         .pretui-toolaction:focus-visible {
@@ -768,12 +812,16 @@ export class ToolReceiptAction extends Component<ToolReceiptActionSignature> {
           outline-offset: 1px;
         }
         .pretui-toolaction-refusal {
-          font-family: var(--font-sans, inherit);
+          font-family: var(--font-sans);
           font-size: var(--boxel-caption-font-size);
           line-height: var(--boxel-caption-line-height);
           color: var(--attention-ink);
         }
-        .pretui-toolaction:disabled {
+        .pretui-toolaction-refusal:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        .pretui-toolaction[aria-disabled='true'] {
           cursor: default;
           color: var(--subtle-foreground);
         }
@@ -874,6 +922,7 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
     <span
       class='pretui-toolrow-status'
       data-tone={{@tone}}
+      data-state={{@state}}
       data-timed={{if @timed 'true'}}
       data-test-pretui-tool-row-status
     >
@@ -905,15 +954,15 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
           white-space: nowrap;
         }
         .pretui-toolrow-disc {
-          width: var(--pretui-toolrow-disc, 16px);
-          height: var(--pretui-toolrow-disc, 16px);
+          width: var(--pretui-toolrow-disc, var(--boxel-sp));
+          height: var(--pretui-toolrow-disc, var(--boxel-sp));
           display: grid;
           place-items: center;
           flex: none;
           margin-block-start: calc(
             (
                 var(--boxel-ui-label-line-height) -
-                  var(--pretui-toolrow-disc, 16px)
+                  var(--pretui-toolrow-disc, var(--boxel-sp))
               ) /
               2
           );
@@ -946,10 +995,10 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
           display: inline-flex;
           align-items: center;
           max-width: 40%;
-          height: 18px;
+          height: 1.125rem;
           padding: 0 var(--boxel-sp-xs);
           border-radius: var(--boxel-border-radius-sm);
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
           box-shadow: inset 0 0 0 1px var(--border);
           font-size: var(--boxel-caption-font-size);
           line-height: var(--boxel-caption-line-height);
@@ -1070,9 +1119,9 @@ class ToolRowHeading extends Component<ToolRowHeadingSignature> {
         }
         .pretui-toolrow-chevron {
           flex: none;
-          width: 6px;
-          height: 6px;
-          margin-block-start: 6px;
+          width: 0.375rem;
+          height: 0.375rem;
+          margin-block-start: 0.375rem;
           border-inline-end: 1.5px solid var(--subtle-foreground);
           border-block-end: 1.5px solid var(--subtle-foreground);
           transform: rotate(-45deg);
@@ -1233,16 +1282,20 @@ export class ToolRow extends Component<ToolRowSignature> {
   get isRunning(): boolean {
     return this.tone === 'running';
   }
-  /** a settled call whose time is its whole state */
+  /** a completed call whose time is its whole state */
   get isTimed(): boolean {
-    return !this.args.status && this.tone === 'done' && !!this.durationText;
+    return (
+      !this.args.status && this.state === 'completed' && !!this.durationText
+    );
   }
   get statusText(): string {
     if (this.args.status) {
       return this.args.status;
     }
-    // a settled call with a time says the time: the check already says done
-    if (this.tone === 'done' && this.durationText) {
+    // a completed call with a time says only the time: its title in the
+    // settled ink already reads as finished. The other done states (kept,
+    // delivered, partly kept) say more than "finished", so their word stays
+    if (this.isTimed) {
       return '';
     }
     return this.isStreaming ? 'preparing…' : workStatus(this.state);
@@ -1279,36 +1332,52 @@ export class ToolRow extends Component<ToolRowSignature> {
   }
   // When the gate's controls leave (the decision was made) while focus is
   // in them, focus would fall to the page; it goes to the row's header
-  // instead, so a keyboard reader stays where they were.
+  // instead, so a keyboard reader stays where they were. Runtime lookups use
+  // the data-toolrow attributes, never the styling classes.
   watchGate = modifier((element: HTMLElement) => {
-    let focused = false;
+    // the control in the gate that last had focus; cleared once focus
+    // moves somewhere real outside the gate, or once it is handed on
+    let held: Element | undefined;
     // whether the reader reached the gate by keyboard: only then does the
     // header show its ring when focus lands on it
     let keyboard = false;
     let onFocusIn = (event: FocusEvent) => {
-      focused = true;
-      keyboard = (event.target as Element).matches(':focus-visible');
+      held = event.target as Element;
+      keyboard = held.matches(':focus-visible');
     };
-    // a removed control can blur with no related target; only focus that
-    // moved somewhere real outside the gate clears the flag
+    // focus that moves somewhere real outside the gate clears `held`. A
+    // blur with no related target is either a removed control (the
+    // decision) or the reader leaving for blank page space or another
+    // window; only the second leaves the control connected, and then the
+    // reader has moved on, so a later change in the gate moves no focus
     let onFocusOut = (event: FocusEvent) => {
       let to = event.relatedTarget as Node | null;
-      if (to && !element.contains(to)) {
-        focused = false;
-      }
-    };
-    let observer = new MutationObserver(() => {
-      let active = document.activeElement;
-      if (
-        !focused ||
-        (active && active !== document.body && element.contains(active))
-      ) {
+      if (to) {
+        if (!element.contains(to)) {
+          held = undefined;
+        }
         return;
       }
-      focused = false;
+      let left = event.target as Element;
+      queueMicrotask(() => {
+        if (held === left && left.isConnected) {
+          held = undefined;
+        }
+      });
+    };
+    let observer = new MutationObserver(() => {
+      if (!held || held.isConnected) {
+        return;
+      }
+      held = undefined;
+      let active = document.activeElement;
+      if (active && active !== document.body) {
+        // focus already went somewhere on purpose
+        return;
+      }
       let header = element
-        .closest('.pretui-toolrow')
-        ?.querySelector<HTMLElement>('.pretui-toolrow-header');
+        .closest('[data-toolrow]')
+        ?.querySelector<HTMLElement>('[data-toolrow-header]');
       if (header) {
         if (header.tagName !== 'BUTTON' && !header.hasAttribute('tabindex')) {
           header.setAttribute('tabindex', '-1');
@@ -1405,6 +1474,11 @@ export class ToolRow extends Component<ToolRowSignature> {
     }
     return '';
   }
+  /** Polite, so a group whose calls fail together does not interrupt the
+   * reader once per row; only a call that now needs them is assertive. */
+  get liveness(): 'assertive' | 'polite' {
+    return this.tone === 'attention' ? 'assertive' : 'polite';
+  }
 
   /** Progress belongs to work in flight; a settled call says what it did in
    * its title and rows instead. */
@@ -1463,6 +1537,7 @@ export class ToolRow extends Component<ToolRowSignature> {
     <div
       class='pretui-toolrow'
       role='group'
+      data-toolrow
       aria-label={{this.title}}
       data-state={{this.state}}
       data-tone={{this.tone}}
@@ -1485,8 +1560,9 @@ export class ToolRow extends Component<ToolRowSignature> {
               class='pretui-toolrow-header'
               aria-expanded={{if this.isOpen 'true' 'false'}}
               aria-controls={{this.bodyId}}
-              data-test-pretui-tool-row-toggle
+              data-toolrow-header
               {{on 'click' this.toggle}}
+              data-test-pretui-tool-row-toggle
             >
               <ToolRowHeading
                 @tone={{this.tone}}
@@ -1508,7 +1584,7 @@ export class ToolRow extends Component<ToolRowSignature> {
               />
             </button>
           {{else}}
-            <div class='pretui-toolrow-header'>
+            <div class='pretui-toolrow-header' data-toolrow-header>
               <ToolRowHeading
                 @tone={{this.tone}}
                 @state={{this.state}}
@@ -1617,8 +1693,8 @@ export class ToolRow extends Component<ToolRowSignature> {
       {{#if (has-block 'gate')}}
         <div
           class='pretui-toolrow-gate'
-          data-test-pretui-tool-row-gate
           {{this.watchGate}}
+          data-test-pretui-tool-row-gate
         >
           {{yield to='gate'}}
         </div>
@@ -1653,7 +1729,7 @@ export class ToolRow extends Component<ToolRowSignature> {
       <span
         class='pretui-toolrow-live'
         role='status'
-        aria-live='assertive'
+        aria-live={{this.liveness}}
         data-test-pretui-tool-row-live
       >{{this.announcement}}</span>
     </div>
@@ -1699,7 +1775,7 @@ export class ToolRow extends Component<ToolRowSignature> {
           /* off-screen rows skip layout and paint; the browser remembers each
              row's last size, so the scrollbar does not jump */
           content-visibility: auto;
-          contain-intrinsic-size: auto 32px;
+          contain-intrinsic-size: auto 2rem;
         }
         /* the prominence ramp: settled work recedes, the live frontier and
            anything needing the reader stay at full strength. Off unless a
@@ -1730,32 +1806,37 @@ export class ToolRow extends Component<ToolRowSignature> {
         }
         /* everything in the header sits on the title's first line, so a
            title that wraps keeps its icon, status and chevron level with
-           the words they belong to: 7px + one 18px line + 7px is the
-           32px row */
+           the words they belong to: the block padding plus one label
+           line is the 2rem row */
         .pretui-toolrow-header {
           flex: 1;
           min-width: 0;
           display: flex;
           align-items: flex-start;
           gap: var(--pretui-toolrow-gap);
-          padding: 7px var(--pretui-toolrow-inset);
-          min-height: 32px;
+          padding: 0.4375rem var(--pretui-toolrow-inset);
+          min-height: 2rem;
           box-sizing: border-box;
           border: 0;
           /* square: the row is the one box that rounds, and clips this */
           border-radius: 0;
-          background: none;
+          background-color: transparent;
           color: inherit;
-          font: inherit;
+          font-family: inherit;
+          font-size: inherit;
+          font-weight: inherit;
+          line-height: inherit;
           text-align: start;
         }
         button.pretui-toolrow-header {
           cursor: pointer;
         }
         button.pretui-toolrow-header:hover {
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
         }
-        button.pretui-toolrow-header:focus-visible {
+        /* both header forms: the static one takes focus when a gate hands
+           it back on a row with no body */
+        .pretui-toolrow-header:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: -2px;
         }
@@ -1787,12 +1868,12 @@ export class ToolRow extends Component<ToolRowSignature> {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-xs);
-          padding: 2px var(--pretui-toolrow-inset) var(--boxel-sp-xs)
-            var(--pretui-toolrow-text);
+          padding: var(--boxel-sp-6xs) var(--pretui-toolrow-inset)
+            var(--boxel-sp-xs) var(--pretui-toolrow-text);
           min-width: 0;
         }
         /* the sections under the header, in reading order. Each owns its
-           bottom 8px, so any subset stacks evenly. */
+           bottom spacing, so any subset stacks evenly. */
         .pretui-toolrow-progress {
           display: flex;
           flex-direction: column;
@@ -1808,15 +1889,15 @@ export class ToolRow extends Component<ToolRowSignature> {
         }
         .pretui-toolrow-progress-track {
           display: block;
-          height: 3px;
-          border-radius: 2px;
+          height: 0.1875rem;
+          border-radius: var(--boxel-border-radius-2xs);
           overflow: hidden;
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
         }
         .pretui-toolrow-progress-fill {
           display: block;
           height: 100%;
-          background: var(--primary);
+          background-color: var(--primary);
           transition: width 200ms
             var(--pretui-ease, cubic-bezier(0.2, 0, 0.2, 1));
         }
@@ -1838,7 +1919,7 @@ export class ToolRow extends Component<ToolRowSignature> {
           border-radius: var(--boxel-border-radius-sm);
           /* the question is a surface, not an alarm: the row's status word
              and mark carry the attention colour */
-          background: var(--inset, var(--card));
+          background-color: var(--inset);
           box-shadow: inset 0 0 0 1px var(--border);
         }
         /* a framed row is already the box (and ringed in the attention
@@ -1848,7 +1929,7 @@ export class ToolRow extends Component<ToolRowSignature> {
         .pretui-toolrow[data-framed] > .pretui-toolrow-gate {
           padding: 0;
           border-radius: 0;
-          background: none;
+          background-color: transparent;
           box-shadow: none;
         }
         .pretui-toolrow-result {
@@ -1860,7 +1941,7 @@ export class ToolRow extends Component<ToolRowSignature> {
           display: flex;
           align-items: center;
           gap: var(--boxel-sp-xs);
-          min-height: 30px;
+          min-height: 1.875rem;
           padding: 0 var(--pretui-toolrow-inset) 0 var(--pretui-toolrow-text);
           box-shadow: 0 -1px 0 var(--border);
           font-size: var(--boxel-caption-font-size);
@@ -1877,7 +1958,7 @@ export class ToolRow extends Component<ToolRowSignature> {
         }
         .pretui-toolrow-receipt-action {
           flex: none;
-          font-family: var(--font-sans, inherit);
+          font-family: var(--font-sans);
         }
         /* three widths, one grid. Narrow (a 320px panel): the subtitle and
            the duration step aside so the title and its state keep their
@@ -1889,20 +1970,21 @@ export class ToolRow extends Component<ToolRowSignature> {
           .pretui-toolrow-status:not([data-timed]) .pretui-toolrow-duration {
             display: none;
           }
-          /* narrow, the grid gives its width back to the words: an 8px
-             inset framed or not, and a 6px gap, so the text column sits at
-             30px. Every part reads these, so they move together */
+          /* narrow, the grid gives its width back to the words: the small
+             inset framed or not, and a smaller gap. Every part reads these,
+             so they move together */
           .pretui-toolrow > * {
             --pretui-toolrow-inset: var(--boxel-sp-xs);
-            --pretui-toolrow-gap: 6px;
+            --pretui-toolrow-gap: var(--boxel-sp-2xs);
             --pretui-toolrow-text: calc(
               var(--pretui-toolrow-inset) + var(--pretui-toolrow-disc) +
                 var(--pretui-toolrow-gap)
             );
           }
-          /* a settled call's check already says it is done: the word steps
-             aside, and a time stays */
-          .pretui-toolrow-status[data-tone='done']:not([data-timed]) {
+          /* a completed call's title in the settled ink already reads as
+             finished, so its word steps aside. The other done states (kept,
+             delivered, partly kept) keep theirs, and a time always stays */
+          .pretui-toolrow-status[data-state='completed']:not([data-timed]) {
             display: none;
           }
         }
@@ -1914,7 +1996,7 @@ export class ToolRow extends Component<ToolRowSignature> {
         /* Glimmer passes a named block or not, never "sometimes", so a host
            whose gate or rows are conditional passes the block and lets its
            content come and go. A section that renders no element takes no
-           space: no empty box, no stray 8px. */
+           space: no empty box, no stray gap. */
         .pretui-toolrow-actions:not(:has(:not([hidden]))),
         .pretui-toolrow-receipt:has(.pretui-toolrow-receipt-text:empty):not(
             :has(.pretui-toolrow-receipt-action *)
@@ -1930,18 +2012,19 @@ export class ToolRow extends Component<ToolRowSignature> {
         .pretui-toolrow[data-framed] {
           --pretui-toolrow-inset: var(--boxel-sp-sm);
           border-radius: var(--boxel-border-radius-sm);
-          background: var(--card);
+          background-color: var(--card);
           box-shadow: 0 0 0 1px var(--border);
           overflow: hidden;
         }
-        /* 2px above the header and below the last section: with each
-           section's own 8px that closes the box at 10px. A receipt is the
-           box's floor, so it takes the 2px back and sits flush. */
+        /* a sliver above the header and below the last section, added to
+           each section's own bottom spacing. A receipt is the box's floor,
+           so it takes the sliver back and sits flush */
         .pretui-toolrow[data-framed] {
-          padding-block: 2px;
+          --_toolrow-edge: var(--boxel-sp-6xs);
+          padding-block: var(--_toolrow-edge);
         }
         .pretui-toolrow[data-framed] > .pretui-toolrow-receipt {
-          margin-block-end: -2px;
+          margin-block-end: calc(-1 * var(--_toolrow-edge));
         }
         /* a receipt with neither words nor an action takes no line */
         .pretui-toolrow-receipt:not(
@@ -1967,14 +2050,14 @@ export class ToolRow extends Component<ToolRowSignature> {
             )
           ) {
           --pretui-toolrow-inset: var(--boxel-sp-xs);
-          background: none;
+          background-color: transparent;
           box-shadow: none;
           padding-block: 0;
         }
         /* a framed row's ring stays the border in every state: a state
            colours the mark and the word, never the row */
         .pretui-toolrow[data-framed] button.pretui-toolrow-header:hover {
-          background: var(--hover, var(--inset));
+          background-color: var(--hover);
         }
         /* the whole failure is pasteable text: mono, in ink, on the inset
            well, not a red box */
@@ -1988,7 +2071,7 @@ export class ToolRow extends Component<ToolRowSignature> {
           white-space: pre-wrap;
           overflow-wrap: anywhere;
           color: var(--foreground);
-          background: var(--inset, var(--card));
+          background-color: var(--inset);
         }
         .pretui-toolrow-live {
           position: absolute;

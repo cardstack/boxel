@@ -24,7 +24,7 @@ export interface ToolPlanSignature {
     steps: ToolPlanStep[];
     /** the list's accessible name. Default 'Plan' */
     label?: string;
-    /** 'compact' (default) sits in a ToolRow's 16px disc column;
+    /** 'compact' (default) sits in a ToolRow's disc column;
      * 'comfortable' is a checklist read on its own, as TaskChecklist shows it */
     density?: 'compact' | 'comfortable';
   };
@@ -110,8 +110,11 @@ export class ToolPlan extends Component<ToolPlanSignature> {
            row's text edge */
         .pretui-toolplan-step {
           display: grid;
-          grid-template-columns: var(--pretui-toolrow-disc, 16px) minmax(0, 1fr);
-          column-gap: var(--pretui-toolrow-gap, 8px);
+          grid-template-columns: var(--pretui-toolrow-disc, var(--boxel-sp)) minmax(
+              0,
+              1fr
+            );
+          column-gap: var(--pretui-toolrow-gap, var(--boxel-sp-xs));
           align-items: center;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
@@ -146,7 +149,7 @@ export class ToolPlan extends Component<ToolPlanSignature> {
           gap: var(--boxel-sp-xs);
         }
         .pretui-toolplan[data-density='comfortable'] .pretui-toolplan-step {
-          grid-template-columns: 16px minmax(0, 1fr);
+          grid-template-columns: var(--boxel-sp) minmax(0, 1fr);
           column-gap: var(--boxel-sp-xs);
           align-items: center;
         }
@@ -167,8 +170,8 @@ export class ToolPlan extends Component<ToolPlanSignature> {
         .pretui-toolplan-details {
           grid-column: 2;
           display: grid;
-          gap: 2px;
-          margin: 2px 0 var(--boxel-sp-4xs);
+          gap: var(--boxel-sp-6xs);
+          margin: var(--boxel-sp-6xs) 0 var(--boxel-sp-4xs);
           padding: 0;
           list-style: none;
           font-size: var(--boxel-caption-font-size);
