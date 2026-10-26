@@ -209,6 +209,7 @@ import { DEMOS_RECORD_PILL } from './components/record-pill.usage';
 import { DEMOS_RELATIVE_TIME } from './components/relative-time.usage';
 import { DEMOS_CONTROLS_REORDER } from './components/reorder.usage';
 import { DEMOS_RESIZABLE } from './components/resizable.usage';
+import { DEMOS_RESIZE_HANDLE } from './components/resize-handle.usage';
 import { DEMOS_RESULT_CARD } from './components/result-card.usage';
 import { DEMOS_RESULT } from './components/result.usage';
 import { DEMOS_RULE_ROW } from './components/rule-row.usage';
@@ -503,6 +504,7 @@ const REGISTRIES: Record<string, Record<string, unknown>> = {
   DEMOS_RELATIVE_TIME,
   DEMOS_CONTROLS_REORDER,
   DEMOS_RESIZABLE,
+  DEMOS_RESIZE_HANDLE,
   DEMOS_RESULT_CARD,
   DEMOS_RESULT,
   DEMOS_RULE_ROW,

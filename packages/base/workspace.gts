@@ -69,6 +69,7 @@ import {
   type CodeRef,
 } from '@cardstack/runtime-common';
 
+import { ResizeHandle } from '@cardstack/pretui/components/resize-handle';
 import CardsGridLayout, {
   VIEW_OPTIONS,
   SORT_OPTIONS,
@@ -112,6 +113,12 @@ const here: string = (import.meta as any).url;
 
 // Below this width the Library pane starts with its filter rail closed.
 const LIBRARY_NARROW_WIDTH_REM = 40;
+
+// How far the Library rail can be dragged. The default is --grid-rail-width,
+// which double-clicking the rail's edge restores.
+const RAIL_MIN_WIDTH = '11rem';
+const RAIL_MAX_WIDTH = '26rem';
+const RAIL_DEFAULT_WIDTH = '13.375rem';
 
 function remToPx(rem: number): number {
   let rootSize = parseFloat(
@@ -991,7 +998,12 @@ class Isolated extends Component<typeof Workspace> {
           </div>
         </div>
       {{else if (eq this.segment 'library')}}
-        <div class='library' {{this.watchLibraryWidth}} data-test-library>
+        <div
+          class='library'
+          style={{this.railWidthStyle}}
+          {{this.watchLibraryWidth}}
+          data-test-library
+        >
           {{! Stays mounted so it can slide shut; inert while closed keeps its
             controls out of the tab order and the accessibility tree. }}
           <div
@@ -1062,6 +1074,17 @@ class Isolated extends Component<typeof Workspace> {
                   </div>
                 {{/if}}
               </nav>
+              <ResizeHandle
+                class='rail-resize'
+                @size={{this.railWidth}}
+                @min={{this.railMinWidth}}
+                @max={{this.railMaxWidth}}
+                @defaultSize={{this.railDefaultWidth}}
+                @onSizeChange={{this.resizeRail}}
+                @label='Resize sidebar'
+                @controls={{this.railId}}
+                data-test-rail-resize-handle
+              />
             </div>
           </div>
           <CardsGridLayout
@@ -1359,7 +1382,8 @@ class Isolated extends Component<typeof Workspace> {
         --grid-chip-border: color-mix(in oklch, var(--border) 50%, transparent);
         /* looser leading for the welcome prose; no line-height token runs past 1.4 */
         --grid-prose-leading: 1.6;
-        /* fixed geometry the layout is built around */
+        /* fixed geometry the layout is built around; the rail's width
+           matches RAIL_DEFAULT_WIDTH */
         --grid-rail-width: 13.375rem;
         --grid-search-width: 10.625rem;
         --grid-search-results-size: 20rem;
@@ -1675,12 +1699,19 @@ class Isolated extends Component<typeof Workspace> {
         width: var(--grid-rail-width);
       }
       .rail-panel {
+        position: relative;
         flex-shrink: 0;
         width: var(--grid-rail-width);
         display: flex;
         flex-direction: column;
         background-color: var(--muted);
         border-inline-end: 1px solid var(--border);
+      }
+      /* on the panel's inner edge, inside the slot that clips it */
+      .rail-resize {
+        position: absolute;
+        inset-block: 0;
+        inset-inline-end: 0;
       }
       .rail {
         flex-grow: 1;
@@ -1690,6 +1721,11 @@ class Isolated extends Component<typeof Workspace> {
         /* top matches the grid header's padding */
         padding: var(--boxel-cards-grid-layout-padding, var(--boxel-sp-lg))
           var(--boxel-sp-xs) var(--boxel-sp-lg);
+        /* the resize handle's 0.5rem strip comes out of the end padding, so
+           the rail's scrollbar sits beside the handle rather than under it
+           and the rows keep their width */
+        margin-inline-end: 0.5rem;
+        padding-inline-end: max(0px, calc(var(--boxel-sp-xs) - 0.5rem));
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
@@ -2592,6 +2628,25 @@ class Isolated extends Component<typeof Workspace> {
   @action private toggleRail() {
     this.railAnimates = true;
     this.railPreference = !this.isRailOpen;
+  }
+
+  // Dragged width in px; unset leaves --grid-rail-width in charge. Like the
+  // toggle, it lasts until the card re-renders.
+  @tracked private railWidth: number | undefined;
+  private railMinWidth = RAIL_MIN_WIDTH;
+  private railMaxWidth = RAIL_MAX_WIDTH;
+  private railDefaultWidth = RAIL_DEFAULT_WIDTH;
+
+  private get railWidthStyle(): SafeString | undefined {
+    return this.railWidth === undefined
+      ? undefined
+      : htmlSafe(`--grid-rail-width: ${this.railWidth}px`);
+  }
+
+  // A resize follows the pointer directly; only a toggle slides the rail.
+  @action private resizeRail(width: number) {
+    this.railAnimates = false;
+    this.railWidth = width;
   }
 
   watchLibraryWidth = modifier((element: Element) => {

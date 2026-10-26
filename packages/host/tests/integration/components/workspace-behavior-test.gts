@@ -133,6 +133,73 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
       .exists('with its selection intact');
   });
 
+  test('dragging the rail edge resizes the rail within its bounds, and a double-click restores it', async function (assert) {
+    const HANDLE = '[data-test-rail-resize-handle]';
+    let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    // layout px, unaffected by the test container's scale
+    let railWidth = () => (find(RAIL_SLOT) as HTMLElement).offsetWidth;
+    let railScreenWidth = () =>
+      Math.round(find(RAIL_SLOT)!.getBoundingClientRect().width);
+    let drag = async (by: number) => {
+      let options = { button: 0, pointerId: 1 };
+      await triggerEvent(HANDLE, 'pointerdown', { ...options, clientX: 500 });
+      await triggerEvent(HANDLE, 'pointermove', {
+        ...options,
+        clientX: 500 + by,
+      });
+      await triggerEvent(HANDLE, 'pointerup', {
+        ...options,
+        clientX: 500 + by,
+      });
+    };
+
+    await renderCard(loader, new Workspace({}), 'isolated');
+    await click(LIBRARY);
+
+    let defaultWidth = Math.round(13.375 * rem);
+    assert.strictEqual(
+      railWidth(),
+      defaultWidth,
+      'the rail starts at 13.375rem',
+    );
+    assert
+      .dom(HANDLE)
+      .hasAttribute('role', 'separator')
+      .hasAria('label', 'Resize sidebar')
+      .hasAria('controls', find(RAIL)!.id, 'the handle names the rail')
+      .hasAria('valuenow', String(defaultWidth));
+
+    let screenWidth = railScreenWidth();
+    await drag(40);
+    assert.strictEqual(
+      railScreenWidth(),
+      screenWidth + 40,
+      'dragging widens it, with the edge following the pointer',
+    );
+    assert
+      .dom(HANDLE)
+      .hasAria('valuenow', String(railWidth()), 'and reports the new width');
+
+    await drag(1000);
+    assert.strictEqual(railWidth(), Math.round(26 * rem), 'up to 26rem');
+
+    await drag(-1000);
+    assert.strictEqual(railWidth(), Math.round(11 * rem), 'down to 11rem');
+
+    await triggerEvent(HANDLE, 'dblclick');
+    assert.strictEqual(
+      railWidth(),
+      defaultWidth,
+      'a double-click restores the default',
+    );
+
+    await click(TOGGLE);
+    assert.ok(
+      find(HANDLE)?.closest('[inert]'),
+      'the handle leaves the tab order with the rail',
+    );
+  });
+
   test('a narrow pane starts with the rail closed, and the toggle opens it', async function (assert) {
     let api = await loader.import<typeof import('@cardstack/base/card-api')>(
       '@cardstack/base/card-api',
