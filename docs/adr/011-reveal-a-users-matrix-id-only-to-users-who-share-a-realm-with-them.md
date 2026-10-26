@@ -105,14 +105,16 @@ see each other's activity in it.
 Matrix gives no way to hide a room's members from each other. A member can
 list the room's members, and every join is an event in the room's timeline,
 which each member receives through sync. Synapse has no setting that changes
-this, as of v1.164.0rc1. Blocking the member-list endpoints at a proxy leaves the
-timeline. So the rule has to be kept by deciding who shares a room (§1.5),
+this, as of v1.163.0, the version Boxel runs. Blocking the member-list
+endpoints at a proxy leaves the timeline. So the rule has to be kept by deciding who shares a room (§1.5),
 not by hiding members after the fact.
 
 Synapse's user directory also returns the members of any room with a `public`
 join rule to every user on the server, whether or not they share the room.
 One public room would make its members searchable by everyone, so §1.6 turns
-the directory off as a backstop.
+the directory off as a backstop. Filtering it instead is possible: Synapse
+passes `check_username_for_spam` the id of the user who is searching, so a
+module can apply §1.2 to each result.
 
 Room membership isn't the only way to learn a Matrix id. By default, Synapse
 answers a profile request for any user, without authentication and over
@@ -156,7 +158,9 @@ events, as proposed in #6906, breaks §1.3 and §1.5.
   `packages/matrix/support/synapse/test-without-registration-token/homeserver.yaml`
   break §1.6. They leave the user directory, unauthenticated profile requests,
   profile lookup over federation, and profile data in invites at their
-  defaults, which are all on.
+  defaults, which are all on. `limit_profile_requests_to_users_who_share_rooms`
+  has to be turned on together with `require_auth_for_profile_requests`:
+  Synapse refuses to start with the first and not the second.
 - `packages/runtime-common/db-queries/realm-permission-queries.ts` (its use
   of `fetchMatrixProfile`) and
   `packages/realm-server/middleware/multi-realm-authorization.ts`
