@@ -16,6 +16,7 @@ One component for all four, because they differ in _role_ rather than in appeara
 @id?      — pin the cue's id so an external control can aria-describedby it.
             Otherwise the id is per-instance and unique
 @decorative? — purely decorative; hidden from assistive tech entirely
+@glyph? — false drops the tone glyph, for a caller whose control already shows the tone (default true)
 
 <:default> — the cue's content when it needs markup
 ```

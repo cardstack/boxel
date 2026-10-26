@@ -28,18 +28,17 @@ Where it is behind React Aria, and the first one is the notable gap:
 
 - **No Escape-to-clear.** This is the search field's one keyboard convention, it costs a `keydown` handler, and every serious implementation has it. Its absence means a keyboard user must Tab to the clear button or select-all-delete.
 - **No `onClear` distinct from `onInput('')`.** A caller cannot tell "the user cleared" from "the user deleted the last character", which matters if clearing should also reset filters or close a results panel.
-- **No search icon.** Every reference implementation has a leading magnifier; here the field is visually indistinguishable from a plain **Input** until you type. That is the clearest visual gap.
 - **No result-count announcement hook** (see below).
 
 ## Accessibility
 
-No APG pattern. The convention is `<input type="search">` inside a `role="search"` landmark (or a `<form role="search">`), with a labelled clear button and a live region for result counts.
+No APG pattern. The convention is `<input type="search">` inside a `role="search"` landmark (or a `<form role="search">`), with a labeled clear button and a live region for result counts.
 
 Gaps, in order:
 
 - **Result counts are not announced, and nothing here provides a hook.** This is the most important accessibility fact about any search field: a sighted user sees the list shrink, a screen-reader user gets silence. The fix is a `role="status"` region containing "24 results" — and **it must exist in the DOM before the count changes**, which is the usual live-region requirement. That region belongs to the caller, and this component neither provides nor prompts for one.
 - **No Escape-to-clear** (above) is an accessibility gap as much as a usability one — it is the expected keyboard affordance.
-- **The clear button's accessible name and tab position need checking.** It must be labelled ("Clear search"), must be `type="button"` so it never submits an enclosing form, and — arguably — should be reachable, unlike a password reveal toggle, since clearing is a real action.
+- **The clear button's accessible name and tab position need checking.** It must be labeled ("Clear search"), must be `type="button"` so it never submits an enclosing form, and — arguably — should be reachable, unlike a password reveal toggle, since clearing is a real action.
 - **Clearing announces nothing.** After pressing clear, focus should generally return to the field, and the empty state should be discoverable. Verify where focus lands.
 - **No `role="search"` landmark.** The component does not wrap itself in one and there is no arg for it, so a page's search is not findable by landmark navigation unless the caller adds it.
 - **No accessible name of its own.** Outside **Field**/**FormField** and without an explicit `aria-label`, the field is unnamed — and search fields are the most likely control in any kit to be shipped with only a placeholder, which is not a label.
@@ -47,9 +46,9 @@ Gaps, in order:
 
 ## Theming
 
-Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3` (placeholder), `--control-h`, `--radius`, `--text-ui-md`, `--text-ui-sm`, `--text-ui-xs`, `--track-ui`, plus **IconButton**'s tokens for the clear affordance.
+Input's field style: a `--field` face with `--foreground` text, an `--input` edge, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus. The magnifier is the kit's own 14px `--muted-foreground` glyph, not BoxelInput's search variant, so hover, invalid and placeholder match Input.
 
-Forwarded into boxel-ui through the `--boxel-*` channel, matching **Input**'s metrics exactly.
+It wears Input's field dress (`internal/field-dress`), so its hover, invalid, disabled, read-only and focus states are Input's too; see **Input**'s Theming.
 
 `data-filled` is reflected on the wrapper when the clear button is showing, so a stylesheet can dress the filled state — a stronger hairline, a changed placeholder treatment — which is the only hook available for signaling "this search is active" without adding markup. Worth using, since the clear button alone is a small signal at 28px.
 

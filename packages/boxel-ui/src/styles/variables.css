@@ -279,6 +279,8 @@
   --boxel-form-control-border-radius: var(--boxel-border-radius);
   --boxel-form-control-dark-mode-placeholder-color: #acacac;
   --boxel-form-control-dark-mode-border: var(--boxel-border-flexible);
+  /* a disabled control's dimming */
+  --boxel-disabled-opacity: 0.45;
 
   /* deprecated - Do Not Use */
   --boxel-sp-xxxl: var(--boxel-sp-3xl); /* xxxl is deprecated, use 3xl */

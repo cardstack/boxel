@@ -24,7 +24,7 @@ Two decisions carry the component.
 
 Pretui's yielded-id shape is closest to Radix's implicit association but explicit about it, which makes it obvious at the call site which control the label belongs to — useful when a "field" contains two controls.
 
-Where Pretui is genuinely better than all three: **the invalid dress travels through the token channel.** `Field` sets `data-invalid` on itself, and its own stylesheet repoints `--border` and `--background` on any `.pretui-inputwrap` or `.pretui-boxelwrap` descendant. A control picks its own invalid dress by setting `--pretui-invalid-border` and `--pretui-invalid-background` on its wrapper; Input uses a `--destructive-ink` edge and no tint, and the rest default to a `--destructive` edge with a 4% tint. The inner boxel-ui control re-dresses itself; **no Pretui CSS reaches into boxel markup**, so a boxel-ui upgrade cannot break the error styling, and a theme can redefine what "invalid" looks like by changing one token. Compare the usual approach of threading an `isError` prop down through three components.
+Where Pretui is genuinely better than all three: **the invalid dress travels through the token channel.** `Field` sets `data-invalid` on itself, and its own stylesheet repoints `--border` and `--background` on any `.pretui-inputwrap` or `.pretui-boxelwrap` descendant. The default dress is a `--destructive-ink` edge with no tint, as on Input, Select and Autocomplete; a control can pick another by setting `--pretui-invalid-border` and `--pretui-invalid-background` on its wrapper. The inner boxel-ui control re-dresses itself; **no Pretui CSS reaches into boxel markup**, so a boxel-ui upgrade cannot break the error styling, and a theme can redefine what "invalid" looks like by changing one token. Compare the usual approach of threading an `isError` prop down through three components.
 
 Where it is behind: no `aria-describedby` wiring (below), no required/optional marker of its own, and no support for grouped controls.
 
@@ -46,9 +46,9 @@ Use **FormField** for anything validated. Field is right for a labeled control o
 
 ## Theming
 
-`--foreground` (label ink), `--muted-foreground` (hint ink, through Cue), `--destructive` (error ink, through Cue, and the other controls' invalid hairline/tint), `--destructive-ink` (an invalid Input's edge), `--field` (the tinted invalid background base), the label role (`--boxel-ui-label-*`), `--text-ui-sm` (messages, through Cue).
+`--foreground` (label ink), `--muted-foreground` (hint ink, through Cue), `--destructive` (error ink, through Cue), `--destructive-ink` (an invalid control's edge), `--field` (an invalid control's face), the label role (`--boxel-ui-label-*`), `--text-ui-sm` (messages, through Cue).
 
-Repointed into descendants when invalid: on an **Input**, `--border` → `--destructive-ink`, matching Select and Autocomplete; on Textarea and the other boxel-ui-wrapped controls, `--border` → `--destructive` and `--background` → a 4% `--destructive` mix over `--field`.
+Repointed into descendants when invalid: on Input, Textarea and the other boxel-ui-wrapped controls, `--border` → `--destructive-ink` and `--background` → `--field`, matching Select and Autocomplete; and on the Field itself `--input` → `--destructive-ink`, which the select-type triggers draw their edge from. A Field whose control is disabled keeps the usual edges.
 
 The `--boxel-sp-3xs` row gap and 1rem reserved message line are fixed. A theme must keep `--muted-foreground` and `--destructive` distinguishable at 11.5px — hint and error occupy the same slot, so weight (500 on the error) plus hue is the only differentiator, and hue alone fails WCAG 1.4.1.
 

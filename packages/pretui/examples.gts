@@ -59,6 +59,8 @@ import { EXAMPLES_SLIDER } from './components/slider.examples';
 import { EXAMPLES_RATING } from './components/rating.examples';
 import { EXAMPLES_STATEMENT_TABLE } from './components/statement-table.examples';
 import { EXAMPLES_LINE_GRID } from './components/line-grid.examples';
+import { EXAMPLES_FIELD } from './components/field.examples';
+import { EXAMPLES_SEGMENTED_CONTROL } from './components/segmented-control.examples';
 import { mergeRegistry } from './registry';
 
 // slugOf is intentionally absent: it was private to this module before the
@@ -581,4 +583,6 @@ export const EXAMPLES: Record<string, ExampleSpec[]> = mergeRegistry({
   EXAMPLES_RATING,
   EXAMPLES_STATEMENT_TABLE,
   EXAMPLES_LINE_GRID,
+  EXAMPLES_FIELD,
+  EXAMPLES_SEGMENTED_CONTROL,
 });

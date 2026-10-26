@@ -51,13 +51,9 @@ Governing pattern: none of APG's — this is the native `<select>`, and its list
 
 ## Theming
 
-From the host theme, bare: `--field` (the face), `--input` (the hairline), `--hover`, `--foreground`, `--muted-foreground` (placeholder ink and the caret), `--destructive` (the invalid hairline), `--ring`, `--radius`.
+Select's field style: a `--field` face with `--foreground` text (`--muted-foreground` while the placeholder shows), an `--input` edge, Button's corner (`calc(var(--radius) - 0.125rem)`), a `--boxel-form-control-height-sm` (1.75rem) height at size `m` with `xs`, `s`, `l` and `xl` as offsets from it, and `--boxel-font-size-xs` text, at least 16px on touch screens. The caret is Select's 10px `--muted-foreground` chevron at Select's inset; the platform draws the open list, so it never flips.
 
-Kit tokens, each named once on the root and read through an internal variable: `--control-h` (the `m` height; `xs`, `s`, `l`, `xl` are offsets from it), `--text-ui-md`, `--text-ui-sm`, `--text-ui-lg`, `--space-3` (the inline padding), `--track-ui`, `--pretui-dur-snap`, `--pretui-ease-snap`.
-
-Fixed: the caret's 0.75rem box and its 1.5 stroke, the 1px hairline, the 2px focus outline, the 0.45 disabled opacity.
-
-A theme retunes the field face through `--field` and `--input` alongside **Input**, so the two read as one family; the size scale follows `--control-h`.
+States match Select's: hover pulls the edge 30% toward `--foreground`, focus is a 2px `--ring` outline over it, invalid is a `--destructive-ink` edge that hover darkens, and disabled dims to `--boxel-disabled-opacity` with the usual edge.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
