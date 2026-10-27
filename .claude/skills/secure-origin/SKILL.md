@@ -42,7 +42,7 @@ The secure window's key pages are where a person keeps their keys: adds one, rep
 - **A destination** is shown by its registrable domain in large type, then its full host and path, then the card and realm it comes from (`destination.gts`), under "This request sends it to". The realm server computes the registrable domain (`registrableDomain`, with `tldts` and private suffixes included, so `alice.github.io` is its own); the page never derives one, and an operation's label never stands in for the host.
 - **Every change takes its own ticket**, minted with the window's session just before the request it is for (`src/security/keys.ts`): `add`, `replace` or `delete` of one key, `share` of one key into one realm, `swap` of one key into one share.
 - **Only a direct writer shares or swaps.** For anyone else `share-key` and `swap-key` say "An administrator of this realm needs to set this up" and offer nothing to type.
-- **A load that fails** for anything but a 404 says why and offers Try again; a 404 says the link leads nowhere.
+- **A load that fails** for anything but an ended session keeps the page's title and shows the error as the app does (`components/error-display.gts`, a port of the host's ErrorDisplay): a general message, with the HTTP status and the server's own message, or that no response came, behind Show Details. It offers Try again.
 - **Done, the window closes** (`navigation.close()`) when it was opened for something. A window the user opened themselves can't be closed by script and stays on the page saying what was done. A page reached from the key page goes back to it instead. The app learns the outcome by asking the realm server, never from the window.
 
 ## The credential fields the app frames

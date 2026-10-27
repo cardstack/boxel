@@ -29,7 +29,12 @@ import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
 import { modeURL } from '../urls.js';
 
-import { failureMessage, isNotFound, isSignedOut } from './context.ts';
+import {
+  failureMessage,
+  isSignedOut,
+  loadFailure,
+  type LoadFailure,
+} from './context.ts';
 import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
@@ -38,7 +43,6 @@ import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
-import NotFound from './not-found.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedFor } from './opened-for.ts';
 import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
@@ -50,8 +54,7 @@ interface Realm {
 
 type State =
   | { name: 'loading' }
-  | { name: 'not-found' }
-  | { name: 'load-failed'; message: string }
+  | { name: 'load-failed'; failure: LoadFailure }
   | { name: 'needs-admin'; realm: string }
   // `key` is the key the page was opened for, if any, and `context` the
   // realm's, if it was opened for one; the other is chosen here.
@@ -66,10 +69,12 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   <template>
     {{#if this.loading}}
       <BusyMessage class='busy' @title='Loading…' />
-    {{else if this.notFound}}
-      <NotFound />
     {{else if this.loadFailed}}
-      <LoadFailed @message={{this.loadFailed.message}} @onRetry={{this.load}} />
+      <LoadFailed
+        @heading='Share a key'
+        @failure={{this.loadFailed.failure}}
+        @onRetry={{this.load}}
+      />
     {{else if this.needsAdmin}}
       <NeedsAdmin @realm={{this.needsAdmin.realm}} />
     {{else if this.done}}
@@ -213,9 +218,6 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   private get loading() {
     return this.page.state.name === 'loading';
   }
-  private get notFound() {
-    return this.page.state.name === 'not-found';
-  }
   private get loadFailed() {
     return this.page.state.name === 'load-failed' ? this.page.state : undefined;
   }
@@ -231,13 +233,12 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
 
   private load = async () => {
     let { realm, key: keyId } = this.opened;
-    if (!realm && !keyId) {
-      this.page.state = { name: 'not-found' };
-      return;
-    }
     this.page.state = { name: 'loading' };
     let { config } = this.args.api;
     try {
+      if (!realm && !keyId) {
+        throw new Error('this page names neither a key nor a workspace');
+      }
       let context: WindowContext | undefined;
       if (realm) {
         context = await windowContext(config, { realm });
@@ -258,8 +259,7 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       if (keyId) {
         key = keys.find((k) => k.id === keyId);
         if (!key) {
-          this.page.state = { name: 'not-found' };
-          return;
+          throw new Error('the key this page names isn’t one of your keys');
         }
         this.selectKey(key.id);
       } else if (keys.length === 1) {
@@ -269,10 +269,11 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
-      } else if (isNotFound(e)) {
-        this.page.state = { name: 'not-found' };
       } else {
-        this.page.state = { name: 'load-failed', message: failureMessage(e) };
+        this.page.state = {
+          name: 'load-failed',
+          failure: loadFailure(e),
+        };
       }
     }
   };
