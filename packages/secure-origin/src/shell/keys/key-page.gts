@@ -4,7 +4,8 @@
 // It is what the secure origin shows at its own address and at `keys`.
 // No key's value is ever shown, here or anywhere: a key is replaced, never
 // read back. Removing a key first lists the shares it would suspend, and
-// can't be confirmed until that list has loaded.
+// can't be confirmed until that list has loaded. A key list that fails to
+// load says why and offers to try again, rather than reading as no keys.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
@@ -33,6 +34,7 @@ import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
 import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
+import LoadFailed from './load-failed.gts';
 
 type Action =
   | { name: 'none' }
@@ -42,153 +44,163 @@ type Action =
 
 class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   <template>
-    <EditPage @heading='Your keys' data-test-key-page>
-      <:intro>Keys you add here are encrypted, and nothing can read them back.
-        Cards use a key only through requests you approve for it.</:intro>
-      <:default>
-        {{#if this.state.error}}
-          <div class='error' role='alert' data-test-keys-error>
-            {{this.state.error}}
-          </div>
-        {{/if}}
-        {{#if this.state.loading}}
-          <BusyMessage @title='Loading…' />
-        {{else}}
-          {{#if this.state.keys.length}}
-            <ul class='list' data-test-key-list>
-              {{#each this.state.keys as |key|}}
-                <li class='item' data-test-key-row={{key.name}}>
-                  <div class='entry'>
-                    <KeyTile @key={{key}}>
-                      <div class='tile-actions'>
-                        <Button
-                          class='action'
-                          @kind='secondary'
-                          @size='extra-small'
-                          data-test-key-share
-                          {{on 'click' (fn this.share key)}}
-                        ><ShareIcon
-                            class='action-icon'
-                            aria-hidden='true'
-                          />Share</Button>
-                        <Button
-                          class='action'
-                          @kind='secondary'
-                          @size='extra-small'
-                          data-test-key-replace
-                          {{on 'click' (fn this.startReplace key)}}
-                        ><RefreshCw
-                            class='action-icon'
-                            aria-hidden='true'
-                          />Replace</Button>
-                      </div>
-                    </KeyTile>
-                    {{#if (this.isActing 'replacing' key)}}
-                      <form
-                        class='panel'
-                        novalidate
-                        {{on 'submit' this.replace}}
-                        data-test-key-replace-form
-                      >
-                        <KeyFields
-                          @value={{this.form.value}}
-                          @onValue={{this.setValue}}
-                        />
-                        <div class='panel-actions'>
-                          <Button
-                            type='button'
-                            @kind='secondary'
-                            @size='small'
-                            {{on 'click' this.cancel}}
-                          >Cancel</Button>
-                          <Button
-                            type='submit'
-                            @kind='primary'
-                            @size='small'
-                            @disabled={{this.replaceDisabled}}
-                            @loading={{this.form.saving}}
-                            data-test-key-replace-save
-                          >Replace key</Button>
-                        </div>
-                      </form>
-                    {{else if (this.isActing 'deleting' key)}}
-                      <div class='panel' data-test-key-delete-confirm>
-                        {{#if this.loadingShares}}
-                          <p class='confirm' data-test-key-delete-loading>
-                            Checking where
-                            <strong>{{key.name}}</strong>
-                            is shared…
-                          </p>
-                        {{else if this.deletingShares.length}}
-                          <p class='confirm'>Deleting
-                            <strong>{{key.name}}</strong>
-                            stops it working in the workspaces it’s shared into:</p>
-                          <ul class='shares' data-test-key-delete-shares>
-                            {{#each this.deletingShares as |share|}}
-                              <li>{{share.label}}
-                                <span
-                                  class='share-realm'
-                                >{{share.realm}}</span></li>
-                            {{/each}}
-                          </ul>
-                        {{else}}
-                          <p class='confirm'>Delete
-                            <strong>{{key.name}}</strong>? It isn’t shared into
-                            any workspace. Requests that use it stop working.</p>
-                        {{/if}}
-                        <div class='panel-actions'>
-                          <Button
-                            type='button'
-                            @kind='secondary'
-                            @size='small'
-                            {{on 'click' this.cancel}}
-                          >Cancel</Button>
-                          <Button
-                            type='button'
-                            @kind='destructive'
-                            @size='small'
-                            @disabled={{this.loadingShares}}
-                            @loading={{this.form.saving}}
-                            data-test-key-delete-confirm-button
-                            {{on 'click' this.delete}}
-                          >Delete key</Button>
-                        </div>
-                      </div>
-                    {{/if}}
-                  </div>
-                  <button
-                    type='button'
-                    class='remove'
-                    aria-label='Delete {{key.name}}'
-                    data-test-key-delete
-                    {{on 'click' (fn this.startDelete key)}}
-                  ><Trash width='18' height='18' aria-hidden='true' /></button>
-                </li>
-              {{/each}}
-            </ul>
-          {{else}}
-            <p class='empty' data-test-key-list-empty>You haven’t added any
-              keys.</p>
+    {{#if this.state.loadFailed}}
+      <LoadFailed @message={{this.state.loadFailed}} @onRetry={{this.retry}} />
+    {{else}}
+      <EditPage @heading='Your keys' data-test-key-page>
+        <:intro>Keys you add here are encrypted, and nothing can read them back.
+          Cards use a key only through requests you approve for it.</:intro>
+        <:default>
+          {{#if this.state.error}}
+            <div class='keys-error' role='alert' data-test-keys-error>
+              {{this.state.error}}
+            </div>
           {{/if}}
-          <Button
-            class='add-new'
-            @kind='secondary'
-            @size='tall'
-            @rectangular={{true}}
-            data-test-key-page-add
-            {{on 'click' this.add}}
-          ><IconPlus
-              class='plus'
-              width='12px'
-              height='12px'
-              role='presentation'
-            />Add a key</Button>
-        {{/if}}
-      </:default>
-    </EditPage>
+          {{#if this.state.loading}}
+            <BusyMessage @title='Loading…' />
+          {{else}}
+            {{#if this.state.keys.length}}
+              <ul class='list' data-test-key-list>
+                {{#each this.state.keys as |key|}}
+                  <li class='item' data-test-key-row={{key.name}}>
+                    <div class='entry'>
+                      <KeyTile @key={{key}}>
+                        <div class='tile-actions'>
+                          <Button
+                            class='action'
+                            @kind='secondary'
+                            @size='extra-small'
+                            data-test-key-share
+                            {{on 'click' (fn this.share key)}}
+                          ><ShareIcon
+                              class='action-icon'
+                              aria-hidden='true'
+                            />Share</Button>
+                          <Button
+                            class='action'
+                            @kind='secondary'
+                            @size='extra-small'
+                            data-test-key-replace
+                            {{on 'click' (fn this.startReplace key)}}
+                          ><RefreshCw
+                              class='action-icon'
+                              aria-hidden='true'
+                            />Replace</Button>
+                        </div>
+                      </KeyTile>
+                      {{#if (this.isActing 'replacing' key)}}
+                        <form
+                          class='panel'
+                          novalidate
+                          {{on 'submit' this.replace}}
+                          data-test-key-replace-form
+                        >
+                          <KeyFields
+                            @value={{this.form.value}}
+                            @onValue={{this.setValue}}
+                          />
+                          <div class='panel-actions'>
+                            <Button
+                              type='button'
+                              @kind='secondary'
+                              @size='small'
+                              {{on 'click' this.cancel}}
+                            >Cancel</Button>
+                            <Button
+                              type='submit'
+                              @kind='primary'
+                              @size='small'
+                              @disabled={{this.replaceDisabled}}
+                              @loading={{this.form.saving}}
+                              data-test-key-replace-save
+                            >Replace key</Button>
+                          </div>
+                        </form>
+                      {{else if (this.isActing 'deleting' key)}}
+                        <div class='panel' data-test-key-delete-confirm>
+                          {{#if this.loadingShares}}
+                            <p class='confirm' data-test-key-delete-loading>
+                              Checking where
+                              <strong>{{key.name}}</strong>
+                              is shared…
+                            </p>
+                          {{else if this.deletingShares.length}}
+                            <p class='confirm'>Deleting
+                              <strong>{{key.name}}</strong>
+                              stops it working in the workspaces it’s shared
+                              into:</p>
+                            <ul class='shares' data-test-key-delete-shares>
+                              {{#each this.deletingShares as |share|}}
+                                <li>{{share.label}}
+                                  <span
+                                    class='share-realm'
+                                  >{{share.realm}}</span></li>
+                              {{/each}}
+                            </ul>
+                          {{else}}
+                            <p class='confirm'>Delete
+                              <strong>{{key.name}}</strong>? It isn’t shared
+                              into any workspace. Requests that use it stop
+                              working.</p>
+                          {{/if}}
+                          <div class='panel-actions'>
+                            <Button
+                              type='button'
+                              @kind='secondary'
+                              @size='small'
+                              {{on 'click' this.cancel}}
+                            >Cancel</Button>
+                            <Button
+                              type='button'
+                              @kind='destructive'
+                              @size='small'
+                              @disabled={{this.loadingShares}}
+                              @loading={{this.form.saving}}
+                              data-test-key-delete-confirm-button
+                              {{on 'click' this.delete}}
+                            >Delete key</Button>
+                          </div>
+                        </div>
+                      {{/if}}
+                    </div>
+                    <button
+                      type='button'
+                      class='remove'
+                      aria-label='Delete {{key.name}}'
+                      data-test-key-delete
+                      {{on 'click' (fn this.startDelete key)}}
+                    ><Trash
+                        width='18'
+                        height='18'
+                        aria-hidden='true'
+                      /></button>
+                  </li>
+                {{/each}}
+              </ul>
+            {{else}}
+              <p class='empty' data-test-key-list-empty>You haven’t added any
+                keys.</p>
+            {{/if}}
+            <Button
+              class='add-new'
+              @kind='secondary'
+              @size='tall'
+              @rectangular={{true}}
+              data-test-key-page-add
+              {{on 'click' this.add}}
+            ><IconPlus
+                class='plus'
+                width='12px'
+                height='12px'
+                role='presentation'
+              />Add a key</Button>
+          {{/if}}
+        </:default>
+      </EditPage>
+    {{/if}}
 
     <style scoped>
-      .error {
+      .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
@@ -291,6 +303,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     loading: true,
     keys: [] as UserKey[],
     error: undefined as string | undefined,
+    // Why the key list didn't load, when it didn't.
+    loadFailed: undefined as string | undefined,
     action: { name: 'none' } as Action,
   });
   private form = trackedObject({ value: '', saving: false });
@@ -318,11 +332,23 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   }
 
   private async load() {
-    await this.guard(async () => {
+    try {
       this.state.keys = await listKeys(this.args.api.config);
-    });
+    } catch (e) {
+      if (isSignedOut(e)) {
+        this.args.api.signedOut();
+      } else {
+        this.state.loadFailed = failureMessage(e);
+      }
+    }
     this.state.loading = false;
   }
+
+  private retry = () => {
+    this.state.loadFailed = undefined;
+    this.state.loading = true;
+    this.load();
+  };
 
   private isActing = (name: Action['name'], key: UserKey) =>
     this.state.action.name === name &&

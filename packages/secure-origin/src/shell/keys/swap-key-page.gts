@@ -111,7 +111,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @onGoToKeys={{this.goToKeys}}
             />
             {{#if this.form.error}}
-              <div class='error' role='alert' data-test-keys-error>
+              <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
               </div>
             {{/if}}
@@ -156,7 +156,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         line-height: var(--boxel-line-height-xs);
         color: var(--muted-foreground);
       }
-      .error {
+      .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);

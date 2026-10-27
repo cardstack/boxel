@@ -155,7 +155,10 @@ write ticket refuses an ended session. An ended session is forgotten. A
 sign-in page then shows "Sign in to Boxel" with no error. A key page never
 signs in, as it never signs out: it says to sign in to Boxel from the page
 that opened it, and shows nothing else (ADR 005 §1.6). The window's session
-for its key pages is the one Boxel's own sign-in on this origin leaves here. When the check gets no answer
+for its key pages is the one Boxel's own sign-in on this origin leaves here,
+which happens only where `SIGN_IN_ON_SECURE_ORIGIN` is on (§1.7). With it
+off, Boxel signs in in the app page and leaves no session here, so a
+deployment opens the key pages only with it on. When the check gets no answer
 within ten seconds, or the server can't be reached, the window keeps its
 session.
 

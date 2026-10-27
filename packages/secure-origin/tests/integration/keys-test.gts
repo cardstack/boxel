@@ -24,6 +24,9 @@ import SwapKeyPage from '../../src/shell/keys/swap-key-page.gts';
 
 const REALM_SERVER = 'https://realm-server.test/';
 const REALM = 'https://realm-server.test/someone/workspace/';
+// The same realm named in prefix form, as a page may open the window with it.
+// The server answers with the realm's URL, and the page acts on that answer.
+const REALM_PREFIX = '@someone/workspace/';
 const CARD = `${REALM}Weather/today`;
 const SESSION = {
   token: 'secure-session-token',
@@ -297,6 +300,27 @@ module('Integration | key pages', function (hooks) {
   });
 
   module('the key page', function () {
+    test('a key list that fails to load offers to try again, rather than reading as no keys', async function (assert) {
+      let attempts = 0;
+      serve({
+        'GET _user-keys': () =>
+          ++attempts === 1
+            ? refusal(503, 'the server is unavailable')
+            : json(200, keyResources()),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-keys-load-failed]')
+        .includesText('The server is unavailable.');
+      assert.dom('[data-test-key-list-empty]').doesNotExist();
+      assert.dom('[data-test-key-page-add]').doesNotExist();
+      await click('[data-test-keys-retry]');
+      await waitFor('[data-test-key-row="Maps"]');
+      assert.dom('[data-test-key-row]').exists({ count: 2 });
+    });
+
     test('lists the keys, and replaces one with a ticket for that key', async function (assert) {
       serve({
         'PATCH _user-keys/key-2': () =>
@@ -671,12 +695,67 @@ module('Integration | key pages', function (hooks) {
       );
     });
 
-    test('opened for a workspace, picks one of the user’s keys, then closes', async function (assert) {
+    test('two workspaces with the same name are told apart by their addresses', async function (assert) {
+      const OTHER = 'https://realm-server.test/someone/another/';
+      const DASHBOARD = 'https://realm-server.test/someone/dashboard/';
       serve({
-        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+        'GET _secure-window/realms': () =>
+          json(200, {
+            data: [
+              [DASHBOARD, 'Dashboard'],
+              [OTHER, 'Team Workspace'],
+              [REALM, 'Team Workspace'],
+            ].map(([id, name]) => ({
+              type: 'secure-window-realm',
+              id,
+              attributes: { name },
+            })),
+          }),
         'POST _key-shares': shares(),
       });
-      visitShell(`share-key#realm=${encodeURIComponent(REALM)}`);
+      visitShell('keys/key-2/share');
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      await click('[data-test-workspace-dropdown-trigger]');
+      assert
+        .dom(
+          '[data-test-workspace-option="Dashboard"] [data-test-workspace-address]',
+        )
+        .doesNotExist('a name of its own needs no address');
+      assert.deepEqual(
+        [
+          ...document.querySelectorAll(
+            '[data-test-workspace-option="Team Workspace"] [data-test-workspace-address]',
+          ),
+        ].map((e) => e.textContent?.trim()),
+        [OTHER, REALM],
+      );
+      await click(
+        [...document.querySelectorAll('[data-test-workspace-option]')].find(
+          (e) => e.textContent?.includes(OTHER),
+        )!,
+      );
+      assert.dom('[data-test-workspace-address]').hasText(OTHER);
+      await click('[data-test-share-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert
+        .dom('[data-test-keys-done]')
+        .includesText(`Team Workspace (${OTHER})`);
+    });
+
+    test('opened for a workspace, picks one of the user’s keys, then closes', async function (assert) {
+      serve({
+        'POST _secure-window/context': ({ body }) => {
+          assert.strictEqual(
+            body.data.attributes.realm,
+            REALM_PREFIX,
+            'the fragment’s realm is only asked about',
+          );
+          return context({ realm: WORKSPACE });
+        },
+        'POST _key-shares': shares(),
+      });
+      visitShell(`share-key#realm=${encodeURIComponent(REALM_PREFIX)}`);
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
       assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
@@ -685,9 +764,17 @@ module('Integration | key pages', function (hooks) {
       await click('[data-test-key-choice="Maps"] input');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
-      assert.deepEqual(ticketRequests(), [
-        { action: 'share', keyId: 'key-2', realm: REALM },
-      ]);
+      assert.deepEqual(
+        ticketRequests(),
+        [{ action: 'share', keyId: 'key-2', realm: REALM }],
+        'the ticket is for the realm the server described',
+      );
+      assert.strictEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_key-shares')!
+          .body.data.attributes.realm,
+        REALM,
+        'and so is the share',
+      );
       assert.deepEqual(navigations, [{ how: 'close' }]);
     });
 
@@ -742,7 +829,14 @@ module('Integration | key pages', function (hooks) {
     test('puts one of the user’s keys in, with a ticket for that key and share', async function (assert) {
       serve({
         'POST _secure-window/context': () => context({ realm: WORKSPACE }),
-        'GET _key-shares': shares(SHARE),
+        'GET _key-shares': (request) => {
+          assert.strictEqual(
+            request.url.searchParams.get('realm'),
+            REALM,
+            'the shares are those of the realm the server described',
+          );
+          return shares(SHARE)();
+        },
         'POST _key-shares/share-4/swap': () =>
           json(200, {
             data: {
@@ -752,7 +846,9 @@ module('Integration | key pages', function (hooks) {
             },
           }),
       });
-      visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
+      visitShell(
+        `swap-key#realm=${encodeURIComponent(REALM_PREFIX)}&share=share-4`,
+      );
       await render(SwapKeyPage);
       await waitFor('[data-test-swap-key-form]');
       assert.dom('[data-test-swap-share-label]').hasText('Team weather');

@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import type { CreateRoutesArgs } from '../routes.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
+import { findRealm } from '../lib/realm-routing.ts';
 import { isSecureSession } from '../lib/secure-session.ts';
 import {
   secureWindowContext,
@@ -21,12 +22,13 @@ type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
 // realm, a card or type, an operation on it — described from the server's own
 // records (`lib/secure-window.ts`). Asked with the window's own session, as
 // every request the window makes is.
-export function handleSecureWindowContext({
-  dbAdapter,
-  realms,
-  definitionLookup,
-  virtualNetwork,
-}: CreateRoutesArgs): Handler {
+// The realm a URL is in, among every realm the server serves, mounted or not.
+function realmFinder({ dbAdapter, realms, reconciler }: CreateRoutesArgs) {
+  return (url: URL) => findRealm(url, { realms, reconciler, dbAdapter });
+}
+
+export function handleSecureWindowContext(args: CreateRoutesArgs): Handler {
+  let { dbAdapter, definitionLookup, virtualNetwork } = args;
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     if (
@@ -59,7 +61,12 @@ export function handleSecureWindowContext({
       throw new UserKeyError(400, 'attributes must be an object');
     }
     let context = await secureWindowContext(
-      { dbAdapter, realms, definitionLookup, virtualNetwork },
+      {
+        dbAdapter,
+        findRealm: realmFinder(args),
+        definitionLookup,
+        virtualNetwork,
+      },
       user,
       validateContextRequest(attributes),
     );
@@ -72,10 +79,8 @@ export function handleSecureWindowContext({
 // `GET /_secure-window/realms`: the realms the user is a direct writer of, by
 // name, which the window offers to share a key into. Asked with the window's
 // own session.
-export function handleSecureWindowRealms({
-  dbAdapter,
-  realms,
-}: CreateRoutesArgs): Handler {
+export function handleSecureWindowRealms(args: CreateRoutesArgs): Handler {
+  let { dbAdapter } = args;
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     if (
@@ -89,7 +94,10 @@ export function handleSecureWindowRealms({
         'the secure window asks this with its own session',
       );
     }
-    let found = await writableRealms({ dbAdapter, realms }, user);
+    let found = await writableRealms(
+      { dbAdapter, findRealm: realmFinder(args) },
+      user,
+    );
     await sendJSON(ctxt, 200, {
       data: found.map(({ url, name }) => ({
         type: 'secure-window-realm',

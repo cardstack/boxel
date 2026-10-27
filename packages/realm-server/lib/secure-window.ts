@@ -1,6 +1,7 @@
 import { getDomain } from 'tldts';
 import {
   codeRefWithAbsoluteIdentifier,
+  fetchDirectWriterRealms,
   fetchRealmPermissions,
   isBotAccount,
   isDirectWriter,
@@ -8,13 +9,13 @@ import {
   isResolvedCodeRef,
   param,
   query,
-  RealmPaths,
   type CodeRef,
   type DBAdapter,
   type DefinitionLookup,
   type Realm,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
+  type ServedRealm,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { operationDisplayLabel } from '@cardstack/runtime-common/card-operations/label';
@@ -33,8 +34,9 @@ import { UserKeyError } from './user-keys.ts';
 // the user has no access to, or whether a module exists there.
 //
 // Identifiers arrive in either form, URL or prefix (`@cardstack/catalog/…`).
-// They are resolved only through the VirtualNetwork, and realm membership is
-// decided with `RealmPaths`.
+// They are resolved only through the VirtualNetwork, and the realm holding
+// one is found as the server routes a request to it (`findRealm`), among every
+// realm it serves, whether mounted yet or not.
 
 export interface DestinationDisplay {
   // The destination as lowered: an origin and a path prefix ending in `/`.
@@ -167,7 +169,9 @@ export function validateContextRequest(
 
 interface Deps {
   dbAdapter: DBAdapter;
-  realms: Realm[];
+  // The realm a URL is in, found among every realm this server serves,
+  // mounted or not, and without mounting it (`findRealm`).
+  findRealm: (url: URL) => Promise<ServedRealm | undefined>;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
 }
@@ -185,32 +189,28 @@ function servedURL(
   }
 }
 
-// The innermost realm this server serves that holds `url`.
-function realmHolding(realms: Realm[], url: URL): Realm | undefined {
-  return realms
-    .filter((r) => new RealmPaths(new URL(r.url)).inRealm(url))
-    .sort((a, b) => b.url.length - a.url.length)[0];
-}
-
 // The realm `id` names: its root, written with or without the trailing slash.
-function realmNamed(
-  { realms, virtualNetwork }: Deps,
+async function realmNamed(
+  { findRealm, virtualNetwork }: Deps,
   id: RealmResourceIdentifier,
-): Realm | undefined {
+): Promise<ServedRealm | undefined> {
   let url = servedURL(virtualNetwork, id);
   if (!url) {
     return undefined;
   }
   let root = url.href.endsWith('/') ? url.href : `${url.href}/`;
-  return realms.find((r) => r.url === root);
+  let found = await findRealm(new URL(root));
+  return found?.url === root ? found : undefined;
 }
 
+// Read from the realm's permission rows, so a realm need not be mounted to be
+// asked about.
 async function mayRead(
   dbAdapter: DBAdapter,
-  realm: Realm,
+  realmURL: string,
   user: string,
 ): Promise<boolean> {
-  let permissions = await fetchRealmPermissions(dbAdapter, new URL(realm.url));
+  let permissions = await fetchRealmPermissions(dbAdapter, new URL(realmURL));
   return [user, 'users', '*'].some((who) => permissions[who]?.includes('read'));
 }
 
@@ -246,24 +246,35 @@ export async function secureWindowContext(
   user: string,
   request: SecureWindowContextRequest,
 ): Promise<SecureWindowContext> {
-  let { dbAdapter, realms, definitionLookup, virtualNetwork } = deps;
+  let { dbAdapter, findRealm, definitionLookup, virtualNetwork } = deps;
   let notFound = () => new UserKeyError(404, NOT_FOUND);
   let { target } = request;
 
-  let realm: Realm | undefined;
+  // A realm is mounted only once the user is known to be able to read it.
+  let served: ServedRealm | undefined;
   let instanceURL: URL | undefined;
   if (target?.kind === 'instance') {
     instanceURL = servedURL(virtualNetwork, target.url);
-    realm = instanceURL ? realmHolding(realms, instanceURL) : undefined;
+    served = instanceURL ? await findRealm(instanceURL) : undefined;
   } else {
     let named = target?.kind === 'type' ? target.realm : request.realm;
-    realm = named ? realmNamed(deps, named) : undefined;
+    served = named ? await realmNamed(deps, named) : undefined;
   }
-  // A realm named beside a target must be the target's own.
-  if (request.realm && target && realmNamed(deps, request.realm) !== realm) {
-    throw new UserKeyError(400, 'the target is not in that realm');
+  if (!served || !(await mayRead(dbAdapter, served.url, user))) {
+    throw notFound();
   }
-  if (!realm || !(await mayRead(dbAdapter, realm, user))) {
+  // A realm named beside a target must be the target's own. Any other realm
+  // answers as not found, so the answer says nothing about a realm the user
+  // can't read.
+  if (
+    request.realm &&
+    target &&
+    (await realmNamed(deps, request.realm))?.url !== served.url
+  ) {
+    throw notFound();
+  }
+  let realm = await served.mount();
+  if (!realm) {
     throw notFound();
   }
   let info = await realm.getRealmInfo();
@@ -291,8 +302,12 @@ export async function secureWindowContext(
     virtualNetwork,
     codeRef.module as RealmResourceIdentifier,
   );
-  let moduleRealm = moduleURL ? realmHolding(realms, moduleURL) : undefined;
-  if (!moduleRealm || !(await mayRead(dbAdapter, moduleRealm, user))) {
+  let moduleRealm = moduleURL ? await findRealm(moduleURL) : undefined;
+  if (!moduleRealm || !(await mayRead(dbAdapter, moduleRealm.url, user))) {
+    throw notFound();
+  }
+  // The definition is looked up among mounted realms.
+  if (!(await moduleRealm.mount())) {
     throw notFound();
   }
   let definition;
@@ -335,31 +350,30 @@ export async function secureWindowContext(
   return context;
 }
 
+// What a realm is called before its `realm.json` is indexed, as a realm
+// reports itself then.
+const UNNAMED_REALM = 'Unnamed Workspace';
+
 export interface WritableRealm {
   url: string;
   name: string;
 }
 
 // The realms this server serves that `user` is a direct writer of, by name:
-// the realms they may share a key into. A direct writer's own permission row
-// grants write; a `*` or `users` row, a bot account or a policy grant makes no
-// one a direct writer.
+// the realms they may share a key into, as `isDirectWriter` decides it. None
+// of them is mounted to list it.
 export async function writableRealms(
-  { dbAdapter, realms }: Pick<Deps, 'dbAdapter' | 'realms'>,
+  { dbAdapter, findRealm }: Pick<Deps, 'dbAdapter' | 'findRealm'>,
   user: string,
 ): Promise<WritableRealm[]> {
   if (isBotAccount(user)) {
     return [];
   }
-  let rows = (await query(dbAdapter, [
-    `SELECT realm_url FROM realm_user_permissions WHERE write = true AND username =`,
-    param(user),
-  ])) as { realm_url: string }[];
-  let urls = new Set(rows.map((row) => row.realm_url));
   let found: WritableRealm[] = [];
-  for (let realm of realms) {
-    if (urls.has(realm.url)) {
-      found.push({ url: realm.url, name: (await realm.getRealmInfo()).name });
+  for (let { url, name } of await fetchDirectWriterRealms(dbAdapter, user)) {
+    // A permission row can outlive the realm it names.
+    if ((await findRealm(new URL(url)))?.url === url) {
+      found.push({ url, name: name ?? UNNAMED_REALM });
     }
   }
   return found.sort(
