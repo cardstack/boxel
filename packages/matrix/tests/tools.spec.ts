@@ -163,7 +163,9 @@ test.describe('Commands', () => {
       `[data-test-tool-call-id="${commandRequestId}"]`,
     );
     await command.waitFor();
-    await command.locator('[data-test-tool-call-apply]').click();
+    await command
+      .locator('[data-test-pretui-tool-gate-action="apply"]')
+      .click();
 
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
@@ -237,7 +239,9 @@ test.describe('Commands', () => {
       `[data-test-tool-call-id="${commandRequestId}"]`,
     );
     await command.waitFor();
-    await command.locator('[data-test-tool-call-apply]').click();
+    await command
+      .locator('[data-test-pretui-tool-gate-action="apply"]')
+      .click();
 
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
@@ -387,7 +391,8 @@ test.describe('Commands', () => {
     // Note: you don't have to click on apply button, because command on Skill
     // has requireApproval set to false
     await page.waitForSelector(
-      '[data-test-message-idx="1"] [data-test-apply-state="applied"]',
+      '[data-test-message-idx="1"] [data-test-tool-call-apply="applied"]',
+      { state: 'attached' },
     );
 
     await expect(
@@ -460,7 +465,8 @@ test.describe('Commands', () => {
     await page.waitForSelector('[data-test-message-idx="3"]');
 
     await page.waitForSelector(
-      '[data-test-message-idx="3"] [data-test-apply-state="applied"]',
+      '[data-test-message-idx="3"] [data-test-tool-call-apply="applied"]',
+      { state: 'attached' },
     );
 
     await expect(

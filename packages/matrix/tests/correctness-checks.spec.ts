@@ -128,13 +128,24 @@ async function runRealmCode({
   });
 
   let toolCall = page.locator(`[data-test-tool-call-id="${toolCallId}"]`);
-  let ready = toolCall.locator('[data-test-apply-state="ready"]');
-  let applied = toolCall.locator('[data-test-apply-state="applied"]');
-  await ready.or(applied).first().waitFor();
-  if (await ready.isVisible()) {
-    await ready.locator('button').click();
+  // the apply state is a hidden marker on the row, so it is waited for as
+  // attached, not visible
+  let applyState = toolCall.locator('[data-test-tool-call-apply]');
+  await expect(applyState).toHaveAttribute(
+    'data-test-tool-call-apply',
+    /^(ready|applied)$/,
+  );
+  if (
+    (await applyState.getAttribute('data-test-tool-call-apply')) === 'ready'
+  ) {
+    await toolCall
+      .locator('[data-test-pretui-tool-gate-action="apply"]')
+      .click();
   }
-  await applied.waitFor();
+  await expect(applyState).toHaveAttribute(
+    'data-test-tool-call-apply',
+    'applied',
+  );
 
   let toolResultEvent: any;
   await expect(async () => {
@@ -283,16 +294,16 @@ test.describe('Correctness Checks', () => {
 
     // Wait for the command to auto-apply
     await commandContainer
-      .locator('[data-test-apply-state="applied"]')
-      .waitFor();
+      .locator('[data-test-tool-call-apply="applied"]')
+      .waitFor({ state: 'attached' });
 
     // Verify the command didn't fail
     await expect(commandContainer).not.toHaveClass(/is-failed/);
 
     // Verify the command description is displayed
-    await expect(commandContainer.locator('.tool-description')).toContainText(
-      'Check correctness',
-    );
+    await expect(
+      commandContainer.locator('[data-test-pretui-tool-row-title]'),
+    ).toContainText('Check correctness');
 
     // Verify the command result event was dispatched with correct data
     let toolResultEvent: any;
@@ -415,8 +426,8 @@ test.describe('Correctness Checks', () => {
     await failingCommandContainer.waitFor();
 
     await failingCommandContainer
-      .locator('[data-test-apply-state="applied-with-error"]')
-      .waitFor();
+      .locator('[data-test-tool-call-apply="applied-with-error"]')
+      .waitFor({ state: 'attached' });
 
     let failingCommandResultEvent: any;
     await expect(async () => {
@@ -532,8 +543,8 @@ test.describe('Correctness Checks', () => {
     );
     await finalCommandContainer.waitFor();
     await finalCommandContainer
-      .locator('[data-test-apply-state="applied"]')
-      .waitFor();
+      .locator('[data-test-tool-call-apply="applied"]')
+      .waitFor({ state: 'attached' });
 
     let finalCommandResultEvent: any;
     await expect(async () => {
@@ -737,9 +748,9 @@ export class ImportCheck extends CardDef {
         );
         await commandContainer
           .locator(
-            '[data-test-apply-state="applied"], [data-test-apply-state="applied-with-error"]',
+            '[data-test-tool-call-apply="applied"], [data-test-tool-call-apply="applied-with-error"]',
           )
-          .waitFor();
+          .waitFor({ state: 'attached' });
 
         let toolResultEvent: any;
         await expect(async () => {
@@ -786,7 +797,7 @@ export class ImportCheck extends CardDef {
         expect(resultJson.data.attributes.correct).toBe(expectCorrect);
         await expect(
           commandContainer.locator(
-            `[data-test-apply-state="${
+            `[data-test-tool-call-apply="${
               expectCorrect ? 'applied' : 'applied-with-error'
             }"]`,
           ),
