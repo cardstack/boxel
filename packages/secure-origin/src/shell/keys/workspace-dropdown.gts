@@ -67,6 +67,13 @@ const focusOnInsert = modifier((element: HTMLElement) => {
   element.focus();
 });
 
+// Hands the element to `keep`, so the dropdown can focus its trigger again.
+const keepElement = modifier(
+  (element: HTMLElement, keep: (element: HTMLElement) => void) => {
+    keep(element);
+  },
+);
+
 // Keeps the highlighted option in view as the arrow keys move it.
 const scrollIntoViewWhen = modifier((element: HTMLElement, active: boolean) => {
   if (active) {
@@ -84,6 +91,7 @@ export default class WorkspaceDropdown extends Component<Signature> {
         aria-expanded={{if this.state.open 'true' 'false'}}
         aria-labelledby={{@labelId}}
         data-test-workspace-dropdown-trigger
+        {{keepElement this.keepTrigger}}
         {{on 'click' this.toggle}}
         {{on 'keydown' this.triggerKeydown}}
         ...attributes
@@ -116,14 +124,21 @@ export default class WorkspaceDropdown extends Component<Signature> {
       </button>
       {{#if this.state.open}}
         <div class='content' data-test-workspace-dropdown-content>
+          {{! Focus stays in the search field as the arrow keys move the
+            highlight, so the field is the combobox and names the highlighted
+            option for a screen reader to announce. }}
           <div class='search'>
             <input
               class='search-input'
               type='search'
+              role='combobox'
               placeholder='Search workspaces'
               autocomplete='off'
               aria-label='Search workspaces'
+              aria-autocomplete='list'
+              aria-expanded='true'
               aria-controls='workspace-options'
+              aria-activedescendant={{this.activeOptionId}}
               value={{this.state.term}}
               data-test-workspace-dropdown-search
               {{focusOnInsert}}
@@ -140,6 +155,7 @@ export default class WorkspaceDropdown extends Component<Signature> {
             >
               {{#each this.filtered as |workspace index|}}
                 <li
+                  id={{this.optionId index}}
                   role='option'
                   class='option {{if (eq index this.state.active) "active"}}'
                   aria-selected={{if
@@ -334,6 +350,19 @@ export default class WorkspaceDropdown extends Component<Signature> {
   </template>
 
   private state = trackedObject({ open: false, term: '', active: 0 });
+  private trigger: HTMLElement | undefined;
+
+  private keepTrigger = (element: HTMLElement) => {
+    this.trigger = element;
+  };
+
+  private optionId = (index: number) => `workspace-option-${index}`;
+
+  private get activeOptionId(): string | undefined {
+    return this.filtered[this.state.active]
+      ? this.optionId(this.state.active)
+      : undefined;
+  }
 
   private get selectedWorkspace() {
     return this.args.workspaces.find((w) => w.url === this.args.selected);
@@ -404,6 +433,13 @@ export default class WorkspaceDropdown extends Component<Signature> {
     this.close();
   };
 
+  // Closing from the keyboard removes the focused search field, so focus goes
+  // back to the trigger rather than falling to the page.
+  private closeToTrigger = () => {
+    this.close();
+    this.trigger?.focus();
+  };
+
   private listKeydown = (e: Event) => {
     let event = e as KeyboardEvent;
     let count = this.filtered.length;
@@ -417,11 +453,12 @@ export default class WorkspaceDropdown extends Component<Signature> {
       event.preventDefault();
       let workspace = this.filtered[this.state.active];
       if (workspace) {
-        this.choose(workspace.url);
+        this.args.onSelect(workspace.url);
+        this.closeToTrigger();
       }
     } else if (event.key === 'Escape') {
       event.preventDefault();
-      this.close();
+      this.closeToTrigger();
     }
   };
 }

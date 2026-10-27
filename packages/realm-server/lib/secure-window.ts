@@ -19,6 +19,7 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { operationDisplayLabel } from '@cardstack/runtime-common/card-operations/label';
+import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
 import { UserKeyError } from './user-keys.ts';
 
 // What the secure window shows about what it was opened for, read here from
@@ -204,14 +205,20 @@ async function realmNamed(
 }
 
 // Read from the realm's permission rows, so a realm need not be mounted to be
-// asked about.
+// asked about, by the rule every realm request is checked by. A secure session
+// is a registered Matrix user's, so the `users` row applies to it.
 async function mayRead(
   dbAdapter: DBAdapter,
   realmURL: string,
   user: string,
 ): Promise<boolean> {
   let permissions = await fetchRealmPermissions(dbAdapter, new URL(realmURL));
-  return [user, 'users', '*'].some((who) => permissions[who]?.includes('read'));
+  let actions = await effectiveRealmPermissions(
+    permissions,
+    user,
+    async () => true,
+  );
+  return actions.includes('read');
 }
 
 // The type an indexed card adopts from. A card is named with or without
