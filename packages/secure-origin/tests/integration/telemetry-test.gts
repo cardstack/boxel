@@ -35,12 +35,14 @@ const SECRETS = {
   shareLabel: 'Quokka Share Label',
   realmName: 'Classified Workspace Name',
   serverMessage: 'Nothing matched Pangolin Lookup Detail',
+  // The beacon is attributed by its session; its body names no user.
+  matrixUser: '@someone:example.test',
 };
 const IDS = [KEY_ID, OTHER_KEY_ID, SHARE_ID];
 
 const SESSION = {
   token: SECRETS.token,
-  user: '@someone:example.test',
+  user: SECRETS.matrixUser,
   expiresAt: '2099-01-01T00:00:00.000Z',
 };
 
