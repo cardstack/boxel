@@ -142,7 +142,7 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               />
             </FieldContainer>
             {{#if this.form.error}}
-              <div class='error' role='alert' data-test-keys-error>
+              <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
               </div>
             {{/if}}
@@ -177,7 +177,7 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       .busy {
         margin-top: var(--boxel-sp-xl);
       }
-      .error {
+      .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
@@ -290,12 +290,17 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     return this.form.keys.find((k) => k.id === id)?.name ?? '';
   }
 
+  // A workspace sharing its name with another on offer is told apart by its
+  // address.
   private realmName(url: string | undefined): string {
-    return (
+    let name =
       this.choosing?.context?.realm.name ??
       this.form.realms.find((r) => r.url === url)?.name ??
-      ''
+      '';
+    let ambiguous = this.form.realms.some(
+      (r) => r.url !== url && r.name === name,
     );
+    return ambiguous ? `${name} (${url})` : name;
   }
 
   // Until a label is typed, a share is labelled with its key's name.

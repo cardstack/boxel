@@ -233,75 +233,82 @@ module(basename(import.meta.filename), function (hooks) {
     await page.evaluate(() => localStorage.clear());
   });
 
-  test('error and muted text on the sign-in pages meet WCAG AA contrast', async function (assert) {
-    // Every mode's stylesheet ships with the shell, so this one page holds
-    // the error rules of all of them. Each colour is resolved inside the
-    // page's AuthContainer, under its theme, and composited over the page
-    // background on a canvas, which turns any CSS colour into sRGB.
-    await page.goto(`${secureOrigin}/secure?mode=sign-in`, {
-      waitUntil: 'networkidle0',
-    });
-    await page.waitForSelector('[data-test-secure-page]', { timeout: 10000 });
-    let { background, colors, nested } = await page.evaluate(() => {
-      let container = document.querySelector('[data-test-secure-page]')!;
-      let canvas = document.createElement('canvas');
-      canvas.width = canvas.height = 1;
-      let context = canvas.getContext('2d', { willReadFrequently: true })!;
-      let backgroundColor = getComputedStyle(container).backgroundColor;
-      let toRGB = (color: string) => {
-        context.fillStyle = backgroundColor;
-        context.fillRect(0, 0, 1, 1);
-        context.fillStyle = color;
-        context.fillRect(0, 0, 1, 1);
-        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
-      };
-      let resolve = (value: string) => {
-        let probe = document.createElement('span');
-        probe.style.setProperty('color', value);
-        container.append(probe);
-        let color = getComputedStyle(probe).color;
-        probe.remove();
-        return toRGB(color);
-      };
-      let errorRule = /^\.error(-message)?(\[[^\]]+\])?$/;
-      let colors: { label: string; rgb: number[] }[] = [];
-      let nested = 0;
-      // The components' rules sit inside `@layer` blocks, so the walk
-      // descends into every grouping rule.
-      let visit = (rules: CSSRuleList, depth: number) => {
-        for (let rule of rules) {
-          if (rule instanceof CSSGroupingRule) {
-            visit(rule.cssRules, depth + 1);
-            continue;
-          }
-          if (!(rule instanceof CSSStyleRule)) {
-            continue;
-          }
-          let value = rule.style.getPropertyValue('color');
-          if (
-            value &&
-            rule.selectorText.split(',').some((s) => errorRule.test(s.trim()))
-          ) {
-            if (depth > 0) {
-              nested++;
+  // The error rules a selector pattern picks out of every stylesheet the
+  // shell ships, and the page's muted text, each resolved inside `container`
+  // under its theme and composited over its background on a canvas, which
+  // turns any CSS colour into sRGB.
+  async function textColors(container: string, errorRule: RegExp) {
+    return await page.evaluate(
+      (container, source, flags) => {
+        let element = document.querySelector(container)!;
+        let canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        let context = canvas.getContext('2d', { willReadFrequently: true })!;
+        let backgroundColor = getComputedStyle(element).backgroundColor;
+        let toRGB = (color: string) => {
+          context.fillStyle = backgroundColor;
+          context.fillRect(0, 0, 1, 1);
+          context.fillStyle = color;
+          context.fillRect(0, 0, 1, 1);
+          return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+        };
+        let resolve = (value: string) => {
+          let probe = document.createElement('span');
+          probe.style.setProperty('color', value);
+          element.append(probe);
+          let color = getComputedStyle(probe).color;
+          probe.remove();
+          return toRGB(color);
+        };
+        let errorRule = new RegExp(source, flags);
+        let colors: { label: string; rgb: number[] }[] = [];
+        let nested = 0;
+        // The components' rules sit inside `@layer` blocks, so the walk
+        // descends into every grouping rule.
+        let visit = (rules: CSSRuleList, depth: number) => {
+          for (let rule of rules) {
+            if (rule instanceof CSSGroupingRule) {
+              visit(rule.cssRules, depth + 1);
+              continue;
             }
-            colors.push({
-              label: `${rule.selectorText} { color: ${value} }`,
-              rgb: resolve(value),
-            });
+            if (!(rule instanceof CSSStyleRule)) {
+              continue;
+            }
+            let value = rule.style.getPropertyValue('color');
+            if (
+              value &&
+              rule.selectorText.split(',').some((s) => errorRule.test(s.trim()))
+            ) {
+              if (depth > 0) {
+                nested++;
+              }
+              colors.push({
+                label: `${rule.selectorText} { color: ${value} }`,
+                rgb: resolve(value),
+              });
+            }
           }
+        };
+        for (let sheet of document.styleSheets) {
+          visit(sheet.cssRules, 0);
         }
-      };
-      for (let sheet of document.styleSheets) {
-        visit(sheet.cssRules, 0);
-      }
-      colors.push({
-        label: 'var(--muted-foreground)',
-        rgb: resolve('var(--muted-foreground)'),
-      });
-      return { background: toRGB(backgroundColor), colors, nested };
-    });
+        colors.push({
+          label: 'var(--muted-foreground)',
+          rgb: resolve('var(--muted-foreground)'),
+        });
+        return { background: toRGB(backgroundColor), colors, nested };
+      },
+      container,
+      errorRule.source,
+      errorRule.flags,
+    );
+  }
 
+  function assertContrast(
+    assert: Assert,
+    where: string,
+    { background, colors, nested }: Awaited<ReturnType<typeof textColors>>,
+  ) {
     let luminance = (rgb: number[]) => {
       let [r, g, b] = rgb.map((channel) => {
         let c = channel / 255;
@@ -316,19 +323,54 @@ module(basename(import.meta.filename), function (hooks) {
 
     assert.ok(
       colors.length > 1,
-      `the shell's stylesheets hold error rules (${colors.length - 1})`,
+      `${where}: the shell's stylesheets hold error rules (${colors.length - 1})`,
     );
-    assert.ok(
-      nested > 0,
-      `error rules inside @layer blocks are checked (${nested})`,
-    );
+    // The sign-in pages' rules sit inside `@layer` blocks; this shows the
+    // walk reached them.
+    if (where === 'sign-in') {
+      assert.ok(
+        nested > 0,
+        `${where}: error rules inside @layer blocks are checked (${nested})`,
+      );
+    }
     for (let { label, rgb } of colors) {
       let ratio = contrast(rgb, background);
       assert.ok(
         ratio >= 4.5,
-        `${label}: rgb(${rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+        `${where}: ${label}: rgb(${rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
       );
     }
+  }
+
+  test('error and muted text on the sign-in pages meet WCAG AA contrast', async function (assert) {
+    // Every mode's stylesheet ships with the shell, so this one page holds
+    // the error rules of all the sign-in pages.
+    await page.goto(`${secureOrigin}/secure?mode=sign-in`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-secure-page]', { timeout: 10000 });
+    assertContrast(
+      assert,
+      'sign-in',
+      await textColors(
+        '[data-test-secure-page]',
+        /^\.error(-message)?(\[[^\]]+\])?$/,
+      ),
+    );
+  });
+
+  test('error and muted text on the key pages meet WCAG AA contrast', async function (assert) {
+    // The key pages draw their errors on the key window's own panel, which
+    // has a theme and background of its own.
+    await page.goto(`${secureOrigin}/secure?mode=keys`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });
+    assertContrast(
+      assert,
+      'key pages',
+      await textColors('[data-test-keys-panel]', /^\.keys-error(\[[^\]]+\])?$/),
+    );
   });
 
   test('each credential form runs under the policy, framed by the app', async function (assert) {

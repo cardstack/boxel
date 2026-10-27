@@ -66,7 +66,7 @@ export default class KeysWindow extends Component<Signature> {
             class='close-label'
           >Close</span></Button>
       </header>
-      <main class='body'>
+      <main class='body' data-test-keys-panel>
         {{#if (this.is 'checking')}}
           <BusyMessage
             class='checking'
