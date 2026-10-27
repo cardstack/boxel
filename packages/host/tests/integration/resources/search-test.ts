@@ -646,80 +646,86 @@ module(`Integration | search resource`, function (hooks) {
     }
   });
 
-  test(`can perform a live search for cards`, async function (assert) {
-    let query: Query = {
-      filter: {
-        on: {
-          module: testRRI('book'),
-          name: 'Book',
-        },
-        eq: {
-          'author.lastName': 'Abdel-Rahman',
-        },
-      },
-    };
-    let search = getSearchResourceForTest(loaderService, () => ({
-      named: {
-        query,
-        realms: [testRealmURL],
-        isLive: true,
-        isAutoSaved: false,
-        storeService,
-        owner: this.owner,
-      },
-    }));
-    await search.loaded;
-    assert.strictEqual(search.instances.length, 2);
-    assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
-    assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
-
-    await realm.write(
-      'books/3.json',
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            author: {
-              firstName: 'Paper',
-              lastName: 'Abdel-Rahman',
-            },
-            editions: 0,
-            pubDate: '2023-08-01',
-          },
-          meta: {
-            adoptsFrom: {
+  // STRESS (do not merge): each variant registered many times.
+  for (let stressRun = 0; stressRun < 40; stressRun++)
+    for (let control of [false, true])
+      test(`can perform a live search for cards [stress ${control ? 'control-1s' : 'fixed'} ${stressRun}]`, async function (assert) {
+        let query: Query = {
+          filter: {
+            on: {
               module: testRRI('book'),
               name: 'Book',
             },
+            eq: {
+              'author.lastName': 'Abdel-Rahman',
+            },
           },
-        },
-      } as LooseSingleCardDocument),
-    );
+        };
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query,
+            realms: [testRealmURL],
+            isLive: true,
+            isAutoSaved: false,
+            storeService,
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        assert.strictEqual(search.instances.length, 2);
+        assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
+        assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
 
-    // The re-run follows the realm's index event over matrix, then searches
-    // the server and loads the new card; on a loaded runner that chain can
-    // outlast `waitUntil`'s 1 s default even though it completes.
-    let waitStart = performance.now();
-    try {
-      await settled();
-      await waitUntil(() => search.instances.length === 3, {
-        timeout: 10_000,
+        await realm.write(
+          'books/3.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                author: {
+                  firstName: 'Paper',
+                  lastName: 'Abdel-Rahman',
+                },
+                editions: 0,
+                pubDate: '2023-08-01',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('book'),
+                  name: 'Book',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        // The re-run follows the realm's index event over matrix, then searches
+        // the server and loads the new card; on a loaded runner that chain can
+        // outlast `waitUntil`'s 1 s default even though it completes.
+        let waitStart = performance.now();
+        if (control) {
+          await waitUntil(() => search.instances.length === 3);
+        } else
+          try {
+            await settled();
+            await waitUntil(() => search.instances.length === 3, {
+              timeout: 10_000,
+            });
+          } catch (e) {
+            throw new Error(
+              `live search did not reach 3 instances ${Math.round(
+                performance.now() - waitStart,
+              )} ms after the write; it holds ${JSON.stringify(
+                search.instances.map((i) => i.id),
+              )}, isLoading=${search.isLoading}: ${e}`,
+            );
+          }
+
+        assert.strictEqual(search.instances.length, 3);
+        assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
+        assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
+        assert.strictEqual(search.instances[2].id, `${testRealmURL}books/3`);
       });
-    } catch (e) {
-      throw new Error(
-        `live search did not reach 3 instances ${Math.round(
-          performance.now() - waitStart,
-        )} ms after the write; it holds ${JSON.stringify(
-          search.instances.map((i) => i.id),
-        )}, isLoading=${search.isLoading}: ${e}`,
-      );
-    }
-
-    assert.strictEqual(search.instances.length, 3);
-    assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
-    assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
-    assert.strictEqual(search.instances[2].id, `${testRealmURL}books/3`);
-  });
 
   test(`a live search of a realm named by a registered prefix re-runs on that realm's events`, async function (assert) {
     // The realm's events are keyed by its URL while the search subscribes by

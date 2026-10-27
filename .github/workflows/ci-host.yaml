@@ -795,8 +795,13 @@ jobs:
             TEST_CMD="pnpm ember-test-pre-built"
           fi
 
+          # STRESS (do not merge): run only the stressed test, with every
+          # core busy so the runner is as loaded as during the full suite.
+          TEST_CMD="sleep 15 && pnpm exec ember test --path ./dist --filter 'can perform a live search for cards [stress'"
+          for i in $(seq "$(nproc)"); do (while :; do :; done) & done
+
           set +e
-          dbus-run-session -- $TEST_CMD 2>&1 | tee /tmp/test-output.log
+          dbus-run-session -- bash -c "$TEST_CMD" 2>&1 | tee /tmp/test-output.log
           exit_code=${PIPESTATUS[0]}
 
           # Transient chunk-fetch failures present as `ChunkLoadError` under
@@ -829,7 +834,7 @@ jobs:
             echo "::endgroup::"
             echo ""
 
-            dbus-run-session -- $TEST_CMD 2>&1 | tee /tmp/test-output-retry.log
+            dbus-run-session -- bash -c "$TEST_CMD" 2>&1 | tee /tmp/test-output-retry.log
             retry_exit_code=${PIPESTATUS[0]}
             if [ $retry_exit_code -eq 0 ]; then
               echo "::notice::Shard ${{ matrix.shardIndex }} recovered on retry — original failure was a transient chunk-fetch flake"
