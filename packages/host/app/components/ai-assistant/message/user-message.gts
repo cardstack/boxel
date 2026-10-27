@@ -50,7 +50,11 @@ const UserMessage: TemplateOnlyComponent<Signature> = <template>
     <:attachments>{{yield to='attachments'}}</:attachments>
     <:default>
       {{#if @html}}
-        <div class='user-message-text' data-theme='light'>
+        <div
+          class='user-message-text'
+          data-theme='light'
+          data-test-user-message-text
+        >
           {{sanitizedHtml @html}}
         </div>
       {{/if}}

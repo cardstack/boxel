@@ -32,7 +32,7 @@ main = putStrLn "🖤"
     });
 
     let messageElement = (this as RenderingTestContext).element.querySelector(
-      '.message',
+      '[data-test-user-message-text]',
     );
 
     assert.ok(

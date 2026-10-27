@@ -346,6 +346,8 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       isStreamingFinished: true,
     });
     await waitFor('[data-test-message-idx="40"]');
+    // the chip shows once the reader has been left behind for a moment
+    await waitFor('[data-test-unread-messages-button]');
 
     assert
       .dom('[data-test-unread-messages-button]')
@@ -374,6 +376,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       isStreamingFinished: true,
     });
     await waitFor('[data-test-message-idx="40"]');
+    await waitFor('[data-test-unread-messages-button] button');
     await click('[data-test-unread-messages-button] button');
     // poll until the animated scroll completes and settles at the bottom
     await assertScrolledToBottom(assert);

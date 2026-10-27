@@ -1060,7 +1060,9 @@ module('Acceptance | Tools tests', function (hooks) {
       );
       throw err;
     }
-    await click(applySelector);
+    await click(
+      '[data-test-message-idx="1"] [data-test-pretui-tool-gate-action="apply"]',
+    );
     await waitUntil(
       () => findAll('[data-test-operator-mode-stack]').length === 2,
     );

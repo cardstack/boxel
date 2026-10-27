@@ -10,7 +10,6 @@ import { ToolGroup } from '@cardstack/pretui/components/tool-group';
 
 import { humanizeToolName } from '@cardstack/pretui/components/tool-row';
 import { task } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 
 import { consume } from 'ember-provide-consume-context';
 
@@ -202,21 +201,19 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   // A call ai-bot holds for approval is "run" by approving it; ai-bot then
-  // runs it. Every other call runs on the host.
-  private run = task(async (command: MessageTool) => {
+  // runs it. Every other call runs on the host. The work is the tool
+  // service's: a settled turn folds and can take this message away while
+  // the call runs, and that must not cancel it.
+  private run = (command: MessageTool) => {
     if (command.awaitsApproval) {
-      return this.toolService.answerApproval
-        .unlinked()
-        .perform(command, 'approve');
+      return this.toolService.answerApproval.perform(command, 'approve');
     }
-    return this.toolService.run.unlinked().perform(command);
-  });
+    return this.toolService.run.perform(command);
+  };
 
-  private decline = task(async (command: MessageTool) => {
-    return this.toolService.answerApproval
-      .unlinked()
-      .perform(command, 'decline');
-  });
+  private decline = (command: MessageTool) => {
+    return this.toolService.answerApproval.perform(command, 'decline');
+  };
 
   // Correctness-check messages render all their tools compactly; bot-executed
   // tools (e.g. readRealmFile) render compactly even inside a regular message,
@@ -556,8 +553,8 @@ export default class RoomMessage extends Component<Signature> {
                     <RoomMessageTool
                       @messageTool={{command}}
                       @roomResource={{@roomResource}}
-                      @runCommand={{fn (perform this.run) command}}
-                      @declineCommand={{fn (perform this.decline) command}}
+                      @runCommand={{fn this.run command}}
+                      @declineCommand={{fn this.decline command}}
                       @roomId={{@roomId}}
                       @isPending={{@isPending}}
                       @isCompact={{this.isCompactTool command}}
@@ -575,8 +572,8 @@ export default class RoomMessage extends Component<Signature> {
                 hidden={{this.rowsFolded}}
                 @messageTool={{command}}
                 @roomResource={{@roomResource}}
-                @runCommand={{fn (perform this.run) command}}
-                @declineCommand={{fn (perform this.decline) command}}
+                @runCommand={{fn this.run command}}
+                @declineCommand={{fn this.decline command}}
                 @roomId={{@roomId}}
                 @isPending={{@isPending}}
                 @isCompact={{this.isCompactTool command}}
