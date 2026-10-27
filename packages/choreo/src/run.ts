@@ -77,6 +77,16 @@ const loopKey = (cue: Cue) =>
     .sort()
     .join(',');
 
+/** a tween a replacement pass carries on: see Run.midfade */
+export interface Fade {
+  /** score ms until it starts (0 when it is already running) */
+  delay: number;
+  /** score ms it has left once started */
+  remaining: number;
+  /** where its values were going */
+  to: Record<string, unknown>;
+}
+
 export interface Run {
   /** open the gate the run is parked at; mid-segment, complete the segment and park (§4.1) */
   advance(): void;
@@ -94,6 +104,16 @@ export interface Run {
    * timeline retimes a loop rather than sending it back to the top.
    */
   loopPhases(): LoopPhases;
+  /**
+   * The values other than geometry this run is still TWEENING, or has yet
+   * to tween — a fade cut short or not begun — one entry per tween, with
+   * where its values were going, the delay left before it starts and the
+   * time it had left, in score milliseconds. A tween's value is neither
+   * moved nor borrowed, so a cancel stops it where it stands and nothing
+   * gives it back: a replacement pass reads this to carry each one on to
+   * its end (§3.1). Tweens behind a closed gate are not listed.
+   */
+  midfade(): Map<ChoreoNode, Fade[]>;
   /**
    * The sprites this run is DRIVING through space right now — an
    * unfinished move/spring/tween writing geometry — with each cue's
@@ -719,6 +739,64 @@ export class ChoreoRun implements Run {
       if (geometry) {
         out.set(cue.sprite.node, cue.transition);
       }
+    }
+    return out;
+  }
+
+  midfade(): Map<ChoreoNode, Fade[]> {
+    const out = new Map<ChoreoNode, Fade[]>();
+    if (this.isDone()) {
+      return out;
+    }
+    const now = this.master;
+    // the score past a closed gate waits for its advance(): not carried
+    const gate = this.gates.find((g) => !g.opened && g.at >= now)?.at;
+    // the tracks are timed in scaled ms; a cue's times are score ms
+    const scale = this.scale || 1;
+    for (const t of this.tracks) {
+      const { cue } = t;
+      if (
+        t.passed ||
+        t.end <= now ||
+        (gate !== undefined && t.start >= gate && !t.started) ||
+        cue.kind !== 'tween' ||
+        cue.loop ||
+        cue.borrow ||
+        !cue.target
+      ) {
+        continue;
+      }
+      // Motion ends a tween that repeats an odd number of times, other than
+      // as a loop, on its FIRST keyframe (motion-dom's getFinalKeyframe)
+      const { repeat, repeatType } = (cue.transition ?? {}) as {
+        repeat?: number;
+        repeatType?: string;
+      };
+      const first =
+        typeof repeat === 'number' && repeat % 2 === 1 && repeatType !== 'loop';
+      const to: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(cue.target)) {
+        if (MIDFLIGHT_KEYS.includes(key)) {
+          continue;
+        }
+        const end = Array.isArray(value)
+          ? value[first ? 0 : value.length - 1]
+          : value;
+        if (end !== undefined && end !== null) {
+          to[key] = end;
+        }
+      }
+      if (!Object.keys(to).length) {
+        continue;
+      }
+      const begins = Math.max(now, t.start);
+      const fades = out.get(cue.sprite.node) ?? [];
+      fades.push({
+        delay: (begins - now) / scale,
+        remaining: (t.end - begins) / scale,
+        to,
+      });
+      out.set(cue.sprite.node, fades);
     }
     return out;
   }
