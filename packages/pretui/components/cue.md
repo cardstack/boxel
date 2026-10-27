@@ -41,6 +41,7 @@ Where it is thinner: no icon slot, no dismissal, and no multi-line structure —
 
 - **`@kind` selects the ARIA relationship**, which is the component's reason to exist.
 - **`'status'` announces politely on change**, which is correct for a live validation hint and wrong for static help text — the arg is how you say which you have.
+- **A status cue rendered together with its first message may not announce it**, since a live region has to exist before its text changes. Keep a stable `role="status"` region and render a description cue inside it, as Field does.
 - **`'error'` is a description in the danger tone**, not a live region: an error that announces itself on every keystroke is the failure this avoids.
 - **`@decorative` removes it from the tree**, which is the honest way to repeat something visually without repeating it aloud.
 - **A pinned `@id` is a promise**: the control pointing at it must exist, or the reference dangles.

@@ -75,8 +75,15 @@ export class Field extends Component<FieldSignature> {
     if (this.args.status) return resolveTone(this.args.statusTone, CUE_TONES, 'info');
     return 'neutral';
   }
+  get isStatus() {
+    return this.messageKind === 'status';
+  }
   get messageText() {
     return this.error ?? this.args.status ?? this.hint;
+  }
+  // the hint or error, which never announce on their own
+  get quietText() {
+    return this.isStatus ? undefined : this.messageText;
   }
   <template>
     <div class='pretui-fieldw' data-invalid={{if this.error 'true'}} data-test-pretui-field ...attributes>
@@ -101,13 +108,26 @@ export class Field extends Component<FieldSignature> {
       {{else}}
         {{yield this.controlId this.messageId}}
       {{/if}}
-      <div class='pretui-fieldmsg'>
-        {{#if this.messageText}}
+      <div class='pretui-fieldmsg' id={{this.messageId}}>
+        {{! always rendered, so a status's first message is announced too;
+            a live region added with its text can go unheard }}
+        <span
+          class='pretui-fieldlive'
+          role='status'
+          data-test-pretui-field-status
+        >
+          {{#if this.isStatus}}
+            <Cue
+              @tone={{this.messageTone}}
+              @text={{this.messageText}}
+            />
+          {{/if}}
+        </span>
+        {{#if this.quietText}}
           <Cue
             @kind={{this.messageKind}}
             @tone={{this.messageTone}}
-            @text={{this.messageText}}
-            @id={{this.messageId}}
+            @text={{this.quietText}}
           />
         {{/if}}
       </div>
@@ -160,8 +180,14 @@ export class Field extends Component<FieldSignature> {
         }
         /* a flex row, so the Cue sets the line and the inherited font can't
            grow it; reads the Cue's line height, so an ancestor sets both */
-        .pretui-fieldmsg {
+        .pretui-fieldmsg,
+        .pretui-fieldlive {
           display: flex;
+          min-width: 0;
+        }
+        /* the column's width, not the message's, so a long one wraps */
+        .pretui-fieldmsg {
+          justify-self: stretch;
           min-height: var(--pretui-cue-line-height, 1rem);
         }
         /* the invalid dress is Input's: a --destructive-ink edge (the fill

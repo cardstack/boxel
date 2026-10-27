@@ -122,6 +122,30 @@ module('Pretui | components/cue', function (hooks) {
     );
   });
 
+  test('a long URL breaks after its slashes, not mid-word', async function (assert) {
+    await render(<template><Cue @text='See https://example.com/docs/limits?plan=team' /></template>);
+    assert.strictEqual(
+      cue().textContent?.trim(),
+      'See https://example.com/docs/limits?plan=team',
+      'the break points add no text',
+    );
+    let lines: string[] = [''];
+    for (let node of Array.from(cue().childNodes).flatMap((n) => Array.from(n.childNodes))) {
+      if (node.nodeName === 'WBR') lines.push('');
+      else if (node.nodeName === '#text') lines[lines.length - 1] += node.textContent;
+    }
+    assert.deepEqual(
+      lines.slice(1),
+      ['example', '.com/', 'docs/', 'limits', '?plan', '=team'],
+      'a break after each slash and before . ? and =',
+    );
+  });
+
+  test('a long run with no slash gets no break points', async function (assert) {
+    await render(<template><Cue @text='Write to first.last@company-domain.example' /></template>);
+    assert.dom('[data-test-pretui-cue] wbr').doesNotExist('an email is not a URL');
+  });
+
   test('yields a block when a cue needs markup, and @text wins over it', async function (assert) {
     await render(<template><Cue><b data-test-strong>Bold</b> hint</Cue></template>);
     assert.ok(cue().querySelector('[data-test-strong]'));

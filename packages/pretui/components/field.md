@@ -42,6 +42,8 @@ Gaps, and they matter:
 - **Controls without a `@controlId` arg cannot be associated.** Wrapping a `RadioGroup` or `Slider` in a `Field` produces a visible label pointing at nothing — `for` references an id that no element has. That is worse than no label, because it looks correct in review.
 - No `aria-required` and no required marker.
 
+What a `@status` does: it renders inside a `role="status"` region that is on the page from the first render, so its first message is announced and not only its later changes. The hint and the error sit outside that region and never announce on their own.
+
 Use **FormField** for anything validated. Field is right for a labeled control on a settings panel, not for a form that reports errors.
 
 ## Theming

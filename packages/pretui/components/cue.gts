@@ -53,6 +53,25 @@ const CUE_GLYPHS = {
   danger: XIcon,
 };
 
+// A long run with a slash, like a URL or path, gets a soft break after each
+// slash and before . ? # & =, so it wraps there instead of mid-word. An email
+// or a dotted name has no slash and stays whole.
+const SPACE_RUN = /(\s+)/;
+const URL_BREAK = /(?<=\/)(?=[^/])|(?=[.?#&=].)/;
+const LONG_RUN_LENGTH = 20;
+function textParts(text: string): string[] {
+  let parts = [''];
+  for (let token of text.split(SPACE_RUN)) {
+    let pieces =
+      token.length >= LONG_RUN_LENGTH && token.includes('/')
+        ? token.split(URL_BREAK)
+        : [token];
+    parts[parts.length - 1] += pieces[0];
+    parts.push(...pieces.slice(1));
+  }
+  return parts;
+}
+
 export interface CueSignature {
   Args: {
     /** 'description' (default) captions; 'status' announces politely when it
@@ -95,6 +114,9 @@ export class Cue extends Component<CueSignature> {
   get glyph() {
     return this.args.glyph === false ? undefined : CUE_GLYPHS[this.tone];
   }
+  get textParts() {
+    return this.args.text ? textParts(this.args.text) : [];
+  }
   get glyphText() {
     return typeof this.glyph === 'string' ? this.glyph : undefined;
   }
@@ -133,7 +155,7 @@ export class Cue extends Component<CueSignature> {
                 height='10'
                 stroke-width='3.5'
               />{{else}}{{this.glyphText}}{{/if}}</span></span>{{/if}}
-      {{#if @text}}{{@text}}{{else}}{{yield}}{{/if}}
+      <span class='pretui-cue-text'>{{#if @text}}{{#each this.textParts as |part index|}}{{#if index}}<wbr />{{/if}}{{part}}{{/each}}{{else}}{{yield}}{{/if}}</span>
     </span>
     <style scoped>
       @layer PretComponent {
@@ -220,6 +242,12 @@ export class Cue extends Component<CueSignature> {
         .pretui-cue-icon {
           inline-size: 78%;
           block-size: 78%;
+        }
+        /* one flex item, so yielded markup stays inline; a long word with no
+           break point wraps anywhere rather than widening the row */
+        .pretui-cue-text {
+          min-width: 0;
+          overflow-wrap: break-word;
         }
         /* logical edges: the inline pair sit on the control's reading start /
            end, the block pair above / below. RTL comes free. */
