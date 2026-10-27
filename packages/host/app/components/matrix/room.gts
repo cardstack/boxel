@@ -1127,7 +1127,13 @@ export default class Room extends Component<Signature> {
   // register before the transcript scrolls: this runs once the last one has
   // registered.
   private landOnFirstUnread(scrollState: RoomScrollState) {
-    if (!this.hasUnreadMessages || !this.isAllowedToAutoScroll) {
+    // a conversation that fits its view has nowhere to go, and asking would
+    // stop it following the end
+    if (
+      !this.hasUnreadMessages ||
+      !this.isAllowedToAutoScroll ||
+      !scrollState.isConversationScrollable
+    ) {
       return;
     }
     let firstUnreadIndex = this.lastReadMessageIndex + 1;

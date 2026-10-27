@@ -497,10 +497,28 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     await settled();
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-message-idx="39"]');
-    await assertScrolledToTop(
-      assert,
-      'AI assistant is scrolled to top (where the first unread message is)',
-    );
+    // The room opens on the start of its unread history, not at the end.
+    // The "New messages" chip shows a moment later and takes height from
+    // the transcript, which can move the view by about one message.
+    let conversation = () =>
+      document.querySelector(
+        '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
+      ) as HTMLElement | null;
+    try {
+      await waitUntil(
+        () => {
+          let el = conversation();
+          return Boolean(el && el.scrollTop < 120);
+        },
+        { timeout: 2000 },
+      );
+      assert.ok(true, 'the room opens on the start of its unread history');
+    } catch {
+      assert.ok(
+        false,
+        `the room opens on the start of its unread history — ${describeScrollPosition()}`,
+      );
+    }
   });
 
   test('it scrolls to last message when opening a room with no unread messages', async function (assert) {
