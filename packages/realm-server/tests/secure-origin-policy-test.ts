@@ -6,6 +6,7 @@ import type { AddressInfo } from 'net';
 import Koa from 'koa';
 import puppeteer, { type Browser, type Frame, type Page } from 'puppeteer';
 import { createSecureOrigin, secureOriginGate } from '../lib/secure-origin.ts';
+import { PAGE_PATHS } from '@cardstack/secure-origin/shell/pages.js';
 
 // Each page the secure origin serves, loaded from its build in a real browser
 // under the origin's real policy, must run without the policy refusing
@@ -16,24 +17,156 @@ import { createSecureOrigin, secureOriginGate } from '../lib/secure-origin.ts';
 // The built pages are also where the theme's tokens resolve, so this is where
 // the error and muted text colours are checked against WCAG AA contrast.
 
-// Every mode the shell presents, the key page its own address presents, and
-// the address Google returns to.
-const SHELL_PAGES = [
-  '/secure',
-  '/secure?mode=sign-in',
-  '/secure?mode=cli-sign-in&port=4567&state=example-state',
-  '/secure?mode=cli-auth&port=4567&state=example-state-0123',
-  '/secure?mode=cli-auth&port=4567&state=example-state-0123&session=secure',
-  '/secure?mode=register',
-  '/secure?mode=verify-email',
-  '/secure?mode=forgot-password',
-  '/secure?mode=reset-password',
-  '/secure?mode=sign-out',
-  '/secure?mode=keys',
-  '/secure?mode=enter-key',
-  '/secure?mode=share-key#realm=https%3A%2F%2Frealm.example%2F',
-  '/secure?mode=swap-key#realm=https%3A%2F%2Frealm.example%2F&share=example',
-  '/secure/google-callback',
+const KEY_ID = '0b6c1e9e-5a1f-4c47-9d0e-2f5b8f6f1a3c';
+// The window's own sign-in form: the CLI's sign-in pages draw the same form,
+// with a subtitle naming the CLI.
+const WINDOW_SIGN_IN =
+  'body:not(:has([data-test-secure-cli-sign-in-subtitle], [data-test-secure-cli-auth-subtitle])) [data-test-secure-sign-in-form]';
+const STATE = 'example-state-0123';
+
+// Every page the shell presents, loaded directly at its own path with what it
+// is told, and something only that page draws. A key page signed out draws
+// only the key window, which names its page. `page` is the page's entry in
+// `PAGE_PATHS` (`''` for the shell's own address).
+const SHELL_PAGES: { page: string; address: string; marker: string }[] = [
+  { page: '', address: '', marker: '[data-test-keys-page="keys"]' },
+  {
+    page: 'sign-in',
+    address: 'sign-in',
+    marker: WINDOW_SIGN_IN,
+  },
+  {
+    page: 'cli-sign-in',
+    address: `cli-sign-in?port=4567&state=${STATE}`,
+    marker: '[data-test-secure-cli-sign-in-subtitle]',
+  },
+  {
+    page: 'cli-auth',
+    address: `cli-auth?port=4567&state=${STATE}`,
+    marker: '[data-test-secure-cli-auth-subtitle]',
+  },
+  {
+    page: 'cli-auth',
+    address: `cli-auth?port=4567&state=${STATE}&session=secure`,
+    marker: '[data-test-secure-cli-auth-subtitle]',
+  },
+  {
+    page: 'register',
+    address: 'register',
+    marker: '[data-test-register-page]',
+  },
+  {
+    page: 'verify-email',
+    address: 'verify-email',
+    marker: '[data-test-email-validated]',
+  },
+  {
+    page: 'forgot-password',
+    address: 'forgot-password',
+    marker: '[data-test-forgot-password-form]',
+  },
+  {
+    page: 'reset-password',
+    address: 'reset-password',
+    marker: '[data-test-reset-password-form]',
+  },
+  // Signed out, it moves on to the sign-in page.
+  {
+    page: 'sign-out',
+    address: 'sign-out',
+    marker: WINDOW_SIGN_IN,
+  },
+  {
+    page: 'google-callback',
+    address: 'google-callback',
+    marker: '[data-test-secure-start-again]',
+  },
+  { page: 'keys', address: 'keys', marker: '[data-test-keys-page="keys"]' },
+  {
+    page: 'keys/add',
+    address: 'keys/add',
+    marker: '[data-test-keys-page="enter-key"]',
+  },
+  {
+    page: `keys/${KEY_ID}/share`,
+    address: `keys/${KEY_ID}/share`,
+    marker: '[data-test-keys-page="share-key"]',
+  },
+  {
+    page: 'enter-key',
+    address: 'enter-key',
+    marker: '[data-test-keys-page="enter-key"]',
+  },
+  {
+    page: 'share-key',
+    address: 'share-key#realm=https%3A%2F%2Frealm.example%2F',
+    marker: '[data-test-keys-page="share-key"]',
+  },
+  {
+    page: 'swap-key',
+    address: 'swap-key#realm=https%3A%2F%2Frealm.example%2F&share=example',
+    marker: '[data-test-keys-page="swap-key"]',
+  },
+];
+
+// Addresses that name a page by the `mode` query parameter, as earlier CLI
+// releases and emails already sent do: the address each lands on, and what
+// only that page draws.
+const LEGACY_ADDRESSES: { legacy: string; landed: string; marker: string }[] = [
+  {
+    legacy: '/secure?mode=sign-in',
+    landed: '/secure/sign-in',
+    marker: WINDOW_SIGN_IN,
+  },
+  {
+    legacy: `/secure?mode=cli-sign-in&port=4567&state=${STATE}&user=someone`,
+    landed: `/secure/cli-sign-in?port=4567&state=${STATE}&user=someone`,
+    marker: '[data-test-secure-cli-sign-in-subtitle]',
+  },
+  {
+    legacy: `/secure?mode=cli-auth&port=4567&state=${STATE}&session=secure`,
+    landed: `/secure/cli-auth?port=4567&state=${STATE}&session=secure`,
+    marker: '[data-test-secure-cli-auth-subtitle]',
+  },
+  {
+    legacy: '/secure?mode=register',
+    landed: '/secure/register',
+    marker: '[data-test-register-page]',
+  },
+  {
+    legacy: '/secure?mode=forgot-password',
+    landed: '/secure/forgot-password',
+    marker: '[data-test-forgot-password-form]',
+  },
+  // A registration email's link, with the Matrix server's session id.
+  {
+    legacy: '/secure/?mode=verify-email&sid=example-sid',
+    landed: '/secure/verify-email?sid=example-sid',
+    marker: '[data-test-email-validated]',
+  },
+  // A reset email's link: the page reads the fragment and takes it out of
+  // the address.
+  {
+    legacy:
+      '/secure?mode=reset-password#clientSecret=example-secret&email=someone%40example.test&sid=example-sid',
+    landed: '/secure/reset-password',
+    marker: '[data-test-reset-password-form]',
+  },
+  {
+    legacy: '/secure/?mode=keys',
+    landed: '/secure/keys',
+    marker: '[data-test-keys-page="keys"]',
+  },
+  {
+    legacy: '/secure?mode=enter-key&then=keys',
+    landed: '/secure/keys/add',
+    marker: '[data-test-keys-page="enter-key"]',
+  },
+  {
+    legacy: '/secure?mode=share-key#realm=https%3A%2F%2Frealm.example%2F',
+    landed: '/secure/share-key#realm=https%3A%2F%2Frealm.example%2F',
+    marker: '[data-test-keys-page="share-key"]',
+  },
 ];
 
 // Every form the credential fields present.
@@ -157,7 +290,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a violation of the policy is seen', async function (assert) {
-    await page.goto(`${secureOrigin}/secure?mode=sign-in`, {
+    await page.goto(`${secureOrigin}/secure/sign-in`, {
       waitUntil: 'networkidle0',
     });
     await page.evaluate(() =>
@@ -174,8 +307,16 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test("each of the shell's modes runs under the policy", async function (assert) {
-    for (let path of SHELL_PAGES) {
+  test("each of the shell's pages runs under the policy", async function (assert) {
+    assert.deepEqual(
+      [...new Set(SHELL_PAGES.map(({ page }) => page))]
+        .filter((page) => !page.startsWith('keys/') || page === 'keys/add')
+        .sort(),
+      ['', ...PAGE_PATHS].sort(),
+      'every page is loaded',
+    );
+    for (let { address, marker } of SHELL_PAGES) {
+      let path = `/secure/${address}`;
       let response = await page.goto(`${secureOrigin}${path}`, {
         waitUntil: 'networkidle0',
       });
@@ -186,10 +327,81 @@ module(basename(import.meta.filename), function (hooks) {
           ['content-security-policy']?.includes(`default-src 'self'`),
         `${path}: served with the policy`,
       );
-      await page.waitForSelector('#secure-shell > *', { timeout: 10000 });
-      assert.ok(true, `${path}: the mode rendered`);
+      await page.waitForSelector(marker, { timeout: 10000 });
+      assert.ok(true, `${path}: the page rendered`);
       assert.deepEqual(await violationsIn(page), [], `${path}: no violation`);
     }
+  });
+
+  test('an address naming a page by its `mode` lands on that page', async function (assert) {
+    for (let { legacy, landed, marker } of LEGACY_ADDRESSES) {
+      await page.goto(`${secureOrigin}${legacy}`, {
+        waitUntil: 'networkidle0',
+      });
+      await page.waitForSelector(marker, { timeout: 10000 });
+      let { pathname, search, hash } = await page.evaluate(() => ({
+        pathname: window.location.pathname,
+        search: window.location.search,
+        hash: window.location.hash,
+      }));
+      assert.strictEqual(`${pathname}${search}${hash}`, landed, legacy);
+      assert.deepEqual(await violationsIn(page), [], `${legacy}: no violation`);
+    }
+  });
+
+  test('moving between pages is a route transition, and back returns', async function (assert) {
+    // A mark left on the first document is still there after a move only if
+    // the move loaded no new one.
+    await page.goto(`${secureOrigin}/secure/sign-in`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.evaluate(() => {
+      (window as any).__document = 'first';
+    });
+    await page.waitForSelector('[data-test-forgot-password]', {
+      timeout: 10000,
+    });
+    await page.click('[data-test-forgot-password]');
+    await page.waitForFunction(
+      () => window.location.pathname === '/secure/forgot-password',
+      { timeout: 10000 },
+    );
+    await page.waitForSelector('[data-test-forgot-password-form]', {
+      timeout: 10000,
+    });
+    assert.strictEqual(
+      await page.evaluate(() => (window as any).__document),
+      'first',
+      'the move forward loads no new document',
+    );
+    await page.goBack();
+    await page.waitForFunction(
+      () => window.location.pathname === '/secure/sign-in',
+      { timeout: 10000 },
+    );
+    await page.waitForSelector('[data-test-forgot-password]', {
+      timeout: 10000,
+    });
+    assert.strictEqual(
+      await page.evaluate(() => (window as any).__document),
+      'first',
+      'nor does the move back',
+    );
+    assert.deepEqual(await violationsIn(page), [], 'no violation');
+
+    // The sign-out page moves on to the sign-in page itself once it has
+    // ended the window's session.
+    await page.goto(`${secureOrigin}/secure/sign-out`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForFunction(
+      () => window.location.pathname === '/secure/sign-in',
+      { timeout: 10000 },
+    );
+    await page.waitForSelector('[data-test-forgot-password]', {
+      timeout: 10000,
+    });
+    assert.deepEqual(await violationsIn(page), [], 'signed out: no violation');
   });
 
   test('the screens a sign-in is handed back to the app from run under the policy', async function (assert) {
@@ -210,7 +422,7 @@ module(basename(import.meta.filename), function (hooks) {
       ),
     );
     await page.goto(
-      `${secureOrigin}/secure?mode=sign-in#return=${encodeURIComponent(`${appOrigin}/`)}`,
+      `${secureOrigin}/secure/sign-in#return=${encodeURIComponent(`${appOrigin}/`)}`,
       { waitUntil: 'networkidle0' },
     );
     await page.waitForSelector('[data-test-secure-loopback-confirm]', {
@@ -343,9 +555,9 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   test('error and muted text on the sign-in pages meet WCAG AA contrast', async function (assert) {
-    // Every mode's stylesheet ships with the shell, so this one page holds
+    // Every page's stylesheet ships with the shell, so this one page holds
     // the error rules of all the sign-in pages.
-    await page.goto(`${secureOrigin}/secure?mode=sign-in`, {
+    await page.goto(`${secureOrigin}/secure/sign-in`, {
       waitUntil: 'networkidle0',
     });
     await page.waitForSelector('[data-test-secure-page]', { timeout: 10000 });
@@ -362,7 +574,7 @@ module(basename(import.meta.filename), function (hooks) {
   test('error and muted text on the key pages meet WCAG AA contrast', async function (assert) {
     // The key pages draw their errors on the key window's own panel, which
     // has a theme and background of its own.
-    await page.goto(`${secureOrigin}/secure?mode=keys`, {
+    await page.goto(`${secureOrigin}/secure/keys`, {
       waitUntil: 'networkidle0',
     });
     await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });

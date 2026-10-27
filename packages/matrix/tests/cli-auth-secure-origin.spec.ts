@@ -103,7 +103,7 @@ test.describe('boxel profile add on the secure origin', () => {
     });
 
     expect(opened!.origin).toBe(new URL(secureOriginURL).origin);
-    expect(opened!.searchParams.get('mode')).toBe('cli-auth');
+    expect(opened!.pathname).toBe('/secure/cli-auth');
     expect(opened!.search).not.toMatch(/localhost:|127\.0\.0\.1/);
     await expectOwnDevice(auth, credentials.userId);
     expect(auth.deviceId).not.toBe(credentials.deviceId);
@@ -112,7 +112,7 @@ test.describe('boxel profile add on the secure origin', () => {
     await snapshot(testInfo, page, 'cli-auth-2-done');
 
     // The window keeps no session of its own.
-    let check = await openSecurePage(page, 'mode=none');
+    let check = await openSecurePage(page, '?mode=none');
     expect(
       await check.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
     ).toBeNull();
@@ -149,7 +149,7 @@ test.describe('boxel profile add on the secure origin', () => {
   }, testInfo) => {
     let { username, password, credentials } =
       await createSubscribedUser('cli-auth-confirm');
-    let secure = await openSecurePage(page, 'mode=sign-in');
+    let secure = await openSecurePage(page, 'sign-in');
     await secure.getByLabel('Email Address or Username').fill(username);
     await secure.getByLabel('Password').fill(password);
     await secure.keyboard.press('Enter');
@@ -182,7 +182,7 @@ test.describe('boxel profile add on the secure origin', () => {
     let auth = await signInForProfile(async (link) => {
       await page.goto(link);
       await page.locator('[data-test-secure-register]').click();
-      await expect(page).toHaveURL(/[?&]mode=register\b/);
+      await expect(page).toHaveURL(/\/register(\?|#|$)/);
       await fillRegistration(page, {
         name: 'CLI Auth Registrant',
         email,
@@ -234,7 +234,7 @@ test.describe('boxel profile add on the secure origin', () => {
       await confirm.locator('[data-test-reset-password-btn]').click();
       await confirm.locator('[data-test-back-to-login-btn]').click();
       // Back on the CLI's page, which still names the waiting listener.
-      await expect(confirm).toHaveURL(/[?&]mode=cli-auth\b/);
+      await expect(confirm).toHaveURL(/\/cli-auth(\?|#|$)/);
       await confirm.getByLabel('Email Address or Username').fill(user.username);
       await confirm.getByLabel('Password').fill(newPassword);
       await confirm.keyboard.press('Enter');
@@ -254,9 +254,7 @@ test.describe('boxel profile add on the secure origin', () => {
       await page.locator('[data-test-secure-google]').click();
       await expect(page.locator('input[name="username"]')).toBeVisible();
       await page.goto(oauthErrorResponseURL(page.url(), 'access_denied'));
-      await page.waitForURL(
-        (url) => url.searchParams.get('mode') === 'cli-auth',
-      );
+      await page.waitForURL((url) => url.pathname.endsWith('/cli-auth'));
       await page.getByLabel('Email Address or Username').fill(username);
       await page.getByLabel('Password').fill(password);
       await page.keyboard.press('Enter');
@@ -268,7 +266,7 @@ test.describe('boxel profile add on the secure origin', () => {
   test('says it can’t authorize a link without a usable listener, as the app does', async ({
     page,
   }) => {
-    let secure = await openSecurePage(page, 'mode=cli-auth&port=0&state=x');
+    let secure = await openSecurePage(page, 'cli-auth?port=0&state=x');
     await expect(secure.locator('[data-test-secure-title]')).toHaveText(
       "Can't authorize",
     );

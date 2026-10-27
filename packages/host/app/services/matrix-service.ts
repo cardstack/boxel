@@ -108,6 +108,7 @@ import {
   RealmServerSessionLocalStorageKey,
   SessionLocalStorageKey,
 } from '@cardstack/host/utils/local-storage-keys';
+import type { LoginHandoff } from '@cardstack/host/utils/login-token';
 
 import { isSkillCard } from '../lib/file-def-manager';
 import { pickableModelIds, usedLLMsFromEvents } from '../lib/pickable-models';
@@ -926,7 +927,7 @@ export default class MatrixService extends Service {
   // loginWithSsoToken() rewrites the live client's access token in place and
   // logout() clears persisted auth — this is the only point A's session is
   // recoverable for a server-side logout.
-  async switchAccount(loginToken: string): Promise<void> {
+  async switchAccount(handoff: LoginHandoff): Promise<void> {
     await this.ready;
     let previousAuth = this.getAuth();
     if (!previousAuth) {
@@ -936,7 +937,7 @@ export default class MatrixService extends Service {
     }
     let auth: LoginResponse;
     try {
-      auth = await this.loginWithSsoToken(loginToken);
+      auth = await this.loginWithSsoToken(handoff);
     } catch (e) {
       // Redemption failed before any teardown, so the current account is still
       // intact and recoverable. Tagged 'redeem' so the caller can show a
@@ -2663,10 +2664,18 @@ export default class MatrixService extends Service {
     return this.client.getSsoLoginUrl(callbackUrl, 'sso', idpId);
   }
 
-  async loginWithSsoToken(token: string) {
+  // Redeems a login token. A hand-off from the secure origin names the device
+  // to sign in as, the one the secure window's session is bound to.
+  async loginWithSsoToken({ token, deviceId }: LoginHandoff) {
     let waiterToken = signInWaiter.beginAsync();
     try {
       await this.ready;
+      if (deviceId) {
+        return await this.client.login('m.login.token', {
+          token,
+          device_id: deviceId,
+        });
+      }
       return await this.client.loginWithToken(token);
     } finally {
       signInWaiter.endAsync(waiterToken);

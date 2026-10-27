@@ -54,9 +54,9 @@ function uniqueRealmName(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function keysURL(mode: string, fragment: Record<string, string> = {}) {
+function keysURL(page: string, fragment: Record<string, string> = {}) {
   let hash = new URLSearchParams(fragment).toString();
-  return `${secureOriginURL}?mode=${mode}${hash ? `#${hash}` : ''}`;
+  return `${secureOriginURL}/${page}${hash ? `#${hash}` : ''}`;
 }
 
 // Opens the secure window from the app page, as the command that opens it
@@ -90,7 +90,7 @@ async function signInToBoxel(
   username: string,
   password: string,
 ) {
-  let page = await openDirectly(context, `${secureOriginURL}?mode=sign-in`);
+  let page = await openDirectly(context, `${secureOriginURL}/sign-in`);
   await page.locator('[data-test-secure-username]').fill(username);
   await page.locator('[data-test-secure-password]').fill(password);
   await page.locator('[data-test-secure-password-submit]').click();
@@ -445,6 +445,19 @@ test.describe('the secure window’s key pages', () => {
     await keys
       .locator('[data-test-key-row="Team weather"] [data-test-key-share]')
       .click();
+    await expect(keys.locator('[data-test-share-key-key]')).toContainText(
+      'Team weather',
+    );
+    expect(new URL(keys.url()).pathname).toMatch(
+      /^\/secure\/keys\/[^/]+\/share$/,
+    );
+    // The share page is beneath the key page: back returns to it, and
+    // forward to the share page again.
+    await keys.goBack();
+    await expect(
+      keys.locator('[data-test-key-row="Team weather"]'),
+    ).toBeVisible();
+    await keys.goForward();
     await expect(keys.locator('[data-test-share-key-key]')).toContainText(
       'Team weather',
     );

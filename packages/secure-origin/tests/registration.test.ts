@@ -21,7 +21,7 @@ const DETAILS = {
   email: 'ada@example.com',
   username: 'ada',
   password: 'a-password-1',
-  nextLink: 'https://secure.test/secure/?mode=verify-email',
+  nextLink: 'https://secure.test/secure/verify-email',
 };
 
 const CONFIG = { realmServerURL: new URL(REALM_SERVER_URL) };

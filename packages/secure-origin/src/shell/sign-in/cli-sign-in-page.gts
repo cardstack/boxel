@@ -1,4 +1,4 @@
-// The `cli-sign-in` mode: a session for the CLI waiting on a loopback port,
+// The `cli-sign-in` page: a session for the CLI waiting on a loopback port,
 // which the URL names with `port` and `state`. Signed in, the session goes to
 // that listener and nowhere else; this window keeps none of it. The CLI uses
 // that session to change the user's keys, so the page names the CLI and says
