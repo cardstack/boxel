@@ -954,6 +954,13 @@ module('Acceptance | dashboard', function (hooks) {
             await waitUntil(() => archivedListRequested);
             await operatorModeState().openWorkspace(keptRealmURL);
             releaseArchivedList();
+            // The Archived list is filled last, so the dashboard's handling
+            // of the archive follows from here.
+            await waitUntil(() =>
+              getService('realm-server').archivedRealms.some(
+                ({ url }) => url === removedRealmURL,
+              ),
+            );
             await confirmed;
             await settled();
           } finally {
