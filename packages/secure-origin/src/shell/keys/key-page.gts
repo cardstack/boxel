@@ -1,7 +1,7 @@
 // The key page: the user's own keys, laid out as a linksToMany field is in a
 // card's edit format: each key a tile with Share and Replace on it and a
 // delete button beside it, and a button under them to add another.
-// It is what the secure origin shows at its own address, and its `keys` mode.
+// It is what the secure origin shows at its own address and at `keys`.
 // No key's value is ever shown, here or anywhere: a key is replaced, never
 // read back. Removing a key first lists the shares it would suspend, and
 // can't be confirmed until that list has loaded.
@@ -24,7 +24,8 @@ import ShareIcon from '../../components/icons/share-2.gts';
 import Trash from '../../components/icons/trash-2.gts';
 import IconPlus from '../../components/icons/icon-plus.gts';
 import { navigation } from '../navigation.js';
-import { modeURL } from '../urls.js';
+import { keySharePath } from '../pages.js';
+import { pageURL } from '../urls.js';
 
 import { failureMessage, isSignedOut } from './context.ts';
 import type { KeyShare, UserKey } from './context.ts';
@@ -32,7 +33,6 @@ import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
 import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
-import { RETURN_PARAM } from './opened-for.ts';
 
 type Action =
   | { name: 'none' }
@@ -343,15 +343,12 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     return this.form.saving || !this.form.value;
   }
 
-  private add = () =>
-    navigation.assign(modeURL('enter-key', { [RETURN_PARAM]: 'keys' }));
+  private add = () => navigation.assign(pageURL('keys/add'));
 
   // Sharing a key into a realm is a change of its own, made on the share
   // page, which asks which realm.
   private share = (key: UserKey) =>
-    navigation.assign(
-      `${modeURL('share-key')}#${new URLSearchParams({ key: key.id })}`,
-    );
+    navigation.assign(pageURL(keySharePath(key.id)));
 
   private setValue = (value: string) => {
     this.form.value = value;

@@ -51,7 +51,7 @@ module('Integration | password reset', function (hooks) {
       }));
       await render(
         <template>
-          <ForgotPassword @cli={{CLI}} @signInURL='?mode=cli-sign-in' />
+          <ForgotPassword @cli={{CLI}} @signInURL='cli-sign-in' />
         </template>,
       );
       assert.dom('[data-test-email-field]').isFocused();
@@ -78,11 +78,11 @@ module('Integration | password reset', function (hooks) {
       assert.strictEqual(request!.body.email, 'someone@example.com');
       assert.strictEqual(request!.body.send_attempt, 1);
       let link = new URL(request!.body.next_link);
-      assert.strictEqual(link.searchParams.get('mode'), 'reset-password');
-      assert.deepEqual(
-        [...link.searchParams.keys()],
-        ['mode'],
-        'nothing but the mode in the query string, which access logs record',
+      assert.true(link.pathname.endsWith('/reset-password'));
+      assert.strictEqual(
+        link.search,
+        '',
+        'nothing in the query string, which access logs record',
       );
       let fragment = new URLSearchParams(link.hash.slice(1));
       assert.strictEqual(
@@ -114,7 +114,7 @@ module('Integration | password reset', function (hooks) {
         body: { errcode: 'M_THREEPID_NOT_FOUND', error: 'Email not found' },
       }));
       await render(
-        <template><ForgotPassword @signInURL='?mode=sign-in' /></template>,
+        <template><ForgotPassword @signInURL='sign-in' /></template>,
       );
       await fillIn('[data-test-email-field]', 'nobody@example.com');
       await click('[data-test-reset-your-password-btn]');
@@ -131,10 +131,10 @@ module('Integration | password reset', function (hooks) {
 
     test('"Back to login" goes to the sign-in page', async function (assert) {
       await render(
-        <template><ForgotPassword @signInURL='?mode=sign-in' /></template>,
+        <template><ForgotPassword @signInURL='sign-in' /></template>,
       );
       await click('[data-test-cancel-reset-password-btn]');
-      assert.deepEqual(assigned, ['?mode=sign-in']);
+      assert.deepEqual(assigned, ['sign-in']);
     });
   });
 
@@ -153,10 +153,7 @@ module('Integration | password reset', function (hooks) {
         cli: CLI,
       });
       assert.strictEqual(window.location.hash, '', 'out of the address bar');
-      assert.strictEqual(
-        new URL(window.location.href).searchParams.get('mode'),
-        'reset-password',
-      );
+      assert.true(window.location.pathname.endsWith('/reset-password'));
       assert.notOk(
         window.location.href.includes('the-client-secret'),
         'nowhere in the address',
@@ -218,9 +215,10 @@ module('Integration | password reset', function (hooks) {
         'the page sends the new password to the Matrix server only through the realm server',
       );
       await click('[data-test-back-to-login-btn]');
-      assert.strictEqual(
-        new URL(assigned[0]!, window.location.href).searchParams.get('mode'),
-        'sign-in',
+      assert.true(
+        new URL(assigned[0]!, window.location.href).pathname.endsWith(
+          '/sign-in',
+        ),
       );
     });
 
@@ -263,7 +261,7 @@ module('Integration | password reset', function (hooks) {
           .getAttribute('href')!,
         window.location.href,
       );
-      assert.strictEqual(restart.searchParams.get('mode'), 'forgot-password');
+      assert.true(restart.pathname.endsWith('/forgot-password'));
       assert.strictEqual(
         restart.searchParams.get('port'),
         '4567',

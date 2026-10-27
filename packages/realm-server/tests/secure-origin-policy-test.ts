@@ -16,24 +16,48 @@ import { createSecureOrigin, secureOriginGate } from '../lib/secure-origin.ts';
 // The built pages are also where the theme's tokens resolve, so this is where
 // the error and muted text colours are checked against WCAG AA contrast.
 
-// Every mode the shell presents, the key page its own address presents, and
-// the address Google returns to.
+// Every page the shell presents, each at its own path, loaded directly: the
+// key page at the shell's own address, a key's share page beneath it, and the
+// address Google returns to.
 const SHELL_PAGES = [
   '/secure',
-  '/secure?mode=sign-in',
-  '/secure?mode=cli-sign-in&port=4567&state=example-state',
-  '/secure?mode=cli-auth&port=4567&state=example-state-0123',
-  '/secure?mode=cli-auth&port=4567&state=example-state-0123&session=secure',
-  '/secure?mode=register',
-  '/secure?mode=verify-email',
-  '/secure?mode=forgot-password',
-  '/secure?mode=reset-password',
-  '/secure?mode=sign-out',
-  '/secure?mode=keys',
-  '/secure?mode=enter-key',
-  '/secure?mode=share-key#realm=https%3A%2F%2Frealm.example%2F',
-  '/secure?mode=swap-key#realm=https%3A%2F%2Frealm.example%2F&share=example',
+  '/secure/sign-in',
+  '/secure/cli-sign-in?port=4567&state=example-state',
+  '/secure/cli-auth?port=4567&state=example-state-0123',
+  '/secure/cli-auth?port=4567&state=example-state-0123&session=secure',
+  '/secure/register',
+  '/secure/verify-email',
+  '/secure/forgot-password',
+  '/secure/reset-password',
+  '/secure/sign-out',
+  '/secure/keys',
+  '/secure/keys/add',
+  '/secure/keys/0b6c1e9e-5a1f-4c47-9d0e-2f5b8f6f1a3c/share',
+  '/secure/enter-key',
+  '/secure/share-key#realm=https%3A%2F%2Frealm.example%2F',
+  '/secure/swap-key#realm=https%3A%2F%2Frealm.example%2F&share=example',
   '/secure/google-callback',
+];
+
+// Addresses that name a page by the `mode` query parameter, as earlier CLI
+// releases and emails already sent do, and the address each lands on.
+const LEGACY_ADDRESSES: [string, string][] = [
+  ['/secure?mode=sign-in', '/secure/sign-in'],
+  ['/secure/?mode=keys', '/secure/keys'],
+  [
+    '/secure?mode=cli-sign-in&port=4567&state=example-state&user=someone',
+    '/secure/cli-sign-in?port=4567&state=example-state&user=someone',
+  ],
+  [
+    '/secure?mode=cli-auth&port=4567&state=example-state-0123&session=secure',
+    '/secure/cli-auth?port=4567&state=example-state-0123&session=secure',
+  ],
+  ['/secure?mode=register', '/secure/register'],
+  ['/secure?mode=forgot-password', '/secure/forgot-password'],
+  [
+    '/secure?mode=share-key#realm=https%3A%2F%2Frealm.example%2F',
+    '/secure/share-key#realm=https%3A%2F%2Frealm.example%2F',
+  ],
 ];
 
 // Every form the credential fields present.
@@ -157,7 +181,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a violation of the policy is seen', async function (assert) {
-    await page.goto(`${secureOrigin}/secure?mode=sign-in`, {
+    await page.goto(`${secureOrigin}/secure/sign-in`, {
       waitUntil: 'networkidle0',
     });
     await page.evaluate(() =>
@@ -174,7 +198,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test("each of the shell's modes runs under the policy", async function (assert) {
+  test("each of the shell's pages runs under the policy", async function (assert) {
     for (let path of SHELL_PAGES) {
       let response = await page.goto(`${secureOrigin}${path}`, {
         waitUntil: 'networkidle0',
@@ -187,9 +211,80 @@ module(basename(import.meta.filename), function (hooks) {
         `${path}: served with the policy`,
       );
       await page.waitForSelector('#secure-shell > *', { timeout: 10000 });
-      assert.ok(true, `${path}: the mode rendered`);
+      assert.ok(true, `${path}: the page rendered`);
       assert.deepEqual(await violationsIn(page), [], `${path}: no violation`);
     }
+  });
+
+  test('an address naming a page by its `mode` lands on that page', async function (assert) {
+    for (let [legacy, landed] of LEGACY_ADDRESSES) {
+      await page.goto(`${secureOrigin}${legacy}`, {
+        waitUntil: 'networkidle0',
+      });
+      await page.waitForSelector('#secure-shell > *', { timeout: 10000 });
+      let { pathname, search, hash } = await page.evaluate(() => ({
+        pathname: window.location.pathname,
+        search: window.location.search,
+        hash: window.location.hash,
+      }));
+      assert.strictEqual(`${pathname}${search}${hash}`, landed, legacy);
+      assert.deepEqual(await violationsIn(page), [], `${legacy}: no violation`);
+    }
+  });
+
+  test('moving between pages is a route transition, and back returns', async function (assert) {
+    // A mark left on the first document is still there after a move only if
+    // the move loaded no new one.
+    await page.goto(`${secureOrigin}/secure/sign-in`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.evaluate(() => {
+      (window as any).__document = 'first';
+    });
+    await page.waitForSelector('[data-test-forgot-password]', {
+      timeout: 10000,
+    });
+    await page.click('[data-test-forgot-password]');
+    await page.waitForFunction(
+      () => window.location.pathname === '/secure/forgot-password',
+      { timeout: 10000 },
+    );
+    await page.waitForSelector('[data-test-forgot-password-form]', {
+      timeout: 10000,
+    });
+    assert.strictEqual(
+      await page.evaluate(() => (window as any).__document),
+      'first',
+      'the move forward loads no new document',
+    );
+    await page.goBack();
+    await page.waitForFunction(
+      () => window.location.pathname === '/secure/sign-in',
+      { timeout: 10000 },
+    );
+    await page.waitForSelector('[data-test-forgot-password]', {
+      timeout: 10000,
+    });
+    assert.strictEqual(
+      await page.evaluate(() => (window as any).__document),
+      'first',
+      'nor does the move back',
+    );
+    assert.deepEqual(await violationsIn(page), [], 'no violation');
+
+    // The sign-out page moves on to the sign-in page itself once it has
+    // ended the window's session.
+    await page.goto(`${secureOrigin}/secure/sign-out`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForFunction(
+      () => window.location.pathname === '/secure/sign-in',
+      { timeout: 10000 },
+    );
+    await page.waitForSelector('[data-test-forgot-password]', {
+      timeout: 10000,
+    });
+    assert.deepEqual(await violationsIn(page), [], 'signed out: no violation');
   });
 
   test('the screens a sign-in is handed back to the app from run under the policy', async function (assert) {
@@ -210,7 +305,7 @@ module(basename(import.meta.filename), function (hooks) {
       ),
     );
     await page.goto(
-      `${secureOrigin}/secure?mode=sign-in#return=${encodeURIComponent(`${appOrigin}/`)}`,
+      `${secureOrigin}/secure/sign-in#return=${encodeURIComponent(`${appOrigin}/`)}`,
       { waitUntil: 'networkidle0' },
     );
     await page.waitForSelector('[data-test-secure-loopback-confirm]', {
@@ -234,11 +329,11 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('error and muted text on the sign-in pages meet WCAG AA contrast', async function (assert) {
-    // Every mode's stylesheet ships with the shell, so this one page holds
+    // Every page's stylesheet ships with the shell, so this one page holds
     // the error rules of all of them. Each colour is resolved inside the
     // page's AuthContainer, under its theme, and composited over the page
     // background on a canvas, which turns any CSS colour into sRGB.
-    await page.goto(`${secureOrigin}/secure?mode=sign-in`, {
+    await page.goto(`${secureOrigin}/secure/sign-in`, {
       waitUntil: 'networkidle0',
     });
     await page.waitForSelector('[data-test-secure-page]', { timeout: 10000 });

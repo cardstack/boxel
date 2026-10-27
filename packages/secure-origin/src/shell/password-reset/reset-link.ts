@@ -1,6 +1,6 @@
 import type { CliCallback } from '../../security/cli-handoff.js';
 import { cliFrom } from '../cli-links.ts';
-import { cliParams, modeURL } from '../urls.js';
+import { cliParams, pageURL } from '../urls.js';
 
 // The link a password reset email carries, and reading it where it lands.
 //
@@ -29,7 +29,7 @@ export function resetLink(
       fragment.set(name, String(value));
     }
   }
-  return new URL(`${modeURL('reset-password')}#${fragment}`, location.href)
+  return new URL(`${pageURL('reset-password')}#${fragment}`, location.href)
     .href;
 }
 
@@ -44,7 +44,7 @@ export interface ResetLink {
 // address bar and the history: the secret has done its job once it is read.
 export function takeResetLink(): ResetLink {
   let fragment = new URLSearchParams(location.hash.replace(/^#/, ''));
-  history.replaceState(null, '', modeURL('reset-password'));
+  history.replaceState(null, '', pageURL('reset-password'));
   return {
     clientSecret: fragment.get('clientSecret') ?? '',
     sid: fragment.get('sid') ?? '',

@@ -33,7 +33,7 @@ const matrixId = `@${TEST_USERNAME}:localhost`;
 async function actAsSecureWindow(link: string): Promise<boolean> {
   let url = new URL(link);
   expect(url.origin).toBe(secureOriginURL.origin);
-  expect(url.searchParams.get('mode')).toBe('cli-sign-in');
+  expect(url.pathname).toBe('/secure/cli-sign-in');
   expect(url.searchParams.get('user')).toBe(TEST_USERNAME);
   let port = url.searchParams.get('port');
   let state = url.searchParams.get('state')!;

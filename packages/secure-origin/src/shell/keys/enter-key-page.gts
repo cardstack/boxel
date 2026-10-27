@@ -1,11 +1,11 @@
-// The `enter-key` mode: a new key, its name and its value, entered into this
+// The `enter-key` page: a new key, its name and its value, entered into this
 // window and added to the user's own keys. A key holds no destination. Opened
 // for an operation, the page first says which operation, card and realm the
 // key is for and where that operation sends it, as the realm server describes
 // them; where the key may be sent is granted when the operation is approved.
 //
 // This is the one page a new key's value is typed into. Reached from the key
-// page (`?then=keys`), it goes back there once the key is added, rather than
+// page, at `keys/add`, it goes back there once the key is added, rather than
 // closing the window.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
@@ -16,7 +16,7 @@ import { addKey, windowContext } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { navigation } from '../navigation.js';
-import { modeURL } from '../urls.js';
+import { pageURL } from '../urls.js';
 
 import { failureMessage, isNotFound, isSignedOut } from './context.ts';
 import type { UserKey, WindowContext } from './context.ts';
@@ -36,7 +36,14 @@ type State =
   | { name: 'entering'; context?: WindowContext }
   | { name: 'done'; key: UserKey; context?: WindowContext };
 
-class EnterKey extends Component<{ Args: { api: KeysWindowAPI } }> {
+interface EnterKeyArgs {
+  api: KeysWindowAPI;
+  // Whether the page is the key page's own `keys/add`, as the router names
+  // it, rather than read from the address.
+  fromKeyPage?: boolean;
+}
+
+class EnterKey extends Component<{ Args: EnterKeyArgs }> {
   <template>
     {{#if this.loading}}
       <BusyMessage class='busy' @title='Loading…' />
@@ -112,7 +119,7 @@ class EnterKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   </template>
 
   private opened = openedFor();
-  private returnsToKeyPage = returnsToKeyPage();
+  private returnsToKeyPage = this.args.fromKeyPage ?? returnsToKeyPage();
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
@@ -123,7 +130,7 @@ class EnterKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     error: undefined as string | undefined,
   });
 
-  constructor(owner: Owner, args: { api: KeysWindowAPI }) {
+  constructor(owner: Owner, args: EnterKeyArgs) {
     super(owner, args);
     this.load();
   }
@@ -168,7 +175,7 @@ class EnterKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     }
   };
 
-  private back = () => navigation.replace(modeURL('keys'));
+  private back = () => navigation.back(pageURL('keys'));
 
   private get submitDisabled() {
     return this.form.saving || !this.form.name.trim() || !this.form.value;
@@ -199,7 +206,7 @@ class EnterKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       // The value is gone from the page the moment the server has it.
       this.form.value = '';
       if (this.returnsToKeyPage) {
-        navigation.replace(modeURL('keys'));
+        navigation.back(pageURL('keys'));
         return;
       }
       this.page.state = {
@@ -220,10 +227,12 @@ class EnterKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   };
 }
 
-export default class EnterKeyPage extends Component {
+export default class EnterKeyPage extends Component<{
+  Args: { fromKeyPage?: boolean };
+}> {
   <template>
     <KeysWindow @title='Boxel · Your keys' as |api|>
-      <EnterKey @api={{api}} />
+      <EnterKey @api={{api}} @fromKeyPage={{@fromKeyPage}} />
     </KeysWindow>
   </template>
 }
