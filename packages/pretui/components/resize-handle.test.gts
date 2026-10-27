@@ -43,17 +43,24 @@ function scaleOf(el: HTMLElement): number {
   );
 }
 
+// The primary button is held from pointerdown until pointerup, as in a real
+// drag, unless `buttons` says otherwise.
 async function pointer(
   el: HTMLElement,
   type: string,
   coord: { x?: number; y?: number },
-  { button = 0, pointerId = 1 } = {},
+  {
+    button = 0,
+    pointerId = 1,
+    buttons = type === 'pointerdown' || type === 'pointermove' ? 1 : 0,
+  } = {},
 ) {
   el.dispatchEvent(
     new PointerEvent(type, {
       bubbles: true,
       cancelable: true,
       button,
+      buttons,
       pointerId,
       clientX: coord.x ?? 0,
       clientY: coord.y ?? 0,
@@ -105,7 +112,7 @@ module('Pretui | components/resize-handle', function (hooks) {
     assert.dom(HANDLE).hasAria('valuenow', '250', 'a set size wins');
   });
 
-  test('a bare handle has a generic name and no upper bound', async function (assert) {
+  test('a bare handle has a generic name, and names the viewport as its max', async function (assert) {
     let pane = new Pane(120);
     await render(
       <template>
@@ -116,8 +123,22 @@ module('Pretui | components/resize-handle', function (hooks) {
       .dom(HANDLE)
       .hasAria('label', 'Resize')
       .hasAria('valuemin', '0')
-      .doesNotHaveAria('valuemax')
+      .hasAria(
+        'valuemax',
+        String(Math.max(120, window.innerWidth)),
+        'an unbounded handle still names a max, which assistive tech would otherwise read as 100',
+      )
       .hasAria('valuenow', '120');
+
+    pane.size = window.innerWidth + 500;
+    await settled();
+    assert
+      .dom(HANDLE)
+      .hasAria(
+        'valuemax',
+        String(window.innerWidth + 500),
+        'a pane past the viewport reports its own size as the max',
+      );
   });
 
   test('a drag reports the size from the total travel, clamped to the bounds', async function (assert) {
@@ -253,12 +274,81 @@ module('Pretui | components/resize-handle', function (hooks) {
     await pointer(el, 'pointerdown', { x: 500 });
     await pointer(el, 'lostpointercapture', { x: 500 });
     assert.dom(el).doesNotHaveAttribute('data-dragging');
-    await pointer(el, 'pointermove', { x: 600 });
+    await pointer(el, 'pointermove', { x: 600 }, { buttons: 0 });
     assert.deepEqual(
       pane.reports,
       [],
       'a later hover with no button pressed resizes nothing',
     );
+  });
+
+  test('a move with no button held ends the drag', async function (assert) {
+    let pane = new Pane(200);
+    await render(
+      <template>
+        <ResizeHandle @size={{pane.size}} @onSizeChange={{pane.set}} />
+      </template>,
+    );
+    let el = handle();
+    let s = scaleOf(el);
+    await pointer(el, 'pointerdown', { x: 500 });
+    await pointer(el, 'pointermove', { x: 500 + 40 * s });
+    assert.strictEqual(pane.size, 240);
+    await pointer(el, 'pointermove', { x: 500 + 80 * s }, { buttons: 0 });
+    assert.strictEqual(
+      pane.size,
+      240,
+      'a hover after a release the handle never saw resizes nothing',
+    );
+    assert.dom(el).doesNotHaveAttribute('data-dragging');
+    await pointer(el, 'pointermove', { x: 500 + 80 * s });
+    assert.strictEqual(pane.size, 240, 'and the gesture is over');
+  });
+
+  test('a press from the pointer that owns a gesture starts it over', async function (assert) {
+    let pane = new Pane(200);
+    await render(
+      <template>
+        <ResizeHandle @size={{pane.size}} @onSizeChange={{pane.set}} />
+      </template>,
+    );
+    let el = handle();
+    let s = scaleOf(el);
+    await pointer(el, 'pointerdown', { x: 500 });
+    await pointer(el, 'pointerdown', { x: 800 });
+    await pointer(el, 'pointermove', { x: 800 + 40 * s });
+    assert.strictEqual(
+      pane.size,
+      240,
+      'a release that never arrived leaves nothing stuck: travel counts from the new press',
+    );
+    assert.dom(el).hasAttribute('data-dragging', 'true');
+  });
+
+  test('rem bounds follow the root font size at the next key press', async function (assert) {
+    let pane = new Pane(250);
+    await render(
+      <template>
+        <ResizeHandle
+          @size={{pane.size}}
+          @min='10rem'
+          @max='20rem'
+          @onSizeChange={{pane.set}}
+        />
+      </template>,
+    );
+    let root = document.documentElement;
+    let before = root.style.fontSize;
+    let rem = rootFontSize() * 1.25;
+    root.style.fontSize = `${rem}px`;
+    try {
+      await triggerKeyEvent(HANDLE, 'keydown', 'Home');
+      assert.strictEqual(pane.size, Math.round(10 * rem));
+      await triggerKeyEvent(HANDLE, 'keydown', 'End');
+      assert.strictEqual(pane.size, Math.round(20 * rem));
+    } finally {
+      root.style.fontSize = before;
+    }
   });
 
   test('a strip that is not a whole number of px still tracks the pointer', async function (assert) {

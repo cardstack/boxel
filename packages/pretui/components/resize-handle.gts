@@ -46,6 +46,11 @@ const PLACEMENTS: Record<string, ResizeHandlePlacement> = {
 /** A px number, or a `px` / `rem` length string. */
 export type ResizeHandleLength = number | string;
 
+interface Bounds {
+  min: number;
+  max: number | undefined;
+}
+
 const LENGTH = /^\s*(\d*\.?\d+)\s*(px|rem)?\s*$/;
 
 /** Resolves a px number or a `px` / `rem` string to px. Anything else is
@@ -112,24 +117,27 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
     let raw = this.args.placement;
     return (raw === undefined ? undefined : PLACEMENTS[raw]) ?? 'end';
   }
-  // Cached: a rem bound reads the root font size, and a drag reads the
-  // bounds on every pointer move.
-  @cached
-  get min(): number {
-    return resolveLength(this.args.min) ?? 0;
-  }
-  @cached
-  get max(): number | undefined {
+  // A rem bound follows the root font size, which nothing tracks, so each
+  // gesture and key press resolves the bounds afresh. Rendering, which reads
+  // them on every size change, uses a cached copy that refreshes when the
+  // bounds' args change.
+  private resolveBounds(): Bounds {
+    let min = resolveLength(this.args.min) ?? 0;
     let max = resolveLength(this.args.max);
-    return max === undefined ? undefined : Math.max(max, this.min);
+    return { min, max: max === undefined ? undefined : Math.max(max, min) };
   }
   @cached
-  get defaultSize(): number | undefined {
-    let size = resolveLength(this.args.defaultSize);
-    return size === undefined ? undefined : this.clamp(size);
+  private get bounds(): Bounds {
+    return this.resolveBounds();
+  }
+  get min(): number {
+    return this.bounds.min;
+  }
+  get max(): number | undefined {
+    return this.bounds.max;
   }
   get size(): number {
-    return this.clamp(this.args.size ?? this.defaultSize ?? this.min);
+    return this.sizeWithin(this.bounds);
   }
   get valueMin(): number {
     return Math.round(this.min);
@@ -137,20 +145,43 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
   get valueNow(): number {
     return Math.round(this.size);
   }
-  get valueMax(): number | undefined {
-    return this.max === undefined ? undefined : Math.round(this.max);
+  // Unbounded, the separator still names a max, since assistive tech reads a
+  // missing aria-valuemax as 100. The viewport is as far as a pane on screen
+  // can reach, and a pane already past it reports its own size.
+  get valueMax(): number {
+    if (this.max !== undefined) {
+      return Math.round(this.max);
+    }
+    let viewport =
+      typeof window === 'undefined'
+        ? 0
+        : this.orientation === 'vertical'
+          ? window.innerWidth
+          : window.innerHeight;
+    return Math.max(this.valueNow, Math.round(viewport));
   }
   get label(): string {
     return this.args.label ?? 'Resize';
   }
 
-  private clamp(size: number): number {
-    let max = this.max ?? Infinity;
-    return Math.min(max, Math.max(this.min, size));
+  private clamp(size: number, { min, max }: Bounds): number {
+    return Math.min(max ?? Infinity, Math.max(min, size));
   }
 
-  private report(next: number) {
-    let size = Math.round(this.clamp(next));
+  private defaultSizeWithin(bounds: Bounds): number | undefined {
+    let size = resolveLength(this.args.defaultSize);
+    return size === undefined ? undefined : this.clamp(size, bounds);
+  }
+
+  private sizeWithin(bounds: Bounds): number {
+    return this.clamp(
+      this.args.size ?? this.defaultSizeWithin(bounds) ?? bounds.min,
+      bounds,
+    );
+  }
+
+  private report(next: number, bounds: Bounds) {
+    let size = Math.round(this.clamp(next, bounds));
     if (size !== this.valueNow) {
       this.args.onSizeChange(size);
     }
@@ -220,12 +251,25 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
     // `factor` turns screen travel into a size change: the growth direction
     // over the screen scale.
     let origin:
-      | { pointerId: number; coord: number; size: number; factor: number }
+      | {
+          pointerId: number;
+          coord: number;
+          size: number;
+          factor: number;
+          bounds: Bounds;
+        }
       | undefined;
     let coordOf = (e: PointerEvent) =>
       this.orientation === 'vertical' ? e.clientX : e.clientY;
+    let end = () => {
+      origin = undefined;
+      this.dragging = false;
+    };
     let down = (e: PointerEvent) => {
-      if (e.button !== 0 || origin) {
+      // A press from the pointer that already owns the gesture means its
+      // release never arrived, so it starts over rather than leaving the
+      // handle stuck.
+      if (e.button !== 0 || (origin && origin.pointerId !== e.pointerId)) {
         return;
       }
       // Stops the drag selecting the page's text; focus is moved by hand
@@ -240,31 +284,43 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
         // pointer, so capture throws, and the gesture stays armed for the
         // pointermove/pointerup the same caller dispatches on this element.
       }
+      let bounds = this.resolveBounds();
       origin = {
         pointerId: e.pointerId,
         coord: coordOf(e),
-        size: this.size,
+        size: this.sizeWithin(bounds),
         factor: this.growthSign(handle) / this.screenScale(handle),
+        bounds,
       };
       this.dragging = true;
     };
     let move = (e: PointerEvent) => {
-      if (origin?.pointerId === e.pointerId) {
-        this.report(origin.size + (coordOf(e) - origin.coord) * origin.factor);
+      if (origin?.pointerId !== e.pointerId) {
+        return;
       }
+      // No button held: the release went somewhere else.
+      if (e.buttons === 0) {
+        end();
+        return;
+      }
+      this.report(
+        origin.size + (coordOf(e) - origin.coord) * origin.factor,
+        origin.bounds,
+      );
     };
     // Also runs on lostpointercapture, so a gesture whose pointerup never
     // reaches the handle (it went inert, or capture was taken away) still
     // ends instead of resizing on later hovers.
     let up = (e: PointerEvent) => {
       if (origin?.pointerId === e.pointerId) {
-        origin = undefined;
-        this.dragging = false;
+        end();
       }
     };
     let reset = () => {
-      if (this.defaultSize !== undefined) {
-        this.report(this.defaultSize);
+      let bounds = this.resolveBounds();
+      let size = this.defaultSizeWithin(bounds);
+      if (size !== undefined) {
+        this.report(size, bounds);
       }
     };
     let key = (e: KeyboardEvent) => {
@@ -273,6 +329,8 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
       if (e.altKey || e.ctrlKey || e.metaKey) {
         return;
       }
+      let bounds = this.resolveBounds();
+      let size = this.sizeWithin(bounds);
       let step = (this.args.step ?? 16) * (e.shiftKey ? 4 : 1);
       let [less, more] =
         this.orientation === 'vertical'
@@ -281,15 +339,15 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
       let next: number | undefined;
       if (e.key === less || e.key === more) {
         let travel = e.key === more ? step : -step;
-        next = this.size + travel * this.growthSign(handle);
+        next = size + travel * this.growthSign(handle);
       } else if (e.key === 'Home') {
-        next = this.min;
-      } else if (e.key === 'End' && this.max !== undefined) {
-        next = this.max;
+        next = bounds.min;
+      } else if (e.key === 'End' && bounds.max !== undefined) {
+        next = bounds.max;
       }
       if (next !== undefined) {
         e.preventDefault();
-        this.report(next);
+        this.report(next, bounds);
       }
     };
     handle.addEventListener('pointerdown', down);
