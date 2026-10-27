@@ -192,6 +192,19 @@ interface LongtaskEntry {
   duration: number;
 }
 
+// How a page that loads data reports how its load ended (`pageAwaitsData`).
+export interface PageVisit {
+  loaded(): void;
+  loadFailed(error?: unknown): void;
+  signedOut(): void;
+}
+
+const IGNORED_VISIT: PageVisit = {
+  loaded() {},
+  loadFailed() {},
+  signedOut() {},
+};
+
 interface Visit {
   page: string;
   navigation: PageLoadEvent['navigation'];
@@ -320,7 +333,7 @@ export class SecureTelemetry {
       return;
     }
     if (reason === 'pagehide' || reason === 'close' || reason === 'stop') {
-      this.#settle('left');
+      this.#settle(this.#visit, 'left');
     }
     while (this.#buffer.length > 0) {
       this.#flushChunk();
@@ -330,12 +343,15 @@ export class SecureTelemetry {
   // ── Pages ────────────────────────────────────────────────────────────────
   // The shell's router calls `pageOpened` as a move to a page starts, and
   // `pageRendered` once it has rendered. A page that loads data (the key
-  // pages) says so while rendering, with `pageAwaitsData`, and then reports
-  // how its load ended; any other page has loaded once it renders.
+  // pages) says so while rendering, with `pageAwaitsData`, and reports how its
+  // load ended through the visit that answers. A visit reports only its own
+  // page: a page left mid-load whose load ends later reports nothing, since
+  // its visit already ended as `left`. Any other page has loaded once it
+  // renders.
 
   pageOpened(routeName: string | undefined): void {
     this.#guard(() => {
-      this.#settle('left');
+      this.#settle(this.#visit, 'left');
       let first = this.#visits++ === 0;
       this.#visit = {
         page: pageLabel(routeName),
@@ -350,10 +366,27 @@ export class SecureTelemetry {
     });
   }
 
-  pageAwaitsData(): void {
-    if (this.#visit) {
-      this.#visit.awaitsData = true;
+  pageAwaitsData(): PageVisit {
+    let visit = this.#visit;
+    if (!visit) {
+      return IGNORED_VISIT;
     }
+    visit.awaitsData = true;
+    return {
+      loaded: () => this.#guard(() => this.#settle(visit, 'loaded')),
+      // `error` is what the load failed with; its status stands in when no
+      // request of the page failed (it threw before or after its requests).
+      loadFailed: (error?: unknown) =>
+        this.#guard(() => {
+          let status = (error as { status?: unknown } | undefined)?.status;
+          this.#settle(
+            visit,
+            'load-failed',
+            typeof status === 'number' ? status : null,
+          );
+        }),
+      signedOut: () => this.#guard(() => this.#settle(visit, 'signed-out')),
+    };
   }
 
   pageRendered(): void {
@@ -364,48 +397,37 @@ export class SecureTelemetry {
       }
       visit.firstRender = this.#now() - visit.start;
       if (!visit.awaitsData) {
-        this.#settle('loaded');
+        this.#settle(visit, 'loaded');
       }
     });
   }
 
-  pageLoaded(): void {
-    this.#guard(() => this.#settle('loaded'));
-  }
-
-  // `error` is what the load failed with; its status stands in when no
-  // request of the page failed (it threw before or after its requests).
-  pageLoadFailed(error?: unknown): void {
-    this.#guard(() => {
-      let status = (error as { status?: unknown } | undefined)?.status;
-      this.#settle('load-failed', typeof status === 'number' ? status : null);
-    });
-  }
-
-  pageSignedOut(): void {
-    this.#guard(() => this.#settle('signed-out'));
-  }
-
-  #settle(outcome: PageOutcome, errorStatus: number | null = null): void {
-    let visit = this.#visit;
+  #settle(
+    visit: Visit | undefined,
+    outcome: PageOutcome,
+    errorStatus: number | null = null,
+  ): void {
     if (!visit || visit.settled) {
       return;
     }
     visit.settled = true;
     let failure = outcome === 'load-failed' ? visit.lastFailure : null;
-    this.#record({
-      event_type: 'page-load',
-      navigation: visit.navigation,
-      outcome,
-      first_render_ms: round(visit.firstRender),
-      data_loaded_ms:
-        outcome === 'loaded' && visit.awaitsData
-          ? round(this.#now() - visit.start)
-          : null,
-      failed_endpoint: failure?.endpoint ?? null,
-      failed_status:
-        failure?.status ?? (outcome === 'load-failed' ? errorStatus : null),
-    });
+    this.#record(
+      {
+        event_type: 'page-load',
+        navigation: visit.navigation,
+        outcome,
+        first_render_ms: round(visit.firstRender),
+        data_loaded_ms:
+          outcome === 'loaded' && visit.awaitsData
+            ? round(this.#now() - visit.start)
+            : null,
+        failed_endpoint: failure?.endpoint ?? null,
+        failed_status:
+          failure?.status ?? (outcome === 'load-failed' ? errorStatus : null),
+      },
+      visit.page,
+    );
   }
 
   // ── Requests ─────────────────────────────────────────────────────────────
@@ -704,10 +726,10 @@ export class SecureTelemetry {
       session = undefined;
     }
     let chunk = this.#buffer.slice(0, MAX_EVENTS_PER_FLUSH);
-    let body = this.#body(chunk, session);
+    let body = this.#body(chunk);
     while (chunk.length > 1 && byteLength(body) > MAX_FLUSH_BODY_BYTES) {
       chunk = chunk.slice(0, Math.ceil(chunk.length / 2));
-      body = this.#body(chunk, session);
+      body = this.#body(chunk);
     }
     this.#buffer.splice(0, chunk.length);
     // A sent event can't absorb a repeat, and the shared slot never spans
@@ -734,30 +756,28 @@ export class SecureTelemetry {
     }
   }
 
-  #body(
-    events: TelemetryEvent[],
-    session: { user: string } | undefined,
-  ): string {
+  // No user: the realm server attributes a beacon to the session it is sent
+  // with, never to a user the body names, so the body names none.
+  #body(events: TelemetryEvent[]): string {
     return JSON.stringify({
       v: 1,
       client_app: 'secure-origin',
       session_id: this.sessionId,
-      matrix_user_id: session?.user ?? null,
       events,
     });
   }
 
   // ── Buffer ───────────────────────────────────────────────────────────────
 
-  #record(event: DistributiveOmit<TelemetryEvent, 'ts' | 'page'>): void {
+  // `page` defaults to the page open now.
+  #record(
+    event: DistributiveOmit<TelemetryEvent, 'ts' | 'page'>,
+    page = this.#visit?.page ?? pageLabel(undefined),
+  ): void {
     if (!this.#started) {
       return;
     }
-    this.#push({
-      ...event,
-      ts: Date.now(),
-      page: this.#visit?.page ?? pageLabel(undefined),
-    } as TelemetryEvent);
+    this.#push({ ...event, ts: Date.now(), page } as TelemetryEvent);
   }
 
   #push(event: TelemetryEvent): void {

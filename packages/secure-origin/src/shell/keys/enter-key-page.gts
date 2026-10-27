@@ -16,7 +16,6 @@ import { addKey, windowContext } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { navigation } from '../navigation.js';
-import { pageLoaded, pageLoadFailed } from '../telemetry.ts';
 import { pageURL } from '../urls.js';
 
 import {
@@ -158,7 +157,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     let request = contextRequest(this.opened);
     if (!request) {
       this.page.state = { name: 'entering' };
-      pageLoaded();
+      this.args.api.visit.loaded();
       return;
     }
     this.page.state = { name: 'loading' };
@@ -168,12 +167,12 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
         request,
       )) as WindowContext;
       this.page.state = { name: 'entering', context };
-      pageLoaded();
+      this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       } else {
-        pageLoadFailed(e);
+        this.args.api.visit.loadFailed(e);
         this.page.state = {
           name: 'load-failed',
           failure: loadFailure(e),

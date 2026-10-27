@@ -22,6 +22,10 @@ import {
 } from '../helpers/mock-servers.ts';
 import { fieldNames } from '../helpers/field-names.ts';
 import { assertEnterSubmits } from '../helpers/implicit-submission.ts';
+import {
+  setupTelemetrySecretsCheck,
+  stringsIn,
+} from '../helpers/telemetry-secrets.ts';
 
 const STORAGE_KEY = 'boxel-secure-session';
 const PASSWORD = 'mypassword1!';
@@ -100,6 +104,20 @@ module('Integration | register', function (hooks) {
     navigation.assign = assign;
     localStorage.removeItem(STORAGE_KEY);
   });
+
+  setupTelemetrySecretsCheck(hooks, () => [
+    // What the page sent: bodies and credentials, not the method and path
+    // a label is made from.
+    ...stringsIn(
+      [...servers.requests('matrix'), ...servers.requests('realm-server')].map(
+        (r) => [r.body, r.authorization],
+      ),
+    ),
+    PASSWORD,
+    INVITE_CODE,
+    'new-user@example.com',
+    'longenough1',
+  ]);
 
   test('registers with an invite code, waiting by itself for the email to be validated', async function (assert) {
     let server = invitingServer(servers);
