@@ -152,6 +152,11 @@ module('Integration | FileDef format templates', function (hooks) {
       await click('[data-test-file-download]');
       await savedClick;
       assert.strictEqual(saved?.download, 'report.pdf');
+      await settled();
+      assert
+        .dom('[data-test-file-download]')
+        .hasText('Download')
+        .doesNotHaveAttribute('data-download-state');
       let savedBytes = await (await fetch(saved!.href)).text();
       assert.strictEqual(savedBytes, bytes, 'the saved blob holds the file');
     } finally {
@@ -159,7 +164,7 @@ module('Integration | FileDef format templates', function (hooks) {
     }
   });
 
-  test('a Download whose bytes cannot be fetched marks the link failed', async function (assert) {
+  test('a Download whose bytes cannot be fetched offers a retry', async function (assert) {
     let sourceURL = URL.createObjectURL(new Blob(['gone']));
     URL.revokeObjectURL(sourceURL);
     await renderCard(
@@ -171,8 +176,8 @@ module('Integration | FileDef format templates', function (hooks) {
     await waitFor('[data-test-file-download][data-download-state="failed"]');
     assert
       .dom('[data-test-file-download]')
-      .hasAttribute('title', 'Download failed. Click to try again.')
-      .doesNotHaveAttribute('aria-busy');
+      .hasText('Retry download')
+      .hasAttribute('aria-live', 'polite');
   });
 
   test('a file with no resource URL renders no download action', async function (assert) {

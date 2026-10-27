@@ -125,16 +125,6 @@ export async function fetchRealmFile(
   return response;
 }
 
-// Saves a file link's bytes rather than letting the browser follow its `href`.
-// A realm URL followed as a download navigation doesn't yield the file: the
-// navigation's `Accept: text/html` gets the host app shell, the request carries
-// no Authorization header so a private realm answers 401, and a realm on
-// another origin than the host has its `download` attribute ignored. The bytes
-// come from `fetchRealmFile`, the same authenticated read the previews use, and
-// are saved through a `blob:` URL under the link's `download` name. The anchor keeps its `href`, so modified clicks (new tab, new window)
-// and copy-link still work natively. The whole body is read before the save
-// starts, so the link carries `data-download-state` — `pending` while the
-// bytes arrive, `failed` when they don't — for the views to style.
 // The decoded last segment of a URL's path, or the raw segment when it holds
 // an escape that isn't valid UTF-8, which `decodeURIComponent` throws on.
 function lastPathSegment(url: string): string {
@@ -146,68 +136,104 @@ function lastPathSegment(url: string): string {
   }
 }
 
-export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
-  // Leaving the view abandons a download still in flight, so its save never
-  // lands on whatever page is showing by the time the bytes arrive.
-  let controller = new AbortController();
-  let inFlight = false;
-  let onClick = async (event: MouseEvent) => {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
-      return;
-    }
-    event.preventDefault();
-    if (inFlight || !element.href) {
-      return;
-    }
-    inFlight = true;
-    element.setAttribute('aria-busy', 'true');
-    element.dataset.downloadState = 'pending';
-    element.removeAttribute('title');
-    try {
-      let response = await fetchRealmFile(element.href, controller.signal);
-      let blob = await response.blob();
-      if (controller.signal.aborted) {
+export type DownloadState = 'idle' | 'pending' | 'failed';
+
+// What a Download link reads in each state. The state is in the label, not
+// only its styling, so it reaches touch, keyboard and screen-reader users;
+// the links announce a change of label through `aria-live`.
+export function downloadLabelFor(state: DownloadState): string {
+  switch (state) {
+    case 'pending':
+      return 'Downloading…';
+    case 'failed':
+      return 'Retry download';
+    default:
+      return 'Download';
+  }
+}
+
+// The `data-download-state` a Download link carries for styling; an idle link
+// carries none.
+export function downloadStateAttr(state: DownloadState): string | undefined {
+  return state === 'idle' ? undefined : state;
+}
+
+// Saves a file link's bytes rather than letting the browser follow its `href`.
+// A realm URL followed as a download navigation doesn't yield the file: the
+// navigation's `Accept: text/html` gets the host app shell, the request carries
+// no Authorization header so a private realm answers 401, and a realm on
+// another origin than the host has its `download` attribute ignored. The bytes
+// come from `fetchRealmFile`, the same authenticated read the previews use, and
+// are saved through a `blob:` URL under the link's `download` name. The anchor
+// keeps its `href`, so modified clicks (new tab, new window) and copy-link
+// still work natively. The whole body is read before the save starts, so the
+// modifier reports each download's state through `onStateChange` — `pending`
+// while the bytes arrive, `failed` when they don't, `idle` once saved — and
+// the view that owns the link renders it.
+export const downloadViaFetch = modifier(
+  (
+    element: HTMLAnchorElement,
+    _positional: [],
+    { onStateChange }: { onStateChange?: (state: DownloadState) => void },
+  ) => {
+    // Leaving the view abandons a download still in flight, so its save never
+    // lands on whatever page is showing by the time the bytes arrive.
+    let controller = new AbortController();
+    let inFlight = false;
+    let onClick = async (event: MouseEvent) => {
+      if (
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
         return;
       }
-      let objectURL = URL.createObjectURL(blob);
-      let save = document.createElement('a');
-      save.href = objectURL;
-      // A blob: URL has no meaningful name of its own, so a nameless file
-      // falls back to the last segment of its URL rather than a random id.
-      save.download =
-        element.getAttribute('download') || lastPathSegment(element.href);
-      save.hidden = true;
-      document.body.append(save);
-      save.click();
-      save.remove();
-      // The browser reads the blob when the download starts, not
-      // synchronously on click, so the URL stays valid for a while after.
-      setTimeout(() => URL.revokeObjectURL(objectURL), 60_000);
-      delete element.dataset.downloadState;
-    } catch (error) {
-      if (controller.signal.aborted) {
+      event.preventDefault();
+      if (inFlight || !element.href) {
         return;
       }
-      console.error(`Could not download ${element.href}`, error);
-      element.dataset.downloadState = 'failed';
-      element.title = 'Download failed. Click to try again.';
-    } finally {
-      inFlight = false;
-      element.removeAttribute('aria-busy');
-    }
-  };
-  element.addEventListener('click', onClick);
-  return () => {
-    controller.abort();
-    element.removeEventListener('click', onClick);
-  };
-});
+      inFlight = true;
+      onStateChange?.('pending');
+      try {
+        let response = await fetchRealmFile(element.href, controller.signal);
+        let blob = await response.blob();
+        if (controller.signal.aborted) {
+          return;
+        }
+        let objectURL = URL.createObjectURL(blob);
+        let save = document.createElement('a');
+        save.href = objectURL;
+        // A blob: URL has no meaningful name of its own, so a nameless file
+        // falls back to the last segment of its URL rather than a random id.
+        save.download =
+          element.getAttribute('download') || lastPathSegment(element.href);
+        save.hidden = true;
+        document.body.append(save);
+        save.click();
+        save.remove();
+        // The browser reads the blob when the download starts, not
+        // synchronously on click, so the URL stays valid for a while after.
+        setTimeout(() => URL.revokeObjectURL(objectURL), 60_000);
+        onStateChange?.('idle');
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        console.error(`Could not download ${element.href}`, error);
+        onStateChange?.('failed');
+      } finally {
+        inFlight = false;
+      }
+    };
+    element.addEventListener('click', onClick);
+    return () => {
+      controller.abort();
+      element.removeEventListener('click', onClick);
+    };
+  },
+);
 
 // Coerce a timestamp to a Date. A bare number is epoch time, but the server
 // stamps a file's `lastModified` / `resourceCreatedAt` in epoch *seconds* — a

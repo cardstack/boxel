@@ -7,6 +7,7 @@
 // supplies that renderer as `static previewComponent`; a file whose family has
 // no renderer yet gets an honest generic pane rather than a broken one.
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 // The boxel-ui icon barrel is a single module already in every card's
@@ -14,10 +15,13 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { Warning } from '@cardstack/boxel-ui/icons';
 
 import {
+  downloadLabelFor,
   downloadNameFor,
+  downloadStateAttr,
   downloadViaFetch,
   fileIconFor,
   humanSize,
+  type DownloadState,
 } from './file-presentation';
 import type {
   FileFormat,
@@ -88,6 +92,12 @@ interface StageSignature {
 }
 
 export class FilePreviewStage extends GlimmerComponent<StageSignature> {
+  @tracked downloadState: DownloadState = 'idle';
+
+  setDownloadState = (state: DownloadState) => {
+    this.downloadState = state;
+  };
+
   get model() {
     return this.args.model;
   }
@@ -189,9 +199,11 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
                   class='gp-download'
                   href={{@model.url}}
                   download={{downloadNameFor @model}}
-                  {{downloadViaFetch}}
+                  data-download-state={{downloadStateAttr this.downloadState}}
+                  aria-live='polite'
+                  {{downloadViaFetch onStateChange=this.setDownloadState}}
                   data-test-file-generic-download
-                >Download</a>
+                >{{downloadLabelFor this.downloadState}}</a>
               {{/if}}
             {{else}}
               <span class='pane-label'>No preview</span>
