@@ -2992,11 +2992,6 @@ export default class Room extends Component<Signature> {
       if (answered && tools.length > 1) {
         let key = turn[0]!.eventId;
         let expanded = this.expandedTurns.has(key);
-        let undone = tools.filter(
-          (tool) =>
-            tool.id &&
-            this.toolService.toolUndo.get(tool.id)?.state === 'undone',
-        ).length;
         let stopped = tools.filter((tool) =>
           tool.failureReason?.startsWith(STOPPED_BY_USER),
         ).length;
@@ -3008,7 +3003,7 @@ export default class Room extends Component<Signature> {
         ).length;
         let summary = turnSummary(
           tools.map((tool) => tool.name ?? 'tool'),
-          { seconds, failed, stopped, undone },
+          { seconds, failed, stopped },
         );
         let firstWithTools = turn.findIndex((m) => m.tools?.length);
         for (let k = start; k < end; k++) {

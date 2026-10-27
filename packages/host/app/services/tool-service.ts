@@ -303,13 +303,6 @@ export default class ToolService extends Service {
   toolFound = new TrackedMap<string, EntrySummary[]>();
   // Calls the reader stopped, by tool call id. A stop is asked once.
   stoppedToolRequestIds = new TrackedSet<string>();
-  // The Undo of a settled call, by tool call id: running, done with what it
-  // restored, or refused with why. It is the gate that keeps an Undo from
-  // being applied twice.
-  toolUndo = new TrackedMap<
-    string,
-    { state: 'undoing' | 'undone' | 'failed'; message: string }
-  >();
   // The running tools that can be stopped, by tool call id.
   private stoppableTools = new TrackedMap<string, { stop: () => void }>();
   // Calls that stand for a background run still under way, reported by
@@ -1056,25 +1049,6 @@ export default class ToolService extends Service {
       this.stoppableTools.has(toolRequestId) &&
       !this.stoppedToolRequestIds.has(toolRequestId)
     );
-  }
-
-  // Undoes a settled call once: a second Undo while one runs, or after one
-  // landed, does nothing. `undo` makes the change and says what it put back.
-  async undoTool(toolRequestId: string, undo: () => Promise<string>) {
-    let current = this.toolUndo.get(toolRequestId);
-    if (current && current.state !== 'failed') {
-      return;
-    }
-    this.toolUndo.set(toolRequestId, { state: 'undoing', message: '' });
-    try {
-      let message = await undo();
-      this.toolUndo.set(toolRequestId, { state: 'undone', message });
-    } catch (e) {
-      this.toolUndo.set(toolRequestId, {
-        state: 'failed',
-        message: e instanceof Error ? e.message : String(e),
-      });
-    }
   }
 
   // Posts a finished background run into its room, so the assistant gets a

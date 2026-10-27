@@ -70,18 +70,12 @@ import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import { isAskUserTool } from '@cardstack/host/lib/ask-user';
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import {
-  applyUndo,
   isDiffable,
   parseCompactDiff,
   resultCardChanges,
   resultDiff,
-  planUndo,
-  realmUndoFiles,
 } from '@cardstack/host/lib/realm-runner/edits';
-import type {
-  CardFieldChange,
-  RealmFileEdit,
-} from '@cardstack/host/lib/realm-runner/edits';
+import type { CardFieldChange } from '@cardstack/host/lib/realm-runner/edits';
 import { STOPPED_BY_USER } from '@cardstack/host/lib/realm-runner/types';
 import { runDeliveryId } from '@cardstack/host/lib/run-delivery';
 import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
@@ -90,7 +84,6 @@ import type { ChangedFile } from '@cardstack/host/lib/turn-summary';
 
 import type { RoomResource } from '@cardstack/host/resources/room';
 import type AssistantQuickLookService from '@cardstack/host/services/assistant-quick-look';
-import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -165,17 +158,6 @@ interface RunState {
   progressCurrent?: number;
   progressTotal?: number;
   currentActivity?: string;
-}
-
-// A value at a field path as an attributes patch: `address.city` becomes
-// `{ address: { city } }`.
-function patchAt(target: Record<string, any>, path: string, value: unknown) {
-  let parts = path.split('.');
-  let node = target;
-  for (let part of parts.slice(0, -1)) {
-    node = node[part] ??= {};
-  }
-  node[parts[parts.length - 1]!] = value;
 }
 
 /** Calls back on install and whenever the value changes. */
@@ -502,7 +484,6 @@ export default class RoomMessageTool extends Component<Signature> {
   @service('assistant-quick-look')
   declare private quickLook: AssistantQuickLookService;
   @service declare private store: StoreService;
-  @service declare private cardService: CardService;
   @service declare private network: NetworkService;
 
   @consume(CardContextName) declare private cardContext: CardContext;
@@ -963,11 +944,7 @@ export default class RoomMessageTool extends Component<Signature> {
     // once it has done it, the row says what it did, in the past tense and
     // without the why, as the design board titles settled rows
     let state = this.rowState;
-    if (
-      state === 'completed' ||
-      state === 'delivered' ||
-      state === 'reverted'
-    ) {
+    if (state === 'completed' || state === 'delivered') {
       // a change it did not make stays in the words it was asked in
       if (this.claimedChangeNotMade) {
         return plainTitle(description);
@@ -984,11 +961,8 @@ export default class RoomMessageTool extends Component<Signature> {
     if (this.isPreparing) {
       return 'streaming';
     }
-    // the reader's own stop and undo outrank a later retry: they are what
-    // happened to this call
-    if (this.undo?.state === 'undone') {
-      return 'reverted';
-    }
+    // the reader's own stop outranks a later retry: it is what happened to
+    // this call
     if (this.isStopped) {
       return 'stopped';
     }
@@ -1053,7 +1027,7 @@ export default class RoomMessageTool extends Component<Signature> {
   private get cardChangeTable():
     | { rows: ToolChangeRow[]; changeLabel: string; ids: Set<string> }
     | undefined {
-    if (this.undo?.state === 'undone' || this.isRunning) {
+    if (this.isRunning) {
       return undefined;
     }
     let card = this.toolResultCard.card as Record<string, any> | undefined;
@@ -1115,7 +1089,7 @@ export default class RoomMessageTool extends Component<Signature> {
   // research run created, the card an update tool changed).
   @cached
   private get touchedCards(): CardPillItem[] {
-    if (this.undo?.state === 'undone' || this.isRunning) {
+    if (this.isRunning) {
       return [];
     }
     let card = this.toolResultCard.card as Record<string, any> | undefined;
@@ -1692,17 +1666,9 @@ export default class RoomMessageTool extends Component<Signature> {
     });
   }
 
-  // The closing line of a call: what an Undo put back, why it could not,
-  // or what a settled write changed. A running call needs no line to say it
+  // The closing line of a call: what a settled write changed. A running call needs no line to say it
   // can be stopped: the composer's Stop says so.
   private get receipt(): string | undefined {
-    let undo = this.undo;
-    if (undo?.state === 'undone') {
-      return undo.message;
-    }
-    if (undo?.state === 'failed') {
-      return `Not undone · ${undo.message}`;
-    }
     if (this.isStopping) {
       return 'Stopping after the current call…';
     }
@@ -1827,11 +1793,7 @@ export default class RoomMessageTool extends Component<Signature> {
         }
         let deleted = file.status === 'deleted';
         // a card the run wrote is named by its pill, under the lines
-        if (
-          !deleted &&
-          this.undo?.state !== 'undone' &&
-          CARD_FILE.test(file.fileUrl ?? '')
-        ) {
+        if (!deleted && CARD_FILE.test(file.fileUrl ?? '')) {
           continue;
         }
         lines.push({
@@ -1845,13 +1807,11 @@ export default class RoomMessageTool extends Component<Signature> {
           text: shortPath(file.fileUrl),
           // ✓ already says it was saved; the line names only an exception
           sub:
-            this.undo?.state === 'undone'
-              ? 'restored'
-              : shownIsFile && file.fileUrl?.replace(/\.json$/, '') === shown
-                ? 'opened'
-                : file.status === 'saved'
-                  ? undefined
-                  : file.status,
+            shownIsFile && file.fileUrl?.replace(/\.json$/, '') === shown
+              ? 'opened'
+              : file.status === 'saved'
+                ? undefined
+                : file.status,
           mono: true,
           href: file.fileUrl,
           hook: 'file',
@@ -2158,11 +2118,10 @@ export default class RoomMessageTool extends Component<Signature> {
     );
   }
 
-  // Each source file the call wrote, as an inline diff under its rows. A
-  // reverted call shows none: the files are back as they were.
+  // Each source file the call wrote, as an inline diff under its rows.
   @cached
   private get fileDiffs(): FileDiff[] {
-    if (this.undo?.state === 'undone' || this.isRunning) {
+    if (this.isRunning) {
       return [];
     }
     let tab = this.tabEdits;
@@ -2194,112 +2153,6 @@ export default class RoomMessageTool extends Component<Signature> {
         : [],
     );
   }
-
-  private get undo() {
-    let id = this.toolCallId;
-    return id ? this.toolService.toolUndo.get(id) : undefined;
-  }
-
-  // What an Undo of this call would put back: the files a Realm Runner call
-  // changed, each with its full texts when this tab ran it, else the
-  // result's diff. Undo is offered only when every file can go back.
-  private get undoTargets():
-    | { url: string; edit?: RealmFileEdit; diff?: string }[]
-    | undefined {
-    let tab = this.tabEdits;
-    if (tab?.length) {
-      return tab.some((edit) => edit.irreversible)
-        ? undefined
-        : tab.map((edit) => ({ url: edit.url, edit }));
-    }
-    let files = this.resultFiles.filter((file) => file.status !== 'deleted');
-    if (
-      !files.length ||
-      files.some((file) => !file.diff || !parseCompactDiff(file.diff).complete)
-    ) {
-      return undefined;
-    }
-    return files.map((file) => ({ url: file.fileUrl, diff: file.diff }));
-  }
-
-  // A card update that reported every field's old value can be put back
-  // field by field.
-  private get fieldUndo():
-    | { cardId: string; attributes: Record<string, unknown>; count: number }
-    | undefined {
-    let result = this.toolResultCard.card as
-      | {
-          paths?: string[];
-          cardId?: string;
-          changes?: { path?: string; before?: unknown }[];
-        }
-      | undefined;
-    let changes = Array.isArray(result?.changes) ? result!.changes : [];
-    if (
-      !result?.cardId ||
-      !changes.length ||
-      changes.some(
-        (change) =>
-          typeof change?.path !== 'string' ||
-          !('before' in change) ||
-          /(^|\.)\d+(\.|$)/.test(change.path.replace(/^\./, '')),
-      )
-    ) {
-      return undefined;
-    }
-    let attributes: Record<string, unknown> = {};
-    for (let change of changes) {
-      patchAt(attributes, change.path!.replace(/^\./, ''), change.before);
-    }
-    return { cardId: result.cardId, attributes, count: changes.length };
-  }
-
-  // The receipt's Undo: on a settled write this tab can put back, once.
-  private get canUndo() {
-    let state = this.rowState;
-    let settled =
-      state === 'completed' || state === 'stopped' || state === 'failed';
-    if (!settled || this.isSuperseded) {
-      return false;
-    }
-    // one Undo per call: once it ran, the receipt says what it put back
-    // or why it could not, and offers it no more
-    if (this.undo) {
-      return false;
-    }
-    return Boolean(this.undoTargets?.length || this.fieldUndo);
-  }
-
-  private get undoLabel() {
-    let count = this.undoTargets?.length ?? 0;
-    return count > 1 ? `Undo ${count}` : 'Undo';
-  }
-
-  private undoCall = async () => {
-    let id = this.toolCallId;
-    if (!id) {
-      return;
-    }
-    let fields = this.fieldUndo;
-    let targets = this.undoTargets;
-    await this.toolService.undoTool(id, async () => {
-      if (!targets?.length && fields) {
-        await this.store.patch(fields.cardId, {
-          attributes: fields.attributes,
-        });
-        return `Restored ${fields.count} field${fields.count === 1 ? '' : 's'}`;
-      }
-      let files = realmUndoFiles({
-        fetch: (url, init) => this.network.authedFetch(url, init),
-        saveSource: (url, content) =>
-          this.cardService.saveSource(new URL(url), content, 'bot-patch', {
-            resetLoader: /\.(gts|ts)$/.test(url),
-          }),
-        deleteSource: (url) => this.cardService.deleteSource(new URL(url)),
-      });
-      return await applyUndo(await planUndo(targets ?? [], files), files);
-    });
-  };
 
   // ── Stop ───────────────────────────────────────────────────────────────
 
@@ -3414,13 +3267,6 @@ export default class RoomMessageTool extends Component<Signature> {
               @label='Stop'
               @onAct={{this.stopCall}}
               data-tool-receipt-action='stop'
-            />
-          {{else if this.canUndo}}
-            <ToolReceiptAction
-              @label={{this.undoLabel}}
-              @busyLabel='Undoing…'
-              @onAct={{this.undoCall}}
-              data-tool-receipt-action='undo'
             />
           {{/if}}
         </:receipt>

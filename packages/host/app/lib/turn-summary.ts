@@ -54,7 +54,6 @@ export function turnSummary(
     seconds?: number;
     failed?: number;
     stopped?: number;
-    undone?: number;
   } = {},
 ): string {
   let counts = new Map<Phrase, number>();
@@ -73,9 +72,6 @@ export function turnSummary(
   }
   if (options.stopped) {
     line += ` · ${options.stopped} stopped`;
-  }
-  if (options.undone) {
-    line += ` · ${options.undone} undone`;
   }
   if (options.seconds !== undefined && options.seconds >= 1) {
     line += ` · ${formatToolDuration(options.seconds)}`;
