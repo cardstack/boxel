@@ -98,16 +98,16 @@ module('Integration | preview', function (hooks) {
 
     await percySnapshot(assert);
 
-    assert.dom('.google-title').hasText('Preview Title');
-    assert.dom('.google-description').hasText('Preview description');
-    assert.dom('.google-site-name').hasText('example.com');
-    assert.dom('.google-breadcrumb').includesText('example.com');
-    assert.dom('.google-breadcrumb').includesText('post');
+    assert.dom('[data-test-google-title]').hasText('Preview Title');
+    assert.dom('[data-test-google-description]').hasText('Preview description');
+    assert.dom('[data-test-google-site-name]').hasText('example.com');
+    assert.dom('[data-test-google-breadcrumb]').includesText('example.com');
+    assert.dom('[data-test-google-breadcrumb]').includesText('post');
     assert
-      .dom('.facebook-image img')
+      .dom('[data-test-facebook-image] img')
       .hasAttribute('src', 'https://example.com/cover.png');
     assert
-      .dom('.twitter-image img')
+      .dom('[data-test-twitter-image] img')
       .hasAttribute('src', 'https://example.com/cover.png');
     assert
       .dom('[data-test-head-markup]')
@@ -159,16 +159,16 @@ module('Integration | preview', function (hooks) {
 
     await renderComponent(TestDriver, 'head');
 
-    assert.dom('.google-title').hasText('Fallback Title');
+    assert.dom('[data-test-google-title]').hasText('Fallback Title');
     assert
-      .dom('.google-description')
+      .dom('[data-test-google-description]')
       .hasText('Add title and description meta tags to see them here.');
-    assert.dom('.facebook-domain').hasText('example.com');
-    assert.dom('.twitter-domain').includesText('example.com');
-    assert.dom('.google-favicon img').doesNotExist();
-    assert.dom('.google-favicon span').hasText('E');
-    assert.dom('.facebook-image img').doesNotExist();
-    assert.dom('.twitter-image img').doesNotExist();
+    assert.dom('[data-test-facebook-domain]').hasText('example.com');
+    assert.dom('[data-test-twitter-domain]').includesText('example.com');
+    assert.dom('[data-test-google-favicon] img').doesNotExist();
+    assert.dom('[data-test-google-favicon] span').hasText('E');
+    assert.dom('[data-test-facebook-image] img').doesNotExist();
+    assert.dom('[data-test-twitter-image] img').doesNotExist();
     assert
       .dom('[data-test-head-markup]')
       .includesText('<meta property="og:type" content="article">');

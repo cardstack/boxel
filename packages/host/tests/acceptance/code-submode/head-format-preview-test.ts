@@ -151,9 +151,9 @@ module('Acceptance | code submode | head format preview', function (hooks) {
       cardPreviewFormat: 'head',
     });
 
-    await waitFor('.google-title');
-    assert.dom('.google-title').hasText('Preview Title');
-    assert.dom('.google-description').hasText('Preview description');
+    await waitFor('[data-test-google-title]');
+    assert.dom('[data-test-google-title]').hasText('Preview Title');
+    assert.dom('[data-test-google-description]').hasText('Preview description');
 
     setMonacoContent(
       JSON.stringify({
@@ -174,8 +174,8 @@ module('Acceptance | code submode | head format preview', function (hooks) {
     );
     await settled();
 
-    assert.dom('.google-title').hasText('Updated Title');
-    assert.dom('.google-description').hasText('Updated description');
+    assert.dom('[data-test-google-title]').hasText('Updated Title');
+    assert.dom('[data-test-google-description]').hasText('Updated description');
   });
 
   test('shows warning when head template contains disallowed tags', async function (assert) {
@@ -222,7 +222,7 @@ module('Acceptance | code submode | head format preview', function (hooks) {
       cardPreviewFormat: 'head',
     });
 
-    await waitFor('.google-title');
+    await waitFor('[data-test-google-title]');
     assert
       .dom('[data-test-head-warning]')
       .doesNotExist('no warning for valid head content');
