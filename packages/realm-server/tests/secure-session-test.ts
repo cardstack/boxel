@@ -1521,6 +1521,316 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    function renew(authorization: string, origin = secureOrigin) {
+      return request
+        .post('/_secure-session/renewal')
+        .set('Authorization', authorization)
+        .set('Origin', origin);
+    }
+
+    async function redeemAsDevice(token: string, deviceId: string) {
+      let response = await fetch(
+        new URL('_matrix/client/v3/login', matrixURL),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'm.login.token',
+            token,
+            device_id: deviceId,
+          }),
+        },
+      );
+      return (await response.json()) as Record<string, any>;
+    }
+
+    // A window signed in with a password that has handed its sign-in to the
+    // app, which redeemed the token as the device the hand-off named.
+    async function handedOverWindow() {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let session = (await passwordSignIn(username, password)).body.data
+        .attributes;
+      let minted = (await mintLoginToken(`Bearer ${session.token}`)).body.data
+        .attributes;
+      let app = await redeemAsDevice(minted.loginToken, minted.deviceId);
+      let [{ id }] = (await dbAdapter.execute(
+        `SELECT id FROM secure_sessions WHERE user_id = $1`,
+        { bind: [userId] },
+      )) as { id: string }[];
+      return {
+        userId,
+        password,
+        session,
+        deviceId: minted.deviceId,
+        app,
+        id,
+      };
+    }
+
+    async function bindingOf(id: string) {
+      let [row] = (await dbAdapter.execute(
+        `SELECT app_device_id FROM secure_sessions WHERE id = $1`,
+        { bind: [id] },
+      )) as { app_device_id: string | null }[];
+      return row?.app_device_id;
+    }
+
+    // The window's session as it stands once its first week has passed: its
+    // row lapsed a day ago, and its token with it.
+    async function pastItsWeek(userId: string, id: string) {
+      await dbAdapter.execute(
+        `UPDATE secure_sessions SET expires_at = NOW() - interval '1 day'
+          WHERE id = $1`,
+        { bind: [id] },
+      );
+      return `Bearer ${createSecureSessionJWT(
+        { user: userId, sessionRoom: 'test-session', secureSession: id },
+        realmSecretSeed,
+        -24 * 60 * 60,
+      )}`;
+    }
+
+    test("a window's hand-off names the device the app signs in as", async function (assert) {
+      let { userId, deviceId, app } = await handedOverWindow();
+      assert.strictEqual(typeof deviceId, 'string', 'the hand-off names one');
+      assert.strictEqual(app.user_id, userId);
+      assert.strictEqual(app.device_id, deviceId, 'the app signs in as it');
+      await logoutMatrixAccessToken({
+        matrixURL,
+        accessToken: app.access_token,
+      });
+    });
+
+    test("a CLI's hand-off names no device", async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let auth = await secureSessionAuth(dbAdapter, userId, { client: 'cli' });
+      let minted = await mintLoginToken(auth);
+      assert.strictEqual(minted.status, 201, minted.text);
+      assert.false('deviceId' in minted.body.data.attributes);
+    });
+
+    test("a window's session past its first week is renewed while the app session it handed over lasts", async function (assert) {
+      let { userId, id, app } = await handedOverWindow();
+      let lapsed = await pastItsWeek(userId, id);
+      assert.strictEqual(
+        (await request.get('/_secure-session').set('Authorization', lapsed))
+          .status,
+        401,
+        'its token alone no longer stands',
+      );
+
+      let renewed = await renew(lapsed);
+      assert.strictEqual(renewed.status, 201, renewed.text);
+      let session = renewed.body.data.attributes;
+      assert.strictEqual(session.user, userId);
+      let week = Date.parse(session.expiresAt) - Date.now();
+      assert.true(week > 6.9 * 24 * 60 * 60 * 1000, `renewed (${week} ms)`);
+      assert.true(week <= 7 * 24 * 60 * 60 * 1000, 'for a week');
+      assert.strictEqual(
+        (await mint(`Bearer ${session.token}`)).status,
+        201,
+        'and its new token mints key write tickets',
+      );
+
+      await logoutMatrixAccessToken({
+        matrixURL,
+        accessToken: app.access_token,
+      });
+      let gone = await renew(await pastItsWeek(userId, id));
+      assert.strictEqual(gone.status, 401, 'not once the app signs out');
+      assert.strictEqual(gone.body.errors[0].code, 'signed-out');
+      let [row] = (await dbAdapter.execute(
+        `SELECT app_device_id FROM secure_sessions WHERE id = $1`,
+        { bind: [id] },
+      )) as { app_device_id: string | null }[];
+      assert.strictEqual(row.app_device_id, null, 'and it is unbound');
+    });
+
+    test("a window's session is renewed only near its end, and is otherwise answered as it stands", async function (assert) {
+      let { userId, id, app } = await handedOverWindow();
+      await dbAdapter.execute(
+        `UPDATE secure_sessions SET expires_at = NOW() + interval '3 days'
+          WHERE id = $1`,
+        { bind: [id] },
+      );
+      let [{ expires_at: before }] = (await dbAdapter.execute(
+        `SELECT expires_at FROM secure_sessions WHERE id = $1`,
+        { bind: [id] },
+      )) as { expires_at: string }[];
+      let current = createSecureSessionJWT(
+        { user: userId, sessionRoom: 'test-session', secureSession: id },
+        realmSecretSeed,
+        3 * 24 * 60 * 60,
+      );
+      let answered = await renew(`Bearer ${current}`);
+      assert.strictEqual(answered.status, 201, answered.text);
+      assert.strictEqual(
+        Date.parse(answered.body.data.attributes.expiresAt),
+        new Date(before).getTime(),
+        'its end is where it was',
+      );
+      assert.strictEqual(answered.body.data.attributes.user, userId);
+      await logoutMatrixAccessToken({
+        matrixURL,
+        accessToken: app.access_token,
+      });
+    });
+
+    test('a window session that was never handed over, or was ended, is not renewed past its end', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      await secureSessionAuth(dbAdapter, userId);
+      let [{ id: unboundId }] = (await dbAdapter.execute(
+        `SELECT id FROM secure_sessions WHERE user_id = $1`,
+        { bind: [userId] },
+      )) as { id: string }[];
+      let neverHanded = await renew(await pastItsWeek(userId, unboundId));
+      assert.strictEqual(neverHanded.status, 401, 'never handed over');
+      assert.strictEqual(neverHanded.body.errors[0].code, 'signed-out');
+
+      let handed = await handedOverWindow();
+      let appSession = `Bearer ${createRealmServerJWT(
+        { user: handed.userId, sessionRoom: 'test-session' },
+        realmSecretSeed,
+      )}`;
+      let lapsed = await pastItsWeek(handed.userId, handed.id);
+      let signedOut = await request
+        .delete('/_secure-sessions?client=window')
+        .set('Authorization', appSession);
+      assert.strictEqual(signedOut.status, 204);
+      let ended = await renew(lapsed);
+      assert.strictEqual(
+        ended.status,
+        401,
+        "the app's sign-out ends it, though the device is still there",
+      );
+      await logoutMatrixAccessToken({
+        matrixURL,
+        accessToken: handed.app.access_token,
+      });
+    });
+
+    test('only the current token renews a window session', async function (assert) {
+      let { userId, id, app } = await handedOverWindow();
+      let lapsed = await pastItsWeek(userId, id);
+      let renewed = await renew(lapsed);
+      assert.strictEqual(renewed.status, 201, renewed.text);
+
+      let stale = await renew(lapsed);
+      assert.strictEqual(
+        stale.status,
+        401,
+        'the token it replaced renews nothing',
+      );
+      assert.strictEqual(stale.body.errors[0].code, 'signed-out');
+      assert.strictEqual(
+        (await renew(`Bearer ${renewed.body.data.attributes.token}`)).status,
+        201,
+        'and the one it got still does',
+      );
+      await logoutMatrixAccessToken({
+        matrixURL,
+        accessToken: app.access_token,
+      });
+    });
+
+    test('signing out in the window ends a session past its end, and its binding', async function (assert) {
+      let { userId, id, app } = await handedOverWindow();
+      let lapsed = await pastItsWeek(userId, id);
+      let signedOut = await request
+        .delete('/_secure-session')
+        .set('Authorization', lapsed);
+      assert.strictEqual(signedOut.status, 204, 'an expired token signs out');
+      assert.strictEqual(await bindingOf(id), null, 'the binding is cleared');
+      assert.strictEqual(
+        (await renew(lapsed)).status,
+        401,
+        'and the device, still there, renews nothing',
+      );
+      await logoutMatrixAccessToken({
+        matrixURL,
+        accessToken: app.access_token,
+      });
+    });
+
+    test('a password change ends a bound window session, though the app device that made it stays', async function (assert) {
+      let { userId, password, id, app } = await handedOverWindow();
+      let lapsed = await pastItsWeek(userId, id);
+      let changed = await passwordChange({
+        accessToken: app.access_token,
+        currentPassword: password,
+        newPassword: `pw-${randomBytes(12).toString('hex')}`,
+      });
+      assert.strictEqual(changed.status, 200, changed.text);
+      assert.strictEqual(await bindingOf(id), null, 'the binding is cleared');
+      assert.strictEqual(
+        await whoami(app.access_token),
+        200,
+        'the app device that made the change is still signed in',
+      );
+      assert.strictEqual(
+        (await renew(lapsed)).status,
+        401,
+        'and renews nothing',
+      );
+      await logoutMatrixAccessToken({
+        matrixURL,
+        accessToken: app.access_token,
+      });
+    });
+
+    test('a bound window session is kept past its end, where an unbound one is swept', async function (assert) {
+      let bound = await handedOverWindow();
+      let unbound = await registerPasswordUser(dbAdapter);
+      await secureSessionAuth(dbAdapter, unbound.userId);
+      await dbAdapter.execute(
+        `UPDATE secure_sessions SET expires_at = NOW() - interval '3 days'
+          WHERE user_id = $1 OR user_id = $2`,
+        { bind: [bound.userId, unbound.userId] },
+      );
+      // Any sign-in sweeps rows past their end.
+      let other = await registerPasswordUser(dbAdapter);
+      assert.strictEqual(
+        (await passwordSignIn(other.username, other.password)).status,
+        201,
+      );
+      let left = (await dbAdapter.execute(
+        `SELECT user_id FROM secure_sessions
+          WHERE user_id = $1 OR user_id = $2`,
+        { bind: [bound.userId, unbound.userId] },
+      )) as { user_id: string }[];
+      assert.deepEqual(
+        left.map((r) => r.user_id),
+        [bound.userId],
+        'only the bound row is left, to be renewed',
+      );
+      assert.strictEqual(
+        (await renew(await pastItsWeek(bound.userId, bound.id))).status,
+        201,
+        'and it still renews',
+      );
+      await logoutMatrixAccessToken({
+        matrixURL,
+        accessToken: bound.app.access_token,
+      });
+    });
+
+    test("a window's session is renewed only for the secure origin, and never the CLI's", async function (assert) {
+      let { userId, id, app } = await handedOverWindow();
+      let lapsed = await pastItsWeek(userId, id);
+      let elsewhere = await renew(lapsed, APP_ORIGIN);
+      assert.strictEqual(elsewhere.status, 403);
+      assert.strictEqual(elsewhere.body.errors[0].code, 'forbidden');
+
+      let cli = await secureSessionAuth(dbAdapter, userId, { client: 'cli' });
+      let cliRenewal = await renew(cli);
+      assert.strictEqual(cliRenewal.status, 401, 'a CLI session is not one');
+      await logoutMatrixAccessToken({
+        matrixURL,
+        accessToken: app.access_token,
+      });
+    });
+
     test("signing out of the app signs the user's secure windows out", async function (assert) {
       let { userId } = await registerPasswordUser(dbAdapter);
       let other = await registerPasswordUser(dbAdapter);
