@@ -689,6 +689,25 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     recordingTest(
+      'a different write under an operation id already used is refused',
+      async function (assert) {
+        let first = await patchPerson('/person-1', 'First Use', {
+          [OPERATION_ID_HEADER]: 'reused',
+        });
+        assert.strictEqual(first.status, 200, JSON.stringify(first.body));
+        let revision = first.get(REVISION_HEADER)!;
+        let before = stored('person-2.json');
+
+        let reused = await patchPerson('/person-2', 'Second Use', {
+          [OPERATION_ID_HEADER]: 'reused',
+        });
+        assert.strictEqual(reused.status, 409, JSON.stringify(reused.body));
+        assert.strictEqual(stored('person-2.json'), before, 'nothing written');
+        assert.strictEqual(await history.head(), revision, 'nothing recorded');
+      },
+    );
+
+    recordingTest(
       'a write whose outcome is unknown is finished by a retry under its id, whatever the retry is correlated with',
       async function (assert) {
         history.loseNextCommitResponse = true;

@@ -4,7 +4,9 @@
 // are on disk, so a realm whose oldest unstamped row is older than its HEAD has
 // a write that died between the two, which recovery completes. `results` is
 // what the write answered with, so a retry under the same operation id answers
-// the same way without writing again.
+// the same way without writing again; `fingerprint` is what the write asked
+// for, so a different write reusing the id is refused rather than answered as
+// the earlier one.
 
 exports.shorthands = undefined;
 
@@ -16,6 +18,7 @@ exports.up = (pgm) => {
       revision varchar NOT NULL,
       parent varchar NOT NULL,
       operation_id varchar NOT NULL,
+      fingerprint varchar,
       recorded_at timestamptz NOT NULL DEFAULT now(),
       materialized_at timestamptz,
       results jsonb,

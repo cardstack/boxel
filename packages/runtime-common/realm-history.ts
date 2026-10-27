@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from '@lukeed/uuid';
+import { Sha256 } from '@aws-crypto/sha256-js';
 import { logger } from './log.ts';
 import { param, query } from './expression.ts';
 import type { DBAdapter } from './db.ts';
@@ -105,6 +106,11 @@ export interface WriteRecording {
   operationId: string;
   channel: HistoryChannel;
   correlationId?: string;
+  // What the write asked for: the request as the client sent it, and who sent
+  // it. Journaled with the revision, so a later request under the same id is
+  // a retry only when it asks for the same thing. Absent for a write no
+  // request made.
+  fingerprint?: string;
   // The matrix user the write is attributed to: the request's authenticated
   // user after assume-user. Never read from a header. Absent, the revision is
   // attributed to the realm itself.
@@ -138,7 +144,7 @@ export interface HistoryCallTiming {
 
 export function writeRecordingFor(
   request: Request,
-  requestContext: { authenticatedUser?: string },
+  requestContext: { authenticatedUser?: string; requestDigest?: string },
   defaultChannel: HistoryChannel,
 ): WriteRecording {
   let suppliedId = request.headers.get(OPERATION_ID_HEADER)?.trim();
@@ -164,7 +170,58 @@ export function writeRecordingFor(
     ...(requestContext.authenticatedUser
       ? { author: requestContext.authenticatedUser }
       : {}),
+    ...(requestContext.requestDigest
+      ? {
+          fingerprint: `${requestContext.requestDigest}:${requestContext.authenticatedUser ?? ''}`,
+        }
+      : {}),
   };
+}
+
+// The methods a request writes by, and so the requests a realm that records
+// history fingerprints.
+export const WRITE_METHODS: ReadonlySet<string> = new Set([
+  'POST',
+  'PUT',
+  'PATCH',
+  'DELETE',
+]);
+
+// A digest of a write request as the client sent it: its method, URL,
+// content type and body. Read from a clone, so the handler still reads the
+// body. Taken before the handler runs because what a handler derives from a
+// request can depend on the realm's state, which a retry finds moved on.
+// Undefined for a request whose body has already been read.
+export async function requestDigest(
+  request: Request,
+): Promise<string | undefined> {
+  if (request.bodyUsed) {
+    return undefined;
+  }
+  let hash = new Sha256();
+  let encoder = new TextEncoder();
+  let field = (bytes: Uint8Array) => {
+    hash.update(encoder.encode(`${bytes.byteLength}:`));
+    hash.update(bytes);
+  };
+  field(encoder.encode(request.method));
+  field(encoder.encode(request.url));
+  field(encoder.encode(request.headers.get('Content-Type') ?? ''));
+  let body = request.clone().body;
+  if (body) {
+    let reader = body.getReader();
+    for (;;) {
+      let { done, value } = await reader.read();
+      if (done || !value) {
+        break;
+      }
+      hash.update(value);
+    }
+  }
+  let digest = await hash.digest();
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join(
+    '',
+  );
 }
 
 export function systemWriteRecording(): WriteRecording {
@@ -253,6 +310,8 @@ export function isHistoryBackendError(
 export interface JournalEntry {
   revision: string;
   materialized: boolean;
+  // See `WriteRecording.fingerprint`.
+  fingerprint?: string;
   // What the write answered with, kept so a retry under the same operation id
   // answers the same way. Absent until the coordinator has built it.
   results?: unknown;
@@ -296,7 +355,8 @@ export class RealmHistoryRecorder {
   // The journal row for an operation id, when this realm recorded it.
   async journalEntry(operationId: string): Promise<JournalEntry | undefined> {
     let [row] = await query(this.#dbAdapter, [
-      `SELECT revision, materialized_at IS NOT NULL AS materialized, results
+      `SELECT revision, materialized_at IS NOT NULL AS materialized, results,
+              fingerprint
        FROM realm_history_revisions WHERE realm_url =`,
       param(this.#realmURL),
       `AND operation_id =`,
@@ -308,6 +368,9 @@ export class RealmHistoryRecorder {
     return {
       revision: String(row.revision),
       materialized: Boolean(row.materialized),
+      ...(row.fingerprint != null
+        ? { fingerprint: String(row.fingerprint) }
+        : {}),
       ...(row.results != null ? { results: parseJSON(row.results) } : {}),
     };
   }
@@ -372,7 +435,8 @@ export class RealmHistoryRecorder {
           // already committed finds its row already there.
           await txQuerier([
             `INSERT INTO realm_history_revisions
-               (realm_url, revision, parent, operation_id, recorded_at)
+               (realm_url, revision, parent, operation_id, fingerprint,
+                recorded_at)
              VALUES (`,
             param(this.#realmURL),
             `,`,
@@ -381,6 +445,8 @@ export class RealmHistoryRecorder {
             param(result.parent),
             `,`,
             param(recording.operationId),
+            `,`,
+            param(recording.fingerprint ?? null),
             `, now()) ON CONFLICT (realm_url, operation_id) DO NOTHING`,
           ]);
           return result.revision;

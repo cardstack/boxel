@@ -556,7 +556,9 @@ import {
 import {
   RealmHistoryRecorder,
   UnchangedTreeSignal,
+  requestDigest,
   systemWriteRecording,
+  WRITE_METHODS,
   writeRecordingFor,
   type HistoryChannel,
   type HistoryBackend,
@@ -2619,6 +2621,9 @@ export type RequestContext = {
   // that writes. The commit fills in its revision, which the response carries
   // (see `createResponse`).
   writeRecording?: WriteRecording;
+  // A digest of the request as sent (see `requestDigest`), taken before a
+  // write's handler runs in a realm that records history.
+  requestDigest?: string;
   // Set by `checkPermission` when the request presented no Authorization
   // header at all. A provably credential-less caller has no read-your-writes
   // claim, since a write a policy admits for one is made as an acting user it
@@ -8394,6 +8399,24 @@ export class Realm {
           if (!entry) {
             return undefined;
           }
+          if (
+            entry.fingerprint !== undefined &&
+            recording.fingerprint !== undefined &&
+            entry.fingerprint !== recording.fingerprint
+          ) {
+            recording.engaged = true;
+            recording.outcome = 'aborted';
+            throw new OperationFailure({
+              status: 409,
+              code: 'operation-id-conflict',
+              title: 'Operation id already used',
+              detail: `operation ${recording.operationId} already recorded a different write, as revision ${entry.revision}; send this write under a new operation id`,
+              meta: {
+                operationId: recording.operationId,
+                revision: entry.revision,
+              },
+            });
+          }
           recording.engaged = true;
           recording.revision = entry.revision;
           if (!entry.materialized || entry.results === undefined) {
@@ -8857,6 +8880,9 @@ export class Realm {
       let turnedAway = this.#anonymous.turnedAway(requestContext);
       if (turnedAway) {
         return turnedAway;
+      }
+      if (this.#history && WRITE_METHODS.has(request.method)) {
+        requestContext.requestDigest = await requestDigest(request);
       }
       return await this.#anonymous.charge(
         request,
