@@ -100,16 +100,30 @@ export function downloadNameFor(
   return model?.name || undefined;
 }
 
+// Reads a realm file's bytes with the caller's session, for every view that
+// loads a file through `fetch` rather than an element's own `src`. `same-origin`
+// rather than `include`: the realm answers with `Access-Control-Allow-Origin: *`,
+// which a credentialed cross-origin request rejects; the auth service worker
+// carries the session instead. A response that isn't OK throws, so a caller
+// only ever reads a body that is the file.
+export async function fetchRealmFile(
+  url: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  let response = await fetch(url, { credentials: 'same-origin', signal });
+  if (!response.ok) {
+    throw new Error(`File fetch failed with HTTP ${response.status}`);
+  }
+  return response;
+}
+
 // Saves a file link's bytes rather than letting the browser follow its `href`.
 // A realm URL followed as a download navigation doesn't yield the file: the
 // navigation's `Accept: text/html` gets the host app shell, the request carries
 // no Authorization header so a private realm answers 401, and a realm on
 // another origin than the host has its `download` attribute ignored. The bytes
-// come from the same authenticated `fetch` the previews use — `same-origin`
-// rather than `include` because the realm answers with
-// `Access-Control-Allow-Origin: *`, and the auth service worker carries the
-// session — and are saved through a `blob:` URL under the link's `download`
-// name. The anchor keeps its `href`, so modified clicks (new tab, new window)
+// come from `fetchRealmFile`, the same authenticated read the previews use, and
+// are saved through a `blob:` URL under the link's `download` name. The anchor keeps its `href`, so modified clicks (new tab, new window)
 // and copy-link still work natively. The whole body is read before the save
 // starts, so the link carries `data-download-state` — `pending` while the
 // bytes arrive, `failed` when they don't — for the views to style.
@@ -134,12 +148,7 @@ export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
     element.dataset.downloadState = 'pending';
     element.removeAttribute('title');
     try {
-      let response = await fetch(element.href, {
-        credentials: 'same-origin',
-      });
-      if (!response.ok) {
-        throw new Error(`File download failed with HTTP ${response.status}`);
-      }
+      let response = await fetchRealmFile(element.href);
       let objectURL = URL.createObjectURL(await response.blob());
       let save = document.createElement('a');
       save.href = objectURL;
