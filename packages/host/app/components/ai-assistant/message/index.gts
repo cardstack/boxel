@@ -663,8 +663,8 @@ export default class AiAssistantMessage extends Component<Signature> {
           />
         {{/if}}
         {{#if @answerFooter}}
-          {{! superseded by a later answer, it keeps its space and shows its
-              actions on hover or focus (ADR 013 §1.16) }}
+          {{! superseded by a later answer, it stays as it was (ADR 013
+              §1.16) }}
           <AnswerFooter @footer={{@answerFooter}} title={{this.tokenUsage}} />
         {{/if}}
         {{#if this.tokenUsage}}
@@ -789,10 +789,6 @@ export default class AiAssistantMessage extends Component<Signature> {
         );
         text-underline-offset: 0.18em;
         cursor: pointer;
-      }
-      /* a superseded footer shows while the reader is on its message */
-      .ai-assistant-message:is(:hover, :focus-within) {
-        --pretui-answerfooter-reveal: 1;
       }
       .turn-head-thinking:hover {
         color: var(--ink-2, var(--boxel-300));

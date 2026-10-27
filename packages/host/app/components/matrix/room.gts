@@ -3027,9 +3027,9 @@ export default class Room extends Component<Signature> {
       // the quiet actions sit under the latest answer, as the board draws
       // them; older turns are history, and the session line has the cost.
       // Every settled turn gets one, and all but the latest are marked
-      // superseded below: a superseded footer keeps its space and shows its
-      // actions on hover, so the turn above never gets shorter when the
-      // next one settles (ADR 013 §1.16)
+      // superseded below: a superseded footer stays as it was, losing only
+      // Retry, so the turn above never gets shorter when the next one
+      // settles (ADR 013 §1.16)
       if (replyIndex >= 0) {
         let costUsd = 0;
         let costed = false;

@@ -55,7 +55,6 @@ export default class AnswerFooter extends Component<Signature> {
       @diff={{this.diff}}
       @onRetry={{@footer.retry}}
       @cost={{@footer.credits}}
-      @superseded={{@footer.superseded}}
       data-test-answer-footer
       ...attributes
     />

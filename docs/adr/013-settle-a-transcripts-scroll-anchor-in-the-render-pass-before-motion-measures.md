@@ -94,9 +94,9 @@ In the latest turn, a block MUST NOT get shorter because furniture changed: a re
 
 A block's live form and its settled form MUST take the same place, and SHOULD take the same height. A live part that only says the obvious (that a running call can be stopped, beside the composer's own Stop) SHOULD NOT be drawn at all. The session's cost MUST show only in the latest answer's footer, not as a line of its own that comes and goes.
 
-### 1.16. History keeps its footer's space
+### 1.16. History keeps its footer
 
-An answer's footer MUST keep its space when a later answer supersedes it. Its actions go quiet and show on hover or focus, inside that space. Hover MUST NOT add height.
+An answer's footer MUST stay, and stay visible, when a later answer supersedes it. Hover MUST NOT add height.
 
 ### 1.17. Proved by a ledger
 

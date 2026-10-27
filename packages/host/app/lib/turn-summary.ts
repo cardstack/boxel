@@ -133,8 +133,8 @@ export interface ChangedFile {
 }
 
 export interface AnswerFooterData {
-  /** a later turn has its own footer: this one stays mounted but hidden,
-   * so it can leave by shrinking rather than vanishing */
+  /** a later turn has its own footer: this one stays as it was, without
+   * Retry */
   superseded?: boolean;
   /** the reply as written, for Copy */
   markdown: string;
