@@ -28,7 +28,12 @@ import { navigation } from '../navigation.js';
 import { keySharePath } from '../pages.js';
 import { pageURL } from '../urls.js';
 
-import { failureMessage, isSignedOut } from './context.ts';
+import {
+  failureMessage,
+  isSignedOut,
+  loadFailure,
+  type LoadFailure,
+} from './context.ts';
 import type { KeyShare, UserKey } from './context.ts';
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
@@ -45,7 +50,11 @@ type Action =
 class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   <template>
     {{#if this.state.loadFailed}}
-      <LoadFailed @message={{this.state.loadFailed}} @onRetry={{this.retry}} />
+      <LoadFailed
+        @heading='Your keys'
+        @failure={{this.state.loadFailed}}
+        @onRetry={{this.retry}}
+      />
     {{else}}
       <EditPage @heading='Your keys' data-test-key-page>
         <:intro>Keys you add here are encrypted, and nothing can read them back.
@@ -303,8 +312,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     loading: true,
     keys: [] as UserKey[],
     error: undefined as string | undefined,
-    // Why the key list didn't load, when it didn't.
-    loadFailed: undefined as string | undefined,
+    // What went wrong when the key list didn't load.
+    loadFailed: undefined as LoadFailure | undefined,
     action: { name: 'none' } as Action,
   });
   private form = trackedObject({ value: '', saving: false });
@@ -338,7 +347,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       } else {
-        this.state.loadFailed = failureMessage(e);
+        this.state.loadFailed = loadFailure(e);
       }
     }
     this.state.loading = false;

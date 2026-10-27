@@ -312,13 +312,43 @@ module('Integration | key pages', function (hooks) {
       await render(KeyPage);
       await waitFor('[data-test-keys-load-failed]');
       assert
-        .dom('[data-test-keys-load-failed]')
-        .includesText('The server is unavailable.');
+        .dom('[data-test-keys-heading]')
+        .hasText('Your keys', 'the page keeps its own title');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText('Boxel couldn’t load this page.');
+      assert.dom('[data-test-error-details]').doesNotExist();
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-detail="Status"]').hasText('503');
+      assert
+        .dom('[data-test-error-detail="Message"]')
+        .hasText('The server is unavailable.');
       assert.dom('[data-test-key-list-empty]').doesNotExist();
       assert.dom('[data-test-key-page-add]').doesNotExist();
       await click('[data-test-keys-retry]');
       await waitFor('[data-test-key-row="Maps"]');
       assert.dom('[data-test-key-row]').exists({ count: 2 });
+    });
+
+    test('a server that can’t be reached is said so', async function (assert) {
+      serve({
+        'GET _user-keys': () => {
+          throw new TypeError('Failed to fetch');
+        },
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText(
+          'Boxel couldn’t be reached. Check your connection and try again.',
+        );
+      await click('[data-test-toggle-details]');
+      assert
+        .dom('[data-test-error-detail="Error"]')
+        .hasText('Boxel could not be reached.');
+      assert.dom('[data-test-error-detail="Status"]').doesNotExist();
     });
 
     test('lists the keys, and replaces one with a ticket for that key', async function (assert) {
@@ -547,13 +577,16 @@ module('Integration | key pages', function (hooks) {
         .includesText('Written by the card that opened this window');
     });
 
-    test('opened for something the server doesn’t know of, says so', async function (assert) {
+    test('opened for something the server doesn’t know of, shows the server’s answer', async function (assert) {
       visitShell(
         `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast`,
       );
       await render(EnterKeyPage);
-      await waitFor('[data-test-keys-not-found]');
+      await waitFor('[data-test-keys-load-failed]');
       assert.dom('[data-test-enter-key-form]').doesNotExist();
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-detail="Status"]').hasText('404');
+      assert.dom('[data-test-error-detail="Message"]').hasText('Not found.');
     });
 
     test('a load that fails for another reason offers to try again', async function (assert) {
@@ -567,10 +600,9 @@ module('Integration | key pages', function (hooks) {
       visitShell(`enter-key#realm=${encodeURIComponent(REALM)}`);
       await render(EnterKeyPage);
       await waitFor('[data-test-keys-load-failed]');
-      assert
-        .dom('[data-test-keys-load-failed]')
-        .includesText('The server is unavailable.');
-      assert.dom('[data-test-keys-not-found]').doesNotExist();
+      assert.dom('[data-test-keys-heading]').hasText('Enter a key');
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-detail="Status"]').hasText('503');
       await click('[data-test-keys-retry]');
       await waitFor('[data-test-enter-key-form]');
       assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
