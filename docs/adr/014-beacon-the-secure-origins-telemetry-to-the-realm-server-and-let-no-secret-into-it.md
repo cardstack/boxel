@@ -4,9 +4,15 @@ date: 2026-10-27
 scope:
   - packages/secure-origin/src/telemetry/**
   - packages/secure-origin/src/shell/telemetry.ts
+  - packages/secure-origin/src/shell/app.gts
+  - packages/secure-origin/src/shell/keys/keys-window.gts
   - packages/secure-origin/src/security/session.js
   - packages/secure-origin/src/security/matrix.js
+  - packages/secure-origin/tests/telemetry.test.ts
+  - packages/secure-origin/tests/helpers/telemetry-secrets.ts
+  - packages/secure-origin/tests/integration/telemetry-test.gts
   - packages/realm-server/handlers/handle-client-telemetry.ts
+  - packages/realm-server/routes.ts
 ---
 
 # 014. Beacon the secure origin's telemetry to the realm server, and let no secret into it
@@ -39,11 +45,14 @@ it doesn't know.
 ### 1.2. Who a beacon is attributed to
 
 A beacon MUST carry the window's own secure session as its bearer token when
-the window has one, never the app's. The realm server MUST attribute a beacon
-to the user of the session it carries, and MUST attribute a beacon without a
-session it honours to nobody, whatever user the body names. The realm server
-MUST accept a beacon without a session, so sign-in is observable, and MUST
-rate limit such beacons by the caller's address.
+the window has one, never the app's, and its body MUST NOT name a user. The
+realm server MUST attribute a beacon to the user of the session it carries,
+and MUST attribute a beacon without a session it honours to nobody, whatever
+user the body names. The realm server MUST accept a beacon without a session,
+so sign-in is observable. It MUST write such a beacon as the secure origin's
+whatever app it names, so unauthenticated input never reaches the host's
+lines, and MUST rate limit its events by the caller's network (an IPv4
+address, or an IPv6 /64), sized for the busiest page's traffic.
 
 ### 1.3. Nothing sensitive leaves a page
 
@@ -54,8 +63,10 @@ MUST be matched, never copied, and a query string MUST NOT be read. A page
 MUST be named by a label from a fixed list, never by its address. An error's
 message MUST be scrubbed before it is recorded: a refused request's message
 replaced by its status and code, and anything quoted, any URL and any Matrix
-ID or email address cut. Its stack MUST keep only its frames. A test MUST
-drive the pages with known secret values and check that no beacon carries one.
+ID or email address cut. Its stack MUST keep only its frames. Tests MUST
+drive every page that takes a credential, a secret or a private name (the key
+pages, sign-in, the CLI pages, registration and password reset) with known
+values, and check that no beacon carries what was typed, sent or answered.
 
 ### 1.4. Telemetry never fails a page
 
