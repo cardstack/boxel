@@ -43,7 +43,9 @@ const WEATHER_SOURCE = `
 
 async function snapshot(testInfo: TestInfo, page: Page, name: string) {
   await testInfo.attach(name, {
-    body: await page.screenshot(),
+    // Transitions are run to their end, so a button just enabled isn't
+    // caught partway through fading in.
+    body: await page.screenshot({ animations: 'disabled' }),
     contentType: 'image/png',
   });
 }
