@@ -45,13 +45,21 @@ interface Signature {
   Args: {
     // What the bar says the window is for.
     title: string;
+    // Which key page this is, for tests to tell the pages apart while the
+    // window shows only that it is signed out.
+    page: string;
   };
   Blocks: { default: [KeysWindowAPI] };
 }
 
 export default class KeysWindow extends Component<Signature> {
   <template>
-    <div class='keys-window' data-theme='light' data-test-secure-page>
+    <div
+      class='keys-window'
+      data-theme='light'
+      data-test-secure-page
+      data-test-keys-page={{@page}}
+    >
       <header class='bar'>
         <span class='logo' aria-hidden='true'><BoxelIcon /></span>
         <span class='bar-title' data-test-keys-window-title>{{@title}}</span>

@@ -106,7 +106,7 @@ module('Integration | register', function (hooks) {
     servers.realmServer('POST _secure-session', () =>
       secureSession('@new-user:localhost'),
     );
-    await render(<template><Register @signInURL='?mode=sign-in' /></template>);
+    await render(<template><Register @signInURL='sign-in' /></template>);
 
     assert.dom('[data-test-name-field]').isFocused();
     assert
@@ -148,10 +148,8 @@ module('Integration | register', function (hooks) {
     );
     assert.strictEqual(emailRequest!.body.email, 'new-user@example.com');
     assert.strictEqual(emailRequest!.body.send_attempt, 1);
-    assert.ok(
-      new URL(emailRequest!.body.next_link).search.includes(
-        'mode=verify-email',
-      ),
+    assert.true(
+      new URL(emailRequest!.body.next_link).pathname.endsWith('/verify-email'),
       'the email link lands on verify-email',
     );
     let registers = servers.requests('matrix', 'POST register');
@@ -181,10 +179,7 @@ module('Integration | register', function (hooks) {
       JSON.parse(localStorage.getItem(STORAGE_KEY)!).token,
       'secure-token-1',
     );
-    assert.strictEqual(
-      new URL(window.location.href).searchParams.get('mode'),
-      'sign-in',
-    );
+    assert.true(window.location.pathname.endsWith('/sign-in'));
   });
 
   test('creates an account with no invite step when the server asks for none', async function (assert) {
@@ -212,7 +207,7 @@ module('Integration | register', function (hooks) {
     servers.realmServer('POST _secure-session', () =>
       secureSession('@new-user:localhost'),
     );
-    await render(<template><Register @signInURL='?mode=sign-in' /></template>);
+    await render(<template><Register @signInURL='sign-in' /></template>);
     await fillRegistration();
     await click('[data-test-register-btn]');
     await waitFor('[data-test-secure-signed-in]', { timeout: 5000 });
@@ -233,7 +228,7 @@ module('Integration | register', function (hooks) {
 
   test('resends the email validation message', async function (assert) {
     invitingServer(servers);
-    await render(<template><Register @signInURL='?mode=sign-in' /></template>);
+    await render(<template><Register @signInURL='sign-in' /></template>);
     await fillRegistration();
     await click('[data-test-register-btn]');
     await waitFor('[data-test-token-field]');
@@ -262,7 +257,7 @@ module('Integration | register', function (hooks) {
       status: 400,
       body: { errcode: 'M_USER_IN_USE', error: 'User ID already taken.' },
     }));
-    await render(<template><Register @signInURL='?mode=sign-in' /></template>);
+    await render(<template><Register @signInURL='sign-in' /></template>);
 
     await triggerEvent('[data-test-name-field]', 'blur');
     assert.dom(error('name')).hasText('Your name is missing');
@@ -331,7 +326,7 @@ module('Integration | register', function (hooks) {
       status: 400,
       body: { errcode: 'M_USER_IN_USE', error: 'User ID already taken.' },
     }));
-    await render(<template><Register @signInURL='?mode=sign-in' /></template>);
+    await render(<template><Register @signInURL='sign-in' /></template>);
     await fillRegistration();
     await click('[data-test-register-btn]');
     await waitFor(error('username'));
@@ -345,7 +340,7 @@ module('Integration | register', function (hooks) {
       status: 400,
       body: { errcode: 'M_THREEPID_IN_USE', error: 'Email is in use' },
     }));
-    await render(<template><Register @signInURL='?mode=sign-in' /></template>);
+    await render(<template><Register @signInURL='sign-in' /></template>);
     await fillRegistration();
     await click('[data-test-register-btn]');
     await waitFor(error('email'));
@@ -360,7 +355,7 @@ module('Integration | register', function (hooks) {
       status: 403,
       body: { errcode: 'M_FORBIDDEN', error: 'Registration has been disabled' },
     }));
-    await render(<template><Register @signInURL='?mode=sign-in' /></template>);
+    await render(<template><Register @signInURL='sign-in' /></template>);
     await fillRegistration();
     await click('[data-test-register-btn]');
     await waitFor('[data-test-register-user-error]');
@@ -376,7 +371,7 @@ module('Integration | register', function (hooks) {
 
   test('an invalid invite code is asked for again', async function (assert) {
     invitingServer(servers);
-    await render(<template><Register @signInURL='?mode=sign-in' /></template>);
+    await render(<template><Register @signInURL='sign-in' /></template>);
     await fillRegistration();
     await click('[data-test-register-btn]');
     await waitFor('[data-test-token-field]');
@@ -402,7 +397,7 @@ module('Integration | register', function (hooks) {
       }
       return { network: 'down' };
     });
-    await render(<template><Register @signInURL='?mode=sign-in' /></template>);
+    await render(<template><Register @signInURL='sign-in' /></template>);
     await fillRegistration();
     await click('[data-test-register-btn]');
     await waitFor('[data-test-token-field]');
@@ -434,7 +429,7 @@ module('Integration | register', function (hooks) {
           }
         : secureSession('@new-user:localhost');
     });
-    await render(<template><Register @signInURL='?mode=sign-in' /></template>);
+    await render(<template><Register @signInURL='sign-in' /></template>);
     await fillRegistration();
     await click('[data-test-register-btn]');
     await waitFor('[data-test-token-field]');
@@ -464,11 +459,7 @@ module('Integration | register', function (hooks) {
     );
     await render(
       <template>
-        <Register
-          @cli={{CLI}}
-          @username='new-user'
-          @signInURL='?mode=cli-sign-in'
-        />
+        <Register @cli={{CLI}} @username='new-user' @signInURL='cli-sign-in' />
       </template>,
     );
     assert
@@ -512,10 +503,10 @@ module('Integration | register', function (hooks) {
       data: { attributes: { matrixServerName: 'localhost' } },
     }));
     await render(
-      <template><Register @signInURL='?mode=cli-sign-in&port=1' /></template>,
+      <template><Register @signInURL='cli-sign-in?port=1' /></template>,
     );
     await click('[data-test-cancel-btn]');
-    assert.deepEqual(assigned, ['?mode=cli-sign-in&port=1']);
+    assert.deepEqual(assigned, ['cli-sign-in?port=1']);
   });
 
   test('the email validation link lands on a page that says so', async function (assert) {

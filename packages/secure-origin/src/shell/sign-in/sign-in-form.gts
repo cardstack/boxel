@@ -20,7 +20,7 @@ import { bool } from '../../helpers/truth-helpers.ts';
 import SignInScreen from '../../screens/sign-in.gts';
 import { navigation } from '../navigation.js';
 import { asSentence, signInFailed } from '../sign-in-copy.js';
-import { cliParams, modeURL } from '../urls.js';
+import { cliParams, pageURL } from '../urls.js';
 
 import { autofocus } from '../../modifiers/autofocus.ts';
 
@@ -189,11 +189,11 @@ export default class SignInForm extends Component<Signature> {
   };
 
   private forgotPassword = () => {
-    navigation.assign(modeURL('forgot-password', this.pageParams));
+    navigation.assign(pageURL('forgot-password', this.pageParams));
   };
 
   private register = () => {
-    navigation.assign(modeURL('register', this.pageParams));
+    navigation.assign(pageURL('register', this.pageParams));
   };
 
   private submit = async (event: Event) => {
