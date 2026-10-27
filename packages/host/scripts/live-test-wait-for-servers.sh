@@ -76,11 +76,11 @@ fi
 #
 # WAIT_ON_TIMEOUT covers the from-scratch index of every realm the
 # realm-server starts at boot — base + skills + openrouter run serially
-# under --migrateDB, and on a slow CI runner that can take several minutes
-# before the last readiness check flips to 200. 12 minutes gives enough
-# headroom for a slow runner without masking a true hang (a real hang
-# burns the full window regardless).
-WAIT_ON_TIMEOUT=720000 NODE_NO_WARNINGS=1 START_SERVER_AND_TEST_INSECURE=1 \
+# under --migrateDB, plus the realm under test (the catalog's live job
+# indexes the whole catalog, about 10 minutes on a CI runner). 20 minutes
+# gives a slow runner headroom without masking a true hang (a real hang
+# burns the full window regardless). A job can set its own.
+WAIT_ON_TIMEOUT="${WAIT_ON_TIMEOUT:-1200000}" NODE_NO_WARNINGS=1 START_SERVER_AND_TEST_INSECURE=1 \
   REALM_URL="${REALM_URL:-}" start-server-and-test \
   'pnpm run wait' \
   "$READY_URLS" \
