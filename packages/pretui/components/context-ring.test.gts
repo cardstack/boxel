@@ -33,4 +33,18 @@ module('Pretui | components/context-ring', function (hooks) {
     await render(<template><ContextRing @used={{60}} @limit={{100}} @warnAt={{0.5}} /></template>);
     assert.strictEqual(root().getAttribute('aria-label'), 'Context 60% used, nearly full: 60 of 100 tokens', '@warnAt moves the threshold');
   });
+
+  test('a conversation larger than the window says it is over, not "100% used"', async function (assert) {
+    await render(<template><ContextRing @used={{600000}} @limit={{128000}} /></template>);
+    assert.strictEqual(root().dataset['over'], 'true');
+    assert.strictEqual(root().dataset['warn'], 'true', 'it keeps the attention colour');
+    assert.strictEqual(
+      root().getAttribute('aria-label'),
+      'Context full: 600k tokens, more than the 128k this model holds. Earlier messages are summarized when the next one is sent',
+    );
+    assert.dom('[data-test-pretui-context-ring-pct]').hasText('Full');
+
+    await render(<template><ContextRing @used={{128000}} @limit={{128000}} /></template>);
+    assert.strictEqual(root().dataset['over'], undefined, 'a window exactly full is not over');
+  });
 });
