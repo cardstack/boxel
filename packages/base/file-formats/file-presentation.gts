@@ -4,6 +4,8 @@ import { modifier } from 'ember-modifier';
 
 import FileIcon from '@cardstack/boxel-icons/file';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
+
 import type { ComponentLike } from '@glint/template';
 import { now } from '../helpers/clock';
 
@@ -104,13 +106,19 @@ export function downloadNameFor(
 // loads a file through `fetch` rather than an element's own `src`. `same-origin`
 // rather than `include`: the realm answers with `Access-Control-Allow-Origin: *`,
 // which a credentialed cross-origin request rejects; the auth service worker
-// carries the session instead. A response that isn't OK throws, so a caller
-// only ever reads a body that is the file.
+// carries the session instead. The request asks for the stored source: under
+// the default `Accept: */*` the realm answers a `.gts`, `.ts` or `.js` path with
+// its transpiled module, not the file as written. A response that isn't OK
+// throws, so a caller only ever reads a body that is the file.
 export async function fetchRealmFile(
   url: string,
   signal?: AbortSignal,
 ): Promise<Response> {
-  let response = await fetch(url, { credentials: 'same-origin', signal });
+  let response = await fetch(url, {
+    credentials: 'same-origin',
+    headers: { Accept: SupportedMimeType.CardSource },
+    signal,
+  });
   if (!response.ok) {
     throw new Error(`File fetch failed with HTTP ${response.status}`);
   }
