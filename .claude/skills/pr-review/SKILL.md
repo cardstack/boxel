@@ -1,7 +1,7 @@
 ---
 name: pr-review
-description: Review a GitHub pull request thoroughly and post the findings as one inline-first pending review. Builds subsystem context before judging, verifies every claim empirically against the checked-out branch, and classifies each finding (regression / pre-existing / follow-up). The output is critique only: every comment asks the author for a change, a decision, or an answer, and carries just the mechanism that ask rests on — no verification logs, no narrating the diff back to the person who wrote it, no subsystem tours. Use whenever asked to review a PR, give feedback on a pull request, or re-review after the author pushes changes. For the local working diff use the built-in code-review skill (a Claude Code built-in, not a repo skill); for a local guided tour without posting anything, use review-branch.
-allowed-tools: Read, Grep, Bash(gh pr view *, gh pr diff *, gh api *, git fetch *, git log *, git diff *, git worktree *), mcp__github__pull_request_review_write, mcp__github__add_comment_to_pending_review, mcp__github__add_reply_to_pull_request_comment
+description: Review a GitHub pull request thoroughly and post the findings as one inline-first pending review. Builds subsystem context before judging, verifies every claim empirically against the checked-out branch, and classifies each finding (regression / pre-existing / follow-up). The output is critique only: every comment asks the author for a change, a decision, or an answer, and carries just the mechanism that ask rests on — no verification logs, no narrating the diff back to the person who wrote it, no subsystem tours. A PR that changes UI (templates, components, scoped styles) also gets the UI lens: the boxel-ui-guidelines review procedure and better-interface's accessibility, layout, writing, typography, color and polish checks. Use whenever asked to review a PR, give feedback on a pull request, do a UI or design review of one, or re-review after the author pushes changes. For the local working diff use the built-in code-review skill (a Claude Code built-in, not a repo skill); for a local guided tour without posting anything, use review-branch.
+allowed-tools: Read, Grep, Glob, Bash(gh pr view *, gh pr diff *, gh api *, git fetch *, git log *, git diff *, git worktree *), mcp__github__pull_request_review_write, mcp__github__add_comment_to_pending_review, mcp__github__add_reply_to_pull_request_comment
 ---
 
 # PR Review
@@ -21,6 +21,8 @@ Load these companion skills before writing a single comment; each applies in **b
 - **evergreen-comments** — the review's own prose is evergreen (no ticket IDs, no PR numbers, no journey narration), and the diff's new or edited comments, docs, and skill files are checked for temporal wording, tracker references, and journey narration as a standing review dimension.
 
 If the diff touches an area with a dedicated domain skill (index-query-engine, search, gts-component-conventions, ember-best-practices, …), load it — those files carry the invariants the change must preserve, which is exactly what a review checks.
+
+If the diff is a UI change, as `references/ui-lens.md` defines it, also run that lens. Its findings go through Phases 3–6 like any other.
 
 ## Phase 1 — Context before judgment
 
