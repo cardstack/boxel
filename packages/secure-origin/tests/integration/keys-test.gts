@@ -502,7 +502,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-key-replace-where]')
         .includesText(
-          '2 workspaces use this key. Replacing it switches them all to the new key right away, so make sure all of these workspaces should use the new key.',
+          '2 workspaces use this key. Replacing it switches them all to the new key right away, so make sure all of these workspaces use the same key.',
           'says how many workspaces the key is shared into',
         );
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
@@ -951,10 +951,10 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-workspace-dropdown-trigger]')
         .isFocused('as does choosing from it');
-      await waitFor('[data-test-workspace-members]');
+      await waitFor('[data-test-workspace-readers]');
       assert
         .dom('[data-test-workspace-readers]')
-        .hasText('Anyone can see this workspace, signed in or not.');
+        .hasText('Anyone, signed in or not');
       await fillIn('[data-test-share-label]', 'Team maps');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
@@ -1046,13 +1046,14 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
       assert
         .dom('[data-test-workspace-readers]')
-        .hasText('Only its members can see this workspace.');
+        .hasText(
+          'Members of this workspace, and anyone its permissions policy lets in',
+        );
       assert
-        .dom('[data-test-workspace-members] li')
-        .exists({ count: 2 }, 'who can see it, and whose account it runs on');
-      assert
-        .dom('[data-test-workspace-members]')
-        .includesText('Requests that use the key run on your account');
+        .dom('[data-test-workspace-billing]')
+        .hasText(
+          'Requests made with this key are billed to your account at the service.',
+        );
       assert.dom('[data-test-workspace-dropdown-trigger]').doesNotExist();
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       await click('[data-test-key-choice="Maps"] input');

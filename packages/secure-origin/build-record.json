@@ -667,7 +667,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 42100,
+      "bytes": 42008,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -779,6 +779,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/c5ca634a0d.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/d05259cb91.css"
         },
         {
@@ -792,10 +796,6 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/e62b090fc6.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/e7054e3773.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -836,7 +836,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 165663,
+      "bytes": 166036,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -872,6 +872,11 @@
           "package": "@cardstack/secure-origin",
           "module": "src/components/icons/boxel-icon.gts",
           "size": 2020
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/icons/credit-card.gts",
+          "size": 780
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1051,7 +1056,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 14750
+          "size": 14740
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1091,12 +1096,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-key-page.gts",
-          "size": 10693
+          "size": 10470
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/swap-key-page.gts",
-          "size": 9438
+          "size": 9219
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1106,7 +1111,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/workspace-members.gts",
-          "size": 1166
+          "size": 1440
         },
         {
           "package": "@cardstack/secure-origin",
