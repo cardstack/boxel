@@ -114,8 +114,14 @@ every Matrix OpenID token requested before the sweep has expired. The sweep
 and that revocation MUST still run when the realm server that scheduled them
 stops before they are due.
 
-A secure window whose session has ended MUST forget it and offer to sign in
-again.
+A secure window whose session has ended MUST forget it. A sign-in page then
+offers to sign in again. A key page MUST NOT: it offers no sign-in of its own,
+as it offers no sign-out, and says to sign in to Boxel from the page that
+opened it. The one sign-in is Boxel's own, which leaves the window its session
+on the secure origin only on a deployment that signs users in there (§1.7),
+so a key page never gathers a credential for a session of its own. A
+deployment MUST NOT open a key page unless it signs users in on the secure
+origin.
 
 ### 1.7. Signing in to the app on the secure origin
 
