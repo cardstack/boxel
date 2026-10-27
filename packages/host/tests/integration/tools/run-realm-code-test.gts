@@ -1590,9 +1590,9 @@ return 'done';`,
         }),
         (error: Error) =>
           error.message ===
-          `${realm} is a folder in the workspace ${testRealmURL}, not its root. ` +
-            `Pass ${testRealmURL} as realm, and start each path in the folder ` +
-            `with card-mutation/relink/`,
+          `${realm} is the folder card-mutation/relink/ in the workspace ` +
+            `${testRealmURL}, not its root. Pass ${testRealmURL} as realm, ` +
+            `and start each path in the folder with card-mutation/relink/`,
       );
     }
     let source = await cardService.getSource(
@@ -1602,6 +1602,80 @@ return 'done';`,
       source.content.includes('"count": 1'),
       'the script does not run against the root',
     );
+  });
+
+  test('refuses a file in the realm as the realm, and names it by its path from the root', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let file = `${testRealmURL}Event/intro-to-pottery.json`;
+
+    await assert.rejects(
+      command.execute({
+        realm: file,
+        roomId: '!room:example.com',
+        code: `return 'ran';`,
+      }),
+      (error: Error) =>
+        error.message ===
+        `${file} is the file Event/intro-to-pottery.json in the workspace ` +
+          `${testRealmURL}, not the workspace. Pass ${testRealmURL} as ` +
+          `realm, and name the file by its path from there: ` +
+          `Event/intro-to-pottery.json`,
+    );
+  });
+
+  test('refuses a folder of a realm named by a prefix, and names the root by that prefix', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    let prefix = '@test/folder-input/';
+    virtualNetwork.addRealmMapping(prefix, testRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+      let folder = `${prefix}card-mutation/relink/`;
+
+      await assert.rejects(
+        command.execute({
+          realm: folder,
+          roomId: '!room:example.com',
+          code: `return 'ran';`,
+        }),
+        (error: Error) =>
+          error.message ===
+          `${folder} is the folder card-mutation/relink/ in the workspace ` +
+            `${prefix}, not its root. Pass ${prefix} as realm, and start ` +
+            `each path in the folder with card-mutation/relink/`,
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping(prefix);
+    }
+  });
+
+  test('runs in the realm root named with a query string', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: `${testRealmURL}?x=1`,
+      roomId: '!room:example.com',
+      code: `return await realm.fs.readText('task.json');`,
+    });
+
+    assert.true(JSON.parse(result.scriptResult!).includes('"count"'));
+  });
+
+  test('runs in a workspace nested under the realm, learned after it', async function (assert) {
+    let nestedRealmURL = `${testRealmURL}nested/`;
+    knowReadableWorkspace(nestedRealmURL);
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: nestedRealmURL,
+      roomId: '!room:example.com',
+      code: `return 'ran';`,
+    });
+
+    assert.strictEqual(JSON.parse(result.scriptResult!), 'ran');
   });
 
   test('refuses paths outside the realm, and names the files it already saved', async function (assert) {

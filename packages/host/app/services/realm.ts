@@ -788,7 +788,8 @@ export default class RealmService extends Service {
   // function of the realm URL string (cache entries never go stale), and a
   // resolved id→realm answer stays valid as long as that realm is still
   // known — validated against `realms` on every hit, so realm removal and
-  // resetState can't serve a stale answer.
+  // resetState can't serve a stale answer — and no realm is learned after it,
+  // since a realm nested under the answer would now claim the id.
   private realmPathsCache = new Map<string, RealmPaths>();
   private realmOfCache = new Map<string, string>();
   // The authorization middleware reads `token()` on every fetch, and a single
@@ -1289,6 +1290,10 @@ export default class RealmService extends Service {
       // stale id doesn't pay validation + full scan on every call.
       this.realmOfCache.delete(id);
     }
+    // The innermost realm wins: a realm nested under another realm's URL owns
+    // its own resources, whichever of the two was learned first.
+    let best: string | undefined;
+    let bestLength = -1;
     for (const realm of this.realms.keys()) {
       let paths = this.realmPathsCache.get(realm);
       if (!paths) {
@@ -1300,9 +1305,17 @@ export default class RealmService extends Service {
         this.realmPathsCache.set(realm, paths);
       }
       if (paths.inRealm(id)) {
-        this.realmOfCache.set(id, realm);
-        return ri(realm);
+        // Compared in URL form, since keys may be registered in either form.
+        let length = this.toLookupURL(realm).length;
+        if (length > bestLength) {
+          best = realm;
+          bestLength = length;
+        }
       }
+    }
+    if (best !== undefined) {
+      this.realmOfCache.set(id, best);
+      return ri(best);
     }
     // Misses are not cached: a realm learned later may claim this id.
     return undefined;
@@ -1756,6 +1769,7 @@ export default class RealmService extends Service {
     if (!resource) {
       resource = this.createRealmResource(realmURL, token);
       this._realms.set(realmURL, resource);
+      this.realmOfCache.clear();
       // only after the set has happened can we safely do the tracked read to
       // establish our depenency.
       this.currentKnownRealms.add(realmURL);

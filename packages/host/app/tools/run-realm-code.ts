@@ -13,6 +13,7 @@ import {
   isRelativePath,
   isResolvedCodeRef,
   logger,
+  RealmPaths,
   resourceIdentity,
   ri,
   rri,
@@ -100,6 +101,8 @@ import type * as BaseToolModule from '@cardstack/base/command';
 const log = logger('tools:run-realm-code');
 
 const MAX_CODE_SIZE = 100_000;
+// A last path segment with an extension names a file rather than a folder.
+const FILE_NAME = /\.[^/.]+$/;
 const MAX_FILES = 20;
 // realm.cards.update has its own limit: a script that edits every card a
 // search found must not stop at MAX_FILES. The updates are saved in one
@@ -1862,17 +1865,24 @@ export default class RunRealmCodeTool extends HostBaseTool<
     ) {
       throw new Error(`The current user cannot read or write ${realmInput}`);
     }
-    // Paths in the script resolve from the realm root, so a folder inside the
-    // realm is refused rather than replaced by the root: the script's paths
-    // would otherwise resolve from somewhere the caller did not name.
-    let rootURL = this.realmRootURL(realmURL);
-    let inputURL = this.network.virtualNetwork.toURL(realmId).href;
-    if (inputURL !== rootURL) {
-      let folder = inputURL.slice(rootURL.length);
+    // Paths in the script resolve from the realm root, so a folder or file
+    // inside the realm is refused rather than replaced by the root: the
+    // script's paths would otherwise resolve from somewhere the caller did not
+    // name. The root is named in the form the model is shown realms in.
+    let { virtualNetwork } = this.network;
+    let local = new RealmPaths(new URL(this.realmRootURL(realmURL))).local(
+      virtualNetwork.toURL(realmId),
+    );
+    if (local !== '') {
+      let root = virtualNetwork.unresolveURL(this.realmRootURL(realmURL));
       throw new Error(
-        `${realmInput} is a folder in the workspace ${rootURL}, not its root. ` +
-          `Pass ${rootURL} as realm, and start each path in the folder ` +
-          `with ${folder}`,
+        !realmInput.endsWith('/') && FILE_NAME.test(local)
+          ? `${realmInput} is the file ${local} in the workspace ${root}, ` +
+              `not the workspace. Pass ${root} as realm, and name the file ` +
+              `by its path from there: ${local}`
+          : `${realmInput} is the folder ${local}/ in the workspace ${root}, ` +
+              `not its root. Pass ${root} as realm, and start each path in ` +
+              `the folder with ${local}/`,
       );
     }
 
