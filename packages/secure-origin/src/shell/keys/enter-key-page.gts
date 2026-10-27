@@ -18,21 +18,24 @@ import Button from '../../components/button.gts';
 import { navigation } from '../navigation.js';
 import { modeURL } from '../urls.js';
 
-import { failureMessage, isNotFound, isSignedOut } from './context.ts';
+import {
+  failureMessage,
+  isSignedOut,
+  loadFailure,
+  type LoadFailure,
+} from './context.ts';
 import type { UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
-import NotFound from './not-found.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { contextRequest, openedFor, returnsToKeyPage } from './opened-for.ts';
 
 type State =
   | { name: 'loading' }
-  | { name: 'not-found' }
-  | { name: 'load-failed'; message: string }
+  | { name: 'load-failed'; failure: LoadFailure }
   | { name: 'entering'; context?: WindowContext }
   | { name: 'done'; key: UserKey; context?: WindowContext };
 
@@ -40,10 +43,12 @@ class EnterKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   <template>
     {{#if this.loading}}
       <BusyMessage class='busy' @title='Loading…' />
-    {{else if this.notFound}}
-      <NotFound />
     {{else if this.loadFailed}}
-      <LoadFailed @message={{this.loadFailed.message}} @onRetry={{this.load}} />
+      <LoadFailed
+        @heading='Enter a key'
+        @failure={{this.loadFailed.failure}}
+        @onRetry={{this.load}}
+      />
     {{else if this.done}}
       <DonePage @heading='Key saved' @onClose={{@api.close}}>Your key
         <strong data-test-keys-done-name>{{this.done.key.name}}</strong>
@@ -131,9 +136,6 @@ class EnterKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   private get loading() {
     return this.page.state.name === 'loading';
   }
-  private get notFound() {
-    return this.page.state.name === 'not-found';
-  }
   private get loadFailed() {
     return this.page.state.name === 'load-failed' ? this.page.state : undefined;
   }
@@ -160,10 +162,11 @@ class EnterKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
-      } else if (isNotFound(e)) {
-        this.page.state = { name: 'not-found' };
       } else {
-        this.page.state = { name: 'load-failed', message: failureMessage(e) };
+        this.page.state = {
+          name: 'load-failed',
+          failure: loadFailure(e),
+        };
       }
     }
   };

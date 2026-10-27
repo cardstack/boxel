@@ -22,7 +22,12 @@ import Tag from '../../components/icons/tag.gts';
 import { navigation } from '../navigation.js';
 import { modeURL } from '../urls.js';
 
-import { failureMessage, isNotFound, isSignedOut } from './context.ts';
+import {
+  failureMessage,
+  isSignedOut,
+  loadFailure,
+  type LoadFailure,
+} from './context.ts';
 import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
@@ -30,14 +35,12 @@ import KeyPicker from './key-picker.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
-import NotFound from './not-found.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedFor } from './opened-for.ts';
 
 type State =
   | { name: 'loading' }
-  | { name: 'not-found' }
-  | { name: 'load-failed'; message: string }
+  | { name: 'load-failed'; failure: LoadFailure }
   | { name: 'needs-admin'; context: WindowContext }
   | { name: 'active'; context: WindowContext; share: KeyShare }
   | { name: 'choosing'; context: WindowContext; share: KeyShare }
@@ -55,10 +58,12 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   <template>
     {{#if this.loading}}
       <BusyMessage class='busy' @title='Loading…' />
-    {{else if this.notFound}}
-      <NotFound />
     {{else if this.loadFailed}}
-      <LoadFailed @message={{this.loadFailed.message}} @onRetry={{this.load}} />
+      <LoadFailed
+        @heading='Share your key in place of one that stopped working'
+        @failure={{this.loadFailed.failure}}
+        @onRetry={{this.load}}
+      />
     {{else if this.needsAdmin}}
       <NeedsAdmin @realm={{this.needsAdmin.context.realm.name}} />
     {{else if this.active}}
@@ -184,9 +189,6 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   private get loading() {
     return this.page.state.name === 'loading';
   }
-  private get notFound() {
-    return this.page.state.name === 'not-found';
-  }
   private get loadFailed() {
     return this.page.state.name === 'load-failed' ? this.page.state : undefined;
   }
@@ -210,13 +212,12 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
 
   private load = async () => {
     let { realm, share: shareId } = this.opened;
-    if (!realm || !shareId) {
-      this.page.state = { name: 'not-found' };
-      return;
-    }
     this.page.state = { name: 'loading' };
     let { config } = this.args.api;
     try {
+      if (!realm || !shareId) {
+        throw new Error('this page names no workspace and shared key');
+      }
       let context = await windowContext(config, { realm });
       if (!context.realm.directWriter) {
         this.page.state = { name: 'needs-admin', context };
@@ -226,8 +227,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         (s) => s.id === shareId,
       );
       if (!share) {
-        this.page.state = { name: 'not-found' };
-        return;
+        throw new Error('that workspace has no such shared key');
       }
       if (share.state === 'active') {
         this.page.state = { name: 'active', context, share };
@@ -242,10 +242,11 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
-      } else if (isNotFound(e)) {
-        this.page.state = { name: 'not-found' };
       } else {
-        this.page.state = { name: 'load-failed', message: failureMessage(e) };
+        this.page.state = {
+          name: 'load-failed',
+          failure: loadFailure(e),
+        };
       }
     }
   };

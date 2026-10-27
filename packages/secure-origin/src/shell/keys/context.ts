@@ -19,14 +19,49 @@ export function failureMessage(e: unknown): string {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
-export function isSignedOut(e: unknown): boolean {
-  return (e as { code?: unknown })?.code === 'signed-out';
+export interface LoadFailure {
+  message: string;
+  details: { label: string; value: string }[];
 }
 
-// Whether a request was refused because what it names doesn't exist, or isn't
-// the user's to see, which the realm server answers alike. Anything else that
-// stops a page loading (the server can't be reached, or fails) is worth trying
-// again.
-export function isNotFound(e: unknown): boolean {
-  return (e as { status?: unknown })?.status === 404;
+// What a page that couldn't load says went wrong: a general message, and in
+// its details the response's status and the server's own account of it, or
+// that no response came at all.
+export function loadFailure(e: unknown): LoadFailure {
+  let { status, code, message } = (e ?? {}) as {
+    status?: unknown;
+    code?: unknown;
+    message?: unknown;
+  };
+  if (code === 'network') {
+    return {
+      message:
+        'Boxel couldn’t be reached. Check your connection and try again.',
+      details: [
+        {
+          label: 'Error',
+          value:
+            typeof message === 'string' && message
+              ? message
+              : 'No response from the server.',
+        },
+      ],
+    };
+  }
+  return {
+    message: 'Boxel couldn’t load this page.',
+    details: [
+      ...(typeof status === 'number' && status > 0
+        ? [{ label: 'Status', value: String(status) }]
+        : []),
+      ...(typeof code === 'string' && code
+        ? [{ label: 'Code', value: code }]
+        : []),
+      { label: 'Message', value: failureMessage(e) },
+    ],
+  };
+}
+
+export function isSignedOut(e: unknown): boolean {
+  return (e as { code?: unknown })?.code === 'signed-out';
 }
