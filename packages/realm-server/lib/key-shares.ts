@@ -478,6 +478,48 @@ export async function listOwnShares(
   return rows.map((row) => toShare(row, { withKey: true }));
 }
 
+// A realm one of the user's keys is shared into: its address, and its name as
+// its `realm.json` gives it (null until that is indexed).
+export interface SharedRealm {
+  url: string;
+  name: string | null;
+}
+
+// The realms each of the user's keys is shared into, by key id, each realm
+// once however many shares put the key there, by address. These are the
+// realms of the shares `listOwnShares` lists, read for every key at once. With
+// `keyId`, only that key's.
+export async function listOwnSharedRealms(
+  dbAdapter: DBAdapter,
+  owner: string,
+  { keyId }: { keyId?: string } = {},
+): Promise<Map<string, SharedRealm[]>> {
+  let byKey = new Map<string, SharedRealm[]>();
+  if (keyId !== undefined && !isUUID(keyId)) {
+    return byKey;
+  }
+  let rows = (await query(dbAdapter, [
+    `SELECT DISTINCT ks.key_id, ks.realm_url,
+            config.pristine_doc->'attributes'->'cardInfo'->>'name' AS name
+     FROM key_shares ks
+     LEFT JOIN boxel_index config
+       ON config.url = ks.realm_url || 'realm.json'
+      AND config.realm_url = ks.realm_url
+      AND config.type = 'instance'
+      AND (config.is_deleted = FALSE OR config.is_deleted IS NULL)
+     WHERE ks.key_id IS NOT NULL AND ks.owner = `,
+    param(owner),
+    ...(keyId !== undefined ? [` AND ks.key_id = `, param(keyId)] : []),
+    ` ORDER BY ks.key_id, ks.realm_url`,
+  ])) as { key_id: string; realm_url: string; name: string | null }[];
+  for (let { key_id, realm_url, name } of rows) {
+    let realms = byKey.get(key_id) ?? [];
+    realms.push({ url: realm_url, name });
+    byKey.set(key_id, realms);
+  }
+  return byKey;
+}
+
 // Reads `realm`'s rows for one of its direct writers, with their permission
 // row locked for the read, so write removed meanwhile can't let them read on.
 async function readAsDirectWriter(

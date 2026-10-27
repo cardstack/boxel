@@ -39,7 +39,10 @@ export interface WindowContext {
   };
 }
 
-// One of the user's keys: its metadata, never its value.
+// One of the user's keys: its metadata, never its value, with where it is
+// used: the services its approved requests go to, by registrable domain, and
+// the realms it is shared into. Those two come with the key listing, not with
+// the answer to adding or replacing a key.
 export interface UserKey {
   id: string;
   name: string;
@@ -47,6 +50,8 @@ export interface UserKey {
   state: string;
   createdAt: string;
   updatedAt: string;
+  usedWith?: string[];
+  sharedInto?: { url: string; name: string }[];
 }
 
 // A share of a key into a realm.

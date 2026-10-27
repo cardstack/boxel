@@ -1,5 +1,6 @@
 // The key page: the user's own keys, laid out as a linksToMany field is in a
-// card's edit format: each key a tile with Share and Replace on it and a
+// card's edit format: each key a tile saying which services it is used with
+// and which workspaces it is shared into, with Share and Replace on it and a
 // delete button beside it, and a button under them to add another.
 // It is what the secure origin shows at its own address and at `keys`.
 // No key's value is ever shown, here or anywhere: a key is replaced, never
@@ -39,6 +40,7 @@ import type { KeyShare, UserKey } from './context.ts';
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
 import KeyTile from './key-tile.gts';
+import KeyUse from './key-use.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 
@@ -75,6 +77,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                   <li class='item' data-test-key-row={{key.name}}>
                     <div class='entry'>
                       <KeyTile @key={{key}}>
+                        <KeyUse @key={{key}} />
                         <div class='tile-actions'>
                           <Button
                             class='action'
@@ -283,6 +286,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
         flex-wrap: wrap;
         justify-content: flex-end;
         gap: var(--boxel-sp-4xs);
+        margin-top: var(--boxel-sp-xs);
       }
       .entry {
         display: grid;

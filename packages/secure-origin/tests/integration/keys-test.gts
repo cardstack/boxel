@@ -57,6 +57,14 @@ const KEYS = [
     state: 'active',
     createdAt: '2026-10-01T12:00:00.000Z',
     updatedAt: '2026-10-01T12:00:00.000Z',
+    usedWith: ['github.com', 'openweathermap.org'],
+    sharedInto: [
+      {
+        url: 'https://realm-server.test/someone/dashboard/',
+        name: 'Dashboard',
+      },
+      { url: 'https://realm-server.test/someone/workspace/', name: 'Team' },
+    ],
   },
   {
     id: 'key-2',
@@ -65,6 +73,8 @@ const KEYS = [
     state: 'active',
     createdAt: '2026-10-02T12:00:00.000Z',
     updatedAt: '2026-10-02T12:00:00.000Z',
+    usedWith: [] as string[],
+    sharedInto: [] as { url: string; name: string }[],
   },
 ];
 
@@ -414,6 +424,55 @@ module('Integration | key pages', function (hooks) {
         meta: { ticket: 'ticket-1' },
       });
       assert.dom('[data-test-key-replace-form]').doesNotExist();
+    });
+
+    test('each key says which services it is used with and which workspaces it is shared into, from the key listing alone', async function (assert) {
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      let weather = '[data-test-key-row="Weather service"]';
+      assert
+        .dom(`${weather} [data-test-key-used-with]`)
+        .hasText('Used with github.com, openweathermap.org');
+      assert
+        .dom(`${weather} [data-test-key-shared-into-summary]`)
+        .hasText('Shared into 2 workspaces');
+      assert
+        .dom(`${weather} [data-test-key-shared-into-disclosure]`)
+        .doesNotHaveAttribute(
+          'open',
+          'the workspaces are listed only when asked for',
+        );
+      await click(`${weather} [data-test-key-shared-into-summary]`);
+      assert
+        .dom(`${weather} [data-test-key-shared-into-disclosure]`)
+        .hasAttribute('open', '', 'opening the count lists the workspaces');
+      assert.dom(`${weather} [data-test-key-shared-into-list]`).isVisible();
+      assert
+        .dom(
+          `${weather} [data-test-key-shared-into-workspace="https://realm-server.test/someone/dashboard/"]`,
+        )
+        .hasText('Dashboard realm-server.test/someone/dashboard/');
+      assert
+        .dom(`${weather} [data-test-key-shared-into-workspace="${REALM}"]`)
+        .hasText('Team realm-server.test/someone/workspace/');
+
+      let maps = '[data-test-key-row="Maps"]';
+      assert
+        .dom(`${maps} [data-test-key-used-with]`)
+        .hasText('Not used with any service yet');
+      assert
+        .dom(`${maps} [data-test-key-shared-into]`)
+        .hasText('Not shared into any workspace');
+      assert.dom(`${maps} [data-test-key-shared-into-summary]`).doesNotExist();
+
+      assert.deepEqual(
+        requests
+          .filter((r) => r.path !== '_secure-session')
+          .map((r) => `${r.method} ${r.path}`),
+        ['GET _user-keys'],
+        'the page asks nothing per key',
+      );
     });
 
     test('deleting a key lists the shares it would stop, then deletes it', async function (assert) {

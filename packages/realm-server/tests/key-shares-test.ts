@@ -301,6 +301,80 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(clash.status, 409, 'a label is unique in its realm');
     });
 
+    test('the key listing says which realms each key is shared into, by name and address', async function (assert) {
+      await dbAdapter.execute(
+        `INSERT INTO boxel_index (url, file_alias, type, generation, realm_url, pristine_doc)
+         VALUES ($1, $2, 'instance', 1, $3, $4)`,
+        {
+          bind: [
+            `${REALM}realm.json`,
+            `${REALM}realm`,
+            REALM,
+            JSON.stringify({ attributes: { cardInfo: { name: 'Team' } } }),
+          ],
+        },
+      );
+      let keyId = await keyFor(OWNER);
+      let unshared = await keyFor(OWNER, 'unshared');
+      for (let [realm, label] of [
+        [REALM, 'Weather'],
+        [REALM, 'Team weather'],
+        [OTHER_REALM, 'Weather'],
+      ]) {
+        let response = await share(OWNER, { realm, keyId, label });
+        assert.strictEqual(response.status, 201, response.text);
+      }
+      let writerKey = await keyFor(WRITER, 'writer key');
+      let writerShare = await share(WRITER, {
+        realm: REALM,
+        keyId: writerKey,
+        label: 'Writer weather',
+      });
+      assert.strictEqual(writerShare.status, 201, writerShare.text);
+
+      let listed = await request
+        .get('/_user-keys')
+        .set('Authorization', auth(OWNER));
+      assert.strictEqual(listed.status, 200, listed.text);
+      let sharedInto = Object.fromEntries(
+        listed.body.data.map(
+          (key: { id: string; attributes: { sharedInto: unknown } }) => [
+            key.id,
+            key.attributes.sharedInto,
+          ],
+        ),
+      );
+      assert.deepEqual(
+        sharedInto,
+        {
+          [keyId]: [
+            { url: OTHER_REALM, name: 'Unnamed Workspace' },
+            { url: REALM, name: 'Team' },
+          ],
+          [unshared]: [],
+        },
+        `each realm once, however many shares put the key there, and a realm whose realm.json isn't indexed by the name a realm has then; another user's shares aren't listed`,
+      );
+
+      let shown = await request
+        .get(`/_user-keys/${keyId}`)
+        .set('Authorization', auth(OWNER));
+      assert.deepEqual(
+        shown.body.data.attributes.sharedInto,
+        sharedInto[keyId],
+      );
+
+      await removeRealmPermissions(dbAdapter, new URL(OTHER_REALM));
+      let afterLosingWrite = await request
+        .get(`/_user-keys/${keyId}`)
+        .set('Authorization', auth(OWNER));
+      assert.deepEqual(
+        afterLosingWrite.body.data.attributes.sharedInto,
+        sharedInto[keyId],
+        'a share suspended because its owner lost write is still where the key is shared',
+      );
+    });
+
     test('a user who is not a direct writer of the realm cannot share into it', async function (assert) {
       let readerKey = await keyFor(READER);
       let byReader = await share(READER, {
