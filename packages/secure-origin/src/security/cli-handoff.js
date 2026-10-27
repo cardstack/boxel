@@ -6,9 +6,9 @@
 //
 // The CLI signs in here for one of two things:
 //
-// - `boxel keys sign-in` (the `cli-sign-in` mode) wants a secure session,
+// - `boxel keys sign-in` (the `cli-sign-in` page) wants a secure session,
 //   which it uses to change the user's keys.
-// - `boxel profile add` (the `cli-auth` mode) wants a Matrix device of its
+// - `boxel profile add` (the `cli-auth` page) wants a Matrix device of its
 //   own. It gets a single-use Matrix login token, which it redeems for one. A
 //   CLI that says so (`session=secure`) also gets a secure session in the
 //   same hand-off, so a new profile can manage keys without signing in again.

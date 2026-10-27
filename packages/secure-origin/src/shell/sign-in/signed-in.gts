@@ -27,7 +27,7 @@ import AuthContainer from '../../components/auth-container.gts';
 import BusyMessage from '../../components/busy-message.gts';
 import { navigation } from '../navigation.js';
 import { asSentence } from '../sign-in-copy.js';
-import { modeURL } from '../urls.js';
+import { pageURL } from '../urls.js';
 
 import MessagePage from './message-page.gts';
 
@@ -123,7 +123,7 @@ export default class SignedIn extends Component {
   private config = readConfig();
   // The key page is a link away, never where signing in lands: a sign-in
   // the app started hands back to the app, and one that didn't ends here.
-  private keyPage = modeURL('keys');
+  private keyPage = pageURL('keys');
   private target = pendingReturn(appOrigins(this.config));
   private page = trackedObject<{ state: State }>({
     state: { name: 'signed-in' },
@@ -182,7 +182,7 @@ export default class SignedIn extends Component {
         // The session ended since the window checked it, as signing out in
         // another tab ends it: sign in again, and the hand-off this tab is
         // waiting on follows.
-        navigation.replace(modeURL('sign-in'));
+        navigation.replace(pageURL('sign-in'));
         return;
       }
       this.page.state = { name: 'failed', error: asSentence(e.message) };

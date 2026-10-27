@@ -34,7 +34,7 @@ import CliHandoff from '../sign-in/cli-handoff.gts';
 import MessagePage from '../sign-in/message-page.gts';
 import SignedIn from '../sign-in/signed-in.gts';
 import { asSentence } from '../sign-in-copy.js';
-import { modeURL } from '../urls.js';
+import { pageURL } from '../urls.js';
 import CliWaitNotice from '../sign-in/cli-wait-notice.gts';
 
 // Creating a Boxel account on the secure origin (`register`), on the
@@ -239,7 +239,7 @@ export default class Register extends Component<Signature> {
         email: this.state.email,
         username: this.state.username,
         password: this.password.password,
-        nextLink: new URL(modeURL('verify-email'), window.location.href).href,
+        nextLink: new URL(pageURL('verify-email'), window.location.href).href,
       },
       { onAwaitingEmail: () => (this.state.page = 'awaiting-email') },
     );
@@ -327,7 +327,7 @@ export default class Register extends Component<Signature> {
       this.state.page = 'cli-handoff';
     } else {
       storeSession(session);
-      history.replaceState(null, '', modeURL('sign-in'));
+      history.replaceState(null, '', pageURL('sign-in'));
       this.state.page = 'signed-in';
     }
   }

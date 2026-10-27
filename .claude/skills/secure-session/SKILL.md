@@ -305,10 +305,10 @@ CLI never calls them; it opens a page of the window, which signs in with
 `http://127.0.0.1:<port>/callback` (after a Google round trip too; the CLI's
 port and state wait in session storage):
 
-- `boxel keys sign-in` opens `<secure origin>?mode=cli-sign-in&port=…&state=…`,
+- `boxel keys sign-in` opens `<secure origin>/cli-sign-in?port=…&state=…`,
   and the window posts the session (`secure_session`, `user_id`,
   `expires_at`, `state`).
-- `boxel profile add` opens `<secure origin>?mode=cli-auth&port=…&state=…&session=secure`
+- `boxel profile add` opens `<secure origin>/cli-auth?port=…&state=…&session=secure`
   when `GET /_secure-origin` says `cliAuth: true`, and the host app's
   `/cli-auth` otherwise or under `--host-url`. Once signed in, the window
   mints a Matrix login token with the session (`POST
@@ -344,7 +344,7 @@ as on the next deploy. Unset, the host keeps what its build set, which is
 off.
 
 1. A signed-out app (`components/matrix/secure-sign-in.gts`) replaces itself
-   with `<secure origin>?mode=sign-in#return=<the app page, path and query>`.
+   with `<secure origin>/sign-in#return=<the app page, path and query>`.
    `return` rides in the fragment, which no firewall or access log sees. The
    page is also a plain **Sign in to Boxel** link to the same address. A tab
    that comes back signed out within two minutes of being sent stops and
@@ -391,14 +391,14 @@ Signing out of the app (`MatrixService.signOut()`) runs the app's own
 `logout()` first, which ends the Matrix device, clears the service worker's
 realm tokens and asks the realm server to end the user's window sessions.
 It then replaces the location with
-`<secure origin>?mode=sign-out#return=<app root>` (an app in a frame signs
+`<secure origin>/sign-out#return=<app root>` (an app in a frame signs
 out of its own session only, since the secure origin can't be framed), which forgets the
 window's session, ends it on the server, and goes back to a listed `return`.
 
 Links already sent keep working through the app: a reset link
 (`?clientSecret=…#email=…&sid=…`) is replaced by the secure origin's
 `reset-password` with all three in its fragment, and an older CLI's
-`/cli-auth?port=&state=` by the secure origin's `cli-auth` mode with the
+`/cli-auth?port=&state=` by the secure origin's `cli-auth` page with the
 same port and state.
 
 ## Refusals

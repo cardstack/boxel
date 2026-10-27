@@ -224,7 +224,7 @@ describe('boxel profile add on the secure origin (integration)', () => {
       });
 
       expect(opened!.origin).toBe(secureOriginURL.origin);
-      expect(opened!.searchParams.get('mode')).toBe('cli-auth');
+      expect(opened!.pathname).toBe('/secure/cli-auth');
       expect(opened!.searchParams.get('session')).toBe('secure');
       expect(opened!.search).not.toMatch(/localhost|127\.0\.0\.1/);
 

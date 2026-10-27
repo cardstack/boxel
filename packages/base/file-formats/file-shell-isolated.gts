@@ -15,10 +15,14 @@ import { isSampledContentHash } from '@cardstack/runtime-common';
 
 import {
   boundedVideoFrameAspectRatio,
+  downloadLabelFor,
   downloadNameFor,
+  downloadStateAttr,
+  downloadViaFetch,
   fileIconFor,
   humanSize,
   shortDate,
+  type DownloadState,
 } from './file-presentation';
 import {
   FilePreviewStage,
@@ -47,6 +51,11 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
   // Successful clipboard feedback belongs to the control that was pressed.
   @tracked copied = false;
   copyFeedbackTimer?: ReturnType<typeof setTimeout>;
+  @tracked downloadState: DownloadState = 'idle';
+
+  setDownloadState = (state: DownloadState) => {
+    this.downloadState = state;
+  };
 
   get icon() {
     return fileIconFor(this.args.model);
@@ -359,9 +368,12 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
               class='act primary'
               href={{@model.url}}
               download={{downloadNameFor @model}}
+              data-download-state={{downloadStateAttr this.downloadState}}
+              aria-live='polite'
+              {{downloadViaFetch onStateChange=this.setDownloadState}}
               data-test-file-download
-            >Download</a>
-            {{! The pressed control announces its own success without extra
+            >{{downloadLabelFor this.downloadState}}</a>
+            {{! Each pressed control announces its own outcome without extra
             wrapper DOM. }}
             <button
               type='button'
@@ -646,6 +658,15 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         background: var(--fd-slate, var(--foreground));
         border-color: var(--fd-slate, var(--foreground));
         color: var(--fd-paper, var(--card, #f7f7f5));
+      }
+      .act[data-download-state='pending'] {
+        cursor: progress;
+        opacity: 0.6;
+      }
+      .act[data-download-state='failed'] {
+        background-color: transparent;
+        border-color: var(--destructive-ink);
+        color: var(--destructive-ink);
       }
       .iso-cols {
         display: grid;

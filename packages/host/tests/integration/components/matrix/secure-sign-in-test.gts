@@ -18,9 +18,9 @@ import { setupRenderingTest } from '../../../helpers/setup';
 
 const APP_PAGE = '/some/path?operatorModeState=%7B%7D';
 
-function secureURL(mode: string) {
+function secureURL(page: string) {
   let url = new URL(ENV.secureOriginURL);
-  url.searchParams.set('mode', mode);
+  url.pathname = `${url.pathname.replace(/\/+$/, '')}/${page}`;
   return url;
 }
 
@@ -400,7 +400,7 @@ module('Integration | Component | matrix/secure-sign-in', function (hooks) {
       landed.origin + landed.pathname,
       expected.origin + expected.pathname,
     );
-    assert.strictEqual(landed.searchParams.get('mode'), 'reset-password');
+    assert.strictEqual(landed.search, '', 'nothing rides in the query string');
     assert.false(
       landed.searchParams.has('clientSecret'),
       'the secret is not in the query string',

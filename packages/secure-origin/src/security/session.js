@@ -426,7 +426,7 @@ function signedOut() {
   return new SecureSessionError(401, 'signed-out', 'Sign in to continue.');
 }
 
-// A request to the realm server under the window's own session. A mode that
+// A request to the realm server under the window's own session. A page that
 // changes a key uses this, so the change is authorized by this session and
 // never by the app's. A refusal because the session has ended forgets it and
 // answers `signed-out`: a key write ticket refuses an ended session with a

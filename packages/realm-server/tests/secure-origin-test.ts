@@ -19,6 +19,7 @@ import {
 } from '../lib/secure-origin.ts';
 import { isListedOrigin } from '@cardstack/secure-origin/security/app-origins.js';
 import { redactResponse } from '@cardstack/secure-origin/security/redact.js';
+import { PAGE_PATHS } from '@cardstack/secure-origin/shell/pages.js';
 import {
   registerSecureOriginHost,
   scrubRequestTelemetry,
@@ -94,6 +95,12 @@ const NON_SHELL_PATHS: { path: string; accept: string }[] = [
   { path: '/auth-service-worker.js', accept: '*/*' },
   { path: '/', accept: 'text/html' },
   { path: '/secure/other', accept: 'text/html' },
+  { path: '/secure/sign-in/', accept: 'text/html' },
+  { path: '/secure/keys/', accept: 'text/html' },
+  { path: '/secure/keys/share', accept: 'text/html' },
+  { path: '/secure/keys/key-1', accept: 'text/html' },
+  { path: '/secure/keys/key-1/share/more', accept: 'text/html' },
+  { path: '/secure/keys/not%20a%20key/share', accept: 'text/html' },
   { path: '/secure/index.html', accept: 'text/html' },
   { path: '/secure/credentials/', accept: 'text/html' },
   { path: '/secure/credentials.html', accept: 'text/html' },
@@ -526,13 +533,13 @@ module(basename(import.meta.filename), function () {
           response.text.includes(
             `<meta name="boxel-realm-server-url" content="${realmURL.origin}/" />`,
           ),
-          `${path}: names the realm server its modes talk to`,
+          `${path}: names the realm server its pages talk to`,
         );
         assert.ok(
           response.text.includes(
             `<meta name="boxel-matrix-url" content="${new URL(matrixURL).href}" />`,
           ),
-          `${path}: names the Matrix server its modes talk to`,
+          `${path}: names the Matrix server its pages talk to`,
         );
         assert.ok(
           response.text.includes(
@@ -543,22 +550,23 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('serves the page shell where Google returns to', async function (assert) {
-      let response = await request
-        .get('/secure/google-callback')
-        .set('Host', secureHost)
-        .set('Accept', 'text/html');
-      assert.strictEqual(response.status, 200);
-      assertSecureOriginHeaders(
-        assert,
-        response,
-        'google-callback',
-        SHELL_PAGE_HEADERS,
-      );
-      assert.ok(
-        entryScript('/secure/shell.js').test(response.text),
-        'it is the shell, whose script finishes the sign-in',
-      );
+    test("serves the page shell at each of its pages' paths", async function (assert) {
+      for (let page of [
+        ...PAGE_PATHS,
+        'keys/0b6c1e9e-5a1f-4c47-9d0e-2f5b8f6f1a3c/share',
+      ]) {
+        let path = `/secure/${page}`;
+        let response = await request
+          .get(path)
+          .set('Host', secureHost)
+          .set('Accept', 'text/html');
+        assert.strictEqual(response.status, 200, `${path}: status`);
+        assertSecureOriginHeaders(assert, response, path, SHELL_PAGE_HEADERS);
+        assert.ok(
+          entryScript('/secure/shell.js').test(response.text),
+          `${path}: is the shell, whose router shows the page`,
+        );
+      }
     });
 
     test("serves the modes' scripts with the locked-down headers", async function (assert) {
