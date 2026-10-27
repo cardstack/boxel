@@ -135,6 +135,17 @@ export async function fetchRealmFile(
 // and copy-link still work natively. The whole body is read before the save
 // starts, so the link carries `data-download-state` — `pending` while the
 // bytes arrive, `failed` when they don't — for the views to style.
+// The decoded last segment of a URL's path, or the raw segment when it holds
+// an escape that isn't valid UTF-8, which `decodeURIComponent` throws on.
+function lastPathSegment(url: string): string {
+  let segment = new URL(url).pathname.split('/').pop() ?? '';
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
   let inFlight = false;
   let onClick = async (event: MouseEvent) => {
@@ -163,10 +174,7 @@ export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
       // A blob: URL has no meaningful name of its own, so a nameless file
       // falls back to the last segment of its URL rather than a random id.
       save.download =
-        element.getAttribute('download') ||
-        decodeURIComponent(
-          new URL(element.href).pathname.split('/').pop() ?? '',
-        );
+        element.getAttribute('download') || lastPathSegment(element.href);
       save.hidden = true;
       document.body.append(save);
       save.click();
