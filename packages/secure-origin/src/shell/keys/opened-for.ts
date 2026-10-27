@@ -13,10 +13,13 @@
 //   #card=<card URL>&operation=<name>
 //   #module=<module URL>&name=<export>&realm=<realm URL>&operation=<name>
 //   …&reason=<text>
-//   #key=<key id>, for a share started from the key page
+//   #key=<key id>, for a share of one of the user's keys
 //
 // A realm, card or module is a URL or a prefix-form id (`@cardstack/…`);
 // which it names is the realm server's to decide.
+
+import { keyOfSharePath } from '../pages.js';
+import { currentPage } from '../urls.js';
 
 export type OpenedForTarget =
   | { kind: 'instance'; url: string }
@@ -33,15 +36,21 @@ export interface OpenedFor {
 
 export const MAX_REASON_LENGTH = 200;
 
-// A query parameter naming the key page to go back to once a key is added,
-// for an enter-key page reached from it rather than opened for something. A
-// plain value, never a URL.
-export const RETURN_PARAM = 'then';
-
 // Whether this page goes back to the key page when it is done, rather than
-// closing the window.
-export function returnsToKeyPage(search: string = window.location.search) {
-  return new URLSearchParams(search).get(RETURN_PARAM) === 'keys';
+// closing the window: a page beneath the key page's path, reached from it.
+export function returnsToKeyPage(page: string = currentPage()) {
+  return page.startsWith('keys/');
+}
+
+// What a share page was opened for: the key it shares is the one its path
+// names (`keys/<key id>/share`, as the router passes it, or else as the
+// address reads) or, on the `share-key` page, the one its fragment names.
+export function openedForShare(
+  keyId: string | undefined = keyOfSharePath(currentPage()),
+  hash: string = window.location.hash,
+): OpenedFor {
+  let opened = openedFor(hash);
+  return keyId ? { ...opened, key: keyId } : opened;
 }
 
 // A name for a realm, card or module: an http(s) URL, or a prefix-form id.

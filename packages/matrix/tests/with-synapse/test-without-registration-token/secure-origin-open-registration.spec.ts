@@ -16,7 +16,7 @@ test.describe('The secure origin’s pages where registration is open', () => {
   test('creates an account without an invite step', async ({ page }) => {
     let username = uniqueName('secure-open');
     let email = `${username}@example.com`;
-    let secure = await openSecurePage(page, 'mode=register');
+    let secure = await openSecurePage(page, 'register');
     await fillRegistration(secure, {
       name: 'Open Registrant',
       email,

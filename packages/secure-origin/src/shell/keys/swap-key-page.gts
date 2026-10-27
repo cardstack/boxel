@@ -1,4 +1,4 @@
-// The `swap-key` mode: one of the user's own keys put into a realm's suspended
+// The `swap-key` page: one of the user's own keys put into a realm's suspended
 // share, which then resumes under the same label with the user as its owner,
 // so the cards using it keep working unchanged. Only a key the user already
 // has goes in: adding one is a change of its own, made on the key page. Only a
@@ -21,7 +21,7 @@ import FieldContainer from '../../components/field-container.gts';
 import Tag from '../../components/icons/tag.gts';
 import Users from '../../components/icons/users.gts';
 import { navigation } from '../navigation.js';
-import { modeURL } from '../urls.js';
+import { pageURL } from '../urls.js';
 
 import {
   failureMessage,
@@ -277,7 +277,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.error = undefined;
   };
 
-  private goToKeys = () => navigation.replace(modeURL('keys'));
+  private goToKeys = () => navigation.back(pageURL('keys'));
 
   private save = async (event: Event) => {
     event.preventDefault();
@@ -314,7 +314,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
 
 export default class SwapKeyPage extends Component {
   <template>
-    <KeysWindow @title='Boxel · Your keys' as |api|>
+    <KeysWindow @title='Boxel · Your keys' @page='swap-key' as |api|>
       <SwapKey @api={{api}} />
     </KeysWindow>
   </template>

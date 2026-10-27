@@ -103,9 +103,8 @@ describe('buildSecureCliAuthUrl', () => {
       }),
     );
     expect(url.origin).toBe('https://secure.example.com');
-    expect(url.pathname).toBe('/');
+    expect(url.pathname).toBe('/cli-auth');
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      mode: 'cli-auth',
       port: '1234',
       state: 'abc123def456',
       session: 'secure',
@@ -119,7 +118,7 @@ describe('buildSecureCliAuthUrl', () => {
         state: 'abc123def456',
       }),
     );
-    expect(url.pathname).toBe('/secure');
+    expect(url.pathname).toBe('/secure/cli-auth');
     expect(url.search).not.toMatch(/http|localhost|127\.0\.0\.1/i);
   });
 });
@@ -478,7 +477,7 @@ describe('browserLogin', () => {
     });
 
     expect(new URL(opened!).origin).toBe('https://secure.example.com');
-    expect(new URL(opened!).searchParams.get('mode')).toBe('cli-auth');
+    expect(new URL(opened!).pathname).toBe('/cli-auth');
     expect(auth).toEqual({
       accessToken: 'redeemed',
       deviceId: 'DEVICE',

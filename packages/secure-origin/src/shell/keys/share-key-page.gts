@@ -1,13 +1,14 @@
-// The `share-key` mode: one of the user's existing keys put into a realm under
+// The `share-key` page: one of the user's existing keys put into a realm under
 // a label the realm's people see, so that others there can use it through the
 // operations approved for it. Sharing is its own change, apart from adding a
 // key: this page never takes a key's value.
 //
-// It is reached two ways. From the key page, for one key (`#key=<id>`), it
-// asks which realm, offering those the user is a direct writer of. Opened for
-// a realm (`#realm=<realm>`), it asks which of the user's keys; only a direct
-// writer of that realm may share into it, and anyone else is told an
-// administrator needs to set it up, with nothing to enter.
+// It is reached two ways. From the key page, for one key (at
+// `keys/<key id>/share`, or `share-key#key=<id>`), it asks which realm,
+// offering those the user is a direct writer of. Opened for a realm
+// (`#realm=<realm>`), it asks which of the user's keys; only a direct writer
+// of that realm may share into it, and anyone else is told an administrator
+// needs to set it up, with nothing to enter.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -28,7 +29,7 @@ import Tag from '../../components/icons/tag.gts';
 import Users from '../../components/icons/users.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
-import { modeURL } from '../urls.js';
+import { pageURL } from '../urls.js';
 
 import {
   failureMessage,
@@ -46,7 +47,7 @@ import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { openedFor } from './opened-for.ts';
+import { openedForShare } from './opened-for.ts';
 import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
 import WorkspaceMembers from './workspace-members.gts';
 
@@ -68,7 +69,13 @@ type State =
     }
   | { name: 'done'; realm: string; share: KeyShare; key: string };
 
-class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
+interface ShareKeyArgs {
+  api: KeysWindowAPI;
+  // The key to share, when the router names it from the page's path.
+  keyId?: string;
+}
+
+class ShareKey extends Component<{ Args: ShareKeyArgs }> {
   <template>
     {{#if this.loading}}
       <BusyMessage class='busy' @title='Loading…' />
@@ -203,7 +210,7 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     </style>
   </template>
 
-  private opened = openedFor();
+  private opened = openedForShare(this.args.keyId);
   // Reached from the key page for one of its keys, rather than opened for a
   // realm by a page elsewhere.
   private fromKeyPage = Boolean(this.opened.key && !this.opened.realm);
@@ -225,7 +232,7 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     picked: undefined as WindowContext['realm'] | undefined,
   });
 
-  constructor(owner: Owner, args: { api: KeysWindowAPI }) {
+  constructor(owner: Owner, args: ShareKeyArgs) {
     super(owner, args);
     this.load();
   }
@@ -372,7 +379,7 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.error = undefined;
   };
 
-  private goToKeys = () => navigation.replace(modeURL('keys'));
+  private goToKeys = () => navigation.back(pageURL('keys'));
 
   // Done, a share started from the key page goes back to it; one opened for a
   // realm closes the window.
@@ -419,10 +426,12 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   };
 }
 
-export default class ShareKeyPage extends Component {
+export default class ShareKeyPage extends Component<{
+  Args: { keyId?: string };
+}> {
   <template>
-    <KeysWindow @title='Boxel · Your keys' as |api|>
-      <ShareKey @api={{api}} />
+    <KeysWindow @title='Boxel · Your keys' @page='share-key' as |api|>
+      <ShareKey @api={{api}} @keyId={{@keyId}} />
     </KeysWindow>
   </template>
 }

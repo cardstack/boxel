@@ -15,8 +15,9 @@ import {
 } from '../src/shell/sign-in-copy.js';
 import {
   cliParams,
+  currentPage,
   isGoogleCallback,
-  modeURL,
+  pageURL,
   shellPath,
   startURL,
 } from '../src/shell/urls.js';
@@ -360,22 +361,42 @@ describe("the shell's addresses", () => {
     (globalThis as any).window = { location: { pathname } };
   }
 
-  test('a mode is the shell with a `mode` parameter', () => {
+  test('a page is at its own path beneath the shell', () => {
     at('/secure/');
     assert.equal(shellPath(), '/secure/');
-    assert.equal(modeURL('sign-in'), '/secure/?mode=sign-in');
+    assert.equal(pageURL('sign-in'), '/secure/sign-in');
     assert.equal(
-      modeURL('register', { port: '51234', state: STATE, user: '' }),
-      `/secure/?mode=register&port=51234&state=${STATE}`,
+      pageURL('register', { port: '51234', state: STATE, user: '' }),
+      `/secure/register?port=51234&state=${STATE}`,
       'an empty value is left out',
     );
+    at('/');
+    assert.equal(pageURL('sign-in'), '/sign-in', 'deployed at the root');
+  });
+
+  test("the shell's address is the same from every page beneath it", () => {
+    for (let path of [
+      '/secure',
+      '/secure/',
+      '/secure/sign-in',
+      '/secure/keys',
+      '/secure/keys/add',
+      '/secure/keys/0b6c1e9e-5a1f-4c47-9d0e-2f5b8f6f1a3c/share',
+    ]) {
+      at(path);
+      assert.equal(shellPath(), '/secure/', path);
+    }
+    at('/secure/keys/add');
+    assert.equal(currentPage(), 'keys/add');
+    at('/secure');
+    assert.equal(currentPage(), '');
   });
 
   test("Google's callback is beneath the shell", () => {
     at('/secure/google-callback');
     assert.ok(isGoogleCallback());
     assert.equal(shellPath(), '/secure/');
-    assert.equal(modeURL('sign-in'), '/secure/?mode=sign-in');
+    assert.equal(pageURL('sign-in'), '/secure/sign-in');
     at('/secure/');
     assert.ok(!isGoogleCallback());
   });
@@ -418,7 +439,7 @@ describe("the shell's addresses", () => {
     });
     assert.deepEqual(
       cliCallback(
-        new URLSearchParams(modeURL('register', cliParams(cli)).split('?')[1]),
+        new URLSearchParams(pageURL('register', cliParams(cli)).split('?')[1]),
       ),
       cli,
       'and the page they reach reads the same CLI back',
@@ -427,15 +448,15 @@ describe("the shell's addresses", () => {
 
   test('starting a Google sign-in again returns to the page it began on', () => {
     at('/secure/google-callback');
-    assert.equal(startURL(undefined), '/secure/?mode=sign-in');
-    assert.equal(startURL({ client: 'window' }), '/secure/?mode=sign-in');
+    assert.equal(startURL(undefined), '/secure/sign-in');
+    assert.equal(startURL({ client: 'window' }), '/secure/sign-in');
     assert.equal(
       startURL({
         client: 'cli',
         cli: { url: 'http://127.0.0.1:51234/callback', state: STATE },
         username: 'someone',
       }),
-      `/secure/?mode=cli-sign-in&port=51234&state=${STATE}&user=someone`,
+      `/secure/cli-sign-in?port=51234&state=${STATE}&user=someone`,
     );
     assert.equal(
       startURL({
@@ -446,12 +467,12 @@ describe("the shell's addresses", () => {
           profile: { secureSession: true },
         },
       }),
-      `/secure/?mode=cli-auth&port=51234&state=${STATE}&cli=profile&session=secure`,
+      `/secure/cli-auth?port=51234&state=${STATE}&cli=profile&session=secure`,
       'a profile sign-in starts again on its own page',
     );
     assert.equal(
       startURL({ client: 'cli' }),
-      '/secure/?mode=sign-in',
+      '/secure/sign-in',
       "a CLI sign-in that lost its listener starts the window's own",
     );
   });

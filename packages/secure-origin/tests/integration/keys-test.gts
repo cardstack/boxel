@@ -246,7 +246,7 @@ module('Integration | key pages', function (hooks) {
   module('the window', function () {
     test('opened without a session, says to sign in to Boxel, and offers no sign-in of its own', async function (assert) {
       forgetSession();
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-keys-signed-out]');
       assert.dom('[data-test-keys-heading]').hasText('You’re not signed in');
@@ -262,7 +262,7 @@ module('Integration | key pages', function (hooks) {
     });
 
     test('signed out while open, stops and offers no sign-in of its own', async function (assert) {
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Maps"]');
 
@@ -281,7 +281,7 @@ module('Integration | key pages', function (hooks) {
     });
 
     test('a request the server refuses as signed out stops the window', async function (assert) {
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Maps"]');
       serve({
@@ -297,7 +297,7 @@ module('Integration | key pages', function (hooks) {
     });
 
     test('the Close button closes the window', async function (assert) {
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-page]');
       await click('[data-test-keys-close]');
@@ -314,7 +314,7 @@ module('Integration | key pages', function (hooks) {
             ? refusal(503, 'the server is unavailable')
             : json(200, keyResources()),
       });
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-keys-load-failed]');
       assert
@@ -342,7 +342,7 @@ module('Integration | key pages', function (hooks) {
           throw new TypeError('Failed to fetch');
         },
       });
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-keys-load-failed]');
       assert
@@ -383,7 +383,7 @@ module('Integration | key pages', function (hooks) {
             },
           }),
       });
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Maps"]');
       assert.dom('[data-test-key-row]').exists({ count: 2 });
@@ -432,7 +432,7 @@ module('Integration | key pages', function (hooks) {
         },
         'DELETE _user-keys/key-1': () => ({ status: 204 }),
       });
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Weather service"]');
       await click(
@@ -468,7 +468,7 @@ module('Integration | key pages', function (hooks) {
             release = () => resolve(json(200, { data: [] }));
           }),
       });
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Maps"]');
       // Not awaited: the share list is held back until released.
@@ -489,7 +489,7 @@ module('Integration | key pages', function (hooks) {
       serve({
         'GET _key-shares': () => refusal(500, 'the server failed'),
       });
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Maps"]');
       await click('[data-test-key-row="Maps"] [data-test-key-delete]');
@@ -499,22 +499,22 @@ module('Integration | key pages', function (hooks) {
     });
 
     test('Share on a key goes to the share page for that key', async function (assert) {
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Maps"]');
       await click('[data-test-key-row="Maps"] [data-test-key-share]');
       assert.deepEqual(navigations, [
-        { how: 'assign', url: '/secure/?mode=share-key#key=key-2' },
+        { how: 'assign', url: '/secure/keys/key-2/share' },
       ]);
     });
 
     test('Add a key goes to the key entry page, which comes back here', async function (assert) {
-      visitShell('?mode=keys');
+      visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-page]');
       await click('[data-test-key-page-add]');
       assert.deepEqual(navigations, [
-        { how: 'assign', url: '/secure/?mode=enter-key&then=keys' },
+        { how: 'assign', url: '/secure/keys/add' },
       ]);
     });
   });
@@ -531,7 +531,7 @@ module('Integration | key pages', function (hooks) {
             },
           }),
       });
-      visitShell('?mode=enter-key');
+      visitShell('enter-key');
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
       assert.dom('[data-test-opened-for]').doesNotExist();
@@ -595,7 +595,7 @@ module('Integration | key pages', function (hooks) {
         },
       });
       visitShell(
-        `?mode=enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&reason=${encodeURIComponent('Forecasts need your \u202eweather key')}`,
+        `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&reason=${encodeURIComponent('Forecasts need your \u202eweather key')}`,
       );
       await render(EnterKeyPage);
       await waitFor('[data-test-opened-for]');
@@ -663,7 +663,7 @@ module('Integration | key pages', function (hooks) {
 
     test('opened for something the server doesn’t know of, says so and doesn’t offer to try again', async function (assert) {
       visitShell(
-        `?mode=enter-key#card=${encodeURIComponent(CARD)}&operation=forecast`,
+        `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast`,
       );
       await render(EnterKeyPage);
       await waitFor('[data-test-keys-load-failed]');
@@ -703,7 +703,7 @@ module('Integration | key pages', function (hooks) {
             ? refusal(503, 'the server is unavailable')
             : context({ realm: WORKSPACE }),
       });
-      visitShell(`?mode=enter-key#realm=${encodeURIComponent(REALM)}`);
+      visitShell(`enter-key#realm=${encodeURIComponent(REALM)}`);
       await render(EnterKeyPage);
       await waitFor('[data-test-keys-load-failed]');
       assert.dom('[data-test-keys-heading]').hasText('Enter a key');
@@ -725,16 +725,14 @@ module('Integration | key pages', function (hooks) {
             },
           }),
       });
-      visitShell('?mode=enter-key&then=keys');
+      visitShell('keys/add');
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
       await fillIn('[data-test-key-name]', 'Forecasts');
       await fillIn('[data-test-key-value]', 'sk-forecast');
       await click('[data-test-enter-key-save]');
       await waitUntil(() => navigations.length > 0);
-      assert.deepEqual(navigations, [
-        { how: 'replace', url: '/secure/?mode=keys' },
-      ]);
+      assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
     });
 
     test('shows why a key can’t be added', async function (assert) {
@@ -742,7 +740,7 @@ module('Integration | key pages', function (hooks) {
         'POST _user-keys': () =>
           refusal(409, 'the owner already has a key of that name'),
       });
-      visitShell('?mode=enter-key');
+      visitShell('enter-key');
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
       await fillIn('[data-test-key-name]', 'Maps');
@@ -799,7 +797,7 @@ module('Integration | key pages', function (hooks) {
         },
         'POST _key-shares': shares(),
       });
-      visitShell('?mode=share-key#key=key-2');
+      visitShell('keys/key-2/share');
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
       assert.dom('[data-test-share-key-key]').includesText('Maps');
@@ -869,7 +867,7 @@ module('Integration | key pages', function (hooks) {
       await click('[data-test-keys-done-close]');
       assert.deepEqual(
         navigations,
-        [{ how: 'replace', url: '/secure/?mode=keys' }],
+        [{ how: 'replace', url: '/secure/keys' }],
         'and goes back to the key page',
       );
     });
@@ -892,7 +890,7 @@ module('Integration | key pages', function (hooks) {
           }),
         'POST _key-shares': shares(),
       });
-      visitShell('?mode=share-key#key=key-2');
+      visitShell('keys/key-2/share');
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
       await click('[data-test-workspace-dropdown-trigger]');
@@ -936,7 +934,7 @@ module('Integration | key pages', function (hooks) {
         },
         'POST _key-shares': shares(),
       });
-      visitShell(`?mode=share-key#realm=${encodeURIComponent(REALM_PREFIX)}`);
+      visitShell(`share-key#realm=${encodeURIComponent(REALM_PREFIX)}`);
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
       assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
@@ -975,13 +973,11 @@ module('Integration | key pages', function (hooks) {
         'GET _user-keys': () => json(200, keyResources([])),
         'POST _secure-window/context': () => context({ realm: WORKSPACE }),
       });
-      visitShell(`?mode=share-key#realm=${encodeURIComponent(REALM)}`);
+      visitShell(`share-key#realm=${encodeURIComponent(REALM)}`);
       await render(SharePage);
       await waitFor('[data-test-key-picker-empty]');
       await click('[data-test-key-picker-go-to-keys]');
-      assert.deepEqual(navigations, [
-        { how: 'replace', url: '/secure/?mode=keys' },
-      ]);
+      assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
     });
 
     test('a link naming a key that isn’t the user’s says so and doesn’t offer to try again', async function (assert) {
@@ -1022,7 +1018,7 @@ module('Integration | key pages', function (hooks) {
         'POST _secure-window/context': () =>
           context({ realm: { ...WORKSPACE, directWriter: false } }),
       });
-      visitShell(`?mode=share-key#realm=${encodeURIComponent(REALM)}`);
+      visitShell(`share-key#realm=${encodeURIComponent(REALM)}`);
       await render(SharePage);
       await waitFor('[data-test-keys-needs-admin]');
       assert
@@ -1077,7 +1073,7 @@ module('Integration | key pages', function (hooks) {
           }),
       });
       visitShell(
-        `?mode=swap-key#realm=${encodeURIComponent(REALM_PREFIX)}&share=share-4`,
+        `swap-key#realm=${encodeURIComponent(REALM_PREFIX)}&share=share-4`,
       );
       await render(SwapKeyPage);
       await waitFor('[data-test-swap-key-form]');
@@ -1130,9 +1126,7 @@ module('Integration | key pages', function (hooks) {
           suspensionReason: null,
         }),
       });
-      visitShell(
-        `?mode=swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`,
-      );
+      visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
       await render(SwapKeyPage);
       await waitFor('[data-test-swap-key-active]');
       assert.dom('[data-test-swap-key-form]').doesNotExist();
@@ -1143,9 +1137,7 @@ module('Integration | key pages', function (hooks) {
         'POST _secure-window/context': () =>
           context({ realm: { ...WORKSPACE, directWriter: false } }),
       });
-      visitShell(
-        `?mode=swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`,
-      );
+      visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
       await render(SwapKeyPage);
       await waitFor('[data-test-keys-needs-admin]');
       assert.dom('input').doesNotExist();
