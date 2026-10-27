@@ -44,6 +44,7 @@ import ManageCatalogs from '../workspace-chooser/manage-catalogs';
 
 import AddWorkspace from './add-workspace';
 import ArchivedWorkspace from './archived-workspace';
+import FavoritesFlyout from './favorites-flyout';
 import { greetingFor } from './greeting';
 import KeyboardCursor from './keyboard-cursor';
 import Workspace from './workspace';
@@ -54,10 +55,17 @@ import {
   sortByUpdatedAtDesc,
 } from './workspace-layout';
 
+import type DashboardSections from './sections';
+import type { DashboardSection } from './sections';
+
 type Scope = 'all' | 'hosted';
 
 interface Signature {
   Element: HTMLElement;
+  Args: {
+    // Each section registers its entry in the section rail here.
+    sections: DashboardSections;
+  };
 }
 
 const log = logger('component:dashboard');
@@ -485,6 +493,15 @@ export default class Dashboard extends Component<Signature> {
     return 0;
   }
 
+  // No count: the rail counts a section only as its heading does, and this
+  // one's counts belong to its Favorites and Your Workspaces groups.
+  private workspacesSection: DashboardSection = {
+    id: 'workspaces',
+    label: 'Workspaces',
+    icon: LayoutGrid,
+    flyout: FavoritesFlyout,
+  };
+
   private cursor = new KeyboardCursor({
     keys: () => this.walkKeys,
     defaultIndex: () => this.defaultSelectedIndex,
@@ -502,7 +519,11 @@ export default class Dashboard extends Component<Signature> {
       data-test-dashboard
       ...attributes
     >
-      <div class='dashboard-scroller boxel-dark-scrollbar'>
+      <div
+        class='dashboard-scroller boxel-dark-scrollbar'
+        {{@sections.trackScroller}}
+        data-test-dashboard-scroller
+      >
         <div class='frosted-band' aria-hidden='true'></div>
         <div class='dashboard-page'>
           {{! Rendered empty up front: a live region inserted already
@@ -550,6 +571,7 @@ export default class Dashboard extends Component<Signature> {
           <section
             class='dashboard-section'
             aria-labelledby={{this.headingId 'workspaces'}}
+            {{@sections.register this.workspacesSection}}
             data-test-dashboard-section='workspaces'
           >
             <div class='section-head'>
@@ -900,6 +922,7 @@ export default class Dashboard extends Component<Signature> {
         --dashboard-scrim-height: 7rem;
         --dashboard-toggle-height: 2.75rem;
         --dashboard-greeting-font-size: var(--boxel-font-size-xl);
+        --dashboard-greeting-font-weight: 700;
         --dashboard-section-title-font-size: var(--boxel-font-size-lg);
         --dashboard-section-hint-font-size: var(--boxel-font-size-sm);
 
@@ -924,7 +947,8 @@ export default class Dashboard extends Component<Signature> {
         top: 0;
         height: var(--dashboard-band-height);
         margin: 0 calc(-1 * var(--dashboard-gutter))
-          calc(-1 * var(--dashboard-band-height));
+          calc(-1 * var(--dashboard-band-height))
+          calc(-1 * var(--dashboard-gutter-start));
         background-color: color-mix(
           in oklch,
           var(--boxel-800) 55%,
@@ -939,6 +963,16 @@ export default class Dashboard extends Component<Signature> {
          container queries below can change them. */
       .dashboard-scroller {
         --dashboard-gutter: 5rem;
+        /* The section rail stands as an icon column in the wordmark's
+           column, so the page starts past it. Its labels slide out over the
+           page, so they need no room of their own. */
+        --dashboard-gutter-start: max(
+          var(--dashboard-gutter),
+          calc(
+            var(--container-button-size) + 2 * var(--operator-mode-spacing) +
+              var(--boxel-sp-xl)
+          )
+        );
         height: 100%;
         overflow: auto;
         /* Tiles scrolled into view by the keyboard land below the frosted band. */
@@ -951,7 +985,8 @@ export default class Dashboard extends Component<Signature> {
               var(--container-button-size) + var(--operator-mode-spacing) +
                 var(--boxel-sp)
             )
-          );
+          )
+          var(--dashboard-gutter-start);
         /* Only the contents fade in; the dark background paints at once, so
            the operator-mode canvas never flashes after sign-in. */
         opacity: 0;
@@ -976,12 +1011,15 @@ export default class Dashboard extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp);
       }
+      /* The greeting grows to fill its line, which pushes the filter to the
+         right beside it, and leaves the filter at the start once it wraps. */
       .greeting {
+        flex: 1 1 auto;
         min-width: 0;
         margin: 0;
         overflow-wrap: break-word;
         font-size: var(--dashboard-greeting-font-size);
-        font-weight: 700;
+        font-weight: var(--dashboard-greeting-font-weight);
         letter-spacing: -0.02em;
       }
       /* The rail matches the page, and the selected pill is white on black.
@@ -992,7 +1030,6 @@ export default class Dashboard extends Component<Signature> {
         --border-strong: var(--boxel-light-25);
         --card: var(--boxel-dark);
         --card-foreground: var(--boxel-light);
-        margin-left: auto;
       }
 
       .dashboard-section {
@@ -1195,6 +1232,24 @@ export default class Dashboard extends Component<Signature> {
       @container dashboard (max-width: 40rem) {
         .dashboard-scroller {
           --dashboard-gutter: 1rem;
+        }
+      }
+      /* Below 80rem, where the section rail stays as icons, the page
+         tightens too: less room above and between its parts, and a smaller,
+         lighter greeting. */
+      @container dashboard (width < 80rem) {
+        .dashboard-page {
+          --dashboard-page-padding-top: calc(
+            var(--dashboard-top-bar-clearance) + var(--boxel-sp-xs)
+          );
+          gap: var(--boxel-sp-2xl);
+        }
+        .page-head {
+          gap: var(--boxel-sp-xs);
+        }
+        .greeting {
+          --dashboard-greeting-font-size: var(--boxel-font-size-lg);
+          --dashboard-greeting-font-weight: 400;
         }
       }
       /* One tile per row, filling the dashboard's width. */

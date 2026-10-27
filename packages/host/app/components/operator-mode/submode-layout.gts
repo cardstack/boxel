@@ -46,6 +46,8 @@ import SubmodeSwitcher, { Submodes } from '../submode-switcher';
 
 import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
 import Dashboard from './dashboard';
+import SectionRail from './dashboard/section-rail';
+import DashboardSections from './dashboard/sections';
 
 import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
@@ -401,6 +403,13 @@ export default class SubmodeLayout extends Component<Signature> {
       !this.operatorModeStateService.workspaceChooserOpened;
   }
 
+  // The dashboard's sections, which the section rail lists.
+  private dashboardSections = new DashboardSections();
+
+  private get isDashboardShown() {
+    return this.workspaceChooserOpened && this.isDashboardV2Enabled;
+  }
+
   @action private toggleProfileSettings() {
     this.operatorModeStateService.toggleProfileSettings();
 
@@ -537,10 +546,15 @@ export default class SubmodeLayout extends Component<Signature> {
               />
             </button>
           </div>
+          {{! Ahead of the page, so Tab reaches the rail right after the top
+              bar, as it reads. }}
+          {{#if this.isDashboardShown}}
+            <SectionRail @sections={{this.dashboardSections}} />
+          {{/if}}
           {{#if this.workspaceChooserOpened}}
             <div class='workspace-overlay'>
               {{#if this.isDashboardV2Enabled}}
-                <Dashboard />
+                <Dashboard @sections={{this.dashboardSections}} />
               {{else}}
                 <WorkspaceChooser
                   @topBarCenterElement={{this.topBarCenterElement}}
