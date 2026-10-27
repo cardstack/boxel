@@ -10,6 +10,7 @@ import {
 import { AuthenticationError } from '@cardstack/runtime-common/router';
 import { parseRealmsParam } from '@cardstack/runtime-common/search-utils';
 import { verifyURLSignature } from '@cardstack/runtime-common/url-signature-node';
+import { isHistoryPath } from '@cardstack/runtime-common/paths';
 import archiver from 'archiver';
 import fsExtra from 'fs-extra';
 const { existsSync, statSync } = fsExtra;
@@ -205,7 +206,12 @@ export default function handleDownloadRealm({
     archive.pipe(ctxt.res);
 
     try {
-      archive.directory(realmPath, false);
+      // The realm's history holds every version of every file, deleted ones
+      // included, and is never the realm's content: it is read only through
+      // the realm's history operations, under their own permissions.
+      archive.directory(realmPath, false, (entry) =>
+        isHistoryPath(entry.name) ? false : entry,
+      );
       await archive.finalize();
     } catch (error) {
       log.error(`Failed to create archive for ${realmURL}: ${error}`);

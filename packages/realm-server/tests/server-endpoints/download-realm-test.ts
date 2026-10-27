@@ -61,6 +61,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     );
   });
 
+  test('leaves the realm history out of the archive', async function (assert) {
+    let historyDir = join(context.testRealmDir, '.realm-history', 'deckd');
+    mkdirSync(historyDir, { recursive: true });
+    writeFileSync(join(historyDir, 'history-marker.txt'), 'history');
+
+    let response = await context.request
+      .get('/_download-realm')
+      .query({ realm: testRealmURL.href })
+      .buffer(true)
+      .parse(binaryParser);
+
+    assert.strictEqual(response.status, 200);
+    assert.ok(
+      response.body.includes(Buffer.from('person.gts')),
+      'archive includes realm files',
+    );
+    assert.false(
+      response.body.includes(Buffer.from('.realm-history')),
+      'and none of the history',
+    );
+  });
+
   test('requires auth when realm is not public', async function (assert) {
     await context.dbAdapter.execute(
       `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealmURL.href}' AND username = '*'`,

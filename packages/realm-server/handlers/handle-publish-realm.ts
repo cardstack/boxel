@@ -22,7 +22,8 @@ import {
 import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
-import { join } from 'path';
+import { join, sep } from 'path';
+import { HISTORY_DIR } from '@cardstack/runtime-common/paths';
 import fsExtra from 'fs-extra';
 // Async fs ops only: the publish handler runs these inside the request, and a
 // synchronous copy/move of a whole realm directory would freeze the Node event
@@ -697,8 +698,15 @@ export default function handlePublishRealm({
           // second on a copied file's mtime is ambiguous (see
           // touchFilesModifiedSince).
           let publishStartedAt = Date.now();
+          // The source's history stays with the source. A published realm
+          // records none of its own, and the history holds deleted files a
+          // published realm's readers were never meant to have.
+          let sourceHistoryPath = join(sourceRealmPath, HISTORY_DIR);
           await copy(sourceRealmPath, tempCopyPath, {
             preserveTimestamps: true,
+            filter: (src) =>
+              src !== sourceHistoryPath &&
+              !src.startsWith(`${sourceHistoryPath}${sep}`),
           });
           if (!isNewRealm) {
             await touchFilesModifiedSince(

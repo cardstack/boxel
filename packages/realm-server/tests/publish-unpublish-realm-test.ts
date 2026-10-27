@@ -229,6 +229,21 @@ module(basename(import.meta.filename), function () {
       });
 
       test('POST /_publish-realm can publish realm successfully', async function (assert) {
+        // The source's history stays with the source.
+        let [{ disk_id: sourceDiskId }] = (await dbAdapter.execute(
+          `SELECT disk_id FROM realm_registry WHERE url = $1`,
+          { bind: [sourceRealmUrlString] },
+        )) as { disk_id: string }[];
+        let sourceHistoryDir = join(
+          dir.name,
+          'realm_server_3',
+          sourceDiskId,
+          '.realm-history',
+          'deckd',
+        );
+        ensureDirSync(sourceHistoryDir);
+        writeJsonSync(join(sourceHistoryDir, 'history-marker.json'), {});
+
         let response = await request
           .post('/_publish-realm')
           .set('Accept', 'application/vnd.api+json')
@@ -314,6 +329,10 @@ module(basename(import.meta.filename), function () {
         assert.ok(
           existsSync(join(publishedRealmPath, 'index.json')),
           'published realm has index.json',
+        );
+        assert.false(
+          existsSync(join(publishedRealmPath, '.realm-history')),
+          "published realm carries none of the source's history",
         );
 
         // CS-10053: publishable is in realm_metadata, not the sidecar.
