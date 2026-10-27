@@ -381,7 +381,7 @@ export default class ShareKeyPage extends Component<{
   Args: { keyId?: string };
 }> {
   <template>
-    <KeysWindow @title='Boxel · Your keys' as |api|>
+    <KeysWindow @title='Boxel · Your keys' @page='share-key' as |api|>
       <ShareKey @api={{api}} @keyId={{@keyId}} />
     </KeysWindow>
   </template>

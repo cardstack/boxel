@@ -14,8 +14,9 @@ import { startShell } from './app.gts';
 import { LEGACY_MODES } from './pages.js';
 import { pageURL } from './urls.js';
 
-// The address with its `mode` moved into its path, true when there is
-// a page to start, false when the `mode` names none.
+// Moves an address's `mode` into its path: true when there is a page to
+// start, false when the `mode` names none. The key page's add-a-key
+// address, `enter-key` with `then=keys`, is `keys/add`.
 function fromLegacyMode() {
   let url = new URL(window.location.href);
   let mode = url.searchParams.get('mode');
@@ -26,10 +27,15 @@ function fromLegacyMode() {
     return false;
   }
   url.searchParams.delete('mode');
+  let page = mode;
+  if (mode === 'enter-key' && url.searchParams.get('then') === 'keys') {
+    page = 'keys/add';
+    url.searchParams.delete('then');
+  }
   window.history.replaceState(
     null,
     '',
-    `${pageURL(mode, Object.fromEntries(url.searchParams))}${url.hash}`,
+    `${pageURL(page, Object.fromEntries(url.searchParams))}${url.hash}`,
   );
   return true;
 }

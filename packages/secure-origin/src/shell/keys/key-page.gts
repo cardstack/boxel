@@ -446,7 +446,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
 
 export default class KeyPage extends Component {
   <template>
-    <KeysWindow @title='Boxel · Your keys' as |api|>
+    <KeysWindow @title='Boxel · Your keys' @page='keys' as |api|>
       <Keys @api={{api}} />
     </KeysWindow>
   </template>

@@ -231,7 +231,7 @@ export default class EnterKeyPage extends Component<{
   Args: { fromKeyPage?: boolean };
 }> {
   <template>
-    <KeysWindow @title='Boxel · Your keys' as |api|>
+    <KeysWindow @title='Boxel · Your keys' @page='enter-key' as |api|>
       <EnterKey @api={{api}} @fromKeyPage={{@fromKeyPage}} />
     </KeysWindow>
   </template>

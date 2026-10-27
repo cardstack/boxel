@@ -828,7 +828,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 153600,
+      "bytes": 153859,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1013,7 +1013,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/enter-key-page.gts",
-          "size": 6295
+          "size": 6319
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1023,7 +1023,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 12330
+          "size": 12349
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1038,7 +1038,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/keys-window.gts",
-          "size": 4345
+          "size": 4391
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1068,12 +1068,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-key-page.gts",
-          "size": 9896
+          "size": 9920
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/swap-key-page.gts",
-          "size": 8977
+          "size": 9000
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1113,7 +1113,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/reset-link.ts",
-          "size": 690
+          "size": 709
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1138,7 +1138,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/shell.js",
-          "size": 495
+          "size": 644
         },
         {
           "package": "@cardstack/secure-origin",

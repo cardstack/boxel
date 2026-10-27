@@ -39,7 +39,8 @@ class Router extends EmberRouter {
 }
 
 // The routes' paths are `pages.js`'s `PAGE_PATHS`, and a key's share page at
-// `keys/<key id>/share`; the realm server serves the shell at those paths.
+// `keys/<key id>/share`; the realm server serves the shell at those paths, and
+// the policy test checks each draws its own page.
 Router.map(function () {
   this.route('sign-in');
   this.route('cli-sign-in');

@@ -1,7 +1,8 @@
 // The shell's pages, each at its own path beneath the shell's address. The
-// shell's router has a route for each, and the realm server serves the shell's
-// document at each of these paths and no other. This module is plain values,
-// so the realm server reads the same list the router is built from.
+// shell's router has a route for each (`app.gts`), and the realm server serves
+// the shell's document at each of these paths and no other. This module is
+// plain values, so the realm server reads the same list. The policy test
+// loads every page here and checks it draws its own page.
 //
 // The key page is also at the shell's own address. A key's share page names
 // the key in its path, `keys/<key id>/share`; everything else a page is told
@@ -24,9 +25,9 @@ export const PAGE_PATHS = Object.freeze([
   'swap-key',
 ]);
 
-// The values of the `mode` query parameter that addressed a page before pages
-// had paths. Earlier CLI releases and emails already sent still use them, so
-// the shell maps each to the page of the same name.
+// The values of the `mode` query parameter that address a page. Earlier CLI
+// releases and emails already sent use them, so the shell maps each to the
+// page of the same name.
 export const LEGACY_MODES = Object.freeze([
   'sign-in',
   'cli-sign-in',

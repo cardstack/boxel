@@ -296,7 +296,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
 
 export default class SwapKeyPage extends Component {
   <template>
-    <KeysWindow @title='Boxel · Your keys' as |api|>
+    <KeysWindow @title='Boxel · Your keys' @page='swap-key' as |api|>
       <SwapKey @api={{api}} />
     </KeysWindow>
   </template>
