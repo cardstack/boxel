@@ -29,8 +29,15 @@ export interface LoadFailure {
 }
 
 // A page's link names nothing the page can show: no key or workspace at all,
-// or one the user doesn't have.
-export class LinkError extends Error {}
+// or one the user doesn't have. `message` is the detail; `userMessage` is what
+// the page says, naming what the link asked for.
+export class LinkError extends Error {
+  userMessage: string;
+  constructor(message: string, userMessage: string) {
+    super(message);
+    this.userMessage = userMessage;
+  }
+}
 
 const NOT_FOUND =
   'This workspace, card or request doesn’t exist, or you don’t have access to it.';
@@ -50,7 +57,10 @@ function retryableStatus(status: unknown): boolean {
 function generalMessage(e: unknown, status: unknown): string {
   // The server answers 404 for what the user can't read as well as for what
   // isn't there, so the message can't tell which.
-  if (e instanceof LinkError || status === 404) {
+  if (e instanceof LinkError) {
+    return e.userMessage;
+  }
+  if (status === 404) {
     return NOT_FOUND;
   }
   if (status === 403) {

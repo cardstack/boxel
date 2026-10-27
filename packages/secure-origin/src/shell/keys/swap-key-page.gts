@@ -217,7 +217,10 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     let { config } = this.args.api;
     try {
       if (!realm || !shareId) {
-        throw new LinkError('this page names no workspace and shared key');
+        throw new LinkError(
+          'this page names no workspace and shared key',
+          'This link doesn’t name a workspace and a shared key.',
+        );
       }
       let context = await windowContext(config, { realm });
       if (!context.realm.directWriter) {
@@ -228,7 +231,10 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         (s) => s.id === shareId,
       );
       if (!share) {
-        throw new LinkError('that workspace has no such shared key');
+        throw new LinkError(
+          'that workspace has no such shared key',
+          'This shared key isn’t in that workspace. It may have been removed.',
+        );
       }
       if (share.state === 'active') {
         this.page.state = { name: 'active', context, share };

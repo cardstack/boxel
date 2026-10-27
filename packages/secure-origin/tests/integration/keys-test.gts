@@ -872,6 +872,19 @@ module('Integration | key pages', function (hooks) {
       ]);
     });
 
+    test('a link naming a key that isn’t the user’s says so and doesn’t offer to try again', async function (assert) {
+      serve({
+        'GET _secure-window/realms': () => json(200, { data: [] }),
+      });
+      visitShell('?mode=share-key#key=key-9');
+      await render(SharePage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText('This key isn’t one of yours. It may have been deleted.');
+      assert.dom('[data-test-keys-retry]').doesNotExist();
+    });
+
     test('a link naming neither a key nor a workspace says so and doesn’t offer to try again', async function (assert) {
       visitShell('?mode=share-key');
       await render(SharePage);
@@ -879,7 +892,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-error-message]')
         .hasText(
-          'This workspace, card or request doesn’t exist, or you don’t have access to it.',
+          'This link doesn’t name a key or a workspace to share it into.',
         );
       assert.dom('[data-test-keys-retry]').doesNotExist();
       await click('[data-test-toggle-details]');
@@ -973,6 +986,24 @@ module('Integration | key pages', function (hooks) {
         },
       );
       assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('a link naming a share the workspace doesn’t have says so and doesn’t offer to try again', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+        'GET _key-shares': shares(SHARE),
+      });
+      visitShell(
+        `?mode=swap-key#realm=${encodeURIComponent(REALM)}&share=share-9`,
+      );
+      await render(SwapKeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText(
+          'This shared key isn’t in that workspace. It may have been removed.',
+        );
+      assert.dom('[data-test-keys-retry]').doesNotExist();
     });
 
     test('a share that is working has nothing to put a key in place of', async function (assert) {

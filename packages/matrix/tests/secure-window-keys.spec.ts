@@ -59,8 +59,9 @@ function keysURL(mode: string, fragment: Record<string, string> = {}) {
   return `${secureOriginURL}?mode=${mode}${hash ? `#${hash}` : ''}`;
 }
 
-// The secure window's size, as the command that opens it gives it: wide
-// enough that the share page's key names and fields sit on one line.
+// The secure window's size, as the command that opens it must give it (the
+// `secure-origin` skill): wide enough that the share page's key names and
+// fields sit on one line.
 const WINDOW = { width: 640, height: 720 };
 
 // Opens the secure window from the app page, as the command that opens it

@@ -79,6 +79,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                             class='action'
                             @kind='secondary'
                             @size='extra-small'
+                            aria-describedby='key-name-{{key.id}}'
                             data-test-key-share
                             {{on 'click' (fn this.share key)}}
                           ><ShareIcon
@@ -89,6 +90,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                             class='action'
                             @kind='secondary'
                             @size='extra-small'
+                            aria-describedby='key-name-{{key.id}}'
                             data-test-key-replace
                             {{on 'click' (fn this.startReplace key)}}
                           ><RefreshCw

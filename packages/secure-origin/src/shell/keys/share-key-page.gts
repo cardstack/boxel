@@ -238,7 +238,10 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     let { config } = this.args.api;
     try {
       if (!realm && !keyId) {
-        throw new LinkError('this page names neither a key nor a workspace');
+        throw new LinkError(
+          'this page names neither a key nor a workspace',
+          'This link doesn’t name a key or a workspace to share it into.',
+        );
       }
       let context: WindowContext | undefined;
       if (realm) {
@@ -260,7 +263,10 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       if (keyId) {
         key = keys.find((k) => k.id === keyId);
         if (!key) {
-          throw new LinkError('the key this page names isn’t one of your keys');
+          throw new LinkError(
+            'the key this page names isn’t one of your keys',
+            'This key isn’t one of yours. It may have been deleted.',
+          );
         }
         this.selectKey(key.id);
       } else if (keys.length === 1) {

@@ -31,7 +31,11 @@ const KeyTile: TemplateOnlyComponent<Signature> = <template>
   <div class='key-tile' ...attributes>
     <span class='key-icon' aria-hidden='true'><KeyRound /></span>
     <div class='key-text'>
-      <div class='key-name' data-test-key-row-name>{{@key.name}}</div>
+      <div
+        id='key-name-{{@key.id}}'
+        class='key-name'
+        data-test-key-row-name
+      >{{@key.name}}</div>
       <div class='key-meta'>Added {{addedOn @key.createdAt}}</div>
     </div>
     {{#if (has-block)}}
