@@ -84,7 +84,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           ><ShareIcon
                               class='action-icon'
                               aria-hidden='true'
-                            />Share</Button>
+                            />Share with Realm</Button>
                           <Button
                             class='action'
                             @kind='secondary'
@@ -257,6 +257,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       }
       .tile-actions {
         display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
         gap: var(--boxel-sp-4xs);
       }
       .entry {

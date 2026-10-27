@@ -59,15 +59,26 @@ function keysURL(mode: string, fragment: Record<string, string> = {}) {
   return `${secureOriginURL}?mode=${mode}${hash ? `#${hash}` : ''}`;
 }
 
+// The secure window's size, as the command that opens it gives it: wide
+// enough that the share page's key names and fields sit on one line.
+const WINDOW = { width: 640, height: 720 };
+
 // Opens the secure window from the app page, as the command that opens it
 // will: a popup, with no handle back to the page.
 async function openFromApp(page: Page, url: string): Promise<Page> {
   let opened = page.context().waitForEvent('page');
-  await page.evaluate((url) => {
-    window.open(url, '_blank', 'noopener,popup,width=520,height=720');
-  }, url);
+  await page.evaluate(
+    ({ url, width, height }) => {
+      window.open(
+        url,
+        '_blank',
+        `noopener,popup,width=${width},height=${height}`,
+      );
+    },
+    { url, ...WINDOW },
+  );
   let secure = await opened;
-  await secure.setViewportSize({ width: 520, height: 720 });
+  await secure.setViewportSize(WINDOW);
   return secure;
 }
 
@@ -78,7 +89,7 @@ async function openDirectly(
   url: string,
 ): Promise<Page> {
   let secure = await context.newPage();
-  await secure.setViewportSize({ width: 520, height: 720 });
+  await secure.setViewportSize(WINDOW);
   await secure.goto(url);
   return secure;
 }
