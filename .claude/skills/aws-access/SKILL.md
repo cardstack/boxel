@@ -667,7 +667,7 @@ The secure origin, where credentials are typed, has no service of its own. It is
     --filter 'secure-origin '
   ```
 
-- **No client telemetry.** The shell loads none of the host app, so nothing on that origin beacons to `/_client-telemetry`. Sentry events from a secure-origin request carry only the method and path, so look for those, not bodies.
+- **Its client telemetry** is the host's pipeline. Its pages beacon to the realm server's `/_client-telemetry`, so each event is a `boxel:client-perf` line in the realm-server's Loki stream with `client_app` `secure-origin`: which page opened and how its load ended (`page-load`), each call's endpoint label, status and timing, and its errors, scrubbed. Read them on the "Host App Client Performance" dashboard's Secure origin row, or with `--regex 'boxel:client-perf.*secure-origin'` in place of `--filter` on the command above (the realm server writes `client_app` after the channel, and a deployed line's quotes arrive escaped, so match the two words, not the JSON). The `client-perf-diagnosis` skill (Mode I) has the fields and queries. Sentry events from a secure-origin request carry only the method and path, so look for those, not bodies.
 
 ## Auditing the secrets-at-rest KMS key
 
