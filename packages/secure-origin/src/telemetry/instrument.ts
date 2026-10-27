@@ -6,7 +6,8 @@
 //
 // It records:
 // - `server-request` for each request a page makes to the realm server or the
-//   Matrix server (`security/request-timing.js`), by a fixed endpoint label;
+//   Matrix server (`timedFetch` in `security/session.js`), by a fixed endpoint
+//   label;
 // - `page-load` for each page opened: which page, how long until it first
 //   rendered and until its data loaded, and how the load ended;
 // - `client-error` for an uncaught throw or unhandled rejection;
@@ -24,7 +25,7 @@
 // Nothing here may make a page fail: every hook swallows its own errors, and a
 // beacon that fails is dropped.
 
-import { observeRequests } from '../security/request-timing.js';
+import { observeRequests } from '../security/session.js';
 
 import {
   reportFromErrorEvent,

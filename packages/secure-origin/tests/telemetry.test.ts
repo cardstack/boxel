@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 
-import { timedFetch } from '../src/security/request-timing.js';
+import { timedFetch } from '../src/security/session.js';
 import {
   SecureTelemetry,
   scrubMessage,

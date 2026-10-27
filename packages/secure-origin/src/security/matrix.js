@@ -7,7 +7,7 @@
 // goes through the realm server instead (`changePassword` in `session.js`),
 // which ends the account's secure sessions once the Matrix server sets it.
 
-import { timedFetch } from './request-timing.js';
+import { timedFetch } from './session.js';
 
 export class MatrixError extends Error {
   // `status` 0 is a request that never reached the server.
