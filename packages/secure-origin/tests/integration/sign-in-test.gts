@@ -1290,6 +1290,23 @@ module('Integration | sign-in', function (hooks) {
       assert.strictEqual(sessionStorage.getItem('boxel-secure-return'), null);
     });
 
+    test('signing out ends a window session past its stored end too', async function (assert) {
+      storeSession({ ...SESSION, expiresAt: '2000-01-01T00:00:00.000Z' });
+      let server = serve({
+        'DELETE _secure-session': () => ({ status: 200, body: {} }),
+      });
+      visitShell(`?mode=sign-out${returnFragment(`${APP}/`)}`);
+      await render(SignOutPage);
+      await waitUntil(() => navigations.length > 0);
+      assert.true(
+        server.requests.some(
+          (r) => r.method === 'DELETE' && r.path === '_secure-session',
+        ),
+        'a session bound to the app’s can outlive its stored end, so it is ended on the server',
+      );
+      assert.strictEqual(localStorage.getItem('boxel-secure-session'), null);
+    });
+
     test('signing out never goes to an origin the realm server does not list', async function (assert) {
       serve({});
       visitShell(`?mode=sign-out${returnFragment('https://elsewhere.test/')}`);

@@ -316,9 +316,10 @@ export function forgetSession() {
 }
 
 // Signs the window's own session out: forgotten here even when the server
-// can't be reached, and ended on the server.
+// can't be reached, and ended on the server. One past its stored end is
+// ended too, since a session bound to the app's outlives its token.
 export async function signOut(config) {
-  let session = storedSession();
+  let session = storedRecord();
   forgetSession();
   if (!session) {
     return;
@@ -409,9 +410,12 @@ async function renew(config, record) {
     return storedSession();
   } catch (e) {
     if (e.status === 401) {
-      if (storedRecord()?.token === record.token) {
-        forgetSession();
+      // Another tab of this origin may have renewed the session first, which
+      // leaves this token behind; its renewal stands.
+      if (storedRecord()?.token !== record.token) {
+        return storedSession();
       }
+      forgetSession();
       return undefined;
     }
     return hasExpired(record) ? undefined : record;
@@ -443,7 +447,27 @@ export async function authorizedRequest(config, path, options = {}) {
     });
   } catch (e) {
     if (e.status === 401) {
-      forgetSession();
+      // The server's clock can put the token past its end before this
+      // window's does; a session bound to the app's is renewed then, and the
+      // request made once more under the renewed token.
+      let renewed = await renew(config, session);
+      let last = session;
+      if (renewed && renewed.token !== session.token) {
+        last = renewed;
+        try {
+          return await request(new URL(path, config.realmServerURL), {
+            ...options,
+            token: renewed.token,
+          });
+        } catch (again) {
+          if (again.status !== 401) {
+            throw again;
+          }
+        }
+      }
+      if (storedRecord()?.token === last.token) {
+        forgetSession();
+      }
       throw signedOut();
     }
     if (e.status === 403 && !(await liveSession(config))) {

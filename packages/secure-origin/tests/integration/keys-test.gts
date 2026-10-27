@@ -338,6 +338,58 @@ module('Integration | key pages', function (hooks) {
       );
     });
 
+    test('a request refused as signed out is made again under a renewed session', async function (assert) {
+      let renewed = {
+        token: 'renewed-session-token',
+        user: SESSION.user,
+        expiresAt: '2099-01-08T00:00:00.000Z',
+      };
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      let refusedOnce = false;
+      serve({
+        'POST _key-write-tickets': () => {
+          if (!refusedOnce) {
+            refusedOnce = true;
+            return refusal(401, 'the token has expired');
+          }
+          return json(201, {
+            data: {
+              attributes: {
+                ticket: 'ticket-after-renewal',
+                expiresAt: '2099-01-01T00:00:00.000Z',
+              },
+            },
+          });
+        },
+        'POST _secure-session/renewal': () =>
+          json(201, { data: { type: 'secure-session', attributes: renewed } }),
+        'PATCH _user-keys/key-2': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-2',
+              attributes: attributesOf(KEYS[1]),
+            },
+          }),
+      });
+      await click('[data-test-key-row="Maps"] [data-test-key-replace]');
+      await fillIn('[data-test-key-value]', 'new-value');
+      await click('[data-test-key-replace-save]');
+      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
+      assert.dom('[data-test-keys-signed-out]').doesNotExist();
+      assert.strictEqual(
+        requests.filter((r) => r.path === '_key-write-tickets').length,
+        2,
+        'the ticket is asked for again',
+      );
+      assert.deepEqual(
+        JSON.parse(localStorage.getItem('boxel-secure-session') ?? 'null'),
+        renewed,
+      );
+    });
+
     test('a session far from its end is checked, not renewed', async function (assert) {
       visitShell('?mode=keys');
       await render(KeyPage);

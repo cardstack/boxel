@@ -20,12 +20,12 @@ A secure session is a realm-server JWT with `user`, `sessionRoom` and
 `secureSession`: the id of a `secure_sessions` row. It works anywhere the
 user's session does, and additionally:
 
-| Gate                                | Requires                                                                                         |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `POST /_key-write-tickets`          | `isSecureSession`: the claim, naming a row of the token's user, not expired                      |
-| `GET /_secure-session`              | The same; answers 204, or 401 `signed-out`                                                       |
-| `POST /_secure-session/login-token` | The same, and `Origin` the secure origin's; answers a single-use Matrix login token for the user |
-| `POST /_secure-session/renewal`     | `Origin` the secure origin's, and a `window` row that hasn't ended; the token may have expired   |
+| Gate                                | Requires                                                                                                            |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `POST /_key-write-tickets`          | `isSecureSession`: the claim, naming a row of the token's user, not expired                                         |
+| `GET /_secure-session`              | The same; answers 204, or 401 `signed-out`                                                                          |
+| `POST /_secure-session/login-token` | The same, and `Origin` the secure origin's; answers a single-use Matrix login token for the user                    |
+| `POST /_secure-session/renewal`     | `Origin` the secure origin's, a `window` row that hasn't ended, and the row's current token, which may have expired |
 
 Minting also still requires the request's `Origin` to be the secure origin's
 or absent (the CLI). Only `createSecureSessionJWT` mints the claim (ADR 005
@@ -82,7 +82,13 @@ whether the device still exists (`GET
   tries again when it next opens or regains focus.
 
 Earlier than that day, renewal answers the session as it stands and asks the
-Matrix server nothing. A row bound to a device that never shows up, as when
+Matrix server nothing. Only the row's current token renews it: one whose
+`exp` is the row's `expires_at`, within five seconds. A renewal that moves
+the row's end leaves every earlier token behind, so a token copied out of the
+window renews nothing once the window has renewed past it. `DELETE
+/_secure-session` takes an expired token too, so a window can sign out a
+session bound to the app's after its token has run out, which also clears the
+binding. A row bound to a device that never shows up, as when
 the app never redeems a hand-off, lasts its week. A bound row whose device
 has gone, and which no window renews again, stays in the table until a
 renewal finds the device gone.

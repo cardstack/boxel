@@ -317,7 +317,11 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.delete(
     SECURE_SESSION_PATH,
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    // Signing out only ends a session, and a window's session bound to an
+    // app device outlives its token, so any expired token is taken here too.
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter, {
+      expiredWithinSeconds: Number.POSITIVE_INFINITY,
+    }),
     handleEndSecureSession(args),
   );
   router.post(

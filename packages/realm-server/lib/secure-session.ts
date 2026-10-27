@@ -84,6 +84,10 @@ export const SECURE_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 // asks the Matrix server about its device: a day, so a window opened often
 // asks about once a day.
 export const RENEWAL_WINDOW_SECONDS = 24 * 60 * 60;
+// How far a window's current token's expiry may sit from its row's: a token
+// is minted with the row's lifetime in whole seconds, a moment after the row
+// is written.
+const CURRENT_TOKEN_SLACK_MS = 5 * 1000;
 // How long a row outlives its session, so the proof it records can't sign in
 // again while the Matrix server would still accept it: a completed UIA session
 // stays usable for a while after completion.
@@ -1576,14 +1580,18 @@ function newDeviceId(): string {
 // Answers a fresh token for the session, whose lifetime is the row's: renewed
 // when the device is found, and as it was otherwise. The token presented may
 // have expired, since a row bound to a device outlives its token; its
-// signature and the row it names are what count. A row the device check
+// signature and the row it names are what count. Only the row's current token
+// renews it: one whose expiry is the row's, within `CURRENT_TOKEN_SLACK_MS`.
+// A renewal that moves the row's end leaves every earlier token behind, so a
+// token that leaked from the window renews nothing once the window has
+// renewed past it. A row the device check
 // finds signed out is unbound, and then ends at its `expires_at`, as one
 // never bound does. When the Matrix server can't be asked, a row that hasn't
 // expired is answered unrenewed, and one that has is `unavailable`, since
 // nothing says it has ended.
 export async function renewSecureSession(
   deps: SecureSessionDeps,
-  token: RealmServerTokenClaim | undefined,
+  token: (RealmServerTokenClaim & { exp?: number }) | undefined,
 ): Promise<SignedInSession> {
   let id = token?.secureSession;
   if (!token?.user || typeof id !== 'string' || !isUUID(id)) {
@@ -1603,6 +1611,12 @@ export async function renewSecureSession(
     throw signedOutError();
   }
   let expiresAt = new Date(row.expires_at);
+  if (
+    typeof token.exp !== 'number' ||
+    Math.abs(token.exp * 1000 - expiresAt.getTime()) > CURRENT_TOKEN_SLACK_MS
+  ) {
+    throw signedOutError();
+  }
   if (
     row.app_device_id &&
     expiresAt.getTime() - Date.now() < RENEWAL_WINDOW_SECONDS * 1000

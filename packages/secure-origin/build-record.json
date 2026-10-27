@@ -92,12 +92,12 @@
       ]
     },
     "session.js": {
-      "bytes": 6001,
+      "bytes": 6183,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/session.js",
-          "size": 9211
+          "size": 9629
         }
       ]
     },
