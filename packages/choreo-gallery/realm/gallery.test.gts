@@ -449,11 +449,17 @@ module('Choreo gallery | film frame', function (hooks) {
       'which is remembered',
     );
 
-    await triggerKeyEvent(grip(), 'keydown', 'ArrowUp', { shiftKey: true });
+    await triggerKeyEvent(grip(), 'keydown', 'ArrowDown', { shiftKey: true });
     assert.strictEqual(
       grip().getAttribute('aria-valuetext'),
       '984 × 536',
-      'Shift+Up shortens it a longer step',
+      'Shift+Down shortens it a longer step',
+    );
+    await triggerKeyEvent(grip(), 'keydown', 'ArrowUp');
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '984 × 552',
+      'Up heightens it a step',
     );
 
     for (let i = 0; i < 12; i++) {
@@ -464,7 +470,7 @@ module('Choreo gallery | film frame', function (hooks) {
       '384 × 384',
       'the width stops at the floor, and the height follows it so the frame never goes portrait',
     );
-    await triggerKeyEvent(grip(), 'keydown', 'ArrowDown', { shiftKey: true });
+    await triggerKeyEvent(grip(), 'keydown', 'ArrowUp', { shiftKey: true });
     assert.strictEqual(
       grip().getAttribute('aria-valuetext'),
       '384 × 384',
@@ -491,11 +497,24 @@ module('Choreo gallery | film frame', function (hooks) {
       'the frame grows no larger than the well',
     );
 
-    await triggerKeyEvent(grip(), 'keydown', 'ArrowDown');
+    await triggerKeyEvent(grip(), 'keydown', 'ArrowUp');
     assert.strictEqual(
       grip().getAttribute('aria-valuetext'),
       '1000 × 600, default size',
       'on either side',
+    );
+
+    await triggerKeyEvent(grip(), 'keydown', 'Home');
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '384 × 216',
+      'Home takes it to the floor',
+    );
+    await triggerKeyEvent(grip(), 'keydown', 'End');
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '1000 × 600, default size',
+      'and End to the well',
     );
 
     await triggerKeyEvent(grip(), 'keydown', 'ArrowLeft');

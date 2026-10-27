@@ -15,8 +15,9 @@ import { FilmFrame, type FilmName } from './film-frame';
    the way a monitor in a grading suite does; the well itself does not
    move. The floor is a frame that still reads; the ceiling is the well.
    Double-click the grip, or the chip, to snap back. From the keyboard the
-   grip is a slider: the arrows step the corner the way a drag moves it,
-   Shift for a longer step, and Enter or Escape snaps back. */
+   grip is a slider: Right and Up grow the frame a step, Left and Down shrink
+   it, Shift for a longer step, Home takes it to the floor and End to the
+   well, and Enter or Escape snaps back. */
 const SIZE_MIN = { h: 216, w: 384 } as const;
 
 /** how far one arrow press moves the frame's edge, and one with Shift */
@@ -247,9 +248,10 @@ export class FilmStage extends Component<Signature> {
   };
 
   /**
-   * The grip's keyboard. The arrows move the corner as a drag does: Right and
-   * Down grow the frame, Left and Up shrink it, held by `fit` as a drag is. Enter or Escape snaps back; with the frame
-   * already at its own size they have nothing to undo and are the host's.
+   * The grip's keyboard, as a slider's: Right and Up grow the frame, Left and
+   * Down shrink it, Home is the floor and End the well, held by `fit` as a
+   * drag is. Enter or Escape snaps back; with the frame already at its own
+   * size they have nothing to undo and are the host's.
    */
   private gripKey = (event: Event) => {
     if (
@@ -269,22 +271,25 @@ export class FilmStage extends Component<Signature> {
       return;
     }
     let step = event.shiftKey ? STEP_SHIFT : STEP;
-    let dw = 0;
-    let dh = 0;
+    let from = this.size ?? this.ceiling();
+    let to: Size;
     if (event.key === 'ArrowRight') {
-      dw = step;
+      to = { h: from.h, w: from.w + step };
     } else if (event.key === 'ArrowLeft') {
-      dw = -step;
-    } else if (event.key === 'ArrowDown') {
-      dh = step;
+      to = { h: from.h, w: from.w - step };
     } else if (event.key === 'ArrowUp') {
-      dh = -step;
+      to = { h: from.h + step, w: from.w };
+    } else if (event.key === 'ArrowDown') {
+      to = { h: from.h - step, w: from.w };
+    } else if (event.key === 'Home') {
+      to = SIZE_MIN;
+    } else if (event.key === 'End') {
+      to = this.ceiling();
     } else {
       return;
     }
     event.preventDefault();
-    let from = this.size ?? this.ceiling();
-    this.size = this.fit({ h: from.h + dh, w: from.w + dw });
+    this.size = this.fit(to);
     this.keyed = true;
     this.remember();
   };
