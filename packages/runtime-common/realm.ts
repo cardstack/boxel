@@ -2085,9 +2085,7 @@ function toISOStringOrNull(value: string | Date | null): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-// One bounded range of a stored file, as bytes. The ranges a fingerprint is
-// assembled from are at most `CONTENT_HASH_WHOLE_LIMIT_BYTES` wide however
-// large the file is, so this holds a bounded amount however large the file is.
+// Test seams that fail a recorded write between its steps.
 interface HistoryFaults {
   afterStage?: () => Promise<void>;
   afterRecord?: () => Promise<void>;
@@ -2111,6 +2109,9 @@ async function collectBytes(
   return bytes;
 }
 
+// One bounded range of a stored file, as bytes. The ranges a fingerprint is
+// assembled from are at most `CONTENT_HASH_WHOLE_LIMIT_BYTES` wide however
+// large the file is, so this holds a bounded amount however large the file is.
 async function readRangeBytes(
   adapter: RealmAdapter,
   path: LocalPath,
