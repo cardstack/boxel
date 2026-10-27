@@ -121,19 +121,19 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                             {{#if (eq this.replacingWorkspaces 1)}}
                               One workspace uses this key. Replacing it switches
                               that workspace to the new key right away, so make
-                              sure that workspace should use the new key.
+                              sure the new key is right for that workspace.
                             {{else if this.replacingWorkspaces}}
                               {{this.replacingWorkspaces}}
                               workspaces use this key. Replacing it switches
                               them all to the new key right away, so make sure
-                              all of these workspaces should use the new key.
+                              all of these workspaces use the same key.
                             {{else if this.replacingSharesKnown}}
                               No workspace uses this key. Make sure the new key
                               is for the same service.
                             {{else}}
                               Replacing this key switches every workspace that
                               uses it to the new key right away, so make sure
-                              all of them should use the new key.
+                              all of them use the same key.
                             {{/if}}
                           </p>
                           <KeyFields

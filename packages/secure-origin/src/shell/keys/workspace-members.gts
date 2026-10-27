@@ -1,8 +1,13 @@
-// Who a share puts a key in front of, for the workspace it goes into: who can
-// read the workspace, and that requests that use the key run on its owner's
-// account at the service.
+// Who a share puts a key in front of, for the workspace it goes into, as two
+// rows: who can use the key there, and that its requests are billed to the
+// key's owner. A permissions policy can let in people the workspace's
+// permission rows don't name, and nothing can list who a policy admits, so a
+// members-only workspace is described as its members and its policy.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import FieldContainer from '../../components/field-container.gts';
+import CreditCard from '../../components/icons/credit-card.gts';
+import Users from '../../components/icons/users.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
 import type { WindowContext } from './context.ts';
@@ -12,29 +17,32 @@ interface Signature {
 }
 
 const WorkspaceMembers: TemplateOnlyComponent<Signature> = <template>
-  <ul class='members' data-test-workspace-members>
-    <li data-test-workspace-readers>
+  <FieldContainer
+    @tag='div'
+    @label='Who can use it in this workspace'
+    @icon={{Users}}
+  >
+    <p class='value' data-test-workspace-readers>
       {{#if (eq @realm.readableBy 'anyone')}}
-        Anyone can see this workspace, signed in or not.
+        Anyone, signed in or not
       {{else if (eq @realm.readableBy 'signed-in')}}
-        Anyone signed in to Boxel can see this workspace.
+        Anyone signed in to Boxel
       {{else}}
-        Only its members can see this workspace.
+        Members of this workspace, and anyone its permissions policy lets in
       {{/if}}
-    </li>
-    <li>Requests that use the key run on your account at the service and count
-      toward your usage and billing there.</li>
-  </ul>
+    </p>
+  </FieldContainer>
+  <FieldContainer @tag='div' @label='Billing' @icon={{CreditCard}}>
+    <p class='value' data-test-workspace-billing>Requests made with this key are
+      billed to your account at the service.</p>
+  </FieldContainer>
 
   <style scoped>
-    .members {
+    .value {
       margin: 0;
-      padding-inline-start: var(--boxel-sp);
+      padding-top: var(--boxel-sp-xs);
       font-size: var(--boxel-font-size-sm);
       line-height: var(--boxel-line-height-sm);
-    }
-    .members li + li {
-      margin-top: var(--boxel-sp-4xs);
     }
   </style>
 </template>;

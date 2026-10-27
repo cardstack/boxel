@@ -19,7 +19,6 @@ import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import FieldContainer from '../../components/field-container.gts';
 import Tag from '../../components/icons/tag.gts';
-import Users from '../../components/icons/users.gts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 
@@ -100,13 +99,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @context={{this.choosing.context}}
               @reason={{this.opened.reason}}
             />
-            <FieldContainer
-              @tag='div'
-              @label='Who it’s shared with'
-              @icon={{Users}}
-            >
-              <WorkspaceMembers @realm={{this.choosing.context.realm}} />
-            </FieldContainer>
+            <WorkspaceMembers @realm={{this.choosing.context.realm}} />
             <FieldContainer
               @tag='div'
               @label='Shared key'
