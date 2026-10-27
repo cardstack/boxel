@@ -25,6 +25,7 @@ import ShareIcon from '../../components/icons/share-2.gts';
 import Trash from '../../components/icons/trash-2.gts';
 import IconPlus from '../../components/icons/icon-plus.gts';
 import { navigation } from '../navigation.js';
+import { pageLoaded, pageLoadFailed } from '../telemetry.ts';
 import { keySharePath } from '../pages.js';
 import { pageURL } from '../urls.js';
 
@@ -343,10 +344,12 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   private async load() {
     try {
       this.state.keys = await listKeys(this.args.api.config);
+      pageLoaded();
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       } else {
+        pageLoadFailed(e);
         this.state.loadFailed = loadFailure(e);
       }
     }

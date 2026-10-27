@@ -1,12 +1,23 @@
 import type Koa from 'koa';
-import { logger } from '@cardstack/runtime-common';
+import { AuthenticationError } from '@cardstack/runtime-common/router';
+import {
+  CLIENT_IP_HEADER,
+  counterKey,
+  isRateLimitUnavailable,
+  logger,
+  type DBAdapter,
+  type RateLimitStore,
+} from '@cardstack/runtime-common';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForError,
   setContextResponse,
 } from '../middleware/index.ts';
-import type { RealmServerTokenClaim } from '../utils/jwt.ts';
+import {
+  retrieveUserSessionClaim,
+  type RealmServerTokenClaim,
+} from '../utils/jwt.ts';
 
 // Nothing caps the request body server-side, so this handler enforces its own
 // small ceiling to reject abusive telemetry beacons.
@@ -14,6 +25,19 @@ const MAX_TELEMETRY_BODY_BYTES = 256 * 1024;
 // Upper bound on events accepted in a single beacon batch — headroom above the
 // host instrument's 400-event flush chunk, not a contract the client relies on.
 const MAX_TELEMETRY_EVENTS = 500;
+
+// The apps that beacon here. Every line names the one its batch came from as
+// `client_app`, so a dashboard can tell the host's events from the secure
+// origin's. A batch that names none, or one not on this list, is the host's.
+const CLIENT_APPS = new Set(['host', 'secure-origin']);
+const DEFAULT_CLIENT_APP = 'host';
+
+// A beacon without a session is counted against its sender's address, so an
+// anonymous caller can't flood the log. The secure origin's pages beacon
+// before anyone signs in there (the sign-in page itself), about once a second
+// while something is happening and every 25s while quiet, so this admits a
+// few busy windows behind one address and refuses a script.
+const ANONYMOUS_BEACON_LIMIT = { burst: 60, refillPerMinute: 30 };
 
 // Each accepted event is emitted as one line on this channel. alloy scrapes
 // stdout into Loki, where Grafana's `| json` parser reads each line.
@@ -24,12 +48,57 @@ const log = logger('realm-server');
 // single structured JSON log line. The route is schema-agnostic beyond a light
 // envelope check: it validates size and shape and does not interpret event
 // types.
-export default function handleClientTelemetry(): (
-  ctxt: Koa.Context,
-  next: Koa.Next,
-) => Promise<void> {
+//
+// A beacon with a realm-server session (the host's, or the secure window's
+// own) is attributed to that session's user. One without a valid session is
+// still accepted, since the secure origin's pages report what happens before
+// anyone signs in, but it is attributed to nobody: the body's self-reported
+// user is never believed, and the sender's address is rate limited.
+export default function handleClientTelemetry({
+  realmSecretSeed,
+  dbAdapter,
+  rateLimitStore,
+}: {
+  realmSecretSeed: string;
+  dbAdapter: DBAdapter;
+  rateLimitStore: RateLimitStore;
+}): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
+      let token = await sessionClaim(ctxt, realmSecretSeed, dbAdapter);
+      if (!token) {
+        let address = ctxt.req.headers[CLIENT_IP_HEADER];
+        if (typeof address !== 'string' || !address) {
+          // No session and no address to count it against: nothing to admit
+          // it under.
+          await setContextResponse(ctxt, new Response(null, { status: 204 }));
+          return;
+        }
+        let outcome = await rateLimitStore.take(
+          counterKey('client-telemetry', address),
+          ANONYMOUS_BEACON_LIMIT,
+        );
+        if (!outcome.admitted) {
+          if (isRateLimitUnavailable(outcome)) {
+            await sendResponseForError(
+              ctxt,
+              503,
+              'Service Unavailable',
+              'Telemetry rate limit unavailable',
+            );
+          } else {
+            ctxt.set('Retry-After', String(outcome.retryAfterSeconds));
+            await sendResponseForError(
+              ctxt,
+              429,
+              'Too Many Requests',
+              'Too many telemetry beacons',
+            );
+          }
+          return;
+        }
+      }
+
       // The body is read fully into memory below, so bound it by the declared
       // Content-Length before reading. A telemetry beacon is always a
       // materialized JSON string, so a well-formed client always declares a
@@ -99,12 +168,12 @@ export default function handleClientTelemetry(): (
         return;
       }
 
-      // Prefer the authenticated matrix user id from the JWT (set by
-      // jwtMiddleware) over the body's self-reported value, which is
-      // client-supplied and untrusted.
-      let token = ctxt.state.token as RealmServerTokenClaim | undefined;
-      let authedUser = token?.user ?? null;
-      let matrixUserId = authedUser ?? json.matrix_user_id ?? null;
+      // The user is the session's, never the body's self-reported value,
+      // which is client-supplied and untrusted.
+      let matrixUserId = token?.user ?? null;
+      let clientApp = CLIENT_APPS.has(json.client_app)
+        ? json.client_app
+        : DEFAULT_CLIENT_APP;
       let sessionId = json.session_id;
       let env = json.env;
       let appVersion = json.app_version;
@@ -121,6 +190,7 @@ export default function handleClientTelemetry(): (
           JSON.stringify({
             ...event,
             channel: 'boxel:client-perf',
+            client_app: clientApp,
             session_id: sessionId,
             matrix_user_id: matrixUserId,
             env,
@@ -137,4 +207,30 @@ export default function handleClientTelemetry(): (
       await setContextResponse(ctxt, new Response(null, { status: 204 }));
     }
   };
+}
+
+// The session the beacon was sent with, or undefined when it carries none or
+// one the server doesn't honour (expired, ended, forged): either way the
+// beacon is anonymous.
+async function sessionClaim(
+  ctxt: Koa.Context,
+  realmSecretSeed: string,
+  dbAdapter: DBAdapter,
+): Promise<RealmServerTokenClaim | undefined> {
+  let authorization = ctxt.req.headers['authorization'];
+  if (!authorization) {
+    return undefined;
+  }
+  try {
+    return await retrieveUserSessionClaim(
+      authorization,
+      realmSecretSeed,
+      dbAdapter,
+    );
+  } catch (e) {
+    if (e instanceof AuthenticationError) {
+      return undefined;
+    }
+    throw e;
+  }
 }

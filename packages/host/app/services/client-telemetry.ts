@@ -4,6 +4,12 @@ import Service, { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
 
+import {
+  reportFromErrorEvent,
+  reportFromRejectionEvent,
+  type ClientErrorKind,
+  type ErrorReport,
+} from '@cardstack/secure-origin/telemetry/error-report.ts';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -13,12 +19,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
-import {
-  reportFromErrorEvent,
-  reportFromRejectionEvent,
-  type ClientErrorKind,
-  type ErrorReport,
-} from '@cardstack/host/lib/client-error-report';
 import {
   now,
   isDocumentHidden,

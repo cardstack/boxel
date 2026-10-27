@@ -14,6 +14,8 @@ import { getOwner } from '@ember/owner';
 import Route from '@ember/routing/route';
 import EmberRouter from '@ember/routing/router';
 import type RouterService from '@ember/routing/router-service';
+import type Transition from '@ember/routing/transition';
+import { schedule } from '@ember/runloop';
 
 import EnterKeyPage from './keys/enter-key-page.gts';
 import KeyPage from './keys/key-page.gts';
@@ -30,6 +32,7 @@ import CliSignInPage from './sign-in/cli-sign-in-page.gts';
 import GoogleCallback from './sign-in/google-callback.gts';
 import SignInPage from './sign-in/sign-in-page.gts';
 import SignOutPage from './sign-in/sign-out-page.gts';
+import { pageOpened, pageRendered } from './telemetry.ts';
 import { shellPath } from './urls.js';
 
 class Router extends EmberRouter {
@@ -60,9 +63,21 @@ Router.map(function () {
   this.route('swap-key');
 });
 
+// The application route starts once, on the document's first transition: it
+// hands navigation the router, and tells the telemetry about that page and
+// every page opened after it, and when each has rendered.
 class ApplicationRoute extends Route {
-  beforeModel() {
-    useRouter(getOwner(this)!.lookup('service:router') as RouterService);
+  beforeModel(transition: Transition) {
+    let router = getOwner(this)!.lookup('service:router') as RouterService;
+    useRouter(router);
+    pageOpened(transition.to?.name);
+    router.on('routeWillChange', (next: Transition) => {
+      // The document's first transition was reported above.
+      if (next.from) {
+        pageOpened(next.to?.name);
+      }
+    });
+    router.on('routeDidChange', () => schedule('afterRender', pageRendered));
   }
 }
 

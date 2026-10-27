@@ -27,6 +27,7 @@ import Button from '../../components/button.gts';
 import BoxelIcon from '../../components/icons/boxel-icon.gts';
 import IconX from '../../components/icons/icon-x.gts';
 import { navigation } from '../navigation.js';
+import { pageAwaitsData, pageSignedOut } from '../telemetry.ts';
 
 import EditPage from './edit-page.gts';
 
@@ -176,6 +177,8 @@ export default class KeysWindow extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    // The page under it reports when its data has loaded.
+    pageAwaitsData();
     this.check();
   }
 
@@ -197,6 +200,7 @@ export default class KeysWindow extends Component<Signature> {
     if (session) {
       this.begin(session);
     } else {
+      pageSignedOut();
       this.page.state = 'signed-out';
     }
   }
@@ -234,6 +238,7 @@ export default class KeysWindow extends Component<Signature> {
       return;
     }
     this.page.wasSignedIn = true;
+    pageSignedOut();
     this.stopListening?.();
     document.removeEventListener('visibilitychange', this.recheck);
     window.removeEventListener('focus', this.recheck);

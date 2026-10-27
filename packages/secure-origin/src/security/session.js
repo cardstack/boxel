@@ -9,6 +9,8 @@
 // Matrix server, or with Google, which sends its authorization code back to
 // this origin alone (see the realm server's `lib/secure-session.ts`).
 
+import { timedFetch } from './request-timing.js';
+
 const STORAGE_KEY = 'boxel-secure-session';
 // A Google sign-in in progress: what the window sent Google, kept for the
 // callback to check what comes back against.
@@ -49,14 +51,18 @@ async function request(url, { method = 'POST', body, token, signal } = {}) {
   }
   let response;
   try {
-    response = await fetch(url, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      credentials: 'omit',
-      referrerPolicy: 'no-referrer',
-      signal,
-    });
+    response = await timedFetch(
+      url,
+      {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        signal,
+      },
+      'realm-server',
+    );
   } catch {
     throw new SecureSessionError(0, 'network', 'Boxel could not be reached.');
   }
@@ -122,7 +128,7 @@ export async function signInWithPassword(
 export async function changePassword(config, change) {
   let response;
   try {
-    response = await fetch(
+    response = await timedFetch(
       new URL('_secure-sessions/password-change', config.realmServerURL),
       {
         method: 'POST',
@@ -133,6 +139,7 @@ export async function changePassword(config, change) {
         credentials: 'omit',
         referrerPolicy: 'no-referrer',
       },
+      'realm-server',
     );
   } catch (e) {
     return { ok: false, status: 0, body: { error: String(e?.message) } };

@@ -53,5 +53,35 @@ module.exports = {
         ],
       },
     },
+    {
+      // The telemetry instrument: plain modules too, so what it records, and
+      // that it can't record a secret, is read and tested without rendering.
+      files: ['./src/telemetry/**'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          {
+            patterns: [
+              {
+                group: ['@ember/*', '@glimmer/*', 'ember-*', 'ember'],
+                message:
+                  'src/telemetry/ imports nothing from Ember or Glimmer: the shell reports to it, not the other way round.',
+              },
+              {
+                group: [
+                  '../*',
+                  '!../security',
+                  '!../security/**',
+                  '!../telemetry',
+                  '!../telemetry/**',
+                ],
+                message:
+                  'src/telemetry/ imports only telemetry and security modules, never the components or pages that report to it.',
+              },
+            ],
+          },
+        ],
+      },
+    },
   ],
 };
