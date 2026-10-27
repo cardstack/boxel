@@ -643,8 +643,11 @@ export default class ToolService extends Service {
             );
           } catch (e) {
             let error = e instanceof Error ? e : new Error(String(e));
+            // The message and step timeline go in the text itself: a test
+            // runner's console capture can render an Error argument as
+            // "[object Object]".
             console.error(
-              `Tool processing failed for "${messageTool.name}" (${messageTool.id}):`,
+              `Tool processing failed for "${messageTool.name}" (${messageTool.id}): ${error.message}. Validation steps: ${this.describeValidationSteps(messageTool)}`,
               e,
             );
             try {
@@ -678,6 +681,7 @@ export default class ToolService extends Service {
             clearTimeout(watchdog);
             if (messageTool.id) {
               this.validationSteps.delete(messageTool.id);
+              this.validationStepTimelines.delete(messageTool.id);
             }
           }
           if (!isValid) {
@@ -1283,11 +1287,45 @@ export default class ToolService extends Service {
 
   // Which step each in-flight validation is on, for the slow-validation log.
   private validationSteps = new Map<string, string>();
+  // When each in-flight validation entered each of its steps, so a validation
+  // that fails or times out can say which step took the time.
+  private validationStepTimelines = new Map<
+    string,
+    { step: string; at: number }[]
+  >();
 
   private markValidationStep(command: MessageTool, step: string) {
     if (command.id) {
       this.validationSteps.set(command.id, step);
+      let timeline = this.validationStepTimelines.get(command.id);
+      if (!timeline) {
+        timeline = [];
+        this.validationStepTimelines.set(command.id, timeline);
+      }
+      timeline.push({ step, at: performance.now() });
     }
+  }
+
+  // e.g. "resolve tool foo at +0ms (2950ms); load tool module bar at
+  // +2950ms (still running at +3000ms)"
+  private describeValidationSteps(command: MessageTool): string {
+    let timeline = command.id
+      ? this.validationStepTimelines.get(command.id)
+      : undefined;
+    if (!timeline?.length) {
+      return 'none started';
+    }
+    let start = timeline[0].at;
+    let now = performance.now();
+    return timeline
+      .map(({ step, at }, i) => {
+        let next = timeline![i + 1];
+        let span = next
+          ? `${Math.round(next.at - at)}ms`
+          : `still running at +${Math.round(now - start)}ms`;
+        return `${step} at +${Math.round(at - start)}ms (${span})`;
+      })
+      .join('; ');
   }
 
   private logSlowValidation(command: MessageTool) {
@@ -1297,7 +1335,7 @@ export default class ToolService extends Service {
     console.warn(
       `Tool "${command.name}" (${command.id}) is still validating after ${VALIDATE_WATCHDOG_MS}ms, at step: ${
         step ?? 'before the first load'
-      }. Loader imports in flight: ${JSON.stringify(
+      }. Tool still resolving: ${command.isResolving}. Loader imports in flight: ${JSON.stringify(
         moduleImports,
       )}. Store query loads in flight: ${JSON.stringify(queryLoads)}`,
     );

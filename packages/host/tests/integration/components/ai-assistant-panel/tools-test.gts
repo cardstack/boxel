@@ -43,6 +43,7 @@ import {
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import ENV from '@cardstack/host/config/environment';
+import { loadSkillSource } from '@cardstack/host/lib/skill-tools';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -2548,8 +2549,19 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
   // Holds every store load of the discovered skill until released, so every
   // resolution of its tool stays in flight.
-  function holdDiscoveredSkillLoads() {
+  //
+  // The skill and the tool's module are loaded once before the hold. The
+  // drain's validation timeout runs while the hold is in place, so whatever
+  // the resolution still has to load after the release has to fit in the rest
+  // of that budget. Loaded beforehand, that work is a cache hit; loaded for
+  // the first time after the release, it can overrun the budget on a busy
+  // runner, and the tool fails with a validation timeout instead of running.
+  async function holdDiscoveredSkillLoads() {
     let store = getService('store');
+    await loadSkillSource(store, discoveredSkillUrl);
+    await getService('loader-service').loader.import(
+      '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+    );
     let release = new Deferred<void>();
     let heldLoads = 0;
     let originalGet = store.get;
@@ -2638,7 +2650,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     let roomId = await renderAiAssistantPanel();
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
 
-    let hold = holdDiscoveredSkillLoads();
+    let hold = await holdDiscoveredSkillLoads();
     try {
       // The finished message carries a bot-run tool followed by the host
       // tool, whose resolution now waits on the held skill load.
@@ -2697,7 +2709,9 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert.strictEqual(
       hostToolResults[0]?.content['m.relates_to']?.key,
       'applied',
-      'the host tool ran successfully',
+      `the host tool ran successfully (failure reason: ${
+        hostToolResults[0]?.content.failureReason ?? 'none'
+      })`,
     );
     assert
       .dom('[data-test-tool-call-apply="applying"]')
@@ -2714,7 +2728,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
     let matrixService = getService('matrix-service');
 
-    let hold = holdDiscoveredSkillLoads();
+    let hold = await holdDiscoveredSkillLoads();
     try {
       simulateRemoteMessage(
         roomId,
@@ -2827,7 +2841,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     });
     await settled();
 
-    let hold = holdDiscoveredSkillLoads();
+    let hold = await holdDiscoveredSkillLoads();
     try {
       // The final edit renames it to the discovered host tool, whose
       // resolution is held.
@@ -2861,7 +2875,9 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert.strictEqual(
       hostToolResults[0]?.content['m.relates_to']?.key,
       'applied',
-      'the renamed tool ran',
+      `the renamed tool ran (failure reason: ${
+        hostToolResults[0]?.content.failureReason ?? 'none'
+      })`,
     );
   });
 
