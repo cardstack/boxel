@@ -25,18 +25,18 @@ const WorkspaceMembers: TemplateOnlyComponent<Signature> = <template>
     </li>
     <li data-test-workspace-writers>
       {{#if (eq @realm.otherWriters 0)}}
-        No one else edits it.
+        No one else edits this workspace.
       {{else if (eq @realm.otherWriters 1)}}
-        One other person edits it, and can stop this share or put their own key
-        in its place.
+        One other person edits this workspace. They can stop this share or
+        replace your key with their own.
       {{else}}
         {{@realm.otherWriters}}
-        other people edit it, and any of them can stop this share or put their
-        own key in its place.
+        other people edit this workspace. Any of them can stop this share or
+        replace your key with their own.
       {{/if}}
     </li>
-    <li>Requests made with the key run on your account at the service, so they
-      count toward your usage and billing there.</li>
+    <li>Requests that use the key run on your account at the service and count
+      toward your usage and billing there.</li>
   </ul>
 
   <style scoped>

@@ -17,10 +17,10 @@ const NeedsAdmin: TemplateOnlyComponent<Signature> = <template>
     @heading='Someone who edits this workspace needs to set this up'
     data-test-keys-needs-admin
   >
-    <:intro>Only someone given edit access to
+    <:intro>Only people with their own edit access to
       <strong>{{@realm.name}}</strong>
-      (<span data-test-needs-admin-address>{{addressOf @realm.url}}</span>) by
-      name can add a key to it. Ask one of them to set it up.</:intro>
+      (<span data-test-needs-admin-address>{{addressOf @realm.url}}</span>) can
+      add a key to it.</:intro>
   </EditPage>
 </template>;
 

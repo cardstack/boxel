@@ -393,7 +393,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-key-replace-where]')
         .includesText(
-          'Used in 2 workspaces. They use the new key as soon as you replace it.',
+          '2 workspaces use this key. Replacing it switches them all to the new key right away, so make sure the new key is for the same service.',
           'says how many workspaces the key is shared into',
         );
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
@@ -848,7 +848,7 @@ module('Integration | key pages', function (hooks) {
         .hasText('Anyone can see this workspace, signed in or not.');
       assert
         .dom('[data-test-workspace-writers]')
-        .includesText('One other person edits it');
+        .includesText('One other person edits this workspace.');
       await fillIn('[data-test-share-label]', 'Team maps');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
@@ -944,11 +944,11 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-workspace-writers]')
         .includesText(
-          '2 other people edit it, and any of them can stop this share or put their own key in its place.',
+          '2 other people edit this workspace. Any of them can stop this share or replace your key with their own.',
         );
       assert
         .dom('[data-test-workspace-members]')
-        .includesText('Requests made with the key run on your account');
+        .includesText('Requests that use the key run on your account');
       assert.dom('[data-test-workspace-dropdown-trigger]').doesNotExist();
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       await click('[data-test-key-choice="Maps"] input');

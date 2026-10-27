@@ -108,22 +108,23 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           data-test-key-replace-form
                         >
                           <p class='confirm' data-test-key-replace-where>
-                            {{#if this.replacingWorkspaces}}
-                              Used in
+                            {{#if (eq this.replacingWorkspaces 1)}}
+                              One workspace uses this key. Replacing it switches
+                              that workspace to the new key right away, so make
+                              sure the new key is for the same service.
+                            {{else if this.replacingWorkspaces}}
                               {{this.replacingWorkspaces}}
-                              {{if
-                                (eq this.replacingWorkspaces 1)
-                                'workspace'
-                                'workspaces'
-                              }}. They use the new key as soon as you replace
-                              it.
+                              workspaces use this key. Replacing it switches
+                              them all to the new key right away, so make sure
+                              the new key is for the same service.
                             {{else if this.replacingSharesKnown}}
-                              It isn’t shared into any workspace.
+                              No workspace uses this key. Make sure the new key
+                              is for the same service.
                             {{else}}
-                              Every workspace it’s shared into uses the new key
-                              as soon as you replace it.
+                              Replacing this key switches every workspace that
+                              uses it to the new key right away, so make sure
+                              the new key is for the same service.
                             {{/if}}
-                            Make sure the new key is for the same service.
                           </p>
                           <KeyFields
                             @value={{this.form.value}}
