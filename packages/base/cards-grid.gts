@@ -25,6 +25,8 @@ import {
   SupportedMimeType,
   subscribeToRealm,
   codeRefFromInternalKey,
+  loaderForModule,
+  type Loader,
   type Query,
 } from '@cardstack/runtime-common';
 
@@ -49,6 +51,16 @@ import {
 import type { RealmEventContent } from './matrix-event';
 import type { Spec } from './spec';
 import StringField from './string';
+
+// The loader this module runs under. A fetched copy gets the loader that
+// served it, a bundled copy the one the host publishes for bundled modules;
+// either way its `fetch` resolves realm URLs through the virtual network.
+function myLoader(): Loader {
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
+  // @ts-ignore
+  return loaderForModule(import.meta);
+}
 
 const [_CardView, StripView, GridView] = VIEW_OPTIONS;
 
@@ -333,7 +345,7 @@ class Isolated extends Component<typeof CardsGrid> {
     if (!realm) {
       return;
     }
-    let response = await fetch(`${realm}_types`, {
+    let response = await myLoader().fetch(`${realm}_types`, {
       headers: {
         Accept: SupportedMimeType.CardTypeSummary,
       },
