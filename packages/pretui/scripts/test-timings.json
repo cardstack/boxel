@@ -126,6 +126,7 @@
   "components/record-detail.test.gts": 3898,
   "components/record-pill.test.gts": 1847,
   "components/relative-time.test.gts": 1838,
+  "components/resize-handle.test.gts": 3359,
   "components/result-card.test.gts": 1519,
   "components/result.test.gts": 2588,
   "components/rule-row.test.gts": 2771,
