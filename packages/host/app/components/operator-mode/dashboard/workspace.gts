@@ -1645,14 +1645,18 @@ export default class Workspace extends Component<Signature> {
   // Whether the workspace, or anything open from it, is on screen behind the
   // dashboard; removing it then clears the stacks.
   private get isActiveWorkspace() {
+    return this.isOnScreen(this.args.realmIdentifier);
+  }
+
+  private isOnScreen(realmIdentifier: RealmIdentifier) {
     let realmPath = new RealmPaths(
-      this.args.realmIdentifier,
+      realmIdentifier,
       this.network.virtualNetwork,
     );
     let { codePath } = this.operatorModeStateService.state;
     return (
       this.operatorModeStateService.realmURL ===
-        this.network.virtualNetwork.toURL(this.args.realmIdentifier).href ||
+        this.network.virtualNetwork.toURL(realmIdentifier).href ||
       this.operatorModeStateService
         .getOpenCardIds()
         .some((cardId) => realmPath.inRealm(cardId)) ||
@@ -1670,20 +1674,22 @@ export default class Workspace extends Component<Signature> {
 
   // A plain async method, not part of the task: archiving drops this
   // workspace from the list before it returns, and the teardown that follows
-  // cancels the task, which would skip everything after the archive.
-  private async archiveAndLeave(wasActive: boolean) {
+  // cancels the task, which would skip everything after the archive. With the
+  // row gone the dashboard is usable again, so whether the workspace is still
+  // on screen is checked once the archive returns.
+  private async archiveAndLeave() {
     let { realmIdentifier } = this.args;
     await this.realmServer.archiveRealm(realmIdentifier);
     // Archiving seals the realm; its session goes so background requests
     // don't loop on 403. Restoring creates a new one.
     this.realm.removeRealm(realmIdentifier);
-    await this.leaveRemovedWorkspace(wasActive);
+    await this.leaveRemovedWorkspace(this.isOnScreen(realmIdentifier));
   }
 
   private archiveWorkspaceTask = dropTask(async () => {
     this.archiveError = undefined;
     try {
-      await this.archiveAndLeave(this.isActiveWorkspace);
+      await this.archiveAndLeave();
       this.showArchiveModal = false;
     } catch (error: any) {
       this.archiveError = error.message;

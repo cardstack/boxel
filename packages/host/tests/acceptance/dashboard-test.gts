@@ -915,6 +915,60 @@ module('Acceptance | dashboard', function (hooks) {
           ]);
           assert.strictEqual(operatorModeState().state.codePath, codePath);
         });
+
+        test('opening another workspace while the archive finishes keeps it open', async function (assert) {
+          let archivedRoute = getRealmServerRoute(
+            new URL('http://test-realm/_archived-realms'),
+          );
+          if (!archivedRoute) {
+            throw new Error('no default archived-realms route');
+          }
+          let releaseArchivedList!: () => void;
+          let archivedListHeld = new Promise<void>(
+            (resolve) => (releaseArchivedList = resolve),
+          );
+          let archivedListRequested = false;
+          registerRealmServerRoute({
+            path: '/_archived-realms',
+            handler: async (req, url, state) => {
+              archivedListRequested = true;
+              await archivedListHeld;
+              return archivedRoute.handler(req, url, state);
+            },
+          });
+          try {
+            await visitOperatorMode({
+              workspaceChooserOpened: true,
+              stacks: [
+                [{ id: `${removedRealmURL}Person/1`, format: 'isolated' }],
+              ],
+            });
+
+            await click(
+              `[data-test-workspace-menu-trigger="${removedRealmURL}"]`,
+            );
+            await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
+            // Not awaited: the click settles only once the held request
+            // returns.
+            let confirmed = click('[data-test-confirm-archive-button]');
+            await waitUntil(() => archivedListRequested);
+            await operatorModeState().openWorkspace(keptRealmURL);
+            releaseArchivedList();
+            await confirmed;
+            await settled();
+          } finally {
+            releaseArchivedList();
+            registerRealmServerRoute(archivedRoute);
+          }
+
+          assert.deepEqual(operatorModeState().getOpenCardIds(), [
+            `${keptRealmURL}index`,
+          ]);
+          assert.false(
+            operatorModeState().workspaceChooserOpened,
+            'the dashboard stays closed',
+          );
+        });
       },
     );
 
