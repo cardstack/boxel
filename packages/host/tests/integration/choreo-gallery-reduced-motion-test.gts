@@ -4,7 +4,13 @@
  * stage wakes it, and a demo page offers the demo's full motion.
  */
 import { htmlSafe } from '@ember/template';
-import { click, render, settled, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  render,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { live, liveAll } from '@cardstack/choreo/test-support';
 import { closestMotionConfig } from 'glimmer-motion';
@@ -17,9 +23,13 @@ import {
 
 import type * as HoldModule from '../../../choreo-gallery/realm/lib/motion-hold';
 import type * as OnStageModule from '../../../choreo-gallery/realm/lib/onstage';
+import type * as HeldStageModule from '../../../choreo-gallery/realm/shell/held-stage';
 
 /** a stage with a box, so the observer has something to see */
 const stageSize = htmlSafe('width: 100px; height: 100px');
+
+/** something inside a stage that would loop forever if let */
+const looping = htmlSafe('animation: spin 1s linear infinite');
 
 module('Integration | Choreo gallery | reduced motion', function (hooks) {
   let gallery = setupChoreoGalleryTest(hooks);
@@ -64,6 +74,32 @@ module('Integration | Choreo gallery | reduced motion', function (hooks) {
     await new Promise((resolve) => setTimeout(resolve, 50));
     assert.deepEqual(told, [false, true, false], 'held again: off');
     watcher.disconnect();
+  });
+
+  test('a held stage’s animations stand still until it wakes', async function (assert) {
+    let { HeldStage } =
+      await gallery.import<typeof HeldStageModule>('shell/held-stage');
+    let { MotionHold } =
+      await gallery.import<typeof HoldModule>('lib/motion-hold');
+    let hold = new MotionHold();
+    await render(
+      <template>
+        <HeldStage @hold={{hold}} style={{stageSize}} data-test-held-stage>
+          <div style={{looping}} data-test-looping></div>
+        </HeldStage>
+      </template>,
+    );
+    let playState = () =>
+      getComputedStyle(live('[data-test-looping]')!).animationPlayState;
+    await waitUntil(() => playState() === 'paused');
+    assert
+      .dom('[data-test-held-stage]')
+      .hasAttribute('data-motion-hold', 'held');
+    assert.strictEqual(playState(), 'paused', 'held: paused');
+
+    hold.wake();
+    await waitUntil(() => playState() === 'running');
+    assert.strictEqual(playState(), 'running', 'woken: running');
   });
 
   test('every tile in the grid holds its stage', async function (assert) {
