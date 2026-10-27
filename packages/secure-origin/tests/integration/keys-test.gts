@@ -580,7 +580,7 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-keys-error]');
       assert
         .dom('[data-test-keys-error]')
-        .includesText("only a share's owner unshares it");
+        .includesText("Only a share's owner unshares it.");
       assert
         .dom(`${dashboard} [data-test-key-unshare-confirm]`)
         .exists('the question stays open');
