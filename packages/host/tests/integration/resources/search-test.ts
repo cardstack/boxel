@@ -698,10 +698,11 @@ module(`Integration | search resource`, function (hooks) {
 
     // The re-run follows the realm's index event over matrix, then searches
     // the server and loads the new card; on a loaded runner that chain can
-    // outlast `waitUntil`'s 1 s default even though it completes.
+    // outlast `waitUntil`'s 1 s default even though it completes. The wait is
+    // bounded, not `settled()`, so a waiter that never drains still reaches
+    // the diagnostic below.
     let waitStart = performance.now();
     try {
-      await settled();
       await waitUntil(() => search.instances.length === 3, {
         timeout: 10_000,
       });
