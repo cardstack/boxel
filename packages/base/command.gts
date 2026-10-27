@@ -493,26 +493,27 @@ export class LintAndFixResult extends CardDef {
   @field lintWarnings = containsMany(StringField); // severity 1 only
 }
 
-// Shows an image a tool uploaded to the room. Room media loads only through
-// the host's `loadRoomMedia`, which answers with an object URL this releases
-// once the image is gone; without it (outside the assistant's chat) the URL
-// is used as it is.
-// A realm URL as the reader thinks of it: the path inside the realm, not the
-// server and the owner. `https://host/owner/realm/collab/Article/a.json` is
-// `collab/Article/a.json`; anything that is not such a URL is left alone.
-function shortPath(url: string | undefined): string {
+// A URL as the reader thinks of it: the path inside the run's realm
+// (`collab/Article/a.json`), else the path on its server. Anything that is
+// not a URL is left alone.
+function shortPath(url: string | undefined, realm: string | undefined): string {
   if (!url) {
     return '';
   }
+  if (realm && url.startsWith(realm) && url !== realm) {
+    return url.slice(realm.length);
+  }
   try {
-    let segments = new URL(url).pathname.split('/').filter(Boolean);
-    return segments.length > 2
-      ? segments.slice(2).join('/')
-      : segments.join('/');
+    return new URL(url).pathname.split('/').filter(Boolean).join('/');
   } catch {
     return url;
   }
 }
+
+// Shows an image a tool uploaded to the room. Room media loads only through
+// the host's `loadRoomMedia`, which answers with an object URL this releases
+// once the image is gone; without it (outside the assistant's chat) the URL
+// is used as it is.
 
 const roomMediaSrc = modifier(
   (
@@ -609,6 +610,8 @@ export class RealmCodeUiActionResult extends FieldDef {
 export class RunRealmCodeResult extends CardDef {
   static displayName = 'Realm Code Result';
 
+  // The realm the run worked in, ending in a slash.
+  @field realm = contains(StringField);
   @field files = containsMany(RealmCodeFileResult);
   @field scriptResult = contains(StringField);
   @field uiActions = containsMany(RealmCodeUiActionResult);
@@ -681,6 +684,7 @@ export class RunRealmCodeResult extends CardDef {
             <span class='text'>
               <a class='path' href={{file.fileUrl}}>{{shortPath
                   file.fileUrl
+                  @model.realm
                 }}</a>
               <span class='status'>{{file.status}}</span>
             </span>
@@ -705,7 +709,10 @@ export class RunRealmCodeResult extends CardDef {
             <span class='glyph' aria-hidden='true'>→</span>
             <span class='text'>
               {{uiAction.action}}
-              <span class='path'>{{shortPath uiAction.target}}</span>
+              <span class='path'>{{shortPath
+                  uiAction.target
+                  @model.realm
+                }}</span>
               <span class='status'>{{uiAction.status}}</span>
               {{#if uiAction.detail}}
                 <span class='status'>{{uiAction.detail}}</span>
@@ -731,6 +738,7 @@ export class RunRealmCodeResult extends CardDef {
             <span class='text'>Opened
               <a class='path' href={{@model.shownCard}}>{{shortPath
                   @model.shownCard
+                  @model.realm
                 }}</a></span>
           </div>
         {{/if}}

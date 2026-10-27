@@ -59,7 +59,6 @@ import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
 import {
   compactDiff,
   CARD_CHANGES_IN_DETAIL,
-  DIFF_IN_DETAIL,
   cardChanges,
   type CardFieldChange,
   type RealmFileEdit,
@@ -671,6 +670,12 @@ class RealmFsSession {
   // Settles once every call already made has finished or been refused.
   idle(): Promise<unknown> {
     return Promise.all([this.queue, ...this.researchInFlight]);
+  }
+
+  // Settles once every queued call (each save and delete among them) has
+  // finished or been refused. Research calls are not waited on.
+  queueSettled(): Promise<unknown> {
+    return this.queue;
   }
 
   // A step the script reports, such as `Step 2 of 4 · Gather sources`. It
@@ -2187,13 +2192,6 @@ class RealmFsSession {
   }
 }
 
-// The diff rides in `detail` too, after a fixed marker: a realm server whose
-// base predates `diff` keeps `detail`, so the change still reaches the model
-// and the transcript can still show it after a reload.
-function withDiff(detail: string, diff: string | undefined): string {
-  return diff ? `${detail}${DIFF_IN_DETAIL}${diff}` : detail;
-}
-
 // A script's question to the reader, as realm.ask takes it.
 export interface ScriptAsk {
   question: string;
@@ -2539,9 +2537,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
       }),
     ]);
   }
-  // the session's calls settled, or Stop's grace over
-  private idleOrStopped(session: RealmFsSession): Promise<unknown> {
-    return Promise.race([session.idle(), this.stopGrace]);
+  // the session's calls settled, or Stop's grace over. Stop never cuts the
+  // wait for a save or delete already under way, so the result reports
+  // every change the realm got; only research is given up on.
+  private async idleOrStopped(session: RealmFsSession): Promise<unknown> {
+    await Promise.race([session.idle(), this.stopGrace]);
+    return session.queueSettled();
   }
   stop = () => {
     this.stopper.abort(
@@ -2839,6 +2840,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       );
     }
     return new commandModule.RunRealmCodeResult({
+      realm: this.realmRootURL(realmURL),
       uiActions,
       ...shown,
       files: [
@@ -2848,12 +2850,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
               fileUrl,
               status: 'saved',
               detail: withCardChanges(
-                withDiff(
-                  session.binary.has(fileUrl)
-                    ? 'Binary file saved.'
-                    : 'Source saved; correctness validation will run after this tool result.',
-                  fileDiff(session, fileUrl),
-                ),
+                session.binary.has(fileUrl)
+                  ? 'Binary file saved.'
+                  : 'Source saved; correctness validation will run after this tool result.',
                 fileCardChanges(session, fileUrl),
               ),
               diff: fileDiff(session, fileUrl),
@@ -2881,10 +2880,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
             new commandModule.RealmCodeFileResult({
               fileUrl,
               status: 'deleted',
-              detail: withDiff(
-                'Existed before this run; deleted.',
-                fileDiff(session, fileUrl),
-              ),
+              detail: 'Existed before this run; deleted.',
               diff: fileDiff(session, fileUrl),
             }),
         ),

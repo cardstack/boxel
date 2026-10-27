@@ -228,6 +228,7 @@ export const BOTTOM_THRESHOLD = 50;
 // how long a press keeps a settled message's motion region awake: long
 // enough for what it opened or closed to finish moving
 const ENGAGED_MS = 2500;
+const HTTP_PROTOCOL = new RegExp('^https?:$');
 
 interface ReloadBillingOnInsertSignature {
   Args: {
@@ -1069,7 +1070,7 @@ class AiAssistantConversation extends Component<AiAssistantConversationSignature
       return;
     }
     if (
-      !/^https?:$/.test(url.protocol) ||
+      !HTTP_PROTOCOL.test(url.protocol) ||
       url.origin === window.location.origin
     ) {
       return;

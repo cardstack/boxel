@@ -458,7 +458,15 @@ Common issues are:
         // handlers do not race for it and lose events. Only the newest event
         // waits: an older event is covered by the newer event's history, so
         // it stands down (see RoomEventSerializer).
-        releaseRoomTurn = await roomEventSerializer.claim(room.roomId, eventId);
+        // A reaction writes no reply, so it must not make a user message
+        // that is still waiting stand down.
+        releaseRoomTurn = await roomEventSerializer.claim(
+          room.roomId,
+          eventId,
+          {
+            supersedes: !reaction,
+          },
+        );
         if (!releaseRoomTurn) {
           return;
         }
@@ -1260,7 +1268,7 @@ Common issues are:
                   client,
                   roomId: room.roomId,
                   requestEventId: released.requestEventId,
-                  agentId: pendingReleasedAgentId,
+                  agentId: released.agentId ?? pendingReleasedAgentId,
                 },
               });
             }
@@ -1306,7 +1314,7 @@ Common issues are:
                 client,
                 roomId: room.roomId,
                 requestEventId: declined.requestEventId,
-                agentId: pendingReleasedAgentId,
+                agentId: declined.agentId ?? pendingReleasedAgentId,
               },
               declinedByReactionReason(
                 declined.call.function.name,

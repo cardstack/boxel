@@ -36,6 +36,17 @@ module('Unit | Lib | assistant transcript', function () {
       settledTitle("I'll find two logos per brand", 'Script'),
       'Found two logos per brand',
     );
+    for (let [title, settled] of [
+      ['Making the hero image', 'Made the hero image'],
+      ['Writing tests', 'Wrote tests'],
+      ['Running the script', 'Ran the script'],
+      ['Updating the prices', 'Updated the prices'],
+      ['Replace the header', 'Replaced the header'],
+      ['The header patch', 'The header patch'],
+      ['New card for Lena', 'New card for Lena'],
+    ]) {
+      assert.strictEqual(settledTitle(title!, 'Script'), settled);
+    }
   });
 
   test('a folded turn says what its calls did, counted, with its time', function (assert) {

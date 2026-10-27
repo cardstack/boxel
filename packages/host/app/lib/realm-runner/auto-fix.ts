@@ -202,6 +202,12 @@ export function checkFix(original: string, fixed: string): CheckedFix {
   if (removedCalls.length > 0) {
     return { diff, problem: `the fix removed ${removedCalls.join(', ')}` };
   }
+  // A fix that rewrote a line naming realm or room could change what an
+  // existing call is given, such as the path a delete removes, and the
+  // fixed script runs without asking again.
+  if ([...removed, ...added].some((line) => matches(line, NAME_RE).length)) {
+    return { diff, problem: 'the fix changed a line that uses realm or room' };
+  }
   // `realm` or `room` reached another way, such as `realm['fs']`.
   if (matches(fixed, NAME_RE).length > matches(original, NAME_RE).length) {
     return { diff, problem: 'the fix added a use of realm or room' };

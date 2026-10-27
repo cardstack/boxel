@@ -303,8 +303,12 @@ export default class ToolService extends Service {
   toolFound = new TrackedMap<string, EntrySummary[]>();
   // Calls the reader stopped, by tool call id. A stop is asked once.
   stoppedToolRequestIds = new TrackedSet<string>();
-  // The running tools that can be stopped, by tool call id.
-  private stoppableTools = new TrackedMap<string, { stop: () => void }>();
+  // The running tools that can be stopped, by tool call id, with the room
+  // each one runs for.
+  private stoppableTools = new TrackedMap<
+    string,
+    { roomId: string; stop: () => void }
+  >();
   // Calls that stand for a background run still under way, reported by
   // their rows. A turn holding one is live work, so it never folds away.
   liveRunToolIds = new TrackedSet<string>();
@@ -312,7 +316,11 @@ export default class ToolService extends Service {
   // id: the row shows the picker, and the pick settles the script's wait.
   scriptAsks = new TrackedMap<
     string,
-    { request: ScriptAsk; answer: (value: string) => void }
+    {
+      request: ScriptAsk;
+      answer: (value: string) => void;
+      cancel: () => void;
+    }
   >();
 
   private askFromScript(
@@ -331,6 +339,11 @@ export default class ToolService extends Service {
           this.scriptAsks.delete(toolRequestId);
           let option = request.options.find((o) => o.value === value);
           resolve({ answer: value, label: option?.label ?? value });
+        },
+        cancel: () => {
+          clearTimeout(timer);
+          this.scriptAsks.delete(toolRequestId);
+          reject(new Error('The run ended before an answer came'));
         },
       });
     });
@@ -352,7 +365,8 @@ export default class ToolService extends Service {
   }
 
   // The reader said no to a call that waited on their click: its result
-  // says so, so the call has an outcome and the model reads why.
+  // says so, so the call has an outcome and the model reads why. A decline
+  // does not resume the assistant, so it never lifts a Stop.
   async denyTool(messageTool: MessageTool) {
     let roomId = messageTool.message.roomId;
     if (!messageTool.id) {
@@ -367,7 +381,6 @@ export default class ToolService extends Service {
       status: 'canceled',
       failureReason: DENIED_BY_USER,
       context: await this.operatorModeStateService.getSummaryForAIBot(),
-      resumesAssistant: true,
     });
   }
   // What each settled call changed in source files, reported by its row:
@@ -1044,6 +1057,16 @@ export default class ToolService extends Service {
     tool.stop();
   }
 
+  // Stops every running call of one room: Stop in a room ends its own work
+  // only.
+  stopToolsInRoom(roomId: string) {
+    for (let [id, tool] of [...this.stoppableTools]) {
+      if (tool.roomId === roomId) {
+        this.stopTool(id);
+      }
+    }
+  }
+
   canStopTool(toolRequestId: string) {
     return (
       this.stoppableTools.has(toolRequestId) &&
@@ -1327,6 +1350,7 @@ export default class ToolService extends Service {
               let stoppable = toolToRun as { stop?: () => void };
               if (typeof stoppable.stop === 'function') {
                 this.stoppableTools.set(requestId, {
+                  roomId: command.message.roomId,
                   stop: stoppable.stop,
                 });
               }
@@ -1533,6 +1557,8 @@ export default class ToolService extends Service {
         }
         this.currentlyExecutingToolRequestIds.delete(commandRequestId!);
         this.stoppableTools.delete(commandRequestId!);
+        // A question the run left open has no one waiting for its answer.
+        this.scriptAsks.get(commandRequestId!)?.cancel();
         toolRunWaiter.endAsync(waiterToken);
       }
     },

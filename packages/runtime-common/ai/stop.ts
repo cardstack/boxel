@@ -28,8 +28,9 @@ export interface StopRuleEvent {
 // go ahead after all (Run, Retry, Accept All, Approve): the host marks the
 // result of such a call with `resumesAssistant`, which lifts the stop, and a
 // 👍 on a bot message holding a call for approval lifts it the same way (see
-// approval-reaction.ts). A 👍 on any other message is only a reaction. A
-// decline or an automatic result never lifts it.
+// approval-reaction.ts), when it is the first 👍 or 👎 that message got. A 👍
+// on any other message is only a reaction. A decline or an automatic result
+// never lifts it.
 export interface StopState<T extends StopRuleEvent> {
   // The stop that holds at the end of the timeline, or undefined when the
   // loop is not stopped.
@@ -62,6 +63,9 @@ export function readStopState<T extends StopRuleEvent>(
   let everStoppedMessageIds = new Set<string>();
   // The bot messages holding a call for approval, by any of their ids
   let heldGroups = new Set<MessageIds>();
+  // The held messages a reaction already answered: ai-bot acts on the
+  // first 👍 or 👎 only, so a later one decides nothing.
+  let answeredGroups = new Set<MessageIds>();
 
   let endTurn = () => {
     if (turnStopped) {
@@ -105,7 +109,7 @@ export function readStopState<T extends StopRuleEvent>(
       }
     } else if (
       isResumingResult(event) ||
-      isApprovingReaction(event, groupById, heldGroups)
+      isApprovingReaction(event, groupById, heldGroups, answeredGroups)
     ) {
       turnStopped = false;
       let answered = relatedEventId(event);
@@ -171,18 +175,24 @@ function isPersonMessage(event: StopRuleEvent): boolean {
   );
 }
 
-// A person's 👍 on a bot message that holds a call for approval
+// A person's 👍 on a bot message that holds a call for approval, when it is
+// the first answer that message got
 function isApprovingReaction(
   event: StopRuleEvent,
   groupById: Map<string, MessageIds>,
   heldGroups: Set<MessageIds>,
+  answeredGroups: Set<MessageIds>,
 ): boolean {
   let reaction = approvalReaction(event);
-  if (reaction?.verdict !== 'approve') {
+  if (!reaction) {
     return false;
   }
   let group = groupById.get(reaction.targetEventId);
-  return Boolean(group && heldGroups.has(group));
+  if (!group || !heldGroups.has(group) || answeredGroups.has(group)) {
+    return false;
+  }
+  answeredGroups.add(group);
+  return reaction.verdict === 'approve';
 }
 
 function holdsCallForApproval(event: StopRuleEvent): boolean {

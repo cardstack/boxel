@@ -515,10 +515,39 @@ const TYPE_SCHEMA_KEYS: Record<string, Set<string>> = {
 };
 const EXECUTABLE_PROPERTY =
   /^(?:code|sourceCode|script|executable|sql|html|css|shellCommand|commandLine)$/i;
+// A request for code names a language or a kind of program; a bare "code"
+// (a country code, a postal code) is data.
 const CODE_REQUEST =
-  /\b(?:write|generate|produce|return|create|author|implement|fix)\b[^.\n]{0,80}\b(?:code|script|program|function|class|shell command|command line|sql|html|css)\b/i;
-const EXECUTABLE_TEXT =
-  /(?:```|^#!|^\s*(?:import|export)\s|^\s*(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=|^\s*(?:async\s+)?function\s|^\s*class\s+\w|=>|^\s*(?:def\s+\w+|from\s+\S+\s+import\s+|print\s*\()|^\s*(?:select|insert|update|delete|create|alter|drop)\s+\S+|^\s*(?:npm|pnpm|node|bash|sh|curl|wget|git|rm|cp|mv|mkdir|chmod|sudo|docker|kubectl)\s+\S+|<\/?[A-Za-z][^>]*>|^[^{}\n]+\{\s*[\w-]+\s*:)/im;
+  /\b(?:write|generate|produce|return|create|author|implement|fix)\b[^.\n]{0,80}\b(?:source code|code snippet|javascript|typescript|python|ruby|php|script|program|shell command|command line|sql (?:query|statement)|html|css)\b/i;
+// Text shaped like code, not text that merely shares a word with it: an
+// update of prices, an arrow between two values or a bold tag is data.
+const EXECUTABLE_TEXT = new RegExp(
+  [
+    '```',
+    '^#!',
+    '^\\s*import\\s+(?:[\\w*{][^\\n]*\\sfrom\\s|[\'"])',
+    '^\\s*export\\s+(?:default|const|let|var|function|class|\\{)',
+    '^\\s*(?:const|let|var)\\s+[A-Za-z_$][\\w$]*\\s*=',
+    '^\\s*(?:async\\s+)?function\\s*[\\w$]*\\s*\\(',
+    '^\\s*class\\s+\\w+\\s*(?:extends\\b|\\{)',
+    '\\([^)\\n]*\\)\\s*=>',
+    '=>\\s*\\{',
+    '^\\s*def\\s+\\w+\\s*\\(',
+    '^\\s*from\\s+\\S+\\s+import\\s+',
+    '^\\s*print\\s*\\(',
+    '^\\s*select\\s[^\\n]*\\sfrom\\s',
+    '^\\s*insert\\s+into\\s',
+    '^\\s*update\\s+\\S+\\s+set\\s[^\\n]*=',
+    '^\\s*delete\\s+from\\s',
+    '^\\s*(?:create|alter|drop)\\s+(?:table|index|view|database|schema|trigger|procedure)\\s',
+    '^\\s*(?:npm|pnpm|node|bash|sh|curl|wget|git|rm|cp|mv|mkdir|chmod|sudo|docker|kubectl)\\s+(?:-|\\.{0,2}\\/|~\\/|https?:)',
+    '<\\s*\\/?\\s*(?:script|style|iframe|object|embed|link|meta|base|form|svg|math)\\b',
+    '<[^>\\n]+\\son\\w+\\s*=',
+    'javascript:',
+    '^[^{}\\n]+\\{\\s*[\\w-]+\\s*:[^;{}\\n]*;',
+  ].join('|'),
+  'im',
+);
 
 export const RESOLVE_REFUSAL =
   'realm.resolve transforms or repairs data; it does not write code, scripts, markup or commands';

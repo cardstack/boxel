@@ -556,6 +556,26 @@ module('readUrl approval', () => {
     assert.deepEqual(declinedToolCalls(history, BOT, BOT_TOOL_NAMES), []);
   });
 
+  test('a call released by a 👍 keeps the agent its message answered', () => {
+    let held = botMessage([
+      readUrlRequest('held-a', 'https://a.example/', true),
+    ]);
+    (held.content as Record<string, unknown>).data = JSON.stringify({
+      context: { agentId: 'agent-1' },
+    });
+    let history = [
+      humanMessage('Find their docs'),
+      held,
+      reaction('$bot', '👍', USER),
+    ];
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(history, BOT).map(
+        (entry) => entry.agentId,
+      ),
+      ['agent-1'],
+    );
+  });
+
   test('any skin tone or presentation of the thumb answers', () => {
     for (let key of ['👍🏽', '👍️', '👎🏿']) {
       assert.ok(approvalReaction(reaction('$bot', key, USER) as any), key);
@@ -663,6 +683,19 @@ module('readUrl approval', () => {
         ] as any,
         BOT,
       ).inForce,
+    );
+    assert.ok(
+      readStopState(
+        [
+          humanMessage('go'),
+          held,
+          reaction('$bot', '👎', OTHER),
+          stop,
+          reaction('$bot', '👍', USER),
+        ] as any,
+        BOT,
+      ).inForce,
+      'a 👍 after a 👎 already answered the call does not lift the stop',
     );
   });
 });

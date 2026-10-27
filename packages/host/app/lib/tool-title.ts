@@ -12,9 +12,8 @@ export function plainTitle(text: string): string {
   return plain ? plain[0]!.toUpperCase() + plain.slice(1) : text;
 }
 
-// The past tense of the verbs assistants lead a call's description with.
-// Regular verbs take -ed by rule; these are the ones that don't, or that the
-// rule would spell wrong.
+// The past tense of the verbs assistants lead a call's description with
+// that do not take -ed by rule, or that the rule would spell wrong.
 const PAST: Record<string, string> = {
   build: 'Built',
   buy: 'Bought',
@@ -28,6 +27,9 @@ const PAST: Record<string, string> = {
   leave: 'Left',
   make: 'Made',
   put: 'Put',
+  begin: 'Began',
+  bring: 'Brought',
+  think: 'Thought',
   read: 'Read',
   run: 'Ran',
   send: 'Sent',
@@ -53,21 +55,109 @@ const PAST: Record<string, string> = {
   ship: 'Shipped',
 };
 
+// Regular verbs assistants lead with. A lead word outside this list and PAST
+// is left as it is, since it may not be a verb at all ("New card for Lena").
+const REGULAR = new Set([
+  'adjust',
+  'ask',
+  'attach',
+  'clean',
+  'compare',
+  'convert',
+  'create',
+  'delete',
+  'download',
+  'edit',
+  'enable',
+  'disable',
+  'export',
+  'extract',
+  'fetch',
+  'fill',
+  'format',
+  'generate',
+  'import',
+  'insert',
+  'install',
+  'list',
+  'load',
+  'merge',
+  'move',
+  'normalize',
+  'open',
+  'parse',
+  'patch',
+  'publish',
+  'remove',
+  'rename',
+  'render',
+  'reorder',
+  'replace',
+  'resize',
+  'restore',
+  'review',
+  'save',
+  'search',
+  'switch',
+  'update',
+  'upload',
+  'use',
+  'validate',
+  'view',
+  'wire',
+  'invalidate',
+  'reindex',
+  'capture',
+  'change',
+  'collect',
+  'confirm',
+  'gather',
+  'inspect',
+  'link',
+  'mark',
+  'prepare',
+  'resolve',
+  'scan',
+  'select',
+  'sort',
+  'test',
+  'translate',
+]);
+const VOWEL = /[aeiouy]/;
+
+function regularPast(stem: string): string {
+  let past = stem.endsWith('e') ? `${stem}d` : `${stem}ed`;
+  return past[0]!.toUpperCase() + past.slice(1);
+}
+
 function pastOf(word: string): string | undefined {
   let lower = word.toLowerCase();
   if (PAST[lower]) {
     return PAST[lower];
   }
-  // a gerund ("Asking the user…") names the same act
-  let stem = lower.endsWith('ing') ? lower.slice(0, -3) : lower;
-  if (PAST[stem]) {
-    return PAST[stem];
+  if (REGULAR.has(lower)) {
+    return regularPast(lower);
   }
-  if (!/^[a-z]{3,}$/.test(stem) || /(ed|ly|s)$/.test(stem)) {
+  // a gerund ("Asking the user…") names the same act; its stem may have
+  // lost an e ("making") or doubled its last letter ("running")
+  if (!lower.endsWith('ing')) {
     return undefined;
   }
-  let past = stem.endsWith('e') ? `${stem}d` : `${stem}ed`;
-  return past[0]!.toUpperCase() + past.slice(1);
+  let stem = lower.slice(0, -3);
+  if (!/^[a-z]{2,}$/.test(stem) || !VOWEL.test(stem)) {
+    return undefined;
+  }
+  let undoubled =
+    stem.length > 2 && stem.at(-1) === stem.at(-2) ? stem.slice(0, -1) : stem;
+  for (let candidate of [stem, `${stem}e`, undoubled]) {
+    if (PAST[candidate]) {
+      return PAST[candidate];
+    }
+    if (REGULAR.has(candidate)) {
+      return regularPast(candidate);
+    }
+  }
+  return regularPast(stem);
 }
 
 // The clauses that say why or how, which a settled title can do without:

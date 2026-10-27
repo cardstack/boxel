@@ -3452,9 +3452,7 @@ export default class Room extends Component<Signature> {
   // that can be stopped (a script halts at its next realm call), rather
   // than finishing its work behind a cap that says it stopped.
   private stopGeneratingTask = task(async () => {
-    for (let id of [...this.toolService.currentlyExecutingToolRequestIds]) {
-      this.toolService.stopTool(id);
-    }
+    this.toolService.stopToolsInRoom(this.args.roomId);
     await this.matrixService.sendStopGeneratingEvent(this.args.roomId);
   });
 }

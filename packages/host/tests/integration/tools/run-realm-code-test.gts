@@ -12,7 +12,6 @@ import {
   DEFAULT_FALLBACK_MODELS,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { DIFF_IN_DETAIL } from '@cardstack/host/lib/realm-runner/edits';
 import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
@@ -1056,13 +1055,8 @@ return { deleted, refused };`,
       /Path must be relative to the realm root: notes\//.test(refused[2]),
       `a folder: ${refused[2]}`,
     );
-    // a deleted file's detail also carries its diff, after DIFF_IN_DETAIL
     assert.deepEqual(
-      result.files.map((file) => [
-        file.fileUrl,
-        file.status,
-        file.detail?.split(DIFF_IN_DETAIL)[0],
-      ]),
+      result.files.map((file) => [file.fileUrl, file.status, file.detail]),
       [
         [
           `${testRealmURL}plan.md`,
@@ -4382,6 +4376,32 @@ return outcomes;`);
     );
   });
 
+  test('realm.resolve takes data instructions and answers that only share words with code', async function (assert) {
+    answer = () =>
+      chat(
+        JSON.stringify({
+          title: 'Create an account first => then <b>log in</b>',
+          servings: 4,
+        }),
+      );
+    for (let instruction of [
+      'Update the prices to USD.',
+      'Normalize each address and return the ISO country code.',
+      'Export the recipe header as a title and a serving count.',
+    ]) {
+      let result = await run(`return await realm.resolve({
+  instruction: ${JSON.stringify(instruction)},
+  input: { name: 'beef chili' },
+  outputSchema: ${JSON.stringify(RECIPE_SCHEMA)},
+});`);
+      assert.strictEqual(
+        JSON.parse(result.scriptResult!).output.servings,
+        4,
+        `answered: ${instruction}`,
+      );
+    }
+  });
+
   test('realm.web.search takes maxResults as an alias of limit, and includeContent', async function (assert) {
     answer = () =>
       chat('Sources.', {
@@ -4558,6 +4578,19 @@ notDefined();`),
       /SyntaxError[\s\S]*rejected the fix: the fix added realm\.fs\.exists/,
     );
     assert.strictEqual(forwarded.length, 1);
+  });
+
+  test('a fix that changes the arguments of a realm call is rejected', async function (assert) {
+    answerFixes((code) =>
+      code
+        .replace('3;', '3];')
+        .replace("delete('draft.json')", "delete('index.json')"),
+    );
+    await assert.rejects(
+      run(`let items = [1, 2, 3;
+await realm.fs.delete('draft.json');`),
+      /rejected the fix: the fix changed a line that uses realm or room/,
+    );
   });
 
   test('a fix that changes too much is rejected', async function (assert) {

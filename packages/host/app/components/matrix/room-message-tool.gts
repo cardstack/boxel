@@ -369,6 +369,8 @@ function plainText(markdown: string): string {
 // how long the assistant's turn must stay settled before a run's result
 // is posted into it
 const DELIVERY_SETTLE_MS = 2500;
+const DIGITS = new RegExp('^\\d+$');
+const READ_NAME = new RegExp('read', 'i');
 // finished step lines shown before the rest fold behind "N more"
 const FOLD_AFTER = 4;
 
@@ -377,7 +379,7 @@ function fieldLabel(path: string): string {
   let last =
     path
       .split(/[.[\]]+/)
-      .filter((part) => part && !/^\d+$/.test(part))
+      .filter((part) => part && !DIGITS.test(part))
       .pop() ?? path;
   return humanizeToolName(last);
 }
@@ -884,7 +886,7 @@ export default class RoomMessageTool extends Component<Signature> {
   // The skill a read call opened, by name: "workspace cardinal rules" for
   // a read of …/boxel-workspace-cardinal-rules/SKILL.md
   private get skillRead(): string | undefined {
-    if (!/read/i.test(this.baseName) || this.isPreparing) {
+    if (!READ_NAME.test(this.baseName) || this.isPreparing) {
       return undefined;
     }
     let attributes = this.args.messageTool.arguments?.attributes ?? {};

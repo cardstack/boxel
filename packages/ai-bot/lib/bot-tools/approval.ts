@@ -29,6 +29,25 @@ export interface ReleasedToolCall {
   };
   // The bot message carrying the call; its result relates back to it.
   requestEventId: string;
+  // The agent the bot message answered, so the result and the turn it
+  // continues belong to that agent whatever answered the call.
+  agentId?: string;
+}
+
+// The agent a bot message names in its data, which may be JSON text
+function messageAgentId(
+  content: Record<string, any> | undefined,
+): string | undefined {
+  let data = content?.['m.new_content']?.data ?? content?.data;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return undefined;
+    }
+  }
+  let agentId = data?.context?.agentId;
+  return typeof agentId === 'string' ? agentId : undefined;
 }
 
 // The tool calls in `history` that have an outcome: a result other than a
@@ -146,12 +165,14 @@ function heldToolCalls(
     ) {
       continue;
     }
+    let content = latestEventContent(event);
+    let agentId = messageAgentId(content);
     for (let request of getToolRequests<{
       id?: string;
       name?: string;
       arguments?: unknown;
       approvalRequired?: boolean;
-    }>(latestEventContent(event)) ?? []) {
+    }>(content) ?? []) {
       if (
         !request?.id ||
         !request.name ||
@@ -176,6 +197,7 @@ function heldToolCalls(
           },
         },
         requestEventId: event.event_id,
+        ...(agentId ? { agentId } : {}),
       });
     }
   }

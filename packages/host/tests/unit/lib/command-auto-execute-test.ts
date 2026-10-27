@@ -145,5 +145,9 @@ module('Unit | Lib | tool-auto-execute', function () {
       isAutoExecutableTool(cmd('ask-user', true), 'act', true),
       'the host ask-user call waits for the pick',
     );
+    assert.true(
+      isAutoExecutableTool(cmd('assignTaskUser_3eed', false), 'act', true),
+      'a tool whose name only contains "askuser" is not a question',
+    );
   });
 });

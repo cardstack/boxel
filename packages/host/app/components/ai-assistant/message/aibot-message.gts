@@ -75,6 +75,8 @@ interface Signature {
   };
 }
 
+const HTTP_HREF = new RegExp('^https?:', 'i');
+
 // Marks the reply's answer furniture (stat chips, source refs, a sources
 // strip, a Method disclosure) whenever its markup changes.
 const markFurniture = modifier((element: HTMLElement) => {
@@ -135,7 +137,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
       return;
     }
     let href = anchor.href;
-    if (!/^https?:/i.test(href)) {
+    if (!HTTP_HREF.test(href)) {
       return;
     }
     event.preventDefault();
