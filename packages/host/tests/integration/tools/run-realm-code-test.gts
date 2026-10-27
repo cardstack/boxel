@@ -1562,6 +1562,48 @@ return 'done';`,
     assert.true(source.content.includes('"count": 2'));
   });
 
+  test('resolves paths against the realm root named without its trailing slash', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL.replace(/\/$/, ''),
+      roomId: '!room:example.com',
+      code: `return await realm.fs.readText('task.json');`,
+    });
+
+    assert.true(JSON.parse(result.scriptResult!).includes('"count"'));
+  });
+
+  test('refuses a folder in the realm as the realm, and names the root and the path to use', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let folder = `${testRealmURL}card-mutation/relink/`;
+
+    for (let realm of [folder, folder.replace(/\/$/, '')]) {
+      await assert.rejects(
+        command.execute({
+          realm,
+          roomId: '!room:example.com',
+          code: `return await realm.fs.replace('task.json', '"count": 1', '"count": 2');`,
+        }),
+        (error: Error) =>
+          error.message ===
+          `${realm} is a folder in the workspace ${testRealmURL}, not its root. ` +
+            `Pass ${testRealmURL} as realm, and start each path in the folder ` +
+            `with card-mutation/relink/`,
+      );
+    }
+    let source = await cardService.getSource(
+      new URL(`${testRealmURL}task.json`),
+    );
+    assert.true(
+      source.content.includes('"count": 1'),
+      'the script does not run against the root',
+    );
+  });
+
   test('refuses paths outside the realm, and names the files it already saved', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');

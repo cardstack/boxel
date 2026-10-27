@@ -1793,7 +1793,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'realm.fs.download, can create workspaces with realm.workspaces.create, ' +
     'can change the skills and model of this room with room.*, and can ' +
     'refresh the index of the workspace with realm.index.*. In a workspace ' +
-    'the user can only read, reads work and each write is refused. Return ' +
+    'the user can only read, reads work and each write is refused. realm ' +
+    'is the root of the workspace, and paths are relative to it, so a file ' +
+    'in a folder is named with its folder (folder/file.json). Return ' +
     '{ show: "<card path>" } to open a card in the realm when the run ends.';
   static actionVerb = 'Run';
   // `room.*` changes the room the call came from. The tool service sets
@@ -1848,9 +1850,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
     // Resolve to the realm's own identifier: the fallback realm URL can come
     // without the trailing slash a realm root has.
-    let realmURL = this.realmOfInput(
-      rri(realmInput.endsWith('/') ? realmInput : `${realmInput}/`),
-    );
+    let realmId = rri(realmInput.endsWith('/') ? realmInput : `${realmInput}/`);
+    let realmURL = this.realmOfInput(realmId);
     // Read and write are separate grants, and either one is enough to run:
     // in a workspace the user can only read, each write is refused on its
     // own. In one the user can only write, the realm refuses each read,
@@ -1860,6 +1861,19 @@ export default class RunRealmCodeTool extends HostBaseTool<
       !(this.realm.canRead(realmURL) || this.realm.canWrite(realmURL))
     ) {
       throw new Error(`The current user cannot read or write ${realmInput}`);
+    }
+    // Paths in the script resolve from the realm root, so a folder inside the
+    // realm is refused rather than replaced by the root: the script's paths
+    // would otherwise resolve from somewhere the caller did not name.
+    let rootURL = this.realmRootURL(realmURL);
+    let inputURL = this.network.virtualNetwork.toURL(realmId).href;
+    if (inputURL !== rootURL) {
+      let folder = inputURL.slice(rootURL.length);
+      throw new Error(
+        `${realmInput} is a folder in the workspace ${rootURL}, not its root. ` +
+          `Pass ${rootURL} as realm, and start each path in the folder ` +
+          `with ${folder}`,
+      );
     }
 
     let namedCalls = clickRequiredCallsIn(input.code);
