@@ -1713,6 +1713,10 @@ export type OperationErrorCode =
   // The write's operation id already recorded a revision whose bytes have not
   // all reached disk, which recovery completes. Carries a 503 and the revision.
   | 'revision-not-materialized'
+  // The write's operation id already recorded a revision that is on disk, and
+  // what that write answered was not kept. Carries a 409 and the revision: the
+  // write landed, and its result is read back rather than resent.
+  | 'revision-already-applied'
   // The write's operation id already committed a different write. Carries a
   // 409 and the revision it committed.
   | 'operation-id-conflict'

@@ -821,6 +821,37 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     recordingTest(
+      'a retry of a write whose answer was not kept is told the write landed',
+      async function (assert) {
+        let first = await patchPerson('/person-2', 'Answer Lost', {
+          [OPERATION_ID_HEADER]: 'answer-lost',
+        });
+        assert.strictEqual(first.status, 200, JSON.stringify(first.body));
+        let revision = first.get(REVISION_HEADER)!;
+        await dbAdapter.execute(
+          `UPDATE realm_history_revisions SET results = NULL WHERE operation_id = 'answer-lost'`,
+        );
+        let mtime = statSync(join(realmDir, 'person-2.json')).mtimeMs;
+
+        let retry = await patchPerson('/person-2', 'Answer Lost', {
+          [OPERATION_ID_HEADER]: 'answer-lost',
+        });
+        assert.strictEqual(retry.status, 409, JSON.stringify(retry.body));
+        assert.true(
+          JSON.stringify(retry.body).includes(revision),
+          'and given the revision it landed as',
+        );
+        assert.strictEqual(
+          statSync(join(realmDir, 'person-2.json')).mtimeMs,
+          mtime,
+          'nothing written',
+        );
+        assert.strictEqual(await history.head(), revision, 'nothing recorded');
+        assert.strictEqual(events.at(-1)?.outcome, 'replayed');
+      },
+    );
+
+    recordingTest(
       'every recorded write emits its telemetry',
       async function (assert) {
         let response = await patchPerson('/person-2', 'Measured', {

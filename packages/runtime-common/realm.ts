@@ -8447,10 +8447,26 @@ export class Realm {
           }
           recording.engaged = true;
           recording.revision = entry.revision;
-          if (!entry.materialized || entry.results === undefined) {
-            // Recorded, and not yet all on disk — or on disk with the answer it
-            // gave lost — so there is nothing to answer a retry with but the
-            // revision. Recovery completes the write.
+          if (entry.materialized && entry.results === undefined) {
+            // On disk, with the answer it gave not kept: the attempt is still
+            // indexing and has yet to store it, or storing it failed. The write
+            // landed, and resending it would change nothing, so the retry is
+            // told so and pointed at the revision rather than asked to wait.
+            recording.outcome = 'replayed';
+            throw new OperationFailure({
+              status: 409,
+              code: 'revision-already-applied',
+              title: 'Write already applied',
+              detail: `operation ${recording.operationId} was recorded as revision ${entry.revision} and is on disk; its answer was not kept, so read the result back rather than resending it`,
+              meta: {
+                operationId: recording.operationId,
+                revision: entry.revision,
+              },
+            });
+          }
+          if (!entry.materialized) {
+            // Recorded, and not yet all on disk, so there is nothing to answer
+            // a retry with but the revision. Recovery completes the write.
             recording.outcome = 'failed-after-record';
             throw new OperationFailure({
               status: 503,

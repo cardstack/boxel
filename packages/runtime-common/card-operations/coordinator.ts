@@ -222,7 +222,9 @@ export interface BatchCore {
   // the batch answered it then, so a retry answers the same way and writes
   // nothing. Undefined where the id is new, or the realm records no history.
   // Throws where the id recorded a revision whose bytes have not all reached
-  // disk, which only recovery can finish. Absent on a core that records no
+  // disk, which only recovery can finish; where it recorded one that is on
+  // disk without the answer it gave, which the retry is told landed; and
+  // where it recorded a different write. Absent on a core that records no
   // history.
   replayedOperation?(
     recording: WriteRecording,
