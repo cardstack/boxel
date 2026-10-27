@@ -6,7 +6,6 @@ import {
   isBotAccount,
   isDirectWriter,
   isPrefixForm,
-  otherDirectWriters,
   isResolvedCodeRef,
   param,
   query,
@@ -73,9 +72,6 @@ export interface SecureWindowRealm {
   name: string;
   directWriter: boolean;
   readableBy: RealmReaders;
-  // How many other people are direct writers: each can suspend a share in the
-  // realm or swap their own key into one.
-  otherWriters: number;
 }
 
 export interface SecureWindowContext {
@@ -312,7 +308,6 @@ export async function secureWindowContext(
         : permissions['users']?.includes('read')
           ? 'signed-in'
           : 'members',
-      otherWriters: otherDirectWriters(permissions, user).length,
     },
   };
   if (!target) {

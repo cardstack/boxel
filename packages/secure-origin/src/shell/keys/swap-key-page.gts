@@ -52,8 +52,9 @@ type State =
 // Why a share stopped serving, in the words its writers see.
 const SUSPENDED_BECAUSE: Record<string, string> = {
   'owner-lost-write':
-    'The person who shared its key can no longer edit this workspace.',
-  'suspended-by-writer': 'Someone who edits this workspace suspended it.',
+    'The person who shared its key no longer has direct write access to this workspace.',
+  'suspended-by-writer':
+    'Someone with direct write access to this workspace suspended it.',
   'key-deleted': 'The person who shared its key deleted it.',
 };
 
