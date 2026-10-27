@@ -120,6 +120,12 @@ function ringName() {
   );
 }
 
+// The text of each element a button's aria-describedby points at, in order.
+function descriptionOf(selector: string) {
+  let ids = find(selector)?.getAttribute('aria-describedby')?.split(' ') ?? [];
+  return ids.map((id) => document.getElementById(id)?.textContent?.trim());
+}
+
 async function pressKey(key: string) {
   let target = document.activeElement;
   if (!(target instanceof HTMLElement)) {
@@ -625,6 +631,20 @@ module('Acceptance | dashboard', function (hooks) {
         .hasAttribute('aria-pressed', 'false');
       assert.dom(tip).hasText('Add to Favorites');
       assert.dom(deskStar).doesNotExist();
+    });
+
+    test("a desk's name is described by its full visibility and its address", async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      matrixService.workspaceFavorites = [realmURL];
+      await settled();
+
+      let description = descriptionOf(
+        '[data-test-favorites-list] [data-test-workspace-button="Workspace A"]',
+      );
+      assert.strictEqual(description.length, 2);
+      assert.strictEqual(description[0], 'Private workspace');
+      assert.strictEqual(description[1], 'test-realm/testuser/workspace-a');
     });
 
     test("a hosted tile's site menu lists each published site and opens the one chosen", async function (assert) {
@@ -1362,6 +1382,50 @@ module('Acceptance | dashboard', function (hooks) {
           assert
             .dom('[data-test-dashboard]')
             .exists('choosing a site does not open the workspace');
+        });
+
+        test("a row's button is described by its full visibility, its update time and its address", async function (assert) {
+          await visitDashboard(assert, 2);
+          let day = 24 * 60 * 60 * 1000;
+          for (let [i, url] of [realmURL, ...moreRealmURLs].entries()) {
+            markUpdated(url, new Date(Date.now() - (i + 1) * day));
+          }
+          await settled();
+          let rowName = workspaceNames(ROWS).at(-1)!;
+          assert.strictEqual(
+            rowName,
+            'Workspace 08',
+            'the last row is the workspace updated 9 days ago',
+          );
+
+          let description = descriptionOf(
+            `[data-test-workspace-button="${rowName}"]`,
+          );
+          assert.strictEqual(description.length, 3);
+          assert.strictEqual(
+            description[0],
+            'Private workspace',
+            'the full visibility, not only the chip',
+          );
+          assert.strictEqual(description[1], 'Updated 9 days ago');
+          assert.strictEqual(description[2], 'test-realm/testuser/workspace-8');
+        });
+
+        test("a tile's button is described by its full visibility and its address", async function (assert) {
+          await visitDashboard(assert, 2);
+          let tileName = workspaceNames(RECENT_TILES).find(
+            (name) => name !== 'Workspace A',
+          )!;
+
+          let description = descriptionOf(
+            `[data-test-workspace-button="${tileName}"]`,
+          );
+          assert.strictEqual(description.length, 2);
+          assert.strictEqual(description[0], 'Private workspace');
+          assert.strictEqual(
+            description[1],
+            urlFor(tileName).replace(/^http:\/\/|\/$/g, ''),
+          );
         });
 
         module('keyboard cursor', function () {

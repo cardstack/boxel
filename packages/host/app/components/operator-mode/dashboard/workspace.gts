@@ -183,7 +183,7 @@ export default class Workspace extends Component<Signature> {
                 <button
                   type='button'
                   class='desk-pill'
-                  aria-describedby={{this.realmURLDescriptionId}}
+                  aria-describedby={{this.descriptionIds}}
                   data-nav-index={{@navIndex}}
                   {{on 'click' this.openWorkspace}}
                   {{focusWhenSelected
@@ -225,7 +225,11 @@ export default class Workspace extends Component<Signature> {
                   height='12'
                   aria-hidden='true'
                 />
-                {{this.visibility}}
+                <span aria-hidden='true'>{{this.visibility}}</span>
+                <span
+                  id={{this.visibilityDescriptionId}}
+                  class='boxel-sr-only'
+                >{{this.visibilityLabel}}</span>
               </span>
               <span
                 class='desk-stats'
@@ -291,7 +295,7 @@ export default class Workspace extends Component<Signature> {
         {{else}}
           <ItemContainer
             class='tile-face'
-            aria-describedby={{this.realmURLDescriptionId}}
+            aria-describedby={{this.descriptionIds}}
             data-nav-index={{@navIndex}}
             {{on 'click' this.openWorkspace}}
             {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
@@ -427,7 +431,7 @@ export default class Workspace extends Component<Signature> {
               <button
                 type='button'
                 class='name row-open'
-                aria-describedby={{this.realmURLDescriptionId}}
+                aria-describedby={{this.descriptionIds}}
                 data-nav-index={{@navIndex}}
                 {{on 'click' this.openWorkspace}}
                 {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
@@ -447,14 +451,21 @@ export default class Workspace extends Component<Signature> {
               data-test-workspace-visibility
             >
               <this.visibilityIcon width='12' height='12' aria-hidden='true' />
-              {{this.visibility}}
+              <span aria-hidden='true'>{{this.visibility}}</span>
+              <span
+                id={{this.visibilityDescriptionId}}
+                class='boxel-sr-only'
+              >{{this.visibilityLabel}}</span>
             </span>
             {{#if (eq @variant 'row')}}
               {{#if this.updatedAtLabel}}
-                <span
-                  class='updated'
-                  data-test-workspace-updated
-                >{{this.updatedAgoLabel}}</span>
+                <span class='updated' data-test-workspace-updated>
+                  <span aria-hidden='true'>{{this.updatedAgoLabel}}</span>
+                  <span
+                    id={{this.updatedDescriptionId}}
+                    class='boxel-sr-only'
+                  >{{this.updatedAtLabel}}</span>
+                </span>
               {{/if}}
             {{/if}}
           </div>
@@ -1326,6 +1337,25 @@ export default class Workspace extends Component<Signature> {
 
   private get realmURLDescriptionId() {
     return `${guidFor(this)}-realm-url`;
+  }
+
+  private get visibilityDescriptionId() {
+    return `${guidFor(this)}-visibility`;
+  }
+
+  private get updatedDescriptionId() {
+    return `${guidFor(this)}-updated`;
+  }
+
+  // What the workspace's button says after its name. The chip and the row's
+  // time show short forms, so each carries its full label for this.
+  private get descriptionIds() {
+    let ids = [this.visibilityDescriptionId];
+    if (this.args.variant === 'row' && this.updatedAtLabel) {
+      ids.push(this.updatedDescriptionId);
+    }
+    ids.push(this.realmURLDescriptionId);
+    return ids.join(' ');
   }
 
   private get realmURLText() {
