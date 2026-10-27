@@ -1385,26 +1385,63 @@ function readsCorrelationId(owner: Owner, req: Request): boolean {
   if (typeof window !== 'undefined' && url.origin === window.location.origin) {
     return true;
   }
-  try {
-    let realmServer = owner.lookup('service:realm-server') as
-      | RealmServerService
-      | undefined;
-    if (realmServer && url.origin === realmServer.url.origin) {
-      return true;
+  let network = owner.lookup('service:network') as NetworkService | undefined;
+  // a virtual URL as the request carries it: the real URL it maps to
+  let real = (virtual: URL) => {
+    try {
+      return network?.virtualNetwork.mapURL(virtual, 'virtual-to-real');
+    } catch {
+      return undefined;
     }
-    // the request may carry the real URL a virtual one maps to
-    let network = owner.lookup('service:network') as NetworkService | undefined;
-    let virtual = network?.virtualNetwork.mapURL(url, 'real-to-virtual');
-    if (realmServer && virtual?.origin === realmServer.url.origin) {
-      return true;
-    }
-    let realm = owner.lookup('service:realm') as
-      | { realmOf(input: URL): unknown }
-      | undefined;
-    return Boolean(realm?.realmOf(url));
-  } catch {
-    return false;
+  };
+  let servesThis = (candidate: URL | undefined) =>
+    Boolean(
+      candidate &&
+      (candidate.origin === url.origin ||
+        real(candidate)?.origin === url.origin),
+    );
+  let realmServer = owner.lookup('service:realm-server') as
+    | RealmServerService
+    | undefined;
+  if (servesThis(realmServer?.url)) {
+    return true;
   }
+  // the realm server the base realm lives on is the host's own
+  if (
+    URL.canParse(config.resolvedBaseRealmURL) &&
+    new URL(config.resolvedBaseRealmURL).origin === url.origin
+  ) {
+    return true;
+  }
+  let realm = owner.lookup('service:realm') as
+    | {
+        realmOf(input: URL): unknown;
+        realms: ReadonlyMap<string, unknown>;
+      }
+    | undefined;
+  try {
+    if (realm?.realmOf(url)) {
+      return true;
+    }
+  } catch {
+    // not a realm URL
+  }
+  // a realm server's own endpoints (its search, its auth) sit at the root
+  // of an origin that serves realms the host knows
+  for (let key of realm?.realms.keys() ?? []) {
+    let realmURL: URL | undefined;
+    try {
+      realmURL = URL.canParse(key)
+        ? new URL(key)
+        : network?.virtualNetwork.toURL(key);
+    } catch {
+      continue;
+    }
+    if (servesThis(realmURL)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function createServerRequestTimingMiddleware(

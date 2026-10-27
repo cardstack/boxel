@@ -1067,6 +1067,15 @@ export default class Room extends Component<Signature> {
     scrollState.isConversationScrollable = Boolean(
       this.getConversationScrollability?.(),
     );
+    // The room lands once, when its history first registers; a message
+    // registered after that is a live one.
+    if (
+      index === this.messages.length - 1 &&
+      !this.landedRoomIds.has(this.args.roomId)
+    ) {
+      this.landedRoomIds.add(this.args.roomId);
+      this.landOnFirstUnread(scrollState);
+    }
     // The reader's own new message, however it was sent (the composer, "Fix
     // with AI", a card's command): follow the reply from here.
     // Once per message, as main does it: a message's scroller re-registers
@@ -1096,7 +1105,8 @@ export default class Room extends Component<Signature> {
     // Following the end, and holding a reader's place while they read, is
     // the transcript's scroll owner's (StickToBottom's anchor): the room
     // only asks it to show the first unread message, to a reader who is not
-    // at the end (opening the room on history they haven't read).
+    // at the end. A room that opens on unread history goes to it once its
+    // history has registered (landOnFirstUnread).
     if (
       !this.isScrolledToBottom &&
       this.hasUnreadMessages &&
@@ -1111,6 +1121,29 @@ export default class Room extends Component<Signature> {
       });
     }
   };
+
+  // A room that opens on history the reader hasn't read shows its first
+  // unread message. Messages mount in steps, so the first unread one can
+  // register before the transcript scrolls: this runs once the last one has
+  // registered.
+  private landOnFirstUnread(scrollState: RoomScrollState) {
+    if (!this.hasUnreadMessages || !this.isAllowedToAutoScroll) {
+      return;
+    }
+    let firstUnreadIndex = this.lastReadMessageIndex + 1;
+    let element = [...scrollState.messageElements].find(
+      ([, index]) => index === firstUnreadIndex,
+    )?.[0];
+    if (!element) {
+      return;
+    }
+    schedule('afterRender', null, () => {
+      if (this.isDestroying || this.isDestroyed) {
+        return;
+      }
+      this.navigateConversation?.(element, { block: 'start' });
+    });
+  }
 
   private unregisterMessageScroller = ({
     index,
@@ -1146,6 +1179,9 @@ export default class Room extends Component<Signature> {
 
   // the reader's own message the transcript last followed for
   private followedOwnMessageId: string | undefined;
+  // Rooms whose history has registered once. Not tracked: nothing renders
+  // from it, and it is written while a message renders.
+  private landedRoomIds = new Set<string>();
 
   private setScrollPosition = ({ isBottom }: { isBottom: boolean }) => {
     let scrollState = this.ensureScrollState();

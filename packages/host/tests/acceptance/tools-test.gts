@@ -1203,7 +1203,9 @@ module('Acceptance | Tools tests', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-pretui-tool-row-title]')
       .containsText('Finding and opening Hassan card');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply]')
+      .dom(
+        '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+      )
       .containsText('Search');
     await click(
       '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',

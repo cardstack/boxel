@@ -1911,7 +1911,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       () => !document.querySelector('[data-test-ai-assistant-action-bar]'),
       { timeout: 5000 },
     );
-    assert.dom('[data-test-ai-message-content]').containsText('Thinking');
+    // a stopped reply's reasoning reads as done
+    assert.dom('[data-test-ai-message-content]').containsText('Thought');
     assert.dom('[data-test-ai-message-content]').containsText('■ Stopped');
     await click('[data-test-reasoning]');
     assert

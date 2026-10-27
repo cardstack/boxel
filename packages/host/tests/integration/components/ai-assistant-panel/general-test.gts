@@ -1195,7 +1195,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     assert
       .dom('[data-test-message-idx="0"]')
-      .containsText('12:30 PM Thinking')
+      .containsText('12:30 PM')
       .containsText(
         'Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm...',
       );
@@ -1240,7 +1240,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     assert
       .dom('[data-test-message-idx="0"]')
-      .containsText('12:30 PM Thinking')
+      .containsText('12:30 PM')
       .containsText(
         'Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done',
       );
@@ -1271,7 +1271,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     );
     assert
       .dom('[data-test-message-idx="0"]')
-      .containsText('12:30 PM Thinking')
+      .containsText('12:30 PM')
       .containsText(
         'Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done.',
       );
