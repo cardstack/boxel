@@ -26,7 +26,6 @@ import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import Tag from '../../components/icons/tag.gts';
-import Users from '../../components/icons/users.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -141,13 +140,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
               </FieldContainer>
             {{/unless}}
             {{#if this.members}}
-              <FieldContainer
-                @tag='div'
-                @label='Who it’s shared with'
-                @icon={{Users}}
-              >
-                <WorkspaceMembers @realm={{this.members}} />
-              </FieldContainer>
+              <WorkspaceMembers @realm={{this.members}} />
             {{/if}}
             <FieldContainer
               @tag='label'
