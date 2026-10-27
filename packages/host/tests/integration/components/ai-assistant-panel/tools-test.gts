@@ -2646,130 +2646,134 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     });
   }
 
-  test('a host tool whose resolution outlasts a room-processing restart still runs', async function (assert) {
-    let roomId = await renderAiAssistantPanel();
-    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+  for (let stressRun = 1; stressRun <= 25; stressRun++) {
+    test(`a host tool whose resolution outlasts a room-processing restart still runs (stress ${stressRun})`, async function (assert) {
+      let roomId = await renderAiAssistantPanel();
+      let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
 
-    let hold = await holdDiscoveredSkillLoads();
-    try {
-      // The finished message carries a bot-run tool followed by the host
-      // tool, whose resolution now waits on the held skill load.
-      simulateRemoteMessage(
-        roomId,
-        '@aibot:localhost',
-        finalEditWithHostTool(streamingEventId, 'Reading', [
+      let hold = await holdDiscoveredSkillLoads();
+      try {
+        // The finished message carries a bot-run tool followed by the host
+        // tool, whose resolution now waits on the held skill load.
+        simulateRemoteMessage(
+          roomId,
+          '@aibot:localhost',
+          finalEditWithHostTool(streamingEventId, 'Reading', [
+            {
+              id: 'bot-run-read',
+              name: 'readRealmFile',
+              arguments: JSON.stringify({ path: 'hello.txt' }),
+              executedBy: AI_BOT_EXECUTOR,
+            },
+          ]),
+        );
+        await hold.reached();
+
+        // The bot's own result for its tool lands while the host tool is still
+        // being resolved, restarting room processing and letting the tool drain
+        // run before the resolution finishes.
+        simulateRemoteMessage(
+          roomId,
+          '@aibot:localhost',
           {
-            id: 'bot-run-read',
-            name: 'readRealmFile',
-            arguments: JSON.stringify({ path: 'hello.txt' }),
-            executedBy: AI_BOT_EXECUTOR,
+            msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+            commandRequestId: 'bot-run-read',
+            'm.relates_to': {
+              rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+              key: 'applied',
+              event_id: streamingEventId,
+            },
           },
-        ]),
-      );
-      await hold.reached();
+          { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+        );
+        await drainIsValidating('slow-host-read');
+        assert.strictEqual(
+          hold.heldLoads,
+          1,
+          'neither the restarted room pass nor the drain starts a second resolution',
+        );
+      } finally {
+        hold.release();
+      }
+      await settled();
 
-      // The bot's own result for its tool lands while the host tool is still
-      // being resolved, restarting room processing and letting the tool drain
-      // run before the resolution finishes.
-      simulateRemoteMessage(
-        roomId,
-        '@aibot:localhost',
-        {
-          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-          commandRequestId: 'bot-run-read',
-          'm.relates_to': {
-            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
-            key: 'applied',
-            event_id: streamingEventId,
-          },
-        },
-        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+      let hostToolResults = getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content.commandRequestId === 'slow-host-read',
       );
-      await drainIsValidating('slow-host-read');
       assert.strictEqual(
-        hold.heldLoads,
+        hostToolResults.length,
         1,
-        'neither the restarted room pass nor the drain starts a second resolution',
+        'the host tool resolved after the restart is run and its result posted',
       );
-    } finally {
-      hold.release();
-    }
-    await settled();
-
-    let hostToolResults = getRoomEvents(roomId).filter(
-      (event) =>
-        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
-        event.content.commandRequestId === 'slow-host-read',
-    );
-    assert.strictEqual(
-      hostToolResults.length,
-      1,
-      'the host tool resolved after the restart is run and its result posted',
-    );
-    assert.strictEqual(
-      hostToolResults[0]?.content['m.relates_to']?.key,
-      'applied',
-      `the host tool ran successfully (failure reason: ${
-        hostToolResults[0]?.content.failureReason ?? 'none'
-      })`,
-    );
-    assert
-      .dom('[data-test-tool-call-apply="applying"]')
-      .doesNotExist('no tool is left spinning in the applying state');
-  });
+      assert.strictEqual(
+        hostToolResults[0]?.content['m.relates_to']?.key,
+        'applied',
+        `the host tool ran successfully (failure reason: ${
+          hostToolResults[0]?.content.failureReason ?? 'none'
+        })`,
+      );
+      assert
+        .dom('[data-test-tool-call-apply="applying"]')
+        .doesNotExist('no tool is left spinning in the applying state');
+    });
+  }
 
   // Pins isStreamingFinished as a synchronous content flag, independent of
   // tool resolution: the preview gate in
   // RoomResource.hydrateResponseStreamPreview reads it to drop a stale
   // preview, so a straggler preview arriving while the final edit's tool is
   // still resolving must not overwrite the finalized body.
-  test('a response-stream preview that arrives while the final edit resolves its tools does not overwrite it', async function (assert) {
-    let roomId = await renderAiAssistantPanel();
-    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
-    let matrixService = getService('matrix-service');
+  for (let stressRun = 1; stressRun <= 25; stressRun++) {
+    test(`a response-stream preview that arrives while the final edit resolves its tools does not overwrite it (stress ${stressRun})`, async function (assert) {
+      let roomId = await renderAiAssistantPanel();
+      let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+      let matrixService = getService('matrix-service');
 
-    let hold = await holdDiscoveredSkillLoads();
-    try {
-      simulateRemoteMessage(
-        roomId,
-        '@aibot:localhost',
-        finalEditWithHostTool(streamingEventId, 'The final answer.', []),
-      );
-      await hold.reached();
-
-      // A late to-device preview for the same turn arrives while the final
-      // edit's tool resolution is held.
-      simulateToDeviceEvent(
-        APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
-        {
+      let hold = await holdDiscoveredSkillLoads();
+      try {
+        simulateRemoteMessage(
           roomId,
-          parentEventId: streamingEventId,
-          sequence: 99,
-          body: 'A stale preview.',
-          reasoning: '',
-          toolRequests: [],
-        },
-        matrixService.aiBotUserId,
-      );
-      await delay(100);
-    } finally {
-      hold.release();
-    }
-    await settled();
+          '@aibot:localhost',
+          finalEditWithHostTool(streamingEventId, 'The final answer.', []),
+        );
+        await hold.reached();
 
-    let message = matrixService.roomResources
-      .get(roomId)!
-      .messageForEventId(streamingEventId)!;
-    assert.strictEqual(
-      message.body,
-      'The final answer.',
-      'the final edit keeps its body',
-    );
-    assert.true(message.isStreamingFinished, 'the message stays finished');
-    assert
-      .dom(`[data-test-room="${roomId}"]`)
-      .doesNotContainText('A stale preview.');
-  });
+        // A late to-device preview for the same turn arrives while the final
+        // edit's tool resolution is held.
+        simulateToDeviceEvent(
+          APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
+          {
+            roomId,
+            parentEventId: streamingEventId,
+            sequence: 99,
+            body: 'A stale preview.',
+            reasoning: '',
+            toolRequests: [],
+          },
+          matrixService.aiBotUserId,
+        );
+        await delay(100);
+      } finally {
+        hold.release();
+      }
+      await settled();
+
+      let message = matrixService.roomResources
+        .get(roomId)!
+        .messageForEventId(streamingEventId)!;
+      assert.strictEqual(
+        message.body,
+        'The final answer.',
+        'the final edit keeps its body',
+      );
+      assert.true(message.isStreamingFinished, 'the message stays finished');
+      assert
+        .dom(`[data-test-room="${roomId}"]`)
+        .doesNotContainText('A stale preview.');
+    });
+  }
 
   test('a host tool whose command never resolves gets a terminal invalid result and the room keeps processing', async function (assert) {
     let roomId = await renderAiAssistantPanel();
@@ -2822,64 +2826,66 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .containsText('Still alive', 'the room keeps processing later events');
   });
 
-  test('a host tool renamed by the final edit runs as the renamed tool, not the stale one', async function (assert) {
-    let roomId = await renderAiAssistantPanel();
-    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+  for (let stressRun = 1; stressRun <= 25; stressRun++) {
+    test(`a host tool renamed by the final edit runs as the renamed tool, not the stale one (stress ${stressRun})`, async function (assert) {
+      let roomId = await renderAiAssistantPanel();
+      let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
 
-    // A streamed chunk names the request with a name that is not complete
-    // yet, which resolves to no command.
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      body: 'Reading',
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: false,
-      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
-        { id: 'slow-host-read', name: 'read-file-for' },
-      ],
-      'm.relates_to': { rel_type: 'm.replace', event_id: streamingEventId },
-      data: { context: { agentId: getService('matrix-service').agentId } },
-    });
-    await settled();
+      // A streamed chunk names the request with a name that is not complete
+      // yet, which resolves to no command.
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: 'Reading',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: false,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          { id: 'slow-host-read', name: 'read-file-for' },
+        ],
+        'm.relates_to': { rel_type: 'm.replace', event_id: streamingEventId },
+        data: { context: { agentId: getService('matrix-service').agentId } },
+      });
+      await settled();
 
-    let hold = await holdDiscoveredSkillLoads();
-    try {
-      // The final edit renames it to the discovered host tool, whose
-      // resolution is held.
-      simulateRemoteMessage(
-        roomId,
-        '@aibot:localhost',
-        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      let hold = await holdDiscoveredSkillLoads();
+      try {
+        // The final edit renames it to the discovered host tool, whose
+        // resolution is held.
+        simulateRemoteMessage(
+          roomId,
+          '@aibot:localhost',
+          finalEditWithHostTool(streamingEventId, 'Reading', []),
+        );
+        await hold.reached();
+        await drainIsValidating('slow-host-read');
+        assert.strictEqual(
+          getRoomEvents(roomId).filter(
+            (event) =>
+              event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+              event.content.commandRequestId === 'slow-host-read',
+          ).length,
+          0,
+          'the drain waits for the renamed tool instead of validating the stale name',
+        );
+      } finally {
+        hold.release();
+      }
+      await settled();
+
+      let hostToolResults = getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content.commandRequestId === 'slow-host-read',
       );
-      await hold.reached();
-      await drainIsValidating('slow-host-read');
+      assert.strictEqual(hostToolResults.length, 1, 'exactly one result');
       assert.strictEqual(
-        getRoomEvents(roomId).filter(
-          (event) =>
-            event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
-            event.content.commandRequestId === 'slow-host-read',
-        ).length,
-        0,
-        'the drain waits for the renamed tool instead of validating the stale name',
+        hostToolResults[0]?.content['m.relates_to']?.key,
+        'applied',
+        `the renamed tool ran (failure reason: ${
+          hostToolResults[0]?.content.failureReason ?? 'none'
+        })`,
       );
-    } finally {
-      hold.release();
-    }
-    await settled();
-
-    let hostToolResults = getRoomEvents(roomId).filter(
-      (event) =>
-        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
-        event.content.commandRequestId === 'slow-host-read',
-    );
-    assert.strictEqual(hostToolResults.length, 1, 'exactly one result');
-    assert.strictEqual(
-      hostToolResults[0]?.content['m.relates_to']?.key,
-      'applied',
-      `the renamed tool ran (failure reason: ${
-        hostToolResults[0]?.content.failureReason ?? 'none'
-      })`,
-    );
-  });
+    });
+  }
 
   test('a call that already has a result is not answered again when its command no longer resolves', async function (assert) {
     let roomId = await renderAiAssistantPanel();
