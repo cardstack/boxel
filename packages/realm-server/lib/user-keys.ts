@@ -2,11 +2,16 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { param, query, type DBAdapter } from '@cardstack/runtime-common';
 import type { Expression, Querier } from '@cardstack/runtime-common/expression';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
-import type {
-  SealedSecret,
-  SecretBinding,
-  SecretsKeyring,
-} from './secrets-at-rest/index.ts';
+import {
+  SecretDecryptionError,
+  type SealedSecret,
+  type SecretBinding,
+  type SecretsKeyring,
+} from './secrets-at-rest/envelope.ts';
+import {
+  sealedColumnsSelect,
+  sealedFromColumns,
+} from './secrets-at-rest/sealed-columns.ts';
 
 // Keys that belong to people. Every key has one owner, the user who created
 // it, and only that owner lists, shows, replaces or deletes it. A key's value
@@ -442,9 +447,34 @@ export async function addUserKey(
   });
 }
 
+// Whether `sealed` opens under `binding`. Only a copy that doesn't open
+// answers false; any other failure is thrown.
+export function opensUnder(
+  keyring: SecretsKeyring,
+  sealed: SealedSecret | undefined,
+  binding: SecretBinding,
+): boolean {
+  if (!sealed) {
+    return false;
+  }
+  try {
+    keyring.open(sealed, binding);
+    return true;
+  } catch (e) {
+    if (e instanceof SecretDecryptionError) {
+      return false;
+    }
+    throw e;
+  }
+}
+
 // Replaces a key's value, keeping its name and kind. The master copy and every
 // grant's copy are sealed again in the same transaction, so the old value
-// opens nowhere afterwards and no grant asks for approval again.
+// opens nowhere afterwards and no grant asks for approval again. A grant is
+// sealed again only when its current copy opens under its own binding: the
+// binding is read from the row, so sealing one whose copy doesn't open would
+// make a row written or edited outside the realm server a real grant. Such a
+// row is left as it is, and still sends nothing.
 export async function replaceUserKeyValue(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -478,22 +508,23 @@ export async function replaceUserKeyValue(
       throw notFound();
     }
     let grants = await txQuery([
-      `SELECT id, destination FROM user_key_grants WHERE key_id = `,
+      `SELECT id, destination, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,
       param(id),
       ` AND owner = `,
       param(owner),
       ` FOR UPDATE`,
     ]);
     for (let grant of grants) {
-      let copy = keyring.seal(
-        validValue,
-        grantCopyBinding({
-          owner,
-          keyId: id,
-          grantId: grant.id as string,
-          destination: grant.destination as string,
-        }),
-      );
+      let binding = grantCopyBinding({
+        owner,
+        keyId: id,
+        grantId: grant.id as string,
+        destination: grant.destination as string,
+      });
+      if (!opensUnder(keyring, sealedFromColumns(grant, 'value'), binding)) {
+        continue;
+      }
+      let copy = keyring.seal(validValue, binding);
       await txQuery([
         `UPDATE user_key_grants SET (value_ciphertext, value_nonce, value_tag, value_key_id) = (`,
         ...SEALED_COLUMN_VALUES(copy),

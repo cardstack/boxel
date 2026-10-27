@@ -32,7 +32,13 @@ import {
 
 type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
 
-const CREATE_ATTRIBUTES = new Set(['keyId', 'realm', 'codeRef', 'operation']);
+const CREATE_ATTRIBUTES = new Set([
+  'keyId',
+  'realm',
+  'codeRef',
+  'operation',
+  'expectedDestination',
+]);
 
 function serializeGrant(grant: UserKeyGrant) {
   let { id, ...attributes } = grant;
@@ -86,7 +92,9 @@ function codeRefOf(value: unknown): ResolvedCodeRef {
 // grant of the key that already covers it. Answers 201 with a new grant, 200
 // with the one reused. The operation is read from the realm's definition
 // cache, so the caller must be able to read the realm; a realm they can't is
-// answered as one that doesn't exist.
+// answered as one that doesn't exist. `expectedDestination` is the destination
+// the user was shown. It is checked against the operation's and never stored
+// in its place: 409 when they differ.
 export function handleCreateUserKeyGrant(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
@@ -107,12 +115,18 @@ export function handleCreateUserKeyGrant(args: CreateRoutesArgs): Handler {
         throw new UserKeyError(400, `'${name}' can't be set here`);
       }
     }
-    let { keyId, realm, codeRef, operation } = attributes;
+    let { keyId, realm, codeRef, operation, expectedDestination } = attributes;
     if (typeof keyId !== 'string') {
       throw new UserKeyError(400, 'a grant names the key');
     }
     if (typeof operation !== 'string' || operation.length === 0) {
       throw new UserKeyError(400, 'a grant names the operation');
+    }
+    if (typeof expectedDestination !== 'string') {
+      throw new UserKeyError(
+        400,
+        'a grant names the destination its user was shown, as expectedDestination',
+      );
     }
     let ref = codeRefOf(codeRef);
     let realmURL = typeof realm === 'string' ? normalizeRealmURL(realm) : null;
@@ -139,6 +153,7 @@ export function handleCreateUserKeyGrant(args: CreateRoutesArgs): Handler {
         operationName: operation,
         owner,
         keyId,
+        expectedDestination,
         via,
       },
     );

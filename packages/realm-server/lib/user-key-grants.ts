@@ -11,9 +11,11 @@ import {
   sealedFromColumns,
   type SecretsKeyring,
 } from './secrets-at-rest/index.ts';
+import { isOutboundDevAllowlisted } from './outbound/client.ts';
 import type { SecureSessionClient } from './secure-session.ts';
 import {
   grantCopyBinding,
+  opensUnder,
   SEALED_COLUMN_VALUES,
   UserKeyError,
   userKeyBinding,
@@ -26,17 +28,26 @@ import {
 //
 // A grant stores the destination it was approved for, read from the
 // operation's lowered declaration in the definition cache when it is created.
-// Nothing reads the operation again to send under it, so editing a
-// declaration afterwards can't move where a key goes.
+// The approval also names the destination its user was shown, and is refused
+// when the operation no longer sends there, so an edit between showing it and
+// approving it can't move where a key goes. Nothing reads the operation again
+// to send under it, so neither can an edit afterwards.
+//
+// A destination is as broad as the operation's declaration makes it: the path
+// up to its first `{name}` segment. When the first segment is a parameter
+// (`https://storage.googleapis.com/{bucket}/…`), the destination is the whole
+// host. It then covers every operation sending to that host, whatever path
+// separates one tenant there from another.
 //
 // Each grant holds its own sealed copy of the key's value, bound to the grant,
 // the key and the destination (`grantCopyBinding`). Creating a grant is the
 // only place a key's master copy is opened to make a copy of it (the data-key
 // re-seal pass also opens every sealed row, to seal it again under its own
 // binding); sending opens only a grant's copy, under the destination stored on
-// the grant. A grant row written outside the
-// realm server, or one whose key or destination is edited, has no copy that
-// opens, so it sends nothing.
+// the grant. A grant row written outside the realm server, or one whose key or
+// destination is edited, has no copy that opens, so it sends nothing. Nothing
+// that reads grants takes such a row for one: it is never reused for an
+// approval, and never sealed again when its key is replaced.
 //
 // Creating or removing a grant takes a session signed in on the secure origin;
 // the routes check that (`handle-user-key-grants.ts`) and record which client
@@ -69,10 +80,10 @@ function toGrant(row: Record<string, unknown>): UserKeyGrant {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // A destination as a grant stores it: the URL parser's `href` of an `https:`
-// (or `http:`, which the outbound guard refuses to send to unless its host is
-// on the development allowlist) origin and a path prefix ending in `/`, with
-// no user info, query or fragment, naming exactly one host. Two spellings of
-// one place normalize alike, so they are one grant.
+// origin (or an `http:` one whose host is on the outbound guard's development
+// allowlist, the only `http:` hosts it sends to) and a path prefix ending in
+// `/`, with no user info, query or fragment, naming exactly one host. Two
+// spellings of one place normalize alike, so they are one grant.
 export function normalizeGrantDestination(destination: unknown): string {
   if (typeof destination !== 'string') {
     throw new UserKeyError(400, 'a destination is an absolute URL');
@@ -83,8 +94,11 @@ export function normalizeGrantDestination(destination: unknown): string {
   } catch {
     throw new UserKeyError(400, 'a destination is an absolute URL');
   }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new UserKeyError(400, 'a destination is an https or http URL');
+  if (
+    url.protocol !== 'https:' &&
+    !(url.protocol === 'http:' && isOutboundDevAllowlisted(url.hostname))
+  ) {
+    throw new UserKeyError(400, 'a destination is an https URL');
   }
   if (url.username || url.password) {
     throw new UserKeyError(400, 'a destination carries no user info');
@@ -221,7 +235,8 @@ export async function listOwnerGrants(
 // a grant for `https://api.example.com/v1/` covers an operation sending under
 // `https://api.example.com/v1/chat/` and not one under
 // `https://api.example.com/v1beta/`. Of several that cover it, the one with the
-// longest destination is used.
+// longest destination is used, of those whose copy opens: a row whose copy
+// doesn't was not written by the realm server and is no grant.
 //
 // A new grant's copy is sealed from the key's master copy, opened here and
 // nowhere else, in the same transaction that inserts the grant. The key's row
@@ -257,23 +272,34 @@ export async function createOrReuseGrant(
     if (!key) {
       throw new UserKeyError(404, 'no such key');
     }
-    let grants = (
-      await txQuery([
-        `SELECT ${GRANT_COLUMNS} FROM user_key_grants WHERE key_id = `,
-        param(keyId),
-        ` AND owner = `,
-        param(owner),
-      ])
-    ).map(toGrant);
-    let covering = grants
+    let rows = await txQuery([
+      `SELECT ${GRANT_COLUMNS}, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,
+      param(keyId),
+      ` AND owner = `,
+      param(owner),
+    ]);
+    let covering = rows
+      .map((row) => ({ row, grant: toGrant(row) }))
       .filter(
-        (grant) =>
+        ({ grant }) =>
           grant.state === 'active' &&
           destinationCovers(grant.destination, normalized),
       )
-      .sort((a, b) => b.destination.length - a.destination.length)[0];
+      .sort((a, b) => b.grant.destination.length - a.grant.destination.length)
+      .find(({ row, grant }) =>
+        opensUnder(
+          keyring,
+          sealedFromColumns(row, 'value'),
+          grantCopyBinding({
+            owner,
+            keyId,
+            grantId: grant.id,
+            destination: grant.destination,
+          }),
+        ),
+      );
     if (covering) {
-      return { grant: covering, created: false };
+      return { grant: covering.grant, created: false };
     }
     let master = sealedFromColumns(key, 'value');
     if (!master) {
@@ -305,7 +331,9 @@ export async function createOrReuseGrant(
 }
 
 // `createOrReuseGrant` for the destination an operation in a realm sends to,
-// read from the realm's definition cache.
+// read from the realm's definition cache. `expectedDestination` is the one the
+// approving user was shown; when the operation sends elsewhere now, nothing is
+// approved and the caller shows the user the destination again.
 export async function createOrReuseGrantForOperation(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -316,6 +344,7 @@ export async function createOrReuseGrantForOperation(
     operationName,
     owner,
     keyId,
+    expectedDestination,
     via,
   }: {
     core: Pick<
@@ -327,12 +356,20 @@ export async function createOrReuseGrantForOperation(
     operationName: string;
     owner: string;
     keyId: string;
+    expectedDestination: unknown;
     via: SecureSessionClient;
   },
 ): Promise<{ grant: UserKeyGrant; created: boolean }> {
+  let expected = normalizeGrantDestination(expectedDestination);
   let destination = operationGrantDestination(
     await lookupGrantOperation(core, realmURL, codeRef, operationName, owner),
   );
+  if (destination !== expected) {
+    throw new UserKeyError(
+      409,
+      'the operation sends to another destination than the one approved; show it again',
+    );
+  }
   return await createOrReuseGrant(dbAdapter, keyring, {
     owner,
     keyId,

@@ -237,6 +237,7 @@ module(basename(import.meta.filename), function () {
         'https://api.openai.com/?q=1',
         'https://api.openai.com./',
         'ftp://api.openai.com/',
+        'http://api.openai.com/',
         'not a url',
       ]) {
         assert.throws(
@@ -337,6 +338,83 @@ module(basename(import.meta.filename), function () {
           SecretDecryptionError,
         );
       }
+    });
+
+    test("replacing a key doesn't seal its value to a grant row written outside the realm server", async function (assert) {
+      let key = await addKey(dbAdapter, keyring);
+      let { grant: real } = await grant(key.id, 'https://api.openai.com/');
+      let { grant: moved } = await grant(key.id, 'https://eu.api.openai.com/');
+      let inserted = randomUUID();
+      await dbAdapter.execute(
+        `INSERT INTO user_key_grants
+           (id, key_id, owner, destination, state, approved_via,
+            value_ciphertext, value_nonce, value_tag, value_key_id)
+         SELECT $1, key_id, owner, 'https://attacker.example/', 'active', 'window',
+                value_ciphertext, value_nonce, value_tag, value_key_id
+           FROM user_key_grants WHERE id = $2`,
+        { bind: [inserted, real.id] },
+      );
+      await dbAdapter.execute(
+        `UPDATE user_key_grants SET destination = 'https://attacker.example/v2/' WHERE id = $1`,
+        { bind: [moved.id] },
+      );
+      let before = await Promise.all(
+        [inserted, moved.id].map((id) => grantColumns(dbAdapter, id)),
+      );
+
+      await replaceUserKeyValue(dbAdapter, keyring, {
+        owner: OWNER,
+        id: key.id,
+        value: NEW_VALUE,
+        ticket: await ticket(dbAdapter, 'replace', key.id),
+      });
+
+      for (let [index, grantId] of [inserted, moved.id].entries()) {
+        assert.deepEqual(
+          await grantColumns(dbAdapter, grantId),
+          before[index],
+          `row ${grantId} is left as it is`,
+        );
+        await assert.rejects(
+          openGrantForSending(dbAdapter, keyring, { owner: OWNER, grantId }),
+          SecretDecryptionError,
+          `row ${grantId} still sends nothing`,
+        );
+      }
+      let opened = await openGrantForSending(dbAdapter, keyring, {
+        owner: OWNER,
+        grantId: real.id,
+      });
+      assert.strictEqual(opened.value, NEW_VALUE, 'the real grant is resealed');
+    });
+
+    test("approving doesn't reuse a grant row written outside the realm server", async function (assert) {
+      let key = await addKey(dbAdapter, keyring);
+      let { grant: real } = await grant(key.id, 'https://eu.api.openai.com/');
+      let forged = randomUUID();
+      await dbAdapter.execute(
+        `INSERT INTO user_key_grants
+           (id, key_id, owner, destination, state, approved_via,
+            value_ciphertext, value_nonce, value_tag, value_key_id)
+         SELECT $1, key_id, owner, 'https://api.openai.com/', 'active', 'window',
+                value_ciphertext, value_nonce, value_tag, value_key_id
+           FROM user_key_grants WHERE id = $2`,
+        { bind: [forged, real.id] },
+      );
+      let approved = await grant(key.id, 'https://api.openai.com/v1/');
+      assert.true(approved.created, 'a grant of its own is made');
+      assert.notStrictEqual(approved.grant.id, forged);
+      let opened = await openGrantForSending(dbAdapter, keyring, {
+        owner: OWNER,
+        grantId: approved.grant.id,
+      });
+      assert.strictEqual(opened.value, VALUE);
+      let again = await grant(key.id, 'https://api.openai.com/v1/chat/');
+      assert.strictEqual(
+        again.grant.id,
+        approved.grant.id,
+        'and is the one reused after it',
+      );
     });
 
     test('replacing a key re-seals every copy, and the old value opens nowhere', async function (assert) {
@@ -487,6 +565,7 @@ module(basename(import.meta.filename), function () {
           operationName: 'chat',
           owner: OWNER,
           keyId: key.id,
+          expectedDestination: 'https://api.openai.com/v1/',
           via: 'window',
         });
 
@@ -656,8 +735,27 @@ module(basename(import.meta.filename), function () {
       return req.send({ data: { type: 'user-key-grant', attributes } });
     }
 
-    function forOperation(keyId: string, operation: string) {
-      return { keyId, realm: realmURL.href, codeRef: VENDOR, operation };
+    // What each operation sends to, as the approval shows it.
+    const DESTINATIONS: Record<string, string> = {
+      models: 'https://api.openai.com/v1/',
+      chat: 'https://api.openai.com/v1/chat/',
+      betaModels: 'https://api.openai.com/v1beta/',
+      euModels: 'https://eu.api.openai.com/v1/',
+    };
+
+    function forOperation(
+      keyId: string,
+      operation: string,
+      expectedDestination = DESTINATIONS[operation] ??
+        'https://api.openai.com/',
+    ) {
+      return {
+        keyId,
+        realm: realmURL.href,
+        codeRef: VENDOR,
+        operation,
+        expectedDestination,
+      };
     }
 
     test('approving an operation creates a grant for its destination, and one under it reuses it', async function (assert) {
@@ -743,7 +841,17 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(opened.value, VALUE);
 
-      let moved = await create(auth, forOperation(key.id, 'chat'));
+      let stale = await create(auth, forOperation(key.id, 'chat'));
+      assert.strictEqual(
+        stale.status,
+        409,
+        'approving what was shown before the edit is refused',
+      );
+      let moved = await create(
+        auth,
+        forOperation(key.id, 'chat', 'https://attacker.example/v1/chat/'),
+      );
+      assert.strictEqual(moved.status, 201, moved.text);
       assert.strictEqual(
         moved.body.data.attributes.destination,
         'https://attacker.example/v1/chat/',
@@ -856,6 +964,35 @@ module(basename(import.meta.filename), function () {
         400,
         'a destination is read from the operation, never sent',
       );
+
+      let { expectedDestination: _, ...unshown } = forOperation(
+        key.id,
+        'models',
+      );
+      let missing = await create(auth, unshown);
+      assert.strictEqual(
+        missing.status,
+        400,
+        'an approval names the destination it showed',
+      );
+      let broader = await create(
+        auth,
+        forOperation(key.id, 'models', 'https://api.openai.com/'),
+      );
+      assert.strictEqual(
+        broader.status,
+        409,
+        "a destination the operation doesn't send to is refused",
+      );
+      let plain = await create(
+        auth,
+        forOperation(key.id, 'models', 'http://api.openai.com/v1/'),
+      );
+      assert.strictEqual(plain.status, 400, 'an http destination is refused');
+      let [{ count }] = await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS count FROM user_key_grants`,
+      );
+      assert.strictEqual(count, 0, 'no grant was created');
     });
   });
 
@@ -975,6 +1112,7 @@ module(basename(import.meta.filename), function () {
                 realm: PUBLIC_REALM,
                 codeRef: PRIVATE_VENDOR,
                 operation: 'models',
+                expectedDestination: 'https://private-vendor.example/v1/',
               },
             },
           }),

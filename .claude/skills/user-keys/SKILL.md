@@ -141,9 +141,9 @@ the error's name and message only, never the request.
 ## Grants
 
 A **grant** is the owner's approval for one key to be sent to one
-destination: an `https:` origin (or `http:`, which the outbound guard refuses
-to send to unless its host is on the development allowlist) and a path prefix
-ending in `/`, stored as the URL parser's `href`. One key reaches several hosts, or several path prefixes
+destination: an `https:` origin (or an `http:` one whose host is on the
+outbound guard's development allowlist, the only `http:` hosts it sends to)
+and a path prefix ending in `/`, stored as the URL parser's `href`. One key reaches several hosts, or several path prefixes
 on one host, through one grant each (`api.openai.com/v1/` and
 `eu.api.openai.com/v1/`, or `/v1/` and `/v1beta/`), and its secret is entered
 once. The code is `lib/user-key-grants.ts` and
@@ -196,7 +196,10 @@ sealed to its own id, key and destination: copying the sealed columns from
 another grant, another key's grant or the key itself gives a copy bound to
 that other row, and editing a grant's `destination` or `key_id` breaks its own
 binding. Each fails to open with `SecretDecryptionError`, so the grant sends
-nothing. To give a key a destination, the owner approves an operation that
+nothing. Nothing else takes such a row for a grant either: an approval never
+reuses a row whose copy doesn't open, and replacing the key leaves it as it is
+instead of sealing the new value to it, the same as the data-key re-seal pass
+does. To give a key a destination, the owner approves an operation that
 sends there; to move a grant, remove it and approve again.
 
 ### Creating or reusing a grant
@@ -211,10 +214,25 @@ normalized `href`s, so a match always ends at a `/`. `https://api.openai.com/`
 doesn't cover `https://api.openai.com.evil.net/`, and `/v1/` doesn't cover
 `/v1beta/`. When several cover it, the longest is used.
 
+The request also carries `expectedDestination`, the destination the user was
+shown. It is compared with the one read from the operation and never used in
+its place; when they differ, nothing is approved and the answer is 409, so an
+edit to the operation between showing it and approving it can't move the key.
+The approval UI shows the destination again and asks once more.
+
 A grant stores its destination when it is created and nothing reads the
 operation again, so editing a declaration afterwards changes no grant: the
 next approval of the edited operation creates, or reuses, a grant for where
 it now sends.
+
+**Whole-host grants.** A destination is the path up to the operation URL's
+first `{name}` segment, so one whose first segment is a parameter
+(`https://storage.googleapis.com/{bucket}/…`) is the whole host,
+`https://storage.googleapis.com/`. That grant covers every later operation on
+the host, so on a host that separates tenants by path, one approval covers
+them all. The grant can't be narrower than the operation, which can itself
+send to any path there. An approval UI should say so when the destination's
+path is `/`.
 
 A destination with a host wildcard (`*`, or `%2A`), user info, a query or
 fragment, a path not ending in `/`, or a trailing dot on the host is refused.
@@ -229,13 +247,14 @@ Creating and removing a grant take a session signed in on the secure origin,
 from a request whose `Origin` is the secure origin or absent, exactly as
 minting a key write ticket does. No ticket is involved.
 
-| Route                               | Does                                                                                                                                                                                   |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /_user-key-grants`            | Create or reuse: type `user-key-grant`, `attributes.{keyId, realm, codeRef: {module, name}, operation}`; answers 201 with a new grant or 200 with the one reused, and `meta.{created}` |
-| `DELETE /_user-key-grants/:grantId` | Remove one of the user's grants; answers `meta.{revokedBindings}`, the bindings that sent under it                                                                                     |
+| Route                               | Does                                                                                                                                                                                                        |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /_user-key-grants`            | Create or reuse: type `user-key-grant`, `attributes.{keyId, realm, codeRef: {module, name}, operation, expectedDestination}`; answers 201 with a new grant or 200 with the one reused, and `meta.{created}` |
+| `DELETE /_user-key-grants/:grantId` | Remove one of the user's grants; answers `meta.{revokedBindings}`, the bindings that sent under it                                                                                                          |
 
-| Status | Means                                                                                                                                                                  |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | Malformed body; an attribute that can't be set (a `destination` included); an operation that sends no request or whose declaration has problems; a refused destination |
-| 403    | No secure session, or a request from another `Origin`                                                                                                                  |
-| 404    | No such key or grant of the user's; a realm the user can't read; no such operation, or one whose module is in a realm the user can't read                              |
+| Status | Means                                                                                                                                                                                            |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 400    | Malformed body; an attribute that can't be set (a `destination` included); no `expectedDestination`; an operation that sends no request or whose declaration has problems; a refused destination |
+| 403    | No secure session, or a request from another `Origin`                                                                                                                                            |
+| 404    | No such key or grant of the user's; a realm the user can't read; no such operation, or one whose module is in a realm the user can't read                                                        |
+| 409    | The operation sends to another destination than `expectedDestination`                                                                                                                            |
