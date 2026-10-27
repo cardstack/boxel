@@ -390,7 +390,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         <div class='google-preview'>
           <div class='google-result'>
             <div class='google-url-row'>
-              <div class='google-favicon'>
+              <div class='google-favicon' data-test-google-favicon>
                 {{#if this.headPreviewData.favicon}}
                   <img
                     src={{this.headPreviewData.favicon}}
@@ -401,14 +401,23 @@ export default class HeadFormatPreview extends Component<Signature> {
                 {{/if}}
               </div>
               <div class='google-url-info'>
-                <div class='google-site-name'>{{this.displayDomain}}</div>
-                <div class='google-breadcrumb'>
+                <div
+                  class='google-site-name'
+                  data-test-google-site-name
+                >{{this.displayDomain}}</div>
+                <div class='google-breadcrumb' data-test-google-breadcrumb>
                   {{this.displayDomain}}{{this.breadcrumbPath}}
                 </div>
               </div>
             </div>
-            <h3 class='google-title'>{{this.googleTitle}}</h3>
-            <p class='google-description'>{{this.googleDescription}}</p>
+            <h3
+              class='google-title'
+              data-test-google-title
+            >{{this.googleTitle}}</h3>
+            <p
+              class='google-description'
+              data-test-google-description
+            >{{this.googleDescription}}</p>
           </div>
         </div>
       </section>
@@ -418,12 +427,15 @@ export default class HeadFormatPreview extends Component<Signature> {
         <div class='facebook-preview'>
           <div class='facebook-card'>
             {{#if this.previewImage}}
-              <div class='facebook-image'>
+              <div class='facebook-image' data-test-facebook-image>
                 <img src={{this.previewImage}} alt='Preview' />
               </div>
             {{/if}}
             <div class='facebook-content'>
-              <div class='facebook-domain'>{{this.displayDomain}}</div>
+              <div
+                class='facebook-domain'
+                data-test-facebook-domain
+              >{{this.displayDomain}}</div>
               <div class='facebook-title'>{{this.facebookTitle}}</div>
               <div
                 class='facebook-description'
@@ -438,14 +450,14 @@ export default class HeadFormatPreview extends Component<Signature> {
         <div class='twitter-preview'>
           <div class='twitter-card {{if this.previewImage "has-image" ""}}'>
             {{#if this.previewImage}}
-              <div class='twitter-image'>
+              <div class='twitter-image' data-test-twitter-image>
                 <img src={{this.previewImage}} alt='Preview' />
               </div>
             {{/if}}
             <div class='twitter-content'>
               <div class='twitter-title'>{{this.twitterTitle}}</div>
               <div class='twitter-description'>{{this.twitterDescription}}</div>
-              <div class='twitter-domain'>
+              <div class='twitter-domain' data-test-twitter-domain>
                 <svg
                   class='link-icon'
                   viewBox='0 0 24 24'

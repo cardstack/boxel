@@ -133,6 +133,192 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
       .exists('with its selection intact');
   });
 
+  test('dragging the rail edge resizes the rail within its bounds, and a double-click restores it', async function (assert) {
+    const HANDLE = '[data-test-rail-resize-handle]';
+    let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    // layout px, unaffected by the test container's scale
+    let railWidth = () => (find(RAIL_SLOT) as HTMLElement).offsetWidth;
+    let railScreenWidth = () =>
+      Math.round(find(RAIL_SLOT)!.getBoundingClientRect().width);
+    let drag = async (by: number) => {
+      let options = { button: 0, buttons: 1, pointerId: 1 };
+      await triggerEvent(HANDLE, 'pointerdown', { ...options, clientX: 500 });
+      await triggerEvent(HANDLE, 'pointermove', {
+        ...options,
+        clientX: 500 + by,
+      });
+      await triggerEvent(HANDLE, 'pointerup', {
+        ...options,
+        buttons: 0,
+        clientX: 500 + by,
+      });
+    };
+
+    await renderCard(loader, new Workspace({}), 'isolated');
+    await click(LIBRARY);
+
+    let defaultWidth = Math.round(13.375 * rem);
+    assert.strictEqual(
+      railWidth(),
+      defaultWidth,
+      'the rail starts at 13.375rem',
+    );
+    assert
+      .dom(HANDLE)
+      .hasAttribute('role', 'separator')
+      .hasAria('label', 'Resize sidebar')
+      .hasAria('controls', find(RAIL)!.id, 'the handle names the rail')
+      .hasAria('valuenow', String(defaultWidth));
+
+    let screenWidth = railScreenWidth();
+    await drag(40);
+    assert.strictEqual(
+      railScreenWidth(),
+      screenWidth + 40,
+      'dragging widens it, with the edge following the pointer',
+    );
+    assert
+      .dom(HANDLE)
+      .hasAria('valuenow', String(railWidth()), 'and reports the new width');
+
+    await drag(1000);
+    assert.strictEqual(railWidth(), Math.round(26 * rem), 'up to 26rem');
+
+    await drag(-1000);
+    assert.strictEqual(railWidth(), Math.round(11 * rem), 'down to 11rem');
+
+    await triggerEvent(HANDLE, 'dblclick');
+    assert.strictEqual(
+      railWidth(),
+      defaultWidth,
+      'a double-click restores the default',
+    );
+
+    await click(TOGGLE);
+    assert.ok(
+      find(HANDLE)?.closest('[inert]'),
+      'the handle leaves the tab order with the rail',
+    );
+  });
+
+  test("the handle's target reaches past the rail's edge over the grid's gutter, clear of the rows", async function (assert) {
+    const HANDLE = '[data-test-rail-resize-handle]';
+    let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    await renderCard(loader, new Workspace({}), 'isolated');
+    await click(LIBRARY);
+
+    let handle = find(HANDLE) as HTMLElement;
+    handle.scrollIntoView({ block: 'center' });
+    let box = handle.getBoundingClientRect();
+    let strip = parseFloat(getComputedStyle(handle).width);
+    // screen px per layout px, since the test container is scaled
+    let scale = box.width / strip;
+    let y = box.top + box.height / 2;
+    let past = (layoutPx: number) =>
+      document.elementFromPoint(box.right + layoutPx * scale, y);
+    let outset = 1.5 * rem - strip;
+    assert.strictEqual(
+      past(outset - 2),
+      handle,
+      'the strip and its reach past the edge make a 1.5rem target',
+    );
+    assert.notStrictEqual(past(outset + 2), handle, 'and it ends there');
+    assert.notStrictEqual(
+      past(-strip - 2),
+      handle,
+      'it reaches no further into the rail than the strip',
+    );
+  });
+
+  test('in a narrow pane the rail stops short of the pane edge, so its handle stays in reach', async function (assert) {
+    const HANDLE = '[data-test-rail-resize-handle]';
+    let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    let api = await loader.import<typeof import('@cardstack/base/card-api')>(
+      '@cardstack/base/card-api',
+    );
+    let Comp = api.getComponent(new Workspace({})) as ComponentLike<{
+      Args: { format?: Format };
+    }>;
+    await render(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='width: 22rem; height: 30rem'>
+          <Comp @format='isolated' />
+        </div>
+      </template>,
+    );
+    await click(LIBRARY);
+    await waitUntil(() => find(RAIL_SLOT)?.hasAttribute('inert'));
+    await click(TOGGLE);
+
+    let options = { button: 0, buttons: 1, pointerId: 1 };
+    await triggerEvent(HANDLE, 'pointerdown', { ...options, clientX: 100 });
+    await triggerEvent(HANDLE, 'pointermove', { ...options, clientX: 2000 });
+    await triggerEvent(HANDLE, 'pointerup', {
+      ...options,
+      buttons: 0,
+      clientX: 2000,
+    });
+
+    let library = find('[data-test-library]') as HTMLElement;
+    let rail = find(RAIL_SLOT) as HTMLElement;
+    assert.true(
+      Math.abs(rail.offsetWidth - (library.clientWidth - 3 * rem)) <= 1,
+      `the rail stops 3rem inside the pane (${rail.offsetWidth}px in ${library.clientWidth}px)`,
+    );
+    let handleBox = find(HANDLE)!.getBoundingClientRect();
+    let libraryBox = library.getBoundingClientRect();
+    assert.true(
+      handleBox.right <= libraryBox.right,
+      'the handle is inside the pane',
+    );
+  });
+
+  test('in a pane too narrow for that margin the rail keeps its min width', async function (assert) {
+    const HANDLE = '[data-test-rail-resize-handle]';
+    let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    let api = await loader.import<typeof import('@cardstack/base/card-api')>(
+      '@cardstack/base/card-api',
+    );
+    let Comp = api.getComponent(new Workspace({})) as ComponentLike<{
+      Args: { format?: Format };
+    }>;
+    await render(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='width: 12rem; height: 30rem'>
+          <Comp @format='isolated' />
+        </div>
+      </template>,
+    );
+    await click(LIBRARY);
+    await waitUntil(() => find(RAIL_SLOT)?.hasAttribute('inert'));
+    await click(TOGGLE);
+    let rail = find(RAIL_SLOT) as HTMLElement;
+    await waitUntil(() => rail.getAnimations().length === 0);
+
+    let min = Math.round(11 * rem);
+    assert.strictEqual(
+      rail.offsetWidth,
+      min,
+      'the rail opens at 11rem, narrower than its default, to fit the pane',
+    );
+    assert
+      .dom(HANDLE)
+      .hasAria('valuenow', String(min), 'and the handle reports that width')
+      .hasAria('valuemax', String(min));
+
+    let options = { button: 0, buttons: 1, pointerId: 1 };
+    await triggerEvent(HANDLE, 'pointerdown', { ...options, clientX: 100 });
+    await triggerEvent(HANDLE, 'pointermove', { ...options, clientX: 2000 });
+    await triggerEvent(HANDLE, 'pointerup', {
+      ...options,
+      buttons: 0,
+      clientX: 2000,
+    });
+    assert.strictEqual(rail.offsetWidth, min, 'a drag keeps it there');
+  });
+
   test('a narrow pane starts with the rail closed, and the toggle opens it', async function (assert) {
     let api = await loader.import<typeof import('@cardstack/base/card-api')>(
       '@cardstack/base/card-api',

@@ -200,6 +200,10 @@ jobs:
               # boxel-cli bundles these packages' source for `boxel parse`.
               - 'packages/glimmer-motion/**'
               - 'packages/choreo/**'
+              # boxel-cli bundles the Pret UI realm, filtered by its
+              # .boxelignore, for `boxel test`'s local mode, and the
+              # local-mode fixture renders a Pret UI component.
+              - 'packages/pretui/**'
             bxl:
               # The suite is self-contained — plain objects under Node, no
               # stack and no browser — so it stays cheap even when the

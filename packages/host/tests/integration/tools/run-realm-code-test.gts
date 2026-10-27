@@ -326,6 +326,8 @@ boxel:
       path: 'task.json',
       kind: 'file',
       format: 'isolated',
+      viewportWidth: 1280,
+      viewportHeight: 800,
       width: 1,
       height: 1,
       attached: true,
@@ -487,6 +489,7 @@ return { show: 'Pet/missing' };`,
     format: 'embedded',
     viewportWidth: 600,
     viewportHeight: 400,
+    target: '.name',
   }),
 ];`,
     });
@@ -498,6 +501,7 @@ return { show: 'Pet/missing' };`,
     assert.strictEqual(byId.format, 'embedded');
     assert.deepEqual(byId.captureSpec, {
       viewport: { width: 600, height: 400 },
+      target: '.name',
     });
     let [first, second] = JSON.parse(result.scriptResult!);
     assert.strictEqual(first.path, 'Pet/mango');
@@ -508,6 +512,10 @@ return { show: 'Pet/missing' };`,
       'a URL in the run realm is named by its path',
     );
     assert.strictEqual(second.format, 'embedded');
+    assert.strictEqual(second.viewportWidth, 600);
+    assert.strictEqual(second.viewportHeight, 400);
+    assert.strictEqual(second.target, '.name');
+    assert.strictEqual(first.target, undefined, 'a page capture has none');
     assert.strictEqual(result.captures.length, 2);
   });
 

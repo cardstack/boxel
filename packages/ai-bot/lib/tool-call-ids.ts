@@ -143,6 +143,12 @@ export class ToolCallIds {
     this.used = new Set(used);
   }
 
+  // The next reply numbers its calls from position 0 again. The ids the
+  // earlier reply was given stay used, so the next reply never gets one.
+  startNewReply() {
+    this.assigned.clear();
+  }
+
   idFor(index: number, providerId: string | undefined): string | undefined {
     if (!providerId) {
       return providerId;

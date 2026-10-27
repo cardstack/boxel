@@ -122,10 +122,12 @@ Run `pnpm lint:realm` in `packages/choreo-gallery` after changing an export or a
 | `ArmingRegion`     | [interactive-arming](interactive-arming)                 | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/arming.ts)    |
 | `createArming`     | [interactive-arming](interactive-arming)                 | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/arming.ts)    |
 | `BeaconRef`        | [interactive-beacons](interactive-beacons)               | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/beacons.ts)   |
+| `registerBeacon`   | [interactive-beacons](interactive-beacons)               | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/beacons.ts)   |
 | `Changeset`        | [interactive-queries](interactive-queries)               | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/changeset.ts) |
 | `easeIn`           | [core-tweens](core-tweens)                               | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/easings.ts)   |
 | `easeInAndOut`     | [core-tweens](core-tweens)                               | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/easings.ts)   |
 | `easeOut`          | [core-tweens](core-tweens)                               | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/easings.ts)   |
+| `registerSettle`   | [interactive-regions](interactive-regions)               | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/far.ts)       |
 | `GestureRef`       | [core-drag](core-drag)                                   | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/gesture.ts)   |
 | `ChoreoHost`       | [interactive-registry](interactive-registry)             | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/registry.ts)  |
 | `choreoHostAt`     | [interactive-registry](interactive-registry)             | [Implementation](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/registry.ts)  |

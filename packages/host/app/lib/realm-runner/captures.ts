@@ -83,6 +83,9 @@ export class RealmCaptures {
       path,
       kind: viewed.kind,
       format: viewed.format,
+      viewportWidth: viewed.viewport.width,
+      viewportHeight: viewed.viewport.height,
+      ...(viewed.target ? { target: viewed.target } : {}),
       width: viewed.width ?? null,
       height: viewed.height ?? null,
       ...(viewed.note ? { note: viewed.note } : {}),
@@ -109,5 +112,6 @@ function captureOptions(raw: unknown): ViewOptions {
       ? { viewportHeight: options.viewportHeight }
       : {}),
     ...(options.fullPage === true ? { fullPage: true } : {}),
+    ...(typeof options.target === 'string' ? { target: options.target } : {}),
   };
 }

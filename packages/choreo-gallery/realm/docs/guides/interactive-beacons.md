@@ -49,10 +49,11 @@ Read the [nested Choreo reference](../nested-choreo.md) for selection boundaries
 ## Owning the Destination
 
 A BeaconRef identifies measured geometry; it does not transfer ownership of the element that supplied it. The beacon modifier registers the destination for its lifetime and removes that registration on teardown. Test a destination in persistent chrome while the sending region is replaced, and test removing the destination before another command tries to use it. Use a clear name that describes the place, then inspect the changeset and beacon measurements before compensating for a wrong landing with arbitrary offsets.
+Code that owns an element outside a template can call `registerBeacon(name, element)` directly. It registers the same destination the modifier does and returns the function that removes it.
 
 ## API Coverage
 
-**@cardstack/choreo**: `beacon`, `BeaconRef`.
+**@cardstack/choreo**: `beacon`, `BeaconRef`, `registerBeacon`.
 
 **ChoreoContext**: `c.beacon`.
 

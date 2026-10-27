@@ -14,7 +14,8 @@
     "lint:usage-proof": "node scripts/usage-proof.mjs"
   },
   "dependencies": {
-    "ember-modifier": "^4.1.0"
+    "ember-modifier": "^4.1.0",
+    "glimmer-motion": "workspace:*"
   },
   "devDependencies": {
     "@babel/plugin-proposal-decorators": "catalog:",

@@ -21,6 +21,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
+import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { generateRandomWorkspaceName } from '../../../lib/random-name';
@@ -32,7 +33,6 @@ import {
 
 import ModalContainer from '../../modal-container';
 
-import focusWhenSelected from './focus-when-selected';
 import ItemContainer from './item-container';
 
 interface AddWorkspaceModalSignature {
@@ -48,7 +48,7 @@ interface AddWorkspaceModalSignature {
   };
 }
 
-class AddWorkspaceModal extends Component<AddWorkspaceModalSignature> {
+export class AddWorkspaceModal extends Component<AddWorkspaceModalSignature> {
   private get isCreateWorkspaceButtonDisabled() {
     return !this.args.endpoint || !this.args.displayName;
   }
