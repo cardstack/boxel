@@ -1,18 +1,30 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, dirname, join } from 'path';
+import { dirSync } from 'tmp';
 import { createRequire } from 'module';
 import { randomBytes, randomUUID } from 'node:crypto';
+import supertest from 'supertest';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import { rri } from '@cardstack/runtime-common';
-import type { Realm } from '@cardstack/runtime-common';
+import type {
+  QueuePublisher,
+  QueueRunner,
+  Realm,
+} from '@cardstack/runtime-common';
 import { destinationCovers } from '@cardstack/runtime-common/card-operations';
 import {
+  closeServer,
+  createVirtualNetwork,
+  matrixURL,
   realmSecretSeed,
+  runTestRealmServerWithRealms,
   setupDB,
   setupPermissionedRealmCached,
 } from './helpers/index.ts';
+import type { RealmHttpServer as Server } from '../server.ts';
+import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import {
@@ -843,6 +855,154 @@ module(basename(import.meta.filename), function () {
         destination.status,
         400,
         'a destination is read from the operation, never sent',
+      );
+    });
+  });
+
+  module('grants API across realms', function (hooks) {
+    const PUBLIC_REALM = 'http://127.0.0.1:4444/grants-public-realm/';
+    const PRIVATE_REALM = 'http://127.0.0.1:4444/grants-private-realm/';
+    const secureOriginURL = new URL('https://secure.grants.test/secure');
+    const REALM_USER = '@node-test_realm:localhost';
+    const READER = '@grants-private-reader:localhost';
+    const STRANGER = '@grants-stranger:localhost';
+    const PRIVATE_VENDOR = {
+      module: rri(`${PRIVATE_REALM}vendor`),
+      name: 'Vendor',
+    };
+
+    let request: SuperTest<Test>;
+    let dbAdapter: PgAdapter;
+    let server: Server;
+    let realms: Realm[] = [];
+    let keyring: SecretsKeyring;
+
+    async function start({
+      dbAdapter: _dbAdapter,
+      publisher,
+      runner,
+    }: {
+      dbAdapter: PgAdapter;
+      publisher: QueuePublisher;
+      runner: QueueRunner;
+    }) {
+      dbAdapter = _dbAdapter;
+      let result = await runTestRealmServerWithRealms({
+        virtualNetwork: createVirtualNetwork(),
+        realmsRootPath: join(dirSync().name, 'realm_server_1'),
+        secureOriginURL,
+        realms: [
+          {
+            realmURL: new URL(PUBLIC_REALM),
+            fileSystem: {},
+            permissions: {
+              [REALM_USER]: ['read', 'write', 'realm-owner'],
+              '*': ['read'],
+            },
+          },
+          {
+            realmURL: new URL(PRIVATE_REALM),
+            fileSystem: {
+              'vendor.gts': `
+                import { CardDef } from "@cardstack/base/card-api";
+                import { operation } from "@cardstack/base/operations";
+
+                export class Vendor extends CardDef {
+                  @operation static models = {
+                    base: 'callApi',
+                    url: 'https://private-vendor.example/v1/models',
+                    headers: { authorization: 'Bearer {{userKey}}' },
+                  };
+                }
+              `,
+            },
+            permissions: {
+              [REALM_USER]: ['read', 'write', 'realm-owner'],
+              [READER]: ['read'],
+            },
+          },
+        ],
+        dbAdapter,
+        publisher,
+        runner,
+        matrixURL,
+      });
+      server = result.testRealmHttpServer;
+      realms = result.realms;
+      request = supertest(server);
+    }
+
+    // One server for the module: its tests write only grants and keys,
+    // which name the key's owner, so they don't see each other's rows.
+    // Booting indexes both realms inside the first test's budget.
+    hooks.before(function (assert) {
+      assert.timeout(300_000);
+    });
+
+    setupDB(hooks, {
+      before: async (_dbAdapter, publisher, runner) => {
+        keyring = installSecretsKeyring(
+          await new LocalKeyProvider().loadDataKeys(),
+        );
+        await start({ dbAdapter: _dbAdapter, publisher, runner });
+      },
+      after: async () => {
+        for (let realm of realms) {
+          realm?.unsubscribe();
+        }
+        if (server) {
+          await closeServer(server);
+        }
+        resetCatalogRealms();
+        resetSecretsAtRest();
+      },
+    });
+
+    async function approve(user: string) {
+      let key = await addKey(dbAdapter, keyring, { owner: user });
+      return {
+        key,
+        response: await request
+          .post('/_user-key-grants')
+          .set('Authorization', await secureSessionAuth(dbAdapter, user))
+          .set('Origin', secureOriginURL.origin)
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'user-key-grant',
+              attributes: {
+                keyId: key.id,
+                realm: PUBLIC_REALM,
+                codeRef: PRIVATE_VENDOR,
+                operation: 'models',
+              },
+            },
+          }),
+      };
+    }
+
+    test("naming a readable realm doesn't reach an operation whose module is in one the caller can't read", async function (assert) {
+      let { key, response } = await approve(STRANGER);
+      assert.strictEqual(response.status, 404, response.text);
+      assert.notOk(
+        response.text.includes('private-vendor.example'),
+        "the private realm's destination is not disclosed",
+      );
+      let rows = await dbAdapter.execute(
+        `SELECT id FROM user_key_grants WHERE key_id = $1`,
+        { bind: [key.id] },
+      );
+      assert.strictEqual(rows.length, 0, 'no grant is written');
+
+      let { response: allowed } = await approve(READER);
+      assert.strictEqual(
+        allowed.status,
+        201,
+        `a reader of the module's realm gets the grant: ${allowed.text}`,
+      );
+      assert.strictEqual(
+        allowed.body.data.attributes.destination,
+        'https://private-vendor.example/v1/',
       );
     });
   });
