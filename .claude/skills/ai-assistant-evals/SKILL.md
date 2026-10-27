@@ -334,10 +334,11 @@ changes a selector the run ends as `runner-failure` with the step name.
 `eval-realm/evaluation.gts`; the evaluations themselves are JSON under
 `eval-realm/Evaluation/`. An evaluation that wants a card or file already in
 the test workspace names it in `initialCards` / `initialFiles` and keeps it
-under `eval-realm/`; the runner copies those in before the prompt. Opened seed
-cards never count as "a card rendered". An evaluation that sets
-`expectedChangedCards` is satisfied only by one of those cards, changed from
-its seed and on screen. Its
+under `eval-realm/`; the runner copies those in before the prompt. A seed card
+counts as "a card rendered" only when the evaluation lists it in
+`expectedChangedCards` and its file differs from the seed; an evaluation that
+sets the field is satisfied only by one of those cards, changed and on
+screen. Its
 `skillFeatures` are switched on in each room before the first prompt (the
 result card's notes list the features a run had), and `secondsPerPrompt`
 replaces the default 200 s time target per prompt.

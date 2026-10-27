@@ -4,6 +4,8 @@
 // run as the eval users, never need access to the workspace the evaluation
 // lives in: only the writer that made the bundle does.
 
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+
 import {
   ensureTrailingSlash,
   waitForCard,
@@ -84,10 +86,14 @@ export async function loadEvaluation(
   let id = doc.data.id ?? cardUrl;
   let initialCards = linkedIds(doc, 'initialCards', id);
   let initialFiles = linkedIds(doc, 'initialFiles', id);
-  let expectedChangedCards = linkedIds(doc, 'expectedChangedCards', id);
+  // A card link may be spelled with its `.json` suffix, as `initialCards`
+  // tolerates; the id without it is what the runner compares.
+  let expectedChangedCards = linkedIds(doc, 'expectedChangedCards', id).map(
+    (card) => card.replace(/\.json$/, ''),
+  );
   for (let card of expectedChangedCards) {
     if (
-      !initialCards.includes(card) &&
+      !initialCards.some((seed) => seed.replace(/\.json$/, '') === card) &&
       !initialFiles.includes(`${card}.json`)
     ) {
       throw new Error(
@@ -124,12 +130,13 @@ export async function loadEvaluation(
 }
 
 function relativePath(url: string, realmUrl: string): string {
-  if (!url.startsWith(realmUrl)) {
+  let paths = new RealmPaths(new URL(realmUrl));
+  if (!paths.inRealm(new URL(url))) {
     throw new Error(
       `${url} is outside the evaluation's realm ${realmUrl}; initial cards and files must live in the same workspace as the evaluation`,
     );
   }
-  return url.slice(realmUrl.length);
+  return paths.local(new URL(url));
 }
 
 // Fetches every initial file and card. A card's own module is bundled too
@@ -234,15 +241,16 @@ export function expectedChangedSeeds(
   bundle: EvaluationBundle,
   testRealmUrl: string,
 ): { cardId: string; path: string; content: Buffer }[] {
-  testRealmUrl = ensureTrailingSlash(testRealmUrl);
+  let testRealm = new RealmPaths(new URL(testRealmUrl));
   return (bundle.expectedChangedCards ?? []).map((id) => {
-    let path = `${relativeId(id, bundle)}.json`;
+    let local = relativeId(id, bundle);
+    let path = `${local}.json`;
     let file = bundle.files.find((f) => f.path === path);
     if (!file) {
       throw new Error(`the bundle has no seed for ${path}`);
     }
     return {
-      cardId: `${testRealmUrl}${path.replace(/\.json$/, '')}`,
+      cardId: testRealm.fileURL(local).href,
       path,
       content: Buffer.from(file.content, 'base64'),
     };
@@ -250,5 +258,6 @@ export function expectedChangedSeeds(
 }
 
 function relativeId(id: string, bundle: Evaluation) {
-  return id.startsWith(bundle.realmUrl) ? id.slice(bundle.realmUrl.length) : id;
+  let paths = new RealmPaths(new URL(bundle.realmUrl));
+  return paths.inRealm(new URL(id)) ? paths.local(new URL(id)) : id;
 }

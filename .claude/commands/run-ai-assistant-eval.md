@@ -164,7 +164,8 @@ model, from four sources:
    - a computed value is arithmetically right: check it against the fields it
      derives from, in the same card document.
    - a card in the evaluation's `expectedChangedCards` is the target of the
-     change: compare it with its seed bytes in `session.json`'s bundle. The
+     change: compare it with its seed bytes in the run's `evaluation.json`
+     (base64 under `files[].content`, keyed by `path`). The
      result JSON's `changedCards` lists the ones whose file differs.
 2. The screenshot next to it (open it with the Read tool): what the user would
    have seen, and whether it rendered at all.

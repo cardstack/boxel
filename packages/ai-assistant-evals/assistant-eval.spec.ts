@@ -9,7 +9,9 @@ import {
 } from './matrix-api.ts';
 import { analyzeRoom } from './room-analysis.ts';
 import { grade, type RunResult, type Verdict } from './run-result.ts';
-import { ensureTrailingSlash, RealmClient } from './realm-api.ts';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+
+import { RealmClient } from './realm-api.ts';
 import {
   expectedChangedSeeds,
   prepopulate,
@@ -805,24 +807,23 @@ async function findRenderedCard(
   };
 }
 
-// Whether a seeded card's file differs from the bytes it was seeded with. A
-// card the run deleted, or that cannot be read back, counts as unchanged.
-async function fileChanged(
-  client: RealmClient | undefined,
+type ExpectedSeed = ReturnType<typeof expectedChangedSeeds>[number];
+
+// Whether a seeded card's file still holds the bytes it was seeded with, or
+// `undefined` when it cannot be read back (the run deleted it, say).
+async function matchesSeed(
+  client: RealmClient,
   realmUrl: string,
-  seed: { path: string; content: Buffer },
-): Promise<boolean> {
-  if (!client) {
-    return false;
-  }
+  seed: ExpectedSeed,
+): Promise<boolean | undefined> {
   try {
     let { body } = await client.getSource(
       realmUrl,
-      `${ensureTrailingSlash(realmUrl)}${seed.path}`,
+      new RealmPaths(new URL(realmUrl)).fileURL(seed.path).href,
     );
-    return !seed.content.equals(Buffer.from(body));
+    return seed.content.equals(Buffer.from(body));
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -1006,6 +1007,7 @@ async function runModel(
   // Declared out here so the snapshot in `finally` can still reach it when the
   // run ends early.
   let realmClient: RealmClient | undefined;
+  let expected: ExpectedSeed[] = [];
   let step = 'start';
   let setStep = (next: string) => {
     step = next;
@@ -1045,6 +1047,18 @@ async function runModel(
       );
       result.initialCards = copied.cards;
       result.initialFiles = copied.files;
+      // Read the cards the evaluation expects changed back before the prompt:
+      // the check after the run counts a card as changed when its bytes
+      // differ from the seed, so the copy has to have kept them.
+      expected = expectedChangedSeeds(evaluation, result.realmUrl);
+      result.expectedChangedCards = expected.map((seed) => seed.cardId);
+      for (let seed of expected) {
+        if (!(await matchesSeed(realmClient, result.realmUrl, seed))) {
+          throw new Error(
+            `${seed.path} does not read back as its seed after the copy, so a change to it could not be told apart`,
+          );
+        }
+      }
     }
     setStep('open room');
     result.roomId = await openRoom(page);
@@ -1140,27 +1154,36 @@ async function runModel(
 
     // An evaluation that names the cards it expects changed is satisfied only
     // by one of them, once its file differs from the seed and it is shown.
-    let expected = evaluation
-      ? expectedChangedSeeds(evaluation, result.realmUrl)
-      : [];
-    result.expectedChangedCards = expected.map((seed) => seed.cardId);
     for (let seed of expected) {
-      if (await fileChanged(realmClient, result.realmUrl, seed)) {
+      if ((await matchesSeed(realmClient, result.realmUrl, seed)) === false) {
         result.changedCards.push(seed.cardId);
       }
     }
-    let rendered = await findRenderedCard(
-      page,
-      result.realmUrl,
-      result.initialCards.filter((id) => !result.changedCards.includes(id)),
-      expected.length > 0 ? result.changedCards : undefined,
-    );
-    if (!rendered.cardId && expected.length > 0) {
-      let paths = expected.map((seed) => seed.path).join(', ');
+    let paths = expected.map((seed) => seed.path).join(', ');
+    let rendered =
+      expected.length > 0 && result.changedCards.length === 0
+        ? {
+            cardId: undefined,
+            reasons: [
+              `none of the cards the evaluation expects to change were changed (${paths})`,
+            ],
+            where: undefined,
+          }
+        : await findRenderedCard(
+            page,
+            result.realmUrl,
+            result.initialCards.filter(
+              (id) => !result.changedCards.includes(id),
+            ),
+            expected.length > 0 ? result.changedCards : undefined,
+          );
+    if (
+      !rendered.cardId &&
+      expected.length > 0 &&
+      result.changedCards.length > 0
+    ) {
       rendered.reasons = [
-        result.changedCards.length === 0
-          ? `none of the cards the evaluation expects to change were changed (${paths})`
-          : `a card the evaluation expects to change was changed but is not shown (${paths})`,
+        `a card the evaluation expects to change was changed but is not shown (${paths})`,
       ];
     }
     result.cardRendered = rendered.cardId;
