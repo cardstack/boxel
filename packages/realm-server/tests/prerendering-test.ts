@@ -1213,7 +1213,7 @@ module(basename(import.meta.filename), function () {
                 @field name = contains(StringField);
                 static isolated = class extends Component<typeof this> {
                   <template>
-                    <div style="height: 6000px; background: linear-gradient(#fff, #000);">{{@model.name}}</div>
+                    <div data-card-field="name" style="height: 6000px; background: linear-gradient(#fff, #000);">{{@model.name}}</div>
                   </template>
                 }
               }
@@ -1527,6 +1527,20 @@ module(basename(import.meta.filename), function () {
       // Chromium texture cap.
       let { response } = await capture(`${realmURL}huge`, {
         fullPage: true,
+        deviceScaleFactor: 3,
+      });
+      assert.strictEqual(response.status, 'error', 'capture is refused');
+      assert.true(
+        (response.error ?? '').includes('physical pixels'),
+        `error names the cap: ${response.error}`,
+      );
+    });
+
+    test('a target capture rejects an element past the physical-pixel cap', async function (assert) {
+      // An element's extent is unknowable at parse time too: the 6000px-tall
+      // element at 3× is ~18k physical px, past the 16384 cap.
+      let { response } = await capture(`${realmURL}huge`, {
+        target: '[data-card-field="name"]',
         deviceScaleFactor: 3,
       });
       assert.strictEqual(response.status, 'error', 'capture is refused');

@@ -707,11 +707,26 @@ export class RunRealmCodeResult extends CardDef {
 export class ViewVisuallyInput extends CardDef {
   // A card instance or a file in a workspace, by URL.
   @field url = contains(StringField);
-  @field format = contains(StringField); // 'isolated' | 'embedded'
+  @field format = contains(StringField, {
+    description: '"isolated" (the default) or "embedded".',
+  });
   // Flat JSON-primitive geometry, for the reason `CaptureInput` gives.
-  @field viewportWidth = contains(NumberField);
-  @field viewportHeight = contains(NumberField);
-  @field fullPage = contains(BooleanField);
+  @field viewportWidth = contains(NumberField, {
+    description:
+      'Width of the browser window the capture renders in, in CSS px; set together with viewportHeight. The default is 1280×800, a laptop screen. Capture at the width the work is about: a phone is about 390×844, a tablet about 820×1180.',
+  });
+  @field viewportHeight = contains(NumberField, {
+    description:
+      'Height of the browser window the capture renders in, in CSS px; set together with viewportWidth.',
+  });
+  @field fullPage = contains(BooleanField, {
+    description:
+      'Set true to capture the whole page, not just the top viewportHeight of it. Not with target.',
+  });
+  @field target = contains(StringField, {
+    description:
+      'A CSS selector for one part of a card, such as ".pricing" or "footer", read from the card\'s template: the capture is of the first element it matches, scrolled into view and cropped to it. Use it to see a part of the card below the top of the page, or one section up close. Cards only (a file renders in its own frame), and not with fullPage.',
+  });
 }
 
 export class ViewVisuallyResult extends CardDef {
@@ -720,8 +735,13 @@ export class ViewVisuallyResult extends CardDef {
   @field sourceUrl = contains(StringField);
   @field kind = contains(StringField); // 'card' | 'file'
   @field format = contains(StringField);
-  // Set when the attached image shows less than the capture (a full-page
-  // capture cut to its top).
+  // The window the capture rendered in, and the selector it was cropped to
+  // (unset for a capture of the page).
+  @field viewportWidth = contains(NumberField);
+  @field viewportHeight = contains(NumberField);
+  @field target = contains(StringField);
+  // Set when the attached image shows less than the capture (a tall capture
+  // cut to its top).
   @field note = contains(StringField);
   @field attachedImages = containsMany(AttachedImageField);
 
