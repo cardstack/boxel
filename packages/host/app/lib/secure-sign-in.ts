@@ -22,7 +22,7 @@ export function signInOnSecureOrigin(): boolean {
 
 // The address of one of the secure origin's pages: each is at its own path
 // beneath the secure origin's URL.
-function pageURL(page: string, params: Record<string, string> = {}) {
+export function pageURL(page: string, params: Record<string, string> = {}) {
   let url = new URL(ENV.secureOriginURL);
   url.pathname = `${url.pathname.replace(/\/+$/, '')}/${page}`;
   for (let [name, value] of Object.entries(params)) {
@@ -31,7 +31,7 @@ function pageURL(page: string, params: Record<string, string> = {}) {
   return url;
 }
 
-function withFragment(url: URL, fragment: Record<string, string>) {
+export function withFragment(url: URL, fragment: Record<string, string>) {
   url.hash = new URLSearchParams(fragment).toString();
   return url.href;
 }

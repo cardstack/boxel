@@ -2292,6 +2292,35 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.false(systemPrompt?.includes('This is skill 2'));
   });
 
+  test('the system prompt keeps credentials out of the chat and sends a missing key to the secure window', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          import.meta.dirname,
+          'resources/chats/added-two-skills-removed-two-skills.json',
+        ),
+        'utf-8',
+      ),
+    );
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(messages![0].role, 'system');
+    let systemPrompt = (messages![0].content as TextContent[])
+      .map((c) => c.text)
+      .join('\n');
+    assert.true(
+      systemPrompt.includes('**Never ask for a credential in the chat.**'),
+      'the prompt forbids asking for a credential in the chat',
+    );
+    assert.true(
+      systemPrompt.includes('call the `open-secure-window` tool'),
+      'the prompt sends a missing key to the secure window',
+    );
+  });
+
   test('should support skill cards without ids', async () => {
     // The responsibility of handling deduplication/etc of skill cards
     // lies with the host application, the AI bot should not need to

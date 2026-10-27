@@ -197,6 +197,28 @@ export class SwitchSubmodeResult extends CardDef {
   @field codePath = contains(StringField);
 }
 
+// What the secure window is opened for. Every field names something; none
+// carries a value. `mode` is `enter-key` or `share-key`. A key is entered for
+// an operation on a card instance (`cardId`) or on a card type (`module`,
+// `name` and `realm`); a key is shared into `realm`. `reason` is one line the
+// window shows as written by whoever opened it.
+export class OpenSecureWindowInput extends CardDef {
+  @field mode = contains(StringField);
+  @field cardId = contains(StringField);
+  @field module = contains(StringField);
+  @field name = contains(StringField);
+  @field realm = contains(StringField);
+  @field operation = contains(StringField);
+  @field reason = contains(StringField);
+}
+
+// Whether the window opened (`opened`), or the browser blocked it and the app
+// shows a button that opens it instead (`blocked`). Never what the user did in
+// the window.
+export class OpenSecureWindowResult extends CardDef {
+  @field status = contains(StringField);
+}
+
 export class WriteTextFileInput extends CardDef {
   @field content = contains(StringField);
   @field realm = contains(StringField);
