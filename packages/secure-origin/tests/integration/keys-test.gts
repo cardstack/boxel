@@ -62,9 +62,26 @@ const KEYS = [
       {
         url: 'https://realm-server.test/someone/dashboard/',
         name: 'Dashboard',
+        shares: [{ id: 'share-dash', label: 'Weather', state: 'active' }],
       },
-      { url: 'https://realm-server.test/someone/workspace/', name: 'Team' },
-    ],
+      {
+        url: 'https://realm-server.test/someone/workspace/',
+        name: 'Team',
+        shares: [
+          { id: 'share-team-1', label: 'Weather', state: 'active' },
+          { id: 'share-team-2', label: 'Team weather', state: 'suspended' },
+        ],
+      },
+      {
+        url: 'https://realm-server.test/someone/old-team/',
+        name: null,
+        shares: [{ id: 'share-old', label: 'Weather', state: 'suspended' }],
+      },
+    ] as {
+      url: string;
+      name: string | null;
+      shares: { id: string; label: string; state: string }[];
+    }[],
   },
   {
     id: 'key-2',
@@ -74,7 +91,11 @@ const KEYS = [
     createdAt: '2026-10-02T12:00:00.000Z',
     updatedAt: '2026-10-02T12:00:00.000Z',
     usedWith: [] as string[],
-    sharedInto: [] as { url: string; name: string }[],
+    sharedInto: [] as {
+      url: string;
+      name: string | null;
+      shares: { id: string; label: string; state: string }[];
+    }[],
   },
 ];
 
@@ -425,7 +446,7 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-key-replace-form]').doesNotExist();
     });
 
-    test('each key says which services it is used with and which workspaces it is shared into, from the key listing alone', async function (assert) {
+    test('each key says which services it is used with and lists the workspaces it is shared into, from the key listing alone', async function (assert) {
       visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Weather service"]');
@@ -435,26 +456,32 @@ module('Integration | key pages', function (hooks) {
         .hasText('Used with github.com, openweathermap.org');
       assert
         .dom(`${weather} [data-test-key-shared-into-summary]`)
-        .hasText('Shared into 2 workspaces');
+        .hasText('Shared into 3 workspaces');
+      let dashboard = `${weather} [data-test-key-shared-into-workspace="https://realm-server.test/someone/dashboard/"]`;
       assert
-        .dom(`${weather} [data-test-key-shared-into-disclosure]`)
-        .doesNotHaveAttribute(
-          'open',
-          'the workspaces are listed only when asked for',
+        .dom(`${dashboard} [data-test-workspace-name]`)
+        .hasText('Dashboard');
+      assert
+        .dom(`${dashboard} [data-test-workspace-address]`)
+        .hasText('realm-server.test/someone/dashboard/');
+      assert
+        .dom(`${dashboard} [data-test-workspace-labels]`)
+        .hasText('As “Weather”');
+      let team = `${weather} [data-test-key-shared-into-workspace="${REALM}"]`;
+      assert
+        .dom(`${team} [data-test-workspace-labels]`)
+        .hasText('As “Weather”, “Team weather” (suspended)');
+      let gone = `${weather} [data-test-key-shared-into-workspace="https://realm-server.test/someone/old-team/"]`;
+      assert
+        .dom(`${gone} [data-test-workspace-name]`)
+        .hasText(
+          'realm-server.test/someone/old-team/',
+          'a workspace the user can no longer read is shown by its address',
         );
-      await click(`${weather} [data-test-key-shared-into-summary]`);
+      assert.dom(`${gone} [data-test-workspace-address]`).doesNotExist();
       assert
-        .dom(`${weather} [data-test-key-shared-into-disclosure]`)
-        .hasAttribute('open', '', 'opening the count lists the workspaces');
-      assert.dom(`${weather} [data-test-key-shared-into-list]`).isVisible();
-      assert
-        .dom(
-          `${weather} [data-test-key-shared-into-workspace="https://realm-server.test/someone/dashboard/"]`,
-        )
-        .hasText('Dashboard realm-server.test/someone/dashboard/');
-      assert
-        .dom(`${weather} [data-test-key-shared-into-workspace="${REALM}"]`)
-        .hasText('Team realm-server.test/someone/workspace/');
+        .dom(`${dashboard} [data-test-key-unshare]`)
+        .hasAria('label', 'Unshare Weather service from Dashboard');
 
       let maps = '[data-test-key-row="Maps"]';
       assert
@@ -463,7 +490,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom(`${maps} [data-test-key-shared-into]`)
         .hasText('Not shared into any workspace');
-      assert.dom(`${maps} [data-test-key-shared-into-summary]`).doesNotExist();
+      assert.dom(`${maps} [data-test-key-unshare]`).doesNotExist();
 
       assert.deepEqual(
         requests
@@ -472,6 +499,91 @@ module('Integration | key pages', function (hooks) {
         ['GET _user-keys'],
         'the page asks nothing per key',
       );
+    });
+
+    test('unsharing a key from one workspace asks first, then takes out each of its shares there', async function (assert) {
+      let listings = 0;
+      serve({
+        'GET _user-keys': () => {
+          listings++;
+          return json(
+            200,
+            keyResources(
+              listings === 1
+                ? KEYS
+                : [
+                    {
+                      ...KEYS[0],
+                      sharedInto: KEYS[0].sharedInto.filter(
+                        (w) => w.url !== REALM,
+                      ),
+                    },
+                    KEYS[1],
+                  ],
+            ),
+          );
+        },
+        'DELETE _key-shares/share-team-1': () => ({ status: 204 }),
+        'DELETE _key-shares/share-team-2': () => ({ status: 204 }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      let team = `[data-test-key-row="Weather service"] [data-test-key-shared-into-workspace="${REALM}"]`;
+      await click(`${team} [data-test-key-unshare]`);
+      assert
+        .dom(`${team} [data-test-key-unshare-confirm]`)
+        .includesText(
+          'Unshare from Team? Cards there stop using this key. It stays shared everywhere else.',
+        );
+      await click(`${team} [data-test-key-unshare-cancel]`);
+      assert.dom(`${team} [data-test-key-unshare-confirm]`).doesNotExist();
+      assert.false(
+        requests.some((r) => r.method === 'DELETE'),
+        'nothing is unshared until confirmed',
+      );
+
+      await click(`${team} [data-test-key-unshare]`);
+      await click(`${team} [data-test-key-unshare-confirm-button]`);
+      await waitUntil(() => listings === 2);
+      await settled();
+      assert.deepEqual(
+        requests
+          .filter((r) => r.method === 'DELETE')
+          .map((r) => ({ path: r.path, body: r.body })),
+        [
+          { path: '_key-shares/share-team-1', body: undefined },
+          { path: '_key-shares/share-team-2', body: undefined },
+        ],
+        'each of its shares in that workspace, with no ticket',
+      );
+      assert.deepEqual(ticketRequests(), [], 'unsharing mints no ticket');
+      assert.dom(team).doesNotExist('the workspace is gone from the list');
+      assert
+        .dom(
+          '[data-test-key-row="Weather service"] [data-test-key-shared-into-summary]',
+        )
+        .hasText('Shared into 2 workspaces', 'and the key stays in the rest');
+    });
+
+    test('an unshare the server refuses says why and keeps the workspace', async function (assert) {
+      serve({
+        'DELETE _key-shares/share-dash': () =>
+          refusal(403, `only a share's owner unshares it`),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      let dashboard = `[data-test-key-row="Weather service"] [data-test-key-shared-into-workspace="https://realm-server.test/someone/dashboard/"]`;
+      await click(`${dashboard} [data-test-key-unshare]`);
+      await click(`${dashboard} [data-test-key-unshare-confirm-button]`);
+      await waitFor('[data-test-keys-error]');
+      assert
+        .dom('[data-test-keys-error]')
+        .includesText("only a share's owner unshares it");
+      assert
+        .dom(`${dashboard} [data-test-key-unshare-confirm]`)
+        .exists('the question stays open');
     });
 
     test('deleting a key lists the shares it would stop, then deletes it', async function (assert) {

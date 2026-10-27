@@ -25,7 +25,7 @@ import {
   type UserKeyGrant,
 } from '../lib/user-key-grants.ts';
 import { listOwnSharedRealms, type SharedRealm } from '../lib/key-shares.ts';
-import { registrableDomain, UNNAMED_REALM } from '../lib/secure-window.ts';
+import { registrableDomain } from '../lib/secure-window.ts';
 
 // The management API for the signed-in user's own keys. The shares API
 // (`handle-key-shares.ts`) answers with the same helpers. Every route answers
@@ -61,9 +61,9 @@ function serialize(key: UserKeyMetadata) {
 
 // A key's metadata as listed and shown, with where it is used: the
 // destinations it may be sent to (its grants), the services those are, by
-// registrable domain (`usedWith`), and the realms it is shared into, by name
-// and address (`sharedInto`). The key page shows every key's from this one
-// listing.
+// registrable domain (`usedWith`), and the realms it is shared into, with the
+// key's shares in each (`sharedInto`). The key page shows every key's from
+// this one listing.
 function serializeWithUse(
   key: UserKeyMetadata,
   grants: UserKeyGrant[],
@@ -90,10 +90,7 @@ function serializeWithUse(
           ),
         ),
       ].sort(),
-      sharedInto: sharedInto.map(({ url, name }) => ({
-        url,
-        name: name ?? UNNAMED_REALM,
-      })),
+      sharedInto,
     },
   };
 }

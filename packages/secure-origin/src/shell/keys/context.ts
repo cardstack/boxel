@@ -3,6 +3,8 @@
 export type {
   DestinationDisplay,
   KeyShare,
+  ListedKey,
+  SharedWorkspace,
   UserKey,
   WindowContext,
 } from '../../security/keys.ts';

@@ -1,7 +1,8 @@
 // The key page: the user's own keys, laid out as a linksToMany field is in a
 // card's edit format: each key a tile saying which services it is used with
-// and which workspaces it is shared into, with Share and Replace on it and a
-// delete button beside it, and a button under them to add another.
+// and listing the workspaces it is shared into, each of which it can be
+// unshared from, with Share and Replace on it and a delete button beside it,
+// and a button under them to add another.
 // It is what the secure origin shows at its own address and at `keys`.
 // No key's value is ever shown, here or anywhere: a key is replaced, never
 // read back. Removing a key first lists the shares it would suspend, and
@@ -18,6 +19,7 @@ import {
   listKeys,
   replaceKey,
   sharesOfKey,
+  unshare,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
@@ -36,7 +38,12 @@ import {
   loadFailure,
   type LoadFailure,
 } from './context.ts';
-import type { KeyShare, UserKey } from './context.ts';
+import type {
+  KeyShare,
+  ListedKey,
+  SharedWorkspace,
+  UserKey,
+} from './context.ts';
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
 import KeyTile from './key-tile.gts';
@@ -77,7 +84,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                   <li class='item' data-test-key-row={{key.name}}>
                     <div class='entry'>
                       <KeyTile @key={{key}}>
-                        <KeyUse @key={{key}} />
+                        <KeyUse @key={{key}} @onUnshare={{this.unshare}} />
                         <div class='tile-actions'>
                           <Button
                             class='action'
@@ -340,7 +347,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
 
   private state = trackedObject({
     loading: true,
-    keys: [] as UserKey[],
+    keys: [] as ListedKey[],
     error: undefined as string | undefined,
     // What went wrong when the key list didn't load.
     loadFailed: undefined as LoadFailure | undefined,
@@ -472,6 +479,24 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.state.action = loaded
       ? { name: 'deleting', key, shares }
       : { name: 'none' };
+  };
+
+  // Takes the key out of one workspace: every one of its shares there, which
+  // needs no ticket since a key's owner may always withdraw it. The key stays
+  // shared everywhere else, and the list is read again to show it.
+  private unshare = async (
+    key: ListedKey,
+    workspace: SharedWorkspace,
+  ): Promise<boolean> => {
+    let unshared = await this.guard(async () => {
+      for (let share of workspace.shares) {
+        await unshare(this.args.api.config, share.id);
+      }
+    });
+    if (unshared && this.state.keys.some((k) => k.id === key.id)) {
+      await this.load();
+    }
+    return unshared;
   };
 
   private replace = async (event: Event) => {

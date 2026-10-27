@@ -377,7 +377,7 @@ export async function secureWindowContext(
 
 // What a realm is called before its `realm.json` is indexed, as a realm
 // reports itself then.
-export const UNNAMED_REALM = 'Unnamed Workspace';
+const UNNAMED_REALM = 'Unnamed Workspace';
 
 export interface WritableRealm {
   url: string;
