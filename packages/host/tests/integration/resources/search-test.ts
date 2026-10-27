@@ -696,7 +696,24 @@ module(`Integration | search resource`, function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    await waitUntil(() => search.instances.length === 3);
+    // The re-run follows the realm's index event over matrix, then searches
+    // the server and loads the new card; on a loaded runner that chain can
+    // outlast `waitUntil`'s 1 s default even though it completes.
+    let waitStart = performance.now();
+    try {
+      await settled();
+      await waitUntil(() => search.instances.length === 3, {
+        timeout: 10_000,
+      });
+    } catch (e) {
+      throw new Error(
+        `live search did not reach 3 instances ${Math.round(
+          performance.now() - waitStart,
+        )} ms after the write; it holds ${JSON.stringify(
+          search.instances.map((i) => i.id),
+        )}, isLoading=${search.isLoading}: ${e}`,
+      );
+    }
 
     assert.strictEqual(search.instances.length, 3);
     assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
