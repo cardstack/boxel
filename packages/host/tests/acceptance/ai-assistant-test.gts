@@ -144,6 +144,12 @@ function modelNameFor(llmId: string): string {
   return TEST_MODEL_NAMES[llmId] ?? llmId;
 }
 
+// The picker's trigger names the model without its provider prefix; the
+// list and the trigger's title keep the full name.
+function triggerName(name: string): string {
+  return name.replace(/^[^:]{1,24}:\s*/, '');
+}
+
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -745,7 +751,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     let defaultModelId = 'anthropic/claude-sonnet-4.6';
     let defaultModelName = modelNameFor(defaultModelId);
 
-    assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(triggerName(defaultModelName));
     await click('[data-test-llm-select-selected]');
 
     // Should have 6 models from our system card (including duplicate modelId with different config)
@@ -762,7 +770,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .hasText(llmNameToChangeTo);
     await click(`[data-test-llm-select-item="${llmConfigId}"] button`);
     await click('[data-test-llm-select-selected]');
-    assert.dom('[data-test-llm-select-selected]').hasText(llmNameToChangeTo);
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(triggerName(llmNameToChangeTo));
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.strictEqual(roomState.model, llmIdToChangeTo);
@@ -937,12 +947,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.ok(defaultSystemModelId, 'system card provides a default model');
     let expectedName = modelNameFor(defaultSystemModelId!);
 
-    assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(triggerName(expectedName));
 
     // Switching submodes should not change the active LLM
     await click('[data-test-submode-switcher-button]');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(triggerName(expectedName));
 
     await click('[data-test-close-ai-assistant]');
   });
@@ -984,7 +998,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(modelNameFor('deepseek/deepseek-chat-v3-0324'));
+      .hasText(triggerName(modelNameFor('deepseek/deepseek-chat-v3-0324')));
     await click('[data-test-llm-select-selected]');
     assert
       .dom(

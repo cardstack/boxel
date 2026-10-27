@@ -110,7 +110,9 @@ module('Integration | ai-assistant-panel | quick look', function (hooks) {
     await waitFor('[data-test-room-settled]');
     await fillIn('[data-test-message-field]', 'What is in this card?');
     await click('[data-test-send-message-btn]');
-    await waitFor(`[data-test-user-message]:not(.is-pending) ${bubblePill}`);
+    await waitFor(
+      `[data-test-user-message]:not(.is-pending) [data-test-attached-card="${cardId}"]`,
+    );
   }
 
   test('a card pill in the reader’s bubble opens in Quick Look, and Escape puts it away', async function (assert) {

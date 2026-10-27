@@ -300,10 +300,10 @@ test.describe('Correctness Checks', () => {
     // Verify the command didn't fail
     await expect(commandContainer).not.toHaveClass(/is-failed/);
 
-    // Verify the command description is displayed
+    // A check's row names what it checked: the last segment of the target
     await expect(
       commandContainer.locator('[data-test-pretui-tool-row-title]'),
-    ).toContainText('Check correctness');
+    ).toContainText(`Checked ${cardId.split('/').pop()}`);
 
     // Verify the command result event was dispatched with correct data
     let toolResultEvent: any;
