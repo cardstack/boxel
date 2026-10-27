@@ -115,12 +115,16 @@ live_dashboards() {
 
 stale=()
 while IFS= read -r folder; do
+  # Capture the listing before reading it: a failure inside a process
+  # substitution does not stop the script, and an incomplete inventory would
+  # report nothing to prune.
+  listing="$(live_dashboards "$folder")" || exit 1
   while IFS=$'\t' read -r uid title; do
     [[ -n "$uid" ]] || continue
     if ! grep -qxF "$uid" <<<"$repo_dashboards"; then
       stale+=("${uid}"$'\t'"${title}")
     fi
-  done < <(live_dashboards "$folder")
+  done <<<"$listing"
 done <<<"$managed_folders"
 
 echo "prune-dashboards: env=${env_name} server=${grafana_server} managed folders=$(wc -l <<<"$managed_folders" | tr -d ' ') stale dashboards=${#stale[@]}" >&2
