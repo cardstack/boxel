@@ -91,6 +91,25 @@ export const SEALED_COLUMNS: SealedColumn[] = [
       id: String(row.id),
     }),
   },
+  // Each grant's copy of a user's key, bound to the grant, its key, its owner
+  // and its destination (`grantCopyBinding` in `lib/user-keys.ts`).
+  {
+    field: 'user_key_grants.value',
+    table: 'user_key_grants',
+    idColumn: 'id',
+    keyIdColumn: 'value_key_id',
+    nonceColumn: 'value_nonce',
+    ciphertextColumn: 'value_ciphertext',
+    tagColumn: 'value_tag',
+    bindingColumns: ['owner', 'key_id', 'destination'],
+    binding: (row) => ({
+      field: 'user_key_grants.value',
+      owner: String(row.owner),
+      id: String(row.id),
+      parentId: String(row.key_id),
+      destination: String(row.destination),
+    }),
+  },
 ];
 
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;

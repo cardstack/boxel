@@ -117,7 +117,8 @@ host. A host with a trailing dot is refused too, since it names the same host
 as one without.
 
 The definition cache holds both. The destination is the unit a key is
-approved for; nothing reads it for that until a binding fills a slot.
+approved for: creating a grant (see the `user-keys` skill) reads it from here
+and stores it on the grant, and sending under a grant never reads it again.
 
 **`destinationCovers(destination, url)`** is the one rule for whether a request
 goes where a destination says: the send-time check asks it of every request,

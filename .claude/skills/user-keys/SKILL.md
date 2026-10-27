@@ -1,14 +1,14 @@
 ---
 name: user-keys
-description: Operate and diagnose the keys that belong to people — the `user_keys` table, the signed-in user's write-only management API (`/_user-keys`), and the key write tickets (`/_key-write-tickets`) that adding, replacing or deleting a key must present. Covers what the table holds and how its values are sealed and bound (field, owner, id), that a key records no destination, why no API, log line, Sentry event or read-only database role can ever read a value back, who may mint a ticket (a session signed in on the secure origin, from the secure window or the CLI — never the app's session) and how that is decided, ticket lifetime, single use and the one change each ticket is minted for, and every refusal the API answers with. Use when a user reports a key they can't add, replace or delete, when a key change is refused with 403, when reading or querying `user_keys` / `key_write_tickets` as an operator, when a key's value fails to open with SecretDecryptionError, or when changing `lib/user-keys.ts` or `handlers/handle-user-keys.ts`.
+description: Operate and diagnose the keys that belong to people — the `user_keys` table, the signed-in user's write-only management API (`/_user-keys`), and the key write tickets (`/_key-write-tickets`) that adding, replacing or deleting a key must present. Covers what the table holds and how its values are sealed and bound (field, owner, id), that a key records no destination, why no API, log line, Sentry event or read-only database role can ever read a value back, who may mint a ticket (a session signed in on the secure origin, from the secure window or the CLI — never the app's session) and how that is decided, ticket lifetime, single use and the one change each ticket is minted for, and every refusal the API answers with. Also covers grants — where a key may be sent, one `user_key_grants` row per destination its owner approved, each holding its own sealed copy of the key — the master and grant copies and which code opens each, how a grant is created or reused from an operation's lowered destination, why a grant row added by hand sends nothing, and the `/_user-key-grants` routes. Use when a user reports a key they can't add, replace or delete, when a key change or a grant is refused with 403, when reading or querying `user_keys` / `key_write_tickets` / `user_key_grants` as an operator, when a key's value or a grant's copy fails to open with SecretDecryptionError, or when changing `lib/user-keys.ts`, `lib/user-key-grants.ts`, `handlers/handle-user-keys.ts` or `handlers/handle-user-key-grants.ts`.
 ---
 
 # User keys (operators)
 
 A key is a credential stored for one user, its **owner**: the Matrix user id
 of the session that added it. Only the owner lists, shows, replaces or
-deletes it. A key is only its secret: it records no destination, and nothing
-here says where a key may be sent. The code is `packages/realm-server/lib/user-keys.ts` (storage,
+deletes it. A key is only its secret: it records no destination. Where it may
+be sent is a set of grants, one per destination (see [Grants](#grants)). The code is `packages/realm-server/lib/user-keys.ts` (storage,
 tickets, sealing) and `packages/realm-server/handlers/handle-user-keys.ts`
 (the routes).
 
@@ -104,14 +104,14 @@ the ticket goes in `meta`. A body is at most
 exceed that. A query string on these routes is ignored, and left out of the
 request log line and Sentry breadcrumbs.
 
-| Route                      | Does                                                                                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /_key-write-tickets` | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}` |
-| `GET /_user-keys`          | List the user's keys' metadata, by name                                                                                                          |
-| `GET /_user-keys/:id`      | One key's metadata                                                                                                                               |
-| `POST /_user-keys`         | Add: `attributes.{name, kind?, value}`, `meta.{ticket}` (a ticket to `add`)                                                                      |
-| `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value}`, `meta.{ticket}` (a ticket to `replace` this key)                                                        |
-| `DELETE /_user-keys/:id`   | Delete: `meta.{ticket}` (a ticket to `delete` this key); suspends every share holding it (`GET /_key-shares?key=<id>` lists them first)          |
+| Route                      | Does                                                                                                                                                        |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /_key-write-tickets` | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}`            |
+| `GET /_user-keys`          | List the user's keys' metadata, by name, each with its `grants`                                                                                             |
+| `GET /_user-keys/:id`      | One key's metadata, with its `grants`                                                                                                                       |
+| `POST /_user-keys`         | Add: `attributes.{name, kind?, value}`, `meta.{ticket}` (a ticket to `add`)                                                                                 |
+| `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value}`, `meta.{ticket}` (a ticket to `replace` this key); re-seals every grant's copy                                      |
+| `DELETE /_user-keys/:id`   | Delete: `meta.{ticket}` (a ticket to `delete` this key); deletes its grants, suspends every share holding it (`GET /_key-shares?key=<id>` lists them first) |
 
 An attribute other than these, such as a `destination`, is refused with 400.
 
@@ -137,3 +137,124 @@ unchanged, so a user's report carries the server's own words.
 
 A failure that isn't one of these is a 500 logged on `realm:user-keys` with
 the error's name and message only, never the request.
+
+## Grants
+
+A **grant** is the owner's approval for one key to be sent to one
+destination: an `https:` origin (or an `http:` one whose host is on the
+outbound guard's development allowlist, the only `http:` hosts it sends to)
+and a path prefix ending in `/`, stored as the URL parser's `href`. One key reaches several hosts, or several path prefixes
+on one host, through one grant each (`api.openai.com/v1/` and
+`eu.api.openai.com/v1/`, or `/v1/` and `/v1beta/`), and its secret is entered
+once. The code is `lib/user-key-grants.ts` and
+`handlers/handle-user-key-grants.ts`.
+
+`user_key_grants` — one row per key and destination:
+
+| Column                                                         | Holds                                                    |
+| -------------------------------------------------------------- | -------------------------------------------------------- |
+| `id`                                                           | UUID, minted by the realm server before sealing          |
+| `key_id`                                                       | The key; deleting it deletes its grants                  |
+| `owner`                                                        | The key's owner, who approved the grant                  |
+| `destination`                                                  | The normalized destination; unique per key               |
+| `state`                                                        | `active`                                                 |
+| `approved_at`, `approved_via`                                  | When, and the secure session's client: `window` or `cli` |
+| `value_ciphertext`, `value_nonce`, `value_tag`, `value_key_id` | The grant's own sealed copy of the key's value           |
+
+Withheld from `readonly_role` and its members, and excluded from the SQLite
+schema dump, like `user_keys`. Query the metadata only:
+
+```sql
+SELECT id, key_id, destination, state, approved_at, approved_via, value_key_id
+FROM user_key_grants WHERE owner = '@someone:boxel.ai' ORDER BY key_id, destination;
+```
+
+### The master copy and the grant copies
+
+A key's value is stored once per place it is used:
+
+- **The master copy** on `user_keys`, sealed with field `user_keys.value`,
+  the owner and the key's id. Only creating a grant opens it to make a copy
+  (`createOrReuseGrant`); the data-key re-seal pass also opens it, to seal it
+  again under the same binding.
+- **One copy per grant** on `user_key_grants`, sealed with field
+  `user_key_grants.value`, the owner, the grant's id, the key's id (as the
+  binding's `parentId`) and the grant's destination (`grantCopyBinding`).
+  Sending opens only this copy, under the destination stored on the grant
+  (`openGrantForSending`), and reads neither the master copy nor the operation.
+
+Replacing a key seals the new value as the master copy and as every grant's
+copy in one transaction, so nothing asks for approval again and the old value
+opens nowhere. Creating a grant locks the key's row first, so a replace
+running at the same time either finishes first or re-seals the new grant too.
+`user_key_grants.value` is registered in `SEALED_COLUMNS`, so data-key
+rotation re-seals grant copies, and the census reports them as
+`sealed census: user_key_grants.value rowsByKeyId=…`.
+
+**A grant row can't be added by hand.** A row inserted with SQL has no copy
+sealed to its own id, key and destination: copying the sealed columns from
+another grant, another key's grant or the key itself gives a copy bound to
+that other row, and editing a grant's `destination` or `key_id` breaks its own
+binding. Each fails to open with `SecretDecryptionError`, so the grant sends
+nothing. Nothing else takes such a row for a grant either: an approval never
+reuses a row whose copy doesn't open, and replacing the key leaves it as it is
+instead of sealing the new value to it, the same as the data-key re-seal pass
+does. To give a key a destination, the owner approves an operation that
+sends there; to move a grant, remove it and approve again.
+
+### Creating or reusing a grant
+
+A grant is made from an operation, never from a typed destination: the
+destination is the operation's lowered `callApi` destination, read from the
+realm's definition cache (see the `call-api` skill). If one of the key's
+grants already **covers** it, that grant is used; otherwise a new one is
+created. Covering is `destinationCovers`, the same rule the send-time check
+applies: the operation's destination starts with the grant's, compared as
+normalized `href`s, so a match always ends at a `/`. `https://api.openai.com/`
+doesn't cover `https://api.openai.com.evil.net/`, and `/v1/` doesn't cover
+`/v1beta/`. When several cover it, the longest is used.
+
+The request also carries `expectedDestination`, the destination the user was
+shown. It is compared with the one read from the operation and never used in
+its place; when they differ, nothing is approved and the answer is 409, so an
+edit to the operation between showing it and approving it can't move the key.
+The approval UI shows the destination again and asks once more.
+
+A grant stores its destination when it is created and nothing reads the
+operation again, so editing a declaration afterwards changes no grant: the
+next approval of the edited operation creates, or reuses, a grant for where
+it now sends.
+
+**Whole-host grants.** A destination is the path up to the operation URL's
+first `{name}` segment, so one whose first segment is a parameter
+(`https://storage.googleapis.com/{bucket}/…`) is the whole host,
+`https://storage.googleapis.com/`. That grant covers every later operation on
+the host, so on a host that separates tenants by path, one approval covers
+them all. The grant can't be narrower than the operation, which can itself
+send to any path there. An approval UI should say so when the destination's
+path is `/`.
+
+A destination with a host wildcard (`*`, or `%2A`), user info, a query or
+fragment, a path not ending in `/`, or a trailing dot on the host is refused.
+
+The caller must be able to read both the realm the request names and the
+realm that serves the operation's module (`readsRealmOf`, as for a named
+query's type). A module in a realm they can't read, or in none this server
+serves, answers as no such operation, so a grant request never discloses an
+unreadable realm's destinations.
+
+Creating and removing a grant take a session signed in on the secure origin,
+from a request whose `Origin` is the secure origin or absent, exactly as
+minting a key write ticket does. No ticket is involved.
+
+| Route                               | Does                                                                                                                                                                                                        |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /_user-key-grants`            | Create or reuse: type `user-key-grant`, `attributes.{keyId, realm, codeRef: {module, name}, operation, expectedDestination}`; answers 201 with a new grant or 200 with the one reused, and `meta.{created}` |
+| `DELETE /_user-key-grants/:grantId` | Remove one of the user's grants; answers `meta.{revokedBindings}`, the bindings that sent under it                                                                                                          |
+
+| Status | Means                                                                                                                                                                                            |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 400    | Malformed body; an attribute that can't be set (a `destination` included); no `expectedDestination`; an operation that sends no request or whose declaration has problems; a refused destination |
+| 403    | No secure session, or a request from another `Origin`                                                                                                                                            |
+| 404    | No such key or grant of the user's; a realm the user can't read; no such operation, or one whose module is in a realm the user can't read                                                        |
+| 409    | The operation sends to another destination than `expectedDestination`                                                                                                                            |
