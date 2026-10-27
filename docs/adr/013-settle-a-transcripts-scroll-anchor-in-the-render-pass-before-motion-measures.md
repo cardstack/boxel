@@ -18,7 +18,7 @@ scope:
 
 # 013. Settle a transcript's scroll anchor in the render pass, before motion measures
 
-A live transcript changes height for many reasons at once: a reply streams, a row grows its steps, a turn folds, a question collapses into its answer, a card loads. Each one can move what the reader is looking at. A scroll owner holds one anchor through every change, chosen by a fixed priority and read from layout, and it settles that anchor in the same render pass, before a motion layer measures. Then what the reader looks at stays still, and only what really moved on screen is animated. Every scroll lands inside a pass, the motion layer counts a scroll as a move, whatever scrolls with the messages takes part in their motion, and a move spends painted frames rather than wall time, so a follow glides even behind a long render. Only what can be seen is wired for motion; a load or a jump lands as layout puts it; and no two blocks are ever drawn over each other. And the latest turn gets shorter only when an activity ends: what it shows live and what it shows settled share one place, so the motion layer carries real change and never has to hide a furniture swap. The anchoring itself is described in `packages/pretui/docs/scroll-anchoring-protocol.md`.
+ADR 012 sets how the transcript's scroll owner holds one anchor through every change. This ADR adds what a transcript with a motion layer needs. The owner settles that anchor in the same render pass, before the motion layer measures, so what the reader looks at stays still and only what really moved on screen is animated. Every scroll lands inside a pass, the motion layer counts a scroll as a move, whatever scrolls with the messages takes part in their motion, and a move spends painted frames rather than wall time, so a follow glides even behind a long render. Only what can be seen is wired for motion; a load or a jump lands as layout puts it; and no two blocks are ever drawn over each other. And the latest turn gets shorter only when an activity ends: what it shows live and what it shows settled share one place, so the motion layer carries real change and never has to hide a furniture swap. §1.1 to §1.3, §1.5, §1.6 and §1.12 point to ADR 012; their numbers stay so that citations of them stay valid.
 
 ## 1. Decision
 
@@ -29,34 +29,27 @@ and only when, they appear in all capitals, as shown here.
 
 ### 1.1. One anchor, held through every change
 
-A scroll container whose content changes under the reader MUST hold one anchor across each change. That means one element keeps its distance from the viewport's top, or, while following, the content's end keeps its distance from the viewport's bottom.
-
-The anchor MUST be chosen in this order:
-
-1. the element the app asked to show, for a moment after;
-2. the element the reader pressed (by pointer, or Enter or Space), for a moment after, unless they have scrolled since; focus that code moves does not count;
-3. the end, while following;
-4. the element on the reading line, a third of the way down the view.
+ADR 012 §1.1 applies.
 
 ### 1.2. Only the reader leaves the end
 
-Following MUST change only on the reader's input: a wheel, a touch, a scrolling key, or a press on the scrollbar. A position that moves because the layout changed, or because the app scrolled, MUST NOT change whether the container follows.
+ADR 012 §1.2 applies.
 
 ### 1.3. Layout, not paint
 
-The anchor's position MUST be read from layout offsets, which a motion layer's transforms do not move. The browser's own `overflow-anchor` MUST be off in a container that holds its own anchor.
+ADR 012 §1.3 applies.
 
 ### 1.4. Settle before measure
 
-Where a Choreo region measures the content, the scroll owner MUST settle its anchor in the render-pass barrier's SETTLE phase (`registerSettle`), after the pass's mounts and before any region measures. It SHOULD also settle at render commits and on resize, so the anchor holds where no region is live.
+Where a Choreo region measures the transcript, the scroll owner MUST settle its anchor (ADR 012 §1.4) in the render-pass barrier's SETTLE phase (`registerSettle`), after the pass's mounts and before any region measures.
 
 ### 1.5. One scroll owner
 
-App code MUST NOT scroll a managed container itself, with `scrollIntoView` or by setting `scrollTop`. It SHOULD go through the owner's API (`navigate()`, `scrollToEnd()`, `reveal()`), which makes the target the anchor.
+ADR 012 §1.5 applies.
 
 ### 1.6. Proved by property
 
-A change to the anchor's rules SHOULD keep the seeded property tests in `stick-to-bottom.test.gts` passing. A new cause of a height change SHOULD get a case there.
+ADR 012 §1.6 applies.
 
 ### 1.7. Every scroll lands in a pass
 
@@ -80,7 +73,7 @@ A transcript move SHOULD start its clock on its first painted frame and advance 
 
 ### 1.12. Whole pixels
 
-The scroll owner MUST write scroll positions on whole device pixels, and MUST ignore drift smaller than one device pixel.
+ADR 012 §1.7 applies.
 
 ### 1.13. Both renderers, one size
 
@@ -116,15 +109,7 @@ Two blocks of a transcript MUST NOT be drawn over each other in any frame. That 
 
 ## 2. Rationale
 
-The transcript collected scroll rules one bug at a time:
-
-- following pinned the end;
-- a prepend kept the first row still;
-- a press counted as the reader's for half a second;
-- an upward scroll with no input re-pinned when heights changed;
-- the room scrolled messages into view itself.
-
-Each rule was right alone. Two causes landing in one frame resolved by event order, and the reader saw the view yank. One invariant with one priority has no order to depend on.
+ADR 012 §2 says why the scroll owner holds one anchor by priority.
 
 Motion makes the timing matter. Choreo measures every render pass and animates what moved. If the scroll lands after it measures, the motion layer animates a jump the reader didn't cause, or freezes one it should have hidden. Settled before measure, the scroll is part of the state the pass produced (ADR 007 §1.1), and the motion layer sees the page as the reader will.
 
@@ -148,12 +133,8 @@ The motion layer had been animating these shrinks. That made them smoother, not 
 
 ## 3. Considered options
 
-- **One anchor by priority, settled before measure.** Chosen. It is one rule, it doesn't depend on order, and it can be tested as a property.
-- **The browser's `overflow-anchor`.** Rejected. The browser picks its anchor from painted boxes, which a FLIP transform moves, and it can't know what the reader pressed or that the app asked to show something.
-- **A rule per cause** (prepend, expand, stream, cap). Rejected. It's what the transcript had, and the rules raced when causes shared a frame.
-- **Correcting the scroll after motion runs.** Rejected. It runs one frame late, and the motion layer has already animated the wrong delta.
-- **Timers to tell the reader's scrolls from the app's.** Rejected. A timer guesses intent that the input events already state.
-- **Smooth scrolling (`behavior: 'smooth'`) for the follow.** Rejected. The scroll animates outside the motion layer, which then measures a page in motion, and the reader's own wheel fights it.
+- **The anchor settled in the SETTLE phase, before measure.** Chosen. The scroll is then part of the state the pass produced, and the motion layer measures the page as the reader will see it.
+- ADR 012 §3 has the options for how the anchor itself is held.
 - **Leaving ancestor scroll out of the layout fingerprint**, so a busy page cannot cancel a region's runs. Rejected for scroll: the page above reflowing is still left out, but a scroll moves every participant, and dropping it is what made follows land in one frame.
 - **Fixed heights for messages and rows.** Rejected: a slot sized for its tallest state wastes space on every row that never reaches it, and one sized smaller clips. A block that keeps the height it reached is fixed only where it needs to be.
 - **Animating a shrink instead of preventing it.** Rejected: the follow glides, but the reader still watches the transcript drop under them.
