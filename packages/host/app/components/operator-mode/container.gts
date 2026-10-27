@@ -52,7 +52,6 @@ import CardContextSearchResults from '../search/card-context-search-results';
 import { Submodes } from '../submode-switcher';
 
 import CreateListingModal from './create-listing-modal';
-import SecureWindowFallback from './secure-window-fallback';
 
 import type CapabilitiesService from '../../services/capabilities';
 import type CardService from '../../services/card-service';
@@ -230,7 +229,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       <CreateListingModal />
       <CardChooserModal />
       <MarkdownEmbedChooserModal />
-      <SecureWindowFallback />
       <FromElseWhere @name='modal-elsewhere' />
 
       {{#if

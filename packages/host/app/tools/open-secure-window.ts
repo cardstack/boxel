@@ -28,7 +28,7 @@ export default class OpenSecureWindowTool extends HostBaseTool<
 
   static actionVerb = 'Open';
 
-  description = `Open Boxel's secure window, the only place a user enters or shares an API key. Call it as soon as you learn a key is missing, for example when an operation is refused with "binding-not-approved", and tell the user in the chat what you are opening and why. Never ask the user for a key, token, password or other credential in the chat. mode "enter-key": add a key, for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation). mode "share-key": share one of the user's keys into a workspace (realm). reason: one short line, shown in the window as written by you. The result says only whether the window opened ("opened") or the browser blocked it and the app shows the user a button that opens it ("blocked"); it never says what the user did there.`;
+  description = `Open Boxel's secure window, the only place a user enters or shares an API key. Call it once when an operation is refused with "binding-not-approved" and the refusal's meta.slots names a "userKey" slot, or a card says it needs the user's own key, and tell the user in the chat what you are opening and why. A stored key does not by itself fill the slot, so never reopen the window when the same refusal comes back. Never ask the user for a key, token, password or other credential in the chat. mode "enter-key": add a key, for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation). mode "share-key": share one of the user's keys into a workspace (realm). reason: one short line the window shows as the opener's words. The result says only whether the window opened ("opened") or the browser blocked it and the app shows the user a button that opens it ("blocked"); it never says what the user did there.`;
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -50,10 +50,7 @@ export default class OpenSecureWindowTool extends HostBaseTool<
       );
     }
     let request = secureWindowRequest(input);
-    let status = this.secureWindow.open(
-      secureWindowURL(request),
-      request.reason,
-    );
+    let status = this.secureWindow.open(secureWindowURL(request));
     let commandModule = await this.loadToolModule();
     const { OpenSecureWindowResult } = commandModule;
     return new OpenSecureWindowResult({ status });

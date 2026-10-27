@@ -10,29 +10,31 @@ export type SecureWindowOpenStatus = 'opened' | 'blocked';
 
 export interface BlockedSecureWindow {
   url: string;
-  reason?: string;
 }
 
 // Opens the secure window, and when the browser blocks the popup, holds it
 // for the app to offer a button that opens it on the user's click instead
 // (`SecureWindowFallback`).
 //
-// The app keeps no handle to the window. The window is opened with an opener
-// so that a blocked popup can be told apart from an opened one (a `noopener`
-// open answers null either way), and the opener is cut before the secure page
-// loads; the secure origin's `Cross-Origin-Opener-Policy` cuts it again as the
-// page arrives. So nothing in the app page, card code included, can read,
-// navigate or message the window, and the app learns what happened there only
-// by asking the realm server.
+// The window is opened with an opener so that a blocked popup can be told
+// apart from an opened one (a `noopener` open answers null either way). The
+// popup's `opener` is cut before the secure page loads, and the secure
+// origin's `Cross-Origin-Opener-Policy` severs the two windows as it arrives,
+// so the secure page can't reach the app page and the app learns what happened
+// there only by asking the realm server. The app keeps no handle to the
+// popup. Card code runs in this page, though, and could open a window itself
+// or replace `window.open`, so what protects a key from card code is the
+// secure page's own origin: the user types a key only where the address bar
+// shows it.
 export default class SecureWindowService extends Service {
   @tracked blocked: BlockedSecureWindow | undefined;
 
-  open(url: string, reason?: string): SecureWindowOpenStatus {
+  open(url: string): SecureWindowOpenStatus {
     if (this.openPopup(url)) {
       this.blocked = undefined;
       return 'opened';
     }
-    this.blocked = { url, ...(reason ? { reason } : {}) };
+    this.blocked = { url };
     return 'blocked';
   }
 

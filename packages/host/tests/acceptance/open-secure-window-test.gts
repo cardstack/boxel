@@ -198,8 +198,11 @@ module('Acceptance | open the secure window', function (hooks) {
 
     assert.dom('[data-test-status]').hasText('blocked');
     assert
-      .dom('[data-test-secure-window-fallback-reason]')
-      .containsText(REASON, 'the fallback says why the window was opened');
+      .dom('[data-test-secure-window-fallback]')
+      .doesNotContainText(
+        REASON,
+        'the fallback shows nothing the caller wrote, since any card can raise it',
+      );
     assert
       .dom('[data-test-secure-window-fallback-host]')
       .hasText(secureOrigin.host, 'the fallback names the address to check');

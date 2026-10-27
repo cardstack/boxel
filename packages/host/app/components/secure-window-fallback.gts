@@ -10,6 +10,10 @@ import type SecureWindowService from '@cardstack/host/services/secure-window';
 
 // Offered when the browser blocks the secure window's popup: a button that
 // opens the same window on the user's click, which a browser lets through.
+// It shows nothing the caller wrote. A card can raise it at will (an open
+// outside a click is always blocked), so words of the card's own in Boxel's
+// dialog would read as Boxel's; the window shows the caller's reason itself,
+// labelled as the opener's.
 export default class SecureWindowFallback extends Component {
   @service declare private secureWindow: SecureWindowService;
 
@@ -37,12 +41,6 @@ export default class SecureWindowFallback extends Component {
             Your browser blocked Boxel's secure window, where you enter and
             share your keys.
           </p>
-          {{#if this.blocked.reason}}
-            <p class='reason' data-test-secure-window-fallback-reason>
-              <span class='reason-label'>Why it was opened:</span>
-              {{this.blocked.reason}}
-            </p>
-          {{/if}}
           <p>
             Before you type a key into it, check that its address bar reads
             <strong data-test-secure-window-fallback-host>
@@ -73,9 +71,6 @@ export default class SecureWindowFallback extends Component {
     <style scoped>
       p {
         margin: 0 0 var(--boxel-sp-sm);
-      }
-      .reason-label {
-        font-weight: 600;
       }
       .footer-buttons {
         display: flex;

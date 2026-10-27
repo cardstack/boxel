@@ -3,8 +3,10 @@ import StringField from '@cardstack/base/string';
 import { instance, operation } from '@cardstack/base/operations';
 
 // A card whose forecast comes from an outside weather service, sent with the
-// invoking user's own key for it. Until that key is entered in the secure
-// window, invoking `forecast` is refused with `binding-not-approved`.
+// invoking user's own key for it (a `userKey` slot). An operation that
+// carries a credential slot is refused `binding-not-approved`, and the
+// refusal names the slot, which is what tells the assistant the user's key
+// is needed.
 export class WeatherStation extends CardDef {
   static displayName = 'Weather Station';
 
