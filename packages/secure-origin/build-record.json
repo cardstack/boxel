@@ -836,7 +836,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 165804,
+      "bytes": 165786,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1106,7 +1106,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/workspace-members.gts",
-          "size": 1792
+          "size": 1776
         },
         {
           "package": "@cardstack/secure-origin",

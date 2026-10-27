@@ -20,7 +20,7 @@ const WorkspaceMembers: TemplateOnlyComponent<Signature> = <template>
       {{else if (eq @realm.readableBy 'signed-in')}}
         Anyone signed in to Boxel can see this workspace.
       {{else}}
-        Only the people it’s shared with can see this workspace.
+        Only its members can see this workspace.
       {{/if}}
     </li>
     <li data-test-workspace-writers>

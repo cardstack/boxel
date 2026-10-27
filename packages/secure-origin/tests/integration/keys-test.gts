@@ -940,7 +940,7 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
       assert
         .dom('[data-test-workspace-readers]')
-        .hasText('Only the people it’s shared with can see this workspace.');
+        .hasText('Only its members can see this workspace.');
       assert
         .dom('[data-test-workspace-writers]')
         .includesText(
