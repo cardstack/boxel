@@ -11,7 +11,8 @@ export interface QrCreateOptions {
 
 export interface QrBitMatrix {
   size: number;
-  get(row: number, col: number): boolean;
+  /** 1 for a dark module, 0 for a light one */
+  get(row: number, col: number): number;
 }
 
 export interface QrCodeSymbol {

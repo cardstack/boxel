@@ -11,7 +11,7 @@ type Vendored<Blocks> = ComponentLike<{
   Element: HTMLElement;
 }>;
 
-export declare const Grid: Vendored<{ header: []; body: [] }>;
+export declare const Grid: Vendored<{ header: [grid: any]; body: [grid: any] }>;
 export declare const Row: Vendored<{ default: [] }>;
 export declare const Cell: Vendored<Record<string, never>>;
 

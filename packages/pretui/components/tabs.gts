@@ -34,11 +34,23 @@ interface TabView {
 }
 
 const STEP: Record<string, (index: number, count: number) => number> = {
-  ArrowRight: (i, n) => (i + 1) % n,
-  ArrowLeft: (i, n) => (i - 1 + n) % n,
+  next: (i, n) => (i + 1) % n,
+  previous: (i, n) => (i - 1 + n) % n,
   Home: () => 0,
   End: (_i, n) => n - 1,
 };
+
+function stepFor(event: KeyboardEvent, list: HTMLElement) {
+  let rtl = getComputedStyle(list).direction === 'rtl';
+  switch (event.key) {
+    case 'ArrowRight':
+      return STEP[rtl ? 'previous' : 'next'];
+    case 'ArrowLeft':
+      return STEP[rtl ? 'next' : 'previous'];
+    default:
+      return STEP[event.key];
+  }
+}
 
 // The underline is the same shared primitive the SegmentedControl wears, in
 // its `underline` cut: one <SlidingHighlight /> travelling along the rail
@@ -82,27 +94,32 @@ export class Tabs extends Component<TabsSignature> {
   }
   // Automatic activation: the arrow keys move focus and select together,
   // which APG recommends when every panel renders without a fetch.
+  // A modified key is the browser's or the page's (Alt+Left is Back).
   onKeydown = (event: Event) => {
-    if (!(event instanceof KeyboardEvent)) {
+    if (
+      !(event instanceof KeyboardEvent) ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey
+    ) {
       return;
     }
-    let step = STEP[event.key];
-    let tabs = [
-      ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-        '[role="tab"]',
-      ),
-    ];
+    let list = event.currentTarget as HTMLElement;
+    let step = stepFor(event, list);
+    let tabs = [...list.querySelectorAll<HTMLElement>('[role="tab"]')];
     let index = tabs.indexOf(event.target as HTMLElement);
-    if (!step || index === -1) {
+    let option = step ? this.options[step(index, tabs.length)] : undefined;
+    if (!option || index === -1) {
       return;
     }
     event.preventDefault();
-    let next = step(index, tabs.length);
-    let option = this.options[next];
-    if (option) {
-      this.pick(option);
+    this.pick(option);
+    // A controlled parent may refuse the change; focus stays with the
+    // selection rather than landing on a tab that isn't selected.
+    if (this.value === option.value) {
+      tabs[this.options.indexOf(option)]?.focus();
     }
-    tabs[next]?.focus();
   };
   <template>
     <div data-test-pretui-tabs ...attributes>

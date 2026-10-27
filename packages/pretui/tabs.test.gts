@@ -106,6 +106,64 @@ module('Pretui | Tabs', function (hooks) {
     assert.deepEqual(changes, ['settings', 'overview', 'settings', 'overview']);
   });
 
+  test('the tab stop follows the selection', async function (assert) {
+    await render(<template><Tabs @options={{OPTIONS}} /></template>);
+    await focus(tab('overview'));
+    await triggerKeyEvent(tab('overview'), 'keydown', 'ArrowRight');
+    assert.dom(tab('activity')).hasAttribute('tabindex', '0');
+    assert.dom(tab('overview')).hasAttribute('tabindex', '-1');
+  });
+
+  test('a key with a modifier is left to the browser', async function (assert) {
+    await render(<template><Tabs @options={{OPTIONS}} /></template>);
+    await focus(tab('activity'));
+    for (let modifier of ['altKey', 'metaKey', 'ctrlKey', 'shiftKey']) {
+      let event = new KeyboardEvent('keydown', {
+        key: 'ArrowLeft',
+        bubbles: true,
+        cancelable: true,
+        [modifier]: true,
+      });
+      tab('activity').dispatchEvent(event);
+      await settled();
+      assert.false(event.defaultPrevented, `${modifier} is not prevented`);
+    }
+    assert.strictEqual(selected(), 'overview', 'the selection is unchanged');
+    assert.strictEqual(document.activeElement, tab('activity'));
+  });
+
+  test('right-to-left reverses the arrow keys', async function (assert) {
+    await render(
+      <template>
+        <div dir='rtl'><Tabs @options={{OPTIONS}} /></div>
+      </template>,
+    );
+    await focus(tab('overview'));
+    await triggerKeyEvent(tab('overview'), 'keydown', 'ArrowLeft');
+    assert.strictEqual(selected(), 'activity');
+    await triggerKeyEvent(tab('activity'), 'keydown', 'ArrowRight');
+    assert.strictEqual(selected(), 'overview');
+  });
+
+  test('when a controlled parent refuses the change, focus stays on the selected tab', async function (assert) {
+    let asked: string[] = [];
+    let refuse = (value: string) => asked.push(value);
+    await render(
+      <template>
+        <Tabs
+          @options={{OPTIONS}}
+          @value='overview'
+          @onValueChange={{refuse}}
+        />
+      </template>,
+    );
+    await focus(tab('overview'));
+    await triggerKeyEvent(tab('overview'), 'keydown', 'ArrowRight');
+    assert.deepEqual(asked, ['activity'], 'the parent was asked');
+    assert.strictEqual(selected(), 'overview');
+    assert.strictEqual(document.activeElement, tab('overview'));
+  });
+
   test('each tab controls the panel, and the panel is labelled by the active tab', async function (assert) {
     await render(
       <template>

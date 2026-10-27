@@ -84,7 +84,8 @@ export const QR_DEFAULT_BACKGROUND = '#ffffff';
 
 interface QrModules {
   size: number;
-  get(row: number, col: number): boolean;
+  /** truthy for a dark module */
+  get(row: number, col: number): number | boolean;
 }
 
 /** The shape `qrcode`'s `create()` returns; see ./qrcode/README.md. */
@@ -544,8 +545,8 @@ export class QrCode extends Component<QrCodeSignature> {
             data-test-pretui-qr-contrast-warning
           >Requested colours were rejected — a QR symbol must be dark on light
             at
-            {{QR_MIN_CONTRAST}}:1 or better. Rendered black on white so it
-            still scans.</span>
+            {{QR_MIN_CONTRAST}}:1 or better. Rendered black on white so it still
+            scans.</span>
         {{/if}}
       </figcaption>
     </figure>
@@ -579,10 +580,7 @@ export class QrCode extends Component<QrCodeSignature> {
           /* White because the symbol is: the light modules and the quiet zone
              must read as one continuous field to a scanner. */
           background: var(--pretui-qr-plaque, var(--boxel-light));
-          box-shadow: var(
-            --pretui-shadow-hairline,
-            0 0 0 1px var(--border)
-          );
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
         }
         .pretui-qr-svg {
           display: block;
