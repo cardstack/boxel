@@ -191,6 +191,6 @@ export default class SignedIn extends Component {
     forgetReturn();
     // Replaced, not pushed: Back from the app mustn't land on this page, nor
     // on the app's address with the spent token in it.
-    navigation.replace(handOffURL(target, minted.loginToken));
+    navigation.replace(handOffURL(target, minted.loginToken, minted.deviceId));
   };
 }

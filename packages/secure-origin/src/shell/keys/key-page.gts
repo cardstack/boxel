@@ -96,7 +96,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           ><ShareIcon
                               class='action-icon'
                               aria-hidden='true'
-                            />Share with Realm</Button>
+                            />Share with Workspace</Button>
                           <Button
                             class='action'
                             @kind='secondary'
