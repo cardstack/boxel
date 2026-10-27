@@ -114,14 +114,16 @@ const here: string = (import.meta as any).url;
 // Below this width the Library pane starts with its filter rail closed.
 const LIBRARY_NARROW_WIDTH_REM = 40;
 
-// How far the Library rail can be dragged. The default is --grid-rail-width,
-// which double-clicking the rail's edge restores. The max also stays this far
-// inside the Library pane, so a narrow pane keeps the rail's edge in view to
-// drag back.
-const RAIL_MIN_WIDTH = '11rem';
+// The Library rail's width and how far it can be dragged. The rail opens at
+// the default, which double-clicking its edge restores. The max also stays
+// this far inside the Library pane, so a narrow pane keeps the rail's edge in
+// view to drag back, but never drops below the min.
+const RAIL_DEFAULT_WIDTH = '13.375rem';
+const RAIL_MIN_WIDTH_REM = 11;
 const RAIL_MAX_WIDTH_REM = 26;
 const RAIL_PANE_MARGIN_REM = 3;
-const RAIL_DEFAULT_WIDTH = '13.375rem';
+const RAIL_MIN_WIDTH = `${RAIL_MIN_WIDTH_REM}rem`;
+const RAIL_MAX_WIDTH = `${RAIL_MAX_WIDTH_REM}rem`;
 
 function remToPx(rem: number): number {
   let rootSize = parseFloat(
@@ -1385,9 +1387,9 @@ class Isolated extends Component<typeof Workspace> {
         --grid-chip-border: color-mix(in oklch, var(--border) 50%, transparent);
         /* looser leading for the welcome prose; no line-height token runs past 1.4 */
         --grid-prose-leading: 1.6;
-        /* fixed geometry the layout is built around; the rail's width
-           matches RAIL_DEFAULT_WIDTH */
-        --grid-rail-width: 13.375rem;
+        /* fixed geometry the layout is built around; the rail's width,
+           --grid-rail-width, is set on the Library pane from
+           RAIL_DEFAULT_WIDTH or the dragged width */
         --grid-search-width: 10.625rem;
         --grid-search-results-size: 20rem;
         --grid-frame-height: 3.375rem;
@@ -1735,7 +1737,8 @@ class Isolated extends Component<typeof Workspace> {
           var(--boxel-sp-xs) var(--boxel-sp-lg);
         /* the resize handle's strip comes out of the end padding, so the
            rail's scrollbar and the rows' ends sit beside the handle rather
-           than under it */
+           than under it; a coarse pointer's strip is wider than the
+           padding, so there the rows give up the difference */
         margin-inline-end: var(--rail-resize-size);
         padding-inline-end: max(
           0px,
@@ -2645,26 +2648,25 @@ class Isolated extends Component<typeof Workspace> {
     this.railPreference = !this.isRailOpen;
   }
 
-  // Dragged width in px; unset leaves --grid-rail-width in charge. Like the
+  // Dragged width in px; unset leaves the rail at RAIL_DEFAULT_WIDTH. Like the
   // toggle, it lasts until the card re-renders.
   @tracked private railWidth: number | undefined;
-  @tracked private libraryWidth: number | undefined;
+  // In px, from the Library pane's width; unset until the pane is measured.
+  @tracked private measuredRailMaxWidth: number | undefined;
 
-  private get railMaxWidth(): number {
-    let max = remToPx(RAIL_MAX_WIDTH_REM);
-    return this.libraryWidth === undefined
-      ? max
-      : Math.min(max, this.libraryWidth - remToPx(RAIL_PANE_MARGIN_REM));
+  private get railMaxWidth(): number | string {
+    return this.measuredRailMaxWidth ?? RAIL_MAX_WIDTH;
   }
 
-  // Clamped here too, so a pane that narrows after a drag still keeps the
-  // rail's edge in view.
-  private get railWidthStyle(): SafeString | undefined {
-    return this.railWidth === undefined
-      ? undefined
-      : htmlSafe(
-          `--grid-rail-width: ${Math.min(this.railWidth, this.railMaxWidth)}px`,
-        );
+  // The rail's only width. Clamped to the max too, so a narrow pane keeps
+  // the rail's edge in view, whether it was dragged or is at the default.
+  private get railWidthStyle(): SafeString {
+    let width =
+      this.railWidth === undefined ? RAIL_DEFAULT_WIDTH : `${this.railWidth}px`;
+    if (this.measuredRailMaxWidth !== undefined) {
+      width = `min(${width}, ${this.measuredRailMaxWidth}px)`;
+    }
+    return htmlSafe(`--grid-rail-width: ${width}`);
   }
 
   // A resize follows the pointer directly; only a toggle slides the rail.
@@ -2678,9 +2680,16 @@ class Isolated extends Component<typeof Workspace> {
       return;
     }
     let observer = new ResizeObserver(([entry]) => {
-      this.libraryWidth = entry.contentRect.width;
-      this.isLibraryNarrow =
-        entry.contentRect.width < remToPx(LIBRARY_NARROW_WIDTH_REM);
+      let width = entry.contentRect.width;
+      let rem = remToPx(1);
+      let railMax = Math.max(
+        RAIL_MIN_WIDTH_REM * rem,
+        Math.min(RAIL_MAX_WIDTH_REM * rem, width - RAIL_PANE_MARGIN_REM * rem),
+      );
+      if (railMax !== this.measuredRailMaxWidth) {
+        this.measuredRailMaxWidth = railMax;
+      }
+      this.isLibraryNarrow = width < LIBRARY_NARROW_WIDTH_REM * rem;
     });
     observer.observe(element);
     return () => observer.disconnect();

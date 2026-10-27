@@ -141,7 +141,7 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
     let railScreenWidth = () =>
       Math.round(find(RAIL_SLOT)!.getBoundingClientRect().width);
     let drag = async (by: number) => {
-      let options = { button: 0, pointerId: 1 };
+      let options = { button: 0, buttons: 1, pointerId: 1 };
       await triggerEvent(HANDLE, 'pointerdown', { ...options, clientX: 500 });
       await triggerEvent(HANDLE, 'pointermove', {
         ...options,
@@ -149,6 +149,7 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
       });
       await triggerEvent(HANDLE, 'pointerup', {
         ...options,
+        buttons: 0,
         clientX: 500 + by,
       });
     };
@@ -221,10 +222,14 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
     await waitUntil(() => find(RAIL_SLOT)?.hasAttribute('inert'));
     await click(TOGGLE);
 
-    let options = { button: 0, pointerId: 1 };
+    let options = { button: 0, buttons: 1, pointerId: 1 };
     await triggerEvent(HANDLE, 'pointerdown', { ...options, clientX: 100 });
     await triggerEvent(HANDLE, 'pointermove', { ...options, clientX: 2000 });
-    await triggerEvent(HANDLE, 'pointerup', { ...options, clientX: 2000 });
+    await triggerEvent(HANDLE, 'pointerup', {
+      ...options,
+      buttons: 0,
+      clientX: 2000,
+    });
 
     let library = find('[data-test-library]') as HTMLElement;
     let rail = find(RAIL_SLOT) as HTMLElement;
@@ -238,6 +243,51 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
       handleBox.right <= libraryBox.right,
       'the handle is inside the pane',
     );
+  });
+
+  test('in a pane too narrow for that margin the rail keeps its min width', async function (assert) {
+    const HANDLE = '[data-test-rail-resize-handle]';
+    let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    let api = await loader.import<typeof import('@cardstack/base/card-api')>(
+      '@cardstack/base/card-api',
+    );
+    let Comp = api.getComponent(new Workspace({})) as ComponentLike<{
+      Args: { format?: Format };
+    }>;
+    await render(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='width: 12rem; height: 30rem'>
+          <Comp @format='isolated' />
+        </div>
+      </template>,
+    );
+    await click(LIBRARY);
+    await waitUntil(() => find(RAIL_SLOT)?.hasAttribute('inert'));
+    await click(TOGGLE);
+    let rail = find(RAIL_SLOT) as HTMLElement;
+    await waitUntil(() => rail.getAnimations().length === 0);
+
+    let min = Math.round(11 * rem);
+    assert.strictEqual(
+      rail.offsetWidth,
+      min,
+      'the rail opens at 11rem, narrower than its default, to fit the pane',
+    );
+    assert
+      .dom(HANDLE)
+      .hasAria('valuenow', String(min), 'and the handle reports that width')
+      .hasAria('valuemax', String(min));
+
+    let options = { button: 0, buttons: 1, pointerId: 1 };
+    await triggerEvent(HANDLE, 'pointerdown', { ...options, clientX: 100 });
+    await triggerEvent(HANDLE, 'pointermove', { ...options, clientX: 2000 });
+    await triggerEvent(HANDLE, 'pointerup', {
+      ...options,
+      buttons: 0,
+      clientX: 2000,
+    });
+    assert.strictEqual(rail.offsetWidth, min, 'a drag keeps it there');
   });
 
   test('a narrow pane starts with the rail closed, and the toggle opens it', async function (assert) {
