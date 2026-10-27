@@ -144,6 +144,8 @@ class FaultyHistory implements HistoryBackend {
   // Called as each commit resolves, so a test can order what an observer saw
   // against the moment the revision existed.
   onCommitted?: (revision: string) => void;
+  // Fail the next outcome query, as an unreachable deckd would.
+  failNextOutcome = false;
 
   constructor(inner: DeckdHistoryBackend) {
     this.inner = inner;
@@ -159,8 +161,12 @@ class FaultyHistory implements HistoryBackend {
     return result;
   }
 
-  outcome(operationId: string): Promise<HistoryOutcome> {
-    return this.inner.outcome(operationId);
+  async outcome(operationId: string): Promise<HistoryOutcome> {
+    if (this.failNextOutcome) {
+      this.failNextOutcome = false;
+      throw new Error('connect ECONNREFUSED');
+    }
+    return await this.inner.outcome(operationId);
   }
 
   head(): Promise<string> {
@@ -392,9 +398,13 @@ module(basename(import.meta.filename), function (hooks) {
           {
             operation: recorded.trailers['Boxel-Operation-Id'],
             channel: recorded.trailers['Boxel-Channel'],
-            correlation: recorded.trailers['Boxel-Correlation-Id'],
           },
-          { operation: 'patch-1', channel: 'host', correlation: 'corr-1' },
+          { operation: 'patch-1', channel: 'host' },
+        );
+        assert.strictEqual(
+          events.at(-1)?.correlationId,
+          'corr-1',
+          'the revision leads to its logs through its operation id',
         );
         assert.ok(stored('person-1.json').includes('Patched'), 'and on disk');
         assert.strictEqual(
@@ -675,6 +685,40 @@ module(basename(import.meta.filename), function (hooks) {
           'nothing written',
         );
         assert.strictEqual(events.at(-1)?.outcome, 'replayed');
+      },
+    );
+
+    recordingTest(
+      'a write whose outcome is unknown is finished by a retry under its id, whatever the retry is correlated with',
+      async function (assert) {
+        history.loseNextCommitResponse = true;
+        history.failNextOutcome = true;
+        let before = stored('person-3.json');
+        let response = await patchPerson('/person-3', 'Unknown Outcome', {
+          [OPERATION_ID_HEADER]: 'unknown-outcome',
+          'X-Boxel-Logging-Correlation-Id': 'first-attempt',
+        });
+        assert.strictEqual(response.status, 503, JSON.stringify(response.body));
+        assert.strictEqual(events.at(-1)?.outcome, 'unknown');
+        let revision = await history.head();
+        assert.notStrictEqual(revision, ROOT_REVISION, 'deckd committed it');
+        assert.strictEqual(stored('person-3.json'), before, 'disk is behind');
+
+        let retry = await patchPerson('/person-3', 'Unknown Outcome', {
+          [OPERATION_ID_HEADER]: 'unknown-outcome',
+          'X-Boxel-Logging-Correlation-Id': 'second-attempt',
+        });
+        assert.strictEqual(retry.status, 200, JSON.stringify(retry.body));
+        assert.strictEqual(
+          retry.get(REVISION_HEADER),
+          revision,
+          'the retry is the revision the first attempt recorded',
+        );
+        assert.strictEqual(await history.head(), revision, 'nothing new');
+        assert.ok(
+          stored('person-3.json').includes('Unknown Outcome'),
+          'and the retry brought disk up to it',
+        );
       },
     );
 

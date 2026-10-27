@@ -42,8 +42,12 @@ export const OPERATION_ID_HEADER = 'X-Boxel-Operation-Id';
 export const CHANNEL_HEADER = 'X-Boxel-Channel';
 // The revision a write committed, or HEAD for a write that changed nothing.
 export const REVISION_HEADER = 'X-Boxel-Revision';
-// The id of the log lines a request produced, recorded on its revision as
-// `Boxel-Correlation-Id` so a revision leads to them.
+// The id of the log lines a request produced. It is carried on the write's
+// telemetry line beside the operation id, so a revision leads to its logs
+// through its `Boxel-Operation-Id`. It stays off the revision itself: a client
+// mints a fresh one per request, and history fingerprints a commit request
+// with its trailers, so a retry carrying a new one would no longer match the
+// attempt it retries.
 export const CORRELATION_ID_HEADER = 'X-Boxel-Logging-Correlation-Id';
 
 export type HistoryChannel =
@@ -352,9 +356,6 @@ export class RealmHistoryRecorder {
       trailers: [
         { key: 'Boxel-Operation-Id', value: recording.operationId },
         { key: 'Boxel-Channel', value: recording.channel },
-        ...(recording.correlationId
-          ? [{ key: 'Boxel-Correlation-Id', value: recording.correlationId }]
-          : []),
       ],
       changes: changes.map(({ change }) => change),
     };

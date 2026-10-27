@@ -741,6 +741,9 @@ export interface RevisionWriteEvent {
   // How the write was made (`Boxel-Channel`). Not `channel`, which every line
   // on this channel uses to name the log channel itself.
   writeChannel: string;
+  // The request's `X-Boxel-Logging-Correlation-Id`, which names the rest of
+  // its log lines. Null where the request carried none.
+  correlationId: string | null;
   outcome: string;
   // Null where the write never reached that step.
   lockWaitMs: number | null;

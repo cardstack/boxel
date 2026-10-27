@@ -636,6 +636,7 @@ function emitRecordedWrite(realmURL: string, recording: WriteRecording): void {
       operationId: recording.operationId,
       revision: recording.revision ?? null,
       writeChannel: recording.channel,
+      correlationId: recording.correlationId ?? null,
       outcome: recording.outcome ?? 'unknown',
       lockWaitMs: recording.lockWaitMs ?? null,
       recordMs: recording.recordMs ?? null,
