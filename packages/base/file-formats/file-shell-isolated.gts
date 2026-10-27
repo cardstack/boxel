@@ -654,9 +654,9 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         opacity: 0.6;
       }
       .act[data-download-state='failed'] {
-        background: transparent;
-        border-color: var(--fd-warn, #e8710a);
-        color: var(--fd-warn, #e8710a);
+        background-color: transparent;
+        border-color: var(--destructive-ink);
+        color: var(--destructive-ink);
       }
       .iso-cols {
         display: grid;
