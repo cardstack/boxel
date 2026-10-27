@@ -588,17 +588,20 @@ module('Acceptance | dashboard', function (hooks) {
       );
     });
 
-    test('the star is a toggle with a fixed label whose pressed state follows the favorite', async function (assert) {
+    test('the star is a toggle with a fixed label whose pressed state and tooltip follow the favorite', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       let star =
         '[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-workspace-favorite-btn]';
       let deskStar =
         '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-workspace-favorite-btn]';
+      let tip =
+        '[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-workspace-favorite-tip] [role="tooltip"]';
       assert
         .dom(star)
         .hasAttribute('aria-label', 'Favorite')
         .hasAttribute('aria-pressed', 'false');
+      assert.dom(tip).hasText('Add to Favorites');
 
       await click(star);
 
@@ -606,6 +609,7 @@ module('Acceptance | dashboard', function (hooks) {
         .dom(star)
         .hasAttribute('aria-label', 'Favorite')
         .hasAttribute('aria-pressed', 'true');
+      assert.dom(tip).hasText('Remove from Favorites');
       assert
         .dom(deskStar)
         .hasAttribute('aria-pressed', 'true', "the new desk's star is pressed");
@@ -616,6 +620,7 @@ module('Acceptance | dashboard', function (hooks) {
         .dom(star)
         .hasAttribute('aria-label', 'Favorite')
         .hasAttribute('aria-pressed', 'false');
+      assert.dom(tip).hasText('Add to Favorites');
       assert.dom(deskStar).doesNotExist();
     });
 

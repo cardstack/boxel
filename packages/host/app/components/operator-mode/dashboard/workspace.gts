@@ -19,6 +19,7 @@ import IconX from '@cardstack/boxel-icons/x';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Menu as PretMenu } from '@cardstack/pretui/components/menu';
 import { Spinner } from '@cardstack/pretui/components/spinner';
+import { Tooltip } from '@cardstack/pretui/components/tooltip';
 
 import { didCancel, dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -312,20 +313,32 @@ export default class Workspace extends Component<Signature> {
         <div class={{cn 'favorite-btn' is-favorited=this.isFavorited}}>
           {{! The star's fill already shows the state, so it takes no
               pressed tint, which would show as a gray square on the chip. }}
-          <IconButton
-            @label='Favorite'
-            @appearance='plain'
-            @pressed={{this.isFavorited}}
-            @pressedTint={{false}}
-            {{on 'click' this.toggleFavorite}}
-            data-test-workspace-favorite-btn={{@realmIdentifier}}
+          {{! The tip names the action; title is dropped so the native
+              tooltip doesn't repeat the fixed label over it. }}
+          <Tooltip
+            @content={{if
+              this.isFavorited
+              'Remove from Favorites'
+              'Add to Favorites'
+            }}
+            data-test-workspace-favorite-tip={{@realmIdentifier}}
           >
-            {{#if this.isFavorited}}
-              <StarFilled class='control-icon' width='16' height='16' />
-            {{else}}
-              <Star class='control-icon' width='16' height='16' />
-            {{/if}}
-          </IconButton>
+            <IconButton
+              @label='Favorite'
+              @appearance='plain'
+              @pressed={{this.isFavorited}}
+              @pressedTint={{false}}
+              {{on 'click' this.toggleFavorite}}
+              title={{null}}
+              data-test-workspace-favorite-btn={{@realmIdentifier}}
+            >
+              {{#if this.isFavorited}}
+                <StarFilled class='control-icon' width='16' height='16' />
+              {{else}}
+                <Star class='control-icon' width='16' height='16' />
+              {{/if}}
+            </IconButton>
+          </Tooltip>
         </div>
         {{! The options menu uses BoxelDropdown: Pret UI's Menu takes items
             alone, with no room for the dates under them. }}
