@@ -186,6 +186,23 @@ export class FilmStage extends Component<Signature> {
     };
   }
 
+  /**
+   * The frame a drag or a key asks for, held to the floor and the ceiling.
+   *
+   * AND THE BOX NEVER GOES TALLER THAN IT IS WIDE. Every layout inside the
+   * film is written for a frame that is not portrait — the type sets beside
+   * the subject, the mark draws across to it — so a tall thin frame does not
+   * show the film small, it shows a different film. The grip is free above
+   * that line and stops at it. At the ceiling on both axes the frame is the
+   * well again: no override.
+   */
+  private fit(wanted: Size): Size | null {
+    let max = this.ceiling();
+    let w = Math.round(Math.max(SIZE_MIN.w, Math.min(max.w, wanted.w)));
+    let h = Math.round(Math.max(SIZE_MIN.h, Math.min(max.h, w, wanted.h)));
+    return w >= max.w - 1 && h >= max.h - 1 ? null : { h, w };
+  }
+
   private gripDown = (event: Event) => {
     if (!(event instanceof PointerEvent)) {
       return;
@@ -214,26 +231,10 @@ export class FilmStage extends Component<Signature> {
       return;
     }
     /* the frame is centred, so a corner dragged by d grows the box by 2d */
-    let max = this.ceiling();
-    let w = Math.round(
-      Math.max(
-        SIZE_MIN.w,
-        Math.min(max.w, grip.w0 + 2 * (event.clientX - grip.x0)),
-      ),
-    );
-    /* AND THE BOX NEVER GOES TALLER THAN IT IS WIDE. Every layout inside
-       the film is written for a frame that is not portrait — the type sets
-       beside the subject, the mark draws across to it — so a tall thin drag
-       does not show the film small, it shows a different film. The grip is
-       free above that line and stops at it. */
-    let h = Math.round(
-      Math.max(
-        SIZE_MIN.h,
-        Math.min(max.h, w, grip.h0 + 2 * (event.clientY - grip.y0)),
-      ),
-    );
-    /* at the ceiling on both axes the frame is the well again: no override */
-    this.size = w >= max.w - 1 && h >= max.h - 1 ? null : { h, w };
+    this.size = this.fit({
+      h: grip.h0 + 2 * (event.clientY - grip.y0),
+      w: grip.w0 + 2 * (event.clientX - grip.x0),
+    });
   };
 
   private gripUp = () => {
@@ -247,8 +248,7 @@ export class FilmStage extends Component<Signature> {
 
   /**
    * The grip's keyboard. The arrows move the corner as a drag does: Right and
-   * Down grow the frame, Left and Up shrink it, held to the drag's floor,
-   * ceiling and no-portrait rule. Enter or Escape snaps back; with the frame
+   * Down grow the frame, Left and Up shrink it, held by `fit` as a drag is. Enter or Escape snaps back; with the frame
    * already at its own size they have nothing to undo and are the host's.
    */
   private gripKey = (event: Event) => {
@@ -283,11 +283,8 @@ export class FilmStage extends Component<Signature> {
       return;
     }
     event.preventDefault();
-    let max = this.ceiling();
-    let from = this.size ?? max;
-    let w = Math.max(SIZE_MIN.w, Math.min(max.w, from.w + dw));
-    let h = Math.max(SIZE_MIN.h, Math.min(max.h, w, from.h + dh));
-    this.size = w >= max.w - 1 && h >= max.h - 1 ? null : { h, w };
+    let from = this.size ?? this.ceiling();
+    this.size = this.fit({ h: from.h + dh, w: from.w + dw });
     this.keyed = true;
     this.remember();
   };
