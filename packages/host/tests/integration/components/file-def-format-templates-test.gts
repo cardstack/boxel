@@ -126,23 +126,23 @@ module('Integration | FileDef format templates', function (hooks) {
       new Blob([bytes], { type: 'application/pdf' }),
     );
     let saved: { href: string; download: string } | undefined;
-    let savedClick = new Promise<void>((resolve) => {
-      let captureSave = (event: MouseEvent) => {
-        let anchor = event.target;
-        if (
-          anchor instanceof HTMLAnchorElement &&
-          anchor.href.startsWith('blob:') &&
-          anchor.href !== sourceURL
-        ) {
-          // Stop the browser from writing the file to disk during the test.
-          event.preventDefault();
-          saved = { href: anchor.href, download: anchor.download };
-          document.removeEventListener('click', captureSave, true);
-          resolve();
-        }
-      };
-      document.addEventListener('click', captureSave, true);
-    });
+    let resolveSave!: () => void;
+    let savedClick = new Promise<void>((resolve) => (resolveSave = resolve));
+    let captureSave = (event: MouseEvent) => {
+      let anchor = event.target;
+      if (
+        anchor instanceof HTMLAnchorElement &&
+        anchor.href.startsWith('blob:') &&
+        anchor.href !== sourceURL
+      ) {
+        // Stop the browser from writing the file to disk during the test.
+        event.preventDefault();
+        saved = { href: anchor.href, download: anchor.download };
+        resolveSave();
+      }
+    };
+    document.addEventListener('click', captureSave, true);
+    let saveTimeout: ReturnType<typeof setTimeout> | undefined;
     try {
       await renderCard(
         loader,
@@ -150,7 +150,17 @@ module('Integration | FileDef format templates', function (hooks) {
         'isolated',
       );
       await click('[data-test-file-download]');
-      await savedClick;
+      // A Download that never saves fails here rather than at the QUnit
+      // timeout.
+      await Promise.race([
+        savedClick,
+        new Promise<void>((_, reject) => {
+          saveTimeout = setTimeout(
+            () => reject(new Error('Download never saved the file')),
+            5000,
+          );
+        }),
+      ]);
       assert.strictEqual(saved?.download, 'report.pdf');
       await settled();
       assert
@@ -160,6 +170,8 @@ module('Integration | FileDef format templates', function (hooks) {
       let savedBytes = await (await fetch(saved!.href)).text();
       assert.strictEqual(savedBytes, bytes, 'the saved blob holds the file');
     } finally {
+      clearTimeout(saveTimeout);
+      document.removeEventListener('click', captureSave, true);
       URL.revokeObjectURL(sourceURL);
     }
   });
