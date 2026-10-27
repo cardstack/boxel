@@ -648,8 +648,8 @@ module(`Integration | search resource`, function (hooks) {
 
   // STRESS (do not merge): each variant registered many times.
   for (let stressRun = 0; stressRun < 40; stressRun++)
-    for (let control of [false, true])
-      test(`can perform a live search for cards [stress ${control ? 'control-1s' : 'fixed'} ${stressRun}]`, async function (assert) {
+    for (let variant of ['fixed', 'wait-only', 'control-1s'] as const)
+      test(`can perform a live search for cards [stress ${variant} ${stressRun}]`, async function (assert) {
         let query: Query = {
           filter: {
             on: {
@@ -676,6 +676,7 @@ module(`Integration | search resource`, function (hooks) {
         assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
         assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
 
+        let writeStart = performance.now();
         await realm.write(
           'books/3.json',
           JSON.stringify({
@@ -703,23 +704,41 @@ module(`Integration | search resource`, function (hooks) {
         // the server and loads the new card; on a loaded runner that chain can
         // outlast `waitUntil`'s 1 s default even though it completes.
         let waitStart = performance.now();
-        if (control) {
-          await waitUntil(() => search.instances.length === 3);
-        } else
-          try {
-            await settled();
-            await waitUntil(() => search.instances.length === 3, {
-              timeout: 10_000,
-            });
-          } catch (e) {
-            throw new Error(
-              `live search did not reach 3 instances ${Math.round(
-                performance.now() - waitStart,
-              )} ms after the write; it holds ${JSON.stringify(
-                search.instances.map((i) => i.id),
-              )}, isLoading=${search.isLoading}: ${e}`,
-            );
+        let writeMs = Math.round(waitStart - writeStart);
+        let settledMs: number | undefined;
+        let reachedMs: number | undefined;
+        let reached = () => {
+          if (search.instances.length === 3 && reachedMs === undefined) {
+            reachedMs = Math.round(performance.now() - waitStart);
           }
+          return search.instances.length === 3;
+        };
+        let outcome = 'ok';
+        try {
+          if (variant === 'fixed') {
+            await settled();
+            settledMs = Math.round(performance.now() - waitStart);
+          }
+          await waitUntil(reached, {
+            timeout: variant === 'control-1s' ? 1000 : 10_000,
+          });
+        } catch (e) {
+          outcome = `timeout: ${e}`;
+          // keep polling so the log says whether the refresh came late
+          await waitUntil(reached, { timeout: 15_000 }).catch(() => {});
+        }
+        console.warn(
+          `[stress-timing] variant=${variant} copy=${stressRun} writeMs=${writeMs} settledMs=${settledMs} reached3Ms=${reachedMs} totalWaitMs=${Math.round(
+            performance.now() - waitStart,
+          )} outcome=${outcome}`,
+        );
+        if (outcome !== 'ok') {
+          throw new Error(
+            `live search did not reach 3 instances in time; reached3Ms=${reachedMs}; it holds ${JSON.stringify(
+              search.instances.map((i) => i.id),
+            )}, isLoading=${search.isLoading}: ${outcome}`,
+          );
+        }
 
         assert.strictEqual(search.instances.length, 3);
         assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
