@@ -1,7 +1,9 @@
 // What a key page was opened for, as the realm server describes it, in rows
 // of a card's edit format: the operation and the card definition and realm it
-// is on, where that request sends a key, and the reason the page that opened
-// the window gave, shown as that page's own words.
+// is on, where that request sends a key, and any reason the link that opened
+// the window carries. A realm is named with its address as well as its name,
+// since anyone can give a realm any name. The reason comes from the link, not
+// the server, so it is shown as the link's words and nothing vouches for it.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import FieldContainer from '../../components/field-container.gts';
@@ -11,6 +13,7 @@ import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
 
 import type { WindowContext } from './context.ts';
 import Destination from './destination.gts';
+import { addressOf } from './workspace-dropdown.gts';
 
 interface Signature {
   Args: {
@@ -51,6 +54,9 @@ const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
         class='name'
         data-test-opened-for-realm
       >{{@context.realm.name}}</span>
+      <span class='address' data-test-opened-for-realm-address>{{addressOf
+          @context.realm.url
+        }}</span>
     </p>
   </FieldContainer>
   {{#if @context.operation.destination}}
@@ -64,14 +70,20 @@ const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
         @method={{@context.operation.method}}
         @card={{@context.card.name}}
         @realm={{@context.realm.name}}
+        @realmURL={{@context.realm.url}}
       />
     </FieldContainer>
   {{/if}}
   {{#if @reason}}
-    <FieldContainer @tag='div' @label='Reason given' @icon={{MessageSquare}}>
+    <FieldContainer
+      @tag='div'
+      @label='Message in the link'
+      @icon={{MessageSquare}}
+    >
       <p class='value reason' data-test-opened-for-reason>
         “{{@reason}}”
-        <span class='reason-label'>Written by the card that opened this window</span>
+        <span class='reason-label'>From the link that opened this window. Boxel
+          hasn’t checked it.</span>
       </p>
     </FieldContainer>
   {{/if}}
@@ -86,6 +98,12 @@ const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
     }
     .name {
       font-weight: 600;
+    }
+    .address {
+      display: block;
+      font-size: var(--boxel-font-size-xs);
+      line-height: var(--boxel-line-height-xs);
+      color: var(--muted-foreground);
     }
     .reason-label {
       display: block;

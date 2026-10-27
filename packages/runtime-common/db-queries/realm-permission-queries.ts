@@ -189,6 +189,24 @@ function isDirectWriterRow(username: string, write: boolean): boolean {
 }
 
 /**
+ * The direct writers of a realm, from its permission rows, other than
+ * `userId`: the people who could, among other things, suspend a share there
+ * or swap their own key into one.
+ */
+export function otherDirectWriters(
+  permissions: RealmPermissions,
+  userId: string,
+): string[] {
+  return Object.entries(permissions)
+    .filter(
+      ([username, actions]) =>
+        username !== userId &&
+        isDirectWriterRow(username, actions.includes('write')),
+    )
+    .map(([username]) => username);
+}
+
+/**
  * Whether `userId` is a direct writer of the realm: a person whose own
  * permission row grants `write`. It is the narrower question asked before a
  * realm takes something on in a person's name, such as a shared key or a

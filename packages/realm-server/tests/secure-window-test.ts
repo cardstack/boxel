@@ -131,7 +131,13 @@ module(basename(import.meta.filename), function () {
     const LAZY = 'https://realms.example.test/lazy/';
     const USER = '@someone:example.test';
     const PERMISSIONS: Record<string, Record<string, [boolean, boolean]>> = {
-      [OPEN]: { [USER]: [true, true] },
+      // Readable by anyone, with one other person and a bot account writing.
+      [OPEN]: {
+        [USER]: [true, true],
+        '*': [true, false],
+        '@other:example.test': [true, true],
+        '@node-test_realm:example.test': [true, true],
+      },
       [CLOSED]: { '@owner:example.test': [true, true] },
       [LAZY]: { [USER]: [true, true] },
       // A permission row left behind by a realm the server no longer serves.
@@ -347,6 +353,12 @@ module(basename(import.meta.filename), function () {
         validateContextRequest({ realm: '@example/open/' }),
       );
       assert.true(byPrefix.realm.directWriter);
+      assert.strictEqual(byPrefix.realm.readableBy, 'anyone');
+      assert.strictEqual(
+        byPrefix.realm.otherWriters,
+        1,
+        'the other person counts; the user, `*` and the bot account do not',
+      );
     });
 
     test('lists only the realms the user is a direct writer of', async function (assert) {
@@ -405,7 +417,14 @@ module(basename(import.meta.filename), function () {
       let writer = await ask(WRITER, { realm: REALM.href });
       assert.strictEqual(writer.status, 200, writer.text);
       assert.deepEqual(writer.body.data.attributes, {
-        realm: { url: REALM.href, name: 'Team Workspace', directWriter: true },
+        realm: {
+          url: REALM.href,
+          name: 'Team Workspace',
+          directWriter: true,
+          readableBy: 'members',
+          // The realm's owner here is its own bot account, not a person.
+          otherWriters: 0,
+        },
       });
 
       let reader = await ask(READER, {
@@ -414,6 +433,11 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(reader.status, 200, reader.text);
       assert.false(reader.body.data.attributes.realm.directWriter);
+      assert.strictEqual(
+        reader.body.data.attributes.realm.otherWriters,
+        1,
+        'the writer is another person to a reader',
+      );
     });
 
     test('describes an operation on a card, with where it sends a key', async function (assert) {
@@ -427,6 +451,8 @@ module(basename(import.meta.filename), function () {
           url: REALM.href,
           name: 'Team Workspace',
           directWriter: false,
+          readableBy: 'members',
+          otherWriters: 1,
         },
         card: {
           name: 'Weather Report',

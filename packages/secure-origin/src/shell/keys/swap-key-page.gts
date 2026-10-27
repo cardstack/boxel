@@ -19,6 +19,7 @@ import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import FieldContainer from '../../components/field-container.gts';
 import Tag from '../../components/icons/tag.gts';
+import Users from '../../components/icons/users.gts';
 import { navigation } from '../navigation.js';
 import { modeURL } from '../urls.js';
 
@@ -31,6 +32,7 @@ import {
 } from './context.ts';
 import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
+import WorkspaceMembers from './workspace-members.gts';
 import EditPage from './edit-page.gts';
 import KeyPicker from './key-picker.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
@@ -66,7 +68,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         @onRetry={{this.load}}
       />
     {{else if this.needsAdmin}}
-      <NeedsAdmin @realm={{this.needsAdmin.context.realm.name}} />
+      <NeedsAdmin @realm={{this.needsAdmin.context.realm}} />
     {{else if this.active}}
       <EditPage @heading='This shared key is working' data-test-swap-key-active>
         <:intro><strong>{{this.active.share.label}}</strong>
@@ -89,13 +91,21 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
           data-test-swap-key
         >
           <:intro>This shared key stopped working. Share one of your own keys in
-            its place, and the cards that use it work again under the same name.
-            You become the person sharing it.</:intro>
+            its place: every request in the workspace that uses this shared key
+            then sends your key instead, to wherever that request goes, and runs
+            on your account at the service. You become the person sharing it.</:intro>
           <:default>
             <OpenedForSummary
               @context={{this.choosing.context}}
               @reason={{this.opened.reason}}
             />
+            <FieldContainer
+              @tag='div'
+              @label='Who it’s shared with'
+              @icon={{Users}}
+            >
+              <WorkspaceMembers @realm={{this.choosing.context.realm}} />
+            </FieldContainer>
             <FieldContainer
               @tag='div'
               @label='Shared key'

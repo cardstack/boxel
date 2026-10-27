@@ -25,6 +25,7 @@ import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import Tag from '../../components/icons/tag.gts';
+import Users from '../../components/icons/users.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
 import { modeURL } from '../urls.js';
@@ -47,6 +48,7 @@ import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedFor } from './opened-for.ts';
 import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
+import WorkspaceMembers from './workspace-members.gts';
 
 interface Realm {
   url: string;
@@ -56,7 +58,7 @@ interface Realm {
 type State =
   | { name: 'loading' }
   | { name: 'load-failed'; failure: LoadFailure }
-  | { name: 'needs-admin'; realm: string }
+  | { name: 'needs-admin'; realm: WindowContext['realm'] }
   // `key` is the key the page was opened for, if any, and `context` the
   // realm's, if it was opened for one; the other is chosen here.
   | {
@@ -89,8 +91,8 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     {{else if this.choosing}}
       <form novalidate {{on 'submit' this.save}} data-test-share-key-form>
         <EditPage @heading='Share a key' data-test-share-key>
-          <:intro>People in the workspace can use the key through the requests
-            you approve for it. They never see the key itself.</:intro>
+          <:intro>People in the workspace can use the key in their requests.
+            They never see the key itself.</:intro>
           <:default>
             {{#if this.choosing.context}}
               <OpenedForSummary
@@ -131,6 +133,15 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
                 />
               </FieldContainer>
             {{/unless}}
+            {{#if this.members}}
+              <FieldContainer
+                @tag='div'
+                @label='Who it’s shared with'
+                @icon={{Users}}
+              >
+                <WorkspaceMembers @realm={{this.members}} />
+              </FieldContainer>
+            {{/if}}
             <FieldContainer
               @tag='label'
               @label='Shared as'
@@ -209,6 +220,9 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     labelTyped: false,
     saving: false,
     error: undefined as string | undefined,
+    // The workspace picked from the list, as the server describes it, for
+    // who the share puts the key in front of.
+    picked: undefined as WindowContext['realm'] | undefined,
   });
 
   constructor(owner: Owner, args: { api: KeysWindowAPI }) {
@@ -247,14 +261,14 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       if (realm) {
         context = await windowContext(config, { realm });
         if (!context.realm.directWriter) {
-          this.page.state = { name: 'needs-admin', realm: context.realm.name };
+          this.page.state = { name: 'needs-admin', realm: context.realm };
           return;
         }
         this.form.realm = context.realm.url;
       } else {
         this.form.realms = await writableRealms(config);
         if (this.form.realms.length === 1) {
-          this.form.realm = this.form.realms[0].url;
+          this.selectRealm(this.form.realms[0].url);
         }
       }
       let keys = await listKeys(config);
@@ -320,9 +334,36 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     }
   };
 
+  // Who is in the workspace the key goes into: the one the page was opened
+  // for, or the one picked from the list once the server has described it.
+  private get members(): WindowContext['realm'] | undefined {
+    let context = this.choosing?.context;
+    if (context) {
+      return context.realm;
+    }
+    let picked = this.form.picked;
+    return picked && picked.url === this.form.realm ? picked : undefined;
+  }
+
   private selectRealm = (url: string) => {
     this.form.realm = url;
     this.form.error = undefined;
+    void this.describePicked(url);
+  };
+
+  // A workspace that can't be described just goes without the description;
+  // sharing into it is still checked by the server.
+  private describePicked = async (url: string) => {
+    try {
+      let context = await windowContext(this.args.api.config, { realm: url });
+      if (this.form.realm === url) {
+        this.form.picked = context.realm;
+      }
+    } catch (e) {
+      if (isSignedOut(e)) {
+        this.args.api.signedOut();
+      }
+    }
   };
 
   private setLabel = (value: string) => {

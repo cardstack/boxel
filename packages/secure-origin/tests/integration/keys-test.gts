@@ -89,7 +89,13 @@ function context(attributes: Record<string, unknown>) {
   });
 }
 
-const WORKSPACE = { url: REALM, name: 'Team Workspace', directWriter: true };
+const WORKSPACE = {
+  url: REALM,
+  name: 'Team Workspace',
+  directWriter: true,
+  readableBy: 'members',
+  otherWriters: 2,
+};
 
 module('Integration | key pages', function (hooks) {
   setupRenderingTest(hooks);
@@ -353,6 +359,21 @@ module('Integration | key pages', function (hooks) {
 
     test('lists the keys, and replaces one with a ticket for that key', async function (assert) {
       serve({
+        'GET _key-shares': () =>
+          json(200, {
+            data: [
+              { realm: REALM, label: 'Maps' },
+              { realm: REALM, label: 'Team maps' },
+              {
+                realm: 'https://realm-server.test/someone/dashboard/',
+                label: 'Maps',
+              },
+            ].map((attributes, i) => ({
+              type: 'key-share',
+              id: `share-${i}`,
+              attributes,
+            })),
+          }),
         'PATCH _user-keys/key-2': () =>
           json(200, {
             data: {
@@ -368,6 +389,13 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-key-row]').exists({ count: 2 });
       assert.dom('[data-test-key-value]').doesNotExist('no value is shown');
       await click('[data-test-key-row="Maps"] [data-test-key-replace]');
+      await settled();
+      assert
+        .dom('[data-test-key-replace-where]')
+        .includesText(
+          'Used in 2 workspaces. They use the new key as soon as you replace it.',
+          'says how many workspaces the key is shared into',
+        );
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
       await fillIn('[data-test-key-value]', 'sk-new-value');
       await click('[data-test-key-replace-save]');
@@ -413,6 +441,14 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-key-delete-shares]');
       assert.dom('[data-test-key-delete-shares]').includesText('Weather');
       assert.dom('[data-test-key-delete-shares]').includesText(REALM);
+      assert
+        .dom('[data-test-key-delete-confirm]')
+        .includesText('is permanent', 'says the delete is permanent');
+      assert
+        .dom('[data-test-key-delete-confirm]')
+        .includesText(
+          'Someone who edits one of them can put their own key in its place.',
+        );
       await click('[data-test-key-delete-confirm-button]');
       await waitUntil(() => requests.some((r) => r.method === 'DELETE'));
       await settled();
@@ -522,6 +558,9 @@ module('Integration | key pages', function (hooks) {
         },
       );
       assert.dom('[data-test-keys-done-name]').hasText('Forecasts');
+      assert
+        .dom('[data-test-keys-done-next]')
+        .doesNotExist('opened for no card, there is no card to mention');
       assert.deepEqual(navigations, [{ how: 'close' }]);
     });
 
@@ -556,7 +595,7 @@ module('Integration | key pages', function (hooks) {
         },
       });
       visitShell(
-        `?mode=enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&reason=${encodeURIComponent('Forecasts need your weather key')}`,
+        `?mode=enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&reason=${encodeURIComponent('Forecasts need your \u202eweather key')}`,
       );
       await render(EnterKeyPage);
       await waitFor('[data-test-opened-for]');
@@ -565,16 +604,61 @@ module('Integration | key pages', function (hooks) {
         .hasText('Get the forecast');
       assert.dom('[data-test-opened-for-card]').hasText('Weather');
       assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
+      assert
+        .dom('[data-test-opened-for-realm-address]')
+        .hasText('realm-server.test/someone/workspace/', 'and its address');
       assert.dom('[data-test-destination-domain]').hasText('weather.co.uk');
       assert.dom('[data-test-destination-host]').hasText('api.weather.co.uk');
       assert.dom('[data-test-destination-path]').hasText('/v2/');
-      assert.dom('[data-test-destination-where]').includesText('GET');
+      assert
+        .dom('[data-test-destination-method]')
+        .hasText('Reads from', 'the method in plain words');
+      assert
+        .dom('[data-test-destination-realm-address]')
+        .hasText('realm-server.test/someone/workspace/');
       assert
         .dom('[data-test-opened-for-reason]')
-        .includesText('“Forecasts need your weather key”');
+        .includesText(
+          '“Forecasts need your weather key”',
+          'with the bidi override dropped',
+        );
       assert
         .dom('[data-test-opened-for-reason]')
-        .includesText('Written by the card that opened this window');
+        .includesText('From the link that opened this window.');
+    });
+
+    test('opened for a card, says once saved that the card will ask before it uses the key', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          context({
+            realm: WORKSPACE,
+            card: {
+              name: 'Weather',
+              module: `${REALM}weather`,
+              exportName: 'Weather',
+            },
+          }),
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: { ...attributesOf(KEYS[0]), name: 'Forecasts' },
+            },
+          }),
+      });
+      visitShell(`?mode=enter-key#card=${encodeURIComponent(CARD)}`);
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await fillIn('[data-test-key-name]', 'Forecasts');
+      await fillIn('[data-test-key-value]', 'sk-forecast');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert
+        .dom('[data-test-keys-done-next]')
+        .hasText(
+          'Saving it doesn’t give Weather the key. Weather will ask you to approve its requests before it can use it.',
+        );
     });
 
     test('opened for something the server doesn’t know of, says so and doesn’t offer to try again', async function (assert) {
@@ -703,6 +787,16 @@ module('Integration | key pages', function (hooks) {
               },
             ],
           }),
+        'POST _secure-window/context': ({ body }) => {
+          assert.strictEqual(
+            body.data.attributes.realm,
+            REALM,
+            'the picked workspace is described',
+          );
+          return context({
+            realm: { ...WORKSPACE, readableBy: 'anyone', otherWriters: 1 },
+          });
+        },
         'POST _key-shares': shares(),
       });
       visitShell('?mode=share-key#key=key-2');
@@ -750,6 +844,13 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-workspace-dropdown-trigger]')
         .isFocused('as does choosing from it');
+      await waitFor('[data-test-workspace-members]');
+      assert
+        .dom('[data-test-workspace-readers]')
+        .hasText('Anyone can see this workspace, signed in or not.');
+      assert
+        .dom('[data-test-workspace-writers]')
+        .includesText('One other person edits it');
       await fillIn('[data-test-share-label]', 'Team maps');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
@@ -839,6 +940,17 @@ module('Integration | key pages', function (hooks) {
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
       assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
+      assert
+        .dom('[data-test-workspace-readers]')
+        .hasText('Only the people it’s shared with can see this workspace.');
+      assert
+        .dom('[data-test-workspace-writers]')
+        .includesText(
+          '2 other people edit it, and any of them can stop this share or put their own key in its place.',
+        );
+      assert
+        .dom('[data-test-workspace-members]')
+        .includesText('Requests made with the key run on your account');
       assert.dom('[data-test-workspace-dropdown-trigger]').doesNotExist();
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       await click('[data-test-key-choice="Maps"] input');
@@ -915,7 +1027,10 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-keys-needs-admin]');
       assert
         .dom('[data-test-keys-needs-admin] h1')
-        .hasText('An administrator of this realm needs to set this up');
+        .hasText('Someone who edits this workspace needs to set this up');
+      assert
+        .dom('[data-test-needs-admin-address]')
+        .hasText('realm-server.test/someone/workspace/');
       assert.dom('input').doesNotExist('nothing to type');
       assert.false(
         requests.some((r) => r.path === '_user-keys'),

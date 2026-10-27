@@ -63,9 +63,12 @@ function url(value: string | null): string | undefined {
 }
 
 // A reason is shown as plain text, on one line, and no longer than a line.
+// Format characters (bidi overrides and isolates among them) are dropped, so
+// a reason can't reorder how it reads.
 function reasonOf(value: string | null): string | undefined {
   let text = value
-    ?.replace(/[\p{Cc}\u2028\u2029]/gu, ' ')
+    ?.replace(/\p{Cf}/gu, '')
+    .replace(/[\p{Cc}\u2028\u2029]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   if (!text) {

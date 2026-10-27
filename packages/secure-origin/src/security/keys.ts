@@ -19,7 +19,15 @@ export interface DestinationDisplay {
 
 // The realm server's description of what a key page was opened for.
 export interface WindowContext {
-  realm: { url: string; name: string; directWriter: boolean };
+  realm: {
+    url: string;
+    name: string;
+    directWriter: boolean;
+    // Who beyond its members can read it, and how many other people are its
+    // direct writers.
+    readableBy: 'anyone' | 'signed-in' | 'members';
+    otherWriters: number;
+  };
   card?: { name: string; module: string; exportName: string };
   operation?: {
     name: string;
