@@ -4251,7 +4251,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "wedge events from the secure origin's pages: a main-thread freeze of 10s or more, corroborated by a long-animation-frame or longtask entry so a wake from sleep isn't one. By page and the worst blocking script, which is named by its URL's origin and path and its function name only. The build is minified with no source map, so the function is often a mangled name: read the char offset into that file, built at the deployed commit. A blank frame is a freeze only a longtask corroborated.",
+            "description": "wedge events from the secure origin's pages: a main-thread freeze of 10s or more, corroborated by long-animation-frame or longtask entries spanning at least half of it, so a wake from sleep isn't one. By page and the worst blocking script, which is named by its URL's origin and path and its function name only. The build is minified with no source map, so the function is often a mangled name: read the char offset into that file, built at the deployed commit. A blank frame is a freeze only a longtask corroborated (longtask_count above 0), a long-animation-frame that listed no script, or, with longtask_count 0, a gap in a browser with neither entry type, which nothing corroborated and may be a sleep. A function beside a blank script is one whose URL wasn't a script file's, so it was dropped.",
             "fieldConfig": {
               "defaults": {
                 "color": {

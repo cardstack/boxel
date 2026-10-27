@@ -338,17 +338,17 @@ What they send:
 
 Every line also carries the `page` it happened on. There is no `card-load`, `deserialize`, `rebuild` or `realm-event` from these pages.
 
-**Why a page froze.** A `wedge` is the same incident-grade freeze as the host's (Mode B), with the same sleep-wake filter. Group by page and frame:
+**Why a page froze.** A `wedge` is the same incident-grade freeze as the host's (Mode B), with a stricter sleep-wake filter: the long-animation-frame or longtask entries in the gap must span at least half of it, so a short frame as the window wakes doesn't turn a sleep into a wedge. Group by page and frame:
 
 ```logql
-sum by (page, top_frame_function, top_frame_url) (
+sum by (page, top_frame_function, top_frame_url, top_frame_char) (
   count_over_time({service="realm-server", env="$env"} |= "boxel:client-perf" | json
     | channel="boxel:client-perf" | client_app="secure-origin"
     | event_type="wedge" [$__range])
 )
 ```
 
-`top_frame_url` is one of the secure origin's own script files (`shell.js`, `session.js`, …). They are minified with no source map, so `top_frame_function` is often a mangled name; `top_frame_char` is the offset into that file, so build `packages/secure-origin` at the deployed commit and read the file there. A blank frame is a freeze only a longtask corroborated, as in Mode B. With no wedges, `keepalive.max_gap_ms` still says whether a page janked.
+`top_frame_url` is one of the secure origin's own script files (`shell.js`, `session.js`, …). They are minified with no source map, so `top_frame_function` is often a mangled name; `top_frame_char` is the offset into that file, so build `packages/secure-origin` at the deployed commit and read the file there. A blank frame is one of three things: a freeze only a longtask corroborated (`longtask_count` above 0, as in Mode B); a long-animation-frame that listed no script; or, with `longtask_count` 0, a gap in a browser with neither entry type, which nothing corroborated and may be a sleep. A function name beside a blank `top_frame_url` is a script whose URL wasn't a script file's, so it was dropped. With no wedges, `keepalive.max_gap_ms` still says whether a page janked.
 
 **Who.** A beacon sent with the window's own secure session is attributed to that user. One sent before the window has a session (the sign-in page, a key page opened signed out) has `matrix_user_id` null: the realm server never believes a self-reported user, and admits such beacons rate limited per address. So start from `session_id` there: one window is one session id, and a sign-in that succeeds turns its later lines into the user's.
 

@@ -56,10 +56,13 @@ const OVERFLOW_ERROR_KEY = 'overflow';
 // A heartbeat gap this long or longer is a wedge: a freeze a person notices,
 // not the jank `keepalive.max_gap_ms` already shows.
 const WEDGE_GAP_MS = 10_000;
-// A real freeze always leaves a long-animation-frame or longtask entry, but
-// its observer's callback can arrive a little after the heartbeat that saw
-// the gap. A wake from OS sleep runs no task and never leaves one, so a gap
-// still uncorroborated after these retries is dropped.
+// A real freeze leaves long-animation-frame or longtask entries that span it,
+// but their observer's callback can arrive a little after the heartbeat that
+// saw the gap. A wake from OS sleep runs no task during the gap, at most a
+// short one as it wakes, so a gap whose entries still span less than this
+// share of it after these retries is dropped. A real freeze's entries span
+// nearly all of it.
+const WEDGE_MIN_COVERAGE = 0.5;
 const WEDGE_CORROBORATION_GRACE_MS = 120;
 const WEDGE_CORROBORATION_RETRIES = 2;
 const MAX_LOAF_SCRIPTS = 10;
@@ -129,7 +132,7 @@ export interface KeepaliveEvent extends BaseEvent {
 }
 
 // The host's `wedge` event, without its JS self-profiler stacks: the secure
-// origin's `Permissions-Policy` doesn't grant `js-profiling`. A script is named
+// origin's pages aren't served with `Document-Policy: js-profiling`. A script is named
 // by its URL's origin and path and its function name, never by what invoked it
 // (an element or a URL with its query).
 export interface WedgeEvent extends BaseEvent {
@@ -179,6 +182,7 @@ export interface TelemetryDeps {
 
 interface LoafEntry {
   startTime: number;
+  duration: number;
   blockingDuration: number;
   scripts: Array<Record<string, unknown>>;
 }
@@ -558,9 +562,13 @@ export class SecureTelemetry {
       e.startTime >= windowStart && e.startTime <= windowEnd;
     let loafs = this.#loafHistory.filter(inWindow);
     let longtasks = this.#longtaskHistory.filter(inWindow);
+    let spanned = 0;
+    for (let entry of [...loafs, ...longtasks]) {
+      spanned += Math.min(entry.duration, windowEnd - entry.startTime);
+    }
     // Without an observer the heartbeat is the only signal, so the gap is
     // reported as it is.
-    if (this.#observingFrames && loafs.length === 0 && longtasks.length === 0) {
+    if (this.#observingFrames && spanned < gap * WEDGE_MIN_COVERAGE) {
       if (retriesLeft > 0) {
         this.#deps.window.setTimeout(
           () =>
@@ -643,6 +651,7 @@ export class SecureTelemetry {
             };
             this.#loafHistory.push({
               startTime: e.startTime,
+              duration: e.duration,
               blockingDuration: e.blockingDuration ?? 0,
               scripts: Array.isArray(e.scripts) ? e.scripts : [],
             });

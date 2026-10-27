@@ -588,6 +588,34 @@ describe('the instrument', () => {
       telemetry.stop();
     });
 
+    test('a short frame as the window wakes from sleep does not make the sleep a wedge', () => {
+      telemetry.start();
+      freeze();
+      FakeObserver.deliver('long-animation-frame', [
+        { startTime: 12_000, duration: 60, blockingDuration: 10 },
+      ]);
+      win.runTimeouts();
+      win.runTimeouts();
+      win.runTimeouts();
+      assert.deepEqual(wedges(), []);
+      telemetry.stop();
+    });
+
+    test('a freeze spread over several frames is a wedge', () => {
+      telemetry.start();
+      freeze();
+      FakeObserver.deliver('long-animation-frame', [
+        { startTime: 110, duration: 4_000, blockingDuration: 3_950 },
+        { startTime: 4_120, duration: 4_000, blockingDuration: 3_950 },
+        { startTime: 8_130, duration: 3_960, blockingDuration: 3_910 },
+      ]);
+      win.runTimeouts();
+      let [wedge] = wedges();
+      assert.equal(wedge?.longtask_count, 3);
+      assert.equal(wedge?.blocked_ms, 11_810);
+      telemetry.stop();
+    });
+
     test('a frame whose entry arrives after the heartbeat still corroborates it', () => {
       telemetry.start();
       freeze();
@@ -642,6 +670,7 @@ describe('the instrument', () => {
       win.tick();
       FakeObserver.deliver('long-animation-frame', [
         { startTime: 200, duration: 8_000, blockingDuration: 8_000 },
+        { startTime: 30_000, duration: 11_000, blockingDuration: 11_000 },
       ]);
       win.runTimeouts();
       assert.deepEqual(wedges(), []);
