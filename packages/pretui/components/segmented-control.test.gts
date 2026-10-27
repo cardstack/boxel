@@ -1,9 +1,8 @@
 // Pretui — SegmentedControl unit tests.
 //
-// The 2026-08-13 semantics rebuild is the thing worth pinning: this used to
-// be role='tablist' over plain buttons — invalid ARIA, and the wrong pattern
-// anyway, because a segmented control swaps a VALUE, not a panel. It is now
-// native radios, which hand over the whole APG radio contract for free.
+// The semantics are the thing worth pinning: a segmented control swaps a
+// VALUE, not a panel, so it is a radiogroup of native radios, which hand
+// over the whole APG radio contract, and not a tablist of buttons.
 //
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness.
@@ -114,4 +113,30 @@ module('Pretui | components/segmented-control', function (hooks) {
       'the label wears the dress; the radio carries the semantics',
     );
   });
+
+  test('a controlled control puts its radios back inside a shadow root too', async function (assert) {
+    let seen: string[] = [];
+    const record = (v: string) => seen.push(v);
+    await render(
+      <template><SegmentedControl @options={{VIEWS}} @value='grid' @onValueChange={{record}} /></template>,
+    );
+    let control = root();
+    let radios = inputs();
+    let home = control.parentElement as HTMLElement;
+    let next = control.nextSibling;
+    let host = document.createElement('div');
+    home.appendChild(host);
+    let shadow = host.attachShadow({ mode: 'open' });
+    shadow.appendChild(control);
+    try {
+      (radios[1] as HTMLInputElement).click();
+      assert.deepEqual(seen, ['list'], 'the request is reported');
+      assert.true(radios[0]?.checked, 'the native radio is back on @value');
+      assert.false(radios[1]?.checked);
+    } finally {
+      home.insertBefore(control, next);
+      host.remove();
+    }
+  });
 });
+

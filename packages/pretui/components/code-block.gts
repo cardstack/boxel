@@ -115,7 +115,12 @@ const GRAMMARS: Record<string, Rule[]> = {
     ['string', sticky('`(?:\\\\[\\s\\S]|[^`\\\\])*`')],
     ['string', sticky("'(?:\\\\.|[^'\\\\\\n])*'")],
     ['string', sticky('"(?:\\\\.|[^"\\\\\\n])*"')],
-    ['number', sticky('0[xXbBoO][0-9a-fA-F_]+|\\d[\\d_]*(?:\\.\\d[\\d_]*)?(?:[eE][+-]?\\d+)?')],
+    [
+      'number',
+      sticky(
+        '0[xXbBoO][0-9a-fA-F_]+|\\d[\\d_]*(?:\\.\\d[\\d_]*)?(?:[eE][+-]?\\d+)?',
+      ),
+    ],
     ['keyword', sticky('(?:' + TS_KEYWORDS + ')\\b')],
     ['name', sticky('[A-Za-z_$][\\w$]*(?=\\s*\\()')],
     ['name', sticky('[A-Z][\\w$]*')],
@@ -131,7 +136,7 @@ const GRAMMARS: Record<string, Rule[]> = {
   ],
   css: [
     ['comment', sticky('/\\*[\\s\\S]*?\\*/')],
-    ['string', sticky("'(?:\\\\.|[^'\\\\\\n])*'|\"(?:\\\\.|[^\"\\\\\\n])*\"")],
+    ['string', sticky('\'(?:\\\\.|[^\'\\\\\\n])*\'|"(?:\\\\.|[^"\\\\\\n])*"')],
     ['keyword', sticky('@[\\w-]+')],
     ['name', sticky('--[\\w-]+')],
     ['number', sticky('#[0-9a-fA-F]{3,8}\\b|-?\\d*\\.?\\d+(?:%|[a-z]{1,4})?')],
@@ -154,7 +159,7 @@ const GRAMMARS: Record<string, Rule[]> = {
   ],
   shell: [
     ['comment', sticky('#[^\\n]*')],
-    ['string', sticky("'[^'\\n]*'|\"(?:\\\\.|[^\"\\\\\\n])*\"")],
+    ['string', sticky('\'[^\'\\n]*\'|"(?:\\\\.|[^"\\\\\\n])*"')],
     ['name', sticky('\\$\\{?[\\w]+\\}?')],
     ['number', sticky('\\b\\d+\\b')],
     ['keyword', sticky('(?:' + SHELL_KEYWORDS + ')\\b')],
@@ -173,8 +178,18 @@ const GRAMMARS: Record<string, Rule[]> = {
   python: [
     ['comment', sticky('#[^\\n]*')],
     ['string', sticky('"""[\\s\\S]*?"""|\'\'\'[\\s\\S]*?\'\'\'')],
-    ['string', sticky("[rbfu]{0,2}'(?:\\\\.|[^'\\\\\\n])*'|[rbfu]{0,2}\"(?:\\\\.|[^\"\\\\\\n])*\"")],
-    ['number', sticky('0[xXbBoO][0-9a-fA-F_]+|\\d[\\d_]*(?:\\.\\d[\\d_]*)?(?:[eE][+-]?\\d+)?')],
+    [
+      'string',
+      sticky(
+        '[rbfu]{0,2}\'(?:\\\\.|[^\'\\\\\\n])*\'|[rbfu]{0,2}"(?:\\\\.|[^"\\\\\\n])*"',
+      ),
+    ],
+    [
+      'number',
+      sticky(
+        '0[xXbBoO][0-9a-fA-F_]+|\\d[\\d_]*(?:\\.\\d[\\d_]*)?(?:[eE][+-]?\\d+)?',
+      ),
+    ],
     ['keyword', sticky('(?:' + PY_KEYWORDS + ')\\b')],
     ['name', sticky('[A-Za-z_][\\w]*(?=\\s*\\()')],
     ['plain', sticky('[A-Za-z_][\\w]*')],
@@ -227,7 +242,9 @@ export function grammarFor(language: string | undefined): string | undefined {
 
 /** A language guessed from a filename. Used only when `@language` is absent —
  * an explicit language always wins over an extension. */
-export function languageForFilename(name: string | undefined): string | undefined {
+export function languageForFilename(
+  name: string | undefined,
+): string | undefined {
   let match = /\.([a-z0-9]+)$/i.exec((name ?? '').trim());
   if (!match) {
     return undefined;
@@ -253,10 +270,7 @@ const CLASS_FOR: Record<CodeTokenKind, string> = {
  * and spaces is one span rather than thirty. With no grammar the whole input is
  * a single `plain` token, which is exactly what "no highlighting" should cost.
  */
-export function tokenizeCode(
-  code: string,
-  language?: string,
-): CodeToken[] {
+export function tokenizeCode(code: string, language?: string): CodeToken[] {
   let text = code ?? '';
   let key = grammarFor(language);
   if (!key) {
@@ -420,6 +434,9 @@ export interface CodeBlockSignature {
     highlight?: string | number[];
     /** soft-wrap long lines instead of scrolling sideways */
     wrap?: boolean;
+    /** 'compact': a slim header, the smallest data type size and tight
+     * padding, for code inside a transcript row. Default 'regular' */
+    density?: 'regular' | 'compact';
     /** scroll ceiling, in lines. The source this replaced had none, so a
      * five-hundred-line snippet rendered five hundred lines tall. */
     maxLines?: number;
@@ -549,7 +566,8 @@ export class CodeBlock extends Component<CodeBlockSignature> {
    * custom property so the gutter sizes itself; only a digit string ever
    * reaches the style attribute, and `cssStyle` validates that. */
   get gutterDigits(): number {
-    let last = Math.max(1, Math.floor(this.args.startLine ?? 1)) +
+    let last =
+      Math.max(1, Math.floor(this.args.startLine ?? 1)) +
       Math.max(0, this.lineCount - 1);
     return Math.max(2, String(last).length);
   }
@@ -580,6 +598,7 @@ export class CodeBlock extends Component<CodeBlockSignature> {
     <figure
       class='pretui-code'
       data-wrap={{if @wrap 'true' 'false'}}
+      data-density={{if @density @density 'regular'}}
       data-gutter={{if this.showGutter 'true' 'false'}}
       style={{this.gutterStyle}}
       data-test-pretui-code
@@ -597,7 +616,8 @@ export class CodeBlock extends Component<CodeBlockSignature> {
             <CopyButton
               @text={{this.code}}
               @label='Copy the code'
-              @variant='ghost'
+              @tone='neutral'
+              @appearance='plain'
               data-test-pretui-code-copy
             />
           </span>
@@ -626,7 +646,10 @@ export class CodeBlock extends Component<CodeBlockSignature> {
           data-clamped={{if this.clamped 'true' 'false'}}
           style={{if this.clamped this.clampStyle}}
           data-test-pretui-code-body
-        ><code class='pretui-code-code'>{{#each this.lines key='key' as |line|}}<span
+        ><code class='pretui-code-code'>{{#each
+              this.lines key='key'
+              as |line|
+            }}<span
                 class='pretui-code-line'
                 data-marked={{if line.marked 'true' 'false'}}
               >{{#if this.showGutter}}<span
@@ -657,18 +680,40 @@ export class CodeBlock extends Component<CodeBlockSignature> {
         .pretui-code {
           margin: 0;
           display: grid;
-          border-radius: var(--radius);
-          background: var(--card);
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--card);
+          color: var(--card-foreground);
           box-shadow: var(--pretui-shadow-card, 0 0 0 1px var(--border));
           overflow: hidden;
           container-type: inline-size;
         }
+        /* compact: code inside a row is a glance, not a read: small, short,
+           and scrolled */
+        .pretui-code[data-density='compact'] {
+          --pretui-code-size: var(--boxel-font-size-2xs);
+          --pretui-code-leading: 1.45;
+        }
+        .pretui-code[data-density='compact'] .pretui-code-head {
+          padding: var(--boxel-sp-6xs) var(--boxel-sp-2xs) var(--boxel-sp-6xs)
+            var(--boxel-sp-xs);
+        }
+        .pretui-code[data-density='compact'] .pretui-code-body {
+          padding-block: var(--boxel-sp-4xs);
+        }
+        .pretui-code[data-density='compact']
+          .pretui-code-body[data-clamped='true'] {
+          max-height: calc(
+            var(--pretui-code-max, 24) * var(--pretui-code-leading, 1.6) *
+              var(--pretui-code-size, var(--boxel-font-size-xs)) +
+              var(--boxel-sp-4xs) * 2
+          );
+        }
         .pretui-code-head {
           display: flex;
           align-items: center;
-          gap: var(--space-3, 8px);
-          padding: var(--space-2, 6px) var(--space-3, 8px);
-          background: color-mix(
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
+          background-color: color-mix(
             in oklch,
             var(--foreground) 4%,
             var(--card)
@@ -682,12 +727,11 @@ export class CodeBlock extends Component<CodeBlockSignature> {
           text-overflow: ellipsis;
           white-space: nowrap;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--foreground);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-code-count {
           flex: 0 0 auto;
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
         }
@@ -697,26 +741,25 @@ export class CodeBlock extends Component<CodeBlockSignature> {
         }
         .pretui-code-caption {
           margin: 0;
-          padding: var(--space-2, 6px) var(--space-3, 8px) 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          padding: var(--boxel-sp-2xs) var(--boxel-sp-xs) 0;
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
         }
         .pretui-code-binary {
           margin: 0;
-          padding: var(--space-4, 12px) var(--space-3, 8px);
-          font-size: var(--text-ui-sm, 11.5px);
+          padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
         }
         .pretui-code-body {
           margin: 0;
-          padding: var(--space-3, 8px) 0;
+          padding: var(--boxel-sp-xs) 0;
           overflow: auto;
           font-family: var(--font-mono);
-          font-size: var(--pretui-code-size, 12px);
+          font-size: var(--pretui-code-size, var(--boxel-font-size-xs));
           line-height: var(--pretui-code-leading, 1.6);
           /* Law 8 — code is numerals as often as it is words. */
           font-variant-numeric: tabular-nums;
-          color: var(--foreground);
           tab-size: var(--pretui-code-tab, 2);
         }
         /* The scroll ceiling. `--pretui-code-max` is a line COUNT set from the
@@ -725,7 +768,8 @@ export class CodeBlock extends Component<CodeBlockSignature> {
         .pretui-code-body[data-clamped='true'] {
           max-height: calc(
             var(--pretui-code-max, 24) * var(--pretui-code-leading, 1.6) *
-              var(--pretui-code-size, 12px) + var(--space-3, 8px) * 2
+              var(--pretui-code-size, var(--boxel-font-size-xs)) +
+              var(--boxel-sp-xs) * 2
           );
         }
         .pretui-code-body:focus-visible {
@@ -734,12 +778,14 @@ export class CodeBlock extends Component<CodeBlockSignature> {
         }
         .pretui-code-code {
           display: block;
-          font: inherit;
+          font-family: inherit;
+          font-size: inherit;
+          line-height: inherit;
           min-width: max-content;
         }
         .pretui-code-line {
           display: block;
-          padding-inline: var(--space-3, 8px);
+          padding-inline: var(--boxel-sp-xs);
           /* A blank line is still a line. Without this an empty block collapses
              to nothing and the code silently loses its paragraphing. */
           min-height: calc(var(--pretui-code-leading, 1.6) * 1em);
@@ -747,7 +793,7 @@ export class CodeBlock extends Component<CodeBlockSignature> {
         /* The mark carries a SHAPE as well as a tint, so it
            survives greyscale and a colour-blind reader. */
         .pretui-code-line[data-marked='true'] {
-          background: color-mix(
+          background-color: color-mix(
             in oklch,
             var(--primary) 10%,
             transparent
@@ -763,7 +809,7 @@ export class CodeBlock extends Component<CodeBlockSignature> {
             --pretui-code-gutter,
             calc(var(--pretui-code-digits, 2) * 1ch + 0.5ch)
           );
-          margin-inline-end: var(--space-3, 8px);
+          margin-inline-end: var(--boxel-sp-xs);
           text-align: end;
           /* Not selectable, so dragging across the code does not drag the
              numbers into the clipboard with it. The prefix is not optional:
@@ -771,11 +817,7 @@ export class CodeBlock extends Component<CodeBlockSignature> {
              where a drag-select is most likely. */
           -webkit-user-select: none;
           user-select: none;
-          color: color-mix(
-            in oklch,
-            var(--muted-foreground) 65%,
-            transparent
-          );
+          color: color-mix(in oklch, var(--muted-foreground) 65%, transparent);
         }
         .pretui-code-text {
           white-space: pre;
@@ -824,7 +866,7 @@ export class CodeBlock extends Component<CodeBlockSignature> {
             var(--foreground) 18%,
             var(--pretui-code-keyword, var(--chart-4))
           );
-          font-weight: var(--weight-medium, 500);
+          font-weight: 500;
         }
         .pretui-code-name {
           color: color-mix(
@@ -844,22 +886,22 @@ export class CodeBlock extends Component<CodeBlockSignature> {
           appearance: none;
           border: 0;
           width: 100%;
-          padding: var(--space-2, 6px);
-          background: color-mix(
+          padding: var(--boxel-sp-2xs);
+          background-color: color-mix(
             in oklch,
             var(--foreground) 4%,
             var(--card)
           );
           box-shadow: inset 0 1px 0 var(--border);
-          font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-family: inherit;
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
           cursor: pointer;
           transition: background-color 160ms
             var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1));
         }
         .pretui-code-more:hover {
-          background: var(--hover, color-mix(in oklch, var(--foreground) 7%, var(--card)));
+          background-color: var(--hover);
           color: var(--foreground);
         }
         .pretui-code-more:active {
@@ -871,7 +913,7 @@ export class CodeBlock extends Component<CodeBlockSignature> {
         }
         @media (pointer: coarse) {
           .pretui-code-more {
-            min-height: 44px;
+            min-height: 2.75rem;
           }
         }
         @media (prefers-reduced-motion: reduce) {

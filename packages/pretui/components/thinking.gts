@@ -3,6 +3,10 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
+import CheckIcon from '@cardstack/boxel-icons/check';
+import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
+import SearchIcon from '@cardstack/boxel-icons/search';
+import SparklesIcon from '@cardstack/boxel-icons/sparkles';
 import { Spinner } from './spinner';
 import { cssStyleFrom } from '../pretui-css';
 import { Collapse } from '../internal/agentic-chat';
@@ -130,35 +134,26 @@ export class Thinking extends Component<ThinkingSignature> {
         data-test-pretui-thinking-toggle
         {{on 'click' this.toggle}}
       >
-        <svg
+        <SparklesIcon
           class='pretui-trace-spark'
-          viewBox='0 0 24 24'
+          width='15'
+          height='15'
           aria-hidden='true'
-          focusable='false'
-        >
-          <path d='M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z' />
-        </svg>
+        />
         {{#if this.working}}
-          <span class='pretui-trace-label' data-shimmer='true'
+          <span
+            class='pretui-trace-label'
+            data-shimmer='true'
           >{{this.label}}</span>
         {{else}}
           <span class='pretui-trace-label'>{{this.doneLabel}}</span>
         {{/if}}
-        <svg
+        <ChevronDownIcon
           class='pretui-trace-chev'
-          viewBox='0 0 24 24'
+          width='14'
+          height='14'
           aria-hidden='true'
-          focusable='false'
-        >
-          <path
-            d='M6 9l6 6 6-6'
-            fill='none'
-            stroke='currentColor'
-            stroke-width='2.2'
-            stroke-linecap='round'
-            stroke-linejoin='round'
-          />
-        </svg>
+        />
       </button>
       {{! the state change announces once, politely, from outside the button }}
       <span class='pretui-sr' role='status'>{{if
@@ -171,23 +166,7 @@ export class Thinking extends Component<ThinkingSignature> {
         <div class='pretui-trace-rail' data-open={{if this.expanded 'true'}}>
           {{#if @query}}
             <div class='pretui-trace-row' data-kind='query'>
-              <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'>
-                <circle
-                  cx='11'
-                  cy='11'
-                  r='7'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                />
-                <path
-                  d='M21 21l-4.3-4.3'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                  stroke-linecap='round'
-                />
-              </svg>
+              <SearchIcon width='13' height='13' aria-hidden='true' />
               <span class='pretui-trace-primary'>{{@query}}</span>
             </div>
           {{/if}}
@@ -196,21 +175,12 @@ export class Thinking extends Component<ThinkingSignature> {
               {{#if row.isRunning}}
                 <Spinner @size={{11}} />
               {{else if row.isDone}}
-                <svg
+                <CheckIcon
                   class='pretui-trace-check'
-                  viewBox='0 0 24 24'
+                  width='13'
+                  height='13'
                   aria-hidden='true'
-                  focusable='false'
-                >
-                  <path
-                    d='M20 6L9 17l-5-5'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2.5'
-                    stroke-linecap='round'
-                    stroke-linejoin='round'
-                  />
-                </svg>
+                />
               {{/if}}
               <span
                 class='pretui-trace-primary'
@@ -238,7 +208,8 @@ export class Thinking extends Component<ThinkingSignature> {
     <style scoped>
       @layer PretComponent {
         .pretui-trace {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
         }
         .pretui-sr {
           position: absolute;
@@ -251,35 +222,33 @@ export class Thinking extends Component<ThinkingSignature> {
         .pretui-trace-head {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
-          min-height: 28px;
-          padding: 4px 6px;
-          margin: -4px -6px;
+          gap: var(--boxel-sp-xs);
+          min-height: 1.75rem;
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          margin: calc(-1 * var(--boxel-sp-4xs)) calc(-1 * var(--boxel-sp-xs));
           border: 0;
-          border-radius: 8px;
-          background: none;
-          font: inherit;
+          border-radius: var(--boxel-border-radius-sm);
+          background-color: transparent;
+          font-family: inherit;
           color: var(--muted-foreground);
           cursor: pointer;
         }
         .pretui-trace-head:hover {
-          background: var(--hover, var(--boxel-100));
+          background-color: var(--hover);
         }
         .pretui-trace-head:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 1px;
         }
         .pretui-trace-spark {
-          width: 15px;
-          height: 15px;
           flex: none;
-          fill: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-trace-head[data-working] .pretui-trace-spark {
-          fill: var(--muted-foreground);
+          color: var(--muted-foreground);
         }
         .pretui-trace-label {
-          font-weight: 500;
+          font-weight: 600;
         }
         /* Law 5: the sweep says "still going" and nothing else animates */
         .pretui-trace-label[data-shimmer] {
@@ -304,10 +273,8 @@ export class Thinking extends Component<ThinkingSignature> {
           }
         }
         .pretui-trace-chev {
-          width: 14px;
-          height: 14px;
           flex: none;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           transition: transform 300ms
             var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
         }
@@ -316,79 +283,81 @@ export class Thinking extends Component<ThinkingSignature> {
         }
         .pretui-trace-rail {
           position: relative;
-          margin: 6px 0 0 5px;
-          padding-left: 16px;
+          margin: var(--boxel-sp-3xs) 0 0 var(--boxel-sp-3xs);
+          padding-left: var(--boxel-sp);
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: var(--boxel-sp-6xs);
         }
         .pretui-trace-rail::before {
           content: '';
           position: absolute;
-          left: 3px;
-          top: 4px;
-          bottom: 6px;
+          left: var(--boxel-sp-5xs);
+          top: var(--boxel-sp-4xs);
+          bottom: var(--boxel-sp-3xs);
           width: 1px;
-          background: var(--border);
+          background-color: var(--border);
         }
         .pretui-trace-row {
           display: flex;
           align-items: center;
-          gap: 8px;
-          min-height: 26px;
-          padding: 2px 6px;
-          border-radius: 6px;
+          gap: var(--boxel-sp-xs);
+          min-height: 1.625rem;
+          padding: var(--boxel-sp-6xs) var(--boxel-sp-xs);
+          border-radius: var(--boxel-border-radius-sm);
           color: var(--foreground);
         }
         .pretui-trace-row:hover {
-          background: var(--hover, var(--boxel-100));
+          background-color: var(--hover);
         }
         .pretui-trace-row[data-kind='query'] {
           color: var(--muted-foreground);
         }
         .pretui-trace-row > svg {
-          width: 13px;
-          height: 13px;
           flex: none;
         }
         .pretui-trace-check {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-trace-primary {
           min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          font-weight: 500;
+          font-weight: 400;
         }
         .pretui-trace-primary[data-wrap] {
           white-space: normal;
-          font-weight: 400;
-          line-height: 1.55;
           color: var(--muted-foreground);
         }
         .pretui-trace-sec {
           margin-left: auto;
           flex: none;
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
+          font-variant-numeric: tabular-nums;
+          color: var(--subtle-foreground);
         }
+        /* a machine value is a pasteable string: mono at the data size */
         .pretui-trace-sec[data-mono] {
           font-family: var(--font-mono);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
         }
+        /* the counts are figures, not strings to paste: sans, tabular */
         .pretui-trace-diff {
           flex: none;
           display: inline-flex;
-          gap: 6px;
-          font-family: var(--font-mono);
-          font-size: 11px;
+          gap: var(--boxel-sp-4xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
         }
         .pretui-trace-add {
-          color: var(--success, var(--boxel-success));
+          color: var(--success-ink);
         }
         .pretui-trace-del {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         /* the stagger is a precomputed delay, retriggered by the open flip.
            The flag lives on the rail, not on Collapse's own element: a
@@ -403,7 +372,7 @@ export class Thinking extends Component<ThinkingSignature> {
         @keyframes pretui-trace-in {
           from {
             opacity: 0;
-            transform: translateY(4px);
+            transform: translateY(var(--boxel-sp-4xs));
           }
           to {
             opacity: 1;
@@ -413,7 +382,7 @@ export class Thinking extends Component<ThinkingSignature> {
         @media (prefers-reduced-motion: reduce) {
           .pretui-trace-label[data-shimmer] {
             animation: none;
-            background: none;
+            background-image: none;
             -webkit-background-clip: border-box;
             background-clip: border-box;
             color: var(--foreground);
