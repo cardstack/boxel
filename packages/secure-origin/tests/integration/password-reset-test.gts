@@ -84,6 +84,10 @@ module('Integration | password reset', function (hooks) {
         '',
         'nothing in the query string, which access logs record',
       );
+      assert.true(
+        request!.body.next_link.includes('?#'),
+        'an empty query, so the Matrix server adds the session id with `&`',
+      );
       let fragment = new URLSearchParams(link.hash.slice(1));
       assert.strictEqual(
         fragment.get('clientSecret'),
@@ -139,12 +143,21 @@ module('Integration | password reset', function (hooks) {
   });
 
   module('the reset link', function () {
+    // The link as the Matrix server sends it: the session id appended with
+    // `&` to a link with a query string, and with `?` to one without.
+    function asSent(link: string, sid: string) {
+      return `${link}${link.includes('?') ? '&' : '?'}sid=${sid}`;
+    }
+
     test('its secret is read from the fragment and taken out of the history', async function (assert) {
-      let landing = new URL(
-        resetLink('the-client-secret', 'someone@example.com', CLI),
+      history.replaceState(
+        null,
+        '',
+        asSent(
+          resetLink('the-client-secret', 'someone@example.com', CLI),
+          'sid-1',
+        ),
       );
-      // The Matrix server adds the session id to the end of the link.
-      history.replaceState(null, '', `${landing.href}&sid=sid-1`);
       let link = takeResetLink();
       assert.deepEqual(link, {
         clientSecret: 'the-client-secret',
@@ -164,9 +177,20 @@ module('Integration | password reset', function (hooks) {
       history.replaceState(
         null,
         '',
-        `${resetLink('secret', 'someone@example.com')}&sid=sid-1`,
+        asSent(resetLink('secret', 'someone@example.com'), 'sid-1'),
       );
       assert.strictEqual(takeResetLink().cli, undefined);
+    });
+
+    test('a link sent without its empty query still reads its session id', function (assert) {
+      let link = resetLink('secret', 'someone@example.com').replace('?#', '#');
+      history.replaceState(null, '', asSent(link, 'sid-1'));
+      assert.deepEqual(takeResetLink(), {
+        clientSecret: 'secret',
+        sid: 'sid-1',
+        email: 'someone@example.com',
+        cli: undefined,
+      });
     });
   });
 
