@@ -12,6 +12,7 @@ import {
   DEFAULT_FALLBACK_MODELS,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import { DIFF_IN_DETAIL } from '@cardstack/host/lib/realm-runner/edits';
 import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
@@ -1055,8 +1056,13 @@ return { deleted, refused };`,
       /Path must be relative to the realm root: notes\//.test(refused[2]),
       `a folder: ${refused[2]}`,
     );
+    // a deleted file's detail also carries its diff, after DIFF_IN_DETAIL
     assert.deepEqual(
-      result.files.map((file) => [file.fileUrl, file.status, file.detail]),
+      result.files.map((file) => [
+        file.fileUrl,
+        file.status,
+        file.detail?.split(DIFF_IN_DETAIL)[0],
+      ]),
       [
         [
           `${testRealmURL}plan.md`,

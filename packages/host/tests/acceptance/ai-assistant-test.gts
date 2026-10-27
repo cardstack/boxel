@@ -1759,7 +1759,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       isStreamingFinished: false,
     });
 
-    await waitFor('[data-test-ai-assistant-action-bar]');
+    await waitFor('[data-test-ai-assistant-action-bar]', { timeout: 5000 });
     assert
       .dom('[data-test-ai-assistant-action-bar]')
       .containsText('Writing the answer');
@@ -1775,8 +1775,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         rel_type: 'm.replace',
       },
     });
+    // the cap stays a beat after the reply ends, then closes
     await waitUntil(
       () => !document.querySelector('[data-test-ai-assistant-action-bar]'),
+      { timeout: 5000 },
     );
   });
 
@@ -1833,8 +1835,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       },
     });
 
+    // the cap stays a beat after the reply ends, then closes
     await waitUntil(
       () => !document.querySelector('[data-test-ai-assistant-action-bar]'),
+      { timeout: 5000 },
     );
     assert
       .dom('[data-test-ai-message-content]')
@@ -1879,7 +1883,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-ai-assistant-action-bar]').exists();
     assert.dom('[data-test-ai-assistant-action-bar]').containsText('Thinking');
     assert.dom('[data-test-stop-generating]').exists();
-    assert.dom('[data-test-ai-message-content]').containsText('Thinking...');
+    assert.dom('[data-test-ai-message-content]').containsText('Thinking');
     assert
       .dom('[data-test-ai-message-content]')
       .doesNotContainText('■ Stopped');
@@ -1902,10 +1906,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       },
     });
 
+    // the cap stays a beat after the reply ends, then closes
     await waitUntil(
       () => !document.querySelector('[data-test-ai-assistant-action-bar]'),
+      { timeout: 5000 },
     );
-    assert.dom('[data-test-ai-message-content]').containsText('Thinking...');
+    assert.dom('[data-test-ai-message-content]').containsText('Thinking');
     assert.dom('[data-test-ai-message-content]').containsText('■ Stopped');
     await click('[data-test-reasoning]');
     assert

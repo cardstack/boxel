@@ -33,6 +33,7 @@ import {
 } from '@cardstack/host/lib/client-telemetry-labels';
 
 import type MatrixService from './matrix-service';
+import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
 import type { SessionParticipant } from './session';
@@ -1389,6 +1390,12 @@ function readsCorrelationId(owner: Owner, req: Request): boolean {
       | RealmServerService
       | undefined;
     if (realmServer && url.origin === realmServer.url.origin) {
+      return true;
+    }
+    // the request may carry the real URL a virtual one maps to
+    let network = owner.lookup('service:network') as NetworkService | undefined;
+    let virtual = network?.virtualNetwork.mapURL(url, 'real-to-virtual');
+    if (realmServer && virtual?.origin === realmServer.url.origin) {
       return true;
     }
     let realm = owner.lookup('service:realm') as

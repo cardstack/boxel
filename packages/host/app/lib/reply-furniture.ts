@@ -191,14 +191,24 @@ export function markReplyFurniture(root: HTMLElement) {
     }
     // a link out of Boxel opens in its own window, so the session stays
     // where it was; a card or a file opens in Quick Look instead
-    if (
-      !a.closest('[data-card-ref]') &&
-      /^https?:/.test(a.getAttribute('href') ?? '') &&
-      new URL(a.href, location.href).origin !== location.origin
-    ) {
+    if (!a.closest('[data-card-ref]') && isExternalLink(a)) {
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
     }
+  }
+}
+
+// An absolute http(s) link to another origin. A link that does not parse
+// is left as it is.
+function isExternalLink(a: HTMLAnchorElement): boolean {
+  let href = a.getAttribute('href') ?? '';
+  if (!/^https?:/.test(href)) {
+    return false;
+  }
+  try {
+    return new URL(href).origin !== location.origin;
+  } catch {
+    return false;
   }
 }
 

@@ -170,7 +170,7 @@ module('Integration | ai-assistant-panel | compaction', function (hooks) {
       .hasAttribute('aria-expanded', 'false', 'the summary starts closed');
     assert
       .dom('[data-test-message-idx="0"] .reasoning-content')
-      .containsText('Thinking...', 'the placeholder returns once it is done');
+      .containsText('Thinking', 'the placeholder returns once it is done');
 
     await click(
       '[data-test-compaction-status] [data-test-pretui-compaction-toggle]',

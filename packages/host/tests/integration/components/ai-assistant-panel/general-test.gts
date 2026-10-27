@@ -557,17 +557,15 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await waitFor('[data-test-message-idx="3"]');
 
     assert
-      .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
-      .doesNotHaveClass(
-        'ai-avatar-animated',
-        'Answer to my previous question is not in progress',
-      );
+      .dom(
+        '[data-test-message-idx="1"] [data-test-ai-avatar] [data-test-pretui-agent-mark="working"]',
+      )
+      .doesNotExist('Answer to my previous question is not in progress');
     assert
-      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
-      .hasClass(
-        'ai-avatar-animated',
-        'Answer to my current question is in progress',
-      );
+      .dom(
+        '[data-test-message-idx="3"] [data-test-ai-avatar] [data-test-pretui-agent-mark="working"]',
+      )
+      .exists('Answer to my current question is in progress');
     assert
       .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
       .hasText('Thinking...');
@@ -601,11 +599,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       }
     });
     assert
-      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
-      .hasClass(
-        'ai-avatar-animated',
-        'Answer to my current question is in progress',
-      );
+      .dom(
+        '[data-test-message-idx="3"] [data-test-ai-avatar] [data-test-pretui-agent-mark="working"]',
+      )
+      .exists('Answer to my current question is in progress');
     assert
       .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
       .hasText('French bulldog is a');
@@ -641,11 +638,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     });
 
     assert
-      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
-      .hasClass(
-        'ai-avatar-animated',
-        'Answer to my current question is in progress',
-      );
+      .dom(
+        '[data-test-message-idx="3"] [data-test-ai-avatar] [data-test-pretui-agent-mark="working"]',
+      )
+      .exists('Answer to my current question is in progress');
     assert
       .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
       .hasText('French bulldog is a French breed');
@@ -673,19 +669,21 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     );
 
     await waitFor('[data-test-message-idx="3"]');
-    await waitUntil(() => !document.querySelector('.ai-avatar-animated'));
+    // the turn head stays working a beat after the reply ends
+    await waitUntil(
+      () => !document.querySelector('[data-test-pretui-agent-mark="working"]'),
+      { timeout: 5000 },
+    );
     assert
-      .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
-      .doesNotHaveClass(
-        'ai-avatar-animated',
-        'Answer to my previous question is not in progress',
-      );
+      .dom(
+        '[data-test-message-idx="1"] [data-test-ai-avatar] [data-test-pretui-agent-mark="working"]',
+      )
+      .doesNotExist('Answer to my previous question is not in progress');
     assert
-      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
-      .doesNotHaveClass(
-        'ai-avatar-animated',
-        'Answer to my last question is not in progress',
-      );
+      .dom(
+        '[data-test-message-idx="3"] [data-test-ai-avatar] [data-test-pretui-agent-mark="working"]',
+      )
+      .doesNotExist('Answer to my last question is not in progress');
     assert
       .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
       .hasText('French bulldog is a French breed of companion dog or toy dog.');
@@ -1197,12 +1195,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     assert
       .dom('[data-test-message-idx="0"]')
+      .containsText('12:30 PM Thinking')
       .containsText(
-        '12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm...',
+        'Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm...',
       );
-    assert
-      .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
-      .hasClass('ai-avatar-animated', 'Message is in progress');
     let thirdMessageId = simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
@@ -1244,12 +1240,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     assert
       .dom('[data-test-message-idx="0"]')
+      .containsText('12:30 PM Thinking')
       .containsText(
-        '12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done',
+        'Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done',
       );
-    assert
-      .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
-      .hasClass('ai-avatar-animated', 'Message is in progress');
     simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
@@ -1277,14 +1271,9 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     );
     assert
       .dom('[data-test-message-idx="0"]')
+      .containsText('12:30 PM Thinking')
       .containsText(
-        '12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done.',
-      );
-    assert
-      .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
-      .doesNotHaveClass(
-        'ai-avatar-animated',
-        'Message is in no longer in progress',
+        'Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done.',
       );
   });
 

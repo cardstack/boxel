@@ -73,9 +73,11 @@ export class Message implements RoomMessageInterface {
   @tracked continuedInMessage?: Message | null;
   @tracked continuationOf?: string | null;
 
-  attachedCardIds?: string[] | null;
-  attachedFiles?: FileDef[];
-  attachedCardsAsFiles?: FileDef[];
+  // tracked: the server's copy of a message this client sent replaces the
+  // optimistic copy's attachments, which name cards from their URLs only
+  @tracked attachedCardIds?: string[] | null;
+  @tracked attachedFiles?: FileDef[];
+  @tracked attachedCardsAsFiles?: FileDef[];
   attachedSkillCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;
