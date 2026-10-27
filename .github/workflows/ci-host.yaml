@@ -803,15 +803,17 @@ jobs:
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
-          if [ "$PERCY_ENABLED" = "true" ]; then
-            TEST_CMD="pnpm test-with-percy"
-          else
-            echo "::notice::Skipping Percy snapshots — no UI-relevant changes detected"
-            TEST_CMD="pnpm ember-test-pre-built"
+          # STRESS HARNESS (never merge): run only the tools module, with the
+          # held-resolution tests repeated, and burn two cores on the upper
+          # half of the shards to mimic a loaded runner.
+          TEST_CMD="sleep 15 && pnpm exec ember test --path ./dist --filter 'Integration | ai-assistant-panel | tools'"
+          if [ "${{ matrix.shardIndex }}" -gt 8 ]; then
+            echo "::notice::Burning 2 cores during the test run"
+            for i in 1 2; do (while :; do :; done) >/dev/null 2>&1 & done
           fi
 
           set +e
-          dbus-run-session -- $TEST_CMD 2>&1 | tee /tmp/test-output.log
+          dbus-run-session -- bash -c "$TEST_CMD" 2>&1 | tee /tmp/test-output.log
           exit_code=${PIPESTATUS[0]}
 
           # Transient chunk-fetch failures present as `ChunkLoadError` under
@@ -844,7 +846,7 @@ jobs:
             echo "::endgroup::"
             echo ""
 
-            dbus-run-session -- $TEST_CMD 2>&1 | tee /tmp/test-output-retry.log
+            dbus-run-session -- bash -c "$TEST_CMD" 2>&1 | tee /tmp/test-output-retry.log
             retry_exit_code=${PIPESTATUS[0]}
             if [ $retry_exit_code -eq 0 ]; then
               echo "::notice::Shard ${{ matrix.shardIndex }} recovered on retry — original failure was a transient chunk-fetch flake"
@@ -864,6 +866,7 @@ jobs:
               exit_code=$retry_exit_code
             fi
           fi
+          jobs -p | xargs -r kill || true
           exit $exit_code
         env:
           PERCY_ENABLED: ${{ needs.check-percy.outputs.percy_needed }}
