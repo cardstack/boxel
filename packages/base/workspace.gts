@@ -69,7 +69,7 @@ import {
   type CodeRef,
 } from '@cardstack/runtime-common';
 
-import { ResizeHandle } from '@cardstack/pretui/components/resize-handle';
+import { ResizeHandle } from './components/resize-handle';
 import CardsGridLayout, {
   VIEW_OPTIONS,
   SORT_OPTIONS,
