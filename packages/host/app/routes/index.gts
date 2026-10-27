@@ -143,7 +143,8 @@ export default class Card extends Route {
       await this.matrixService.ready;
     }
     if (loginToken && this.matrixService.persistedUserId) {
-      consumeLoginTokenFromUrl(); // single-use: strip up front so a refresh can't retry
+      // single-use: strip up front so a refresh can't retry
+      let handoff = consumeLoginTokenFromUrl() ?? { token: loginToken };
       let didStart = this.didMatrixServiceStart;
       let controller = this.operatorModeStateService.operatorModeController;
       controller.accountSwitchFailed = false;
@@ -152,7 +153,7 @@ export default class Card extends Route {
         // re-enters this hook; set the one-shot flag first so that re-run skips
         // the boot below (the new session is already up).
         this.didMatrixServiceStart = true;
-        await this.matrixService.switchAccount(loginToken);
+        await this.matrixService.switchAccount(handoff);
         return;
       } catch (e) {
         this.didMatrixServiceStart = didStart;

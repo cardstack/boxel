@@ -196,13 +196,13 @@ export default class Login extends Component<Signature> {
   private consumeSsoLoginToken = restartableTask(async () => {
     // Clears the token from the URL so a refresh doesn't re-trigger the
     // single-use exchange.
-    let token = consumeLoginTokenFromUrl();
-    if (!token) {
+    let handoff = consumeLoginTokenFromUrl();
+    if (!handoff) {
       return;
     }
 
     try {
-      let auth = await this.matrixService.loginWithSsoToken(token);
+      let auth = await this.matrixService.loginWithSsoToken(handoff);
       // start() must stay inside the try: a failure here (e.g. realm
       // unreachable, session init) would otherwise leave us stuck on the
       // "Signing you in…" placeholder forever, with the token already
