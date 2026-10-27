@@ -20,6 +20,10 @@ const EXPIRY_MARGIN_MS = 60 * 1000;
 // How long the window waits to learn whether its session is still signed in
 // before it carries on with the session it has.
 const SESSION_CHECK_TIMEOUT_MS = 10 * 1000;
+// How close to its end the window renews its session, which the realm server
+// does while the app session it handed a sign-in to lasts. The realm server
+// asks about the app's session only this close to the end, too.
+const RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export class SecureSessionError extends Error {
   // `retryAfterMs`: for a 429, how long until the next attempt may be made,
@@ -275,19 +279,29 @@ export async function finishGoogleSignIn(config) {
   }
 }
 
-// The window's session, while it lasts.
-export function storedSession() {
+// The session stored here, whether or not it has expired: one bound to the
+// app's session can still be renewed.
+function storedRecord() {
   let session;
   try {
     session = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
   } catch {
     return undefined;
   }
-  if (
-    !session ||
-    typeof session.token !== 'string' ||
-    Date.parse(session.expiresAt) - EXPIRY_MARGIN_MS <= Date.now()
-  ) {
+  if (!session || typeof session.token !== 'string') {
+    return undefined;
+  }
+  return session;
+}
+
+function hasExpired(session) {
+  return Date.parse(session.expiresAt) - EXPIRY_MARGIN_MS <= Date.now();
+}
+
+// The window's session, while it lasts.
+export function storedSession() {
+  let session = storedRecord();
+  if (!session || hasExpired(session)) {
     return undefined;
   }
   return session;
@@ -333,11 +347,19 @@ export async function endSession(config, session) {
 // an ended session is forgotten, so the window shows its sign-in. When the
 // server can't be reached or doesn't answer in time, the stored session is
 // kept, since nothing says it has ended.
+//
+// A session within a day of its end, or past it, is renewed instead
+// (`renew`): the realm server renews the window's session for as long as the
+// app session it handed its sign-in to lasts.
 export async function liveSession(config) {
-  let session = storedSession();
-  if (!session) {
+  let record = storedRecord();
+  if (!record) {
     return undefined;
   }
+  if (Date.parse(record.expiresAt) - RENEWAL_WINDOW_MS <= Date.now()) {
+    return await renew(config, record);
+  }
+  let session = record;
   try {
     await request(new URL('_secure-session', config.realmServerURL), {
       method: 'GET',
@@ -346,11 +368,54 @@ export async function liveSession(config) {
     });
   } catch (e) {
     if (e.status === 401) {
-      forgetSession();
+      // The server's end for the session can come before the one stored
+      // here, when the two clocks disagree; a session bound to an app session
+      // that lasts is renewed then too. Anything short of a renewal means it
+      // has ended.
+      let renewed = await renew(config, session);
+      if (renewed && renewed.token !== session.token) {
+        return renewed;
+      }
+      if (storedRecord()?.token === session.token) {
+        forgetSession();
+      }
       return undefined;
     }
   }
   return session;
+}
+
+// Asks the realm server for the window's session again, under the token
+// stored here, which may have expired. It answers the session renewed while
+// the app session it handed a sign-in to lasts, and as it was otherwise, with
+// a fresh token either way. An ended session is forgotten. When the server
+// can't be reached, a session that hasn't expired is kept, as `liveSession`
+// keeps one, and one that has is kept for a later try but not answered.
+async function renew(config, record) {
+  try {
+    let json = await request(
+      new URL('_secure-session/renewal', config.realmServerURL),
+      {
+        token: record.token,
+        signal: AbortSignal.timeout(SESSION_CHECK_TIMEOUT_MS),
+      },
+    );
+    let renewed = json.data.attributes;
+    // Signed out, or signed in as someone else, in another tab meanwhile.
+    if (storedRecord()?.token !== record.token) {
+      return storedSession();
+    }
+    storeSession(renewed);
+    return storedSession();
+  } catch (e) {
+    if (e.status === 401) {
+      if (storedRecord()?.token === record.token) {
+        forgetSession();
+      }
+      return undefined;
+    }
+    return hasExpired(record) ? undefined : record;
+  }
 }
 
 function signedOut() {
@@ -365,7 +430,9 @@ function signedOut() {
 // against the server.
 /** @returns {Promise<any>} */
 export async function authorizedRequest(config, path, options = {}) {
-  let session = storedSession();
+  // A session that has run out since the window last checked it may still be
+  // renewed.
+  let session = storedSession() ?? (await liveSession(config));
   if (!session) {
     throw signedOut();
   }

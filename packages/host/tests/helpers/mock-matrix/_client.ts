@@ -494,6 +494,20 @@ export class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
+  login(
+    loginType: string,
+    data: { token?: string; device_id?: string },
+  ): Promise<MatrixSDK.LoginResponse> {
+    if (
+      loginType === 'm.login.token' &&
+      data.token &&
+      this.sdkOpts.loginWithTokenInterceptor
+    ) {
+      return this.sdkOpts.loginWithTokenInterceptor(data.token, data.device_id);
+    }
+    throw new Error('Method not implemented.');
+  }
+
   logout(_stopClient?: boolean | undefined): Promise<{}> {
     if (_stopClient) {
       this.stopClient();

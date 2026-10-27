@@ -202,8 +202,8 @@ export default class SecureSignIn extends Component {
   private redeem = restartableTask(async () => {
     // Single-use: taken out of the address before it is redeemed, so a reload
     // can't try it again.
-    let token = consumeLoginTokenFromUrl();
-    if (!token) {
+    let handoff = consumeLoginTokenFromUrl();
+    if (!handoff) {
       this.redirect();
       return;
     }
@@ -214,7 +214,7 @@ export default class SecureSignIn extends Component {
       this.operatorModeStateService.showWorkspaceChooserBeforeBoot();
     }
     try {
-      let auth = await this.matrixService.loginWithSsoToken(token);
+      let auth = await this.matrixService.loginWithSsoToken(handoff);
       await this.matrixService.start({ auth, refreshRoutes: true });
       // `start()` handles a failure after the Matrix login by signing out
       // again rather than throwing, so only a session that is up counts.

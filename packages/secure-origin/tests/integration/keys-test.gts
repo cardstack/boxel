@@ -287,6 +287,64 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-keys-heading]').hasText('You’re signed out');
     });
 
+    test('a session past its end is renewed, while the app session it handed over lasts, and opens signed in', async function (assert) {
+      let lapsed = { ...SESSION, expiresAt: '2000-01-01T00:00:00.000Z' };
+      let renewed = {
+        token: 'renewed-session-token',
+        user: SESSION.user,
+        expiresAt: '2099-01-08T00:00:00.000Z',
+      };
+      storeSession(lapsed);
+      serve({
+        'POST _secure-session/renewal': () =>
+          json(201, { data: { type: 'secure-session', attributes: renewed } }),
+      });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      assert.deepEqual(
+        JSON.parse(localStorage.getItem('boxel-secure-session') ?? 'null'),
+        renewed,
+        'the renewed session is kept',
+      );
+      assert.false(
+        requests.some(
+          (r) => r.path === '_secure-session' && r.method === 'GET',
+        ),
+        'renewing is the check',
+      );
+    });
+
+    test('a session past its end that isn’t renewed says to sign in to Boxel', async function (assert) {
+      storeSession({ ...SESSION, expiresAt: '2000-01-01T00:00:00.000Z' });
+      serve({
+        'POST _secure-session/renewal': () =>
+          json(401, {
+            errors: [
+              { status: '401', code: 'signed-out', detail: 'signed out' },
+            ],
+          }),
+      });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-keys-signed-out]');
+      assert.strictEqual(
+        localStorage.getItem('boxel-secure-session'),
+        null,
+        'the ended session is forgotten',
+      );
+    });
+
+    test('a session far from its end is checked, not renewed', async function (assert) {
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      assert.false(
+        requests.some((r) => r.path === '_secure-session/renewal'),
+        'no renewal',
+      );
+    });
+
     test('the Close button closes the window', async function (assert) {
       visitShell('?mode=keys');
       await render(KeyPage);

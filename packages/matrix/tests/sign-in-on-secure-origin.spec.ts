@@ -5,6 +5,7 @@ import {
   createRealm,
   createSubscribedUser,
   getMatrixTestContext,
+  getSharedSQLExecutor,
   logout,
   postCardSource,
   setupPermissions,
@@ -181,6 +182,97 @@ test.describe('Sign in on the secure origin', () => {
       "the secure origin's session is gone",
     ).toBeNull();
     await snapshot(testInfo, page, 'signed out, at the secure sign-in');
+  });
+
+  test("the secure window stays signed in past its first week while the app's session lasts", async ({
+    page,
+  }, testInfo) => {
+    await page.goto(appURL);
+    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    await signInOnSecurePage(page, username, password);
+    await expect(
+      page.locator('[data-test-operator-mode-stack="0"]'),
+    ).toHaveCount(1, { timeout: 60_000 });
+
+    let sql = getSharedSQLExecutor();
+    let appDevice = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('auth') ?? '{}').device_id,
+    );
+    let rows = (await sql.executeSQL(
+      `SELECT app_device_id FROM secure_sessions
+        WHERE user_id = '${userId}' AND client = 'window'`,
+    )) as { app_device_id: string | null }[];
+    expect(
+      rows.map((r) => r.app_device_id),
+      "the window's session is bound to the device the app signed in as",
+    ).toEqual([appDevice]);
+
+    // A week on: the window's row has lapsed, and so has the session the
+    // window stored, as both do on the same day.
+    await sql.executeSQL(
+      `UPDATE secure_sessions SET expires_at = NOW() - interval '1 hour'
+        WHERE user_id = '${userId}' AND client = 'window'`,
+    );
+    await page.context().addInitScript(
+      ({ secureOrigin, key }) => {
+        // Once, before the first secure-origin page this test opens next.
+        if (
+          location.origin !== secureOrigin ||
+          localStorage.getItem('test-session-aged')
+        ) {
+          return;
+        }
+        localStorage.setItem('test-session-aged', 'true');
+        let stored = JSON.parse(localStorage.getItem(key) ?? 'null');
+        if (stored) {
+          stored.expiresAt = new Date(Date.now() - 3_600_000).toISOString();
+          localStorage.setItem(key, JSON.stringify(stored));
+        }
+      },
+      {
+        secureOrigin: new URL(secureOriginURL).origin,
+        key: SECURE_SESSION_KEY,
+      },
+    );
+
+    let opened = page.context().waitForEvent('page');
+    await page.evaluate((url) => {
+      window.open(url, '_blank', 'noopener,popup,width=520,height=720');
+    }, `${secureOriginURL}?mode=keys`);
+    let keys = await opened;
+    await keys.setViewportSize({ width: 520, height: 720 });
+    await expect(keys.locator('[data-test-key-list-empty]')).toBeVisible({
+      timeout: 60_000,
+    });
+    await snapshot(testInfo, keys, 'key page, signed in past its first week');
+    let renewed = JSON.parse(
+      (await keys.evaluate(
+        (key) => localStorage.getItem(key),
+        SECURE_SESSION_KEY,
+      )) ?? 'null',
+    );
+    expect(
+      Date.parse(renewed.expiresAt) - Date.now(),
+      'renewed for another week',
+    ).toBeGreaterThan(6 * 24 * 60 * 60 * 1000);
+    expect(
+      await page.evaluate(
+        (key) => localStorage.getItem(key),
+        SECURE_SESSION_KEY,
+      ),
+      'and the app page holds none of it',
+    ).toBeNull();
+    await keys.close();
+
+    // Once the app signs out, its device is gone, and nothing renews the
+    // window's session.
+    await logout(page);
+    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    let ended = (await sql.executeSQL(
+      `SELECT app_device_id, expires_at <= NOW() AS ended FROM secure_sessions
+        WHERE user_id = '${userId}' AND client = 'window'`,
+    )) as { app_device_id: string | null; ended: boolean }[];
+    expect(ended).toEqual([{ app_device_id: null, ended: true }]);
   });
 
   test("a private realm's images load after the hand-off, and stop once signed out", async ({
