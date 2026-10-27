@@ -545,7 +545,7 @@ module('Pretui | components/resize-handle', function (hooks) {
     );
   });
 
-  test('a double-click restores the default size', async function (assert) {
+  test('a double-click or Enter restores the default size', async function (assert) {
     let pane = new Pane(260);
     let bare = new Pane(260);
     await render(
@@ -565,11 +565,27 @@ module('Pretui | components/resize-handle', function (hooks) {
     );
     await triggerEvent('[data-test-default]', 'dblclick');
     assert.strictEqual(pane.size, 180);
+    await triggerKeyEvent('[data-test-default]', 'keydown', 'ArrowRight');
+    assert.strictEqual(pane.size, 196);
+    await triggerKeyEvent('[data-test-default]', 'keydown', 'Enter');
+    assert.strictEqual(
+      pane.size,
+      180,
+      'Enter reaches the default the arrow steps went past',
+    );
     await triggerEvent('[data-test-bare]', 'dblclick');
+    let enter = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    });
+    handle('[data-test-bare]').dispatchEvent(enter);
+    await settled();
     assert.deepEqual(
       bare.reports,
       [],
       'with no default size there is nothing to restore',
     );
+    assert.false(enter.defaultPrevented, 'and Enter is left alone');
   });
 });

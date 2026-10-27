@@ -1,4 +1,4 @@
-// Pretui — ResizeHandle: a focusable separator that drags a neighbouring pane's width or height, in px.
+// Pretui — ResizeHandle: a focusable separator that drags a neighboring pane's width or height, in px.
 //
 // ── Realm laws in force ─────────────────────────────────────────────────
 // No timers, no `Date.now()`, no `Math.random()`. Every listener is owned by
@@ -86,7 +86,7 @@ export interface ResizeHandleSignature {
     min?: ResizeHandleLength;
     /** Largest size. Default unbounded. */
     max?: ResizeHandleLength;
-    /** The size a double-click restores. With none, double-click does
+    /** The size a double-click or Enter restores. With none, both do
      * nothing. */
     defaultSize?: ResizeHandleLength;
     /** The separator's own orientation. `vertical` (default) is a line
@@ -116,6 +116,15 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
   get placement(): ResizeHandlePlacement {
     let raw = this.args.placement;
     return (raw === undefined ? undefined : PLACEMENTS[raw]) ?? 'end';
+  }
+  // The side of the strip the painted line hugs, which is the pane's edge.
+  // It's logical like the placement, except a physical left or right.
+  get lineEdge(): 'start' | 'end' | 'left' | 'right' {
+    let raw = this.args.placement;
+    return this.orientation === 'vertical' &&
+      (raw === 'left' || raw === 'right')
+      ? raw
+      : this.placement;
   }
   // A rem bound follows the root font size, which nothing tracks, so each
   // gesture and key press resolves the bounds afresh. Rendering, which reads
@@ -188,7 +197,7 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
   }
 
   // +1 when a move toward larger screen coordinates (right, down) grows the
-  // pane. Read at the start of each gesture so a `dir` change is honoured.
+  // pane. Read at the start of each gesture so a `dir` change is honored.
   private growthSign(el: HTMLElement): 1 | -1 {
     let towardEnd = this.placement === 'end';
     let physical =
@@ -273,7 +282,7 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
         return;
       }
       // Stops the drag selecting the page's text; focus is moved by hand
-      // since the default action that would have moved it is cancelled.
+      // since the default action that would have moved it is canceled.
       e.preventDefault();
       handle.focus({ preventScroll: true });
       try {
@@ -344,6 +353,10 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
         next = bounds.min;
       } else if (e.key === 'End' && bounds.max !== undefined) {
         next = bounds.max;
+      } else if (e.key === 'Enter') {
+        // The keyboard's way back to the default, which the arrows' steps
+        // can miss.
+        next = this.defaultSizeWithin(bounds);
       }
       if (next !== undefined) {
         e.preventDefault();
@@ -372,23 +385,26 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
     {{! A focusable separator is an interactive widget (WAI-ARIA window
         splitter), so it takes a tab stop and reports its position. The
         listeners live in the modifier: no-invalid-interactive rejects a
-        template listener on a role it does not know is interactive. }}
+        template listener on a role it does not know is interactive. The
+        role, tab stop, orientation and values come after the splat, since
+        the keyboard handling and the layout depend on them. }}
     <div
       class='pretui-resize-handle'
+      aria-label={{this.label}}
+      aria-controls={{@controls}}
+      data-placement={{this.placement}}
+      data-line-edge={{this.lineEdge}}
+      data-dragging={{if this.dragging 'true'}}
+      {{this.dragResize}}
+      data-test-pretui-resize-handle
+      ...attributes
       role='separator'
       tabindex='0'
       aria-orientation={{this.orientation}}
-      aria-label={{this.label}}
-      aria-controls={{@controls}}
       aria-valuemin={{this.valueMin}}
       aria-valuemax={{this.valueMax}}
       aria-valuenow={{this.valueNow}}
       data-orientation={{this.orientation}}
-      data-placement={{this.placement}}
-      data-dragging={{if this.dragging 'true'}}
-      data-test-pretui-resize-handle
-      {{this.dragResize}}
-      ...attributes
     ><span class='pretui-resize-handle-line' aria-hidden='true'></span></div>
     <style scoped>
       @layer PretComponent {
@@ -397,6 +413,7 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
            the strip on the pane's edge. */
         .pretui-resize-handle {
           --pretui-resize-handle-size: 0.5rem;
+          --_pretui-resize-handle-dur: 180ms;
           display: grid;
           place-items: center;
           flex-shrink: 0;
@@ -415,10 +432,9 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
           cursor: row-resize;
         }
         .pretui-resize-handle-line {
-          border-radius: 2px;
-          background: transparent;
-          transition: background var(--pretui-dur-snap, 180ms)
-            var(--pretui-ease-snap, ease);
+          border-radius: var(--boxel-border-radius-2xs);
+          background-color: transparent;
+          transition: background-color var(--_pretui-resize-handle-dur) ease;
         }
         [data-orientation='vertical'] > .pretui-resize-handle-line {
           inline-size: 2px;
@@ -428,15 +444,46 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
           inline-size: 100%;
           block-size: 2px;
         }
-        .pretui-resize-handle:hover > .pretui-resize-handle-line,
+        /* The line runs along the pane's edge, on the side of the strip the
+           handle's placement names. */
+        [data-orientation='vertical'][data-line-edge='start']
+          > .pretui-resize-handle-line {
+          justify-self: start;
+        }
+        [data-orientation='vertical'][data-line-edge='end']
+          > .pretui-resize-handle-line {
+          justify-self: end;
+        }
+        [data-line-edge='left'] > .pretui-resize-handle-line {
+          justify-self: left;
+        }
+        [data-line-edge='right'] > .pretui-resize-handle-line {
+          justify-self: right;
+        }
+        [data-orientation='horizontal'][data-line-edge='start']
+          > .pretui-resize-handle-line {
+          align-self: start;
+        }
+        [data-orientation='horizontal'][data-line-edge='end']
+          > .pretui-resize-handle-line {
+          align-self: end;
+        }
+        /* A stroke on a neutral surface takes the ink; the fill would all but
+           vanish on a light one. */
         .pretui-resize-handle[data-dragging='true']
           > .pretui-resize-handle-line {
-          background: var(--primary);
+          background-color: var(--primary-ink);
+        }
+        /* A tap on a touch screen leaves :hover stuck until the next tap. */
+        @media (hover: hover) {
+          .pretui-resize-handle:hover > .pretui-resize-handle-line {
+            background-color: var(--primary-ink);
+          }
         }
         .pretui-resize-handle:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: -2px;
-          border-radius: var(--radius-chip, 6px);
+          border-radius: var(--boxel-border-radius-sm);
         }
         /* Coarse pointers get a target a finger can find. */
         @media (any-pointer: coarse) {

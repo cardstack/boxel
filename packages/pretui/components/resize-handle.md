@@ -18,7 +18,7 @@ Three decisions worth understanding.
 
 **Bounds take rem.** A pane designed in rem keeps its bounds in rem: `@min='11rem'` resolves against the root font size, read afresh at each drag and key press, so a change to it takes effect on the next one. The reported size is always px, since that's what a drag measures.
 
-**The caller places it.** The handle is a strip (`--pretui-resize-handle-size`, 0.5rem; 1rem on a coarse pointer) that fills its cross axis. Position it on the pane's edge, usually absolutely, inside the pane, so it travels with the edge it moves. `@placement` names that edge, so the handle knows which way growing is. `start` and `end` are logical, so in a right-to-left context the drag flips with them; `left` and `right` are physical and never flip; `top` and `bottom` name the block axis, which the writing direction doesn't affect.
+**The caller places it.** The handle is a strip (`--pretui-resize-handle-size`, 0.5rem; 1rem on a coarse pointer) that fills its cross axis. Position it on the pane's edge, usually absolutely, inside the pane, so it travels with the edge it moves. `@placement` names that edge, so the handle knows which way growing is, and the painted line runs along the strip's side on that edge. `start` and `end` are logical, so in a right-to-left context the drag flips with them; `left` and `right` are physical and never flip; `top` and `bottom` name the block axis, which the writing direction doesn't affect.
 
 ## Prior art
 
@@ -26,7 +26,7 @@ Three decisions worth understanding.
 
 Where it earns its place:
 
-- **Keyboard resizing.** Arrow keys step, Shift steps four times as far, and Home/End go to the limits, which SplitPanes' handle can't do.
+- **Keyboard resizing.** Arrow keys step, Shift steps four times as far, Home/End go to the limits and Enter restores the default, which SplitPanes' handle can't do.
 - **It says where it is.** `aria-valuenow`/`min`/`max` report the size, so a screen reader hears it.
 - **Absolute units.** px and rem bounds, not percentages of a group.
 - **Total travel, not frame deltas.** Each move applies the distance from where the drag started, so rounding never drifts over a long drag. The pointer that started a drag owns it: a second finger neither restarts nor steers it, and losing pointer capture ends it. A release the handle never sees can't leave it stuck: a move with no button held ends the drag, and a fresh press from the same pointer starts it over.
@@ -42,11 +42,11 @@ It follows the WAI-ARIA window splitter pattern: `role='separator'` with `tabind
 - `@label` is the accessible name. Name the pane: "Resize sidebar", not "Resize".
 - `@controls` sets `aria-controls` to the pane's id.
 - Keys: Left/Right for a vertical handle and Up/Down for a horizontal one, following the screen (in a right-to-left context, the key toward the pane's end edge still grows it). Home and End go to the min and max. A key pressed with Alt, Ctrl or Meta is left to the browser (Alt+Left is Back).
-- Double-click restores `@defaultSize`. A keyboard user reaches the same sizes with Home, End and the arrows.
+- Double-click or Enter restores `@defaultSize`. With no `@defaultSize`, both do nothing.
 - Pressing the handle focuses it, and a drag doesn't select the page's text.
 
 ## Theming
 
-The painted line is `--primary` while the handle is pointed at or dragged, and the focus ring is `--ring`. At rest the strip is transparent, so the pane's own border draws the edge. The strip's thickness is `--pretui-resize-handle-size`.
+The painted line is `--primary-ink` while the handle is pointed at (on a device that hovers) or dragged, and the focus ring is `--ring`. At rest the strip is transparent, so the pane's own border draws the edge. The strip's thickness is `--pretui-resize-handle-size`.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS (the positioning, most often) overrides them without a more specific selector.

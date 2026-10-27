@@ -15,12 +15,12 @@ class ResizeHandleFilterRail extends Component {
   setWidth = (width: number) => (this.width = width);
   get style() {
     return htmlSafe(
-      this.width === undefined ? '' : `--rail-width: ${this.width}px`,
+      this.width === undefined ? '' : `--_rail-width: ${this.width}px`,
     );
   }
   <template>
     <div class='ex-shell'>
-      <nav
+      <section
         id='rh-example-rail'
         class='ex-rail'
         aria-label='Teas'
@@ -41,27 +41,28 @@ class ResizeHandleFilterRail extends Component {
           @label='Resize tea list'
           @controls='rh-example-rail'
         />
-      </nav>
+      </section>
       <div class='ex-main'>Drag the rail's edge to read the long names.</div>
     </div>
     <style scoped>
       .ex-shell {
         display: flex;
-        min-inline-size: 320px;
+        min-inline-size: 20rem;
         block-size: 11rem;
         border: 1px solid var(--border);
-        border-radius: var(--radius-card, 8px);
+        border-radius: var(--boxel-border-radius);
         overflow: hidden;
       }
       .ex-rail {
+        --_rail-width: 9rem;
         position: relative;
         flex-shrink: 0;
-        inline-size: var(--rail-width, 9rem);
-        background: var(--muted);
+        inline-size: var(--_rail-width);
+        background-color: var(--muted);
       }
       .ex-rail ul {
         margin: 0;
-        padding: 0.5rem 0.75rem;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         list-style: none;
       }
       .ex-rail li {
@@ -77,7 +78,7 @@ class ResizeHandleFilterRail extends Component {
       }
       .ex-main {
         flex-grow: 1;
-        padding: 0.5rem 0.75rem;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         color: var(--muted-foreground);
       }
     </style>
@@ -89,7 +90,7 @@ class ResizeHandleConsole extends Component {
   setHeight = (height: number) => (this.height = height);
   get style() {
     return htmlSafe(
-      this.height === undefined ? '' : `--console-height: ${this.height}px`,
+      this.height === undefined ? '' : `--_console-height: ${this.height}px`,
     );
   }
   <template>
@@ -120,23 +121,24 @@ class ResizeHandleConsole extends Component {
       .ex-stack {
         display: flex;
         flex-direction: column;
-        min-inline-size: 320px;
+        min-inline-size: 20rem;
         block-size: 12rem;
         border: 1px solid var(--border);
-        border-radius: var(--radius-card, 8px);
+        border-radius: var(--boxel-border-radius);
         overflow: hidden;
       }
       .ex-editor {
         flex-grow: 1;
-        padding: 0.5rem 0.75rem;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       }
       .ex-console {
+        --_console-height: 4.5rem;
         position: relative;
         flex-shrink: 0;
-        block-size: var(--console-height, 72px);
-        padding: 0.75rem;
-        background: var(--muted);
-        font-family: var(--font-mono, monospace);
+        block-size: var(--_console-height);
+        padding: var(--boxel-sp-sm);
+        background-color: var(--muted);
+        font-family: var(--font-mono);
       }
       .ex-handle {
         position: absolute;

@@ -38,7 +38,7 @@ class ResizeHandleUsage extends Component {
   }
   get paneStyle() {
     return htmlSafe(
-      this.size === undefined ? '' : `--pane-size: ${this.size}px`,
+      this.size === undefined ? '' : `--_pane-size: ${this.size}px`,
     );
   }
   get usage() {
@@ -73,7 +73,7 @@ class ResizeHandleUsage extends Component {
   <template>
     <FreestyleUsage
       @name='ResizeHandle'
-      @description='A focusable separator that resizes the pane beside it, in px. The caller owns the size: @size in, @onSizeChange out. Drag it, use the arrow keys (Shift for bigger steps, Home and End for the limits), or double-click to restore @defaultSize. Use it to size one pane next to content that keeps its own layout; to share out a whole group of panes in percent, use SplitPanes.'
+      @description='A focusable separator that resizes the pane beside it, in px. The caller owns the size: @size in, @onSizeChange out. Drag it, use the arrow keys (Shift for bigger steps, Home and End for the limits), or double-click or press Enter to restore @defaultSize. Use it to size one pane next to content that keeps its own layout; to share out a whole group of panes in percent, use SplitPanes.'
       @source={{this.usage}}
     >
       <:example>
@@ -82,7 +82,7 @@ class ResizeHandleUsage extends Component {
           data-orientation={{this.orientation}}
           data-edge={{this.edge}}
         >
-          <nav id='rh-usage-pane' class='rh-pane' style={{this.paneStyle}}>
+          <div id='rh-usage-pane' class='rh-pane' style={{this.paneStyle}}>
             <span class='rh-label'>{{this.paneName}}</span>
             <ResizeHandle
               class='rh-handle'
@@ -97,7 +97,7 @@ class ResizeHandleUsage extends Component {
               @label={{this.label}}
               @controls='rh-usage-pane'
             />
-          </nav>
+          </div>
           <div class='rh-main'><span class='rh-label'>Content</span></div>
         </div>
       </:example>
@@ -122,7 +122,7 @@ class ResizeHandleUsage extends Component {
         />
         <Args.String
           @name='defaultSize'
-          @description='The size double-click restores, and the size an unset @size reads as.'
+          @description='The size double-click and Enter restore, and the size an unset @size reads as.'
         />
         <Args.String
           @name='orientation'
@@ -163,7 +163,7 @@ class ResizeHandleUsage extends Component {
         display: flex;
         block-size: 12rem;
         border: 1px solid var(--border);
-        border-radius: var(--radius-card, 8px);
+        border-radius: var(--boxel-border-radius);
         overflow: hidden;
       }
       .rh-host[data-edge='start'] {
@@ -176,14 +176,16 @@ class ResizeHandleUsage extends Component {
         flex-direction: column-reverse;
       }
       .rh-pane {
+        --_pane-size: 12rem;
         position: relative;
         flex-shrink: 0;
-        inline-size: var(--pane-size, 12rem);
-        background: var(--muted);
+        inline-size: var(--_pane-size);
+        background-color: var(--muted);
       }
       [data-orientation='horizontal'] > .rh-pane {
+        --_pane-size: 5rem;
         inline-size: auto;
-        block-size: var(--pane-size, 5rem);
+        block-size: var(--_pane-size);
       }
       .rh-handle {
         position: absolute;
@@ -208,7 +210,7 @@ class ResizeHandleUsage extends Component {
       }
       .rh-label {
         display: block;
-        padding: var(--boxel-sp-sm, 0.75rem);
+        padding: var(--boxel-sp-sm);
         color: var(--muted-foreground);
       }
     </style>

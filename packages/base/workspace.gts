@@ -1705,7 +1705,7 @@ class Isolated extends Component<typeof Workspace> {
       }
       .rail-panel {
         /* the resize handle's strip, which the rail sets aside beside it */
-        --rail-resize-size: 0.5rem;
+        --_rail-resize-size: 0.5rem;
         position: relative;
         flex-shrink: 0;
         width: var(--grid-rail-width);
@@ -1716,7 +1716,7 @@ class Isolated extends Component<typeof Workspace> {
       }
       /* on the panel's inner edge, inside the slot that clips it */
       .rail-resize {
-        --pretui-resize-handle-size: var(--rail-resize-size);
+        --pretui-resize-handle-size: var(--_rail-resize-size);
         position: absolute;
         inset-block: 0;
         inset-inline-end: 0;
@@ -1724,7 +1724,7 @@ class Isolated extends Component<typeof Workspace> {
       /* a finger gets a wider strip */
       @media (any-pointer: coarse) {
         .rail-panel {
-          --rail-resize-size: 1rem;
+          --_rail-resize-size: 1rem;
         }
       }
       .rail {
@@ -1739,10 +1739,10 @@ class Isolated extends Component<typeof Workspace> {
            rail's scrollbar and the rows' ends sit beside the handle rather
            than under it; a coarse pointer's strip is wider than the
            padding, so there the rows give up the difference */
-        margin-inline-end: var(--rail-resize-size);
+        margin-inline-end: var(--_rail-resize-size);
         padding-inline-end: max(
           0px,
-          calc(var(--boxel-sp-xs) - var(--rail-resize-size))
+          calc(var(--boxel-sp-xs) - var(--_rail-resize-size))
         );
         display: flex;
         flex-direction: column;
