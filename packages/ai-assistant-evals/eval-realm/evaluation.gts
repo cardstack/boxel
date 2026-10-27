@@ -113,6 +113,12 @@ export class EvaluationCard extends CardDef {
   // cards in the stack so they are part of the message context.
   @field initialCards = linksToMany(CardDef);
   @field initialFiles = linksToMany(FileDef);
+  // Seeded cards the prompt asks the assistant to change, each one also in
+  // `initialCards` or a card `.json` in `initialFiles`. When set, only one of
+  // these satisfies the runner's "a card rendered" check, and only once its
+  // file differs from the seed, so a run can't clear the check with a card
+  // that was already on screen or that renders inside the one it changed.
+  @field expectedChangedCards = linksToMany(CardDef);
   // Skill features the evaluation needs switched on (`boxel-debug:feature:
   // enable:<name>` in the room before the first prompt). A skill section
   // between `<!-- feature:<name> -->` markers is left out of the prompt
@@ -174,6 +180,17 @@ export class EvaluationCard extends CardDef {
             <h2>Initial files</h2>
             <div class='links'>
               <@fields.initialFiles @format='atom' />
+            </div>
+          </section>
+        {{/if}}
+
+        {{#if (gt @model.expectedChangedCards.length 0)}}
+          <section>
+            <h2>Expected changed cards</h2>
+            <p class='hint'>The run must change these; each counts as shown
+              only once its file differs from the seed.</p>
+            <div class='links'>
+              <@fields.expectedChangedCards @format='atom' />
             </div>
           </section>
         {{/if}}

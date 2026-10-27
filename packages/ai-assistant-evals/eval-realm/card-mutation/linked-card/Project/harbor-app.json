@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Harbor app redesign",
+      "client": "Harbor Co.",
+      "billingEmail": "accounts@harborco.example",
+      "status": "In progress"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "contacts.0": {
+        "links": {
+          "self": "../Contact/jonah-park"
+        }
+      },
+      "contacts.1": {
+        "links": {
+          "self": "../Contact/mei-lin"
+        }
+      },
+      "contacts.2": {
+        "links": {
+          "self": "../Contact/sara-okafor"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../project",
+        "name": "Project"
+      }
+    }
+  }
+}

@@ -33,7 +33,9 @@ endpoint is the URL.
   relative `adoptsFrom` references keep working; the cards are opened in the
   stack so they are in the message context), `skillFeatures` switched on in
   each room before the first prompt (`EVAL_SKILL_FEATURES` adds more, and a
-  name with a leading `-` leaves one out),
+  name with a leading `-` leaves one out), `expectedChangedCards` naming the
+  seeded cards the prompt asks to change (when set, only one of these, changed
+  from its seed and on screen, satisfies the runner's rendered-card check),
   `secondsPerPrompt` replacing the default 200 s time target for each prompt,
   and a query-backed `sessionReports` list.
 - **EvaluationResult**: one per model per session. The runner fills the
@@ -46,7 +48,7 @@ endpoint is the URL.
 - **EvaluationReport**: one per session, with a query-backed `results` table
   and the total cost.
 
-Nine evaluations ship. `hello-world` is the smallest build there is, one
+Eighteen evaluations ship. `hello-world` is the smallest build there is, one
 definition and one instance shown on screen — the one to start from, and the
 one to reach for when checking that a change did not break the basics.
 `linkedin-profile-computed-edit-restyle` is the step up: one definition with a
@@ -64,7 +66,19 @@ acknowledgement after the write passes its correctness check.
 how much of a brief the assistant answers from catalog parts, and whether it
 references a catalog definition or installs its own copy. The three
 `search-route-*` evaluations check that a search runs through a
-`run-realm-code` script.
+`run-realm-code` script. The eight `mutation-*` evaluations change card
+data, never a definition: fill a card with sample data, redact personal
+information and set an enum, add entries to `containsMany` fields, move dates
+to today while keeping them relative, move linked cards from one
+`linksToMany` to another, change a linked card rather than the open one,
+insert into a list whose items link to cards, and add an item to a list of
+mixed item types. Their seeds live under `eval-realm/card-mutation/`, most
+with a decoy card beside the one to change, and their criteria are judged by
+comparing each card's seed with what the workspace snapshot holds afterwards.
+Three of them cover a known gap, where the skills say nothing or a tool
+silently does the wrong thing (`mutation-list-links`,
+`mutation-mixed-type-list`, and the phone in `mutation-sample-data`); their
+notes say so, and they are expected to fail there until it is fixed.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace

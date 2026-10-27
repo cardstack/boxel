@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "customerName": "Margaret Ellison",
+      "email": "m.ellison82@example.com",
+      "phone": "+15035550142",
+      "dateOfBirth": "1982-07-19",
+      "shippingAddress": {
+        "addressLine1": "4417 SE Belmont St",
+        "addressLine2": "Apt 3",
+        "city": "Portland",
+        "state": "OR",
+        "postalCode": "97215",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "accountNumber": "ACCT-88203917",
+      "orderNumber": "ORD-2026-55120",
+      "product": "Kestrel 27-inch Monitor (KM27-Q)",
+      "category": "hardware",
+      "status": "open",
+      "openedOn": "2026-10-14",
+      "transcript": "**Agent:** Hi, thanks for contacting Kestrel support. Can I get your name and order number?\n\n**Customer:** Margaret Ellison, order ORD-2026-55120.\n\n**Agent:** Thanks, Margaret. What's going on with the monitor?\n\n**Customer:** The screen flickers every few seconds when it's connected over DisplayPort. HDMI is fine.\n\n**Agent:** Which firmware version does the on-screen menu show?\n\n**Customer:** It says 1.0.4.\n\n**Agent:** Does the flicker happen at 60 Hz as well as 144 Hz?\n\n**Customer:** Only at 144 Hz. At 60 Hz it's stable.\n\n**Agent:** Have you tried another DisplayPort cable?\n\n**Customer:** Yes, two different cables, same flicker.\n\n**Agent:** Can I confirm the email on the account?\n\n**Customer:** m.ellison82@example.com. You can also text me at (206) 555-0187, that's my work cell.\n\n**Agent:** And to verify the purchase, the last four digits of the card you paid with?\n\n**Customer:** 7731.\n\n**Agent:** Thank you. I'm escalating this to the hardware vendor, and we'll ship a replacement to 4417 SE Belmont St if they confirm a panel fault.",
+      "resolution": "Reproduced at 144 Hz over DisplayPort on firmware 1.0.4; stable at 60 Hz and over HDMI, and with two different cables. Suspected panel timing controller fault. Escalated to the vendor for confirmation before an RMA."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-ticket",
+        "name": "SupportTicket"
+      }
+    }
+  }
+}

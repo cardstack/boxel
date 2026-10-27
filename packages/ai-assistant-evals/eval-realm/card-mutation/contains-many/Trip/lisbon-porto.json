@@ -1,0 +1,77 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "title": "Lisbon & Porto in April",
+      "travelers": [
+        {
+          "name": "Joana Costa",
+          "email": "joana.costa@example.com"
+        }
+      ],
+      "stops": [
+        {
+          "day": 1,
+          "time": "09:30",
+          "place": "Lisbon Airport to the Alfama hotel",
+          "kind": "transit",
+          "notes": "Taxi rank outside Arrivals."
+        },
+        {
+          "day": 1,
+          "time": "16:00",
+          "place": "Castelo de São Jorge",
+          "kind": "sight",
+          "notes": "Go up before sunset."
+        },
+        {
+          "day": 2,
+          "time": "08:15",
+          "place": "Train from Santa Apolónia to Porto Campanhã",
+          "kind": "transit",
+          "notes": "Alfa Pendular, seats booked in car 4."
+        },
+        {
+          "day": 2,
+          "time": "15:30",
+          "place": "Walk along the Ribeira",
+          "kind": "sight",
+          "notes": null
+        },
+        {
+          "day": 2,
+          "time": "21:30",
+          "place": "Fado at Casa da Mariquinhas",
+          "kind": "sight",
+          "notes": "Tickets at the door."
+        },
+        {
+          "day": 3,
+          "time": "12:30",
+          "place": "Café Santiago",
+          "kind": "meal",
+          "notes": "Try the francesinha."
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../trip",
+        "name": "Trip"
+      }
+    }
+  }
+}

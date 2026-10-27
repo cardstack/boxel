@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "DevDay 2026",
+      "date": "2026-11-19",
+      "venue": "Pier 27 Hall, San Francisco",
+      "sessions": [
+        {
+          "time": "09:00",
+          "title": "Opening keynote: shipping small"
+        },
+        {
+          "time": "10:00",
+          "title": "Type-safe forms without the boilerplate"
+        },
+        {
+          "time": "11:00",
+          "title": "What we learned migrating to Postgres 17"
+        },
+        {
+          "time": "13:00",
+          "title": "Accessible charts from day one"
+        },
+        {
+          "time": "14:00",
+          "title": "Closing panel: the next five years"
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "sessions.0.speaker": {
+        "links": {
+          "self": "../Speaker/ana-silva"
+        }
+      },
+      "sessions.1.speaker": {
+        "links": {
+          "self": "../Speaker/ben-okoro"
+        }
+      },
+      "sessions.2.speaker": {
+        "links": {
+          "self": "../Speaker/chloe-martin"
+        }
+      },
+      "sessions.3.speaker": {
+        "links": {
+          "self": "../Speaker/dev-patel"
+        }
+      },
+      "sessions.4.speaker": {
+        "links": {
+          "self": "../Speaker/erin-walsh"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../conference",
+        "name": "Conference"
+      }
+    }
+  }
+}

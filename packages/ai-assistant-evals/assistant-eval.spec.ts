@@ -9,8 +9,12 @@ import {
 } from './matrix-api.ts';
 import { analyzeRoom } from './room-analysis.ts';
 import { grade, type RunResult, type Verdict } from './run-result.ts';
-import { RealmClient } from './realm-api.ts';
-import { prepopulate, type EvaluationBundle } from './eval-card.ts';
+import { ensureTrailingSlash, RealmClient } from './realm-api.ts';
+import {
+  expectedChangedSeeds,
+  prepopulate,
+  type EvaluationBundle,
+} from './eval-card.ts';
 import { captureWorkspace } from './workspace-snapshot.ts';
 
 // One Playwright test per model. Each test: fresh workspace, new room, pick the
@@ -725,12 +729,19 @@ async function waitForIdle(
 // assistant produced, so they are excluded here — otherwise an evaluation that
 // seeds cards clears the "a card rendered" leg before the assistant does
 // anything.
+//
+// `requiredCardIds`, when given, are the only cards that count: an evaluation
+// that names the cards it expects changed is satisfied only by one of those,
+// changed, on screen — not by a seeded card that happens to render beside or
+// inside it.
 async function findRenderedCard(
   page: Page,
   realmUrl: string,
   seededCardIds: string[] = [],
+  requiredCardIds?: string[],
 ) {
   let seeded = new Set(seededCardIds);
+  let required = requiredCardIds ? new Set(requiredCardIds) : undefined;
   let cardIds: string[] = [];
   try {
     await expect
@@ -748,7 +759,8 @@ async function findRenderedCard(
                   !!id &&
                   id.startsWith(realmUrl) &&
                   !id.endsWith('index') &&
-                  !seeded.has(id),
+                  !seeded.has(id) &&
+                  (!required || required.has(id)),
               ),
             ),
           ];
@@ -791,6 +803,27 @@ async function findRenderedCard(
     reasons,
     where: (inStack ? 'stack' : 'preview') as 'stack' | 'preview',
   };
+}
+
+// Whether a seeded card's file differs from the bytes it was seeded with. A
+// card the run deleted, or that cannot be read back, counts as unchanged.
+async function fileChanged(
+  client: RealmClient | undefined,
+  realmUrl: string,
+  seed: { path: string; content: Buffer },
+): Promise<boolean> {
+  if (!client) {
+    return false;
+  }
+  try {
+    let { body } = await client.getSource(
+      realmUrl,
+      `${ensureTrailingSlash(realmUrl)}${seed.path}`,
+    );
+    return !seed.content.equals(Buffer.from(body));
+  } catch {
+    return false;
+  }
 }
 
 function skillsUsed(events: MatrixEvent[]): string[] {
@@ -957,6 +990,8 @@ async function runModel(
     sessionId: SESSION_ID,
     initialCards: [],
     initialFiles: [],
+    expectedChangedCards: [],
+    changedCards: [],
     skillsUsed: [],
     skillFeatures: [],
     roomReturns: 0,
@@ -1103,11 +1138,31 @@ async function runModel(
     result.roomReturns = roomReturns.count;
     setStep('check render');
 
+    // An evaluation that names the cards it expects changed is satisfied only
+    // by one of them, once its file differs from the seed and it is shown.
+    let expected = evaluation
+      ? expectedChangedSeeds(evaluation, result.realmUrl)
+      : [];
+    result.expectedChangedCards = expected.map((seed) => seed.cardId);
+    for (let seed of expected) {
+      if (await fileChanged(realmClient, result.realmUrl, seed)) {
+        result.changedCards.push(seed.cardId);
+      }
+    }
     let rendered = await findRenderedCard(
       page,
       result.realmUrl,
-      result.initialCards,
+      result.initialCards.filter((id) => !result.changedCards.includes(id)),
+      expected.length > 0 ? result.changedCards : undefined,
     );
+    if (!rendered.cardId && expected.length > 0) {
+      let paths = expected.map((seed) => seed.path).join(', ');
+      rendered.reasons = [
+        result.changedCards.length === 0
+          ? `none of the cards the evaluation expects to change were changed (${paths})`
+          : `a card the evaluation expects to change was changed but is not shown (${paths})`,
+      ];
+    }
     result.cardRendered = rendered.cardId;
     result.renderedIn = rendered.where;
     result.screenshot = join(RESULTS_DIR, `${slug}.png`);

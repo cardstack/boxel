@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "fullName": "Sara Okafor",
+      "role": "Engineering manager",
+      "email": "sara.okafor@harborco.example",
+      "phone": "+14155550186"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../project",
+        "name": "Contact"
+      }
+    }
+  }
+}

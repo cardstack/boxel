@@ -20,6 +20,10 @@ export interface Evaluation {
   // Absolute URLs, as the realm serializes them.
   initialCards: string[];
   initialFiles: string[];
+  // Seeded cards the prompt asks the assistant to change, each one in
+  // `initialCards` or a card `.json` in `initialFiles`. When set, only one of
+  // these, changed from its seed and on screen, counts as a rendered card.
+  expectedChangedCards: string[];
   // Skill features to enable in the room before the first prompt.
   skillFeatures: string[];
   // Overrides the GOOD grade's default time budget per prompt.
@@ -78,6 +82,19 @@ export async function loadEvaluation(
       )
     : [];
   let id = doc.data.id ?? cardUrl;
+  let initialCards = linkedIds(doc, 'initialCards', id);
+  let initialFiles = linkedIds(doc, 'initialFiles', id);
+  let expectedChangedCards = linkedIds(doc, 'expectedChangedCards', id);
+  for (let card of expectedChangedCards) {
+    if (
+      !initialCards.includes(card) &&
+      !initialFiles.includes(`${card}.json`)
+    ) {
+      throw new Error(
+        `${cardUrl} expects ${card} to change, but does not seed it in initialCards or initialFiles`,
+      );
+    }
+  }
   return {
     url: id,
     realmUrl: ensureTrailingSlash(doc.data.meta.realmURL ?? realmUrl),
@@ -89,8 +106,9 @@ export async function loadEvaluation(
       'evaluation',
     prompts: [prompt, ...followUps],
     successCriteria: attributes.successCriteria ?? '',
-    initialCards: linkedIds(doc, 'initialCards', id),
-    initialFiles: linkedIds(doc, 'initialFiles', id),
+    initialCards,
+    initialFiles,
+    expectedChangedCards,
     skillFeatures: Array.isArray(attributes.skillFeatures)
       ? attributes.skillFeatures.filter(
           (f: unknown): f is string => typeof f === 'string' && f.trim() !== '',
@@ -208,6 +226,27 @@ export async function prepopulate(
     log(`indexed ${cardId}`);
   }
   return { cards, files };
+}
+
+// The seed of each card the evaluation expects the assistant to change: its
+// card id in the test workspace and the bytes it started with.
+export function expectedChangedSeeds(
+  bundle: EvaluationBundle,
+  testRealmUrl: string,
+): { cardId: string; path: string; content: Buffer }[] {
+  testRealmUrl = ensureTrailingSlash(testRealmUrl);
+  return (bundle.expectedChangedCards ?? []).map((id) => {
+    let path = `${relativeId(id, bundle)}.json`;
+    let file = bundle.files.find((f) => f.path === path);
+    if (!file) {
+      throw new Error(`the bundle has no seed for ${path}`);
+    }
+    return {
+      cardId: `${testRealmUrl}${path.replace(/\.json$/, '')}`,
+      path,
+      content: Buffer.from(file.content, 'base64'),
+    };
+  });
 }
 
 function relativeId(id: string, bundle: Evaluation) {

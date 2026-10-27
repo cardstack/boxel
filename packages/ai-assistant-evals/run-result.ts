@@ -37,6 +37,10 @@ export interface RunResult {
   // Cards and files copied into the workspace before the first prompt.
   initialCards: string[];
   initialFiles: string[];
+  // The cards the evaluation expects the assistant to change, and those of
+  // them whose file differs from the seed when the run ends.
+  expectedChangedCards: string[];
+  changedCards: string[];
   // Source URLs of the skill files the room had enabled.
   skillsUsed: string[];
   // Skill features enabled in the room before the first prompt

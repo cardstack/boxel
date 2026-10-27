@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "product": "Aurora wireless earbuds",
+      "owner": "Priya Natarajan",
+      "budget": 120000,
+      "kickoff": "2025-01-06",
+      "designFreeze": "2025-02-03",
+      "betaStart": "2025-02-24",
+      "launchDate": "2025-03-14",
+      "launchEvent": "2025-03-14T17:00:00.000Z",
+      "retro": "2025-03-28"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../launch-plan",
+        "name": "LaunchPlan"
+      }
+    }
+  }
+}
