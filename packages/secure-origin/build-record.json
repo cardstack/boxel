@@ -832,7 +832,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 167829,
+      "bytes": 170044,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1232,7 +1232,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/telemetry/instrument.ts",
-          "size": 9339
+          "size": 13336
         },
         {
           "package": "@cardstack/secure-origin",
