@@ -794,12 +794,14 @@ module('Acceptance | dashboard', function (hooks) {
           );
           await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
           await click('[data-test-confirm-archive-button]');
-          await waitUntil(
-            () =>
-              !find(
-                '[data-test-workspace-list] [data-test-workspace="Removed Workspace"]',
-              ),
+          // The row goes before the archive returns; the Archived list is
+          // filled last, so the dashboard's handling of it follows from here.
+          await waitUntil(() =>
+            getService('realm-server').archivedRealms.some(
+              ({ url }) => url === removedRealmURL,
+            ),
           );
+          await settled();
         }
 
         async function deleteRemovedWorkspace() {
@@ -816,7 +818,13 @@ module('Acceptance | dashboard', function (hooks) {
           );
         }
 
-        function assertLeftRemovedWorkspace(assert: Assert) {
+        async function assertLeftRemovedWorkspace(assert: Assert) {
+          await waitUntil(
+            () =>
+              operatorModeState().getOpenCardIds().length === 0 &&
+              operatorModeState().state.codePath === null,
+            { timeoutMessage: 'the removed workspace is left' },
+          );
           assert.deepEqual(
             operatorModeState().getOpenCardIds(),
             [],
@@ -845,7 +853,7 @@ module('Acceptance | dashboard', function (hooks) {
 
           await archiveRemovedWorkspace();
 
-          assertLeftRemovedWorkspace(assert);
+          await assertLeftRemovedWorkspace(assert);
         });
 
         test('deleting it clears the stacks and the code path when the code path is in it', async function (assert) {
@@ -865,7 +873,7 @@ module('Acceptance | dashboard', function (hooks) {
 
           await deleteRemovedWorkspace();
 
-          assertLeftRemovedWorkspace(assert);
+          await assertLeftRemovedWorkspace(assert);
         });
 
         test('deleting it clears the stacks when it is the current realm', async function (assert) {
@@ -888,7 +896,7 @@ module('Acceptance | dashboard', function (hooks) {
 
           await deleteRemovedWorkspace();
 
-          assertLeftRemovedWorkspace(assert);
+          await assertLeftRemovedWorkspace(assert);
         });
 
         test('archiving another workspace leaves the stacks and the code path', async function (assert) {

@@ -1668,15 +1668,22 @@ export default class Workspace extends Component<Signature> {
     }
   }
 
+  // A plain async method, not part of the task: archiving drops this
+  // workspace from the list before it returns, and the teardown that follows
+  // cancels the task, which would skip everything after the archive.
+  private async archiveAndLeave(wasActive: boolean) {
+    let { realmIdentifier } = this.args;
+    await this.realmServer.archiveRealm(realmIdentifier);
+    // Archiving seals the realm; its session goes so background requests
+    // don't loop on 403. Restoring creates a new one.
+    this.realm.removeRealm(realmIdentifier);
+    await this.leaveRemovedWorkspace(wasActive);
+  }
+
   private archiveWorkspaceTask = dropTask(async () => {
     this.archiveError = undefined;
     try {
-      let wasActive = this.isActiveWorkspace;
-      await this.realmServer.archiveRealm(this.args.realmIdentifier);
-      // Archiving seals the realm; its session goes so background requests
-      // don't loop on 403. Restoring creates a new one.
-      this.realm.removeRealm(this.args.realmIdentifier);
-      await this.leaveRemovedWorkspace(wasActive);
+      await this.archiveAndLeave(this.isActiveWorkspace);
       this.showArchiveModal = false;
     } catch (error: any) {
       this.archiveError = error.message;
