@@ -94,7 +94,6 @@ const WORKSPACE = {
   name: 'Team Workspace',
   directWriter: true,
   readableBy: 'members',
-  otherWriters: 2,
 };
 
 module('Integration | key pages', function (hooks) {
@@ -393,7 +392,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-key-replace-where]')
         .includesText(
-          '2 workspaces use this key. Replacing it switches them all to the new key right away, so make sure the new key is for the same service.',
+          '2 workspaces use this key. Replacing it switches them all to the new key right away, so make sure all of these workspaces should use the new key.',
           'says how many workspaces the key is shared into',
         );
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
@@ -447,7 +446,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-key-delete-confirm]')
         .includesText(
-          'Someone who edits one of them can put their own key in its place.',
+          'Someone with direct write access to one of them can put their own key in its place.',
         );
       await click('[data-test-key-delete-confirm-button]');
       await waitUntil(() => requests.some((r) => r.method === 'DELETE'));
@@ -792,7 +791,7 @@ module('Integration | key pages', function (hooks) {
             'the picked workspace is described',
           );
           return context({
-            realm: { ...WORKSPACE, readableBy: 'anyone', otherWriters: 1 },
+            realm: { ...WORKSPACE, readableBy: 'anyone' },
           });
         },
         'POST _key-shares': shares(),
@@ -846,9 +845,6 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-workspace-readers]')
         .hasText('Anyone can see this workspace, signed in or not.');
-      assert
-        .dom('[data-test-workspace-writers]')
-        .includesText('One other person edits this workspace.');
       await fillIn('[data-test-share-label]', 'Team maps');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
@@ -942,10 +938,8 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-workspace-readers]')
         .hasText('Only its members can see this workspace.');
       assert
-        .dom('[data-test-workspace-writers]')
-        .includesText(
-          '2 other people edit this workspace. Any of them can stop this share or replace your key with their own.',
-        );
+        .dom('[data-test-workspace-members] li')
+        .exists({ count: 2 }, 'who can see it, and whose account it runs on');
       assert
         .dom('[data-test-workspace-members]')
         .includesText('Requests that use the key run on your account');
@@ -1023,7 +1017,9 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-keys-needs-admin]');
       assert
         .dom('[data-test-keys-needs-admin] h1')
-        .hasText('Someone who edits this workspace needs to set this up');
+        .hasText(
+          'Someone with direct write access to this workspace needs to set this up',
+        );
       assert
         .dom('[data-test-needs-admin-address]')
         .hasText('realm-server.test/someone/workspace/');
@@ -1080,7 +1076,7 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-swap-share-label]').hasText('Team weather');
       assert
         .dom('[data-test-swap-share]')
-        .includesText('can no longer edit this workspace');
+        .includesText('no longer has direct write access to this workspace');
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       await click('[data-test-key-choice="Weather service"] input');
       await click('[data-test-swap-key-save]');

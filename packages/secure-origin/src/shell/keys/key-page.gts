@@ -111,19 +111,19 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                             {{#if (eq this.replacingWorkspaces 1)}}
                               One workspace uses this key. Replacing it switches
                               that workspace to the new key right away, so make
-                              sure the new key is for the same service.
+                              sure that workspace should use the new key.
                             {{else if this.replacingWorkspaces}}
                               {{this.replacingWorkspaces}}
                               workspaces use this key. Replacing it switches
                               them all to the new key right away, so make sure
-                              the new key is for the same service.
+                              all of these workspaces should use the new key.
                             {{else if this.replacingSharesKnown}}
                               No workspace uses this key. Make sure the new key
                               is for the same service.
                             {{else}}
                               Replacing this key switches every workspace that
                               uses it to the new key right away, so make sure
-                              the new key is for the same service.
+                              all of them should use the new key.
                             {{/if}}
                           </p>
                           <KeyFields
@@ -168,8 +168,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                                   >{{share.realm}}</span></li>
                               {{/each}}
                             </ul>
-                            <p class='confirm'>Someone who edits one of them can
-                              put their own key in its place.</p>
+                            <p class='confirm'>Someone with direct write access
+                              to one of them can put their own key in its place.</p>
                           {{else}}
                             <p class='confirm'>Delete
                               <strong>{{key.name}}</strong>? This is permanent.
