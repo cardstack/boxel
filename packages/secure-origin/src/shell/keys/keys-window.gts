@@ -27,7 +27,8 @@ import Button from '../../components/button.gts';
 import BoxelIcon from '../../components/icons/boxel-icon.gts';
 import IconX from '../../components/icons/icon-x.gts';
 import { navigation } from '../navigation.js';
-import { pageAwaitsData, pageSignedOut } from '../telemetry.ts';
+import { pageAwaitsData } from '../telemetry.ts';
+import type { PageVisit } from '../../telemetry/instrument.ts';
 
 import EditPage from './edit-page.gts';
 
@@ -39,6 +40,8 @@ export interface KeysWindowAPI {
   config: Config;
   // What a page calls when the server refuses a request as signed out.
   signedOut: () => void;
+  // Where a page reports how loading its data ended, for the telemetry.
+  visit: PageVisit;
   close: () => void;
 }
 
@@ -172,13 +175,13 @@ export default class KeysWindow extends Component<Signature> {
     state: 'checking',
     wasSignedIn: false,
   });
+  // The page under it reports through this when its data has loaded.
+  private visit = pageAwaitsData();
   private stopListening: (() => void) | undefined;
   private signedInAs: string | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    // The page under it reports when its data has loaded.
-    pageAwaitsData();
     this.check();
   }
 
@@ -192,7 +195,12 @@ export default class KeysWindow extends Component<Signature> {
   private is = (state: State) => this.page.state === state;
 
   private get api(): KeysWindowAPI {
-    return { config: this.config, signedOut: this.ended, close: this.close };
+    return {
+      config: this.config,
+      signedOut: this.ended,
+      close: this.close,
+      visit: this.visit,
+    };
   }
 
   private async check() {
@@ -200,7 +208,7 @@ export default class KeysWindow extends Component<Signature> {
     if (session) {
       this.begin(session);
     } else {
-      pageSignedOut();
+      this.visit.signedOut();
       this.page.state = 'signed-out';
     }
   }
@@ -238,7 +246,7 @@ export default class KeysWindow extends Component<Signature> {
       return;
     }
     this.page.wasSignedIn = true;
-    pageSignedOut();
+    this.visit.signedOut();
     this.stopListening?.();
     document.removeEventListener('visibilitychange', this.recheck);
     window.removeEventListener('focus', this.recheck);

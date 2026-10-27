@@ -20,7 +20,6 @@ import Button from '../../components/button.gts';
 import FieldContainer from '../../components/field-container.gts';
 import Tag from '../../components/icons/tag.gts';
 import { navigation } from '../navigation.js';
-import { pageLoaded, pageLoadFailed } from '../telemetry.ts';
 import { pageURL } from '../urls.js';
 
 import {
@@ -222,7 +221,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       let context = await windowContext(config, { realm });
       if (!context.realm.directWriter) {
         this.page.state = { name: 'needs-admin', context };
-        pageLoaded();
+        this.args.api.visit.loaded();
         return;
       }
       let share = (await realmShares(config, context.realm.url)).find(
@@ -233,7 +232,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       }
       if (share.state === 'active') {
         this.page.state = { name: 'active', context, share };
-        pageLoaded();
+        this.args.api.visit.loaded();
         return;
       }
       let keys = await listKeys(config);
@@ -242,12 +241,12 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       this.form.selected =
         offered ?? (keys.length === 1 ? keys[0].id : undefined);
       this.page.state = { name: 'choosing', context, share };
-      pageLoaded();
+      this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       } else {
-        pageLoadFailed(e);
+        this.args.api.visit.loadFailed(e);
         this.page.state = {
           name: 'load-failed',
           failure: loadFailure(e),

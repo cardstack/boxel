@@ -1,10 +1,11 @@
 // The shell's telemetry instrument (`../telemetry/instrument.ts`). `shell.js`
 // starts it as the document loads; the router reports each page opened and
-// rendered (`app.gts`), and a page that loads data reports how its load ended.
+// rendered (`app.gts`), and a page that loads data reports how its load ended
+// through its visit (`pageAwaitsData`).
 // Until it starts every report is dropped, so a component test that renders a
 // page without the shell sends nothing.
 import { readConfig, storedSession } from '../security/session.js';
-import { SecureTelemetry } from '../telemetry/instrument.ts';
+import { SecureTelemetry, type PageVisit } from '../telemetry/instrument.ts';
 
 let instrument: SecureTelemetry | undefined;
 
@@ -47,18 +48,14 @@ export function pageRendered(): void {
   instrument?.pageRendered();
 }
 
-export function pageAwaitsData(): void {
-  instrument?.pageAwaitsData();
-}
-
-export function pageLoaded(): void {
-  instrument?.pageLoaded();
-}
-
-export function pageLoadFailed(error: unknown): void {
-  instrument?.pageLoadFailed(error);
-}
-
-export function pageSignedOut(): void {
-  instrument?.pageSignedOut();
+// For a page that loads data, called while it renders: the visit it reports
+// how its load ended through.
+export function pageAwaitsData(): PageVisit {
+  return (
+    instrument?.pageAwaitsData() ?? {
+      loaded() {},
+      loadFailed() {},
+      signedOut() {},
+    }
+  );
 }

@@ -5,6 +5,8 @@ import {
   counterKey,
   isRateLimitUnavailable,
   logger,
+  parseIP,
+  rateLimitKey,
   type DBAdapter,
   type RateLimitStore,
 } from '@cardstack/runtime-common';
@@ -32,12 +34,15 @@ const MAX_TELEMETRY_EVENTS = 500;
 const CLIENT_APPS = new Set(['host', 'secure-origin']);
 const DEFAULT_CLIENT_APP = 'host';
 
-// A beacon without a session is counted against its sender's address, so an
-// anonymous caller can't flood the log. The secure origin's pages beacon
-// before anyone signs in there (the sign-in page itself), about once a second
-// while something is happening and every 25s while quiet, so this admits a
-// few busy windows behind one address and refuses a script.
-const ANONYMOUS_BEACON_LIMIT = { burst: 60, refillPerMinute: 30 };
+// The events of beacons without a session are counted against the sender's
+// network (an IPv4 address, or an IPv6 /64), so an anonymous caller can't
+// flood the log. The secure origin's pages send at most about one event a
+// second each while busy: registration polls the Matrix server every second
+// while it waits for the email link, and each poll is a `server-request`.
+// That is about 60 events a minute a window, so this admits about five busy
+// windows behind one network, and a burst of one full batch (the realm
+// server takes at most 500 events in one).
+const ANONYMOUS_EVENT_LIMIT = { burst: 600, refillPerMinute: 300 };
 
 // Each accepted event is emitted as one line on this channel. alloy scrapes
 // stdout into Loki, where Grafana's `| json` parser reads each line.
@@ -53,7 +58,8 @@ const log = logger('realm-server');
 // own) is attributed to that session's user. One without a valid session is
 // still accepted, since the secure origin's pages report what happens before
 // anyone signs in, but it is attributed to nobody: the body's self-reported
-// user is never believed, and the sender's address is rate limited.
+// user is never believed, it is always the secure origin's, and its events
+// are rate limited by the sender's network.
 export default function handleClientTelemetry({
   realmSecretSeed,
   dbAdapter,
@@ -66,38 +72,6 @@ export default function handleClientTelemetry({
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
       let token = await sessionClaim(ctxt, realmSecretSeed, dbAdapter);
-      if (!token) {
-        let address = ctxt.req.headers[CLIENT_IP_HEADER];
-        if (typeof address !== 'string' || !address) {
-          // No session and no address to count it against: nothing to admit
-          // it under.
-          await setContextResponse(ctxt, new Response(null, { status: 204 }));
-          return;
-        }
-        let outcome = await rateLimitStore.take(
-          counterKey('client-telemetry', address),
-          ANONYMOUS_BEACON_LIMIT,
-        );
-        if (!outcome.admitted) {
-          if (isRateLimitUnavailable(outcome)) {
-            await sendResponseForError(
-              ctxt,
-              503,
-              'Service Unavailable',
-              'Telemetry rate limit unavailable',
-            );
-          } else {
-            ctxt.set('Retry-After', String(outcome.retryAfterSeconds));
-            await sendResponseForError(
-              ctxt,
-              429,
-              'Too Many Requests',
-              'Too many telemetry beacons',
-            );
-          }
-          return;
-        }
-      }
 
       // The body is read fully into memory below, so bound it by the declared
       // Content-Length before reading. A telemetry beacon is always a
@@ -168,12 +142,53 @@ export default function handleClientTelemetry({
         return;
       }
 
+      if (!token) {
+        let address = parseIP(String(ctxt.req.headers[CLIENT_IP_HEADER] ?? ''));
+        if (!address) {
+          // No session and no address to count it against: nothing to admit
+          // it under.
+          await setContextResponse(ctxt, new Response(null, { status: 204 }));
+          return;
+        }
+        // Charged per event, not per beacon, since an event is what becomes a
+        // log line.
+        let outcome = await rateLimitStore.take(
+          counterKey('client-telemetry', rateLimitKey(address)),
+          ANONYMOUS_EVENT_LIMIT,
+          Math.max(1, events.length),
+        );
+        if (!outcome.admitted) {
+          if (isRateLimitUnavailable(outcome)) {
+            await sendResponseForError(
+              ctxt,
+              503,
+              'Service Unavailable',
+              'Telemetry rate limit unavailable',
+            );
+          } else {
+            ctxt.set('Retry-After', String(outcome.retryAfterSeconds));
+            await sendResponseForError(
+              ctxt,
+              429,
+              'Too Many Requests',
+              'Too many telemetry events',
+            );
+          }
+          return;
+        }
+      }
+
       // The user is the session's, never the body's self-reported value,
-      // which is client-supplied and untrusted.
+      // which is client-supplied and untrusted. Only the secure origin
+      // beacons without a session, so a beacon without one is the secure
+      // origin's whatever it names, and unauthenticated input never reaches
+      // the host's lines.
       let matrixUserId = token?.user ?? null;
-      let clientApp = CLIENT_APPS.has(json.client_app)
-        ? json.client_app
-        : DEFAULT_CLIENT_APP;
+      let clientApp = !token
+        ? 'secure-origin'
+        : CLIENT_APPS.has(json.client_app)
+          ? json.client_app
+          : DEFAULT_CLIENT_APP;
       let sessionId = json.session_id;
       let env = json.env;
       let appVersion = json.app_version;

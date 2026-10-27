@@ -19,6 +19,7 @@ import CliSignInPage from '../../src/shell/sign-in/cli-sign-in-page.gts';
 import GoogleCallback from '../../src/shell/sign-in/google-callback.gts';
 import SignInPage from '../../src/shell/sign-in/sign-in-page.gts';
 import SignOutPage from '../../src/shell/sign-in/sign-out-page.gts';
+import { setupTelemetrySecretsCheck } from '../helpers/telemetry-secrets.ts';
 
 // The realm server the pages talk to, named by the page's meta tag as the
 // shell's document names it.
@@ -151,6 +152,17 @@ module('Integration | sign-in', function (hooks) {
     sessionStorage.clear();
     history.replaceState(null, '', originalURL);
   });
+
+  setupTelemetrySecretsCheck(hooks, () => [
+    'a-password',
+    'not-the-password',
+    'another-password',
+    'someone@example.test',
+    '"someone"',
+    SESSION.token,
+    STATE,
+    'single-use-login-token',
+  ]);
 
   module('the sign-in form', function () {
     test('offers no Google sign-in when the realm server has no Google client', async function (assert) {

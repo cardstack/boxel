@@ -101,12 +101,12 @@ module(basename(import.meta.filename), function () {
       return builder;
     }
 
-    test('accepts a beacon without a session and attributes it to nobody', async function (assert) {
+    test('accepts a beacon without a session, attributes it to nobody, and keeps it off the host', async function (assert) {
       await withPerfLogCapture(async (captured) => {
         let response = await post({ authed: false }).send(
           JSON.stringify({
             matrix_user_id: '@someone-else:evil',
-            client_app: 'secure-origin',
+            client_app: 'host',
             events: [{ event_type: 'page-load', page: 'sign-in' }],
           }),
         );
@@ -117,6 +117,11 @@ module(basename(import.meta.filename), function () {
           lines[0].matrix_user_id,
           null,
           'the self-reported user is not believed without a session',
+        );
+        assert.strictEqual(
+          lines[0].client_app,
+          'secure-origin',
+          'only the secure origin beacons without a session, whatever the batch names',
         );
       });
     });
@@ -142,14 +147,18 @@ module(basename(import.meta.filename), function () {
       });
     });
 
-    test('rate limits beacons without a session by address', async function (assert) {
-      let body = JSON.stringify({ events: [{ event_type: 'keepalive' }] });
-      // The bucket refills while the burst is sent, so count what is admitted
-      // before the first refusal rather than expecting the refusal at an exact
-      // position.
+    test('rate limits the events of beacons without a session by network', async function (assert) {
+      let body = JSON.stringify({
+        events: Array.from({ length: 100 }, () => ({
+          event_type: 'keepalive',
+        })),
+      });
+      // The bucket refills while the batches are sent, so count what is
+      // admitted before the first refusal rather than expecting the refusal at
+      // an exact position.
       let admitted = 0;
       let refused;
-      for (let i = 0; i < 80 && !refused; i++) {
+      for (let i = 0; i < 20 && !refused; i++) {
         let response = await post({ authed: false }).send(body);
         if (response.status === 204) {
           admitted++;
@@ -157,14 +166,17 @@ module(basename(import.meta.filename), function () {
           refused = response;
         }
       }
-      assert.true(admitted >= 60, `a burst of 60 is admitted (${admitted})`);
-      assert.strictEqual(refused?.status, 429, 'then a beacon is refused');
+      assert.true(
+        admitted >= 6,
+        `a burst of 600 events is admitted (${admitted} batches of 100)`,
+      );
+      assert.strictEqual(refused?.status, 429, 'then a batch is refused');
       assert.ok(refused?.headers['retry-after'], 'with a Retry-After');
       let authed = await post().send(body);
       assert.strictEqual(
         authed.status,
         204,
-        'a beacon with a session is not counted against the address',
+        'a beacon with a session is not counted against the network',
       );
     });
 

@@ -28,7 +28,6 @@ import LayoutGrid from '../../components/icons/layout-grid.gts';
 import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
-import { pageLoaded, pageLoadFailed } from '../telemetry.ts';
 import { pageURL } from '../urls.js';
 
 import {
@@ -252,7 +251,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         context = await windowContext(config, { realm });
         if (!context.realm.directWriter) {
           this.page.state = { name: 'needs-admin', realm: context.realm.name };
-          pageLoaded();
+          this.args.api.visit.loaded();
           return;
         }
         this.form.realm = context.realm.url;
@@ -275,12 +274,12 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         this.selectKey(keys[0].id);
       }
       this.page.state = { name: 'choosing', key, context };
-      pageLoaded();
+      this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       } else {
-        pageLoadFailed(e);
+        this.args.api.visit.loadFailed(e);
         this.page.state = {
           name: 'load-failed',
           failure: loadFailure(e),

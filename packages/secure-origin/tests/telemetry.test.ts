@@ -174,7 +174,6 @@ interface Beacon {
   keepalive: boolean;
   body: {
     client_app: string;
-    matrix_user_id: string | null;
     session_id: string;
     events: TelemetryEvent[];
   };
@@ -226,7 +225,10 @@ describe('the instrument', () => {
     assert.ok(first!.keepalive);
     assert.equal(first!.authorization, undefined, 'no session yet');
     assert.equal(first!.body.client_app, 'secure-origin');
-    assert.equal(first!.body.matrix_user_id, null);
+    assert.ok(
+      !('matrix_user_id' in first!.body),
+      'the body names no user; the session does',
+    );
     assert.deepEqual(
       first!.body.events.map((e) => [e.event_type, e.page]),
       [['page-load', 'sign-in']],
@@ -244,7 +246,7 @@ describe('the instrument', () => {
     telemetry.pageRendered();
     win.tick();
     assert.equal(beacons[1]!.authorization, 'Bearer secret-session-token');
-    assert.equal(beacons[1]!.body.matrix_user_id, '@alice:example.test');
+    assert.ok(!JSON.stringify(beacons[1]!.body).includes('@alice'));
     assert.equal(beacons[1]!.body.session_id, first!.body.session_id);
     telemetry.stop();
   });
@@ -252,22 +254,21 @@ describe('the instrument', () => {
   test('a page that loads data reports when it loaded, failed, or found no session', () => {
     telemetry.start();
     telemetry.pageOpened('keys.index');
-    telemetry.pageAwaitsData();
+    let keys = telemetry.pageAwaitsData();
     clock = 30;
     telemetry.pageRendered();
     clock = 120;
-    telemetry.pageLoaded();
-    telemetry.pageLoadFailed(new Error('ignored: the load already ended'));
+    keys.loaded();
+    keys.loadFailed(new Error('ignored: the load already ended'));
 
     clock = 200;
     telemetry.pageOpened('keys.share');
-    telemetry.pageAwaitsData();
+    let share = telemetry.pageAwaitsData();
     clock = 450;
-    telemetry.pageLoadFailed(Object.assign(new Error('x'), { status: 503 }));
+    share.loadFailed(Object.assign(new Error('x'), { status: 503 }));
 
     telemetry.pageOpened('enter-key');
-    telemetry.pageAwaitsData();
-    telemetry.pageSignedOut();
+    telemetry.pageAwaitsData().signedOut();
 
     telemetry.pageOpened('share-key');
     telemetry.pageAwaitsData();
@@ -293,6 +294,28 @@ describe('the instrument', () => {
     telemetry.stop();
   });
 
+  test('a page left mid-load reports nothing onto the page after it', () => {
+    telemetry.start();
+    telemetry.pageOpened('keys.share');
+    let share = telemetry.pageAwaitsData();
+    telemetry.pageOpened('keys.index');
+    let keys = telemetry.pageAwaitsData();
+    // The share page's load finishes after the user went back.
+    share.loadFailed(Object.assign(new Error('x'), { status: 500 }));
+    keys.loaded();
+    telemetry.flushAll('test');
+    assert.deepEqual(
+      events()
+        .filter((e) => e.event_type === 'page-load')
+        .map((e) => [e.page, e.outcome]),
+      [
+        ['keys/share', 'left'],
+        ['keys', 'loaded'],
+      ],
+    );
+    telemetry.stop();
+  });
+
   test('times each request by its label, and names the failed one a load ended on', async () => {
     let realFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -307,7 +330,7 @@ describe('the instrument', () => {
     try {
       telemetry.start();
       telemetry.pageOpened('swap-key');
-      telemetry.pageAwaitsData();
+      let swap = telemetry.pageAwaitsData();
       await timedFetch(
         new URL(`_secure-window/context`, REALM_SERVER),
         { method: 'POST', headers: { Authorization: 'Bearer t' } },
@@ -320,7 +343,7 @@ describe('the instrument', () => {
           'matrix',
         ),
       );
-      telemetry.pageLoadFailed(new Error('no status'));
+      swap.loadFailed(new Error('no status'));
       telemetry.flushAll('test');
     } finally {
       globalThis.fetch = realFetch;
