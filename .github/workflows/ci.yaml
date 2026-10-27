@@ -1147,7 +1147,6 @@ jobs:
         with:
           repository: cardstack/deck
           ref: ${{ env.DECKD_REF }}
-          token: ${{ secrets.DECK_READ_TOKEN }}
           path: deck
           persist-credentials: false
       - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
