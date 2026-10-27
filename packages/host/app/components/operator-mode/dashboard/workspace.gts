@@ -310,9 +310,13 @@ export default class Workspace extends Component<Signature> {
         {{/if}}
 
         <div class={{cn 'favorite-btn' is-favorited=this.isFavorited}}>
+          {{! The star's fill already shows the state, so it takes no
+              pressed tint, which would show as a gray square on the chip. }}
           <IconButton
-            @label={{this.favoriteLabel}}
+            @label='Favorite'
             @appearance='plain'
+            @pressed={{this.isFavorited}}
+            @pressedTint={{false}}
             {{on 'click' this.toggleFavorite}}
             data-test-workspace-favorite-btn={{@realmIdentifier}}
           >
@@ -1340,11 +1344,6 @@ export default class Workspace extends Component<Signature> {
     return this.matrixService.workspaceFavorites.includes(
       this.args.realmIdentifier,
     );
-  }
-
-  // Both the button's accessible name and its tooltip, so they can't drift.
-  private get favoriteLabel() {
-    return this.isFavorited ? 'Remove from Favorites' : 'Add to Favorites';
   }
 
   private get menuItems() {

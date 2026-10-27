@@ -104,6 +104,33 @@ module('Pretui | components/icon-button', function (hooks) {
     );
   });
 
+  test('@pressedTint={{false}} drops the tint and keeps the toggle state', async function (assert) {
+    await render(
+      <template>
+        <IconButton @label='Pin' @pressed={{true}} data-test-tinted />
+        <IconButton
+          @label='Pin'
+          @pressed={{true}}
+          @pressedTint={{false}}
+          data-test-untinted
+        />
+      </template>,
+    );
+    assert.false(
+      el('[data-test-tinted]').hasAttribute('data-pressed-tint'),
+      'tinted by default',
+    );
+    assert.strictEqual(
+      el('[data-test-untinted]').getAttribute('data-pressed-tint'),
+      'none',
+    );
+    assert.strictEqual(
+      el('[data-test-untinted]').getAttribute('aria-pressed'),
+      'true',
+      'still announced as pressed',
+    );
+  });
+
   test('busy keeps focus and adds @busyLabel to the accessible name', async function (assert) {
     await render(
       <template>

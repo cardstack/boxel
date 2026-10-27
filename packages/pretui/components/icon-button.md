@@ -14,6 +14,7 @@ A square **Button** carrying an icon instead of text, with a mandatory label. Us
 @shape?: 'rounded' | 'pill' | 'square'   (forwarded to Button; 'pill' is a circle, since the button is square)
 @href?: string   (renders an <a>; @busy and @pressed do not apply)
 @pressed?: boolean   (toggle state as aria-pressed; leave undefined for a plain action)
+@pressedTint?: boolean   (default true; false drops the pressed tint, for a toggle whose icon already shows its state)
 @busy?, @loading?, @isLoading?, @isPending?   (forwarded to Button)
 @busyLabel?: string   (added after @label in the accessible name while busy; forwarded to Button, which shows it when the button is wide enough)
 @disabled?, @isDisabled?
@@ -21,7 +22,7 @@ A square **Button** carrying an icon instead of text, with a mandatory label. Us
 Element: HTMLButtonElement | HTMLAnchorElement
 ```
 
-**Every Button argument is accepted, with the same meaning and aliases**: the signature is Button's plus `@label`, `@icon`, `@iconWidth`/`@iconHeight` and `@pressed`. Only the default treatment differs: `neutral` / `outlined`.
+**Every Button argument is accepted, with the same meaning and aliases**: the signature is Button's plus `@label`, `@icon`, `@iconWidth`/`@iconHeight`, `@pressed` and `@pressedTint`. Only the default treatment differs: `neutral` / `outlined`.
 
 **`@label` is required, and it is the whole point of the component existing.** An icon-only `<Button>` has no accessible name and nothing warns you; `IconButton` makes the name non-optional at the type level and applies it as both `aria-label` and `title`. That is the single reason this is a separate export rather than a `size='icon'` variant.
 
@@ -56,7 +57,7 @@ What is right:
 
 - `aria-label={{@label}}` gives the accessible name, and it is required.
 - **The face is `aria-hidden`.** `aria-label` already names the button, so an icon that emits its own `<title>`, or a text glyph such as `✕`, is not read a second time.
-- **`@pressed` sets `aria-pressed`** for a toggle (pin, favorite, bold). Per APG, a toggle's label must not change with its state, so `@label` stays fixed and `aria-pressed` carries the state. A pressed button takes a tint one step stronger than the `filled` appearance's, so the state shows on `outlined`, `plain` and `filled` alike, plus a forced-colors `Highlight` edge. An `accent` appearance has no stronger step to show it and a `link` has no fill, so a toggle should use another appearance.
+- **`@pressed` sets `aria-pressed`** for a toggle (pin, favorite, bold). Per APG, a toggle's label must not change with its state, so `@label` stays fixed and `aria-pressed` carries the state. A pressed button takes a tint one step stronger than the `filled` appearance's, so the state shows on `outlined`, `plain` and `filled` alike, plus a forced-colors `Highlight` edge. An `accent` appearance has no stronger step to show it and a `link` has no fill, so a toggle should use another appearance. A toggle whose icon already shows its state, such as an outline star that turns filled, passes `@pressedTint={{false}}` to drop the tint, which would otherwise show its state twice; `aria-pressed` and the forced-colors edge stay.
 - **`@busy` keeps focus** (Button's `aria-disabled` treatment), and `@busyLabel` joins the accessible name, because `aria-label` hides Button's own busy text from it.
 
 Gaps and cautions:

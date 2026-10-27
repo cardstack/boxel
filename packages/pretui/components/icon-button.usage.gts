@@ -38,6 +38,7 @@ export class IconButtonUsage extends Component {
   @tracked href = '';
   @tracked shape = 'rounded';
   @tracked pressed: boolean | undefined;
+  @tracked pressedTint = true;
   setLabel = (v: string) => (this.labelText = v);
   setTone = (v: string) => (this.tone = v);
   setAppearance = (v: string) => (this.appearance = v);
@@ -48,6 +49,7 @@ export class IconButtonUsage extends Component {
   setHref = (v: string) => (this.href = v);
   setShape = (v: string) => (this.shape = v);
   setPressed = (v: boolean) => (this.pressed = v);
+  setPressedTint = (v: boolean) => (this.pressedTint = v);
   get toneVal() {
     return this.tone as PretuiTone;
   }
@@ -76,6 +78,7 @@ export class IconButtonUsage extends Component {
     if (this.href) bits.push(`@href='${this.href}'`);
     if (this.shape !== 'rounded') bits.push(`@shape='${this.shape}'`);
     if (this.pressed !== undefined) bits.push(`@pressed={{${this.pressed}}}`);
+    if (!this.pressedTint) bits.push('@pressedTint={{false}}');
     return `<IconButton ${bits.join(' ')} @icon={{PlusIcon}} />`;
   }
   <template>
@@ -96,6 +99,7 @@ export class IconButtonUsage extends Component {
           @href={{this.hrefVal}}
           @shape={{this.shapeVal}}
           @pressed={{this.pressed}}
+          @pressedTint={{this.pressedTint}}
           @icon={{PlusIcon}}
         />
       </:example>
@@ -170,6 +174,13 @@ export class IconButtonUsage extends Component {
           @value={{this.pressed}}
           @description='Toggle state, as aria-pressed; leave unset for a plain action.'
           @onInput={{this.setPressed}}
+        />
+        <Args.Bool
+          @name='pressedTint'
+          @value={{this.pressedTint}}
+          @defaultValue={{true}}
+          @description='Tints a pressed button; false when the icon already shows the state.'
+          @onInput={{this.setPressedTint}}
         />
         <Args.Base
           @name='icon'

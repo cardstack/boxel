@@ -23,6 +23,9 @@ export interface IconButtonSignature {
     /** toggle state, as aria-pressed; leave undefined for a plain action.
      *  Does not apply with @href */
     pressed?: boolean;
+    /** false drops the pressed tint, for a toggle whose icon already shows
+     *  its state; aria-pressed and the forced-colors edge stay */
+    pressedTint?: boolean;
   };
   Blocks: { default: [] };
   Element: HTMLButtonElement | HTMLAnchorElement;
@@ -54,6 +57,9 @@ export class IconButton extends Component<IconButtonSignature> {
     let { pressed, href } = this.args;
     return pressed === undefined || href ? undefined : String(pressed);
   }
+  get pressedTint() {
+    return this.args.pressedTint === false ? 'none' : undefined;
+  }
   get iconWidth() {
     return this.args.iconWidth ?? ICON_SIZE;
   }
@@ -74,6 +80,7 @@ export class IconButton extends Component<IconButtonSignature> {
       class='pretui-iconbtn'
       aria-label={{this.accessibleName}}
       aria-pressed={{this.ariaPressed}}
+      data-pressed-tint={{this.pressedTint}}
       title={{@label}}
       data-test-pretui-icon-button
       ...attributes
@@ -116,7 +123,8 @@ export class IconButton extends Component<IconButtonSignature> {
            appearance */
         .pretui-iconbtn[aria-pressed='true']:not(
             [data-appearance='accent'],
-            [data-appearance='link']
+            [data-appearance='link'],
+            [data-pressed-tint='none']
           ) {
           --_iconbtn-pressed-base: var(--background);
           --pretui-btn-surface: color-mix(
