@@ -694,16 +694,38 @@ module('Integration | key pages', function (hooks) {
 
       await click('[data-test-workspace-dropdown-trigger]');
       assert.dom('[data-test-workspace-option]').exists({ count: 2 });
-      await fillIn('[data-test-workspace-dropdown-search]', 'team');
+      let search = '[data-test-workspace-dropdown-search]';
+      assert.dom(search).hasAttribute('role', 'combobox');
+      assert
+        .dom(search)
+        .hasAttribute(
+          'aria-activedescendant',
+          'workspace-option-0',
+          'the highlighted option is named for a screen reader',
+        );
+      await triggerKeyEvent(search, 'keydown', 'ArrowDown');
+      assert
+        .dom(search)
+        .hasAttribute('aria-activedescendant', 'workspace-option-1');
+      assert
+        .dom('#workspace-option-1')
+        .hasAttribute('data-test-workspace-option', 'Team Workspace');
+      await triggerKeyEvent(search, 'keydown', 'Escape');
+      assert.dom('[data-test-workspace-dropdown-content]').doesNotExist();
+      assert
+        .dom('[data-test-workspace-dropdown-trigger]')
+        .isFocused('closing from the keyboard puts focus back on the trigger');
+
+      await click('[data-test-workspace-dropdown-trigger]');
+      await fillIn(search, 'team');
       assert.dom('[data-test-workspace-option]').exists({ count: 1 });
-      await triggerKeyEvent(
-        '[data-test-workspace-dropdown-search]',
-        'keydown',
-        'Enter',
-      );
+      await triggerKeyEvent(search, 'keydown', 'Enter');
       assert
         .dom('[data-test-workspace-dropdown-selected]')
         .hasText('Team Workspace');
+      assert
+        .dom('[data-test-workspace-dropdown-trigger]')
+        .isFocused('as does choosing from it');
       await fillIn('[data-test-share-label]', 'Team maps');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');

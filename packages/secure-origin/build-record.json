@@ -832,7 +832,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 157699,
+      "bytes": 158227,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1092,7 +1092,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/workspace-dropdown.gts",
-          "size": 8478
+          "size": 9178
         },
         {
           "package": "@cardstack/secure-origin",
