@@ -1071,6 +1071,119 @@ module('Acceptance | dashboard', function (hooks) {
       },
     );
 
+    module('pinned cards', function (hooks) {
+      const pinnedRealmURL = 'http://test-realm/testuser/pinned/';
+
+      function cardJSON(name: string) {
+        return {
+          data: {
+            attributes: { cardInfo: { name } },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        };
+      }
+
+      hooks.beforeEach(async function () {
+        await setupAcceptanceTestRealm({
+          realmURL: pinnedRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Pinned Workspace' }),
+            'roadmap.json': cardJSON('Roadmap'),
+            'launch-notes.json': cardJSON('Launch Notes'),
+            'index.json': {
+              data: {
+                relationships: {
+                  'entryPoints.0': { links: { self: './roadmap' } },
+                  'entryPoints.1': { links: { self: './launch-notes' } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/workspace',
+                    name: 'Workspace',
+                  },
+                },
+              },
+            },
+          },
+        });
+        mockMatrixUtils.setActiveRealms([realmURL, pinnedRealmURL]);
+      });
+
+      async function visitWithFavorites(favorites: string[]) {
+        let matrixService = getService('matrix-service') as MatrixService;
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        matrixService.workspaceFavorites = favorites;
+        await settled();
+      }
+
+      const DESK_PINS =
+        '[data-test-favorites-list] [data-test-workspace="Pinned Workspace"] [data-test-pinned-card]';
+
+      test("a desk shows its Workspace card's pins in the workspace's order and counts them", async function (assert) {
+        await visitWithFavorites([pinnedRealmURL]);
+        await waitUntil(() => findAll(DESK_PINS).length === 2);
+
+        assert.deepEqual(
+          findAll(DESK_PINS).map((el) =>
+            el.getAttribute('data-test-pinned-card'),
+          ),
+          [`${pinnedRealmURL}roadmap`, `${pinnedRealmURL}launch-notes`],
+        );
+        assert
+          .dom(DESK_PINS)
+          .hasAttribute('aria-label', 'Open Roadmap', 'named by title');
+        assert
+          .dom(
+            '[data-test-favorites-list] [data-test-workspace="Pinned Workspace"] [data-test-workspace-stat="Pinned"]',
+          )
+          .hasText('Pinned 2');
+        assert
+          .dom('[data-test-workspace="Pinned Workspace"]')
+          .exists({ count: 2 }, 'it is listed as a desk and again below');
+        assert
+          .dom('[data-test-pinned-cards]')
+          .exists({ count: 1 }, 'only the desk shows pins');
+      });
+
+      test('a pinned card opens that card', async function (assert) {
+        await visitWithFavorites([pinnedRealmURL]);
+        await waitUntil(() => findAll(DESK_PINS).length === 2);
+
+        await click(`[data-test-pinned-card="${pinnedRealmURL}roadmap"]`);
+
+        assert.dom('[data-test-dashboard]').doesNotExist();
+        assert.deepEqual(
+          (
+            getService(
+              'operator-mode-state-service',
+            ) as OperatorModeStateService
+          ).getOpenCardIds(),
+          [`${pinnedRealmURL}roadmap`],
+        );
+      });
+
+      test('a desk with no pins shows no collage and no pin count', async function (assert) {
+        await visitWithFavorites([realmURL]);
+
+        let desk =
+          '[data-test-favorites-list] [data-test-workspace="Workspace A"]';
+        assert.dom(desk).exists();
+        assert.dom(`${desk} [data-test-pinned-cards]`).doesNotExist();
+        assert
+          .dom(`${desk} [data-test-workspace-stat="Pinned"]`)
+          .doesNotExist();
+      });
+    });
+
     module('workspaces', function () {
       let moreRealmURLs: string[] = [];
       let testingRoot: HTMLElement | null;
