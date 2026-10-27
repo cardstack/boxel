@@ -416,11 +416,11 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         color: transparent;
         background: linear-gradient(
             90deg,
-            var(--ink-3, #a8a2ba) 0%,
-            var(--ink-3, #a8a2ba) 40%,
-            var(--foreground, #f3f1f7) 50%,
-            var(--ink-3, #a8a2ba) 60%,
-            var(--ink-3, #a8a2ba) 100%
+            var(--ink-3) 0%,
+            var(--ink-3) 40%,
+            var(--foreground) 50%,
+            var(--ink-3) 60%,
+            var(--ink-3) 100%
           )
           0 0 / 200% 100%;
         background-clip: text;
@@ -441,7 +441,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
       @media (prefers-reduced-motion: reduce) {
         .reasoning-tail {
           animation: none;
-          color: var(--ink-3, #a8a2ba);
+          color: var(--ink-3);
         }
       }
       /* the turn's thinking, opened from its header: quiet text on a rule,
@@ -451,7 +451,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         box-shadow: inset 2px 0 0 var(--border, #3a3446);
         font-size: var(--type-ui, 12.5px);
         line-height: var(--leading-ui, 18px);
-        color: var(--ink-3, #a8a2ba);
+        color: var(--ink-3);
       }
       .reasoning-shown :deep(p) {
         margin: 0 0 var(--step-4, 4px);
@@ -508,14 +508,14 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         word-break: normal;
         padding: var(--step-4, 4px) var(--step-8, 8px);
         border-radius: var(--round-chip, 4px);
-        background: var(--inset, #272330);
+        background-color: var(--inset);
         box-shadow: none;
         font-family: inherit;
         font-size: var(--type-ui, 12.5px);
         line-height: var(--leading-ui, 18px);
         font-weight: 600;
         font-variant-numeric: tabular-nums;
-        color: var(--foreground, #f7f8fa);
+        color: var(--foreground);
       }
       /* a figure with its words: one chip, the figure in the chip's ink
          and weight, its words quieter beside it */
@@ -528,7 +528,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         min-width: 0;
         padding: var(--step-4, 4px) var(--step-8, 8px);
         border-radius: var(--round-chip, 4px);
-        background: var(--inset, #272330);
+        background-color: var(--inset);
         font-size: var(--type-ui, 12.5px);
         line-height: var(--leading-ui, 18px);
         white-space: nowrap;
@@ -543,7 +543,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         line-height: inherit;
         font-weight: 600;
         font-variant-numeric: tabular-nums;
-        color: var(--foreground, #f7f8fa);
+        color: var(--foreground);
       }
       .ai-bot-message :deep([data-chip-label]) {
         min-width: 0;
@@ -555,7 +555,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         display: inline-block;
         padding: 0 var(--step-4, 4px);
         border-radius: var(--round-chip, 4px);
-        background: var(--inset, #2f2a3a);
+        background-color: var(--inset);
         font-family: inherit;
         font-size: var(--type-caption, 11px);
         font-weight: 600;
@@ -570,7 +570,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         gap: var(--step-8, 8px);
         font-size: var(--type-caption, 11px);
         line-height: var(--leading-caption, 16px);
-        color: var(--ink-3, #a8a2ba);
+        color: var(--ink-3);
       }
       .ai-bot-message :deep(p[data-sources] a) {
         padding: 2px var(--step-8, 8px);
@@ -596,18 +596,25 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         font-size: var(--type-ui, 12.5px);
         line-height: var(--leading-ui, 18px);
         color: var(--ink-2, #c9c4d6);
-        cursor: pointer;
       }
       .ai-bot-message :deep(p[data-method][data-open='true']) {
         display: block;
       }
-      .ai-bot-message :deep(p[data-method] > strong) {
+      .ai-bot-message :deep(p[data-method] > button) {
+        padding: 0;
+        border: 0;
+        background-color: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+      .ai-bot-message :deep(p[data-method] > button > strong) {
         font-weight: 600;
-        color: var(--ink-3, #a8a2ba);
+        color: var(--ink-3);
       }
       /* the disclosure mark leads, as every other fold in the thread does:
          "› Method: …", turning when open */
-      .ai-bot-message :deep(p[data-method] > strong::before) {
+      .ai-bot-message :deep(p[data-method] > button > strong::before) {
         content: '›';
         display: inline-block;
         width: 10px;
@@ -615,10 +622,11 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         text-align: center;
         transition: transform 160ms cubic-bezier(0.22, 0.61, 0.25, 1);
       }
-      .ai-bot-message :deep(p[data-method][data-open='true'] > strong::before) {
+      .ai-bot-message
+        :deep(p[data-method][data-open='true'] > button > strong::before) {
         transform: rotate(90deg);
       }
-      .ai-bot-message :deep(p[data-method]:focus-visible) {
+      .ai-bot-message :deep(p[data-method] > button:focus-visible) {
         outline: 2px solid var(--ring, var(--boxel-highlight));
         outline-offset: 2px;
       }
@@ -667,7 +675,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
       }
       /* a block card draws its own frame (CardEmbed); a card embedded in a
          line gets the light card surface a final result has, so its own
-         colours read as designed */
+         colors read as designed */
       .bfm-reply :deep(.markdown-bfm-card-slot--block) {
         display: block;
         margin-block: 0;
@@ -676,7 +684,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         display: block;
         margin-block: 0;
         border-radius: var(--round-surface, 12px);
-        background: var(--boxel-light);
+        background-color: var(--boxel-light);
         color: var(--boxel-dark);
         overflow: hidden;
         box-shadow: 0 0 0 1px var(--boxel-600);
@@ -694,6 +702,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         --card: var(--boxel-light);
         --inset: var(--boxel-100);
         --border: var(--boxel-200);
+        --ring: var(--boxel-dark);
         color: var(--boxel-dark);
       }
       /* a fitted card the reply gives no height is a size container, so
@@ -735,7 +744,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         padding: 0 var(--step-8, 8px);
         vertical-align: 1px;
         border-radius: var(--round-row, 8px);
-        background: var(--boxel-light);
+        background-color: var(--boxel-light);
         color: var(--boxel-dark);
         font-size: var(--type-ui, 12.5px);
         font-weight: 600;
@@ -751,11 +760,11 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         height: 18px;
         vertical-align: 1px;
         border-radius: var(--round-row, 8px);
-        background: var(--boxel-light);
+        background-color: var(--boxel-light);
         white-space: nowrap;
       }
       .bfm-reply :deep(.markdown-bfm-card-slot--inline:hover) {
-        background: var(--boxel-100);
+        background-color: var(--boxel-100);
       }
       .bfm-reply :deep(.markdown-bfm-card-slot--inline *) {
         cursor: pointer;
@@ -780,13 +789,13 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         margin: var(--step-12, 12px) 0 0;
         font-size: var(--type-caption, 11px);
         line-height: var(--leading-caption, 16px);
-        color: var(--ink-3, var(--boxel-450));
+        color: var(--ink-3);
       }
       :deep(span.streaming-text:after) {
         content: '';
         width: 8px;
         height: 8px;
-        background: currentColor;
+        background-color: currentColor;
         border-radius: 50%;
         display: inline-block;
         font-family: system-ui, sans-serif;

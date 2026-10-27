@@ -61,11 +61,11 @@ A motion region inside a scroller MUST count a change in its ancestors' scroll o
 
 ### 1.9. What scrolls with the messages is a participant
 
-Every block in a followed transcript that moves when the transcript follows (a message, a footer line, a status line) MUST be a participant of the transcript's region. A block that is not lands at its new place while its neighbours glide, and draws over them. A block that another one replaces (the session total moving into an answer's footer) SHOULD leave at once rather than fade where it stood.
+Every block in a followed transcript that moves when the transcript follows (a message, a footer line, a status line) MUST be a participant of the transcript's region. A block that is not lands at its new place while its neighbors glide, and draws over them. A block that another one replaces (the session total moving into an answer's footer) SHOULD leave at once rather than fade where it stood.
 
 ### 1.10. An arrival travels with the block above it
 
-A block inserted in a moving transcript MUST start where the block above it is drawn, offset as that block is, and travel on its clock, so the two keep their gap in every frame. It MUST NOT take its offset from the pass as a whole (a median of every move, say): a neighbour that moves differently from the rest leaves the arrival drawn over it. It SHOULD NOT fade while it travels: a later pass can recompile the run mid-arrival, and the fade does not survive the recompile.
+A block inserted in a moving transcript MUST start where the block above it is drawn, offset as that block is, and travel on its clock, so the two keep their gap in every frame. It MUST NOT take its offset from the pass as a whole (a median of every move, say): a neighbor that moves differently from the rest leaves the arrival drawn over it. It SHOULD NOT fade while it travels: a later pass can recompile the run mid-arrival, and the fade does not survive the recompile.
 
 ### 1.11. A move spends frames, not wall time
 
@@ -81,7 +81,7 @@ A block drawn by one renderer while it streams and another once it settles MUST 
 
 ### 1.14. A turn closes up only when an activity ends
 
-In the latest turn, a block MUST NOT get shorter because furniture changed: a reply settling, a message being delivered, a footer moving to a later answer, or a state the room shows for a moment between a call's result and the answer that follows it. A finished activity (a call that ends, a row's steps folding) MAY close up, and the reader MAY collapse what they opened. The motion layer carries that change on one clock with its neighbours (§1.20).
+In the latest turn, a block MUST NOT get shorter because furniture changed: a reply settling, a message being delivered, a footer moving to a later answer, or a state the room shows for a moment between a call's result and the answer that follows it. A finished activity (a call that ends, a row's steps folding) MAY close up, and the reader MAY collapse what they opened. The motion layer carries that change on one clock with its neighbors (§1.20).
 
 ### 1.15. Live and settled share a slot
 
@@ -141,7 +141,7 @@ The motion layer had been animating these shrinks. That made them smoother, not 
 - **Wiring every message and skipping far ones when compiling the run.** Rejected: the measuring is the cost, and a block that isn't wired must not be read at all.
 - **A fixed delay before motion starts.** Rejected: the history doesn't arrive on a timer, and whatever lands after the delay plays as arrivals.
 - **Holding every block at the tallest height it reached.** Rejected: it fixed the shrink, and left uneven gaps under every finished row.
-- **Fading arrivals during a follow.** Rejected: a second pass mid-arrival drops the fade and the arrival shows at full opacity over its neighbour.
+- **Fading arrivals during a follow.** Rejected: a second pass mid-arrival drops the fade and the arrival shows at full opacity over its neighbor.
 
 ## 4. Sources
 

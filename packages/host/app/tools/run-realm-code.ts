@@ -1459,8 +1459,25 @@ class RealmFsSession {
     if (!this.ask) {
       throw new Error('realm.ask needs a reader to answer; none is here');
     }
+    let ask = this.ask;
     let askedAt = Date.now();
-    let { answer, label } = await this.ask(request);
+    // The run can end (Stop, its deadline) while the reader has not picked;
+    // the question then gives up, so the run's queue settles.
+    let { signal } = this.inFlight;
+    let onRunEnd: () => void = () => undefined;
+    let { answer, label } = await new Promise<{
+      answer: string;
+      label: string;
+    }>((resolve, reject) => {
+      onRunEnd = () =>
+        reject(new Error('The run has ended; realm.ask got no answer'));
+      if (signal.aborted) {
+        onRunEnd();
+        return;
+      }
+      signal.addEventListener('abort', onRunEnd, { once: true });
+      ask(request).then(resolve, reject);
+    }).finally(() => signal.removeEventListener('abort', onRunEnd));
     let line = `Asked: ${request.question} · ${label}`;
     this.activity.push(line);
     this.onActivity?.(line);

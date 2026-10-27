@@ -143,7 +143,7 @@ export class TranscriptMotion extends Component<Signature> {
               @size={{false}}
             />
             {{! the streaming message travels with the rest when the follow
-                scrolls, on the same clock (two speeds would let neighbours
+                scrolls, on the same clock (two speeds would let neighbors
                 overlap mid-flight), but its growth lands as it renders:
                 translate only }}
             <c.Move

@@ -14,10 +14,10 @@ module('Unit | Lib | assistant transcript', function () {
   test('a settled title says what the call did, in the past tense', function (assert) {
     assert.strictEqual(
       settledTitle(
-        'Open the relaunch code and add an accent-colour border to the poster',
+        'Open the relaunch code and add an accent-color border to the poster',
         'Edit',
       ),
-      'Opened the relaunch code and added an accent-colour border to the poster',
+      'Opened the relaunch code and added an accent-color border to the poster',
     );
     assert.strictEqual(
       settledTitle(

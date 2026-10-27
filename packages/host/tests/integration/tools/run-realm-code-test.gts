@@ -346,6 +346,28 @@ boxel:
     assert.ok(result.captures[0].url, 'the capture is uploaded to the room');
   });
 
+  test('Stop ends a run that waits on realm.ask', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let asked = false;
+    // The reader never answers.
+    command.onAsk = () => {
+      asked = true;
+      return new Promise(() => undefined);
+    };
+
+    let run = command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.ask({ question: 'Which one?', options: [{ label: 'A' }, { label: 'B' }] });
+return 'answered';`,
+    });
+    await waitUntil(() => asked);
+    command.stop();
+
+    await assert.rejects(run, /stopped/i, 'the run ends without an answer');
+  });
+
   test('the result attaches the files the run saved, then the captures it took', async function (assert) {
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);

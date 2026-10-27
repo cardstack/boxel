@@ -135,7 +135,7 @@ export default class QuickLookMotion extends Component<Signature> {
         inset: 0;
         z-index: var(--boxel-layer-modal-default);
         pointer-events: none;
-        /* a centred sheet over the workspace, the way a card is looked at
+        /* a centered sheet over the workspace, the way a card is looked at
            in operator mode: light, on the stack's surface */
         --pretui-quick-look-inset: max(6vh, 32px)
           max(calc((100vw - 1080px) / 2), 32px);
@@ -149,7 +149,7 @@ export default class QuickLookMotion extends Component<Signature> {
         --muted-foreground: var(--boxel-500);
         --primary: var(--boxel-highlight);
         --primary-foreground: var(--boxel-dark);
-        --ring: var(--boxel-highlight);
+        --ring: var(--boxel-dark);
         --pretui-scrim: rgb(0 0 0 / 55%);
       }
       .quick-look-region > :deep(.pretui-quick-look) {

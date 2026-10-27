@@ -102,7 +102,7 @@ export default class AiAssistantComposerCapUsage extends Component {
 
     <style scoped>
       .example-container {
-        background: var(--boxel-ai-purple);
+        background-color: var(--boxel-ai-purple);
         color: var(--boxel-light);
         padding: var(--boxel-sp);
         --foreground: #f7f8fa;
@@ -124,7 +124,7 @@ export default class AiAssistantComposerCapUsage extends Component {
       .example-box {
         padding: var(--boxel-sp-sm);
         border-radius: 14px;
-        background: color-mix(
+        background-color: color-mix(
           in oklch,
           var(--boxel-ai-purple) 5%,
           var(--boxel-light)

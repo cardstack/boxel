@@ -10,6 +10,30 @@ function paragraph(html: string): HTMLElement {
 }
 
 module('Unit | markReplyFurniture', function () {
+  test('a Method line opens and closes from its label, a real button', function (assert) {
+    let p = paragraph(
+      '<strong>Method:</strong> searched <a href="https://example.com">two sources</a>',
+    );
+    let toggle = p.querySelector('button')!;
+    assert.strictEqual(p.dataset.method, 'true');
+    assert.strictEqual(
+      p.getAttribute('role'),
+      null,
+      'the line is not a button',
+    );
+    assert.strictEqual(toggle.type, 'button');
+    assert.strictEqual(toggle.textContent, 'Method:');
+    assert.strictEqual(toggle.getAttribute('aria-expanded'), 'false');
+
+    toggle.click();
+    assert.strictEqual(p.dataset.open, 'true');
+    assert.strictEqual(toggle.getAttribute('aria-expanded'), 'true');
+
+    toggle.click();
+    assert.strictEqual(p.dataset.open, 'false');
+    assert.strictEqual(toggle.getAttribute('aria-expanded'), 'false');
+  });
+
   test('a stat row of figures and their words becomes labeled chips', function (assert) {
     let p = paragraph(
       '<code>$15</code> race-day benchmark <code>$10–$11.60</code> Burpee Open',

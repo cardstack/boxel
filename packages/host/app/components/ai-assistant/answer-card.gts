@@ -1,14 +1,12 @@
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { CardEmbed } from '@cardstack/pretui/components/card-embed';
+import Ellipsis from '@cardstack/boxel-icons/ellipsis';
 
-import {
-  BoxelDropdown,
-  ContextButton,
-  Menu,
-} from '@cardstack/boxel-ui/components';
-import { toMenuItems } from '@cardstack/boxel-ui/helpers';
+import { CardEmbed } from '@cardstack/pretui/components/card-embed';
+import { IconButton } from '@cardstack/pretui/components/icon-button';
+import { Menu } from '@cardstack/pretui/components/menu';
 
 import {
   cardTypeDisplayName,
@@ -17,6 +15,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import { cardMenuEntries } from '@cardstack/host/lib/card-menu-entries';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -57,7 +56,7 @@ export default class AnswerCard extends Component<Signature> {
         },
         toolContext: this.toolService.toolContext,
       }) ?? [];
-    return toMenuItems(items);
+    return cardMenuEntries(items);
   }
 
   <template>
@@ -72,20 +71,19 @@ export default class AnswerCard extends Component<Signature> {
     >
       <:actions>
         {{#if this.menuItems.length}}
-          <BoxelDropdown>
-            <:trigger as |bindings|>
-              <ContextButton
+          <Menu @items={{this.menuItems}} @align='end' @label='Options'>
+            <:trigger as |_open toggle|>
+              <IconButton
                 class='answer-card-options'
                 @label='Options'
-                @size='extra-small'
+                @icon={{Ellipsis}}
+                @appearance='plain'
+                @size='xs'
                 data-test-answer-card-options
-                {{bindings}}
+                {{on 'click' toggle}}
               />
             </:trigger>
-            <:content as |dd|>
-              <Menu @closeMenu={{dd.close}} @items={{this.menuItems}} />
-            </:content>
-          </BoxelDropdown>
+          </Menu>
         {{/if}}
       </:actions>
       <:default>
@@ -97,20 +95,18 @@ export default class AnswerCard extends Component<Signature> {
       </:default>
     </CardEmbed>
     <style scoped>
-      /* the hat is a grey band over the card's white face: the frame's,
+      /* the hat is a gray band over the card's white face: the frame's,
          not the card's, so it never reads as part of the card */
       .answer-card {
         --pretui-embed-min: 0;
         min-height: 0;
       }
       .answer-card :deep(.pretui-embed-hat) {
-        background: var(--boxel-100);
+        background-color: var(--boxel-100);
         box-shadow: 0 1px 0 var(--boxel-200);
       }
-      /* the menu's trigger fits the hat's 26px line, in the hat's grey */
+      /* the menu's trigger fits the hat's line, in the hat's gray */
       .answer-card-options {
-        --boxel-icon-button-width: 22px;
-        --boxel-icon-button-height: 22px;
         color: var(--boxel-450);
       }
     </style>

@@ -68,17 +68,16 @@ function markSources(p: HTMLElement) {
   }
 }
 
-function toggleMethod(this: HTMLElement) {
-  let open = this.dataset.open === 'true';
-  this.dataset.open = open ? 'false' : 'true';
-  this.setAttribute('aria-expanded', open ? 'false' : 'true');
-}
-
-function onMethodKey(this: HTMLElement, event: KeyboardEvent) {
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault();
-    toggleMethod.call(this);
+// The "Method" label is the line's disclosure button; the line opens and
+// closes under it.
+function toggleMethod(this: HTMLButtonElement) {
+  let line = this.parentElement;
+  if (!line) {
+    return;
   }
+  let open = line.dataset.open === 'true';
+  line.dataset.open = open ? 'false' : 'true';
+  this.setAttribute('aria-expanded', open ? 'false' : 'true');
 }
 
 // A figure with its words after it, as models often write a stat row:
@@ -176,13 +175,14 @@ export function markReplyFurniture(root: HTMLElement) {
       /^method:?$/i.test(first.textContent?.trim() ?? '') &&
       p.firstChild === first
     ) {
-      p.dataset.method = 'true';
       p.dataset.open = 'false';
-      p.setAttribute('role', 'button');
-      p.setAttribute('tabindex', '0');
-      p.setAttribute('aria-expanded', 'false');
-      p.addEventListener('click', toggleMethod);
-      p.addEventListener('keydown', onMethodKey);
+      let toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.setAttribute('aria-expanded', 'false');
+      first.replaceWith(toggle);
+      toggle.append(first);
+      toggle.addEventListener('click', toggleMethod);
+      p.dataset.method = 'true';
     }
   }
   for (let a of root.querySelectorAll<HTMLAnchorElement>('a')) {

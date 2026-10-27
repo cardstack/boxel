@@ -1054,6 +1054,8 @@ export default class ToolService extends Service {
       return;
     }
     this.stoppedToolRequestIds.add(toolRequestId);
+    // A question the run put to its reader is withdrawn with it.
+    this.scriptAsks.get(toolRequestId)?.cancel();
     tool.stop();
   }
 

@@ -75,6 +75,15 @@ function registeredRealmPrefixes() {
   );
 }
 
+// A row of an open Pret UI menu, by its label.
+function menuItem(label: string): HTMLElement | undefined {
+  return [
+    ...document.querySelectorAll<HTMLElement>(
+      '[data-test-pretui-menu-panel] [role="menuitem"]',
+    ),
+  ].find((row) => row.textContent?.trim() === label);
+}
+
 module('Integration | ai-assistant-panel | tools', function (hooks) {
   const realmName = 'Operator Mode Workspace';
   const readOnlyRealmName = 'Read Only Workspace';
@@ -1083,7 +1092,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await click(
       '[data-test-tool-result-container] [data-test-more-options-button]',
     );
-    await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
+    await click(menuItem('Copy to Workspace')!);
     assert
       .dom(`${rightStackItem} [data-test-boxel-card-header-title]`)
       .hasText('Search Results - Search Results');
@@ -1144,7 +1153,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await click(
       '[data-test-tool-result-container] [data-test-more-options-button]',
     );
-    assert.dom('[data-test-boxel-menu-item-text="Copy to Workspace"]').exists();
+    assert.ok(menuItem('Copy to Workspace'), 'the menu offers the copy');
   });
 
   test('copy to workspace menu item is hidden for read-only realm', async function (assert) {
@@ -1184,9 +1193,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom('[data-test-tool-result-container] [data-test-more-options-button]')
       .doesNotExist();
-    assert
-      .dom('[data-test-boxel-menu-item-text="Copy to Workspace"]')
-      .doesNotExist();
+    assert.notOk(menuItem('Copy to Workspace'), 'no copy is offered');
   });
 
   test('it can copy search results card to workspace (no cards in stack)', async function (assert) {
@@ -1245,7 +1252,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await click(
       '[data-test-tool-result-container] [data-test-more-options-button]',
     );
-    await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
+    await click(menuItem('Copy to Workspace')!);
     assert
       .dom(`${stackItem} [data-test-boxel-card-header-title]`)
       .hasText('Search Results - Search Results');

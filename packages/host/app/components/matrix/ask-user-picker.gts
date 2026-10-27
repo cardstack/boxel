@@ -110,7 +110,7 @@ class OptionCard extends Component<{
 }
 
 // The assistant's question as Pret UI's AgentQuestion, answered in its row.
-// Cards show the live card each option stands for; swatches show the colour.
+// Cards show the live card each option stands for; swatches show the color.
 // Both are picked, then confirmed, so a stray tap does not answer. Plain
 // options answer at once. "Something else…" takes a typed answer when the
 // assistant allows it.
@@ -120,9 +120,9 @@ export default class AskUserPicker extends Component<Signature> {
     if (kind === 'cards' || kind === 'swatches') {
       return kind;
     }
-    // a question whose every option is a colour is a colour question,
+    // a question whose every option is a color is a color question,
     // however the model phrased it ("value: '#c3fc33'", no kind, or a
-    // recommendation): the colours show, not their names
+    // recommendation): the colors show, not their names
     let options = this.args.options;
     if (options.length && options.every((option) => colorOf(option))) {
       return 'swatches';
@@ -161,7 +161,7 @@ export default class AskUserPicker extends Component<Signature> {
     return this.args.options.map((option) => {
       let label = option.label ?? option.color ?? optionValue(option);
       return {
-        // the tile draws the colour, so a label's own colour mark goes
+        // the tile draws the color, so a label's own color mark goes
         label: swatches ? swatchName(label) : label,
         value: optionValue(option),
         sub: swatches ? withoutColor(option.detail, label) : option.detail,
@@ -250,7 +250,7 @@ export default class AskUserPicker extends Component<Signature> {
       .option-card-frame {
         display: block;
         height: 100%;
-        background: var(--boxel-light);
+        background-color: var(--boxel-light);
         color: var(--boxel-dark);
       }
       /* the choice's box is the one rounded shape and clips to it: the card
@@ -265,17 +265,17 @@ export default class AskUserPicker extends Component<Signature> {
   </template>
 }
 
-// emoji and symbols a model puts before a colour's name ("🟩 Fresh lime")
+// emoji and symbols a model puts before a color's name ("🟩 Fresh lime")
 const LEADING_MARKS = /^[\p{Extended_Pictographic}\p{So}\uFE0F\s]+/u;
-// a colour written out: hex or a colour function, never a bare word, which
+// a color written out: hex or a color function, never a bare word, which
 // could be any answer
 const WRITTEN_COLOR = /^(#[0-9a-f]{3,8}|(rgba?|hsla?|oklch|oklab)\([^)]*\))$/i;
 // a hex written into an option's label
 const HEX_IN_LABEL = /#[0-9a-f]{6}\b|#[0-9a-f]{3}\b/i;
-// the colour the swatch already shows, written into a detail
+// the color the swatch already shows, written into a detail
 const HEX_PART = /\s*[·•|:,–-]?\s*#[0-9a-f]{3,8}\s*[·•|:,–-]?\s*/gi;
 
-// An option's colour: its color, or a value written as a colour.
+// An option's color: its color, or a value written as a color.
 function colorOf(option: AskUserOptionData): string | undefined {
   let value = option.value?.trim();
   return (
@@ -285,7 +285,7 @@ function colorOf(option: AskUserOptionData): string | undefined {
   );
 }
 
-// A colour's name as the tile shows it: no colour mark before it and no hex
+// A color's name as the tile shows it: no color mark before it and no hex
 // after it ("🟠 Amber — #D97706" is Amber)
 function swatchName(label: string): string {
   return (
@@ -311,7 +311,7 @@ function withoutColor(
   return rest.toLowerCase().includes(name) ? undefined : rest;
 }
 
-// A swatch's colour: a CSS colour value only, so a stray string cannot
+// A swatch's color: a CSS color value only, so a stray string cannot
 // become arbitrary style.
 function safeColor(color: string | undefined): string | undefined {
   let value = typeof color === 'string' ? color.trim() : '';

@@ -447,7 +447,7 @@ export default class Room extends Component<Signature> {
                   {{/if}}
                   {{#if this.shownContextFullness}}
                     {{! Pret UI's ContextRing: how full the model's context is,
-                      warning in the attention colour from 80%; it steps aside
+                      warning in the attention color from 80%; it steps aside
                       with the model picker while a menu is open }}
                     <ContextRing
                       class='context-fullness'
@@ -564,6 +564,8 @@ export default class Room extends Component<Signature> {
         --boxel-pill-menu-button-padding: 2px 6px;
 
         --chat-input-area-bottom-padding: var(--step-12, 12px);
+        /* the panel's teal ring cannot be seen on this light surface */
+        --ring: var(--boxel-dark);
 
         /* a tinted light, not white: raised on the dark panel, it is the
            one thing that reads as "yours to write in" without glaring */
@@ -637,7 +639,7 @@ export default class Room extends Component<Signature> {
         flex-shrink: 0;
       }
 
-      /* "new messages" floats 8px above the composer, centred, over the
+      /* "new messages" floats 8px above the composer, centered, over the
          transcript's bottom fade: a zero-height row, so it takes no line
          and the transcript never moves for it */
       .unread-jump-row {

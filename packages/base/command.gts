@@ -193,7 +193,7 @@ export class PersistModuleInspectorViewInput extends CardDef {
   @field moduleInspectorView = contains(StringField); // 'schema' | 'spec' | 'preview'
 }
 
-// One choice the assistant offers with `ask-user`: a card, a colour, or a
+// One choice the assistant offers with `ask-user`: a card, a color, or a
 // plain option. `value` is what comes back as the answer.
 export class AskUserOption extends FieldDef {
   @field label = contains(StringField);
@@ -201,14 +201,14 @@ export class AskUserOption extends FieldDef {
   @field detail = contains(StringField);
   // a card to show as the option, fitted
   @field cardId = contains(StringField);
-  // a colour to show as a swatch, as a CSS colour
+  // a color to show as a swatch, as a CSS color
   @field color = contains(StringField);
   // for kind `recommend`: how sure the assistant is ('high', 'medium', 'low')
   @field confidence = contains(StringField);
 }
 
 // The assistant asks the user to pick. `kind` chooses the picker: `cards`
-// (each option a card), `swatches` (each a colour), `options` (pills) or
+// (each option a card), `swatches` (each a color), `options` (pills) or
 // `recommend` (the assistant's pick first, with its reason and confidence,
 // and the others as alternatives).
 // `answer` is filled by the host from the user's pick, never by the model.

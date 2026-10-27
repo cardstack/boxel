@@ -6,6 +6,7 @@ import AppWindow from '@cardstack/boxel-icons/app-window';
 import FileText from '@cardstack/boxel-icons/file-text';
 import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import List from '@cardstack/boxel-icons/list';
+import { Button } from '@cardstack/pretui/components/button';
 
 import { cardRefLabel } from '@cardstack/host/lib/reply-furniture';
 import type { EntrySummary } from '@cardstack/host/tools/search-entries';
@@ -125,6 +126,13 @@ export default class FoundEntries extends Component<Signature> {
     return this.rows.length - SHOWN;
   }
 
+  private get moreLabel() {
+    if (this.showAll) {
+      return 'Fewer';
+    }
+    return this.more === 1 ? '1 more match' : `${this.more} more matches`;
+  }
+
   private toggle = () => {
     this.showAll = !this.showAll;
   };
@@ -161,15 +169,15 @@ export default class FoundEntries extends Component<Signature> {
         </div>
       {{/each}}
       {{#if (gt this.more 0)}}
-        <button type='button' class='found-more' {{on 'click' this.toggle}}>
-          {{if
-            this.showAll
-            'Fewer'
-            (concat
-              this.more (if (eq this.more 1) ' more match' ' more matches')
-            )
-          }}
-        </button>
+        <Button
+          class='found-more'
+          @appearance='link'
+          @size='s'
+          aria-expanded={{if this.showAll 'true' 'false'}}
+          {{on 'click' this.toggle}}
+        >
+          {{this.moreLabel}}
+        </Button>
       {{/if}}
     </div>
     <style scoped>
@@ -186,7 +194,7 @@ export default class FoundEntries extends Component<Signature> {
         padding: var(--step-8, 8px) 0 var(--step-4, 4px);
         font-size: var(--type-caption, 11px);
         line-height: var(--leading-caption, 16px);
-        color: var(--ink-3, var(--muted-foreground));
+        color: var(--ink-3);
       }
       .found-row {
         display: grid;
@@ -198,17 +206,17 @@ export default class FoundEntries extends Component<Signature> {
         border-radius: var(--round-chip, 4px);
       }
       .found-row.is-best {
-        background: color-mix(
-          in oklch,
-          var(--primary, #00ebac) 7%,
-          transparent
-        );
+        background-color: color-mix(in oklch, var(--primary) 7%, transparent);
       }
       .found-icon {
         width: 1.625rem;
         height: 1.625rem;
         border-radius: var(--round-chip, 4px);
-        background: color-mix(in oklch, var(--foreground) 9%, transparent);
+        background-color: color-mix(
+          in oklch,
+          var(--foreground) 9%,
+          transparent
+        );
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -243,7 +251,11 @@ export default class FoundEntries extends Component<Signature> {
         line-height: 1rem;
         padding: 0 6px;
         border-radius: 4px;
-        background: color-mix(in oklch, var(--foreground) 12%, transparent);
+        background-color: color-mix(
+          in oklch,
+          var(--foreground) 12%,
+          transparent
+        );
         color: var(--ink-2, var(--foreground));
       }
       .found-description {
@@ -255,7 +267,7 @@ export default class FoundEntries extends Component<Signature> {
         font-family: var(--font-mono, monospace);
         font-size: 0.6875rem;
         line-height: 1rem;
-        color: var(--ink-3, var(--muted-foreground));
+        color: var(--ink-3);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -269,23 +281,22 @@ export default class FoundEntries extends Component<Signature> {
         width: 4px;
         height: 12px;
         border-radius: 2px;
-        background: color-mix(in oklch, var(--foreground) 14%, transparent);
+        background-color: color-mix(
+          in oklch,
+          var(--foreground) 14%,
+          transparent
+        );
       }
       .tick.is-on {
-        background: var(--ink-2, var(--foreground));
+        background-color: var(--ink-2, var(--foreground));
       }
       .is-best .tick.is-on {
-        background: var(--primary, #00ebac);
+        background-color: var(--primary);
       }
       .found-more {
         align-self: flex-start;
-        font: inherit;
         font-size: var(--type-caption, 11px);
         color: var(--ink-2, var(--foreground));
-        background: none;
-        border: 0;
-        padding: var(--step-4, 4px) 0;
-        cursor: pointer;
       }
     </style>
   </template>
@@ -296,7 +307,4 @@ function eq(a: unknown, b: unknown) {
 }
 function gt(a: number, b: number) {
   return a > b;
-}
-function concat(...parts: unknown[]) {
-  return parts.join('');
 }

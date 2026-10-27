@@ -72,7 +72,7 @@ const MessageMeta: TemplateOnlyComponent<Signature> = <template>
       line-height: var(--leading-caption, 16px);
       font-weight: 400;
       font-variant-numeric: tabular-nums;
-      color: var(--ink-3, var(--boxel-450));
+      color: var(--ink-3);
       white-space: nowrap;
     }
   </style>

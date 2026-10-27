@@ -3,7 +3,7 @@ import HostBaseTool from '../lib/host-base-tool';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 // The assistant asks the user to pick, and waits. The transcript shows the
-// options as a picker in the call's own row (cards, colour swatches or
+// options as a picker in the call's own row (cards, color swatches or
 // pills); the user's click runs the call with their pick as `answer`, and
 // the pick is the call's result, which is how the model reads it.
 export default class AskUserTool extends HostBaseTool<
@@ -17,7 +17,7 @@ export default class AskUserTool extends HostBaseTool<
   description =
     'Ask the user to choose before you continue. Give a short question and ' +
     'two to six options. kind "cards" shows each option as a card (set ' +
-    'cardId to the card URL), kind "swatches" shows colours (set color), ' +
+    'cardId to the card URL), kind "swatches" shows colors (set color), ' +
     'kind "options" shows labelled choices. kind "recommend" proposes one: ' +
     'put your pick first, give each option a detail (the reason) and a ' +
     'confidence ("high", "medium" or "low"); the user accepts it or opens ' +

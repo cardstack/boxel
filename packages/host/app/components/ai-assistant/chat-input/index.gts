@@ -158,7 +158,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         border-color: transparent;
       }
       /* Send is the box's one primary: solid teal while there is something
-         to send, a quiet grey well until then */
+         to send, a quiet gray well until then */
       .send-button {
         width: 2rem;
         height: 2rem;

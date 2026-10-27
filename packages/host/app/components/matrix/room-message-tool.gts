@@ -8,6 +8,8 @@ import Component from '@glimmer/component';
 
 import { cached, tracked } from '@glimmer/tracking';
 
+import Ellipsis from '@cardstack/boxel-icons/ellipsis';
+
 import { registerBeacon } from '@cardstack/choreo';
 import { AgentQuestion } from '@cardstack/pretui/components/agent-question';
 import { CardEmbed } from '@cardstack/pretui/components/card-embed';
@@ -15,6 +17,8 @@ import { CardEmbed } from '@cardstack/pretui/components/card-embed';
 import { CardPills } from '@cardstack/pretui/components/card-pills';
 import { CodeBlock as PretCodeBlock } from '@cardstack/pretui/components/code-block';
 import { lineDiff } from '@cardstack/pretui/components/diff-block';
+import { IconButton } from '@cardstack/pretui/components/icon-button';
+import { Menu } from '@cardstack/pretui/components/menu';
 import { Reactions } from '@cardstack/pretui/components/reactions';
 import { ResultCard } from '@cardstack/pretui/components/result-card';
 import { SystemLine } from '@cardstack/pretui/components/system-line';
@@ -40,21 +44,7 @@ import { resource, use } from 'ember-resources';
 import { motion } from 'glimmer-motion';
 import { TrackedObject } from 'tracked-built-ins';
 
-import {
-  BoxelDropdown,
-  ContextButton,
-  Menu,
-} from '@cardstack/boxel-ui/components';
-import {
-  and,
-  bool,
-  cn,
-  eq,
-  gt,
-  not,
-  or,
-  toMenuItems,
-} from '@cardstack/boxel-ui/helpers';
+import { and, bool, cn, eq, gt, not, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   CardContextName,
@@ -68,6 +58,7 @@ import {
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 
 import { isAskUserTool } from '@cardstack/host/lib/ask-user';
+import { cardMenuEntries } from '@cardstack/host/lib/card-menu-entries';
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import {
   isDiffable,
@@ -204,7 +195,7 @@ const UI_MOVE =
   /^(?:set-?view|show|open|switch|preview|navigate|reveal|focus)|view$/i;
 
 // "Asked: Which accent? · 🟦 Teal" from realm.ask: the question, and the
-// reader's answer without the colour mark a model may put before it
+// reader's answer without the color mark a model may put before it
 const ASKED_LINE = /^Asked: (.*) · (.+)$/;
 const LEADING_MARKS = /^[\p{Extended_Pictographic}\p{So}\uFE0F\s]+/u;
 // "Lime — #c3fc33" or "Lime (#c3fc33)": the hex a swatch already showed
@@ -785,7 +776,7 @@ export default class RoomMessageTool extends Component<Signature> {
         },
         toolContext: this.toolService.toolContext,
       }) ?? [];
-    return toMenuItems(menuItems);
+    return cardMenuEntries(menuItems);
   }
 
   private get canEditActiveRealm() {
@@ -1735,7 +1726,7 @@ export default class RoomMessageTool extends Component<Signature> {
 
   // A realm card the call made or changed is the one thing the call leaves
   // the reader; it renders as a card. Anything else a tool hands back is
-  // data for the model and renders unwrapped, in the panel's own colours.
+  // data for the model and renders unwrapped, in the panel's own colors.
   private get showsFinalCard() {
     return (
       this.shouldDisplayResultCard &&
@@ -1745,7 +1736,7 @@ export default class RoomMessageTool extends Component<Signature> {
   }
 
   // A tool's own record of what it did, as rail lines in the panel's
-  // colours: read from the result's fields, so it does not depend on a
+  // colors: read from the result's fields, so it does not depend on a
   // result type's embedded template (or on which base the realm server runs).
   @cached
   // A long run of finished steps shows its first few and folds the rest
@@ -2186,7 +2177,7 @@ export default class RoomMessageTool extends Component<Signature> {
     }
   };
 
-  // The reader stopped this call: it reads grey, as stopped, never as a
+  // The reader stopped this call: it reads gray, as stopped, never as a
   // failure waiting on them.
   private get isStopped() {
     return Boolean(this.failureMessage?.startsWith(STOPPED_BY_USER));
@@ -2920,7 +2911,7 @@ export default class RoomMessageTool extends Component<Signature> {
               {{! The reason on one line, the whole message behind Details;
                   Retry and Details are the receipt's. Once the assistant
                   has retried it with a call that worked, the row says so in
-                  grey and the actions go. }}
+                  gray and the actions go. }}
               <ToolLine
                 @tone={{if
                   (or this.isSuperseded this.isStopped)
@@ -3039,24 +3030,23 @@ export default class RoomMessageTool extends Component<Signature> {
                   @reveal='always'
                 />
                 {{#if this.moreOptionsMenuItems.length}}
-                  <BoxelDropdown>
-                    <:trigger as |bindings|>
-                      <ContextButton
+                  <Menu
+                    @items={{this.moreOptionsMenuItems}}
+                    @align='end'
+                    @label='Result options'
+                  >
+                    <:trigger as |_open toggle|>
+                      <IconButton
                         class='tool-result-options'
                         @label='Result options'
-                        @size='extra-small'
-                        @variant='ghost'
+                        @icon={{Ellipsis}}
+                        @appearance='plain'
+                        @size='xs'
                         data-test-more-options-button
-                        {{bindings}}
+                        {{on 'click' toggle}}
                       />
                     </:trigger>
-                    <:content as |dd|>
-                      <Menu
-                        @closeMenu={{dd.close}}
-                        @items={{this.moreOptionsMenuItems}}
-                      />
-                    </:content>
-                  </BoxelDropdown>
+                  </Menu>
                 {{/if}}
               </div>
             {{/if}}
@@ -3209,23 +3199,22 @@ export default class RoomMessageTool extends Component<Signature> {
               >
                 <:actions>
                   {{#if this.moreOptionsMenuItems.length}}
-                    <BoxelDropdown>
-                      <:trigger as |bindings|>
-                        <ContextButton
-                          class='tool-result-card-options'
+                    <Menu
+                      @items={{this.moreOptionsMenuItems}}
+                      @align='end'
+                      @label='Options'
+                    >
+                      <:trigger as |_open toggle|>
+                        <IconButton
                           @label='Options'
-                          @size='extra-small'
+                          @icon={{Ellipsis}}
+                          @appearance='plain'
+                          @size='xs'
                           data-test-more-options-button
-                          {{bindings}}
+                          {{on 'click' toggle}}
                         />
                       </:trigger>
-                      <:content as |dd|>
-                        <Menu
-                          @closeMenu={{dd.close}}
-                          @items={{this.moreOptionsMenuItems}}
-                        />
-                      </:content>
-                    </BoxelDropdown>
+                    </Menu>
                   {{/if}}
                 </:actions>
                 <:default>
@@ -3306,7 +3295,7 @@ export default class RoomMessageTool extends Component<Signature> {
         height: 4.5rem;
         margin-top: 4px;
         object-fit: cover;
-        background: var(--inset, rgb(255 255 255 / 6%));
+        background-color: var(--inset);
       }
       .tool-line-struck {
         color: var(--muted-foreground, var(--boxel-450));
@@ -3339,7 +3328,7 @@ export default class RoomMessageTool extends Component<Signature> {
         cursor: pointer;
       }
       .tool-lines-more:hover {
-        color: var(--foreground, var(--boxel-dark));
+        color: var(--foreground);
         text-decoration: underline;
       }
       /* the result's particulars and its menu: one line in the rows, in
@@ -3352,8 +3341,6 @@ export default class RoomMessageTool extends Component<Signature> {
       }
       .room-message-tool:hover .tool-result-meta,
       .tool-result-options {
-        --boxel-icon-button-width: 22px;
-        --boxel-icon-button-height: 22px;
         border-radius: 0;
         color: var(--boxel-450);
       }
@@ -3375,7 +3362,7 @@ export default class RoomMessageTool extends Component<Signature> {
         padding-inline-start: var(--step-32, 32px);
       }
       .tool-call-reactions :deep(.pretui-reaction) {
-        background: var(--card, var(--boxel-ai-purple));
+        background-color: var(--card, var(--boxel-ai-purple));
       }
       /* what a check found: lines in the body, the rows' own 4px apart */
       .check-outcome {
@@ -3384,7 +3371,7 @@ export default class RoomMessageTool extends Component<Signature> {
         gap: var(--step-4, 4px);
       }
       /* a finished row recedes as one: its card pills take the row's
-         settled ink instead of standing out bright over a grey row */
+         settled ink instead of standing out bright over a gray row */
       :deep(.pretui-toolrow[data-recede] .pretui-cardpill) {
         color: var(--pretui-toolrow-settled-ink, var(--ink-2));
         font-weight: 500;
@@ -3401,11 +3388,6 @@ export default class RoomMessageTool extends Component<Signature> {
         scrollbar-width: thin;
         scrollbar-color: color-mix(in oklch, var(--foreground) 24%, transparent)
           transparent;
-      }
-      /* the menu's trigger fits the hat's 26px line */
-      .tool-result-card-options {
-        --boxel-icon-button-width: 22px;
-        --boxel-icon-button-height: 22px;
       }
     </style>
   </template>

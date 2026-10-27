@@ -781,7 +781,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         border: 0;
         background: none;
         font: inherit;
-        color: var(--ink-3, var(--boxel-450));
+        color: var(--ink-3);
         text-decoration: underline;
         text-decoration-color: color-mix(
           in oklch,

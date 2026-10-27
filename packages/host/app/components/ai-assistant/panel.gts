@@ -96,7 +96,6 @@ export default class AiAssistantPanel extends Component<Signature> {
               class='panel-agent-mark'
               @working={{false}}
               @size={{20}}
-              aria-label='AI Assistant'
               data-test-agent-mark={{if this.isAssistantWorking 'working'}}
             />
             {{#let
@@ -235,12 +234,11 @@ export default class AiAssistantPanel extends Component<Signature> {
            The panel is dark, so map them onto Boxel values that read on
            --boxel-ai-purple; without this they fall back to light-theme
            literals. Everything Pret UI inside the panel inherits these. */
-        /* the assistant visual system (pretui/docs/assistant-visual-
-           system.md): a tested ink ladder, four states, four type sizes,
-           a 4 px space scale and three radii. Components read these roles;
-           this block is the Boxel dark theme's values for them. */
-        /* ink-1 ≥ 12:1, ink-2 ≥ 7:1, ink-3 ≥ 4.5:1 at 11 px, on the panel,
-           its cards and its insets */
+        /* the assistant's roles: an ink ladder, four states, four type
+           sizes, a 4 px space scale and three radii. Components read these
+           roles; this block is the Boxel dark theme's values for them. */
+        /* on the panel, its cards and its insets: ink-1 ≥ 11:1, ink-2 ≥ 7:1,
+           ink-3 ≥ 4.5:1 at 11 px */
         --foreground: #f7f8fa;
         --ink-2: #c9c4d6;
         --ink-3: #a8a2ba;
@@ -264,7 +262,8 @@ export default class AiAssistantPanel extends Component<Signature> {
         --leading-display: 28px;
         --type-data: 12px;
         --leading-data: 18px;
-        /* old names, for one release */
+        /* the names Pret UI's components read, until they read the theme
+           contract */
         --text-ui-xs: var(--type-caption);
         --text-ui-sm: var(--type-caption);
         --text-ui-md: var(--type-ui);
@@ -342,7 +341,7 @@ export default class AiAssistantPanel extends Component<Signature> {
           var(--boxel-danger) 55%,
           var(--boxel-light)
         );
-        /* amber is the panel's one "needs you" colour: the row's gate, its
+        /* amber is the panel's one "needs you" color: the row's gate, its
            ring and the composer cap's waiting dot all speak it; teal is
            spent only on the moment's one primary action */
         --pretui-attention: var(--state-attention);
@@ -437,7 +436,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         flex-direction: column;
         height: var(--ai-assistant-panel-header-height);
 
-        background: var(--top-gradient-hidden);
+        background-color: var(--top-gradient-hidden);
 
         animation: ai-assistant-chat-gradient-scroll-timeline linear forwards;
         animation-timeline: --ai-assistant-chat-scroll-timeline;
@@ -529,7 +528,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         width: 0.4375rem;
         height: 0.4375rem;
         border-radius: 50%;
-        background: var(--boxel-highlight);
+        background-color: var(--boxel-highlight);
         box-shadow: 0 0 0 2px var(--boxel-ai-purple);
       }
 
@@ -561,15 +560,15 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       @keyframes ai-assistant-chat-gradient-scroll-timeline {
         0% {
-          background: var(--top-gradient-hidden);
+          background-color: var(--top-gradient-hidden);
         }
 
         1% {
-          background: var(--top-gradient-showing);
+          background-color: var(--top-gradient-showing);
         }
 
         100% {
-          background: var(--top-gradient-showing);
+          background-color: var(--top-gradient-showing);
         }
       }
     </style>

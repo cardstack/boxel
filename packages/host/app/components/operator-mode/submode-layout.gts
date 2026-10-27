@@ -738,7 +738,7 @@ export default class SubmodeLayout extends Component<Signature> {
          rather than only within the asymmetric middle track (the 160px
          workspace button makes the flex track off-centre). Take it out of flow
          and pin it to the bar's centre; the breakpoint is high enough that the
-         centred content clears the workspace button on the left. */
+         centered content clears the workspace button on the left. */
       @container (min-width: 60rem) {
         .submode-layout-top-bar-center {
           position: absolute;
