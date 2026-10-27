@@ -207,6 +207,35 @@ interface Signature {
     debug?: boolean;
     id?: string;
     /**
+     * Sit this region out of render passes: while true it takes no snapshot
+     * and joins no barrier, so it plays nothing and costs nothing, and its
+     * participants stay registered and its block stays rendered. A page with
+     * many regions of which few can change at once (a message per region in
+     * a long transcript) keeps the rest idle; the pass that sets it back to
+     * false is the first one the region watches again.
+     */
+    idle?: boolean;
+    /**
+     * Wire only what can be seen: the region measures and animates only the
+     * participants inside its scroller's view, or close enough to it
+     * (`@inViewMargin` views beyond each edge, default 1) that a move may
+     * bring them on screen. The rest are left to layout: no snapshot, no
+     * measuring, no motion. A participant coming within the margin is wired
+     * and one leaving it unwired, and neither counts as an arrival or a
+     * removal. A pass that moves something farther than the margin is a
+     * jump, not a change, and lands as layout puts it: animating it would
+     * fly blocks past ones that were never wired.
+     */
+    inView?: boolean;
+    inViewMargin?: number;
+    /**
+     * The most animation time, in ms, one painted frame may advance: a run
+     * behind a long frame slows down instead of skipping ahead, so nothing
+     * jumps on a busy page. Unset, a frame advances by the time since the
+     * last one (up to 40 ms).
+     */
+    maxFrameStep?: number;
+    /**
      * A `c.Camera3D` cue moved the shot. Called every frame it changes —
      * scrubs included, since the pose is sampled from the score — with a
      * pose the host applies to whatever it is drawing with.
@@ -353,6 +382,29 @@ function reducesMotion(root: Element): boolean {
   );
 }
 
+/** whether an element scrolls its content on either axis */
+function scrolls(el: Element): boolean {
+  const { overflowX, overflowY } = getComputedStyle(el);
+  return [overflowX, overflowY].some(
+    (o) => o === 'auto' || o === 'scroll' || o === 'overlay',
+  );
+}
+
+/** the nearest ancestor that scrolls vertically: what `@inView` calls the view */
+function scrollerOf(el: Element): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const overflow = getComputedStyle(p).overflowY;
+    if (
+      overflow === 'auto' ||
+      overflow === 'scroll' ||
+      overflow === 'overlay'
+    ) {
+      return p;
+    }
+  }
+  return null;
+}
+
 /**
  * The barrier books one post-render callback for every region taking part in a
  * pass. `joinPass(this)` is where the region's PassHost contract (measurePass /
@@ -392,6 +444,9 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private arrived = new Set<ChoreoNode>();
   /** destroyed before the pass that removed them has been processed */
   private claimed = new Set<ChoreoNode>();
+  /** every beacon name this region's score has read, so a pass measures
+   *  those beacons and not the whole page's */
+  readonly beaconNames = new Set<string>();
   /** removed participants this region is keeping alive in its orphan layer */
   private orphans = new Set<ChoreoNode>();
   /** participants whose Presence is letting them go: removed once, not on every pass while they leave */
@@ -443,6 +498,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       this.run = undefined;
       // a quiet region must not take its pause to the grave
       this.unquiet();
+      this.viewObserver?.disconnect();
       for (const node of [...this.orphans, ...this.claimed]) {
         this.drop(node);
       }
@@ -474,6 +530,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   register(node: ChoreoNode) {
     this.participants.add(node);
     this.arrived.add(node);
+    this.watchView(node);
     if (this.args.debug && node.element) {
       (node.element as HTMLElement).style.outline = '1px dotted #16a34a';
       // the seam lints (§5.3): inside a region the timeline is the only
@@ -495,7 +552,118 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // a destroyed participant may still be claimed (below); the sets that decide that survive until drop()
       this.participants.delete(node);
       this.arrived.delete(node);
+      this.unwatchView(node);
     };
+  }
+
+  /** sat out a pass since the last one it watched (`@idle`) */
+  private slept = false;
+
+  /* ---- @inView: what is wired ---- */
+
+  /** participants inside the view or its margin, as the observer last saw them */
+  private nearView = new Set<ChoreoNode>();
+  /** what the last pass animated: kept wired until a pass lets it go, so a
+   *  block that leaves the margin mid-flight is not cut loose halfway */
+  private flying = new Set<ChoreoNode>();
+  private viewNodes = new WeakMap<Element, ChoreoNode>();
+  private viewObserver?: IntersectionObserver;
+  private viewRoot: HTMLElement | null = null;
+  /** the `@inViewMargin` the current observer was made with */
+  private viewMarginUsed?: number;
+
+  private get viewMargin() {
+    return this.args.inViewMargin ?? 1;
+  }
+
+  private watchView(node: ChoreoNode) {
+    const el = node.element;
+    if (!this.args.inView || !el) {
+      return;
+    }
+    if (!this.viewObserver) {
+      this.viewRoot = this.element ? scrollerOf(this.element) : null;
+      this.viewMarginUsed = this.viewMargin;
+      this.viewObserver = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const seen = this.viewNodes.get(entry.target);
+            if (!seen) {
+              continue;
+            }
+            if (entry.isIntersecting) {
+              this.nearView.add(seen);
+            } else {
+              this.nearView.delete(seen);
+            }
+          }
+        },
+        {
+          root: this.viewRoot,
+          rootMargin: `${this.viewMargin * 100}% 0px`,
+        },
+      );
+    }
+    this.viewNodes.set(el, node);
+    this.viewObserver.observe(el);
+  }
+
+  /**
+   * `@inView` and `@inViewMargin` can change after participants registered:
+   * switched on (or given a new margin), the region observes every current
+   * participant and wires the ones already near the view now (the observer
+   * reports only after the next frame); switched off, it lets the observer
+   * go and wires everything again.
+   */
+  private syncViewWatch() {
+    if (
+      this.args.inView &&
+      this.viewObserver &&
+      this.viewMarginUsed !== this.viewMargin
+    ) {
+      // the observer's margin is fixed when it is made: a new margin makes a
+      // new observer
+      this.viewObserver.disconnect();
+      this.viewObserver = undefined;
+      this.nearView.clear();
+    }
+    if (this.args.inView && !this.viewObserver) {
+      for (const node of this.participants) {
+        this.watchView(node);
+      }
+      if (this.viewObserver) {
+        const near = this.nearViewBand();
+        for (const node of this.participants) {
+          const r = node.element?.getBoundingClientRect();
+          if (r && r.bottom >= near.top && r.top <= near.bottom) {
+            this.nearView.add(node);
+          }
+        }
+      }
+    } else if (!this.args.inView && this.viewObserver) {
+      this.viewObserver.disconnect();
+      this.viewObserver = undefined;
+      this.viewRoot = null;
+      this.nearView.clear();
+      this.flying.clear();
+    }
+  }
+
+  private unwatchView(node: ChoreoNode) {
+    this.nearView.delete(node);
+    if (node.element) {
+      this.viewObserver?.unobserve(node.element);
+    }
+  }
+
+  /** the view and its margin, in viewport px; read once per pass */
+  private nearViewBand() {
+    const r = this.viewRoot
+      ? this.viewRoot.getBoundingClientRect()
+      : { bottom: window.innerHeight, top: 0 };
+    const height = r.bottom - r.top;
+    const margin = height * this.viewMargin;
+    return { bottom: r.bottom + margin, margin, top: r.top - margin };
   }
 
   claim(node: ChoreoNode) {
@@ -520,8 +688,20 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // (`layout` / `layoutId`) snapshot here too, so `{{motion layout=true}}`
     // works inside a <Choreo> without a <LayoutGroup> wrapped around it.
     snapshotOnRender();
+    if (this.args.idle) {
+      this.slept = true;
+      return undefined;
+    }
+    if (this.slept) {
+      // what arrived while the region sat out was never watched arriving:
+      // waking must not replay it. This pass's own arrivals register after
+      // this, as its modifiers install.
+      this.slept = false;
+      this.arrived.clear();
+    }
     if (!this.passPending) {
       this.passPending = true;
+      this.syncViewWatch();
       this.snapshot();
       // every region announces here, while Glimmer is still rendering, so the
       // barrier knows the whole cast before anybody measures
@@ -534,9 +714,14 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private snapshot() {
     this.snapshots.clear();
     this.rootSnapshot = this.element?.getBoundingClientRect();
+    const wired = this.args.inView ? this.nearView : undefined;
     for (const node of this.participants) {
       const el = node.element;
-      if (el?.isConnected && !this.orphans.has(node)) {
+      if (
+        el?.isConnected &&
+        !this.orphans.has(node) &&
+        (!wired || wired.has(node) || this.flying.has(node))
+      ) {
         this.snapshots.set(node, measure(el));
       }
     }
@@ -601,6 +786,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       role: node.role,
       type,
     });
+    const near = this.args.inView ? this.nearViewBand() : undefined;
     const candidates = new Set([
       ...this.participants,
       ...this.claimed,
@@ -617,6 +803,15 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         const prior = this.orphanBounds.get(node);
         removed.push(sprite(node, 'removed', prior));
       } else if (this.arrived.has(node)) {
+        if (near) {
+          const r = el.getBoundingClientRect();
+          if (r.bottom < near.top || r.top > near.bottom) {
+            // it lands out of reach of the view: layout places it
+            continue;
+          }
+          // wired now: the observer reports only after the next frame
+          this.nearView.add(node);
+        }
         inserted.push(
           sprite(node, 'inserted', undefined, bounds(measure(el), after)),
         );
@@ -666,6 +861,24 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
             y: s.final.page.y - s.initial.page.y,
           };
       }
+    }
+    // a jump: something moved farther than the margin, past blocks that
+    // were never wired. It lands as layout puts it; what was leaving goes now.
+    if (near && kept.some((s) => Math.abs(s.delta?.y ?? 0) > near.margin)) {
+      for (const s of removed) {
+        this.drop(s.node);
+      }
+      inserted.length = 0;
+      kept.length = 0;
+      removed.length = 0;
+    }
+    if (near) {
+      this.flying = new Set(
+        [
+          ...inserted,
+          ...kept.filter((s) => s.delta && (s.delta.x || s.delta.y)),
+        ].map((s) => s.node),
+      );
     }
     this.arrived.clear();
     this.snapshots.clear();
@@ -725,7 +938,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       [...kept, ...inserted.filter((s) => s.type === 'kept')],
       // measured in the same window as `final`, and re-measured every pass: a
       // beacon can move without this region rendering at all
-      measureBeacons(after),
+      // the beacons this score has asked for before, measured now; a name it
+      // asks for the first time is measured when the step reads it (Glimmer
+      // reads a step's args as it compiles, after this)
+      measureBeacons(after, this.beaconNames),
       measureZoom,
       // the frame's own size in the same final layout, local pixels — the
       // camera's centre reference, so aim terms are internally consistent
@@ -733,7 +949,11 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         height: after.height / measureZoom,
         width: after.width / measureZoom,
       },
-      groundOf(root),
+      () => groundOf(root),
+      (name) => {
+        this.beaconNames.add(name);
+        return measureBeacons(after, [name]).get(name) ?? null;
+      },
     );
     this.changeset = changeset;
 
@@ -860,6 +1080,9 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // aloft, kept-motion cannot justify a recompile either: the score it
       // would produce is the degraded one above.
       (this.orphans.size > 0 || !changeset.sprites({ type: 'moved' }).length) &&
+      // …and only while the layout it compiled in still stands: a reflow or
+      // a scroll under a leaver still aloft is a real move, not noise
+      this.layoutOf() === this.layoutPrint &&
       // …but an EDITED timeline is never noise: a changed tree replays,
       // exactly as it would with no orphans aloft (the build-order
       // transport's delay nudge, made while a leaver is frozen mid-park)
@@ -1010,6 +1233,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // arriving, and every one it can see on its way out. A region in that
       // state is not watching a departure, it is inside one — see `park`.
       doomed: !kept.length && !inserted.length && removed.length > 0,
+      maxFrameStep: this.args.maxFrameStep,
     });
 
     if (this.args.quiet) {
@@ -1082,6 +1306,24 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
           `${el.offsetWidth},${el.offsetHeight}`,
       );
     }
+    // A scroll moves every participant in page space and none of them in
+    // the offsets above, so the scroll offset of the scroller the region
+    // sits in is part of where its participants stand: a follow settled into
+    // a pass mid-run is a real move, and the run is recompiled to carry it.
+    // The walk stops at that scroller (the document's own scroll counts only
+    // when no element scroller holds the region), so scrolling an outer
+    // scroller or the page around it does not cancel the region's runs, for
+    // the same reason the offset walk above stops at the region's edge.
+    let sx = 0;
+    let sy = 0;
+    for (let a = root?.parentElement; a; a = a.parentElement) {
+      sx += a.scrollLeft;
+      sy += a.scrollTop;
+      if (a !== document.documentElement && scrolls(a)) {
+        break;
+      }
+    }
+    parts.push(`scroll@${Math.round(sx)},${Math.round(sy)}`);
     return parts.join('|');
   }
 
