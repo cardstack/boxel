@@ -1291,7 +1291,7 @@ module('Integration | sign-in', function (hooks) {
       let server = serve({
         'DELETE _secure-session': () => ({ status: 200, body: {} }),
       });
-      visitShell(`?mode=sign-out${returnFragment(`${APP}/`)}`);
+      visitShell(`sign-out${returnFragment(`${APP}/`)}`);
       await render(SignOutPage);
       await waitUntil(() => navigations.length > 0);
       assert.true(
