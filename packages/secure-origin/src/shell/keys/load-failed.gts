@@ -13,7 +13,10 @@ interface Signature {
 }
 
 const LoadFailed: TemplateOnlyComponent<Signature> = <template>
-  <EditPage @heading='This page didn’t load' data-test-keys-load-failed>
+  <EditPage
+    @heading='Boxel is currently unavailable'
+    data-test-keys-load-failed
+  >
     <:intro><span role='alert'>{{@message}}</span></:intro>
     <:actions>
       <Button @kind='primary' data-test-keys-retry {{on 'click' @onRetry}}>Try
