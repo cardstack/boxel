@@ -18,7 +18,7 @@ Three decisions worth understanding.
 
 **Bounds take rem.** A pane designed in rem keeps its bounds in rem: `@min='11rem'` resolves against the root font size, read afresh at each drag and key press, so a change to it takes effect on the next one. The reported size is always px, since that's what a drag measures.
 
-**The caller places it.** The handle is a strip (`--pretui-resize-handle-size`, 0.5rem; 1rem on a coarse pointer) that fills its cross axis. Position it on the pane's edge, usually absolutely, inside the pane, so it travels with the edge it moves. `@placement` names that edge, so the handle knows which way growing is, and the painted line runs along the strip's side on that edge. `start` and `end` are logical, so in a right-to-left context the drag flips with them; `left` and `right` are physical and never flip; `top` and `bottom` name the block axis, which the writing direction doesn't affect.
+**The caller places it.** The handle is a strip (`--pretui-resize-handle-size`, 0.5rem; 1rem on a coarse pointer) that fills its cross axis. Position it on the pane's edge, usually absolutely, inside the pane, so it travels with the edge it moves. `@placement` names that edge, so the handle knows which way growing is, and the painted line runs along the strip's side on that edge. When the strip is too thin to be an easy target, `--pretui-resize-handle-outset` extends its hit area past the edge, over a neighbor's gutter, without the pane setting aside more room: a 0.5rem strip with a 1rem outset is a 24px target. `start` and `end` are logical, so in a right-to-left context the drag flips with them; `left` and `right` are physical and never flip; `top` and `bottom` name the block axis, which the writing direction doesn't affect.
 
 ## Prior art
 
@@ -47,6 +47,6 @@ It follows the WAI-ARIA window splitter pattern: `role='separator'` with `tabind
 
 ## Theming
 
-The painted line is `--primary-ink` while the handle is pointed at (on a device that hovers) or dragged, and the focus ring is `--ring`. At rest the strip is transparent, so the pane's own border draws the edge. The strip's thickness is `--pretui-resize-handle-size`.
+The painted line is `--primary-ink` while the handle is pointed at (on a device that hovers) or dragged, and the focus ring is `--ring`. At rest the strip is transparent, so the pane's own border draws the edge. The strip's thickness is `--pretui-resize-handle-size`, and `--pretui-resize-handle-outset` (default 0) is how far its hit area reaches past the pane's edge.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS (the positioning, most often) overrides them without a more specific selector.

@@ -413,7 +413,9 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
            the strip on the pane's edge. */
         .pretui-resize-handle {
           --pretui-resize-handle-size: 0.5rem;
+          --pretui-resize-handle-outset: 0rem;
           --_pretui-resize-handle-dur: 180ms;
+          position: relative;
           display: grid;
           place-items: center;
           flex-shrink: 0;
@@ -467,6 +469,32 @@ export class ResizeHandle extends Component<ResizeHandleSignature> {
         [data-orientation='horizontal'][data-line-edge='end']
           > .pretui-resize-handle-line {
           align-self: end;
+        }
+        /* The hit area reaches past the pane's edge by the outset, over a
+           neighbor's gutter, without widening the strip the pane sets
+           aside. */
+        .pretui-resize-handle::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+        }
+        [data-orientation='vertical'][data-line-edge='start']::before {
+          inset-inline-start: calc(-1 * var(--pretui-resize-handle-outset));
+        }
+        [data-orientation='vertical'][data-line-edge='end']::before {
+          inset-inline-end: calc(-1 * var(--pretui-resize-handle-outset));
+        }
+        [data-line-edge='left']::before {
+          left: calc(-1 * var(--pretui-resize-handle-outset));
+        }
+        [data-line-edge='right']::before {
+          right: calc(-1 * var(--pretui-resize-handle-outset));
+        }
+        [data-orientation='horizontal'][data-line-edge='start']::before {
+          inset-block-start: calc(-1 * var(--pretui-resize-handle-outset));
+        }
+        [data-orientation='horizontal'][data-line-edge='end']::before {
+          inset-block-end: calc(-1 * var(--pretui-resize-handle-outset));
         }
         /* A stroke on a neutral surface takes the ink; the fill would all but
            vanish on a light one. */

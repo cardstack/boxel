@@ -201,6 +201,35 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
     );
   });
 
+  test("the handle's target reaches past the rail's edge over the grid's gutter, clear of the rows", async function (assert) {
+    const HANDLE = '[data-test-rail-resize-handle]';
+    let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    await renderCard(loader, new Workspace({}), 'isolated');
+    await click(LIBRARY);
+
+    let handle = find(HANDLE) as HTMLElement;
+    handle.scrollIntoView({ block: 'center' });
+    let box = handle.getBoundingClientRect();
+    let strip = parseFloat(getComputedStyle(handle).width);
+    // screen px per layout px, since the test container is scaled
+    let scale = box.width / strip;
+    let y = box.top + box.height / 2;
+    let past = (layoutPx: number) =>
+      document.elementFromPoint(box.right + layoutPx * scale, y);
+    let outset = 1.5 * rem - strip;
+    assert.strictEqual(
+      past(outset - 2),
+      handle,
+      'the strip and its reach past the edge make a 1.5rem target',
+    );
+    assert.notStrictEqual(past(outset + 2), handle, 'and it ends there');
+    assert.notStrictEqual(
+      past(-strip - 2),
+      handle,
+      'it reaches no further into the rail than the strip',
+    );
+  });
+
   test('in a narrow pane the rail stops short of the pane edge, so its handle stays in reach', async function (assert) {
     const HANDLE = '[data-test-rail-resize-handle]';
     let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);

@@ -1688,10 +1688,16 @@ class Isolated extends Component<typeof Workspace> {
          full width and is pinned to the slot's end edge, so it slides out
          rather than being squeezed. */
       .rail-slot {
+        /* the resize handle's strip, which the rail sets aside beside it,
+           and how far its hit area reaches past the rail's edge over the
+           grid's gutter: together a 1.5rem (24px) target */
+        --_rail-resize-size: 0.5rem;
+        --_rail-resize-outset: calc(1.5rem - var(--_rail-resize-size));
         flex-shrink: 0;
         display: flex;
         justify-content: flex-end;
         width: 0;
+        min-width: 0;
         overflow: hidden;
       }
       /* only a toggle slides it; the first width reading and resizes across
@@ -1700,12 +1706,21 @@ class Isolated extends Component<typeof Workspace> {
       .rail-slot.animates {
         transition: width var(--grid-slide) var(--grid-ease-out);
       }
+      /* Open, the slot clips with clip-path rather than overflow, so the
+         handle's hit area can reach past its end edge; its start edge still
+         clips the panel as it slides in. It sits above the grid, whose
+         gutter that hit area covers. */
       .rail-slot.open {
+        position: relative;
+        z-index: 1;
         width: var(--grid-rail-width);
+        overflow: visible;
+        clip-path: inset(0 calc(-1 * var(--_rail-resize-outset)) 0 0);
+      }
+      .rail-slot.open:dir(rtl) {
+        clip-path: inset(0 0 0 calc(-1 * var(--_rail-resize-outset)));
       }
       .rail-panel {
-        /* the resize handle's strip, which the rail sets aside beside it */
-        --_rail-resize-size: 0.5rem;
         position: relative;
         flex-shrink: 0;
         width: var(--grid-rail-width);
@@ -1714,16 +1729,17 @@ class Isolated extends Component<typeof Workspace> {
         background-color: var(--muted);
         border-inline-end: 1px solid var(--border);
       }
-      /* on the panel's inner edge, inside the slot that clips it */
+      /* on the panel's inner edge */
       .rail-resize {
         --pretui-resize-handle-size: var(--_rail-resize-size);
+        --pretui-resize-handle-outset: var(--_rail-resize-outset);
         position: absolute;
         inset-block: 0;
         inset-inline-end: 0;
       }
       /* a finger gets a wider strip */
       @media (any-pointer: coarse) {
-        .rail-panel {
+        .rail-slot {
           --_rail-resize-size: 1rem;
         }
       }
