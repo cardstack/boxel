@@ -7,7 +7,8 @@
 //
 // The app shows each workspace's icon image. The secure origin loads no
 // realm or remote images, so each workspace gets a letter tile drawn here
-// from its name instead.
+// from its name instead. Two workspaces with the same name are told apart by
+// their addresses, shown beneath it.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
@@ -34,6 +35,12 @@ interface Signature {
 }
 
 const TILE_COLOURS = 6;
+
+// A workspace's address as shown beneath its name: its URL without the
+// scheme.
+export function addressOf(url: string): string {
+  return url.replace(/^https?:\/\//, '');
+}
 
 // The letter a workspace's tile shows, and which of the tile colours it
 // takes, both from its name, so a workspace looks the same every time.
@@ -86,10 +93,17 @@ export default class WorkspaceDropdown extends Component<Signature> {
             class='tile colour-{{this.selectedTile.colour}}'
             aria-hidden='true'
           >{{this.selectedTile.letter}}</span>
-          <span
-            class='selected-name'
-            data-test-workspace-dropdown-selected
-          >{{this.selectedWorkspace.name}}</span>
+          <span class='names'>
+            <span
+              class='selected-name'
+              data-test-workspace-dropdown-selected
+            >{{this.selectedWorkspace.name}}</span>
+            {{#if (this.isAmbiguous this.selectedWorkspace)}}
+              <span class='address' data-test-workspace-address>{{addressOf
+                  this.selectedWorkspace.url
+                }}</span>
+            {{/if}}
+          </span>
         {{else}}
           <span class='placeholder'>Select a workspace</span>
         {{/if}}
@@ -142,7 +156,15 @@ export default class WorkspaceDropdown extends Component<Signature> {
                     class='tile colour-{{this.tileColour workspace.name}}'
                     aria-hidden='true'
                   >{{this.tileLetter workspace.name}}</span>
-                  <span class='option-name'>{{workspace.name}}</span>
+                  <span class='names'>
+                    <span class='option-name'>{{workspace.name}}</span>
+                    {{#if (this.isAmbiguous workspace)}}
+                      <span
+                        class='address'
+                        data-test-workspace-address
+                      >{{addressOf workspace.url}}</span>
+                    {{/if}}
+                  </span>
                   {{#if (eq workspace.url @selected)}}
                     <span class='check' aria-hidden='true'>✓</span>
                   {{/if}}
@@ -173,7 +195,7 @@ export default class WorkspaceDropdown extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xs);
         width: 100%;
-        height: var(--boxel-form-control-height);
+        min-height: var(--boxel-form-control-height);
         padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         border: 1px solid var(--border, var(--boxel-form-control-border-color));
         border-radius: var(--boxel-border-radius);
@@ -195,11 +217,25 @@ export default class WorkspaceDropdown extends Component<Signature> {
         font-weight: 400;
         color: var(--muted-foreground);
       }
+      .names {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
       .selected-name,
       .option-name {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+      /* An address wraps rather than being cut short, since the part that
+         tells two workspaces apart may be at its end. */
+      .address {
+        overflow-wrap: anywhere;
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        font-weight: 400;
+        color: var(--muted-foreground);
       }
       .arrow {
         --icon-color: var(--foreground, var(--boxel-dark));
@@ -306,6 +342,12 @@ export default class WorkspaceDropdown extends Component<Signature> {
   private get selectedTile() {
     return tileOf(this.selectedWorkspace?.name ?? '');
   }
+
+  // Whether another workspace on offer has the same name.
+  private isAmbiguous = (workspace: Workspace) =>
+    this.args.workspaces.some(
+      (w) => w.url !== workspace.url && w.name === workspace.name,
+    );
 
   private tileLetter = (name: string) => tileOf(name).letter;
   private tileColour = (name: string) => tileOf(name).colour;

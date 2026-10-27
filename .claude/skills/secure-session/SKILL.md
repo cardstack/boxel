@@ -194,7 +194,10 @@ write ticket refuses an ended session. An ended session is forgotten. A
 sign-in page then shows "Sign in to Boxel" with no error. A key page never
 signs in, as it never signs out: it says to sign in to Boxel from the page
 that opened it, and shows nothing else (ADR 005 §1.6). The window's session
-for its key pages is the one Boxel's own sign-in on this origin leaves here. When the check gets no answer
+for its key pages is the one Boxel's own sign-in on this origin leaves here,
+which happens only where `SIGN_IN_ON_SECURE_ORIGIN` is on (§1.7). With it
+off, Boxel signs in in the app page and leaves no session here, so a
+deployment opens the key pages only with it on. When the check gets no answer
 within ten seconds, or the server can't be reached, the window keeps its
 session.
 
@@ -333,10 +336,6 @@ realm server builds that page once and keeps it for as long as the process
 runs, so a changed setting takes effect when the realm server next starts,
 as on the next deploy. Unset, the host keeps what its build set, which is
 off.
-
-The secure window's key pages take their session from this sign-in (ADR 005
-§1.6), so they need the setting on wherever they ship: with it off, the
-window never gets a session, and the key pages show the signed-out state.
 
 1. A signed-out app (`components/matrix/secure-sign-in.gts`) replaces itself
    with `<secure origin>?mode=sign-in#return=<the app page, path and query>`.

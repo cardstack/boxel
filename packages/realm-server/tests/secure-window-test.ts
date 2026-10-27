@@ -122,19 +122,32 @@ module(basename(import.meta.filename), function () {
   });
 
   module('the read boundary', function () {
-    // Two realms on one server, one the user may read and one they may not,
-    // and a prefix that names the readable one. The database answers only
-    // the permission questions the context asks.
+    // Realms on one server: one the user may read, one they may not, and one
+    // they may read that this process hasn't mounted yet, as a deployed
+    // server leaves every realm until its first request. A prefix names the
+    // readable one. The database answers only the questions the context asks.
     const OPEN = 'https://realms.example.test/open/';
     const CLOSED = 'https://realms.example.test/closed/';
+    const LAZY = 'https://realms.example.test/lazy/';
     const USER = '@someone:example.test';
     const PERMISSIONS: Record<string, Record<string, [boolean, boolean]>> = {
       [OPEN]: { [USER]: [true, true] },
       [CLOSED]: { '@owner:example.test': [true, true] },
+      [LAZY]: { [USER]: [true, true] },
+      // A permission row left behind by a realm the server no longer serves.
+      ['https://realms.example.test/removed/']: { [USER]: [true, true] },
+    };
+    const NAMES: Record<string, string> = {
+      [OPEN]: 'Open',
+      [CLOSED]: 'Closed',
+      [LAZY]: 'Lazy',
     };
 
-    function fakeRealm(url: string, name: string) {
-      return { url, getRealmInfo: async () => ({ name }) } as unknown as Realm;
+    function fakeRealm(url: string) {
+      return {
+        url,
+        getRealmInfo: async () => ({ name: NAMES[url] }),
+      } as unknown as Realm;
     }
 
     let dbAdapter = {
@@ -155,22 +168,44 @@ module(basename(import.meta.filename), function () {
           let row = PERMISSIONS[bind[0]]?.[bind[1]];
           return row ? [{ write: row[1] }] : [];
         }
-        if (sql.includes('SELECT realm_url FROM realm_user_permissions')) {
+        if (sql.includes('SELECT rup.realm_url, rup.username, rup.write')) {
           return Object.entries(PERMISSIONS)
-            .filter(([, users]) => users[bind[bind.length - 1]]?.[1])
-            .map(([realm_url]) => ({ realm_url }));
+            .filter(([, users]) => users[bind[0]]?.[1])
+            .map(([realm_url]) => ({
+              realm_url,
+              username: bind[0],
+              write: true,
+              name: NAMES[realm_url] ?? null,
+            }));
         }
         throw new Error(`unexpected query: ${sql}`);
       },
     } as unknown as DBAdapter;
 
     let looked: string[] = [];
+    let mounted: string[] = [];
     let deps = () => {
       let virtualNetwork = new VirtualNetwork();
       virtualNetwork.addRealmMapping('@example/open/', OPEN);
+      mounted = [OPEN, CLOSED];
       return {
         dbAdapter,
-        realms: [fakeRealm(OPEN, 'Open'), fakeRealm(CLOSED, 'Closed')],
+        findRealm: async (url: URL) => {
+          let realmURL = [OPEN, CLOSED, LAZY].find((r) =>
+            url.href.startsWith(r),
+          );
+          return realmURL
+            ? {
+                url: realmURL,
+                mount: async () => {
+                  if (!mounted.includes(realmURL)) {
+                    mounted.push(realmURL);
+                  }
+                  return fakeRealm(realmURL);
+                },
+              }
+            : undefined;
+        },
         virtualNetwork,
         definitionLookup: {
           forRealm: () => ({
@@ -229,6 +264,49 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(looked, [], 'the definition is never read');
     });
 
+    test('a realm named beside a target in another realm answers as one that doesn’t exist', async function (assert) {
+      let ask = (realm: string) =>
+        refusal(
+          secureWindowContext(
+            deps(),
+            USER,
+            validateContextRequest({
+              realm,
+              target: {
+                kind: 'type',
+                module: `${OPEN}weather`,
+                name: 'Weather',
+                realm: OPEN,
+              },
+            }),
+          ),
+        );
+      let unreadable = await ask(CLOSED);
+      let missing = await ask('https://realms.example.test/gone/');
+      assert.strictEqual(unreadable, missing, 'the two refusals read alike');
+      assert.true(unreadable.startsWith('404'), unreadable);
+    });
+
+    test('a realm this process hasn’t mounted yet is found, and mounted only for a reader', async function (assert) {
+      let context = await secureWindowContext(
+        deps(),
+        USER,
+        validateContextRequest({ realm: LAZY }),
+      );
+      assert.strictEqual(context.realm.name, 'Lazy');
+      assert.true(mounted.includes(LAZY), 'mounted once the user may read it');
+
+      let stranger = await refusal(
+        secureWindowContext(
+          deps(),
+          '@stranger:example.test',
+          validateContextRequest({ realm: LAZY }),
+        ),
+      );
+      assert.true(stranger.startsWith('404'), stranger);
+      assert.false(mounted.includes(LAZY), 'never mounted for a stranger');
+    });
+
     test('a type in a readable realm is described', async function (assert) {
       let context = await secureWindowContext(
         deps(),
@@ -272,9 +350,15 @@ module(basename(import.meta.filename), function () {
     });
 
     test('lists only the realms the user is a direct writer of', async function (assert) {
-      assert.deepEqual(await writableRealms(deps(), USER), [
-        { url: OPEN, name: 'Open' },
-      ]);
+      assert.deepEqual(
+        await writableRealms(deps(), USER),
+        [
+          { url: LAZY, name: 'Lazy' },
+          { url: OPEN, name: 'Open' },
+        ],
+        'a realm not mounted yet is listed; one no longer served is not',
+      );
+      assert.deepEqual(mounted, [OPEN, CLOSED], 'listing mounts nothing');
       assert.deepEqual(
         await writableRealms(deps(), '@node-test_realm:example.test'),
         [],
@@ -409,6 +493,15 @@ module(basename(import.meta.filename), function () {
         operation: 'toString',
       });
       assert.strictEqual(noOperation.status, 404);
+      let otherRealm = await ask(WRITER, {
+        realm: 'http://127.0.0.1:4475/other/',
+        target: { kind: 'instance', url: `${REALM.href}today` },
+      });
+      assert.strictEqual(
+        otherRealm.status,
+        404,
+        'a realm named beside a target in another realm',
+      );
     });
 
     test('answers only the window’s own session', async function (assert) {
@@ -467,10 +560,6 @@ module(basename(import.meta.filename), function () {
         { operation: 'forecast' },
         { target: { kind: 'file', url: `${REALM.href}today` } },
         { destination: 'https://evil.example/' },
-        {
-          realm: 'http://127.0.0.1:4475/other/',
-          target: { kind: 'instance', url: `${REALM.href}today` },
-        },
       ]) {
         let response = await ask(WRITER, attributes);
         assert.strictEqual(

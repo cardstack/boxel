@@ -120,8 +120,10 @@ A secure window whose session has ended MUST forget it. A sign-in page then
 offers to sign in again. A key page MUST NOT: it offers no sign-in of its own,
 as it offers no sign-out, and says to sign in to Boxel from the page that
 opened it. The one sign-in is Boxel's own, which leaves the window its session
-on the secure origin, so a key page never gathers a credential for a session
-of its own.
+on the secure origin only on a deployment that signs users in there (§1.7),
+so a key page never gathers a credential for a session of its own. A
+deployment MUST NOT open a key page unless it signs users in on the secure
+origin.
 
 ### 1.7. Signing in to the app on the secure origin
 
@@ -162,11 +164,6 @@ page sends. A renewal MUST be answered only for a request whose `Origin` is
 the secure origin's, and MUST check that the device still exists. Ending a
 window's session (§1.6) MUST also end its binding, so the device can't renew
 it. The CLI's sessions MUST NOT be bound.
-
-The key pages take their session from Boxel's own sign-in on the secure
-origin (§1.6), so they need a deployment that signs users in there (§1.7).
-On one that doesn't, the window never gets a session and the key pages show
-the signed-out state.
 
 ## 2. Rationale
 

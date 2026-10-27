@@ -67,7 +67,7 @@ class EnterKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @onValue={{this.setValue}}
             />
             {{#if this.form.error}}
-              <div class='error' role='alert' data-test-keys-error>
+              <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
               </div>
             {{/if}}
@@ -102,7 +102,7 @@ class EnterKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       .busy {
         margin-top: var(--boxel-sp-xl);
       }
-      .error {
+      .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
