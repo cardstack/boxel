@@ -219,6 +219,17 @@ grafanactl \
   --path "$rendered" \
   "${forwarded_args[@]}"
 
+# Dashboards the repo no longer defines, in the folders it owns. The push
+# above only creates and updates, so without this a removed dashboard stays
+# in Grafana with nothing maintaining it. A --dry-run apply only lists them.
+prune_args=(--env "$env_name")
+for arg in "${forwarded_args[@]}"; do
+  if [[ "$arg" == "--dry-run" ]]; then
+    prune_args+=(--dry-run)
+  fi
+done
+./scripts/prune-dashboards.sh "${prune_args[@]}"
+
 # Data sources — grafanactl doesn't manage them, so push via HTTP API.
 # Local skips this (docker-compose handles file provisioning).
 ./scripts/apply-datasources.sh --env "$env_name"
