@@ -373,6 +373,16 @@ export function isPartialWritePath(localPath: LocalPath): boolean {
   return localPath.endsWith(PARTIAL_WRITE_SUFFIX);
 }
 
+// Where a realm that records history keeps it, inside the realm's own
+// directory. The history is the realm's record of itself, not part of it: it is
+// never indexed, listed or served, and nothing reaches it through the realm —
+// no write, append or removal, by any route.
+export const HISTORY_DIR = '.realm-history';
+
+export function isHistoryPath(localPath: LocalPath): boolean {
+  return localPath === HISTORY_DIR || localPath.startsWith(`${HISTORY_DIR}/`);
+}
+
 // The realm's own config document, as a change set spells it: the `.json` file
 // at the realm root. Built through `RealmPaths` so it cannot disagree with the
 // URLs the write path and the file watcher put in a change set, and so a base

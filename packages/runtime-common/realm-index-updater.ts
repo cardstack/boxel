@@ -26,7 +26,12 @@ import type {
   SharedIndexPass,
 } from './tasks/indexer.ts';
 import type { Realm } from './realm.ts';
-import { RealmPaths, isPartialWritePath, realmConfigHrefFor } from './paths.ts';
+import {
+  RealmPaths,
+  isHistoryPath,
+  isPartialWritePath,
+  realmConfigHrefFor,
+} from './paths.ts';
 import { ignore, type Ignore } from './ignore.ts';
 
 // One file's place in an index job's change set: whether the file is there to
@@ -817,7 +822,9 @@ export function isIgnored(
     local.split('/').includes('.git') ||
     // A file the realm is part-way through writing, or one left behind by a
     // write that died. It is no part of the realm either way.
-    isPartialWritePath(url.href)
+    isPartialWritePath(url.href) ||
+    // The realm's revision history, kept inside its directory.
+    isHistoryPath(local)
   ) {
     return true;
   }

@@ -1129,9 +1129,49 @@ jobs:
           echo "Failed to push shard timings after 5 attempts"
           exit 1
 
+  # deckd, the realm history daemon `realm-history-write-test` records against,
+  # built from cardstack/deck at a pinned revision. It stands in for a pinned
+  # deckd release installed through mise, which replaces this job.
+  deckd-build:
+    name: Build deckd
+    needs: change-check
+    if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DECKD_REF: 95bfe7a3aaa355745d0260b5eb581d95fc8cc004
+    steps:
+      # This repository too, for its upload action.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: cardstack/deck
+          ref: ${{ env.DECKD_REF }}
+          token: ${{ secrets.DECK_READ_TOKEN }}
+          path: deck
+          persist-credentials: false
+      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            deck/packages/deckd/target
+          key: deckd-${{ runner.os }}-${{ env.DECKD_REF }}
+      # rust-toolchain.toml in this directory pins the compiler, which rustup
+      # installs on first use.
+      - name: Build deckd
+        working-directory: deck/packages/deckd
+        run: cargo build --release --locked
+      - uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: deckd
+          path: deck/packages/deckd/target/release/deckd
+          retention-days: 7
+          if-no-files-found: error
+
   realm-server-test:
     name: Realm Server Tests
-    needs: [change-check, test-web-assets]
+    needs: [change-check, test-web-assets, deckd-build]
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -1164,6 +1204,13 @@ jobs:
         id: shard_modules
         run: echo "modules=$(node scripts/shard-test-modules.cjs ${{ matrix.shardIndex }} ${{ matrix.shardTotal }})" >> "$GITHUB_OUTPUT"
         working-directory: packages/realm-server
+      - name: Download deckd
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: deckd
+          path: ${{ runner.temp }}/deckd
+      - name: Make deckd executable
+        run: chmod +x "$RUNNER_TEMP/deckd/deckd"
       # Warm the test images from the GHCR mirror so the services
       # below start from a local image instead of an unauthenticated Docker Hub
       # pull (the cause of the recurring registry-1.docker.io timeouts).
@@ -1182,6 +1229,7 @@ jobs:
         env:
           TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
           JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/realm-server-${{ matrix.shardIndex }}.xml
+          DECKD_BIN: ${{ runner.temp }}/deckd/deckd
       - name: Upload junit report
         uses: ./.github/actions/upload-artifact-retry
         if: ${{ !cancelled() }}

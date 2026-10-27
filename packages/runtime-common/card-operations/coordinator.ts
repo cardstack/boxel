@@ -8,7 +8,9 @@ import {
   CAPTURE_SERVING_PREFIX,
   PARTIAL_WRITE_SUFFIX,
   RealmPaths,
+  HISTORY_DIR,
   isCaptureServingPath,
+  isHistoryPath,
   isPartialWritePath,
   type LocalPath,
 } from '../paths.ts';
@@ -38,7 +40,13 @@ import {
   type StoredMeta,
 } from './executors.ts';
 import { isSplicedSource, type SplicedSource } from '../spliced-content.ts';
-import { emitOperationPerf } from './telemetry.ts';
+import {
+  emitOperationPerf,
+  emitRevisionWrite,
+  recordSafely,
+} from './telemetry.ts';
+import type { WriteRecording } from '../realm-history.ts';
+import { logger } from '../log.ts';
 import {
   OperationFailure,
   isOperationFailure,
@@ -189,6 +197,10 @@ export interface BatchCore {
       // them, so a caller holding write locks over those files can end its
       // critical section at the boundary the locks are actually for.
       onDurable?: () => void;
+      // The write as the realm's history records it. A realm that records
+      // history records the commit as one revision before anything reaches
+      // disk, and fills in what became of it here.
+      recording?: WriteRecording;
     },
   ): Promise<{
     writes: {
@@ -206,6 +218,21 @@ export interface BatchCore {
     // by stopping at `indexWaitBudgetMs`, so the pass is still to land.
     indexPending?: true;
   }>;
+  // A write the realm's history already recorded under this operation id, as
+  // the batch answered it then, so a retry answers the same way and writes
+  // nothing. Undefined where the id is new, or the realm records no history.
+  // Throws where the id recorded a revision whose bytes have not all reached
+  // disk, which only recovery can finish. Absent on a core that records no
+  // history.
+  replayedOperation?(
+    recording: WriteRecording,
+  ): Promise<BatchEntryResult[] | undefined>;
+  // Keep what a recorded batch answered, for `replayedOperation` to answer a
+  // retry with.
+  recordOperationResults?(
+    recording: WriteRecording,
+    results: BatchEntryResult[],
+  ): Promise<void>;
   serializeCard(
     doc: LooseSingleCardDocument,
     relativeTo: URL,
@@ -358,6 +385,10 @@ export interface CommitBatchOptions {
   // starts, and either can be the whole of a slow write — so they are stamped
   // here or not at all. Absent, and so a no-op, for every other caller.
   timings?: RequestTimings;
+  // The write as the realm's history records it: its operation id, channel and
+  // author, and — once the batch has committed — its revision, which the
+  // caller answers with. A realm that records no history leaves it untouched.
+  recording?: WriteRecording;
 }
 
 // One entry's answer, in the flat order the entries were sent — a group's
@@ -445,10 +476,26 @@ export async function commitBatch(
   // the only reader in the system that did not.
   let settings: Promise<Record<string, JsonValue>> | undefined;
   let realmConfig = () => (settings ??= core.realmConfig());
-  return await core.withWriteLocks(
+  let recording = opts.recording;
+  if (recording) {
+    recording.startedAt = lockRequestedAt;
+    recording.historyCalls ??= [];
+  }
+  let committing = core.withWriteLocks(
     lockPaths(entries, paths, lids),
     async (releaseLocks) => {
       timings?.add('lock', Date.now() - lockRequestedAt);
+      if (recording) {
+        recording.lockWaitMs = Date.now() - lockRequestedAt;
+        // Inside the locks, so a retry racing the attempt it retries waits for
+        // that attempt's revision rather than missing it, and ahead of
+        // staging, which would refuse a retried create as a card that already
+        // exists.
+        let replayed = await core.replayedOperation?.(recording);
+        if (replayed) {
+          return replayed;
+        }
+      }
       // Drained inside the lock, before anything is staged. Staging serializes
       // each card against its type's definition, and a module written moments
       // earlier may still be indexing; without this a batch that follows a
@@ -534,8 +581,9 @@ export async function commitBatch(
       // nothing — a caller standing in for the realm — leaves the whole commit
       // here.
       let cursor = timings?.cursor();
+      let results: BatchEntryResult[];
       try {
-        return await commitStaged(
+        results = await commitStaged(
           core,
           entries,
           staged,
@@ -548,8 +596,59 @@ export async function commitBatch(
       } finally {
         cursor?.mark('commit');
       }
+      if (recording?.outcome === 'committed') {
+        // Best-effort: the write has landed, and a row without its results
+        // costs only a retry that has to be told the write committed rather
+        // than shown what it answered.
+        try {
+          await core.recordOperationResults?.(recording, results);
+        } catch (err: unknown) {
+          (resultsLog ??= logger('realm:history')).warn(
+            `could not keep the results of operation ${recording.operationId} in ${core.realmURL}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+      return results;
     },
   );
+  if (recording) {
+    committing = committing.finally(() => {
+      if (recording.engaged) {
+        emitRecordedWrite(core.realmURL, recording);
+      }
+    });
+  }
+  return await committing;
+}
+
+// Created lazily, as the telemetry module's loggers are, to stay clear of the
+// circular import that installs the log-definitions factory.
+let resultsLog: ReturnType<typeof logger> | undefined;
+
+// The write's line on `boxel:operations` (see `RevisionWriteEvent`).
+function emitRecordedWrite(realmURL: string, recording: WriteRecording): void {
+  recordSafely('revision write', () => {
+    let now = Date.now();
+    let { recordedAt, durableAt } = recording;
+    emitRevisionWrite({
+      kind: 'revision-write',
+      realmURL,
+      operationId: recording.operationId,
+      revision: recording.revision ?? null,
+      writeChannel: recording.channel,
+      outcome: recording.outcome ?? 'unknown',
+      lockWaitMs: recording.lockWaitMs ?? null,
+      recordMs: recording.recordMs ?? null,
+      historyLockWaitMs: recording.historyLockWaitMs ?? null,
+      materializeMs:
+        recordedAt !== undefined && durableAt !== undefined
+          ? durableAt - recordedAt
+          : null,
+      postCommitMs: durableAt !== undefined ? now - durableAt : null,
+      totalMs: now - (recording.startedAt ?? now),
+      historyCalls: recording.historyCalls ?? [],
+    });
+  });
 }
 
 // Stage a batch the way `commitBatch` does, without taking its write locks or
@@ -1804,19 +1903,35 @@ function cardSourcePathOf(
 // — read from `isCaptureServingPath` and `isPartialWritePath`, which state
 // them once for all three. Removals are not covered, deliberately: they are
 // the recovery path for anything already stored under either name, which is
-// why the other two admit them as well.
+// why the other two admit them as well. The realm's history is the exception,
+// refused to removals too: nothing under it is the realm's to change.
 function assertWritesAllowed(
   staged: StagedChange[],
   positions: readonly EntryPosition[],
 ): void {
   for (let [index, change] of staged.entries()) {
+    for (let path of change.deletes) {
+      if (isHistoryPath(path)) {
+        throw atEntry(
+          new OperationFailure({
+            status: 422,
+            code: 'invalid-params',
+            title: 'Reserved path',
+            detail: `cannot remove "${path}": "${HISTORY_DIR}" holds the realm's history`,
+          }),
+          positions[index],
+        );
+      }
+    }
     for (let write of [...change.writes, ...change.appends]) {
-      let reserved = isCaptureServingPath(write.path)
-        ? `"${CAPTURE_SERVING_PREFIX}" is reserved for serving captures`
-        : isPartialWritePath(write.path)
-          ? `"${PARTIAL_WRITE_SUFFIX}" names a file the realm is part-way ` +
-            `through writing, which is no part of the realm`
-          : undefined;
+      let reserved = isHistoryPath(write.path)
+        ? `"${HISTORY_DIR}" holds the realm's history`
+        : isCaptureServingPath(write.path)
+          ? `"${CAPTURE_SERVING_PREFIX}" is reserved for serving captures`
+          : isPartialWritePath(write.path)
+            ? `"${PARTIAL_WRITE_SUFFIX}" names a file the realm is part-way ` +
+              `through writing, which is no part of the realm`
+            : undefined;
       if (reserved) {
         throw atEntry(
           new OperationFailure({
@@ -2438,6 +2553,7 @@ async function commitStaged(
       initiatingUser: opts.actor ?? opts.actingUser?.() ?? null,
       ...(stageCursor ? { stageCursor } : {}),
       onDurable: releaseLocks,
+      ...(opts.recording ? { recording: opts.recording } : {}),
     },
   );
   // Emitted here rather than where the record was built: a staged entry is not

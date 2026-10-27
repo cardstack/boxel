@@ -1,4 +1,5 @@
 import type { RequestContext } from './realm.ts';
+import { OPERATION_ID_HEADER, REVISION_HEADER } from './realm-history.ts';
 
 interface CreateResponseArgs {
   body?: BodyInit | null | undefined;
@@ -45,6 +46,15 @@ export function createResponse({
     headers: {
       ...init?.headers,
       'X-Boxel-Realm-Url': requestContext.realm.url,
+      // A write the realm's history recorded answers with its revision — or,
+      // for one that changed nothing, with HEAD — and with the operation id
+      // it was recorded under, which a client retrying it sends back.
+      ...(requestContext.writeRecording?.engaged && {
+        [OPERATION_ID_HEADER]: requestContext.writeRecording.operationId,
+      }),
+      ...(requestContext.writeRecording?.revision && {
+        [REVISION_HEADER]: requestContext.writeRecording.revision,
+      }),
       ...(requestContext.permissions['*']?.includes('read') && {
         'X-Boxel-Realm-Public-Readable': 'true',
       }),
@@ -74,7 +84,7 @@ export function createResponse({
       // a served capture's save-as filename, which a host download control
       // reads off a cross-origin capture response.
       'Access-Control-Expose-Headers':
-        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,Authorization,Cache-Control,ETag,Retry-After,Content-Range,Accept-Ranges,Content-Length,Content-Disposition',
+        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,X-Boxel-Revision,X-Boxel-Operation-Id,Authorization,Cache-Control,ETag,Retry-After,Content-Range,Accept-Ranges,Content-Length,Content-Disposition',
     },
   });
 }

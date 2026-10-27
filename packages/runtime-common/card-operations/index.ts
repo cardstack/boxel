@@ -156,6 +156,8 @@ export {
   setPolicyDecisionSink,
   setPolicySearchScopeSink,
   setPolicySnapshotReadSink,
+  setRevisionWriteSink,
+  emitRevisionWrite,
 } from './telemetry.ts';
 export type {
   CapabilityCheckEvent,
@@ -175,6 +177,7 @@ export type {
   PolicySearchScopeEvent,
   PolicySnapshotReadEvent,
   PolicyTransport,
+  RevisionWriteEvent,
 } from './telemetry.ts';
 export {
   MalformedCardSourceError,

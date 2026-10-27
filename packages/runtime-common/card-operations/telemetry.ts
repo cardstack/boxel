@@ -718,6 +718,62 @@ export function emitKeyUse(event: KeyUseEvent): void {
   });
 }
 
+// ============================================================================
+// Per-write telemetry for a realm that records history.
+//
+// One line per write that went through recording, whatever became of it, so
+// a revision is traceable from the logs by its operation id and a panel can
+// plot where a recorded write's time went: waiting for the files' locks,
+// recording the revision (waiting for the history lock included), writing the
+// bytes to disk, and everything after — file meta, the broadcast, indexing.
+// `outcome: 'unknown'` is the count of writes whose revision may or may not
+// exist, each of which recovery has to resolve.
+// ============================================================================
+
+export interface RevisionWriteEvent {
+  kind: 'revision-write';
+  realmURL: string;
+  operationId: string;
+  // The revision the write committed, or HEAD for one that changed nothing.
+  // Null where none is known: an aborted write, or one whose outcome is
+  // unknown.
+  revision: string | null;
+  // How the write was made (`Boxel-Channel`). Not `channel`, which every line
+  // on this channel uses to name the log channel itself.
+  writeChannel: string;
+  outcome: string;
+  // Null where the write never reached that step.
+  lockWaitMs: number | null;
+  recordMs: number | null;
+  historyLockWaitMs: number | null;
+  materializeMs: number | null;
+  postCommitMs: number | null;
+  totalMs: number;
+  // Every call to the history backend, in order, with its latency and how it
+  // ended.
+  historyCalls: { endpoint: string; ms: number; status: string }[];
+}
+
+let revisionWriteSink: ((event: RevisionWriteEvent) => void) | undefined;
+
+export function setRevisionWriteSink(
+  sink: ((event: RevisionWriteEvent) => void) | undefined,
+): void {
+  revisionWriteSink = sink;
+}
+
+let revisionWriteLog: ReturnType<typeof logger> | undefined;
+
+export function emitRevisionWrite(event: RevisionWriteEvent): void {
+  if (revisionWriteSink) {
+    revisionWriteSink(event);
+    return;
+  }
+  (revisionWriteLog ??= logger(OPERATIONS_CHANNEL)).info(
+    JSON.stringify({ channel: OPERATIONS_CHANNEL, ...event }),
+  );
+}
+
 // Build and write one record, logging and swallowing anything that throws on
 // the way. A record describes a decision and never changes one: a sink or a
 // log transport that throws must not turn an admitted invocation into a 500,

@@ -1702,6 +1702,20 @@ export type OperationErrorCode =
   // The vendor's response was larger than the realm server carries for a
   // `callApi`.
   | 'response-too-large'
+  // The realm records history, and the write's revision was definitely not
+  // recorded, so nothing was written. Carries a 503: the same write sent again
+  // is the remedy.
+  | 'revision-aborted'
+  // The realm records history, and whether the write's revision was recorded
+  // could not be established. Carries a 503 and the operation id; a retry under
+  // that id either finds the revision or records it.
+  | 'revision-outcome-unknown'
+  // The write's operation id already recorded a revision whose bytes have not
+  // all reached disk, which recovery completes. Carries a 503 and the revision.
+  | 'revision-not-materialized'
+  // The write's operation id already committed a different write. Carries a
+  // 409 and the revision it committed.
+  | 'operation-id-conflict'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.

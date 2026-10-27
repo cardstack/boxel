@@ -170,6 +170,8 @@ import {
   isCaptureServingPath,
   withoutCaptureServingPrefix,
   isPartialWritePath,
+  isHistoryPath,
+  HISTORY_DIR,
   join,
   partialWritePath,
 } from './paths.ts';
@@ -546,7 +548,21 @@ import {
   validateByteLength,
   validateWriteSize,
 } from './write-size-validation.ts';
-import { isSplicedSource, type SplicedSource } from './spliced-content.ts';
+import {
+  isSplicedSource,
+  streamSpliced,
+  type SplicedSource,
+} from './spliced-content.ts';
+import {
+  RealmHistoryRecorder,
+  UnchangedTreeSignal,
+  systemWriteRecording,
+  writeRecordingFor,
+  type HistoryChannel,
+  type HistoryBackend,
+  type HistoryChange,
+  type WriteRecording,
+} from './realm-history.ts';
 import type { JsonValue } from './json-validation.ts';
 import {
   computeContentHash,
@@ -2072,6 +2088,29 @@ function toISOStringOrNull(value: string | Date | null): string | null {
 // One bounded range of a stored file, as bytes. The ranges a fingerprint is
 // assembled from are at most `CONTENT_HASH_WHOLE_LIMIT_BYTES` wide however
 // large the file is, so this holds a bounded amount however large the file is.
+interface HistoryFaults {
+  afterStage?: () => Promise<void>;
+  afterRecord?: () => Promise<void>;
+}
+
+async function collectBytes(
+  chunks: AsyncIterable<Uint8Array>,
+): Promise<Uint8Array> {
+  let parts: Uint8Array[] = [];
+  let total = 0;
+  for await (let chunk of chunks) {
+    parts.push(chunk);
+    total += chunk.byteLength;
+  }
+  let bytes = new Uint8Array(total);
+  let offset = 0;
+  for (let part of parts) {
+    bytes.set(part, offset);
+    offset += part.byteLength;
+  }
+  return bytes;
+}
+
 async function readRangeBytes(
   adapter: RealmAdapter,
   path: LocalPath,
@@ -2126,6 +2165,9 @@ function writeSizeType(
 // set. Removals stay admitted everywhere: they are the recovery path for
 // anything already stored under either name.
 function reservedWriteDestination(localPath: LocalPath): string | undefined {
+  if (isHistoryPath(localPath)) {
+    return `'${HISTORY_DIR}' holds the realm's history and cannot be written to`;
+  }
   if (isCaptureServingPath(localPath)) {
     return (
       `'${CAPTURE_SERVING_PREFIX}' is reserved for serving captures and ` +
@@ -2350,6 +2392,12 @@ export interface WriteOptions {
   // Called at most once, and not at all by a write that failed before reaching
   // durability.
   onDurable?: () => void;
+  // The write as the realm's history records it. On a realm that records
+  // history, a commit carrying one is recorded as one revision before any of
+  // it reaches disk, and the commit fills in the revision and what became of
+  // the write. A commit without one — every writer but the operations
+  // coordinator — is not recorded.
+  recording?: WriteRecording;
 }
 
 // Who a realm event is delivered to. By default it goes to every session room
@@ -2566,6 +2614,10 @@ export type RequestContext = {
   // reads it, and the policy gate reads it only as the identity a predicate
   // compares, for a caller the ACL already declined.
   authenticatedUser?: string;
+  // The request's write as the realm's history records it, set by a handler
+  // that writes. The commit fills in its revision, which the response carries
+  // (see `createResponse`).
+  writeRecording?: WriteRecording;
   // Set by `checkPermission` when the request presented no Authorization
   // header at all. A provably credential-less caller has no read-your-writes
   // claim, since a write a policy admits for one is made as an acting user it
@@ -2773,6 +2825,10 @@ export class Realm {
   #router: Router;
   #testOnlyCoarseAdmission: CoarseAdmission | undefined;
   #testOnlyBeforeBatchLock: (() => Promise<void>) | undefined;
+  #testOnlyHistoryFaults: HistoryFaults | undefined;
+  // Present when the realm records history: every write the operations
+  // coordinator commits becomes a revision before it reaches disk.
+  #history: RealmHistoryRecorder | undefined;
   #log = logger('realm');
   #diagnosticLog = logger(DIAGNOSTIC_SESSION_LOG_CHANNEL);
   // Anchors the render-hold cap across back-to-back bulk commits, per render
@@ -3076,6 +3132,7 @@ export class Realm {
       realmFor,
       anonymousRateLimiter,
       callApi,
+      history,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -3119,6 +3176,10 @@ export class Realm {
       // outbound client. Without it, the realm sends no request outside
       // itself and refuses every `callApi`.
       callApi?: CallApiSender;
+      // The realm's revision history. With one, the realm records every write
+      // the operations coordinator commits as a revision, before any of it
+      // reaches disk. Without one, the realm keeps no history.
+      history?: HistoryBackend;
     },
     opts?: Options,
   ) {
@@ -3139,6 +3200,14 @@ export class Realm {
       this.#matrixClient.username,
       this.#matrixClient.matrixURL.href,
     );
+    if (history) {
+      this.#history = new RealmHistoryRecorder({
+        backend: history,
+        dbAdapter,
+        realmURL: this.url,
+        systemAuthor: this.#matrixClientUserId,
+      });
+    }
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
     this.#transpileCoordinator = transpileCoordinator;
     this.#cardSizeLimitBytes =
@@ -5028,7 +5097,7 @@ export class Realm {
       // holds already in flight drain.
       this.#renderHoldChainExpired(renderLane)
     ) {
-      return await this.#commitBatchUnlockedInner(batch, options);
+      return await this.#commitBatchUnlockedRecorded(batch, options);
     }
     let hold = await JobClaimHold.acquire(
       this.#dbAdapter,
@@ -5086,7 +5155,7 @@ export class Realm {
     };
     let result: CommitBatchResult;
     try {
-      result = await this.#commitBatchUnlockedInner(batch, options);
+      result = await this.#commitBatchUnlockedRecorded(batch, options);
     } catch (e) {
       await releaseHold();
       throw e;
@@ -5114,6 +5183,195 @@ export class Realm {
       await releaseHold();
     }
     return result;
+  }
+
+  // The commit, with a failure after its revision was recorded reported as
+  // what it is. History is the realm's truth, so such a write happened: its
+  // revision stands, and disk is behind it until recovery completes the write.
+  // The caller is told so with the operation id, so a retry under that id
+  // finds the revision rather than writing again.
+  async #commitBatchUnlockedRecorded(
+    batch: CommitBatch,
+    options?: WriteOptions,
+  ): Promise<CommitBatchResult> {
+    try {
+      return await this.#commitBatchUnlockedInner(batch, options);
+    } catch (err: unknown) {
+      let recording = options?.recording;
+      if (!recording?.engaged) {
+        throw err;
+      }
+      if (
+        recording.recordedAt === undefined ||
+        recording.durableAt !== undefined
+      ) {
+        // Failed before the revision was recorded, which leaves nothing
+        // written, or after the write was durable, which leaves it complete.
+        recording.outcome ??= 'aborted';
+        throw err;
+      }
+      recording.outcome = 'failed-after-record';
+      this.#log.error(
+        `operation ${recording.operationId} recorded revision ${recording.revision} in ${this.url} and then failed before its bytes were all on disk; the realm is behind its history until recovery completes it: ${stringifyErrorForLog(err)}`,
+      );
+      throw new OperationFailure({
+        status: 500,
+        code: 'internal-error',
+        title: 'Write recorded but not completed',
+        detail: `operation ${recording.operationId} was recorded as revision ${recording.revision}, and writing it to the realm failed; the realm completes it when it recovers`,
+        meta: {
+          operationId: recording.operationId,
+          revision: recording.revision,
+        },
+      });
+    }
+  }
+
+  // Stage and record the batch as one revision, before any of it reaches disk.
+  // Resolves with the revision, or with nothing when the batch changes nothing
+  // — in which case `recording.revision` is HEAD.
+  async #recordBatch(
+    batch: CommitBatch,
+    options: WriteOptions,
+    recording: WriteRecording,
+  ): Promise<string | undefined> {
+    let history = this.#history!;
+    recording.engaged = true;
+    recording.historyCalls ??= [];
+    // A request can commit more than once under one recording — a patch that
+    // changed nothing re-commits to reserialize — so what an earlier commit
+    // reported is cleared rather than read as this one's.
+    recording.revision = undefined;
+    recording.outcome = undefined;
+    recording.recordedAt = undefined;
+    recording.durableAt = undefined;
+    if (options.serializeFile) {
+      // Serializing as it writes is how a mixed batch's instances resolve
+      // against a module the same batch just wrote, and it reads that module
+      // off disk — so its bytes cannot be staged ahead of the write. The
+      // coordinator stages its own bytes and never asks for it.
+      throw new Error(
+        `a commit recorded in ${this.url}'s history stages its bytes before writing them, so it cannot serialize them as it writes`,
+      );
+    }
+    let staged = await this.#stageForHistory(batch);
+    await this.#testOnlyHistoryFaults?.afterStage?.();
+    if (staged.length === 0) {
+      recording.revision = await history.head(recording);
+      recording.outcome = 'unchanged';
+      return undefined;
+    }
+    let revision: string;
+    try {
+      revision = await history.record(recording, staged);
+    } catch (err: unknown) {
+      if (err instanceof UnchangedTreeSignal) {
+        recording.revision = err.head;
+        recording.outcome = 'unchanged';
+        return undefined;
+      }
+      if (isOperationFailure(err)) {
+        throw err;
+      }
+      // Not one of the backend's answers: the history lock, or the journal row
+      // written beside the commit. The commit may already stand, so its
+      // outcome is unknown until recovery reconciles the journal with HEAD.
+      recording.outcome = 'unknown';
+      throw new OperationFailure({
+        status: 503,
+        code: 'revision-outcome-unknown',
+        title: 'Write outcome unknown',
+        detail: `could not establish whether operation ${recording.operationId} was recorded (${stringifyErrorForLog(err)}); retry it under the same operation id`,
+        meta: { operationId: recording.operationId },
+      });
+    }
+    recording.revision = revision;
+    recording.recordedAt = Date.now();
+    await this.#testOnlyHistoryFaults?.afterRecord?.();
+    return revision;
+  }
+
+  // Every change the batch makes, as the bytes each file will hold, leaving
+  // out a write of the bytes a file already holds. Reads the stored files and
+  // writes nothing, so a batch refused here — over the size ceiling, say —
+  // leaves the realm as it was.
+  //
+  // The ceilings are applied here, ahead of the commit loop that applies them
+  // again, because once the revision is recorded the write has happened: a
+  // refusal has to come before it.
+  async #stageForHistory(
+    batch: CommitBatch,
+  ): Promise<
+    { change: HistoryChange; verb: 'Create' | 'Update' | 'Delete' }[]
+  > {
+    let next = new Map<LocalPath, Uint8Array>();
+    for (let [path, content] of batch.writes ?? []) {
+      if (isSplicedSource(content)) {
+        this.assertWriteSize(content, 'card', path);
+        next.set(
+          path,
+          await collectBytes(
+            streamSpliced(content, (start, end) =>
+              this.#adapter.readRange(content.path, start, end),
+            ),
+          ),
+        );
+      } else {
+        this.assertWriteSize(content, writeSizeType(path, content), path);
+        next.set(
+          path,
+          typeof content === 'string'
+            ? new TextEncoder().encode(content)
+            : content,
+        );
+      }
+    }
+    // An addition to the end of a file is, to history, the file's whole next
+    // content: what the write leg leaves there, or what is stored, plus the
+    // addition.
+    for (let [path, content] of batch.appends ?? []) {
+      this.assertWriteSize(content, 'file', path);
+      let base = next.get(path);
+      if (!base) {
+        let stored = await this.#adapter.openFile(path);
+        base =
+          stored?.size !== undefined
+            ? await readRangeBytes(this.#adapter, path, 0, stored.size)
+            : new Uint8Array();
+      }
+      let addition =
+        typeof content === 'string'
+          ? new TextEncoder().encode(content)
+          : content;
+      let joined = new Uint8Array(base.byteLength + addition.byteLength);
+      joined.set(base, 0);
+      joined.set(addition, base.byteLength);
+      next.set(path, joined);
+    }
+    let staged: {
+      change: HistoryChange;
+      verb: 'Create' | 'Update' | 'Delete';
+    }[] = [];
+    for (let [path, content] of next) {
+      let stored = await this.#adapter.openFile(path);
+      if (
+        stored &&
+        (stored.size === undefined || stored.size === content.byteLength) &&
+        (await fileContentEquals(stored, content))
+      ) {
+        continue;
+      }
+      staged.push({
+        change: { path, content },
+        verb: stored ? 'Update' : 'Create',
+      });
+    }
+    for (let path of batch.deletes ?? []) {
+      if (await this.#adapter.exists(path)) {
+        staged.push({ change: { path, delete: true }, verb: 'Delete' });
+      }
+    }
+    return staged;
   }
 
   // Whether writing `content` over the module at `path` leaves the module's
@@ -5179,6 +5437,13 @@ export class Realm {
       // time here however many gates it passed through.
       stageCursor?.mark('drain');
     }
+    // Recorded before anything below reaches disk or anyone else: every NOTIFY,
+    // realm event, file-meta row and index job this commit produces follows the
+    // revision it describes.
+    let recording = this.#history ? options?.recording : undefined;
+    let recordedRevision = recording
+      ? await this.#recordBatch(batch, options!, recording)
+      : undefined;
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: {
@@ -5711,6 +5976,15 @@ export class Realm {
     // the caller may or may not be waiting for — so this is the boundary that
     // says how much of a slow write was the write.
     stageCursor?.mark('persist');
+    if (recording) {
+      // Every byte the revision describes is on disk, so the realm has caught
+      // up with its history to here.
+      if (recordedRevision) {
+        await this.#history!.markMaterialized(recordedRevision);
+        recording.outcome = 'committed';
+      }
+      recording.durableAt = Date.now();
+    }
     // And the boundary the write locks end at. Indexing reads the files back
     // off disk rather than from anything this commit is holding, so the pass
     // below indexes whatever the last write left — which is what the realm
@@ -6817,6 +7091,11 @@ export class Realm {
           {
             clientRequestId: caller.clientRequestId || null,
             actor: caller.actor || undefined,
+            recording: this.#writeRecording(
+              request,
+              requestContext,
+              'operations',
+            ),
             // One request, several cards, and not all of them from the same
             // place — which is the case the event's authorship naming exists
             // for, and the only front door that produces it.
@@ -8097,8 +8376,47 @@ export class Realm {
             searchDoc: row.searchDoc ?? undefined,
           };
         },
+        // Every batch is recorded on a realm that records history; one whose
+        // caller described no request is the realm's own.
         commitUnlocked: (batch, options) =>
-          this._commitBatchUnlocked(batch, options),
+          this._commitBatchUnlocked(batch, {
+            ...options,
+            ...(this.#history && !options?.recording
+              ? { recording: systemWriteRecording() }
+              : {}),
+          }),
+        replayedOperation: async (recording) => {
+          if (!this.#history) {
+            return undefined;
+          }
+          let entry = await this.#history.journalEntry(recording.operationId);
+          if (!entry) {
+            return undefined;
+          }
+          recording.engaged = true;
+          recording.revision = entry.revision;
+          if (!entry.materialized || entry.results === undefined) {
+            // Recorded, and not yet all on disk — or on disk with the answer it
+            // gave lost — so there is nothing to answer a retry with but the
+            // revision. Recovery completes the write.
+            recording.outcome = 'failed-after-record';
+            throw new OperationFailure({
+              status: 503,
+              code: 'revision-not-materialized',
+              title: 'Write recorded but not completed',
+              detail: `operation ${recording.operationId} was recorded as revision ${entry.revision}, and the realm has not finished applying it`,
+              meta: {
+                operationId: recording.operationId,
+                revision: entry.revision,
+              },
+            });
+          }
+          recording.outcome = 'replayed';
+          return entry.results as BatchEntryResult[];
+        },
+        recordOperationResults: async (recording, results) => {
+          await this.#history?.recordResults(recording.operationId, results);
+        },
         serializeCard: (doc, relativeTo) =>
           this.fileSerialization(doc, relativeTo),
         codeRefKey: (codeRef, relativeTo) =>
@@ -8661,6 +8979,18 @@ export class Realm {
         handle: () => this.serveHashedScopedCSS(request, requestContext),
       };
     }
+    // The realm's revision history. It holds every version of every file,
+    // deleted ones included, which nobody reads by fetching the repository's
+    // files: history is read through the realm's history operations, under
+    // their own permissions. Nothing reaches it through the realm by any
+    // method, so it answers as though nothing were there.
+    if (isHistoryPath(localPath)) {
+      return {
+        consumesCoarseOutcome: false,
+        coarseReadOnly: request.method === 'HEAD',
+        handle: async () => notFound(request, requestContext),
+      };
+    }
     // A file the realm is part-way through assembling, or one a write that
     // died left behind. It is never indexed, so serving it would hand back
     // content the realm does not otherwise acknowledge exists. Its `HEAD` is
@@ -9078,6 +9408,34 @@ export class Realm {
   // it.
   __testOnlySetBeforeBatchLock(hook: (() => Promise<void>) | undefined): void {
     this.#testOnlyBeforeBatchLock = hook;
+  }
+
+  // The request's write as the realm's history records it, kept on the request
+  // context so the response can carry the revision the commit fills in. Throws
+  // an `OperationFailure` for an operation id the history cannot take.
+  #writeRecording(
+    request: Request,
+    requestContext: RequestContext,
+    channel: HistoryChannel,
+  ): WriteRecording {
+    return (requestContext.writeRecording ??= writeRecordingFor(
+      request,
+      requestContext,
+      channel,
+    ));
+  }
+
+  // Runs at the named steps of a recorded write, so a test can fail the write
+  // between them: after its bytes are staged and before its revision is
+  // recorded, and after the revision is recorded and before any byte reaches
+  // disk. Pass `undefined` to remove them.
+  __testOnlySetHistoryFaults(faults: HistoryFaults | undefined): void {
+    this.#testOnlyHistoryFaults = faults;
+  }
+
+  // The realm's revision history, when it records one.
+  get history(): RealmHistoryRecorder | undefined {
+    return this.#history;
   }
 
   // Whether the archived seal covers the request `dispatch` answers: the
@@ -11870,6 +12228,7 @@ export class Realm {
           actor: requestContext.authenticatedUser ?? undefined,
           waitForIndex: false,
           broadcastRealmEvents: !realmEventsSuppressed(request),
+          recording: this.#writeRecording(request, requestContext, 'host'),
         },
       );
     } catch (err: unknown) {
@@ -12894,6 +13253,7 @@ export class Realm {
         await commitBatch(this.batchCore, [entry], {
           ...admission.batch,
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          recording: this.#writeRecording(request, requestContext, 'host'),
           ...(requestContext.authenticatedUser
             ? { actor: requestContext.authenticatedUser }
             : {}),
@@ -13424,6 +13784,9 @@ export class Realm {
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
               : {}),
+            // Shared by the re-commit below, which runs only when this one
+            // changed nothing and so recorded nothing under the id.
+            recording: this.#writeRecording(request, requestContext, 'host'),
             // The same trade a create makes, for the same two reasons — see
             // `createCard`, where the deadlock this avoids is spelled out.
             ...indexWaitOptions(request, { bounded: false }),
@@ -15273,6 +15636,7 @@ export class Realm {
         [{ op: 'delete', href: url.href, ...admission.entry }],
         {
           ...admission.batch,
+          recording: this.#writeRecording(request, requestContext, 'host'),
           // A 204 reads nothing from the index, so the removal's own pass is
           // waited for only as long as `indexWaitOptions` allows.
           ...indexWaitOptions(request, { bounded: true }),

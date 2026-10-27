@@ -86,6 +86,15 @@ export interface DBAdapter {
     localPaths: readonly string[],
     fn: (releaseLocks: () => void) => Promise<T>,
   ) => Promise<T>;
+  // Serializes the writers recording revisions in one realm's history, across
+  // replicas, handing `fn` the lock's own transaction to journal the revision
+  // through. Only a realm that records history calls it, and only realm-server
+  // realms do, so an adapter without one leaves it undefined. See
+  // PgAdapter.withHistoryCommitLock.
+  withHistoryCommitLock?: <T>(
+    realmUrl: string,
+    fn: (txQuerier: Querier) => Promise<T>,
+  ) => Promise<T>;
   // Per-matrix-user cost-barrier primitive: serializes one user's credit
   // bookkeeping — the balance check that admits a billable call and the debit
   // that records its cost — across replicas. PgAdapter

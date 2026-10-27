@@ -2,6 +2,10 @@ import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
+import {
+  historyBackendFor,
+  realmHistoryConfigFromEnv,
+} from './lib/realm-history-config.ts';
 import { writeSync } from 'node:fs';
 import {
   CardDocumentCache,
@@ -221,6 +225,11 @@ const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
 // 1-prerender-per-fleet on cold fan-out.
 const PRERENDER_COALESCE_ACROSS_PROCESSES =
   process.env.PRERENDER_COALESCE_ACROSS_PROCESSES === 'true';
+
+// Which realms record every write as a revision in their history. Off unless
+// `REALM_HISTORY_DECKD_URL` and `REALM_HISTORY_REALMS` are both set; see
+// lib/realm-history-config.ts.
+const REALM_HISTORY = realmHistoryConfigFromEnv();
 
 // How much of a card's link graph each live read carries, chosen per realm
 // from the load this process is under. The construction, and why it is not an
@@ -838,6 +847,11 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
               ? findRealm(url, { realms, reconciler, dbAdapter })
               : Promise.resolve(undefined),
           callApi: callApiSender,
+          history: historyBackendFor(REALM_HISTORY, {
+            url: row.url,
+            kind: row.kind,
+            diskPath,
+          }),
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),

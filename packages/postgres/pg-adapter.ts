@@ -81,6 +81,19 @@ export function hashFilePathForAdvisoryLock(
   return digest.readBigInt64BE(0).toString();
 }
 
+// Lock key for recording a revision in one realm's history (see
+// PgAdapter.withHistoryCommitLock). A key space of its own: the realm's key is
+// already held shared by every file writer in the realm, so a writer recording
+// its revision under that key would wait on every other writer's whole section
+// rather than only on their commits to history.
+export function hashRealmUrlForHistoryCommitLock(realmUrl: string): string {
+  const digest = createHash('sha256')
+    .update('history-commit:')
+    .update(realmUrl)
+    .digest();
+  return digest.readBigInt64BE(0).toString();
+}
+
 // How many files one write may lock individually before it takes the realm
 // instead. Advisory locks occupy a cluster-wide table sized by
 // `max_locks_per_transaction`, and a transaction holding one per file would
@@ -307,6 +320,9 @@ export class PgAdapter implements DBAdapter {
   // pins a pool connection while it waits, and two writers aimed at different
   // cards never meet here at all. See withFileWriteLocks.
   #fileWriteQueue = new Map<string, Promise<void>>();
+  // The same coalescer, for writers recording revisions in one realm's
+  // history. See withHistoryCommitLock.
+  #historyCommitQueue = new Map<string, Promise<void>>();
 
   constructor(opts?: { autoMigrate?: boolean; migrationLogging?: boolean }) {
     if (opts?.autoMigrate) {
@@ -1080,6 +1096,55 @@ export class PgAdapter implements DBAdapter {
     });
     const { work } = await myTurn;
     return await work;
+  }
+
+  // Serialize the writers recording revisions in one realm's history, across
+  // replicas. Recording is a compare-and-swap on the history's HEAD, so two
+  // replicas committing at once would have one of them refused and retried;
+  // holding this around the commit makes them take turns instead, and lets
+  // the journal row the commit writes go in through `txQuerier`, in the same
+  // order the revisions were committed.
+  //
+  // Held only around the commit, never across a file write or an index wait,
+  // which is what keeps writers of different files in one realm concurrent:
+  // they meet here for the length of one call to the history backend. That
+  // call is the only thing `fn` waits on while holding this — it must not
+  // check out another pool client or take another lock, since a holder waiting
+  // on the pool while every other waiter pins a client of it is the shape of
+  // a self-deadlock.
+  //
+  // In-process callers chain in memory first, as in withUserCostLock, so a
+  // replica pins at most one pool client per realm waiting here.
+  async withHistoryCommitLock<T>(
+    realmUrl: string,
+    fn: (txQuerier: Querier) => Promise<T>,
+  ): Promise<T> {
+    const previous =
+      this.#historyCommitQueue.get(realmUrl) ?? Promise.resolve();
+    const lockKey = hashRealmUrlForHistoryCommitLock(realmUrl);
+    const myWork = (async (): Promise<T> => {
+      try {
+        await previous;
+      } catch {
+        // A prior caller's failure must not cascade to the next writer.
+      }
+      return await this.#runWithAdvisoryXactLock(
+        lockKey,
+        `history-commit:${realmUrl}`,
+        fn,
+      );
+    })();
+    const myCompletion: Promise<void> = myWork.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#historyCommitQueue.set(realmUrl, myCompletion);
+    void myCompletion.finally(() => {
+      if (this.#historyCommitQueue.get(realmUrl) === myCompletion) {
+        this.#historyCommitQueue.delete(realmUrl);
+      }
+    });
+    return await myWork;
   }
 
   // Per-matrix-user serialization barrier for a user's credit bookkeeping.

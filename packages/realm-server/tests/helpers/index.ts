@@ -55,6 +55,7 @@ import {
   CachingDefinitionLookup,
   CardDocumentCache,
 } from '@cardstack/runtime-common';
+import type { HistoryBackend } from '@cardstack/runtime-common/realm-history';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import {
@@ -1498,6 +1499,7 @@ export async function createRealm({
   linkShapePolicy,
   cardDocumentCache = new CardDocumentCache(),
   realmFor,
+  history,
   published,
 }: {
   dir: string;
@@ -1559,6 +1561,9 @@ export async function createRealm({
   // instance to read its stats, or `ttlMs: 0` to keep coalescing while
   // disabling retention.
   cardDocumentCache?: CardDocumentCache;
+  // The realm's revision history, built for the realm's directory. Absent,
+  // the realm records none.
+  history?: (realmDir: string) => HistoryBackend;
   // The other realms the realm can reach, for an explain on its policy card
   // that asks about a target in one of them.
   realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
@@ -1642,6 +1647,7 @@ export async function createRealm({
       mediaCacheAdapter,
       cardDocumentCache,
       ...(realmFor ? { realmFor } : {}),
+      ...(history ? { history: history(dir) } : {}),
       callApi: callApiSender,
     },
     {
@@ -1708,6 +1714,7 @@ export async function runTestRealmServer({
   googleSignIn,
   cardDocumentCache,
   published,
+  history,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1743,6 +1750,8 @@ export async function runTestRealmServer({
   cardDocumentCache?: CardDocumentCache;
   // Builds the realm as a published one (see `createRealm`).
   published?: true;
+  // See `createRealm`.
+  history?: (realmDir: string) => HistoryBackend;
 }) {
   stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
@@ -1788,6 +1797,7 @@ export async function runTestRealmServer({
     ...(linkShapePolicy ? { linkShapePolicy } : {}),
     ...(cardDocumentCache ? { cardDocumentCache } : {}),
     ...(published ? { published: true as const } : {}),
+    ...(history ? { history } : {}),
   });
 
   await testRealm.logInToMatrix();
@@ -2537,6 +2547,7 @@ type InternalPermissionedRealmSetupOptions = {
   linkShapePolicy?: LinkShapePolicy;
   secureOriginURL?: URL;
   cardDocumentCache?: CardDocumentCache;
+  history?: (realmDir: string) => HistoryBackend;
 };
 
 async function startPermissionedRealmFixture(
@@ -2560,6 +2571,7 @@ async function startPermissionedRealmFixture(
     linkShapePolicy,
     secureOriginURL,
     cardDocumentCache,
+    history,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2635,6 +2647,7 @@ async function startPermissionedRealmFixture(
     secureOriginURL,
     cardDocumentCache,
     ...(published ? { published: true as const } : {}),
+    ...(history ? { history } : {}),
   });
 
   let request = supertest(testRealmServer.testRealmHttpServer);
@@ -2708,6 +2721,7 @@ export function setupPermissionedRealm(
     linkShapePolicy,
     secureOriginURL,
     cardDocumentCache,
+    history,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -2747,6 +2761,10 @@ export function setupPermissionedRealm(
     // computation open, so a second request is guaranteed to join rather than
     // race). Omit for the production default.
     cardDocumentCache?: CardDocumentCache;
+    // The realm's revision history, built for each test's realm directory.
+    // Not part of a cached template: the template is the realm before any
+    // write, and each test records into a history of its own.
+    history?: (realmDir: string) => HistoryBackend;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2781,6 +2799,7 @@ export function setupPermissionedRealm(
         linkShapePolicy,
         secureOriginURL,
         cardDocumentCache,
+        history,
       });
       testRealmServer = server;
 
