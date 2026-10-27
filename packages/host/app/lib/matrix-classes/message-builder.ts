@@ -214,7 +214,18 @@ export default class MessageBuilder {
   }
 
   updateMessage(message: Message) {
-    if (message.created.getTime() > this.event.origin_server_ts) {
+    // A message this client sent starts with a provisional time (the
+    // optimistic event sorts just after the timeline's tail, which is the
+    // previous message's time). The server's copy carries the real one:
+    // take it once, later or not, or every duration measured from the
+    // message (a turn's "Worked for") runs from the previous message.
+    let at = this.event.origin_server_ts;
+    if (!message.lastEventAt || at > message.lastEventAt.getTime()) {
+      message.lastEventAt = new Date(at);
+    }
+    if (isProvisionalTime(message) && isServerCopy(this.event)) {
+      message.created = new Date(this.event.origin_server_ts);
+    } else if (message.created.getTime() > this.event.origin_server_ts) {
       message.created = new Date(this.event.origin_server_ts);
       return;
     }
@@ -309,6 +320,15 @@ export default class MessageBuilder {
         if (messageTool) {
           messageTool.toolCallStatus = event.content['m.relates_to']
             .key as ToolCallStatus;
+          if (messageTool.toolResultEventTs !== event.origin_server_ts) {
+            messageTool.toolResultEventTs = event.origin_server_ts;
+          }
+          let byClick = Boolean(
+            (event.content as { resumesAssistant?: boolean }).resumesAssistant,
+          );
+          if (messageTool.ranOnReadersClick !== byClick) {
+            messageTool.ranOnReadersClick = byClick;
+          }
           let toolResultFileDef = isToolResultWithOutputContent(event.content)
             ? event.content.data.card
             : undefined;
@@ -420,7 +440,7 @@ export default class MessageBuilder {
     // synchronously: 'applying' (loading) until the result event lands, then
     // applied (success) or invalid + reason (failure).
     if (toolRequest.executedBy === AI_BOT_EXECUTOR) {
-      return new MessageTool(
+      let botTool = new MessageTool(
         message,
         toolRequest,
         undefined, // no codeRef — never run on the host
@@ -436,6 +456,12 @@ export default class MessageBuilder {
         getOwner(this)!,
         toolResultEvent?.content.failureReason,
       );
+      botTool.toolResultEventTs = toolResultEvent?.origin_server_ts;
+      botTool.ranOnReadersClick = Boolean(
+        (toolResultEvent?.content as { resumesAssistant?: boolean } | undefined)
+          ?.resumesAssistant,
+      );
+      return botTool;
     }
 
     let toolCallStatus: ToolCallStatus = (toolResultEvent?.content[
@@ -446,7 +472,7 @@ export default class MessageBuilder {
     // awaits network loads and happens on the tool itself (see
     // MessageTool.resolve), so the message's tool list is complete as soon as
     // its event is applied.
-    return new MessageTool(
+    let tool = new MessageTool(
       message,
       toolRequest,
       undefined,
@@ -461,6 +487,12 @@ export default class MessageBuilder {
       toolResultEvent?.content.failureReason,
       { resolver: (request) => this.resolveTool(request) },
     );
+    tool.toolResultEventTs = toolResultEvent?.origin_server_ts;
+    tool.ranOnReadersClick = Boolean(
+      (toolResultEvent?.content as { resumesAssistant?: boolean } | undefined)
+        ?.resumesAssistant,
+    );
+    return tool;
   }
 
   // Resolves a host tool's command from its name: the enabled skills first,
@@ -587,5 +619,23 @@ function hasContinuation(matrixEvent: DiscreteMatrixEvent) {
   return (
     isCardMessageEvent(matrixEvent) &&
     matrixEvent.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY] === true
+  );
+}
+
+// The optimistic event the client adds before sending has a `local-` id and
+// a time borrowed from the timeline's tail; the message built from it keeps
+// that id until the server's copy arrives.
+function isProvisionalTime(message: Message): boolean {
+  return (
+    typeof message.eventId === 'string' && message.eventId.startsWith('local-')
+  );
+}
+
+// An event as the server holds it: a real id and no sending status.
+function isServerCopy(event: { event_id?: string; status?: unknown }): boolean {
+  return (
+    typeof event.event_id === 'string' &&
+    !event.event_id.startsWith('local-') &&
+    (event.status == null || event.status === 'sent')
   );
 }

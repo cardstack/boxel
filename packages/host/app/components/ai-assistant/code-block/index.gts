@@ -30,6 +30,8 @@ interface Signature {
   Args: {
     monacoSDK: MonacoSDK;
     codeData?: Partial<CodeData>;
+    // the small voice a tool row's code view reads in: 11px, regular weight
+    compact?: boolean;
   };
   Blocks: {
     default: [
@@ -49,7 +51,10 @@ const CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
       (hash
         commandHeader=(component CodeBlockToolCallHeader)
         editor=(component
-          CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData
+          CodeBlockEditor
+          monacoSDK=@monacoSDK
+          codeData=@codeData
+          compact=@compact
         )
         actions=(component CodeBlockActionsComponent codeData=@codeData)
       )
@@ -84,7 +89,8 @@ class CodeBlockEditor extends Component<Signature> {
     ...commonEditorOptions,
     wordWrap: 'on',
     wrappingIndent: 'indent',
-    fontWeight: 'bold',
+    fontWeight: this.args.compact ? 'normal' : 'bold',
+    ...(this.args.compact ? { fontSize: 11, lineHeight: 17 } : {}),
     minimap: {
       enabled: false,
     },
@@ -92,8 +98,8 @@ class CodeBlockEditor extends Component<Signature> {
       enabled: false,
     },
     padding: {
-      top: 8,
-      bottom: 8,
+      top: this.args.compact ? 6 : 8,
+      bottom: this.args.compact ? 6 : 8,
     },
   };
 

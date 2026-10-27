@@ -2,8 +2,11 @@ import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  getToolRequests,
   isToolResultEventType,
+  latestEventContent,
 } from '../matrix-constants.ts';
+import { approvalReaction } from './approval-reaction.ts';
 
 export interface StopRuleEvent {
   type: string;
@@ -23,7 +26,9 @@ export interface StopRuleEvent {
 // not started may start, and no result in it starts another answer. The stop
 // holds until the person writes again, or asks for one of the turn's calls to
 // go ahead after all (Run, Retry, Accept All, Approve): the host marks the
-// result of such a call with `resumesAssistant`, which lifts the stop. A
+// result of such a call with `resumesAssistant`, which lifts the stop, and a
+// 👍 on a bot message holding a call for approval lifts it the same way (see
+// approval-reaction.ts). A 👍 on any other message is only a reaction. A
 // decline or an automatic result never lifts it.
 export interface StopState<T extends StopRuleEvent> {
   // The stop that holds at the end of the timeline, or undefined when the
@@ -55,6 +60,8 @@ export function readStopState<T extends StopRuleEvent>(
   let lastStop: T | undefined;
   let stoppedGroups = new Set<MessageIds>();
   let everStoppedMessageIds = new Set<string>();
+  // The bot messages holding a call for approval, by any of their ids
+  let heldGroups = new Set<MessageIds>();
 
   let endTurn = () => {
     if (turnStopped) {
@@ -74,6 +81,9 @@ export function readStopState<T extends StopRuleEvent>(
       }
       let group = groupFor(event, groupById);
       currentTurn.add(group);
+      if (holdsCallForApproval(event)) {
+        heldGroups.add(group);
+      }
       if (turnStopped) {
         for (let id of group) {
           everStoppedMessageIds.add(id);
@@ -93,7 +103,10 @@ export function readStopState<T extends StopRuleEvent>(
           everStoppedMessageIds.add(id);
         }
       }
-    } else if (isResumingResult(event)) {
+    } else if (
+      isResumingResult(event) ||
+      isApprovingReaction(event, groupById, heldGroups)
+    ) {
       turnStopped = false;
       let answered = relatedEventId(event);
       let group = answered ? groupById.get(answered) : undefined;
@@ -155,6 +168,33 @@ function isPersonMessage(event: StopRuleEvent): boolean {
   return (
     msgtype !== APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE &&
     msgtype !== APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
+  );
+}
+
+// A person's 👍 on a bot message that holds a call for approval
+function isApprovingReaction(
+  event: StopRuleEvent,
+  groupById: Map<string, MessageIds>,
+  heldGroups: Set<MessageIds>,
+): boolean {
+  let reaction = approvalReaction(event);
+  if (reaction?.verdict !== 'approve') {
+    return false;
+  }
+  let group = groupById.get(reaction.targetEventId);
+  return Boolean(group && heldGroups.has(group));
+}
+
+function holdsCallForApproval(event: StopRuleEvent): boolean {
+  let eventContent = content(event);
+  let contents = [
+    latestEventContent(event as { content?: Record<string, any> }),
+    eventContent?.['m.new_content'],
+  ];
+  return contents.some((c) =>
+    (getToolRequests<{ approvalRequired?: boolean }>(c) ?? []).some(
+      (request) => request?.approvalRequired === true,
+    ),
   );
 }
 

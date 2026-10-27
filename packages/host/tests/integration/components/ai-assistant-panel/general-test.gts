@@ -1042,12 +1042,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     assert
       .dom('[data-test-message-idx="0"]')
-      .containsText(
-        'Wednesday Jan 3, 2024, 12:30 PM First replacement message body',
-      );
+      .containsText('12:30 PM First replacement message body');
     assert
       .dom('[data-test-message-idx="1"]')
-      .containsText('Wednesday Jan 3, 2024, 12:34 PM Second message body');
+      .containsText('12:34 PM Second message body');
   });
 
   test('it displays a toast if there is an activity that was not seen by the user yet', async function (assert) {
@@ -1200,7 +1198,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert
       .dom('[data-test-message-idx="0"]')
       .containsText(
-        'Wednesday Jan 3, 2024, 12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm...',
+        '12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm...',
       );
     assert
       .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
@@ -1247,7 +1245,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert
       .dom('[data-test-message-idx="0"]')
       .containsText(
-        'Wednesday Jan 3, 2024, 12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done',
+        '12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done',
       );
     assert
       .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
@@ -1280,7 +1278,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert
       .dom('[data-test-message-idx="0"]')
       .containsText(
-        'Wednesday Jan 3, 2024, 12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done.',
+        '12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done.',
       );
     assert
       .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')

@@ -1715,7 +1715,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .doesNotExist();
   });
 
-  test('displays "Generating results..." when streaming', async function (assert) {
+  test('displays "Writing the answer" when streaming', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
       codePath: `${testRealmURL}index.json`,
@@ -1748,7 +1748,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor('[data-test-ai-assistant-action-bar]');
     assert
       .dom('[data-test-ai-assistant-action-bar]')
-      .containsText('Generating results...');
+      .containsText('Writing the answer');
     assert.dom('[data-test-stop-generating]').exists();
 
     simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
@@ -1766,7 +1766,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
   });
 
-  test('displays "Generation Cancelled" in the bottom of the message', async function (assert) {
+  test('says a cancelled reply was stopped, and kept, at the bottom of the message', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
       codePath: `${testRealmURL}index.json`,
@@ -1801,7 +1801,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-ai-assistant-action-bar]').exists();
     assert
       .dom('[data-test-ai-assistant-action-bar]')
-      .containsText('Generating results...');
+      .containsText('Writing the answer');
     assert.dom('[data-test-stop-generating]').exists();
     assert
       .dom('[data-test-ai-message-content]')
@@ -1825,11 +1825,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert
       .dom('[data-test-ai-message-content]')
       .hasText(
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit. {Generation Cancelled}',
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit. ■ Stopped · partial answer kept',
       );
   });
 
-  test(`displays "Generation Cancelled" in the bottom of the message when it's stopped during reasoning`, async function (assert) {
+  test(`says a reply stopped during reasoning was stopped`, async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
       codePath: `${testRealmURL}index.json`,
@@ -1863,14 +1863,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await waitFor('[data-test-ai-assistant-message]');
     assert.dom('[data-test-ai-assistant-action-bar]').exists();
-    assert
-      .dom('[data-test-ai-assistant-action-bar]')
-      .containsText('Generating results...');
+    assert.dom('[data-test-ai-assistant-action-bar]').containsText('Thinking');
     assert.dom('[data-test-stop-generating]').exists();
     assert.dom('[data-test-ai-message-content]').containsText('Thinking...');
     assert
       .dom('[data-test-ai-message-content]')
-      .doesNotContainText('{Generation Cancelled}');
+      .doesNotContainText('■ Stopped');
     assert
       .dom('[data-test-reasoning]')
       .containsText(
@@ -1894,9 +1892,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       () => !document.querySelector('[data-test-ai-assistant-action-bar]'),
     );
     assert.dom('[data-test-ai-message-content]').containsText('Thinking...');
-    assert
-      .dom('[data-test-ai-message-content]')
-      .containsText('{Generation Cancelled}');
+    assert.dom('[data-test-ai-message-content]').containsText('■ Stopped');
     await click('[data-test-reasoning]');
     assert
       .dom('[data-test-reasoning]')
@@ -3190,11 +3186,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor('[data-room-settled]');
 
     assert
-      .dom('[data-test-llm-mode-option="ask"]')
-      .hasClass('selected', 'Ask is selected by default on new session');
+      .dom(
+        '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="ask"]',
+      )
+      .isChecked('Ask is selected by default on new session');
     assert
-      .dom('[data-test-llm-mode-option="act"]')
-      .doesNotHaveClass('selected', 'Act is not selected by default');
+      .dom(
+        '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+      )
+      .isNotChecked('Act is not selected by default');
   });
 
   test('new session inherits llm mode from current room', async function (assert) {
@@ -3212,10 +3212,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
 
-    await click('[data-test-llm-mode-option="act"]');
+    await click(
+      '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+    );
     assert
-      .dom('[data-test-llm-mode-option="act"]')
-      .hasClass('selected', 'LLM mode is set to act');
+      .dom(
+        '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+      )
+      .isChecked('LLM mode is set to act');
 
     await fillIn(
       '[data-test-message-field]',
@@ -3574,11 +3578,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       assert
         .dom('[data-test-session-preparation]')
         .includesText('Takes 10-20 seconds');
-      await waitFor('[data-test-session-preparation-skip-button]');
-      assert.dom('[data-test-session-preparation-skip-button]').hasText('Skip');
+      await waitFor('[data-test-pretui-session-prep-skip]');
+      assert.dom('[data-test-pretui-session-prep-skip]').hasText('Skip');
 
       // Click the skip button to skip session preparation
-      await click('[data-test-session-preparation-skip-button]');
+      await click('[data-test-pretui-session-prep-skip]');
 
       // Verify that the session preparation UI is no longer shown
       await waitFor('[data-test-session-preparation]', { count: 0 });

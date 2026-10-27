@@ -10,7 +10,12 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
-import { getPromptParts, isApprovalResult } from '@cardstack/runtime-common/ai';
+import {
+  approvalReaction,
+  getPromptParts,
+  isApprovalResult,
+} from '@cardstack/runtime-common/ai';
+import { readStopState } from '@cardstack/runtime-common/ai/stop';
 import {
   carriesEncodedData,
   collectPreapprovedUrls,
@@ -22,6 +27,7 @@ import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { toCommandRequest } from '../lib/matrix/response-publisher.ts';
 import {
   ApprovalClaims,
+  declinedToolCalls,
   releasedToolCalls,
   unreleasedApproval,
 } from '../lib/bot-tools/approval.ts';
@@ -35,6 +41,27 @@ const readUrlCallsReleasedByApprovals = (
 
 const BOT = '@aibot:localhost';
 const USER = '@user:localhost';
+const OTHER = '@rupert:localhost';
+
+function reaction(
+  targetEventId: string,
+  key: string,
+  sender: string,
+  id = `$reaction-${key}-${sender}`,
+): DiscreteMatrixEvent {
+  return {
+    type: 'm.reaction',
+    event_id: id,
+    sender,
+    content: {
+      'm.relates_to': {
+        rel_type: 'm.annotation',
+        event_id: targetEventId,
+        key,
+      },
+    },
+  } as unknown as DiscreteMatrixEvent;
+}
 
 function humanMessage(
   body: string,
@@ -506,5 +533,136 @@ module('readUrl approval', () => {
   test('isApprovalResult recognises only the approved key', () => {
     assert.true(isApprovalResult(result('x', 'approved', USER) as any));
     assert.false(isApprovalResult(result('x', 'applied', BOT) as any));
+  });
+  test('a 👍 on the message approves every held call on it', () => {
+    let history = [
+      humanMessage('Find their docs'),
+      streamedBotMessage([
+        readUrlRequest('held-a', 'https://a.example/', true),
+        readUrlRequest('held-b', 'https://b.example/', true),
+      ]),
+      reaction('$bot', '👍', USER),
+    ];
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(history, BOT).map((entry) => [
+        entry.call.id,
+        entry.requestEventId,
+      ]),
+      [
+        ['held-a', '$bot'],
+        ['held-b', '$bot'],
+      ],
+    );
+    assert.deepEqual(declinedToolCalls(history, BOT, BOT_TOOL_NAMES), []);
+  });
+
+  test('any skin tone or presentation of the thumb answers', () => {
+    for (let key of ['👍🏽', '👍️', '👎🏿']) {
+      assert.ok(approvalReaction(reaction('$bot', key, USER) as any), key);
+    }
+    for (let key of ['❤️', '✅', 'approve']) {
+      assert.strictEqual(
+        approvalReaction(reaction('$bot', key, USER) as any),
+        undefined,
+        key,
+      );
+    }
+  });
+
+  test('a 👎 declines the held calls, naming who declined', () => {
+    let history = [
+      humanMessage('Find their docs'),
+      botMessage([readUrlRequest('held', 'https://a.example/', true)]),
+      reaction('$bot', '👎', OTHER),
+    ];
+    assert.deepEqual(readUrlCallsReleasedByApprovals(history, BOT), []);
+    let declined = declinedToolCalls(history, BOT, BOT_TOOL_NAMES);
+    assert.deepEqual(
+      declined.map((entry) => [entry.call.id, entry.reaction.sender]),
+      [['held', OTHER]],
+    );
+    assert.deepEqual(
+      declinedToolCalls(
+        [...history, result('held', 'invalid', BOT)],
+        BOT,
+        BOT_TOOL_NAMES,
+      ),
+      [],
+      'once its result lands the call is settled',
+    );
+  });
+
+  test('the first human answer decides; the bot and other messages never answer', () => {
+    let held = readUrlRequest('held', 'https://a.example/', true);
+    let firstWins = [
+      botMessage([held]),
+      reaction('$bot', '👎', OTHER),
+      reaction('$bot', '👍', USER),
+    ];
+    assert.deepEqual(readUrlCallsReleasedByApprovals(firstWins, BOT), []);
+    assert.strictEqual(
+      declinedToolCalls(firstWins, BOT, BOT_TOOL_NAMES).length,
+      1,
+    );
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(
+        [botMessage([held]), reaction('$bot', '👍', BOT)],
+        BOT,
+      ),
+      [],
+      "the bot's own 👍 approves nothing",
+    );
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(
+        [
+          botMessage([held]),
+          botMessage([], '$answer'),
+          reaction('$answer', '👍', USER),
+        ],
+        BOT,
+      ),
+      [],
+      'a 👍 on another message approves nothing',
+    );
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(
+        [
+          botMessage([held]),
+          { ...reaction('$bot', '👍', USER), content: {} } as any,
+        ],
+        BOT,
+      ),
+      [],
+      'a redacted 👍 approves nothing',
+    );
+  });
+
+  test('a 👍 on a held call lifts a stop; a 👍 on an answer does not', () => {
+    let stop = {
+      type: 'app.boxel.stopGenerating',
+      sender: USER,
+      event_id: '$stop',
+      content: {},
+    };
+    let held = botMessage([readUrlRequest('held', 'https://a.example/', true)]);
+    let answer = botMessage([], '$answer');
+    assert.strictEqual(
+      readStopState(
+        [humanMessage('go'), held, stop, reaction('$bot', '👍', USER)] as any,
+        BOT,
+      ).inForce,
+      undefined,
+    );
+    assert.ok(
+      readStopState(
+        [
+          humanMessage('go'),
+          answer,
+          stop,
+          reaction('$answer', '👍', USER),
+        ] as any,
+        BOT,
+      ).inForce,
+    );
   });
 });

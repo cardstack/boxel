@@ -256,7 +256,8 @@ export default class AttachedItems extends Component<Signature> {
     </div>
     <style scoped>
       .attached-items {
-        background-color: var(--boxel-light);
+        /* the box's own tint shows through: no white band across it */
+        background-color: transparent;
         color: var(--boxel-dark);
         display: flex;
         flex-wrap: wrap;

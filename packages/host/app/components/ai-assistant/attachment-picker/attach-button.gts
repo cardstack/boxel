@@ -90,7 +90,7 @@ export default class AttachButton extends Component<Signature> {
         + :deep(
           .ember-basic-dropdown-content-wormhole-origin .attach-button__dropdown
         ) {
-        border-radius: 10px;
+        border-radius: var(--round-row, 8px);
         width: 256px;
         padding: 0;
         position: absolute;
@@ -106,15 +106,17 @@ export default class AttachButton extends Component<Signature> {
             .ember-power-select-option
         ) {
         padding: 7.5px 5.5px;
-        border-radius: 6px;
+        border-radius: var(--round-chip, 4px);
       }
       .menu-option {
         display: flex;
         align-items: center;
         gap: 10px;
         text-wrap: nowrap;
-        font: 500 var(--boxel-font-sm);
-        letter-spacing: 0.2px;
+        font-family: var(--boxel-font-family);
+        font-size: var(--type-ui, 12.5px);
+        line-height: var(--leading-ui, 18px);
+        font-weight: 400;
       }
     </style>
   </template>

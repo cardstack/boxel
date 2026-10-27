@@ -1365,6 +1365,41 @@ function isMatrixRequest(req: Request): boolean {
   }
 }
 
+// Only the realm server reads the correlation id back out, and a browser
+// sends a custom header to another origin only after a CORS preflight that
+// origin must allow. Synapse does not, and neither does a third-party host a
+// card or a script fetches from (an image on Wikimedia, a raw GitHub file):
+// stamping those makes the preflight fail and the request never leaves. So
+// the id goes only on requests to the realm server and to realms it knows.
+function readsCorrelationId(owner: Owner, req: Request): boolean {
+  if (isMatrixRequest(req)) {
+    return false;
+  }
+  let url: URL;
+  try {
+    url = new URL(req.url);
+  } catch {
+    return false;
+  }
+  if (typeof window !== 'undefined' && url.origin === window.location.origin) {
+    return true;
+  }
+  try {
+    let realmServer = owner.lookup('service:realm-server') as
+      | RealmServerService
+      | undefined;
+    if (realmServer && url.origin === realmServer.url.origin) {
+      return true;
+    }
+    let realm = owner.lookup('service:realm') as
+      | { realmOf(input: URL): unknown }
+      | undefined;
+    return Boolean(realm?.realmOf(url));
+  } catch {
+    return false;
+  }
+}
+
 export function createServerRequestTimingMiddleware(
   owner: Owner,
 ): FetcherMiddlewareHandler {
@@ -1392,12 +1427,9 @@ export function createServerRequestTimingMiddleware(
     // the server is the same one recorded on the event below.
     let attempt = (requestAttemptCounts.get(req) ?? 0) + 1;
     requestAttemptCounts.set(req, attempt);
-    // Only the realm server reads this id back out. Synapse ignores it, and its
-    // CORS allow-list is a fixed set that a custom header is not in — so
-    // stamping a Matrix request makes the browser reject the preflight and the
-    // request never leaves.
+    // Only for hosts that read it back; see readsCorrelationId.
     if (
-      !isMatrixRequest(req) &&
+      readsCorrelationId(owner, req) &&
       !req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER)
     ) {
       try {

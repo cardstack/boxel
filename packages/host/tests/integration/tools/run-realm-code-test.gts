@@ -4019,3 +4019,560 @@ module(
     });
   },
 );
+
+// `realm.web.search`, `realm.web.read` and `realm.resolve` send their requests
+// through the realm server's proxy, which needs a realm server session, so
+// these tests sign a user in. The proxy is stubbed: each test says how the
+// service behind it answers, and every forwarded request is recorded.
+module('Integration | tools | run-realm-code | research', function (hooks) {
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+
+  type Forwarded = { url: string; request: any };
+  let forwarded: Forwarded[] = [];
+  let answer: (forwarded: Forwarded) => Response;
+  setupRealmServerEndpoints(hooks, [
+    {
+      route: '_request-forward',
+      getResponse: async (req: Request) => {
+        let body = await req.clone().json();
+        let request = { url: body.url, request: JSON.parse(body.requestBody) };
+        forwarded.push(request);
+        return answer(request);
+      },
+    },
+  ]);
+
+  setupRealmCacheTeardown(hooks);
+
+  function json(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // An OpenRouter chat answer whose message content is `content`.
+  function chat(content: string, extra: Record<string, unknown> = {}) {
+    return json({
+      model: 'openai/gpt-4.1-mini',
+      choices: [{ finish_reason: 'stop', message: { content, ...extra } }],
+    });
+  }
+
+  const RECIPE_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['title', 'servings'],
+    properties: {
+      title: { type: 'string' },
+      servings: { type: 'integer', minimum: 1 },
+    },
+  };
+
+  async function run(code: string) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+    return await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code,
+    });
+  }
+
+  hooks.beforeEach(async function () {
+    forwarded = [];
+    answer = () => json({ error: { message: 'no answer set' } }, 500);
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: { 'task.json': '{ "title": "Old title" }\n' },
+    });
+  });
+
+  test('research calls need no click, and a run that names one gets more time', function (assert) {
+    for (let code of [
+      `await realm.web.search('chili recipe');`,
+      `await realm.web.read('https://example.com/');`,
+      `await realm.resolve({});`,
+    ]) {
+      assert.false(
+        RunRealmCodeTool.neverAutoExecutesFor({ code }),
+        `no click for ${code}`,
+      );
+      assert.true(
+        RunRealmCodeTool.extraExecuteTimeMsFor({ code }) > 0,
+        `more time for ${code}`,
+      );
+    }
+  });
+
+  test('realm.web.search returns the url_citation sources of an Exa search', async function (assert) {
+    answer = () =>
+      chat('Here are some chili recipes.', {
+        annotations: [
+          {
+            type: 'url_citation',
+            url_citation: {
+              url: 'https://www.budgetbytes.com/chili/',
+              title: 'Chili - Budget Bytes',
+              content: 'A classic beef chili.',
+            },
+          },
+          {
+            type: 'url_citation',
+            url_citation: {
+              url: 'https://www.budgetbytes.com/chili/',
+              title: 'Duplicate',
+              content: 'Duplicate',
+            },
+          },
+          { type: 'file', file: { name: 'ignored' } },
+          {
+            type: 'url_citation',
+            url_citation: { url: 'https://example.com/chili' },
+          },
+        ],
+      });
+
+    let result = await run(
+      `return await realm.web.search('beef chili recipe', { limit: 3, includeDomains: ['BudgetBytes.com'] });`,
+    );
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), [
+      {
+        url: 'https://www.budgetbytes.com/chili/',
+        title: 'Chili - Budget Bytes',
+        snippet: 'A classic beef chili.',
+      },
+      { url: 'https://example.com/chili', title: '', snippet: '' },
+    ]);
+    assert.strictEqual(forwarded.length, 1, 'one request was forwarded');
+    let [{ url, request }] = forwarded;
+    assert.strictEqual(url, 'https://openrouter.ai/api/v1/chat/completions');
+    assert.deepEqual(request.plugins, [
+      {
+        id: 'web',
+        engine: 'exa',
+        max_results: 3,
+        include_domains: ['budgetbytes.com'],
+      },
+    ]);
+    assert.strictEqual(
+      request.messages.at(-1).content,
+      'beef chili recipe',
+      'the query is the user message',
+    );
+    assert.strictEqual(
+      result.activity.length,
+      1,
+      'the search is in the run activity',
+    );
+    assert.true(
+      /Exa searched for "beef chili recipe".*2 results/.test(
+        result.activity[0]!,
+      ),
+      result.activity[0]!,
+    );
+  });
+
+  test('realm.web.search refuses a limit outside 1 to 10 without a request', async function (assert) {
+    await assert.rejects(
+      run(`await realm.web.search('chili', { limit: 11 });`),
+      /limit must be a whole number from 1 to 10/,
+    );
+    assert.strictEqual(forwarded.length, 0, 'nothing was forwarded');
+  });
+
+  test('realm.web.read returns the page markdown, capped, with its metadata', async function (assert) {
+    let markdown = '# Chili\n' + 'x'.repeat(70_000);
+    answer = () =>
+      json({
+        success: true,
+        data: {
+          markdown,
+          metadata: {
+            title: 'Chili',
+            statusCode: 200,
+            contentType: 'text/html; charset=utf-8',
+            sourceURL: 'https://www.budgetbytes.com/chili/',
+            ogImage: 'https://www.budgetbytes.com/chili.jpg',
+          },
+        },
+      });
+
+    let result =
+      await run(`let page = await realm.web.read('https://www.budgetbytes.com/chili/');
+return { url: page.url, length: page.markdown.length, start: page.markdown.slice(0, 7), truncated: page.truncated, metadata: page.metadata };`);
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      url: 'https://www.budgetbytes.com/chili/',
+      length: 64_000,
+      start: '# Chili',
+      truncated: true,
+      metadata: {
+        statusCode: 200,
+        contentType: 'text/html; charset=utf-8',
+        title: 'Chili',
+        sourceURL: 'https://www.budgetbytes.com/chili/',
+      },
+    });
+    let [{ url, request }] = forwarded;
+    assert.strictEqual(url, 'https://api.firecrawl.dev/v2/scrape');
+    assert.strictEqual(request.url, 'https://www.budgetbytes.com/chili/');
+    assert.deepEqual(request.formats, ['markdown']);
+    assert.true(request.onlyMainContent, 'main content by default');
+    assert.deepEqual(result.activity, ['Firecrawl read www.budgetbytes.com']);
+  });
+
+  test('realm.web.read throws with the status and Firecrawl’s reason', async function (assert) {
+    answer = ({ request }) =>
+      request.url.endsWith('.svg')
+        ? json(
+            {
+              success: false,
+              code: 'SCRAPE_UNSUPPORTED_FILE_ERROR',
+              error: 'The file type is not supported.',
+            },
+            400,
+          )
+        : json(
+            {
+              success: false,
+              error:
+                'This website is no longer supported, we do not support this site.',
+            },
+            403,
+          );
+
+    let result = await run(`let errors = [];
+for (let url of ['https://www.seriouseats.com/chili', 'https://example.com/logo.svg']) {
+  try {
+    await realm.web.read(url);
+  } catch (error) {
+    errors.push(error.message);
+  }
+}
+return errors;`);
+
+    let [site, svg] = JSON.parse(result.scriptResult!);
+    assert.true(/HTTP 403/.test(site), site);
+    assert.true(/we do not support this site/.test(site), site);
+    assert.true(/HTTP 400/.test(svg), svg);
+    assert.true(/SCRAPE_UNSUPPORTED_FILE_ERROR/.test(svg), svg);
+    assert.strictEqual(result.activity.length, 2);
+    assert.true(
+      /^Firecrawl could not read www\.seriouseats\.com: .*we do not support this site/.test(
+        result.activity[0]!,
+      ),
+      result.activity[0]!,
+    );
+  });
+
+  test('an uncaught realm.web.read failure fails the run with the reason', async function (assert) {
+    answer = () =>
+      json({ success: false, error: 'we do not support this site' }, 403);
+    await assert.rejects(
+      run(`await realm.web.read('https://www.seriouseats.com/chili');`),
+      /HTTP 403: we do not support this site/,
+    );
+  });
+
+  test('realm.resolve returns JSON that matches outputSchema', async function (assert) {
+    answer = () => chat('{"title":"Beef Chili","servings":6}');
+
+    let result = await run(`return await realm.resolve({
+  instruction: 'Normalize this recipe header.',
+  input: { name: ' beef chili ', serves: 'six' },
+  error: 'servings must be a number',
+  outputSchema: ${JSON.stringify(RECIPE_SCHEMA)},
+});`);
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      output: { title: 'Beef Chili', servings: 6 },
+      model: 'openai/gpt-4.1-mini',
+    });
+    let [{ request }] = forwarded;
+    assert.deepEqual(request.response_format.json_schema.schema, RECIPE_SCHEMA);
+    assert.true(request.response_format.json_schema.strict, 'strict output');
+    assert.deepEqual(JSON.parse(request.messages[1].content), {
+      instruction: 'Normalize this recipe header.',
+      input: { name: ' beef chili ', serves: 'six' },
+      error: 'servings must be a number',
+    });
+  });
+
+  test('realm.resolve refuses an answer that does not match outputSchema', async function (assert) {
+    answer = () => chat('{"title":"Beef Chili","servings":0,"notes":"x"}');
+
+    await assert.rejects(
+      run(`await realm.resolve({
+  instruction: 'Normalize this recipe header.',
+  input: { name: 'beef chili' },
+  outputSchema: ${JSON.stringify(RECIPE_SCHEMA)},
+});`),
+      /does not match outputSchema/,
+    );
+  });
+
+  test('realm.resolve refuses an open schema without a request', async function (assert) {
+    await assert.rejects(
+      run(`await realm.resolve({
+  instruction: 'Normalize this.',
+  input: { name: 'beef chili' },
+  outputSchema: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'] },
+});`),
+      /additionalProperties must be false/,
+    );
+    assert.strictEqual(forwarded.length, 0, 'nothing was forwarded');
+  });
+
+  test('realm.resolve may be called at most 3 times per run', async function (assert) {
+    answer = () => chat('{"title":"Chili","servings":4}');
+
+    let result = await run(`let outcomes = [];
+for (let i = 0; i < 4; i++) {
+  try {
+    await realm.resolve({
+      instruction: 'Normalize this recipe header.',
+      input: { i },
+      outputSchema: ${JSON.stringify(RECIPE_SCHEMA)},
+    });
+    outcomes.push('ok');
+  } catch (error) {
+    outcomes.push(error.message);
+  }
+}
+return outcomes;`);
+
+    let outcomes = JSON.parse(result.scriptResult!);
+    assert.deepEqual(outcomes.slice(0, 3), ['ok', 'ok', 'ok']);
+    assert.true(/at most 3 times per run/.test(outcomes[3]), outcomes[3]);
+    assert.strictEqual(forwarded.length, 3, 'three requests were forwarded');
+  });
+
+  test('realm.resolve refuses a request for code, and an answer that holds code', async function (assert) {
+    await assert.rejects(
+      run(`await realm.resolve({
+  instruction: 'Write a JavaScript function that parses this recipe.',
+  input: { name: 'beef chili' },
+  outputSchema: ${JSON.stringify(RECIPE_SCHEMA)},
+});`),
+      /does not write code, scripts, markup or commands/,
+    );
+    assert.strictEqual(forwarded.length, 0, 'no model was asked');
+
+    answer = () => chat('{"title":"<script>alert(1)</script>","servings":4}');
+    await assert.rejects(
+      run(`await realm.resolve({
+  instruction: 'Normalize this recipe header.',
+  input: { name: 'beef chili' },
+  outputSchema: ${JSON.stringify(RECIPE_SCHEMA)},
+});`),
+      /the answer looked like code/,
+    );
+  });
+
+  test('realm.web.search takes maxResults as an alias of limit, and includeContent', async function (assert) {
+    answer = () =>
+      chat('Sources.', {
+        annotations: [
+          {
+            type: 'url_citation',
+            url_citation: {
+              url: 'https://example.com/a',
+              title: 'A',
+              content: 'y'.repeat(3_000),
+            },
+          },
+          {
+            type: 'url_citation',
+            url_citation: { url: 'http://192.168.1.10/private', title: 'B' },
+          },
+        ],
+      });
+
+    let result =
+      await run(`let [found] = await realm.web.search('logos', { maxResults: 2, includeContent: true, tbs: 'qdr:m' });
+return { count: (await realm.web.search('logos', { limit: 2, maxResults: 2 })).length, snippet: found.snippet.length, content: found.content.length };`);
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      count: 1,
+      snippet: 1_000,
+      content: 3_000,
+    });
+    assert.strictEqual(forwarded[0].request.plugins[0].max_results, 2);
+    assert.true(
+      forwarded[0].request.messages.at(-1).content.includes('qdr:m'),
+      'the time filter reaches the model',
+    );
+    await assert.rejects(
+      run(`await realm.web.search('logos', { limit: 2, maxResults: 3 });`),
+      /limit and maxResults must match/,
+    );
+  });
+
+  test('realm.web.read refuses local and private-network URLs without a request', async function (assert) {
+    for (let url of [
+      'http://localhost:4201/base/',
+      'http://192.168.1.10/',
+      'https://user:secret@example.com/',
+    ]) {
+      await assert.rejects(
+        run(`await realm.web.read('${url}');`),
+        /cannot read URLs with credentials, local hosts or private-network addresses/,
+        url,
+      );
+    }
+    assert.strictEqual(forwarded.length, 0, 'nothing was forwarded');
+  });
+
+  test('realm.activity records the steps of a multi-step script', async function (assert) {
+    let result =
+      await run(`await realm.activity({ message: 'Gather sources', current: 2, total: 4 });
+await realm.activity({ message: 'Write the card', phase: 'write' });
+return 1;`);
+
+    assert.deepEqual(result.activity, [
+      'Step 2 of 4 · Gather sources',
+      'Write the card (write)',
+    ]);
+    await assert.rejects(
+      run(
+        `await realm.activity({ message: 'Too far', current: 5, total: 4 });`,
+      ),
+      /current cannot be more than total/,
+    );
+  });
+
+  test('realm.plan names the steps ahead, and activity counts inside one', async function (assert) {
+    let result =
+      await run(`await realm.plan(['Search calendars', 'Read each page', 'Compare']);
+await realm.activity({ message: 'Read each page', current: 2, total: 3, count: 3, of: 5 });
+return 1;`);
+
+    assert.deepEqual(result.activity, [
+      'Plan · Search calendars · Read each page · Compare',
+      'Step 2 of 3 · Read each page',
+    ]);
+    await assert.rejects(
+      run(`await realm.plan([]);`),
+      /realm.plan expects 1 to 12 step names/,
+    );
+    await assert.rejects(
+      run(
+        `await realm.activity({ message: 'Read', current: 1, total: 2, count: 6, of: 5 });`,
+      ),
+      /count cannot be more than of/,
+    );
+  });
+
+  // Auto-fix answers come from the same proxy. `fix` turns the code the
+  // runner sent into the code the model answers with.
+  function answerFixes(fix: (code: string) => string) {
+    answer = ({ request }) => {
+      let { code } = JSON.parse(request.messages[1].content);
+      return chat(
+        JSON.stringify({
+          fixedCode: fix(code),
+          summary: "added a missing ']'",
+        }),
+      );
+    };
+  }
+
+  const BROKEN = `let items = [1, 2, 3;
+return items.length;`;
+
+  test('auto-fix patches a missing bracket and the run completes', async function (assert) {
+    answerFixes((code) => code.replace('3;', '3];'));
+
+    let result = await run(BROKEN);
+
+    assert.strictEqual(result.scriptResult, '3', 'the fixed script ran');
+    assert.strictEqual(forwarded.length, 1, 'one model call');
+    let [{ url, request }] = forwarded;
+    assert.strictEqual(url, 'https://openrouter.ai/api/v1/chat/completions');
+    assert.strictEqual(request.model, 'openai/gpt-4.1-mini');
+    let sent = JSON.parse(request.messages[1].content);
+    assert.strictEqual(sent.code, BROKEN, 'the model gets the script');
+    assert.strictEqual(sent.error.name, 'SyntaxError');
+    assert.strictEqual(result.activity.length, 1);
+    assert.true(
+      /^Fixed a SyntaxError( at line \d+)?: added a missing '\]' \(auto-fix by openai\/gpt-4\.1-mini\)$/.test(
+        result.activity[0]!,
+      ),
+      result.activity[0]!,
+    );
+    assert.strictEqual(result.scriptFixes.length, 1);
+    assert.true(
+      result.scriptFixes[0]!.includes(
+        '- let items = [1, 2, 3;\n+ let items = [1, 2, 3];',
+      ),
+      result.scriptFixes[0]!,
+    );
+  });
+
+  test('auto-fix fixes a ReferenceError thrown before any realm call', async function (assert) {
+    answerFixes((code) => code.replace('itmes', 'items'));
+
+    let result = await run(`let items = [1, 2];
+return itmes.length;`);
+
+    assert.strictEqual(result.scriptResult, '2');
+    assert.strictEqual(forwarded.length, 1);
+  });
+
+  test('a script that runs cleanly makes no auto-fix call', async function (assert) {
+    let result = await run(`return 1 + 1;`);
+    assert.strictEqual(result.scriptResult, '2');
+    assert.strictEqual(forwarded.length, 0, 'no model call');
+    assert.deepEqual(result.scriptFixes, []);
+  });
+
+  test('an error after a realm call is not auto-fixed', async function (assert) {
+    answerFixes((code) => code.replace('notDefined()', 'null'));
+    await assert.rejects(
+      run(`await realm.fs.exists('task.json');
+notDefined();`),
+      /ReferenceError/,
+    );
+    assert.strictEqual(forwarded.length, 0, 'no model call');
+  });
+
+  test('a fix that adds a realm call is rejected', async function (assert) {
+    answerFixes((code) =>
+      code.replace('3;', "3];\nawait realm.fs.exists('task.json');"),
+    );
+    await assert.rejects(
+      run(BROKEN),
+      /SyntaxError[\s\S]*rejected the fix: the fix added realm\.fs\.exists/,
+    );
+    assert.strictEqual(forwarded.length, 1);
+  });
+
+  test('a fix that changes too much is rejected', async function (assert) {
+    answerFixes((code) =>
+      code.replace('3;', `3];\n${'items.push(0);\n'.repeat(8)}`),
+    );
+    await assert.rejects(
+      run(BROKEN),
+      /rejected the fix: the fix changed more than 5 lines/,
+    );
+  });
+
+  test('auto-fix stops after its attempt cap', async function (assert) {
+    // Each fix compiles no better than the script it replaced.
+    answerFixes((code) =>
+      code.includes('3;') ? code.replace('3;', '3}') : code.replace('3}', '3;'),
+    );
+    await assert.rejects(
+      run(BROKEN),
+      /SyntaxError[\s\S]*auto-fixed the script/,
+    );
+    assert.strictEqual(forwarded.length, 2, 'two fixes were asked for');
+  });
+});

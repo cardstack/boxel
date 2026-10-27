@@ -28,6 +28,7 @@ import { rri } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
+
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
 import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
@@ -39,6 +40,9 @@ import type IndexController from '@cardstack/host/controllers';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
 import type { SearchResultKind } from '@cardstack/host/utils/search/types';
+
+import QuickLookMotion from '../ai-assistant/motion/quick-look-motion';
+import AssistantQuickLook from '../ai-assistant/quick-look';
 
 import SearchSheet, { SearchSheetModes } from '../search-sheet';
 
@@ -182,13 +186,17 @@ export default class SubmodeLayout extends Component<Signature> {
       ? Number(window.localStorage.getItem(AiAssistantPanelWidth))
       : undefined;
 
-    if (!persistedWidth || persistedWidth < aiPanelDefaultWidth) {
+    let aiPanelMinWidth = (Math.min(320, windowWidth) / windowWidth) * 100;
+    if (!persistedWidth || persistedWidth < aiPanelMinWidth) {
       this.aiPanelWidths.defaultWidth = aiPanelDefaultWidth;
     } else {
       this.aiPanelWidths.defaultWidth = persistedWidth;
     }
 
-    this.aiPanelWidths.minWidth = aiPanelDefaultWidth;
+    // The panel opens at 371px but may be dragged down to 320px: the
+    // assistant is designed to read at 320 (narrow), 440 and 680 (wide).
+    let aiPanelMinWidthInPixels = Math.min(320, windowWidth);
+    this.aiPanelWidths.minWidth = (aiPanelMinWidthInPixels / windowWidth) * 100;
   };
 
   get operatorModeController(): IndexController {
@@ -619,6 +627,10 @@ export default class SubmodeLayout extends Component<Signature> {
         {{/if}}
       </ResizablePanelGroup>
     </div>
+    {{! the assistant's Quick Look, over the whole viewport (motion/) }}
+    <QuickLookMotion>
+      <AssistantQuickLook />
+    </QuickLookMotion>
 
     {{#if this.operatorModeStateService.profileSettingsOpen}}
       <ProfileSettingsModal
