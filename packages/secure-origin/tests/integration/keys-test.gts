@@ -577,16 +577,38 @@ module('Integration | key pages', function (hooks) {
         .includesText('Written by the card that opened this window');
     });
 
-    test('opened for something the server doesn’t know of, shows the server’s answer', async function (assert) {
+    test('opened for something the server doesn’t know of, says so and doesn’t offer to try again', async function (assert) {
       visitShell(
         `?mode=enter-key#card=${encodeURIComponent(CARD)}&operation=forecast`,
       );
       await render(EnterKeyPage);
       await waitFor('[data-test-keys-load-failed]');
       assert.dom('[data-test-enter-key-form]').doesNotExist();
+      assert
+        .dom('[data-test-error-message]')
+        .hasText(
+          'This workspace, card or request doesn’t exist, or you don’t have access to it.',
+        );
+      assert.dom('[data-test-keys-retry]').doesNotExist();
       await click('[data-test-toggle-details]');
       assert.dom('[data-test-error-detail="Status"]').hasText('404');
       assert.dom('[data-test-error-detail="Message"]').hasText('Not found.');
+    });
+
+    test('refused access, says so and doesn’t offer to try again', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          refusal(403, 'the secure window asks this with its own session'),
+      });
+      visitShell(`?mode=enter-key#realm=${encodeURIComponent(REALM)}`);
+      await render(EnterKeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText('You don’t have access to this.');
+      assert.dom('[data-test-keys-retry]').doesNotExist();
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-detail="Status"]').hasText('403');
     });
 
     test('a load that fails for another reason offers to try again', async function (assert) {
@@ -848,6 +870,26 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(navigations, [
         { how: 'replace', url: '/secure/?mode=keys' },
       ]);
+    });
+
+    test('a link naming neither a key nor a workspace says so and doesn’t offer to try again', async function (assert) {
+      visitShell('?mode=share-key');
+      await render(SharePage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText(
+          'This workspace, card or request doesn’t exist, or you don’t have access to it.',
+        );
+      assert.dom('[data-test-keys-retry]').doesNotExist();
+      await click('[data-test-toggle-details]');
+      assert
+        .dom('[data-test-error-detail="Message"]')
+        .hasText('This page names neither a key nor a workspace.');
+      assert.false(
+        requests.some((r) => /^_(user-keys|secure-window)/.test(r.path)),
+        'no key or workspace is asked for',
+      );
     });
 
     test('a reader who isn’t a direct writer is told an administrator must set it up', async function (assert) {

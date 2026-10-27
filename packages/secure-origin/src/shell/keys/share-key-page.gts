@@ -32,6 +32,7 @@ import { modeURL } from '../urls.js';
 import {
   failureMessage,
   isSignedOut,
+  LinkError,
   loadFailure,
   type LoadFailure,
 } from './context.ts';
@@ -237,7 +238,7 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     let { config } = this.args.api;
     try {
       if (!realm && !keyId) {
-        throw new Error('this page names neither a key nor a workspace');
+        throw new LinkError('this page names neither a key nor a workspace');
       }
       let context: WindowContext | undefined;
       if (realm) {
@@ -259,7 +260,7 @@ class ShareKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       if (keyId) {
         key = keys.find((k) => k.id === keyId);
         if (!key) {
-          throw new Error('the key this page names isn’t one of your keys');
+          throw new LinkError('the key this page names isn’t one of your keys');
         }
         this.selectKey(key.id);
       } else if (keys.length === 1) {

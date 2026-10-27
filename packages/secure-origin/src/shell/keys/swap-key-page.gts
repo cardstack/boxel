@@ -25,6 +25,7 @@ import { modeURL } from '../urls.js';
 import {
   failureMessage,
   isSignedOut,
+  LinkError,
   loadFailure,
   type LoadFailure,
 } from './context.ts';
@@ -216,7 +217,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     let { config } = this.args.api;
     try {
       if (!realm || !shareId) {
-        throw new Error('this page names no workspace and shared key');
+        throw new LinkError('this page names no workspace and shared key');
       }
       let context = await windowContext(config, { realm });
       if (!context.realm.directWriter) {
@@ -227,7 +228,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         (s) => s.id === shareId,
       );
       if (!share) {
-        throw new Error('that workspace has no such shared key');
+        throw new LinkError('that workspace has no such shared key');
       }
       if (share.state === 'active') {
         this.page.state = { name: 'active', context, share };
