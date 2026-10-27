@@ -61,8 +61,16 @@ export class Changeset implements ChangesetLike {
   /** the frame's own size in local pixels, from the same final layout */
   readonly frame?: { height: number; width: number };
 
-  /** what the page shows behind this region — see ChangesetLike.ground */
-  readonly ground?: string;
+  /** what the page shows behind this region — see ChangesetLike.ground.
+   *  Read on first use: finding it walks the region's ancestors' computed
+   *  styles, and most passes never crossfade a skin that needs it. */
+  get ground(): string | undefined {
+    if (typeof this.groundSource === 'function') {
+      this.groundSource = this.groundSource();
+    }
+    return this.groundSource;
+  }
+  private groundSource: string | undefined | (() => string | undefined);
 
   constructor(
     inserted: Sprite[],
@@ -71,15 +79,27 @@ export class Changeset implements ChangesetLike {
     beacons: Map<string, Bounds> = new Map(),
     measureZoom = 1,
     frame?: { height: number; width: number },
-    ground?: string,
+    ground?: string | (() => string | undefined),
+    // measures a beacon `beacons` does not hold, for a name the score has
+    // not asked for before
+    measureBeacon?: (name: string) => Bounds | null,
   ) {
     this.inserted = inserted;
     this.removed = removed;
     this.kept = kept;
-    this.beacon = (name) => beacons.get(name) ?? null;
+    this.beacon = (name) => {
+      if (!beacons.has(name) && measureBeacon) {
+        const bounds = measureBeacon(name);
+        if (bounds) {
+          beacons.set(name, bounds);
+        }
+        return bounds;
+      }
+      return beacons.get(name) ?? null;
+    };
     this.measureZoom = measureZoom;
     this.frame = frame;
-    this.ground = ground;
+    this.groundSource = ground;
   }
 
   get all(): Sprite[] {

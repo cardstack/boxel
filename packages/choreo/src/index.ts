@@ -11,10 +11,12 @@ export type { Arming, ArmingOptions, ArmingRegion } from './arming.ts';
 export { createArming } from './arming.ts';
 export { beacon } from './beacon.ts';
 export type { BeaconRef } from './beacons.ts';
+export { registerBeacon } from './beacons.ts';
 export type { Changeset } from './changeset.ts';
 export type { ChoreoContext } from './choreo.gts';
 export { Choreo } from './choreo.gts';
 export { easeIn, easeInAndOut, easeOut } from './easings.ts';
+export { registerSettle } from './far.ts';
 export type { GestureRef } from './gesture.ts';
 export {
   type ChoreoHost,

@@ -26,6 +26,14 @@
       "mcp__chrome-devtools__take_screenshot"
     ]
   },
+  "extraKnownMarketplaces": {
+    "interfaces": {
+      "source": {
+        "source": "github",
+        "repo": "jakubkrehel/skills"
+      }
+    }
+  },
   "hooks": {
     "SessionStart": [
       {

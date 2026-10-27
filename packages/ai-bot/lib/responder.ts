@@ -22,9 +22,35 @@ import MatrixResponsePublisher, {
 } from './matrix/response-publisher.ts';
 import ResponseState from './response-state.ts';
 import { classifyToolCalls, type BotToolTurn } from './bot-tools/index.ts';
+import { scriptSyntaxRetryMessages } from './script-syntax-check.ts';
 import type { MatrixClient } from 'matrix-js-sdk';
+import type { TokenUsage } from '@cardstack/base/matrix-event';
 
 let log = logger('ai-bot');
+
+// The usage of two replies of one turn: the counts and the cost summed, and
+// the provider and generation of the later one.
+function addUsage(
+  earlier: TokenUsage | undefined,
+  later: TokenUsage,
+): TokenUsage {
+  if (!earlier) {
+    return later;
+  }
+  let sum = (
+    key: 'promptTokens' | 'completionTokens' | 'cachedTokens' | 'costUsd',
+  ) =>
+    earlier[key] === undefined && later[key] === undefined
+      ? {}
+      : { [key]: (earlier[key] ?? 0) + (later[key] ?? 0) };
+  return {
+    ...later,
+    ...sum('promptTokens'),
+    ...sum('completionTokens'),
+    ...sum('cachedTokens'),
+    ...sum('costUsd'),
+  };
+}
 
 export class Responder {
   matrixResponsePublisher: MatrixResponsePublisher;
@@ -327,8 +353,6 @@ export class Responder {
     // This usage value is set *once* and *only once* at the end of the conversation
     // It will be null at all other times.
     if (chunk.usage) {
-      this.promptTokens = chunk.usage.prompt_tokens;
-      this.completionTokens = chunk.usage.completion_tokens;
       // OpenRouter extensions on the same payload: the prompt-cache split and
       // the inline cost (see the `usage: { include: true }` request option).
       let cachedTokens = (chunk.usage as any).prompt_tokens_details
@@ -344,14 +368,17 @@ export class Responder {
       // event. When the final edit has already gone out (the usage chunk
       // trails the finish chunk), finalize() sends one more edit to carry
       // them.
-      this.matrixResponsePublisher.usage = {
+      let usage = addUsage(this.earlierUsage, {
         promptTokens: chunk.usage.prompt_tokens,
         completionTokens: chunk.usage.completion_tokens,
         ...(typeof cachedTokens === 'number' ? { cachedTokens } : {}),
         ...(typeof costUsd === 'number' ? { costUsd } : {}),
         ...(typeof provider === 'string' ? { provider } : {}),
         ...(typeof generationId === 'string' ? { generationId } : {}),
-      };
+      });
+      this.matrixResponsePublisher.usage = usage;
+      this.promptTokens = usage.promptTokens;
+      this.completionTokens = usage.completionTokens;
       log.info(
         `Request used ${chunk.usage.prompt_tokens} prompt tokens (${
           typeof cachedTokens === 'number' ? cachedTokens : 'unknown'
@@ -361,6 +388,35 @@ export class Responder {
 
     return await Promise.all(this.messagePromises);
   }
+
+  // The messages that hand the finished reply's unparseable run-realm-code
+  // scripts back to the model, or undefined when the reply goes out as it is.
+  // Only while nothing has marked the answer finished: the host runs an
+  // answer's calls once it is, so a call it may already have can't be
+  // withdrawn.
+  scriptSyntaxRetryMessages(message: ChatCompletion.Choice['message']) {
+    if (this.responseState.isStreamingFinished) {
+      return undefined;
+    }
+    return scriptSyntaxRetryMessages(
+      message.content,
+      this.responseState.withPostedIds(message.tool_calls),
+    );
+  }
+
+  // The turn goes on with a new reply from the model, after the last one was
+  // handed back (see scriptSyntaxRetryMessages).
+  startNewReply() {
+    this.responseState.startNewReply();
+    this.toolCallDeltaStats.clear();
+    // Every reply was billed, so the answer's usage counts them all.
+    this.earlierUsage = this.matrixResponsePublisher.usage;
+    this.matrixResponsePublisher.usage = undefined;
+    this.matrixResponsePublisher.usageSent = false;
+  }
+
+  // The usage of the replies this turn already handed back to the model.
+  private earlierUsage: TokenUsage | undefined;
 
   // The finished reply's bot-tool calls, under the ids they were posted with,
   // so their results name the posted requests rather than the provider's ids.

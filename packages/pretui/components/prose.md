@@ -11,11 +11,11 @@ Element: HTMLDivElement
 
 No args. Two things happen inside it, and they are both worth stating because they are what you are actually buying.
 
-**`max-width: 62ch`.** The measure — the number of characters per line — is the single largest determinant of whether body copy is comfortable to read, and 62ch sits inside the 45–75 range typography research consistently lands on. Because it is `ch`, it tracks the font actually in use rather than assuming a pixel width. A card that renders prose full-bleed across a 1600px pane is unreadable, and this is the one line that prevents it.
+**`max-width: var(--pretui-prose-measure, 62ch)`.** The measure — the number of characters per line — is the single largest determinant of whether body copy is comfortable to read, and 62ch sits inside the 45–75 range typography research consistently lands on. Because it is `ch`, it tracks the font actually in use rather than assuming a pixel width. A card that renders prose full-bleed across a 1600px pane is unreadable, and this is the one line that prevents it.
 
-**`line-height: calc(var(--leading-body) / var(--text-body))`.** The leading is expressed as a _ratio derived from two absolute tokens_, so a theme sets a body size and a leading in pixels — the way a type scale is actually designed — and the ratio falls out. Setting `line-height` as a bare number would decouple them and let a theme's leading drift when it retunes the size.
+**`line-height: var(--pretui-prose-leading, var(--boxel-body-line-height))`.** The leading is the theme's body role, a unitless ratio, so it scales with the body size the theme sets. A surface that needs a different leading sets the knob instead of overriding the rule.
 
-Paragraph margins (`0 0 var(--space-4)`) and inline `<code>` styling reach the yielded content through `:deep()`, which is the narrow, legitimate use of the escape hatch: the component must style markup it did not render.
+Paragraph margins (`0 0 var(--boxel-sp-sm)`) and inline `<code>` styling reach the yielded content through `:deep()`, which is the narrow, legitimate use of the escape hatch: the component must style markup it did not render.
 
 ## Prior art
 
@@ -34,7 +34,7 @@ No pattern governs it. The relevant criteria are WCAG **1.4.8 Visual Presentatio
 What is right, and it is genuinely more than most kits:
 
 - **`max-width: 62ch` directly serves WCAG 1.4.8**, which asks for no more than 80 characters per line. Comfortably inside it.
-- **Leading derived from the type scale** rather than hardcoded means a theme that increases body size gets proportional leading. WCAG **1.4.12** requires content to survive a user stylesheet setting line-height to 1.5× — since the leading here is a ratio on a `div` and paragraph margins are in `--space-4`, user overrides apply cleanly rather than fighting a fixed pixel `line-height`.
+- **Leading from the theme's body role** rather than hardcoded means a theme that changes body size or leading changes it here too. WCAG **1.4.12** requires content to survive a user stylesheet setting line-height to 1.5× — since the leading here is a unitless ratio on a `div` and paragraph margins are in `--boxel-sp-sm`, user overrides apply cleanly rather than fighting a fixed pixel `line-height`.
 - **Reflow**: `max-width` with no `min-width` means the surface shrinks correctly at 320px.
 
 Gaps:
@@ -48,10 +48,8 @@ Gaps:
 
 ## Theming
 
-`--leading-body` and `--text-body` (which together produce the line-height ratio), `--space-4` (paragraph spacing), and for inline code: `--font-mono`, `--inset`, `--border`, `--pretui-shadow-hairline`.
+The theme reaches Prose through `--boxel-body-line-height` (leading), `--boxel-sp-sm` (paragraph spacing), `--primary-ink` (links), and for inline code `--font-mono`, `--inset`, `--border` and `--pretui-shadow-hairline`.
 
-The `62ch` measure is fixed and is the one thing a theme most often wants to change — a display-face theme with a wide font may want 58ch, a condensed one 68ch. There is no token for it, so changing the measure means changing the component.
-
-Because everything else inside is unstyled, **a theme's control over prose is limited to the type scale tokens**; heading, list and link appearance inside a Prose are the browser's, whatever the theme says.
+A surface that embeds Prose tunes it through the `--pretui-prose-*` knobs listed at the top of `prose.gts`: the measure (62ch by default; a display face with a wide font may want 58ch, a condensed one 68ch), the leading, heading sizes, leadings and gap, inline code, code block and table sizes, and table header styles. MarkdownSurface sets only these knobs.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

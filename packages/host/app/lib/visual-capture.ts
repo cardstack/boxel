@@ -1,4 +1,8 @@
-import { ensureTrailingSlash, urlNamesFile } from '@cardstack/runtime-common';
+import {
+  ensureTrailingSlash,
+  parseCaptureRequestSpec,
+  urlNamesFile,
+} from '@cardstack/runtime-common';
 import { MAX_TOOL_RESULT_MEDIA_FILE_BYTES } from '@cardstack/runtime-common/ai';
 import {
   CAPTURE_SOURCE_URL_PREFIX,
@@ -36,16 +40,22 @@ export interface ViewOptions {
   viewportWidth?: number;
   viewportHeight?: number;
   fullPage?: boolean;
+  // A CSS selector for one element of the render: the capture is of the first
+  // element it matches, scrolled into view and cropped to it.
+  target?: string;
 }
 
 export interface ViewedImage {
   sourceUrl: string;
   kind: ViewKind;
   format: ViewFormat;
+  // The window the capture rendered in, and the selector it was cropped to.
+  viewport: { width: number; height: number };
+  target: string | undefined;
   width: number | undefined;
   height: number | undefined;
-  // Set when the image shows less than the capture did (a full-page capture
-  // cut to its top); says what was left out.
+  // Set when the image shows less than the capture did (a tall capture cut to
+  // its top); says what was left out.
   note: string | undefined;
   // The uploaded image, ready to attach to a tool result.
   file: FileDef;
@@ -221,13 +231,33 @@ export async function captureForAgent(
       'viewportWidth and viewportHeight must be provided together.',
     );
   }
+  let selector = options.target?.trim() || undefined;
+  // A file renders inside its own frame (an HTML file in a sandboxed iframe),
+  // which a selector run against the page cannot reach.
+  if (selector && target.kind === 'file') {
+    throw new VisualCaptureError(
+      `Cannot capture ${target.url} with a target: a target selects part of ` +
+        'a card, and a file renders in its own frame. View the whole file ' +
+        'instead, with fullPage to see all of it.',
+    );
+  }
+  let viewport =
+    options.viewportWidth != null && options.viewportHeight != null
+      ? { width: options.viewportWidth, height: options.viewportHeight }
+      : DEFAULT_VIEWPORT;
   let captureSpec = {
-    viewport:
-      options.viewportWidth != null && options.viewportHeight != null
-        ? { width: options.viewportWidth, height: options.viewportHeight }
-        : DEFAULT_VIEWPORT,
+    viewport,
     ...(options.fullPage ? { fullPage: true } : {}),
+    ...(selector ? { target: selector } : {}),
   };
+  // The endpoint's own parse, run here so a capture it would refuse fails
+  // without a round trip, with the error in the options' own names.
+  let parse = parseCaptureRequestSpec(captureSpec, format);
+  if (parse.error !== undefined) {
+    throw new VisualCaptureError(
+      `Cannot capture ${target.url}: ${inOptionNames(parse.error)}.`,
+    );
+  }
 
   // The capture endpoint verifies a realm session the same as a realm-server
   // one, so the target realm's token authorizes the request (see the
@@ -304,6 +334,18 @@ export async function captureForAgent(
       throw error;
     }
     if (response.status === 503) {
+      // Only a capture of the whole page is stored, so only its retry is
+      // answered from the store; retrying a target capture would queue
+      // another render behind the one still running.
+      if (selector) {
+        throw new VisualCaptureError(
+          `The capture of ${selector} in ${target.url} is still rendering. ` +
+            'A capture of one element is not stored, so viewing it again ' +
+            'renders it again from the start: view it again once the ' +
+            'workspace is less busy, or view the whole page, whose capture ' +
+            'is stored and answers a retry quickly.',
+        );
+      }
       let retryAfterMs =
         Math.max(1, Number(response.headers.get('retry-after')) || 1) * 1000;
       if (deadline - Date.now() - retryAfterMs < MIN_RETRY_WINDOW_MS) {
@@ -346,9 +388,11 @@ export async function captureForAgent(
   }
 
   await matrixService.ready;
-  let name = `${baseName(target.url)} (${format}).${extensionFor(
-    image.contentType,
-  )}`;
+  let name = `${baseName(target.url)} (${[
+    format,
+    `${viewport.width}×${viewport.height}`,
+    ...(selector ? [shortened(selector)] : []),
+  ].join(', ')}).${extensionFor(image.contentType)}`;
   let local = matrixService.fileAPI.createFileDef({
     sourceUrl: `${CAPTURE_SOURCE_URL_PREFIX}${await shortHash(
       image.bytes,
@@ -366,6 +410,8 @@ export async function captureForAgent(
     sourceUrl: target.url,
     kind: target.kind,
     format,
+    viewport,
+    target: selector,
     width: image.width ?? attrs.width ?? undefined,
     height: image.height ?? attrs.height ?? undefined,
     note: image.note,
@@ -504,6 +550,25 @@ async function shortHash(bytes: Uint8Array): Promise<string> {
   return Array.from(new Uint8Array(digest).slice(0, 8))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+// A capture-spec parse error in the names a caller gives the options:
+// `viewportWidth` and `viewportHeight` rather than the spec's nested
+// `viewport`, and no `captureSpec` prefix.
+function inOptionNames(error: string): string {
+  return error
+    .replace(/captureSpec\.viewport\.width/g, 'viewportWidth')
+    .replace(/captureSpec\.viewport\.height/g, 'viewportHeight')
+    .replace(
+      /captureSpec\.viewport must have positive integer width and height/g,
+      'viewportWidth and viewportHeight must be positive whole numbers',
+    )
+    .replace(/captureSpec(\.| )/g, '');
+}
+
+// A selector short enough to name an attachment by.
+function shortened(selector: string): string {
+  return selector.length > 40 ? `${selector.slice(0, 39)}…` : selector;
 }
 
 function baseName(url: string): string {

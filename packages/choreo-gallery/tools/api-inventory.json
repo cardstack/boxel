@@ -92,6 +92,14 @@
     },
     {
       "entrypoint": "@cardstack/choreo",
+      "symbol": "registerBeacon",
+      "source": "packages/choreo/src/beacons.ts",
+      "kind": "value",
+      "guide": "interactive-beacons",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
       "symbol": "Changeset",
       "source": "packages/choreo/src/changeset.ts",
       "kind": "type",
@@ -120,6 +128,14 @@
       "source": "packages/choreo/src/easings.ts",
       "kind": "value",
       "guide": "core-tweens",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "registerSettle",
+      "source": "packages/choreo/src/far.ts",
+      "kind": "value",
+      "guide": "interactive-regions",
       "declaration": "packages/choreo/src/index.ts"
     },
     {

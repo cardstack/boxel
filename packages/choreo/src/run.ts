@@ -77,6 +77,16 @@ const loopKey = (cue: Cue) =>
     .sort()
     .join(',');
 
+/** a tween a replacement pass carries on: see Run.midfade */
+export interface Fade {
+  /** score ms until it starts (0 when it is already running) */
+  delay: number;
+  /** score ms it has left once started */
+  remaining: number;
+  /** where its values were going */
+  to: Record<string, unknown>;
+}
+
 export interface Run {
   /** open the gate the run is parked at; mid-segment, complete the segment and park (§4.1) */
   advance(): void;
@@ -94,6 +104,16 @@ export interface Run {
    * timeline retimes a loop rather than sending it back to the top.
    */
   loopPhases(): LoopPhases;
+  /**
+   * The values other than geometry this run is still TWEENING, or has yet
+   * to tween — a fade cut short or not begun — one entry per tween, with
+   * where its values were going, the delay left before it starts and the
+   * time it had left, in score milliseconds. A tween's value is neither
+   * moved nor borrowed, so a cancel stops it where it stands and nothing
+   * gives it back: a replacement pass reads this to carry each one on to
+   * its end (§3.1). Tweens behind a closed gate are not listed.
+   */
+  midfade(): Map<ChoreoNode, Fade[]>;
   /**
    * The sprites this run is DRIVING through space right now — an
    * unfinished move/spring/tween writing geometry — with each cue's
@@ -164,6 +184,13 @@ interface RunOptions {
   inherit?: Velocities;
   /** where the prior run's ambient loops stood, to carry them on from */
   loops?: LoopPhases;
+  /**
+   * The most animation time, in ms, one painted frame may advance. Unset,
+   * a frame advances by the time since the last one (the frame loop caps
+   * that at 40 ms). Set, a run behind a long frame slows down rather than
+   * skipping: it lands later, and no frame jumps.
+   */
+  maxFrameStep?: number;
   /** a camera step landed or the run ended: the frame's new resting state */
   onCamera?(state: CameraState): void;
   /**
@@ -376,6 +403,18 @@ interface Track {
   wire?: SVGPathElement;
 }
 
+let warnedPrivateFields = false;
+/** @maxFrameStep reads motion-dom's private animation fields; say once when they are gone */
+function warnPrivateFieldsMoved() {
+  if (warnedPrivateFields) {
+    return;
+  }
+  warnedPrivateFields = true;
+  console.warn(
+    '@cardstack/choreo: motion-dom no longer exposes the animation fields @maxFrameStep reads (_animation, startTime, holdTime); a long frame will skip tweens ahead instead of slowing them',
+  );
+}
+
 export class ChoreoRun implements Run {
   cues: Cue[];
   velocities: Velocities = new Map();
@@ -434,6 +473,17 @@ export class ChoreoRun implements Run {
   private ended = false;
   private resolveFinished!: () => void;
   private ticking = false;
+  /**
+   * The next tick is the first since the clock started (or resumed): it
+   * paints the run where it stands and advances nothing. The frame loop's
+   * delta on that tick is the time since ITS last frame, up to 40 ms, so a
+   * run started by a render pass would otherwise open with that whole step
+   * on its own clock: every cue the clock starts, gates, or drives frame by
+   * frame (a camera, a wire, a later cue's start) would begin that far in.
+   */
+  private freshClock = false;
+  /** the frame timestamp holdBack saw last, while a maxFrameStep applies */
+  private lastStamp: number | undefined;
   private autoTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(compiled: Compiled, options: RunOptions) {
@@ -723,6 +773,64 @@ export class ChoreoRun implements Run {
     return out;
   }
 
+  midfade(): Map<ChoreoNode, Fade[]> {
+    const out = new Map<ChoreoNode, Fade[]>();
+    if (this.isDone()) {
+      return out;
+    }
+    const now = this.master;
+    // the score past a closed gate waits for its advance(): not carried
+    const gate = this.gates.find((g) => !g.opened && g.at >= now)?.at;
+    // the tracks are timed in scaled ms; a cue's times are score ms
+    const scale = this.scale || 1;
+    for (const t of this.tracks) {
+      const { cue } = t;
+      if (
+        t.passed ||
+        t.end <= now ||
+        (gate !== undefined && t.start >= gate && !t.started) ||
+        cue.kind !== 'tween' ||
+        cue.loop ||
+        cue.borrow ||
+        !cue.target
+      ) {
+        continue;
+      }
+      // Motion ends a tween that repeats an odd number of times, other than
+      // as a loop, on its FIRST keyframe (motion-dom's getFinalKeyframe)
+      const { repeat, repeatType } = (cue.transition ?? {}) as {
+        repeat?: number;
+        repeatType?: string;
+      };
+      const first =
+        typeof repeat === 'number' && repeat % 2 === 1 && repeatType !== 'loop';
+      const to: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(cue.target)) {
+        if (MIDFLIGHT_KEYS.includes(key)) {
+          continue;
+        }
+        const end = Array.isArray(value)
+          ? value[first ? 0 : value.length - 1]
+          : value;
+        if (end !== undefined && end !== null) {
+          to[key] = end;
+        }
+      }
+      if (!Object.keys(to).length) {
+        continue;
+      }
+      const begins = Math.max(now, t.start);
+      const fades = out.get(cue.sprite.node) ?? [];
+      fades.push({
+        delay: (begins - now) / scale,
+        remaining: (t.end - begins) / scale,
+        to,
+      });
+      out.set(cue.sprite.node, fades);
+    }
+    return out;
+  }
+
   /* ---- transport ---- */
 
   pause() {
@@ -817,6 +925,12 @@ export class ChoreoRun implements Run {
       return;
     }
     this.ticking = true;
+    this.freshClock = true;
+    this.lastStamp = undefined;
+    if (this.options.maxFrameStep) {
+      // read runs before update: the animations tick after the hold-back
+      frame.read(this.holdBack, true);
+    }
     frame.update(this.tick, true);
   }
 
@@ -824,15 +938,82 @@ export class ChoreoRun implements Run {
     if (this.ticking) {
       this.ticking = false;
       cancelFrame(this.tick);
+      cancelFrame(this.holdBack);
     }
   }
+
+  /**
+   * maxFrameStep for the animations themselves. The run's own clock is
+   * capped in tick; the tweens and springs it started run on motion-dom's
+   * frame clock, which takes the real time since their start, so a long
+   * frame would still skip that much of them. Before they update, each one
+   * driven on the main thread has its start moved on by the time past the
+   * cap: it resumes from where the last frame left it, plus one step.
+   * Animations on the compositor (WAAPI) kept playing through the long
+   * frame and are left alone.
+   */
+  private holdBack = (data: FrameData) => {
+    const step = this.options.maxFrameStep;
+    const last = this.lastStamp;
+    this.lastStamp = data.timestamp;
+    if (!step) {
+      return;
+    }
+    // The first frame: an animation the render pass started takes its start
+    // from motion-dom's clock, which holds one time for a whole task, so a
+    // pass late in a long render would date it back to the task's start and
+    // its first frame would skip that far. Its start moves to this frame.
+    // After that: the time past the cap since the last frame.
+    for (const t of this.tracks) {
+      for (const c of t.controls ?? []) {
+        // the wrapper's resolved animation, read without the getter that
+        // flushes pending keyframes. These are motion-dom's private fields
+        // (VENDORED.md lists them for a bump to check): past the first frame
+        // every control has resolved, so a control without them means the
+        // fields moved and the cap no longer reaches the tweens.
+        const inner = (c as unknown as { _animation?: object })._animation as
+          | { holdTime?: number | null; startTime?: number | null }
+          | undefined;
+        if (
+          last !== undefined &&
+          (!inner ||
+            (!('animation' in inner) &&
+              !('startTime' in inner && 'holdTime' in inner)))
+        ) {
+          warnPrivateFieldsMoved();
+        }
+        if (
+          !inner ||
+          'animation' in inner ||
+          typeof inner.startTime !== 'number' ||
+          inner.holdTime !== null
+        ) {
+          continue;
+        }
+        if (last === undefined) {
+          if (data.timestamp - inner.startTime > step) {
+            inner.startTime = data.timestamp;
+          }
+        } else if (data.timestamp - last > step) {
+          inner.startTime += data.timestamp - last - step;
+        }
+      }
+    }
+  };
 
   private tick = (data: FrameData) => {
     if (!this.playing || this.cancelled || this.ended) {
       this.stopTicking();
       return;
     }
-    const next = this.master + data.delta * this.rate;
+    const step = this.options.maxFrameStep;
+    const delta = this.freshClock
+      ? 0
+      : step
+        ? Math.min(data.delta, step)
+        : data.delta;
+    this.freshClock = false;
+    const next = this.master + delta * this.rate;
     const gate = this.gates.find(
       (g) => !g.opened && g.at >= this.master && g.at <= next,
     );

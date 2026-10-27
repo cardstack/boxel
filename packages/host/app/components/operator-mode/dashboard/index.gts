@@ -17,7 +17,7 @@ import { Spinner } from '@cardstack/pretui/components/spinner';
 import { didCancel, dropTask } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
-import { add, eq } from '@cardstack/boxel-ui/helpers';
+import { add, cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 import {
   FailureBordered as FailureIcon,
   StarFilled,
@@ -29,26 +29,30 @@ import { logger, ri } from '@cardstack/runtime-common';
 
 import { catalogRealmURL, leadWith } from '@cardstack/host/lib/utils';
 import {
-  favoritesTileWidth,
   isHostedRealm,
   listedCatalogRealmURLs,
-  nearestNavIndexInRow,
   sortByCreatedAtDesc,
   unreachableRealmServersMessage,
 } from '@cardstack/host/lib/workspace-list';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import AddWorkspace from '../workspace-chooser/add-workspace';
-import ArchivedWorkspace from '../workspace-chooser/archived-workspace';
 import ManageCatalogs from '../workspace-chooser/manage-catalogs';
-import Workspace, {
-  WORKSPACE_TILE_TARGET,
-} from '../workspace-chooser/workspace';
-import WorkspaceLoadingIndicator from '../workspace-chooser/workspace-loading-indicator';
 
+import AddWorkspace from './add-workspace';
+import ArchivedWorkspace from './archived-workspace';
 import { greetingFor } from './greeting';
+import KeyboardCursor from './keyboard-cursor';
+import Workspace from './workspace';
+import {
+  COLLAPSED_WORKSPACE_ROWS,
+  gridColumnCount,
+  recentWorkspaceCount,
+  sortByUpdatedAtDesc,
+} from './workspace-layout';
 
 type Scope = 'all' | 'hosted';
 
@@ -64,12 +68,25 @@ const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
 ];
 
 // Dashboard v2, shown in place of the workspace chooser when the
-// DASHBOARD_V2 feature flag is on. The sections hold the chooser's tiles
-// until the dashboard's own desks and rows replace them.
+// DASHBOARD_V2 feature flag is on.
 export default class Dashboard extends Component<Signature> {
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realmServer: RealmServerService;
   @service declare private realm: RealmService;
+
+  // The workspace the dashboard opened over, read once: the cursor starts on
+  // it, so Enter goes straight back to where the user was.
+  private returnRealmURL = this.readReturnRealmURL();
+
+  private readReturnRealmURL(): string | undefined {
+    try {
+      return this.operatorModeStateService.realmURL || undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
   @tracked private hour = new Date().getHours();
 
@@ -110,6 +127,9 @@ export default class Dashboard extends Component<Signature> {
   // in a heading, as Catalogs has, stays out of the name.
   private headingId = (section: string) => `${guidFor(this)}-${section}`;
 
+  // What Show more and Show fewer control.
+  private rowListId = `${guidFor(this)}-workspace-rows`;
+
   // All, or only workspaces published to the web, in Favorites, Your
   // Workspaces and Catalogs.
   @tracked private scope: Scope = 'all';
@@ -120,6 +140,8 @@ export default class Dashboard extends Component<Signature> {
     let option = SCOPE_OPTIONS.find((option) => option.value === value);
     if (option) {
       this.scope = option.value;
+      // A different list starts collapsed.
+      this.showAllWorkspaces = false;
     }
   }
 
@@ -238,7 +260,7 @@ export default class Dashboard extends Component<Signature> {
     return this.filterByScope(this.listedFavoriteRealmIdentifiers);
   }
 
-  // Only favorite tiles show Cards / Files / Definitions counts, so they are
+  // Only desks show Cards / Files / Definitions counts, so they are
   // loaded for that set alone. `revision` is unread, but passing it re-runs
   // the modifier when a re-index marks the counts stale.
   private trackFavoriteCounts = modifier(
@@ -272,80 +294,103 @@ export default class Dashboard extends Component<Signature> {
       : 'No catalogs yet. Add public realms with the gear.';
   }
 
-  // Favorite tiles span the Your Workspaces grid, measured live from it.
-  @tracked private workspaceGridWidth = 0;
-  @tracked private workspaceTileWidth = 0;
-  @tracked private workspaceTileGap = 0;
-
-  // Undefined while there's no measured grid, so the tile keeps its static
-  // width. With no workspaces (none yet, or Hosted hid them all) there is no
-  // row to match, whatever was measured last.
-  private get favoritesTileWidthPx(): string | undefined {
-    if (this.userWorkspacesCount === 0) {
-      return undefined;
-    }
-    let width = favoritesTileWidth(
-      this.workspaceGridWidth,
-      this.workspaceTileWidth,
-      this.workspaceTileGap,
-    );
-    return width === null ? undefined : `${width}px`;
-  }
+  // Columns in the recent tiles' grid and the rows' grid, as CSS laid them
+  // out. Kept when a grid unmounts, as when Hosted empties the list.
+  @tracked private recentColumns = 0;
+  @tracked private rowColumns = 0;
 
   // Observer callbacks land after render, so these tracked writes stay out of
-  // the render that read `favoritesTileWidthPx`. Tiles are observed as they
-  // appear, since each starts as a loading indicator that a loaded tile
-  // replaces in the grid, and the grid's own size may not change when it does.
-  private measureWorkspaceGrid = modifier((el: HTMLElement) => {
-    if (
-      typeof ResizeObserver === 'undefined' ||
-      typeof MutationObserver === 'undefined'
-    ) {
-      return;
-    }
-    // Tracked writes re-render every favorite tile, so only changes are written.
-    let ro = new ResizeObserver(() => {
-      if (this.workspaceGridWidth !== el.clientWidth) {
-        this.workspaceGridWidth = el.clientWidth;
-      }
-      let tile = el.querySelector(WORKSPACE_TILE_TARGET);
-      let tileWidth = tile?.getBoundingClientRect().width;
-      if (tileWidth !== undefined && this.workspaceTileWidth !== tileWidth) {
-        this.workspaceTileWidth = tileWidth;
-      }
-      let gap = parseFloat(getComputedStyle(el).columnGap);
-      if (!Number.isNaN(gap) && this.workspaceTileGap !== gap) {
-        this.workspaceTileGap = gap;
-      }
-    });
-    let observedTile: Element | null = null;
-    let observeTile = () => {
-      let tile = el.querySelector(WORKSPACE_TILE_TARGET);
-      if (tile === observedTile) {
+  // the render that read the counts. Only changes are written.
+  private measureColumns = modifier(
+    (grid: HTMLElement, [which]: ['recent' | 'rows']) => {
+      if (typeof ResizeObserver === 'undefined') {
         return;
       }
-      if (observedTile) {
-        ro.unobserve(observedTile);
-      }
-      observedTile = tile;
-      if (tile) {
-        ro.observe(tile);
-      }
-    };
-    let mo = new MutationObserver(observeTile);
-    ro.observe(el);
-    observeTile();
-    mo.observe(el, { childList: true });
-    return () => {
-      ro.disconnect();
-      mo.disconnect();
-    };
-  });
+      let observer = new ResizeObserver(() => {
+        let columns = gridColumnCount(grid);
+        if (which === 'recent' && columns !== this.recentColumns) {
+          this.recentColumns = columns;
+        } else if (which === 'rows' && columns !== this.rowColumns) {
+          this.rowColumns = columns;
+        }
+      });
+      observer.observe(grid);
+      return () => observer.disconnect();
+    },
+  );
 
-  // The keyboard-selected tile, by its position among the selectable tiles in
-  // render order: Favorites, New Workspace, Your Workspaces, then Catalogs.
-  // `null` until the user moves the selection.
-  @tracked private selectedIndex: number | null = null;
+  // Three until the rows' grid has been measured.
+  private get rowsPerGridRow() {
+    return this.rowColumns || 3;
+  }
+
+  // The most recently updated workspaces, as tiles.
+  @cached
+  private get recentRealmIdentifiers() {
+    return sortByUpdatedAtDesc(
+      this.userRealmIdentifiers,
+      this.realm.info,
+    ).slice(
+      0,
+      recentWorkspaceCount(
+        this.recentColumns,
+        this.matrixService.isInitializingNewUser ? 2 : 1,
+      ),
+    );
+  }
+
+  // Everything else, in list order, as rows.
+  @cached
+  private get rowRealmIdentifiers() {
+    let recent = new Set<string>(this.recentRealmIdentifiers);
+    return this.userRealmIdentifiers.filter((url) => !recent.has(url));
+  }
+
+  // A long list shows its first rows, faded under a scrim with a way to show
+  // the rest. Only the rows shown are rendered.
+  // Unset until the user chooses, so the list opens expanded when the
+  // workspace the dashboard opened over would otherwise be hidden.
+  @tracked private showAllWorkspaces: boolean | undefined;
+
+  private get isShowingAllWorkspaces() {
+    return this.showAllWorkspaces ?? this.isReturnRowCollapsed;
+  }
+
+  @action private toggleAllWorkspaces() {
+    this.showAllWorkspaces = !this.isShowingAllWorkspaces;
+  }
+
+  private get isReturnRowCollapsed() {
+    let target = this.returnRealmURL;
+    if (!target) {
+      return false;
+    }
+    let index = this.rowRealmIdentifiers.findIndex(
+      (url) => this.toURL(url) === target,
+    );
+    return index >= this.collapsedRowCount;
+  }
+
+  private get collapsedRowCount() {
+    return this.rowsPerGridRow * COLLAPSED_WORKSPACE_ROWS;
+  }
+
+  private get isRowListCollapsible() {
+    return this.rowRealmIdentifiers.length > this.collapsedRowCount;
+  }
+
+  @cached
+  private get visibleRowRealmIdentifiers() {
+    return this.isShowingAllWorkspaces
+      ? this.rowRealmIdentifiers
+      : this.rowRealmIdentifiers.slice(0, this.collapsedRowCount);
+  }
+
+  private get hiddenRowCount() {
+    return (
+      this.rowRealmIdentifiers.length - this.visibleRowRealmIdentifiers.length
+    );
+  }
 
   private get favoritesCount() {
     return this.favoriteRealmIdentifiers.length;
@@ -365,30 +410,74 @@ export default class Dashboard extends Component<Signature> {
       : this.filteredCatalogRealmIdentifiers.length;
   }
 
+  // Where each part of the keyboard cursor's walk starts: Favorites, New
+  // Workspace, the recent tiles, the rows shown, then Catalogs.
   private get addWorkspaceNavIndex() {
     return this.favoritesCount;
   }
 
-  private get userWorkspacesNavBase() {
+  private get recentNavBase() {
     return this.favoritesCount + (this.isAddWorkspaceShown ? 1 : 0);
   }
 
+  private get rowsNavBase() {
+    return this.recentNavBase + this.recentRealmIdentifiers.length;
+  }
+
   private get catalogNavBase() {
-    return this.userWorkspacesNavBase + this.userWorkspacesCount;
+    return this.rowsNavBase + this.visibleRowRealmIdentifiers.length;
   }
 
-  private get selectableCount() {
-    return this.catalogNavBase + this.renderedCatalogCount;
+  // What each `[data-nav-index]` shows, in page order. A workspace that is
+  // also a favorite is in the walk twice, as a desk and as a tile or row.
+  @cached
+  private get walkKeys(): string[] {
+    return [
+      ...this.favoriteRealmIdentifiers.map((url) => `desk:${url}`),
+      ...(this.isAddWorkspaceShown ? ['new-workspace'] : []),
+      ...this.recentRealmIdentifiers.map((url) => `workspace:${url}`),
+      ...this.visibleRowRealmIdentifiers.map((url) => `workspace:${url}`),
+      ...(this.catalogEmptyMessage
+        ? []
+        : this.filteredCatalogRealmIdentifiers.map((url) => `catalog:${url}`)),
+    ];
   }
 
-  // The selected tile takes focus on open, so it is never New Workspace while
+  // Where the workspace the dashboard opened over sits in the walk, when it
+  // is shown.
+  @cached
+  private get returnNavIndex(): number | undefined {
+    let target = this.returnRealmURL;
+    if (!target) {
+      return undefined;
+    }
+    let index = this.walkKeys.findIndex((key) => {
+      let separator = key.indexOf(':');
+      return separator >= 0 && this.toURL(key.slice(separator + 1)) === target;
+    });
+    return index >= 0 ? index : undefined;
+  }
+
+  private toURL(id: string) {
+    try {
+      return this.network.virtualNetwork.toURL(id).href;
+    } catch {
+      return id;
+    }
+  }
+
+  // The cursor takes focus on open, so it never starts on New Workspace while
   // anything else is shown: the first Enter would create a workspace.
   private get defaultSelectedIndex() {
+    let returnIndex = this.returnNavIndex;
+    if (returnIndex !== undefined) {
+      return returnIndex;
+    }
     if (this.favoritesCount > 0) {
       return 0;
     }
     if (this.userWorkspacesCount > 0) {
-      return this.userWorkspacesNavBase;
+      return this.recentNavBase;
     }
     if (this.renderedCatalogCount > 0) {
       return this.catalogNavBase;
@@ -396,87 +485,10 @@ export default class Dashboard extends Component<Signature> {
     return 0;
   }
 
-  // Clamped, because the selectable set can shrink without a keypress, as
-  // when Hosted hides tiles.
-  private get currentIndex() {
-    let count = this.selectableCount;
-    if (count === 0) {
-      return 0;
-    }
-    let index = this.selectedIndex ?? this.defaultSelectedIndex;
-    return Math.min(Math.max(index, 0), count - 1);
-  }
-
-  // The default tile is focused on open but shows no ring until the user
-  // moves the selection.
-  private get isSelectionActive() {
-    return this.selectedIndex !== null;
-  }
-
-  @action private onFocusIn(event: Event) {
-    let tile = (event.target as HTMLElement).closest('[data-nav-index]');
-    if (!tile) {
-      return;
-    }
-    let index = Number((tile as HTMLElement).dataset.navIndex);
-    // Compared with the effective selection: the selected tile's focus
-    // modifier re-enters here in the render that read `currentIndex`, and a
-    // write then would trip the backtracking-rerender assertion.
-    if (!Number.isNaN(index) && index !== this.currentIndex) {
-      this.selectedIndex = index;
-    }
-  }
-
-  @action private onKeydown(event: Event) {
-    let kbEvent = event as KeyboardEvent;
-    let container = kbEvent.currentTarget as HTMLElement;
-    let count = this.selectableCount;
-    if (count === 0) {
-      return;
-    }
-    // A tile's own controls (star, menu, host link) handle their own keys.
-    if (!(kbEvent.target as HTMLElement).closest('[data-nav-index]')) {
-      return;
-    }
-    switch (kbEvent.key) {
-      case 'ArrowRight':
-        event.preventDefault();
-        this.selectedIndex = Math.min(this.currentIndex + 1, count - 1);
-        break;
-      case 'ArrowLeft':
-        event.preventDefault();
-        this.selectedIndex = Math.max(this.currentIndex - 1, 0);
-        break;
-      case 'ArrowDown':
-        event.preventDefault();
-        this.moveVertically(container, 1);
-        break;
-      case 'ArrowUp':
-        event.preventDefault();
-        this.moveVertically(container, -1);
-        break;
-      case 'Enter': {
-        event.preventDefault();
-        // New Workspace opens a modal whose Create button listens for Enter
-        // on the document; this keystroke must not reach it.
-        event.stopPropagation();
-        let selected = container.querySelector(
-          `[data-nav-index='${this.currentIndex}']`,
-        );
-        if (selected instanceof HTMLElement) {
-          selected.click();
-        }
-        break;
-      }
-    }
-  }
-
-  private moveVertically(container: HTMLElement, direction: 1 | -1) {
-    let index = nearestNavIndexInRow(container, this.currentIndex, direction);
-    if (index !== undefined) {
-      this.selectedIndex = index;
-    }
-  }
+  private cursor = new KeyboardCursor({
+    keys: () => this.walkKeys,
+    defaultIndex: () => this.defaultSelectedIndex,
+  });
 
   <template>
     {{! template-lint-disable no-invalid-interactive }}
@@ -484,8 +496,9 @@ export default class Dashboard extends Component<Signature> {
       class='dashboard'
       aria-label='Dashboard'
       data-theme='dark'
-      {{on 'keydown' this.onKeydown}}
-      {{on 'focusin' this.onFocusIn}}
+      {{on 'keydown' this.cursor.onKeydown}}
+      {{on 'focusin' this.cursor.onFocusIn}}
+      {{on 'pointerup' this.cursor.onPointerUp}}
       data-test-dashboard
       ...attributes
     >
@@ -572,7 +585,7 @@ export default class Dashboard extends Component<Signature> {
                 >{{this.favoritesEmptyMessage}}</p>
               {{else}}
                 <div
-                  class='tile-list'
+                  class='desk-list'
                   {{this.trackFavoriteCounts
                     this.favoriteRealmIdentifiers
                     this.realm.indexCountsRevision
@@ -582,11 +595,10 @@ export default class Dashboard extends Component<Signature> {
                   {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
                     <Workspace
                       @realmIdentifier={{realmIdentifier}}
+                      @variant='desk'
                       @navIndex={{i}}
-                      @isSelected={{eq this.currentIndex i}}
-                      @selectionActive={{this.isSelectionActive}}
-                      @isFavoritesSection={{true}}
-                      @enlargedWidth={{this.favoritesTileWidthPx}}
+                      @isSelected={{eq this.cursor.currentIndex i}}
+                      @selectionActive={{this.cursor.isRingShown}}
                     />
                   {{/each}}
                 </div>
@@ -612,33 +624,98 @@ export default class Dashboard extends Component<Signature> {
                   data-test-workspaces-empty
                 >{{this.userWorkspacesEmptyMessage}}</p>
               {{else}}
-                <div
-                  class='tile-list'
-                  {{this.measureWorkspaceGrid}}
-                  data-test-workspace-list
-                >
-                  <AddWorkspace
-                    @navIndex={{this.addWorkspaceNavIndex}}
-                    @isSelected={{eq
-                      this.currentIndex
-                      this.addWorkspaceNavIndex
-                    }}
-                    @selectionActive={{this.isSelectionActive}}
-                  />
-                  {{#if this.matrixService.isInitializingNewUser}}
-                    <WorkspaceLoadingIndicator />
+                {{! One list: the rows carry straight on from the tiles. }}
+                <div class='your-workspaces' data-test-workspace-list>
+                  <div
+                    class='recent-list'
+                    {{this.measureColumns 'recent'}}
+                    data-test-workspace-recent-list
+                  >
+                    <AddWorkspace
+                      @navIndex={{this.addWorkspaceNavIndex}}
+                      @isSelected={{eq
+                        this.cursor.currentIndex
+                        this.addWorkspaceNavIndex
+                      }}
+                      @selectionActive={{this.cursor.isRingShown}}
+                    />
+                    {{#if this.matrixService.isInitializingNewUser}}
+                      <div
+                        class='new-workspace-pending'
+                        data-test-workspace-loading-indicator
+                      >
+                        <Spinner @size={{20}} aria-label='Creating workspace' />
+                      </div>
+                    {{/if}}
+                    {{#each this.recentRealmIdentifiers as |realmIdentifier i|}}
+                      {{#let (add this.recentNavBase i) as |navIndex|}}
+                        <Workspace
+                          @realmIdentifier={{realmIdentifier}}
+                          @variant='tile'
+                          @navIndex={{navIndex}}
+                          @isSelected={{eq this.cursor.currentIndex navIndex}}
+                          @selectionActive={{this.cursor.isRingShown}}
+                        />
+                      {{/let}}
+                    {{/each}}
+                  </div>
+                  {{#if this.rowRealmIdentifiers.length}}
+                    <div
+                      id={{this.rowListId}}
+                      class={{cn
+                        'row-list'
+                        is-clipped=(gt this.hiddenRowCount 0)
+                      }}
+                      {{this.measureColumns 'rows'}}
+                      data-test-workspace-rows
+                    >
+                      {{#each
+                        this.visibleRowRealmIdentifiers
+                        as |realmIdentifier i|
+                      }}
+                        {{#let (add this.rowsNavBase i) as |navIndex|}}
+                          <Workspace
+                            @realmIdentifier={{realmIdentifier}}
+                            @variant='row'
+                            @navIndex={{navIndex}}
+                            @isSelected={{eq this.cursor.currentIndex navIndex}}
+                            @selectionActive={{this.cursor.isRingShown}}
+                          />
+                        {{/let}}
+                      {{/each}}
+                      {{#if this.hiddenRowCount}}
+                        <div class='list-scrim' aria-hidden='true'></div>
+                      {{/if}}
+                    </div>
+                    {{! One button for both, so focus stays on it as the
+                        list grows and shrinks. }}
+                    {{#if this.isRowListCollapsible}}
+                      <Button
+                        class={{cn
+                          'list-toggle'
+                          is-collapsed=(not this.isShowingAllWorkspaces)
+                        }}
+                        @appearance='accent'
+                        @shape='pill'
+                        aria-controls={{this.rowListId}}
+                        aria-expanded={{if
+                          this.isShowingAllWorkspaces
+                          'true'
+                          'false'
+                        }}
+                        {{on 'click' this.toggleAllWorkspaces}}
+                        data-test-workspace-list-toggle
+                      >
+                        {{#if this.isShowingAllWorkspaces}}
+                          Show fewer
+                        {{else}}
+                          Show
+                          {{this.hiddenRowCount}}
+                          more
+                        {{/if}}
+                      </Button>
+                    {{/if}}
                   {{/if}}
-                  {{#each this.userRealmIdentifiers as |realmIdentifier i|}}
-                    {{#let (add this.userWorkspacesNavBase i) as |navIndex|}}
-                      <Workspace
-                        @realmIdentifier={{realmIdentifier}}
-                        @showMenu={{true}}
-                        @navIndex={{navIndex}}
-                        @isSelected={{eq this.currentIndex navIndex}}
-                        @selectionActive={{this.isSelectionActive}}
-                      />
-                    {{/let}}
-                  {{/each}}
                 </div>
               {{/if}}
             </div>
@@ -667,9 +744,13 @@ export default class Dashboard extends Component<Signature> {
                 <:default>
                   <div class='archived-content'>
                     {{#if this.loadArchivedRealmsTask.isRunning}}
-                      <WorkspaceLoadingIndicator />
+                      <Spinner
+                        @size={{20}}
+                        aria-label='Loading archived workspaces'
+                        data-test-archived-loading
+                      />
                     {{else if this.archivedRealms.length}}
-                      <div class='tile-list' data-test-archived-list>
+                      <div class='row-list' data-test-archived-list>
                         {{#each this.archivedRealms as |archivedRealm|}}
                           <ArchivedWorkspace @archivedRealm={{archivedRealm}} />
                         {{/each}}
@@ -726,7 +807,7 @@ export default class Dashboard extends Component<Signature> {
                 data-test-catalog-empty
               >{{this.catalogEmptyMessage}}</p>
             {{else}}
-              <div class='tile-list' data-test-catalog-list>
+              <div class='catalog-list' data-test-catalog-list>
                 {{#each
                   this.filteredCatalogRealmIdentifiers
                   as |realmIdentifier i|
@@ -734,9 +815,10 @@ export default class Dashboard extends Component<Signature> {
                   {{#let (add this.catalogNavBase i) as |navIndex|}}
                     <Workspace
                       @realmIdentifier={{realmIdentifier}}
+                      @variant='tile'
                       @navIndex={{navIndex}}
-                      @isSelected={{eq this.currentIndex navIndex}}
-                      @selectionActive={{this.isSelectionActive}}
+                      @isSelected={{eq this.cursor.currentIndex navIndex}}
+                      @selectionActive={{this.cursor.isRingShown}}
                     />
                   {{/let}}
                 {{/each}}
@@ -778,7 +860,7 @@ export default class Dashboard extends Component<Signature> {
       }
       .dashboard {
         /* Pret UI selection reads this undefined token and falls back to a
-           light gray; remove once it reads --selected (CS-14334). */
+           light gray; remove once it reads --selected. */
         --pretui-selected: var(--selected);
         --dashboard-top-bar-clearance: calc(
           var(--operator-mode-top-bar-item-height) + 2 *
@@ -794,7 +876,29 @@ export default class Dashboard extends Component<Signature> {
         --dashboard-notice-max-width: 40rem;
         --dashboard-grid-dot-size: 0.075rem;
         --dashboard-grid-size: 2rem;
-        --dashboard-tile-gap: calc(var(--boxel-sp-lg) * 2);
+        --dashboard-desk-min-width: 27.5rem;
+        --dashboard-desk-gap: var(--boxel-sp-3xl);
+        --dashboard-tile-min-width: 12rem;
+        --dashboard-tile-height: 8rem;
+        --dashboard-tile-radius: var(--boxel-border-radius-xl);
+        --dashboard-row-min-width: 15.5rem;
+        --dashboard-row-height: 3.75rem;
+        /* A row's and its thumbnail's tints, shared by workspace and
+           archived rows. */
+        --dashboard-row-tint: color-mix(
+          in oklch,
+          var(--boxel-light) 4%,
+          transparent
+        );
+        --dashboard-thumb-tint: color-mix(
+          in oklch,
+          var(--boxel-light) 6%,
+          transparent
+        );
+        /* The keyboard cursor's ring, on New Workspace and the desks. */
+        --dashboard-ring: 0 0 0 2px var(--boxel-highlight);
+        --dashboard-scrim-height: 7rem;
+        --dashboard-toggle-height: 2.75rem;
         --dashboard-greeting-font-size: var(--boxel-font-size-xl);
         --dashboard-section-title-font-size: var(--boxel-font-size-lg);
         --dashboard-section-hint-font-size: var(--boxel-font-size-sm);
@@ -835,14 +939,6 @@ export default class Dashboard extends Component<Signature> {
          container queries below can change them. */
       .dashboard-scroller {
         --dashboard-gutter: 5rem;
-        /* Read by the chooser tiles the sections hold. */
-        --workspace-chooser-card-width: fit-content;
-        --workspace-chooser-tile-width: var(--boxel-xxs-container);
-        --workspace-chooser-enlarged-tile-width: min(
-          var(--boxel-xxs-container) * 1.5,
-          100cqi - 2 * var(--dashboard-gutter)
-        );
-
         height: 100%;
         overflow: auto;
         /* Tiles scrolled into view by the keyboard land below the frosted band. */
@@ -973,11 +1069,95 @@ export default class Dashboard extends Component<Signature> {
         color: var(--muted-foreground);
         font: 400 var(--boxel-font-sm);
       }
-      .tile-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--dashboard-tile-gap);
+      .catalog-list {
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(min(var(--dashboard-tile-min-width), 100%), 1fr)
+        );
+        gap: var(--boxel-sp-lg) var(--boxel-sp);
         padding: var(--boxel-sp-xs) 0;
+      }
+      /* As many desks per row as fit at their minimum width, spanning the
+         section like the lists below them. */
+      .desk-list {
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(min(var(--dashboard-desk-min-width), 100%), 1fr)
+        );
+        gap: var(--dashboard-desk-gap);
+        padding: var(--boxel-sp-xs) 0;
+      }
+      .your-workspaces {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .recent-list {
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(min(var(--dashboard-tile-min-width), 100%), 1fr)
+        );
+        gap: var(--boxel-sp-lg) var(--boxel-sp);
+        padding: var(--boxel-sp-xs) 0;
+      }
+      .new-workspace-pending {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: var(--dashboard-tile-height);
+        border-radius: var(--dashboard-tile-radius);
+        background-color: var(--boxel-dark-50);
+      }
+      .row-list {
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(min(var(--dashboard-row-min-width), 100%), 1fr)
+        );
+        gap: var(--boxel-sp-sm);
+      }
+      /* A clipped list fades out over its last row, where the button to show
+         the rest sits. */
+      .row-list.is-clipped {
+        position: relative;
+      }
+      .list-scrim {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 2;
+        height: var(--dashboard-scrim-height);
+        background-image: linear-gradient(
+          to bottom,
+          transparent,
+          var(--boxel-800) 72%
+        );
+        pointer-events: none;
+      }
+      .list-toggle {
+        --pretui-button-h: var(--dashboard-toggle-height);
+        --pretui-button-px: var(--boxel-sp-lg);
+        --pretui-button-bg: var(--boxel-700);
+        --pretui-button-fg: var(--boxel-light);
+        --pretui-size-m: var(--boxel-font-size-sm);
+        /* Pret UI's neutral accent hover mixes in --background, which is this
+           same shade on the dark dashboard, so the hover is set here. */
+        --pretui-btn-accent-hover: var(--boxel-650);
+        position: relative;
+        z-index: 3;
+        align-self: center;
+        border-color: var(--boxel-light-25);
+        font-weight: 600;
+      }
+      /* Collapsed, it sits on the scrim over the last row shown. */
+      .list-toggle.is-collapsed {
+        margin-top: calc(
+          -1 * (var(--dashboard-toggle-height) + var(--boxel-sp-sm))
+        );
       }
 
       /* Empty, it stays out of the page's flex gap. */
@@ -1018,14 +1198,6 @@ export default class Dashboard extends Component<Signature> {
         }
       }
       /* One tile per row, filling the dashboard's width. */
-      @container dashboard (max-width: 30rem) {
-        .dashboard-scroller {
-          --workspace-chooser-card-width: 100%;
-          --workspace-chooser-tile-width: 100%;
-          --workspace-chooser-enlarged-tile-width: 100%;
-        }
-      }
-
       @media (prefers-reduced-motion: reduce) {
         .dashboard-scroller {
           animation-duration: 0.01ms;

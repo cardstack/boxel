@@ -242,7 +242,9 @@ export class StepList extends Component<StepListSignature> {
         aria-describedby={{if this.showSummary this.summaryId}}
         data-test-pretui-step-list-items
       >
-        {{#each this.views as |step|}}
+        {{! keyed by position: views are rebuilt on every render, and a
+            step that keeps its state must keep its element }}
+        {{#each this.views key='number' as |step|}}
           <li
             class='pretui-step'
             data-state={{step.state}}
@@ -307,15 +309,16 @@ export class StepList extends Component<StepListSignature> {
         .pretui-steplist-wrap {
           container-type: inline-size;
           display: grid;
-          gap: var(--pretui-step-summary-gap, var(--boxel-sp-2xs));
+          gap: var(--pretui-step-summary-gap, var(--boxel-sp-xs));
           min-width: 0;
         }
         .pretui-steplist-summary {
           justify-self: end;
           margin: 0;
-          font-size: var(--boxel-font-size-xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
-          color: var(--pretui-step-summary-color, var(--muted-foreground));
+          color: var(--pretui-step-summary-color, var(--subtle-foreground));
         }
         .pretui-steplist {
           display: flex;
@@ -329,11 +332,11 @@ export class StepList extends Component<StepListSignature> {
         .pretui-step {
           display: flex;
           align-items: center;
-          gap: var(--boxel-sp-2xs);
+          gap: var(--boxel-sp-xs);
           min-width: 0;
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
-          letter-spacing: var(--boxel-ui-label-letter-spacing);
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
+          font-weight: 400;
         }
         .pretui-step:not(:last-child) {
           flex: 1;
@@ -342,6 +345,9 @@ export class StepList extends Component<StepListSignature> {
            each of those reads a per-state consumer knob first — set
            --pretui-step-error-marker-bg (etc.) on any ancestor to re-tone one
            state without touching the rest */
+        /* the assistant visual system's rule: a state colours the mark (the
+           marker, its ring, its bar) and never the label, done is ink with
+           its check, and the primary hue is kept for the one action */
         .pretui-step[data-state='upcoming'] {
           --pretui-step-tone: var(
             --pretui-step-upcoming-tone,
@@ -353,7 +359,7 @@ export class StepList extends Component<StepListSignature> {
           );
           --pretui-step-marker-fg: var(
             --pretui-step-upcoming-marker-fg,
-            var(--muted-foreground)
+            var(--subtle-foreground)
           );
           --pretui-step-ring: var(--pretui-step-upcoming-ring, var(--border));
           --pretui-step-bar-fill: var(
@@ -368,19 +374,19 @@ export class StepList extends Component<StepListSignature> {
           );
           --pretui-step-marker-bg: var(
             --pretui-step-current-marker-bg,
-            var(--primary)
+            var(--foreground)
           );
           --pretui-step-marker-fg: var(
             --pretui-step-current-marker-fg,
-            var(--primary-foreground)
+            var(--card)
           );
           --pretui-step-ring: var(
             --pretui-step-current-ring,
-            color-mix(in oklch, var(--primary) 70%, var(--border))
+            var(--foreground)
           );
           --pretui-step-bar-fill: var(
             --pretui-step-current-bar,
-            var(--primary)
+            var(--foreground)
           );
         }
         .pretui-step[data-state='complete'] {
@@ -390,46 +396,37 @@ export class StepList extends Component<StepListSignature> {
           );
           --pretui-step-marker-bg: var(
             --pretui-step-complete-marker-bg,
-            color-mix(in oklch, var(--success) 15%, var(--card))
+            var(--inset)
           );
           --pretui-step-marker-fg: var(
             --pretui-step-complete-marker-fg,
-            var(--success-ink)
+            var(--foreground)
           );
-          --pretui-step-ring: var(
-            --pretui-step-complete-ring,
-            color-mix(in oklch, var(--success) 40%, var(--border))
-          );
+          --pretui-step-ring: var(--pretui-step-complete-ring, var(--border));
           --pretui-step-bar-fill: var(
             --pretui-step-complete-bar,
-            var(--success)
+            var(--muted-foreground)
           );
         }
         .pretui-step[data-state='error'] {
-          --pretui-step-tone: var(
-            --pretui-step-error-tone,
-            var(--destructive-ink)
-          );
+          --pretui-step-tone: var(--pretui-step-error-tone, var(--foreground));
           --pretui-step-marker-bg: var(
             --pretui-step-error-marker-bg,
-            color-mix(in oklch, var(--destructive) 12%, var(--card))
+            var(--inset)
           );
           --pretui-step-marker-fg: var(
             --pretui-step-error-marker-fg,
             var(--destructive-ink)
           );
-          --pretui-step-ring: var(
-            --pretui-step-error-ring,
-            color-mix(in oklch, var(--destructive) 45%, var(--border))
-          );
+          --pretui-step-ring: var(--pretui-step-error-ring, var(--destructive));
           --pretui-step-bar-fill: var(
             --pretui-step-error-bar,
             var(--destructive)
           );
         }
-        /* running now: a light info tint with an info-ink play triangle, so it
-           never reads like 'current' (the primary hue filled solid, with a
-           number) at a glance */
+        /* running now: the live hue on the mark's play triangle and ring, so
+           it never reads like 'current' (ink filled solid, with a number) at
+           a glance */
         .pretui-step[data-state='in-progress'] {
           --pretui-step-tone: var(
             --pretui-step-in-progress-tone,
@@ -437,22 +434,22 @@ export class StepList extends Component<StepListSignature> {
           );
           --pretui-step-marker-bg: var(
             --pretui-step-in-progress-marker-bg,
-            color-mix(in oklch, var(--info) 16%, var(--card))
+            var(--inset)
           );
           --pretui-step-marker-fg: var(
             --pretui-step-in-progress-marker-fg,
-            var(--info-ink)
+            var(--primary-ink)
           );
           --pretui-step-ring: var(
             --pretui-step-in-progress-ring,
-            color-mix(in oklch, var(--info) 55%, var(--border))
+            var(--primary)
           );
           --pretui-step-bar-fill: var(
             --pretui-step-in-progress-bar,
-            var(--info)
+            var(--primary)
           );
         }
-        /* cannot proceed: warning tone, not destructive — nothing has failed */
+        /* cannot proceed: the attention hue, not failed — nothing has failed */
         .pretui-step[data-state='blocked'] {
           --pretui-step-tone: var(
             --pretui-step-blocked-tone,
@@ -460,19 +457,16 @@ export class StepList extends Component<StepListSignature> {
           );
           --pretui-step-marker-bg: var(
             --pretui-step-blocked-marker-bg,
-            color-mix(in oklch, var(--warning) 14%, var(--card))
+            var(--inset)
           );
           --pretui-step-marker-fg: var(
             --pretui-step-blocked-marker-fg,
-            var(--warning-ink)
+            var(--attention-ink)
           );
-          --pretui-step-ring: var(
-            --pretui-step-blocked-ring,
-            color-mix(in oklch, var(--warning) 50%, var(--border))
-          );
+          --pretui-step-ring: var(--pretui-step-blocked-ring, var(--attention));
           --pretui-step-bar-fill: var(
             --pretui-step-blocked-bar,
-            var(--warning)
+            var(--attention)
           );
         }
         .pretui-step-marker {
@@ -482,7 +476,8 @@ export class StepList extends Component<StepListSignature> {
           height: 1.125rem;
           border-radius: 50%;
           flex: none;
-          font-size: var(--boxel-font-size-2xs);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-variant-numeric: tabular-nums;
           background-color: var(--pretui-step-marker-bg);
           color: var(--pretui-step-marker-fg);
@@ -503,16 +498,19 @@ export class StepList extends Component<StepListSignature> {
            declares a detail, and reserves a line's height, so a message
            arriving mid-run does not shove the whole rail down. */
         .pretui-step-detail {
-          min-height: 1.35em;
-          font-size: var(--boxel-font-size-2xs);
+          min-height: var(--boxel-caption-line-height);
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
           font-weight: 400;
           white-space: normal;
           overflow-wrap: break-word;
-          color: var(--pretui-step-detail-color, var(--muted-foreground));
+          color: var(--pretui-step-detail-color, var(--subtle-foreground));
         }
+        /* a blocked or failed step's reason steps up to ink-2; the mark
+           carries the state's hue */
         .pretui-step[data-state='blocked'] .pretui-step-detail,
         .pretui-step[data-state='error'] .pretui-step-detail {
-          color: var(--pretui-step-marker-fg);
+          color: var(--muted-foreground);
         }
         .pretui-step-connector {
           flex: 1;
@@ -521,11 +519,7 @@ export class StepList extends Component<StepListSignature> {
           background-color: var(--border);
         }
         .pretui-step[data-state='complete'] .pretui-step-connector {
-          background-color: color-mix(
-            in oklch,
-            var(--success) 45%,
-            var(--border)
-          );
+          background-color: var(--subtle-foreground);
         }
         /* ── track variant ── equal-width bars, caption beneath each. The
            caption keeps the marker glyph, so 'complete' is carried by shape
@@ -536,7 +530,7 @@ export class StepList extends Component<StepListSignature> {
           grid-auto-flow: column;
           grid-auto-columns: minmax(0, 1fr);
           align-items: start;
-          gap: var(--pretui-step-track-gap, var(--boxel-sp-3xs));
+          gap: var(--pretui-step-track-gap, var(--boxel-sp-4xs));
         }
         .pretui-steplist[data-variant='track'] .pretui-step {
           display: grid;
@@ -545,7 +539,7 @@ export class StepList extends Component<StepListSignature> {
             'bar bar'
             'marker label';
           align-items: center;
-          gap: var(--boxel-sp-2xs) var(--boxel-sp-3xs);
+          gap: var(--boxel-sp-xs) var(--boxel-sp-4xs);
         }
         .pretui-steplist[data-variant='track'] .pretui-step-bar {
           grid-area: bar;
@@ -561,7 +555,15 @@ export class StepList extends Component<StepListSignature> {
           border-radius: 0;
           background-color: transparent;
           box-shadow: none;
-          font-size: var(--boxel-font-size-2xs);
+        }
+        /* the track's marker has no fill, so the current step's number,
+           which the steps rail writes in --card on its solid disc, takes
+           the step's tone instead; a caller's marker-fg knob still wins */
+        .pretui-steplist[data-variant='track'] .pretui-step[data-state='current'] {
+          --pretui-step-marker-fg: var(
+            --pretui-step-current-marker-fg,
+            var(--pretui-step-tone)
+          );
         }
         .pretui-steplist[data-variant='track'] .pretui-step-label {
           grid-area: label;
@@ -578,7 +580,7 @@ export class StepList extends Component<StepListSignature> {
           .pretui-steplist[data-variant='steps'] {
             flex-direction: column;
             align-items: stretch;
-            gap: var(--boxel-sp-2xs);
+            gap: var(--boxel-sp-xs);
           }
           .pretui-steplist[data-variant='steps'] .pretui-step {
             flex: none;
@@ -598,12 +600,12 @@ export class StepList extends Component<StepListSignature> {
           .pretui-steplist[data-variant='track'] {
             grid-auto-flow: row;
             grid-auto-columns: auto;
-            gap: var(--boxel-sp-2xs);
+            gap: var(--boxel-sp-xs);
           }
           .pretui-steplist[data-variant='track'] .pretui-step {
             grid-template-columns: 2rem auto minmax(0, 1fr);
             grid-template-areas: 'bar marker label';
-            gap: var(--boxel-sp-2xs);
+            gap: var(--boxel-sp-xs);
           }
         }
         .pretui-vh {

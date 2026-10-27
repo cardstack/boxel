@@ -96,4 +96,22 @@ module('Pretui | components/recommendation', function (hooks) {
     );
     assert.strictEqual(root().querySelector('.pretui-reco-body [data-test-rich]')?.textContent, 'Hold the price!');
   });
+
+  test('an accepted decision is taken once: the button keeps focus but no longer fires', async function (assert) {
+    let accepted: string[] = [];
+    const onAccept = (o: RecommendationOption) => accepted.push(o.key);
+    await render(<template><Recommendation @question='q' @options={{OPTIONS}} @onAccept={{onAccept}} /></template>);
+    assert.strictEqual(accept().getAttribute('aria-disabled'), null, 'open before the decision');
+    await click(accept());
+    await click(accept());
+    assert.deepEqual(accepted, ['hold'], 'a second press does not accept again');
+    assert.strictEqual(accept().getAttribute('aria-disabled'), 'true', 'announced as unavailable');
+    assert.false(accept().disabled, 'not natively disabled, so focus stays on it');
+
+    accepted = [];
+    await render(<template><Recommendation @question='q' @options={{OPTIONS}} @accepted={{true}} @onAccept={{onAccept}} /></template>);
+    await click(accept());
+    assert.deepEqual(accepted, [], 'a decision the caller says is taken does not fire either');
+  });
 });
+

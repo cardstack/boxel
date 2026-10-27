@@ -69,6 +69,7 @@ import {
   type CodeRef,
 } from '@cardstack/runtime-common';
 
+import { ResizeHandle } from './components/resize-handle';
 import CardsGridLayout, {
   VIEW_OPTIONS,
   SORT_OPTIONS,
@@ -112,6 +113,17 @@ const here: string = (import.meta as any).url;
 
 // Below this width the Library pane starts with its filter rail closed.
 const LIBRARY_NARROW_WIDTH_REM = 40;
+
+// The Library rail's width and how far it can be dragged. The rail opens at
+// the default, which double-clicking its edge restores. The max also stays
+// this far inside the Library pane, so a narrow pane keeps the rail's edge in
+// view to drag back, but never drops below the min.
+const RAIL_DEFAULT_WIDTH = '13.375rem';
+const RAIL_MIN_WIDTH_REM = 11;
+const RAIL_MAX_WIDTH_REM = 26;
+const RAIL_PANE_MARGIN_REM = 3;
+const RAIL_MIN_WIDTH = `${RAIL_MIN_WIDTH_REM}rem`;
+const RAIL_MAX_WIDTH = `${RAIL_MAX_WIDTH_REM}rem`;
 
 function remToPx(rem: number): number {
   let rootSize = parseFloat(
@@ -991,7 +1003,12 @@ class Isolated extends Component<typeof Workspace> {
           </div>
         </div>
       {{else if (eq this.segment 'library')}}
-        <div class='library' {{this.watchLibraryWidth}} data-test-library>
+        <div
+          class='library'
+          style={{this.railWidthStyle}}
+          {{this.watchLibraryWidth}}
+          data-test-library
+        >
           {{! Stays mounted so it can slide shut; inert while closed keeps its
             controls out of the tab order and the accessibility tree. }}
           <div
@@ -1062,6 +1079,17 @@ class Isolated extends Component<typeof Workspace> {
                   </div>
                 {{/if}}
               </nav>
+              <ResizeHandle
+                class='rail-resize'
+                @size={{this.railWidth}}
+                @min={{RAIL_MIN_WIDTH}}
+                @max={{this.railMaxWidth}}
+                @defaultSize={{RAIL_DEFAULT_WIDTH}}
+                @onSizeChange={{this.resizeRail}}
+                @label='Resize sidebar'
+                @controls={{this.railId}}
+                data-test-rail-resize-handle
+              />
             </div>
           </div>
           <CardsGridLayout
@@ -1359,8 +1387,9 @@ class Isolated extends Component<typeof Workspace> {
         --grid-chip-border: color-mix(in oklch, var(--border) 50%, transparent);
         /* looser leading for the welcome prose; no line-height token runs past 1.4 */
         --grid-prose-leading: 1.6;
-        /* fixed geometry the layout is built around */
-        --grid-rail-width: 13.375rem;
+        /* fixed geometry the layout is built around; the rail's width,
+           --grid-rail-width, is set on the Library pane from
+           RAIL_DEFAULT_WIDTH or the dragged width */
         --grid-search-width: 10.625rem;
         --grid-search-results-size: 20rem;
         --grid-frame-height: 3.375rem;
@@ -1659,10 +1688,16 @@ class Isolated extends Component<typeof Workspace> {
          full width and is pinned to the slot's end edge, so it slides out
          rather than being squeezed. */
       .rail-slot {
+        /* the resize handle's strip, which the rail sets aside beside it,
+           and how far its hit area reaches past the rail's edge over the
+           grid's gutter: together a 1.5rem (24px) target */
+        --_rail-resize-size: 0.5rem;
+        --_rail-resize-outset: calc(1.5rem - var(--_rail-resize-size));
         flex-shrink: 0;
         display: flex;
         justify-content: flex-end;
         width: 0;
+        min-width: 0;
         overflow: hidden;
       }
       /* only a toggle slides it; the first width reading and resizes across
@@ -1671,16 +1706,42 @@ class Isolated extends Component<typeof Workspace> {
       .rail-slot.animates {
         transition: width var(--grid-slide) var(--grid-ease-out);
       }
+      /* Open, the slot clips with clip-path rather than overflow, so the
+         handle's hit area can reach past its end edge; its start edge still
+         clips the panel as it slides in. It sits above the grid, whose
+         gutter that hit area covers. */
       .rail-slot.open {
+        position: relative;
+        z-index: 1;
         width: var(--grid-rail-width);
+        overflow: visible;
+        clip-path: inset(0 calc(-1 * var(--_rail-resize-outset)) 0 0);
+      }
+      .rail-slot.open:dir(rtl) {
+        clip-path: inset(0 0 0 calc(-1 * var(--_rail-resize-outset)));
       }
       .rail-panel {
+        position: relative;
         flex-shrink: 0;
         width: var(--grid-rail-width);
         display: flex;
         flex-direction: column;
         background-color: var(--muted);
         border-inline-end: 1px solid var(--border);
+      }
+      /* on the panel's inner edge */
+      .rail-resize {
+        --pretui-resize-handle-size: var(--_rail-resize-size);
+        --pretui-resize-handle-outset: var(--_rail-resize-outset);
+        position: absolute;
+        inset-block: 0;
+        inset-inline-end: 0;
+      }
+      /* a finger gets a wider strip */
+      @media (any-pointer: coarse) {
+        .rail-slot {
+          --_rail-resize-size: 1rem;
+        }
       }
       .rail {
         flex-grow: 1;
@@ -1690,6 +1751,15 @@ class Isolated extends Component<typeof Workspace> {
         /* top matches the grid header's padding */
         padding: var(--boxel-cards-grid-layout-padding, var(--boxel-sp-lg))
           var(--boxel-sp-xs) var(--boxel-sp-lg);
+        /* the resize handle's strip comes out of the end padding, so the
+           rail's scrollbar and the rows' ends sit beside the handle rather
+           than under it; a coarse pointer's strip is wider than the
+           padding, so there the rows give up the difference */
+        margin-inline-end: var(--_rail-resize-size);
+        padding-inline-end: max(
+          0px,
+          calc(var(--boxel-sp-xs) - var(--_rail-resize-size))
+        );
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
@@ -2594,13 +2664,48 @@ class Isolated extends Component<typeof Workspace> {
     this.railPreference = !this.isRailOpen;
   }
 
+  // Dragged width in px; unset leaves the rail at RAIL_DEFAULT_WIDTH. Like the
+  // toggle, it lasts until the card re-renders.
+  @tracked private railWidth: number | undefined;
+  // In px, from the Library pane's width; unset until the pane is measured.
+  @tracked private measuredRailMaxWidth: number | undefined;
+
+  private get railMaxWidth(): number | string {
+    return this.measuredRailMaxWidth ?? RAIL_MAX_WIDTH;
+  }
+
+  // The rail's only width. Clamped to the max too, so a narrow pane keeps
+  // the rail's edge in view, whether it was dragged or is at the default.
+  private get railWidthStyle(): SafeString {
+    let width =
+      this.railWidth === undefined ? RAIL_DEFAULT_WIDTH : `${this.railWidth}px`;
+    if (this.measuredRailMaxWidth !== undefined) {
+      width = `min(${width}, ${this.measuredRailMaxWidth}px)`;
+    }
+    return htmlSafe(`--grid-rail-width: ${width}`);
+  }
+
+  // A resize follows the pointer directly; only a toggle slides the rail.
+  @action private resizeRail(width: number) {
+    this.railAnimates = false;
+    this.railWidth = width;
+  }
+
   watchLibraryWidth = modifier((element: Element) => {
     if (typeof ResizeObserver === 'undefined') {
       return;
     }
     let observer = new ResizeObserver(([entry]) => {
-      this.isLibraryNarrow =
-        entry.contentRect.width < remToPx(LIBRARY_NARROW_WIDTH_REM);
+      let width = entry.contentRect.width;
+      let rem = remToPx(1);
+      let railMax = Math.max(
+        RAIL_MIN_WIDTH_REM * rem,
+        Math.min(RAIL_MAX_WIDTH_REM * rem, width - RAIL_PANE_MARGIN_REM * rem),
+      );
+      if (railMax !== this.measuredRailMaxWidth) {
+        this.measuredRailMaxWidth = railMax;
+      }
+      this.isLibraryNarrow = width < LIBRARY_NARROW_WIDTH_REM * rem;
     });
     observer.observe(element);
     return () => observer.disconnect();

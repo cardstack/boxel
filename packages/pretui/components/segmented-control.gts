@@ -51,17 +51,19 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
   get value() {
     return this.args.value ?? this.internal;
   }
-  pick = (option: SegmentOption) => {
+  pick = (option: SegmentOption, event: Event) => {
     if (this.args.value === undefined) {
       this.internal = option.value;
     }
     emit([this.args.onValueChange, this.args.onChange], option.value);
     // controlled: the browser already moved the radio; move it back unless the
-    // owner took the new value
+    // owner took the new value. The radios are found inside this control, so
+    // the lookup holds in a shadow root or another document too.
     if (this.args.value !== undefined && this.args.value !== option.value) {
-      for (let radio of document.getElementsByName(
-        this.name,
-      ) as NodeListOf<HTMLInputElement>) {
+      let group = (event.target as HTMLElement).closest('[data-pretui-seg]');
+      for (let radio of group?.querySelectorAll<HTMLInputElement>(
+        '[data-pretui-seg-radio]',
+      ) ?? []) {
         radio.checked = radio.value === this.args.value;
       }
     }
@@ -72,6 +74,7 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
       class='pretui-seg'
       role='radiogroup'
       aria-label={{@label}}
+      data-pretui-seg
       {{slidingHighlight}}
       data-test-pretui-segmented
       ...attributes
@@ -89,6 +92,7 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
             value={{option.value}}
             checked={{this.isActive option}}
             disabled={{@disabled}}
+            data-pretui-seg-radio
             {{on 'change' (fn this.pick option)}}
             data-test-pretui-segmented-option={{option.value}}
           />
@@ -118,7 +122,9 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
           padding: var(--pretui-seg-inset);
           background-color: var(--inset);
           color: var(--foreground);
-          border-radius: calc(var(--pretui-seg-radius) + var(--pretui-seg-inset));
+          border-radius: calc(
+            var(--pretui-seg-radius) + var(--pretui-seg-inset)
+          );
           box-shadow: 0 0 0 1px var(--border);
         }
         .pretui-seg:has(.pretui-seg-input:disabled) {
@@ -164,7 +170,7 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
         }
         /* the label sits on the pill's --card face */
         .pretui-seg-item[data-state='active'] {
-          color: var(--card-foreground);
+          color: var(--pretui-seg-active-ink, var(--card-foreground));
           font-weight: var(--pretui-seg-active-weight);
         }
         /* a hidden bold copy under the label holds every segment at its bold
@@ -195,4 +201,3 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
     </style>
   </template>
 }
-
