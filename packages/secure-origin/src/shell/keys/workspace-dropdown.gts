@@ -36,6 +36,12 @@ interface Signature {
 
 const TILE_COLOURS = 6;
 
+// A workspace's address as shown beneath its name: its URL without the
+// scheme.
+export function addressOf(url: string): string {
+  return url.replace(/^https?:\/\//, '');
+}
+
 // The letter a workspace's tile shows, and which of the tile colours it
 // takes, both from its name, so a workspace looks the same every time.
 function tileOf(name: string): { letter: string; colour: number } {
@@ -93,10 +99,9 @@ export default class WorkspaceDropdown extends Component<Signature> {
               data-test-workspace-dropdown-selected
             >{{this.selectedWorkspace.name}}</span>
             {{#if (this.isAmbiguous this.selectedWorkspace)}}
-              <span
-                class='address'
-                data-test-workspace-address
-              >{{this.selectedWorkspace.url}}</span>
+              <span class='address' data-test-workspace-address>{{addressOf
+                  this.selectedWorkspace.url
+                }}</span>
             {{/if}}
           </span>
         {{else}}
@@ -157,7 +162,7 @@ export default class WorkspaceDropdown extends Component<Signature> {
                       <span
                         class='address'
                         data-test-workspace-address
-                      >{{workspace.url}}</span>
+                      >{{addressOf workspace.url}}</span>
                     {{/if}}
                   </span>
                   {{#if (eq workspace.url @selected)}}
@@ -218,13 +223,15 @@ export default class WorkspaceDropdown extends Component<Signature> {
         min-width: 0;
       }
       .selected-name,
-      .option-name,
-      .address {
+      .option-name {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      /* An address wraps rather than being cut short, since the part that
+         tells two workspaces apart may be at its end. */
       .address {
+        overflow-wrap: anywhere;
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
         font-weight: 400;

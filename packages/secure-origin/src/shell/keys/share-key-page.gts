@@ -42,7 +42,7 @@ import NeedsAdmin from './needs-admin.gts';
 import NotFound from './not-found.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedForShare } from './opened-for.ts';
-import WorkspaceDropdown from './workspace-dropdown.gts';
+import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
 
 interface Realm {
   url: string;
@@ -307,7 +307,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     let ambiguous = this.form.realms.some(
       (r) => r.url !== url && r.name === name,
     );
-    return ambiguous ? `${name} (${url})` : name;
+    return ambiguous && url ? `${name} (${addressOf(url)})` : name;
   }
 
   // Until a label is typed, a share is labelled with its key's name.

@@ -728,19 +728,21 @@ module('Integration | key pages', function (hooks) {
             '[data-test-workspace-option="Team Workspace"] [data-test-workspace-address]',
           ),
         ].map((e) => e.textContent?.trim()),
-        [OTHER, REALM],
+        [OTHER, REALM].map((url) => url.replace('https://', '')),
       );
       await click(
         [...document.querySelectorAll('[data-test-workspace-option]')].find(
-          (e) => e.textContent?.includes(OTHER),
+          (e) => e.textContent?.includes(OTHER.replace('https://', '')),
         )!,
       );
-      assert.dom('[data-test-workspace-address]').hasText(OTHER);
+      assert
+        .dom('[data-test-workspace-address]')
+        .hasText(OTHER.replace('https://', ''));
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
       assert
         .dom('[data-test-keys-done]')
-        .includesText(`Team Workspace (${OTHER})`);
+        .includesText(`Team Workspace (${OTHER.replace('https://', '')})`);
     });
 
     test('opened for a workspace, picks one of the user’s keys, then closes', async function (assert) {
