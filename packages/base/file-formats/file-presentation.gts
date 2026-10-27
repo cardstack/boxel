@@ -147,6 +147,9 @@ function lastPathSegment(url: string): string {
 }
 
 export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
+  // Leaving the view abandons a download still in flight, so its save never
+  // lands on whatever page is showing by the time the bytes arrive.
+  let controller = new AbortController();
   let inFlight = false;
   let onClick = async (event: MouseEvent) => {
     if (
@@ -167,8 +170,12 @@ export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
     element.dataset.downloadState = 'pending';
     element.removeAttribute('title');
     try {
-      let response = await fetchRealmFile(element.href);
-      let objectURL = URL.createObjectURL(await response.blob());
+      let response = await fetchRealmFile(element.href, controller.signal);
+      let blob = await response.blob();
+      if (controller.signal.aborted) {
+        return;
+      }
+      let objectURL = URL.createObjectURL(blob);
       let save = document.createElement('a');
       save.href = objectURL;
       // A blob: URL has no meaningful name of its own, so a nameless file
@@ -184,6 +191,9 @@ export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
       setTimeout(() => URL.revokeObjectURL(objectURL), 60_000);
       delete element.dataset.downloadState;
     } catch (error) {
+      if (controller.signal.aborted) {
+        return;
+      }
       console.error(`Could not download ${element.href}`, error);
       element.dataset.downloadState = 'failed';
       element.title = 'Download failed. Click to try again.';
@@ -193,7 +203,10 @@ export const downloadViaFetch = modifier((element: HTMLAnchorElement) => {
     }
   };
   element.addEventListener('click', onClick);
-  return () => element.removeEventListener('click', onClick);
+  return () => {
+    controller.abort();
+    element.removeEventListener('click', onClick);
+  };
 });
 
 // Coerce a timestamp to a Date. A bare number is epoch time, but the server
