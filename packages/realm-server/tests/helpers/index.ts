@@ -1500,6 +1500,7 @@ export async function createRealm({
   cardDocumentCache = new CardDocumentCache(),
   realmFor,
   history,
+  historyConfigured,
   published,
 }: {
   dir: string;
@@ -1564,6 +1565,9 @@ export async function createRealm({
   // The realm's revision history, built for the realm's directory. Absent,
   // the realm records none.
   history?: (realmDir: string) => HistoryBackend;
+  // Forwarded to the Realm constructor's `historyConfigured`: a realm mounted
+  // without `history` notes that its writes go unrecorded.
+  historyConfigured?: true;
   // The other realms the realm can reach, for an explain on its policy card
   // that asks about a target in one of them.
   realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
@@ -1648,6 +1652,7 @@ export async function createRealm({
       cardDocumentCache,
       ...(realmFor ? { realmFor } : {}),
       ...(history ? { history: history(dir) } : {}),
+      ...(historyConfigured ? { historyConfigured: true } : {}),
       callApi: callApiSender,
     },
     {

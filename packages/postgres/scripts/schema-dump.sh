@@ -46,6 +46,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=retired_realm_event_rooms \
   --exclude-table-and-children=host_shell_generation \
   --exclude-table-and-children=realm_history_revisions \
+  --exclude-table-and-children=realm_history_state \
   --no-tablespaces \
   --no-table-access-method \
   --no-owner \

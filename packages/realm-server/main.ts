@@ -852,6 +852,8 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
             kind: row.kind,
             diskPath,
           }),
+          historyConfigured:
+            REALM_HISTORY !== undefined && row.kind !== 'published',
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),

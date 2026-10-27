@@ -50,6 +50,7 @@ import handleClientTelemetry from './handlers/handle-client-telemetry.ts';
 import handleQueueStatusRequest from './handlers/handle-queue-status.ts';
 import handleSkillValidation from './handlers/handle-skill-validation.ts';
 import handleReindex from './handlers/handle-reindex.ts';
+import handleClearRealmReadOnly from './handlers/handle-clear-realm-read-only.ts';
 import handleFullReindex from './handlers/handle-full-reindex.ts';
 import handleRemoveJob from './handlers/handle-remove-job.ts';
 import handleAddCredit from './handlers/handle-add-credit.ts';
@@ -618,6 +619,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   registerGrafanaEndpoint(
     '/_grafana-set-realm-catalog',
     handleSetRealmCatalog(args),
+  );
+  registerGrafanaEndpoint(
+    '/_grafana-clear-realm-read-only',
+    handleClearRealmReadOnly(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(

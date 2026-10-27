@@ -18,6 +18,7 @@ export * from './full-reindex.ts';
 export * from './daily-credit-grant.ts';
 export * from './indexer.ts';
 export * from './media-cache-gc.ts';
+export * from './realm-history-recovery.ts';
 export * from './scoped-css-gc.ts';
 export * from './prerender-html.ts';
 export * from './prerender-html-reconcile.ts';

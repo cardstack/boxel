@@ -1,7 +1,12 @@
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { logger } from './log.ts';
-import { param, query } from './expression.ts';
+import {
+  param,
+  query,
+  separatedByCommas,
+  type Expression,
+} from './expression.ts';
 import type { DBAdapter } from './db.ts';
 import { OperationFailure } from './card-operations/types.ts';
 
@@ -122,6 +127,10 @@ export interface WriteRecording {
   // Whether a commit took this write through recording at all. False for a
   // realm that does not record history, which leaves every other field unset.
   engaged?: boolean;
+  // Revisions already recorded whose bytes this commit brings to disk, as
+  // recovery completes them: the commit records nothing of its own, and
+  // stamps these materialized and post-committed instead.
+  recovered?: string[];
   // Per-step wall clock, for the write's telemetry line.
   startedAt?: number;
   lockWaitMs?: number;
@@ -135,7 +144,7 @@ export interface WriteRecording {
 }
 
 export interface HistoryCallTiming {
-  endpoint: 'commit' | 'outcome' | 'head';
+  endpoint: 'commit' | 'outcome' | 'head' | 'tree' | 'read';
   ms: number;
   // `ok`, or the backend's error code, or `transport` for a call whose
   // response never arrived.
@@ -243,6 +252,23 @@ export type HistoryOutcome =
   // Reporting `absent` fences the id: it can never commit afterwards.
   | { state: 'absent' };
 
+// One file in a revision's tree. `blob` is the git blob id of its bytes (see
+// `gitBlobId`), so a file on disk is compared with it without reading the
+// revision's copy.
+export interface HistoryTreeEntry {
+  path: string;
+  blob: string;
+}
+
+export interface HistoryReadResult {
+  // Each path asked for, in order: its bytes at the revision, or no content
+  // where the revision has no file there.
+  files: { path: string; content?: Uint8Array }[];
+  // The paths asked for and not read, because the answer reached the
+  // backend's ceiling. They are asked for again.
+  remaining: string[];
+}
+
 export interface HistoryBackend {
   // Encode a commit for sending before its parent is known. The recorder
   // prepares a commit before it takes the history commit lock, so the writer
@@ -250,6 +276,8 @@ export interface HistoryBackend {
   prepareCommit(request: Omit<HistoryCommitRequest, 'parent'>): PreparedCommit;
   outcome(operationId: string): Promise<HistoryOutcome>;
   head(): Promise<string>;
+  tree(revision: string): Promise<HistoryTreeEntry[]>;
+  read(revision: string, paths: string[]): Promise<HistoryReadResult>;
 }
 
 // A refusal the backend made with a typed answer, so its outcome is known.
@@ -290,8 +318,20 @@ export function isHistoryBackendError(
 // can reach disk in the opposite order to the one they recorded in.
 // ---------------------------------------------------------------------------
 
+// `pending` from before the write asks history to record it until its
+// outcome is known; `committed` with its revision; `aborted` once history has
+// reported the operation absent, which fences it.
+export type JournalState = 'pending' | 'committed' | 'aborted';
+
+// `write` for a revision a write made, `drift` for changes recovery found on
+// disk that no revision explained, `gap` for changes made while the realm did
+// not record.
+export type RevisionKind = 'write' | 'drift' | 'gap';
+
 export interface JournalEntry {
-  revision: string;
+  state: JournalState;
+  // Absent until the row is committed.
+  revision?: string;
   materialized: boolean;
   // See `WriteRecording.fingerprint`.
   fingerprint?: string;
@@ -348,8 +388,8 @@ export class RealmHistoryRecorder {
   // The journal row for an operation id, when this realm recorded it.
   async journalEntry(operationId: string): Promise<JournalEntry | undefined> {
     let [row] = await query(this.#dbAdapter, [
-      `SELECT revision, materialized_at IS NOT NULL AS materialized, results,
-              fingerprint
+      `SELECT state, revision, materialized_at IS NOT NULL AS materialized,
+              results, fingerprint
        FROM realm_history_revisions WHERE realm_url =`,
       param(this.#realmURL),
       `AND operation_id =`,
@@ -359,7 +399,8 @@ export class RealmHistoryRecorder {
       return undefined;
     }
     return {
-      revision: String(row.revision),
+      state: String(row.state) as JournalState,
+      ...(row.revision != null ? { revision: String(row.revision) } : {}),
       materialized: Boolean(row.materialized),
       ...(row.fingerprint != null
         ? { fingerprint: String(row.fingerprint) }
@@ -375,10 +416,12 @@ export class RealmHistoryRecorder {
     let [row] = await query(this.#dbAdapter, [
       `SELECT revision FROM realm_history_revisions WHERE realm_url =`,
       param(this.#realmURL),
-      `AND seq < COALESCE((SELECT min(seq) FROM realm_history_revisions
+      `AND state = 'committed'
+       AND seq < COALESCE((SELECT min(seq) FROM realm_history_revisions
          WHERE realm_url =`,
       param(this.#realmURL),
-      `AND materialized_at IS NULL), 9223372036854775807)
+      `AND state = 'committed' AND materialized_at IS NULL),
+         9223372036854775807)
        ORDER BY seq DESC LIMIT 1`,
     ]);
     return row ? String(row.revision) : undefined;
@@ -395,9 +438,21 @@ export class RealmHistoryRecorder {
   // was. Rejects with an `OperationFailure` whose outcome is set on
   // `recording`: `aborted` when nothing was recorded, `unknown` when that
   // could not be established.
+  //
+  // The write is journaled `pending` before history is asked anything, in a
+  // statement of its own, so a write whose answer is lost — and whose outcome
+  // could not be asked for either — leaves a row that recovery resolves. A
+  // write that definitely recorded nothing takes its row away again, except
+  // one history reported absent: that id is fenced, and its row says so to a
+  // retry.
   async record(
     recording: WriteRecording,
     changes: { change: HistoryChange; verb: 'Create' | 'Update' | 'Delete' }[],
+    opts?: {
+      kind?: RevisionKind;
+      message?: string;
+      trailers?: { key: string; value: string }[];
+    },
   ): Promise<string> {
     if (!this.#dbAdapter.withHistoryCommitLock) {
       throw new Error(
@@ -405,16 +460,38 @@ export class RealmHistoryRecorder {
       );
     }
     let author = this.#author(recording.author);
+    let kind = opts?.kind ?? 'write';
     let request: Omit<HistoryCommitRequest, 'parent'> = {
       operationId: recording.operationId,
       author,
-      message: commitMessage(changes),
+      message: opts?.message ?? commitMessage(changes),
       trailers: [
         { key: 'Boxel-Operation-Id', value: recording.operationId },
         { key: 'Boxel-Channel', value: recording.channel },
+        ...(kind === 'gap'
+          ? [{ key: 'Boxel-Gap', value: 'recording-disabled' }]
+          : []),
+        ...(opts?.trailers ?? []),
       ],
       changes: changes.map(({ change }) => change),
     };
+    let paths = changes.map(({ change }) => change.path);
+    await query(this.#dbAdapter, [
+      `INSERT INTO realm_history_revisions
+         (realm_url, operation_id, fingerprint, paths, kind, state,
+          recorded_at)
+       VALUES (`,
+      param(this.#realmURL),
+      `,`,
+      param(recording.operationId),
+      `,`,
+      param(recording.fingerprint ?? null),
+      `,`,
+      ...textArray(paths),
+      `,`,
+      param(kind),
+      `, 'pending', now()) ON CONFLICT (realm_url, operation_id) DO NOTHING`,
+    ]);
     let started = Date.now();
     try {
       // Encoded before the lock is taken: every other writer in the realm
@@ -428,11 +505,11 @@ export class RealmHistoryRecorder {
           let result = await this.#commitWithReparent(recording, prepared);
           // In the same transaction as the lock, so rows are journaled in the
           // order revisions were committed. A retry of an operation that had
-          // already committed finds its row already there.
+          // already committed finds its row already committed.
           await txQuerier([
             `INSERT INTO realm_history_revisions
-               (realm_url, revision, parent, operation_id, fingerprint,
-                recorded_at)
+               (realm_url, revision, parent, operation_id, fingerprint, paths,
+                kind, state, recorded_at)
              VALUES (`,
             param(this.#realmURL),
             `,`,
@@ -443,25 +520,196 @@ export class RealmHistoryRecorder {
             param(recording.operationId),
             `,`,
             param(recording.fingerprint ?? null),
-            `, now()) ON CONFLICT (realm_url, operation_id) DO NOTHING`,
+            `,`,
+            ...textArray(paths),
+            `,`,
+            param(kind),
+            `, 'committed', now())
+             ON CONFLICT (realm_url, operation_id) DO UPDATE SET
+               revision = EXCLUDED.revision, parent = EXCLUDED.parent,
+               state = 'committed', seq = nextval(pg_get_serial_sequence(
+                 'realm_history_revisions', 'seq'))
+             WHERE realm_history_revisions.state = 'pending'`,
           ]);
           return result.revision;
         },
       );
+    } catch (err: unknown) {
+      // After the lock is released, so no other pool checkout waits inside it.
+      if (err instanceof FencedSignal) {
+        await this.#markAborted(recording.operationId);
+        throw err.failure;
+      }
+      if (
+        err instanceof UnchangedTreeSignal ||
+        recording.outcome === 'aborted'
+      ) {
+        await this.#forgetPending(recording.operationId);
+      }
+      throw err;
     } finally {
       recording.recordMs = Date.now() - started;
     }
   }
 
-  // Stamp the revision materialized: its bytes are on disk.
-  async markMaterialized(revision: string): Promise<void> {
+  // Stamp the revisions materialized: their bytes are on disk.
+  async markMaterialized(revisions: string | string[]): Promise<void> {
+    let list = typeof revisions === 'string' ? [revisions] : revisions;
+    if (list.length === 0) {
+      return;
+    }
     await query(this.#dbAdapter, [
       `UPDATE realm_history_revisions SET materialized_at = now()
-       WHERE realm_url =`,
+       WHERE materialized_at IS NULL AND realm_url =`,
+      param(this.#realmURL),
+      `AND revision = ANY(`,
+      ...textArray(list),
+      `)`,
+    ]);
+  }
+
+  // Stamp the revisions post-committed: the index pass over their paths is
+  // queued, and their change has been announced.
+  async markPostCommitted(revisions: string[]): Promise<void> {
+    if (revisions.length === 0) {
+      return;
+    }
+    await query(this.#dbAdapter, [
+      `UPDATE realm_history_revisions SET post_committed_at = now()
+       WHERE post_committed_at IS NULL AND realm_url =`,
+      param(this.#realmURL),
+      `AND revision = ANY(`,
+      ...textArray(revisions),
+      `)`,
+    ]);
+  }
+
+  // A committed revision other than `operationId`'s that touches one of
+  // `paths` and has not reached disk. Asked by a write holding those paths'
+  // locks: a writer keeps its locks until its bytes are on disk, so such a
+  // revision's writer is gone, and disk holds older bytes than HEAD there.
+  async unmaterializedRevisionTouching(
+    paths: string[],
+    operationId: string,
+  ): Promise<string | undefined> {
+    if (paths.length === 0) {
+      return undefined;
+    }
+    let [row] = await query(this.#dbAdapter, [
+      `SELECT revision FROM realm_history_revisions WHERE realm_url =`,
+      param(this.#realmURL),
+      `AND state = 'committed' AND materialized_at IS NULL
+       AND operation_id <>`,
+      param(operationId),
+      `AND paths &&`,
+      ...textArray(paths),
+      `ORDER BY seq LIMIT 1`,
+    ]);
+    return row ? String(row.revision) : undefined;
+  }
+
+  // Writes journaled `pending` since before `olderThan`: each one's answer was
+  // lost, along with any chance of asking for it then.
+  async pendingOperations(olderThan: Date): Promise<string[]> {
+    let rows = await query(this.#dbAdapter, [
+      `SELECT operation_id FROM realm_history_revisions WHERE realm_url =`,
+      param(this.#realmURL),
+      `AND state = 'pending' AND recorded_at <`,
+      param(olderThan.toISOString()),
+      `ORDER BY seq`,
+    ]);
+    return rows.map((row) => String(row.operation_id));
+  }
+
+  // Settle a pending write by asking history for its outcome, which fences
+  // the id when it never committed. Resolves with the revision it committed,
+  // or with nothing when it did not.
+  async resolvePending(operationId: string): Promise<string | undefined> {
+    let outcome = await this.#timed(undefined, 'outcome', () =>
+      this.#backend.outcome(operationId),
+    );
+    if (outcome.state === 'absent') {
+      await this.#markAborted(operationId);
+      return undefined;
+    }
+    // Its commit stood. It is journaled after every revision this realm has
+    // already journaled, which is where it belongs among those still to reach
+    // disk: none of them can have committed after it and reached disk first,
+    // because its paths' locks were held until its writer was gone.
+    await query(this.#dbAdapter, [
+      `UPDATE realm_history_revisions SET state = 'committed', revision =`,
+      param(outcome.revision),
+      `, seq = nextval(pg_get_serial_sequence('realm_history_revisions',
+          'seq'))
+       WHERE state = 'pending' AND realm_url =`,
+      param(this.#realmURL),
+      `AND operation_id =`,
+      param(operationId),
+    ]);
+    return outcome.revision;
+  }
+
+  // Committed revisions whose bytes have not all reached disk, or whose index
+  // pass was never queued, in the order they were recorded.
+  async incompleteRevisions(): Promise<
+    { revision: string; paths: string[]; materialized: boolean }[]
+  > {
+    let rows = await query(this.#dbAdapter, [
+      `SELECT revision, paths, materialized_at IS NOT NULL AS materialized
+       FROM realm_history_revisions WHERE realm_url =`,
+      param(this.#realmURL),
+      `AND state = 'committed'
+       AND (materialized_at IS NULL OR post_committed_at IS NULL)
+       ORDER BY seq`,
+    ]);
+    return rows.map((row) => ({
+      revision: String(row.revision),
+      paths: parseTextArray(row.paths),
+      materialized: Boolean(row.materialized),
+    }));
+  }
+
+  // The kind of a revision this realm journaled: whether it is a write, drift
+  // recovery found, or a gap left while recording was off.
+  async revisionKind(revision: string): Promise<RevisionKind | undefined> {
+    let [row] = await query(this.#dbAdapter, [
+      `SELECT kind FROM realm_history_revisions WHERE realm_url =`,
       param(this.#realmURL),
       `AND revision =`,
       param(revision),
     ]);
+    return row ? (String(row.kind) as RevisionKind) : undefined;
+  }
+
+  async tree(revision: string): Promise<HistoryTreeEntry[]> {
+    return await this.#timed(undefined, 'tree', () =>
+      this.#backend.tree(revision),
+    );
+  }
+
+  // Every path's bytes at `revision`, over as many calls as the backend's
+  // ceiling takes.
+  async read(
+    revision: string,
+    paths: string[],
+  ): Promise<Map<string, Uint8Array | undefined>> {
+    let found = new Map<string, Uint8Array | undefined>();
+    let remaining = paths;
+    while (remaining.length > 0) {
+      let result = await this.#timed(undefined, 'read', () =>
+        this.#backend.read(revision, remaining),
+      );
+      if (result.files.length === 0) {
+        throw new Error(
+          `history read no file of ${remaining.length} asked for at ${revision}`,
+        );
+      }
+      for (let { path, content } of result.files) {
+        found.set(path, content);
+      }
+      remaining = result.remaining;
+    }
+    return found;
   }
 
   async recordResults(operationId: string, results: unknown): Promise<void> {
@@ -473,6 +721,34 @@ export class RealmHistoryRecorder {
       `AND operation_id =`,
       param(operationId),
     ]);
+  }
+
+  async #markAborted(operationId: string): Promise<void> {
+    await query(this.#dbAdapter, [
+      `UPDATE realm_history_revisions SET state = 'aborted'
+       WHERE state = 'pending' AND realm_url =`,
+      param(this.#realmURL),
+      `AND operation_id =`,
+      param(operationId),
+    ]);
+  }
+
+  async #forgetPending(operationId: string): Promise<void> {
+    try {
+      await query(this.#dbAdapter, [
+        `DELETE FROM realm_history_revisions
+         WHERE state = 'pending' AND realm_url =`,
+        param(this.#realmURL),
+        `AND operation_id =`,
+        param(operationId),
+      ]);
+    } catch (err: unknown) {
+      // Left pending, recovery asks for its outcome, finds it absent, and
+      // marks it aborted.
+      this.#log.warn(
+        `could not remove the pending row of ${operationId} in ${this.#realmURL}: ${describe(err)}`,
+      );
+    }
   }
 
   async #commitWithReparent(
@@ -529,6 +805,10 @@ export class RealmHistoryRecorder {
     parent: string,
   ): Promise<{ revision: string; parent: string }> {
     if (isHistoryBackendError(err) && err.code !== 'internal') {
+      if (err.code === 'operation-fenced') {
+        recording.outcome = 'aborted';
+        throw new FencedSignal(operationFenced(recording.operationId));
+      }
       if (err.code === 'operation-mismatch') {
         recording.outcome = 'aborted';
         throw new OperationFailure({
@@ -586,8 +866,10 @@ export class RealmHistoryRecorder {
     if (outcome.state === 'committed') {
       return { revision: outcome.revision, parent };
     }
+    // Asking fenced the id, so it can never commit late, and a retry under it
+    // is told to send the write under a new one.
     recording.outcome = 'aborted';
-    throw this.#aborted(recording, err);
+    throw new FencedSignal(this.#aborted(recording, err));
   }
 
   #aborted(recording: WriteRecording, cause: unknown): OperationFailure {
@@ -632,6 +914,29 @@ export class RealmHistoryRecorder {
   }
 }
 
+// Thrown inside the history lock by a write whose operation id is fenced, so
+// its journal row is marked aborted once the lock is released.
+class FencedSignal extends Error {
+  readonly failure: OperationFailure;
+  constructor(failure: OperationFailure) {
+    super(failure.message);
+    this.name = 'FencedSignal';
+    this.failure = failure;
+  }
+}
+
+// The answer to a write under an operation id history has fenced: it reported
+// the id absent, so the write it named never happened and never can.
+export function operationFenced(operationId: string): OperationFailure {
+  return new OperationFailure({
+    status: 409,
+    code: 'operation-fenced',
+    title: 'Operation id already aborted',
+    detail: `operation ${operationId} was not recorded, and can no longer be; send this write under a new ${OPERATION_ID_HEADER}`,
+    meta: { operationId },
+  });
+}
+
 // Thrown by a commit that recorded nothing because the tree was already as
 // staged: the realm answers with `head`, as it does for any unchanged write.
 export class UnchangedTreeSignal extends Error {
@@ -667,6 +972,46 @@ function oneLine(value: string): string {
 
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// `values` as a postgres `text[]`.
+function textArray(values: string[]): Expression {
+  if (values.length === 0) {
+    return [`'{}'::text[]`];
+  }
+  return [
+    'CAST(ARRAY[',
+    ...separatedByCommas(values.map((value) => [param(value)])),
+    '] AS text[])',
+  ] as Expression;
+}
+
+// A postgres `text[]`, which a SQLite-backed or older driver may hand back as
+// its literal.
+function parseTextArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(String);
+  }
+  if (typeof value === 'string') {
+    let inner = value.replace(/^\{|\}$/g, '');
+    return inner === ''
+      ? []
+      : inner.split(',').map((item) => item.replace(/^"|"$/g, ''));
+  }
+  return [];
+}
+
+// The git blob id of `bytes`: what history's tree names a file by, so a file
+// on disk is compared with a revision without reading the revision's copy.
+export async function gitBlobId(bytes: Uint8Array): Promise<string> {
+  let header = new TextEncoder().encode(`blob ${bytes.byteLength}\0`);
+  let object = new Uint8Array(header.byteLength + bytes.byteLength);
+  object.set(header, 0);
+  object.set(bytes, header.byteLength);
+  let digest = await globalThis.crypto.subtle.digest('SHA-1', object);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
 }
 
 function parseJSON(value: unknown): unknown {

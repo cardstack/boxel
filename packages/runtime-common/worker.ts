@@ -326,6 +326,11 @@ export class Worker {
         this.#queue.register(`media-cache-gc`, Tasks['mediaCacheGc'](taskArgs)),
       'scoped-css-gc': () =>
         this.#queue.register(`scoped-css-gc`, Tasks['scopedCssGc'](taskArgs)),
+      'realm-history-recovery': () =>
+        this.#queue.register(
+          `realm-history-recovery`,
+          Tasks['realmHistoryRecovery'](taskArgs),
+        ),
       'lint-source': () =>
         this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
       'full-reindex': () =>

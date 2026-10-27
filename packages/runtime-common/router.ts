@@ -27,6 +27,17 @@ export function isCoarseRefusal(error: unknown): error is CoarseRefusal {
 // (sealed) realm. Surfaced as a 403 carrying an "archived" marker so the
 // client can render the sealed state rather than a generic forbidden error.
 export class ArchivedRealmError extends Error {}
+// Thrown at the realm request boundary when a write targets a realm that has
+// gone read-only because its recovery failed. Surfaced as a 423, distinct from
+// the archived 403: a read-only realm still serves reads, and its writes come
+// back once an operator clears it.
+export class ReadOnlyRealmError extends Error {
+  readonly reason: string;
+  constructor(message: string, reason: string) {
+    super(message);
+    this.reason = reason;
+  }
+}
 // A `const` object (rather than a TS `enum`) so the declaration is
 // erasable and runs under Node's native `--experimental-strip-types`.
 export const AuthenticationErrorMessages = {

@@ -1,8 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
-import { execFileSync, spawn, type ChildProcess } from 'child_process';
-import { createServer } from 'net';
+import type { ChildProcess } from 'child_process';
 import fsExtra from 'fs-extra';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import type { SuperTest, Test } from 'supertest';
@@ -30,9 +29,19 @@ import {
   type HistoryCommitResult,
   type HistoryOutcome,
   type PreparedCommit,
+  type HistoryReadResult,
+  type HistoryTreeEntry,
 } from '@cardstack/runtime-common/realm-history';
 import type { PgAdapter } from '@cardstack/postgres';
 import { DeckdHistoryBackend } from '../lib/deckd-client.ts';
+import {
+  ROOT_REVISION,
+  findDeckd,
+  git,
+  historyFrom,
+  readRevision,
+  startDeckd,
+} from './helpers/realm-history.ts';
 import {
   createJWT,
   createRealm,
@@ -52,11 +61,6 @@ const { ensureDirSync, existsSync, readFileSync, statSync, writeJSONSync } =
 // visible anywhere — on disk, in Postgres, to a realm-event subscriber — until
 // that revision exists. These run against a real deckd, the history backend
 // realm-server talks to in every environment.
-//
-// deckd's API reads no revision's contents, so they are read straight out of
-// the git store inside the repository deckd keeps (`jj/store/git`), with git.
-
-const ROOT_REVISION = '0'.repeat(40);
 
 const personGts = `
   import { contains, field, CardDef } from "@cardstack/base/card-api";
@@ -76,65 +80,6 @@ function person(firstName: string, lastName: string): LooseSingleCardDocument {
       meta: { adoptsFrom: { module: rri('./person'), name: 'Person' } },
     },
   };
-}
-
-// --- deckd ------------------------------------------------------------------
-
-// The deckd binary: `DECKD_BIN`, or `deckd` on PATH. CI provides one, so there
-// its absence is a failure; a developer without one skips this module.
-function findDeckd(): string | undefined {
-  if (process.env.DECKD_BIN) {
-    return process.env.DECKD_BIN;
-  }
-  try {
-    return (
-      execFileSync('which', ['deckd'], { stdio: ['ignore', 'pipe', 'ignore'] })
-        .toString()
-        .trim() || undefined
-    );
-  } catch {
-    return undefined;
-  }
-}
-
-async function freePort(): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    let server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      let address = server.address();
-      server.close(() =>
-        typeof address === 'object' && address
-          ? resolve(address.port)
-          : reject(new Error('no port')),
-      );
-    });
-  });
-}
-
-async function startDeckd(
-  binary: string,
-): Promise<{ url: string; process: ChildProcess }> {
-  let port = await freePort();
-  let child = spawn(binary, [], {
-    env: { ...process.env, DECKD_BIND: `127.0.0.1:${port}` },
-    stdio: ['ignore', 'ignore', 'inherit'],
-  });
-  let url = `http://127.0.0.1:${port}`;
-  let deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    try {
-      let response = await fetch(`${url}/health`);
-      if (response.ok) {
-        return { url, process: child };
-      }
-    } catch {
-      // not listening yet
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  child.kill();
-  throw new Error(`deckd at ${binary} did not answer /health within 20s`);
 }
 
 // deckd, with the faults a test asks for injected around it.
@@ -184,68 +129,14 @@ class FaultyHistory implements HistoryBackend {
   head(): Promise<string> {
     return this.inner.head();
   }
-}
 
-// --- reading a revision -------------------------------------------------------
-
-function git(realmDir: string, ...args: string[]): string {
-  return execFileSync('git', [
-    '--git-dir',
-    join(realmDir, HISTORY_DIR, 'jj', 'store', 'git'),
-    ...args,
-  ]).toString();
-}
-
-interface Revision {
-  author: string;
-  email: string;
-  parents: string[];
-  subject: string;
-  trailers: Record<string, string>;
-  // `A path`, `M path` or `D path`, sorted.
-  changes: string[];
-}
-
-function readRevision(realmDir: string, revision: string): Revision {
-  let raw = git(
-    realmDir,
-    'show',
-    '--no-renames',
-    '--name-status',
-    '--format=%an%x00%ae%x00%P%x00%B%x00',
-    revision,
-  );
-  let [author, email, parents, body, rest] = raw.split('\0');
-  let trailers: Record<string, string> = {};
-  for (let line of body.split('\n')) {
-    let match = /^([A-Za-z0-9-]+): (.*)$/.exec(line);
-    if (match) {
-      trailers[match[1]] = match[2];
-    }
+  tree(revision: string): Promise<HistoryTreeEntry[]> {
+    return this.inner.tree(revision);
   }
-  return {
-    author,
-    email,
-    parents: parents.trim() ? parents.trim().split(' ') : [],
-    subject: body.split('\n')[0],
-    trailers,
-    changes: rest
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => line.replace(/\t/, ' '))
-      .sort(),
-  };
-}
 
-// Every revision from HEAD back, newest first.
-function historyFrom(realmDir: string, head: string): string[] {
-  if (head === ROOT_REVISION) {
-    return [];
+  read(revision: string, paths: string[]): Promise<HistoryReadResult> {
+    return this.inner.read(revision, paths);
   }
-  return git(realmDir, 'rev-list', '--first-parent', head)
-    .split('\n')
-    .filter(Boolean);
 }
 
 const deckdBinary = findDeckd();
@@ -316,7 +207,10 @@ module(basename(import.meta.filename), function (hooks) {
       },
     });
 
-    hooks.beforeEach(function () {
+    hooks.beforeEach(async function () {
+      // Mounting took in the realm's files as its first revision, a gap, and
+      // queued their index pass. Each test starts once that has landed.
+      await realm.indexing();
       events = [];
       setRevisionWriteSink((event) => events.push(event));
     });
@@ -401,10 +295,9 @@ module(basename(import.meta.filename), function (hooks) {
         );
         let recorded = readRevision(realmDir, revision);
         assert.strictEqual(recorded.author, 'john', 'authored by the session');
-        // The realm's history begins empty, so a file the realm held before
-        // recording began enters history as added, with its first recorded
-        // write. The message describes the write, which updated the file.
-        assert.deepEqual(recorded.changes, ['A person-1.json']);
+        // Mounting took in what the realm already held as its first revision,
+        // so the write modifies a file history already has.
+        assert.deepEqual(recorded.changes, ['M person-1.json']);
         assert.strictEqual(recorded.subject, 'Update person-1.json');
         assert.deepEqual(
           {
@@ -497,18 +390,18 @@ module(basename(import.meta.filename), function (hooks) {
           );
         assert.strictEqual(batch.status, 200, JSON.stringify(batch.body));
         let afterBatch = readRevision(realmDir, batch.get(REVISION_HEADER)!);
-        // Added to history rather than modified, as in the first test: none
-        // of the three had been recorded before.
+        // Modified rather than added, as in the first test: mounting took in
+        // all three.
         assert.deepEqual(afterBatch.changes, [
-          'A person-1.json',
-          'A person-2.json',
-          'A person-3.json',
+          'M person-1.json',
+          'M person-2.json',
+          'M person-3.json',
         ]);
         assert.strictEqual(afterBatch.trailers['Boxel-Channel'], 'operations');
         assert.strictEqual(
           historyFrom(realmDir, batch.get(REVISION_HEADER)!).length,
-          3,
-          'three requests, three revisions',
+          4,
+          'three requests, three revisions, after the one mounting recorded',
         );
       },
     );
@@ -587,6 +480,7 @@ module(basename(import.meta.filename), function (hooks) {
       'a write that fails before it is recorded writes nothing',
       async function (assert) {
         let before = stored('person-1.json');
+        let head = await history.head();
         let broadcasts = 0;
         let broadcast = adapter.broadcastRealmEvent.bind(adapter);
         adapter.broadcastRealmEvent = async (...args) => {
@@ -609,11 +503,7 @@ module(basename(import.meta.filename), function (hooks) {
           adapter.broadcastRealmEvent = broadcast;
         }
         assert.strictEqual(stored('person-1.json'), before, 'disk unchanged');
-        assert.strictEqual(
-          await history.head(),
-          ROOT_REVISION,
-          'nothing recorded',
-        );
+        assert.strictEqual(await history.head(), head, 'nothing recorded');
         assert.strictEqual(broadcasts, 0, 'nothing broadcast');
         assert.strictEqual(events.at(-1)?.outcome, 'aborted');
         assert.strictEqual(events.at(-1)?.revision, null);
@@ -677,7 +567,6 @@ module(basename(import.meta.filename), function (hooks) {
             .at(-1)
             ?.historyCalls.map(({ endpoint, status }) => [endpoint, status]),
           [
-            ['head', 'ok'],
             ['commit', 'transport'],
             ['outcome', 'ok'],
           ],

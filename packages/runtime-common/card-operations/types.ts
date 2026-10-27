@@ -1720,6 +1720,14 @@ export type OperationErrorCode =
   // The write's operation id already committed a different write. Carries a
   // 409 and the revision it committed.
   | 'operation-id-conflict'
+  // The realm's history reported the write's operation id absent, which fences
+  // it: the write never happened and can no longer. Carries a 409; the write
+  // is sent again under a new operation id.
+  | 'operation-fenced'
+  // A revision touching one of the write's paths was recorded and has not all
+  // reached disk, so disk is behind HEAD there and the realm is completing it.
+  // Carries a 503 and that revision; the same write sent again is the remedy.
+  | 'realm-recovering'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.

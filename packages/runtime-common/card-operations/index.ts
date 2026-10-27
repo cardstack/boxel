@@ -158,8 +158,11 @@ export {
   setPolicySnapshotReadSink,
   setRevisionWriteSink,
   emitRevisionWrite,
+  setRealmRecoverySink,
+  emitRealmRecovery,
 } from './telemetry.ts';
 export type {
+  RealmRecoveryEvent,
   CapabilityCheckEvent,
   KeyUseEvent,
   KeyUseOutcome,

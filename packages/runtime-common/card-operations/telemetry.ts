@@ -800,3 +800,72 @@ let recordFailureLog: ReturnType<typeof logger> | undefined;
 export function elapsedMs(started: number): number {
   return Math.round((performance.now() - started) * 100) / 100;
 }
+
+// ============================================================================
+// Per-recovery telemetry for a realm that records history.
+//
+// One line each time a realm checks itself against its history — at mount, on
+// the schedule, when a write finds disk behind HEAD, or when an operator asks —
+// whatever it found. Counted by `outcome` and by the revisions it recorded,
+// these are the recoveries, drift revisions, gap revisions and realms put
+// read-only that alerting watches. The scan timings are what drift detection
+// costs on a realm of `fileCount` files.
+// ============================================================================
+
+export interface RealmRecoveryEvent {
+  kind: 'realm-recovery';
+  realmURL: string;
+  trigger: 'mount' | 'schedule' | 'write' | 'operator';
+  // `clean`: nothing to do. `recovered`: something was completed or recorded.
+  // `read-only`: recovery failed and the realm refuses writes. `leased`:
+  // another replica was recovering the realm.
+  outcome: 'clean' | 'recovered' | 'read-only' | 'leased';
+  // Pending writes whose outcome recovery asked for, by what it was.
+  resolvedCommitted: number;
+  resolvedAborted: number;
+  // Revisions whose bytes, or whose index pass, recovery completed.
+  caughtUpRevisions: number;
+  caughtUpPaths: number;
+  // What the disk scan found that no revision explained, and the revisions
+  // that took it in. A realm that last ran without recording takes it in as
+  // a gap; any other realm has drifted. Counts beside the lists, because
+  // alert queries filter on numbers.
+  driftPaths: number;
+  driftRevisions: string[];
+  gapPaths: number;
+  gapRevisions: string[];
+  // Null where recovery failed before scanning.
+  fileCount: number | null;
+  bytesHashed: number | null;
+  scanMs: number | null;
+  treeMs: number | null;
+  totalMs: number;
+  // Why the realm went read-only.
+  error: string | null;
+}
+
+let realmRecoverySink: ((event: RealmRecoveryEvent) => void) | undefined;
+
+export function setRealmRecoverySink(
+  sink: ((event: RealmRecoveryEvent) => void) | undefined,
+): void {
+  realmRecoverySink = sink;
+}
+
+let realmRecoveryLog: ReturnType<typeof logger> | undefined;
+
+export function emitRealmRecovery(event: RealmRecoveryEvent): void {
+  if (realmRecoverySink) {
+    realmRecoverySink(event);
+    return;
+  }
+  let log = (realmRecoveryLog ??= logger(OPERATIONS_CHANNEL));
+  let line = JSON.stringify({ channel: OPERATIONS_CHANNEL, ...event });
+  if (event.outcome === 'read-only') {
+    log.error(line);
+  } else if (event.driftRevisions.length > 0) {
+    log.warn(line);
+  } else {
+    log.info(line);
+  }
+}

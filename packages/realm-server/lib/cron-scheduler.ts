@@ -25,6 +25,12 @@ import {
   MEDIA_CACHE_GC_CRON_TZ,
   createMediaCacheGcCronJob,
 } from './media-cache-gc-config.ts';
+import { enqueueRealmHistoryRecovery } from '../scripts/realm-history-recovery.ts';
+import {
+  REALM_HISTORY_RECOVERY_CRON_SCHEDULE,
+  REALM_HISTORY_RECOVERY_CRON_TZ,
+  createRealmHistoryRecoveryCronJob,
+} from './realm-history-recovery-config.ts';
 import { enqueueScopedCssGc } from '../scripts/scoped-css-gc.ts';
 import {
   SCOPED_CSS_GC_CRON_SCHEDULE,
@@ -60,6 +66,11 @@ export function startCronJobs(): void {
   let scopedCssGcJob = startScopedCssGcCron();
   if (scopedCssGcJob) {
     jobs.push(scopedCssGcJob);
+  }
+
+  let realmHistoryRecoveryJob = startRealmHistoryRecoveryCron();
+  if (realmHistoryRecoveryJob) {
+    jobs.push(realmHistoryRecoveryJob);
   }
 }
 
@@ -180,6 +191,34 @@ function startScopedCssGcCron(): CronJob | undefined {
   job.start();
   log.info(
     `scoped-css-gc cron scheduled for ${SCOPED_CSS_GC_CRON_SCHEDULE} ${SCOPED_CSS_GC_CRON_TZ}`,
+  );
+  return job;
+}
+
+// Only where some realm records history: the sweep visits the realms that do,
+// and with none there is nothing for it to check.
+function startRealmHistoryRecoveryCron(): CronJob | undefined {
+  if (!process.env.REALM_HISTORY_DECKD_URL) {
+    log.info(
+      'REALM_HISTORY_DECKD_URL not set, skipping realm-history-recovery cron setup',
+    );
+    return undefined;
+  }
+  let job = createRealmHistoryRecoveryCronJob(
+    async () => {
+      try {
+        await enqueueRealmHistoryRecovery();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('realm-history-recovery cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `realm-history-recovery cron scheduled for ${REALM_HISTORY_RECOVERY_CRON_SCHEDULE} ${REALM_HISTORY_RECOVERY_CRON_TZ}`,
   );
   return job;
 }

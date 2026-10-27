@@ -447,6 +447,7 @@ import type {
 } from './router.ts';
 import {
   ArchivedRealmError,
+  ReadOnlyRealmError,
   AuthenticationError,
   AuthenticationErrorMessages,
   AuthorizationError,
@@ -563,7 +564,20 @@ import {
   type HistoryBackend,
   type HistoryChange,
   type WriteRecording,
+  newOperationId,
+  operationFenced,
 } from './realm-history.ts';
+import {
+  clearRealmReadOnly,
+  realmReadOnly,
+  setRealmRecording,
+} from './db-queries/realm-history-state-queries.ts';
+import {
+  isRecordablePath,
+  recoverRealmHistory,
+  type RecoveryResult,
+  type RecoveryTrigger,
+} from './realm-history-recovery.ts';
 import type { JsonValue } from './json-validation.ts';
 import {
   computeContentHash,
@@ -1106,6 +1120,9 @@ const OPERATIONAL_ENDPOINT = { operationalEndpoint: true } as const;
 // probe's routes read it, and so does the probe that reaches no route because
 // it sends no `Accept` they answer (see `#isBareReadinessProbe`).
 const READINESS_CHECK_PATH = '/_readiness-check';
+// Where the realm's recovery is asked for, by the scheduled job that checks
+// every realm that records history against it.
+const HISTORY_RECOVERY_PATH = '_history-recovery';
 // Marks the routes whose handlers hand the realm ACL's recorded outcome to the
 // policy gate: the `/_operations` envelope, which resolves every entry through
 // the gate, the card+json read, whose operation runs through it, the search,
@@ -2105,6 +2122,14 @@ function historyCommitTooLarge(
 interface HistoryFaults {
   afterStage?: () => Promise<void>;
   afterRecord?: () => Promise<void>;
+  // After the first of the commit's files is on disk and before the next.
+  midMaterialize?: () => Promise<void>;
+  // After every byte is on disk and before the change is announced, its
+  // metadata written or the revision stamped materialized.
+  afterMaterialize?: () => Promise<void>;
+  // After the revision's index pass is queued and it is stamped
+  // post-committed, and before the write answers.
+  afterPostCommit?: () => Promise<void>;
 }
 
 async function collectBytes(
@@ -2415,6 +2440,13 @@ export interface WriteOptions {
   // the write. A commit without one — every writer but the operations
   // coordinator — is not recorded.
   recording?: WriteRecording;
+  // Treat a file already holding the staged bytes as written, and a removal
+  // of a file already gone as made: each is announced, its metadata row
+  // written, and its index pass queued as for any change. Only recovery sets
+  // it, completing a revision whose bytes may have partly reached disk before
+  // its writer stopped, and taking in changes found on disk that were never
+  // indexed.
+  rewriteUnchanged?: true;
 }
 
 // Who a realm event is delivered to. By default it goes to every session room
@@ -2846,6 +2878,15 @@ export class Realm {
   #testOnlyCoarseAdmission: CoarseAdmission | undefined;
   #testOnlyBeforeBatchLock: (() => Promise<void>) | undefined;
   #testOnlyHistoryFaults: HistoryFaults | undefined;
+  // The recovery in progress, which concurrent callers share.
+  #recovering: Promise<RecoveryResult | undefined> | undefined;
+  // Who this realm claims the recovery lease as. Per realm rather than per
+  // process, so two realms over one directory exclude each other as two
+  // replicas do.
+  #recoveryLeaseOwner = newOperationId();
+  // Set in a process that records history for some realms but not this one,
+  // which notes at mount that this realm's writes go unrecorded.
+  #historyConfigured = false;
   // Present when the realm records history: every write the operations
   // coordinator commits becomes a revision before it reaches disk.
   #history: RealmHistoryRecorder | undefined;
@@ -3153,6 +3194,7 @@ export class Realm {
       anonymousRateLimiter,
       callApi,
       history,
+      historyConfigured,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -3200,6 +3242,10 @@ export class Realm {
       // the operations coordinator commits as a revision, before any of it
       // reaches disk. Without one, the realm keeps no history.
       history?: HistoryBackend;
+      // Whether this process records history for other realms. A realm it
+      // mounts without `history` then notes that its writes go unrecorded, so
+      // the changes made meanwhile are taken in as a gap if it records later.
+      historyConfigured?: boolean;
     },
     opts?: Options,
   ) {
@@ -3220,6 +3266,7 @@ export class Realm {
       this.#matrixClient.username,
       this.#matrixClient.matrixURL.href,
     );
+    this.#historyConfigured = Boolean(historyConfigured);
     if (history) {
       this.#history = new RealmHistoryRecorder({
         backend: history,
@@ -3499,6 +3546,12 @@ export class Realm {
         ACL_ONLY,
       )
       .post(
+        `/${HISTORY_RECOVERY_PATH}`,
+        SupportedMimeType.JSON,
+        this.handleHistoryRecovery.bind(this),
+        ACL_ONLY,
+      )
+      .post(
         '(/|/.+/)',
         SupportedMimeType.CardJson,
         this.createCard.bind(this),
@@ -3702,7 +3755,12 @@ export class Realm {
     // different remedy, and the poll loops that consume this discard the
     // body, so the header is the only place an operator can read it from.
     let notReady = (
-      stage: 'startup' | 'index' | 'index-failed' | 'prerender-html',
+      stage:
+        | 'startup'
+        | 'recovering'
+        | 'index'
+        | 'index-failed'
+        | 'prerender-html',
       detail?: string,
     ) =>
       createResponse({
@@ -3746,6 +3804,14 @@ export class Realm {
     // happened.
     let waitStartedAt = Date.now();
     let requestDeadline = waitStartedAt + READINESS_REQUEST_BUDGET_MS;
+    // Bringing the realm back into agreement with its history, at mount or
+    // since: what it serves may be about to change.
+    if (
+      this.#recovering &&
+      !(await settledBy(this.#recovering, requestDeadline))
+    ) {
+      return notReady('recovering');
+    }
     if (!(await settledBy(this.#startedUp.promise, requestDeadline))) {
       this.#log.warn(
         `readiness check for ${this.url} is still waiting on realm startup after ${Date.now() - waitStartedAt}ms`,
@@ -3886,10 +3952,19 @@ export class Realm {
       }
     }
 
+    // A read-only realm is ready: it serves every read. Writes are what it
+    // refuses, which a caller polling for readiness learns here rather than
+    // from its first write.
+    let readOnly = this.#history
+      ? await realmReadOnly(this.#dbAdapter, this.url)
+      : undefined;
     return createResponse({
       body: null,
       init: {
-        headers: { 'content-type': 'text/html' },
+        headers: {
+          'content-type': 'text/html',
+          ...(readOnly ? { 'X-Boxel-Realm-Read-Only': readOnly.reason } : {}),
+        },
         status: 200,
       },
       requestContext,
@@ -4062,6 +4137,28 @@ export class Realm {
       body: null,
       init: {
         status: 204,
+      },
+      requestContext,
+    });
+  }
+
+  // Check the realm against its history and recover it, for the schedule
+  // that visits every realm that records. Answers with what recovery found; a
+  // realm that does not record, or that is read-only, is left alone.
+  private async handleHistoryRecovery(
+    _request: Request,
+    requestContext: RequestContext,
+  ) {
+    let result = await this.recoverHistory({ trigger: 'schedule' });
+    return createResponse({
+      body: JSON.stringify(
+        result
+          ? { outcome: result.outcome, recovery: result.event }
+          : { outcome: 'not-recording' },
+      ),
+      init: {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.JSON },
       },
       requestContext,
     });
@@ -5274,6 +5371,32 @@ export class Realm {
         `a commit recorded in ${this.url}'s history stages its bytes before writing them, so it cannot serialize them as it writes`,
       );
     }
+    // Staging reads what disk holds, which is behind HEAD at a path whose last
+    // revision never all reached disk: an append would be recorded on top of
+    // the older bytes and drop the revision's. A writer holds its files' locks
+    // until its bytes are on disk, and this commit holds these paths' locks
+    // now, so such a revision's writer is gone. Recovery brings disk up to
+    // HEAD; until then this write waits for it.
+    let paths = [
+      ...(batch.writes?.keys() ?? []),
+      ...(batch.appends?.keys() ?? []),
+      ...(batch.deletes ?? []),
+    ];
+    let behind = await history.unmaterializedRevisionTouching(
+      paths,
+      recording.operationId,
+    );
+    if (behind) {
+      recording.outcome = 'aborted';
+      void this.recoverHistory({ trigger: 'write' });
+      throw new OperationFailure({
+        status: 503,
+        code: 'realm-recovering',
+        title: 'Realm recovering',
+        detail: `revision ${behind} of ${this.url} has not finished reaching disk, and the realm is completing it; retry this write`,
+        meta: { operationId: recording.operationId, revision: behind },
+      });
+    }
     let staged = await this.#stageForHistory(batch, history);
     await this.#testOnlyHistoryFaults?.afterStage?.();
     if (staged.length === 0) {
@@ -5474,9 +5597,19 @@ export class Realm {
     // realm event, file-meta row and index job this commit produces follows the
     // revision it describes.
     let recording = this.#history ? options?.recording : undefined;
-    let recordedRevision = recording
-      ? await this.#recordBatch(batch, options!, recording)
-      : undefined;
+    let recordedRevision =
+      recording && !recording.recovered
+        ? await this.#recordBatch(batch, options!, recording)
+        : undefined;
+    // The revisions whose bytes this commit brings to disk: the one it just
+    // recorded, or those recovery is completing.
+    let committedRevisions = recording?.recovered
+      ? recording.recovered
+      : recordedRevision
+        ? [recordedRevision]
+        : [];
+    let faults = recording ? this.#testOnlyHistoryFaults : undefined;
+    let wroteFirstFile = false;
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: {
@@ -5741,7 +5874,7 @@ export class Realm {
         // caller sent to replace it would be dropped.
         unchanged = stored;
       }
-      if (unchanged) {
+      if (unchanged && !options?.rewriteUnchanged) {
         // Identical bytes: the file is left alone, so its modification time
         // stands and nothing is queued for indexing. The content hash is
         // still the file's own — the bytes in hand are the bytes on disk —
@@ -5787,9 +5920,13 @@ export class Realm {
       ) {
         modulesWithoutSchemaChange.add(url.href);
       }
+      if (faults?.midMaterialize && wroteFirstFile) {
+        await faults.midMaterialize();
+      }
       announceIndexing(url);
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
+      wroteFirstFile = true;
       (isNewFile ? addedFiles : updatedFiles).push(path);
       this.invalidateCache(path);
       await this.#notifyFileChange(path);
@@ -5966,13 +6103,16 @@ export class Realm {
       let url = this.paths.fileURL(path);
       announceIndexing(url);
       await this.trackOwnWrite(path, { isDelete: true });
-      await this.#adapter.remove(path);
+      if (!options?.rewriteUnchanged || (await this.#adapter.exists(path))) {
+        await this.#adapter.remove(path);
+      }
       this.invalidateCache(path);
       await this.#notifyFileChange(path);
       removedFiles.push(path);
       deleteURLs.push(url);
     }
 
+    await faults?.afterMaterialize?.();
     if (
       addedFiles.length > 0 ||
       updatedFiles.length > 0 ||
@@ -6012,12 +6152,29 @@ export class Realm {
     if (recording) {
       // Every byte the revision describes is on disk, so the realm has caught
       // up with its history to here.
+      if (committedRevisions.length > 0) {
+        await this.#history!.markMaterialized(committedRevisions);
+      }
       if (recordedRevision) {
-        await this.#history!.markMaterialized(recordedRevision);
         recording.outcome = 'committed';
       }
       recording.durableAt = Date.now();
     }
+    // The last of a revision's post-commit: once its index pass is queued,
+    // nothing about it is left for recovery to redo. A stamp that fails leaves
+    // recovery to queue the pass again, which costs a pass and loses nothing.
+    let stampPostCommitted = async () => {
+      if (committedRevisions.length === 0) {
+        return;
+      }
+      try {
+        await this.#history!.markPostCommitted(committedRevisions);
+      } catch (err: unknown) {
+        this.#log.warn(
+          `could not stamp ${committedRevisions.join(', ')} post-committed in ${this.url}; recovery queues their index pass again: ${stringifyErrorForLog(err)}`,
+        );
+      }
+    };
     // And the boundary the write locks end at. Indexing reads the files back
     // off disk rather than from anything this commit is holding, so the pass
     // below indexes whatever the last write left — which is what the realm
@@ -6242,6 +6399,15 @@ export class Realm {
         );
       }
     }
+    if (landingAfterAnswer) {
+      // The write answers ahead of its pass, so it is stamped when the pass
+      // lands. A pass that fails leaves it unstamped, for recovery to queue
+      // again.
+      void landingAfterAnswer.then(stampPostCommitted, () => undefined);
+    } else {
+      await stampPostCommitted();
+    }
+    await faults?.afterPostCommit?.();
     // A mixed batch whose instances all turned out to be byte-identical
     // leaves the flush's deferred set with no later pass to fold it into.
     // Those URLs are real dependents of a module that did change, so the
@@ -8451,7 +8617,20 @@ export class Realm {
               },
             });
           }
+          if (entry.state === 'pending') {
+            // An attempt under this id lost its answer. The retry goes ahead as
+            // the write: history answers a commit under an id that already
+            // committed with that revision, so the retry either completes the
+            // first attempt or makes the write itself.
+            return undefined;
+          }
           recording.engaged = true;
+          if (entry.state === 'aborted') {
+            // History reported the id absent, which fenced it: the write it
+            // named never happened and never can.
+            recording.outcome = 'aborted';
+            throw operationFenced(recording.operationId);
+          }
           recording.revision = entry.revision;
           if (entry.materialized && entry.results === undefined) {
             // On disk, with the answer it gave not kept: the attempt is still
@@ -8540,6 +8719,14 @@ export class Realm {
   async #startup(opts?: { fromScratchIndexPriority?: number }) {
     await Promise.resolve();
     let startTime = Date.now();
+    // Before the index decision, so whatever the index pass reads off disk is
+    // what the realm's history holds. Recovery never fails the mount: a realm
+    // it cannot recover serves its reads read-only.
+    if (this.#history) {
+      await this.recoverHistory({ trigger: 'mount' });
+    } else if (this.#historyConfigured) {
+      await setRealmRecording(this.#dbAdapter, this.url, false);
+    }
     let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
     if (this.#skipBootIndex) {
       // Mount-and-serve only: no from-scratch index, even on a new index.
@@ -8775,7 +8962,7 @@ export class Realm {
 
     let localPath = this.paths.local(new URL(request.url));
     let requiredPermission: RealmAction = 'read';
-    if (localPath === '_permissions') {
+    if (localPath === '_permissions' || localPath === HISTORY_RECOVERY_PATH) {
       requiredPermission = 'realm-owner';
     } else if (localPath === CAPABILITIES_PATH) {
       // A `POST` because it carries a body, and the body is a list of
@@ -8913,6 +9100,24 @@ export class Realm {
           requestContext.archivedSeal = seal;
         }
       }
+      // A realm whose recovery failed keeps serving reads and refuses every
+      // write until an operator clears it. Read fresh, like the archived seal,
+      // so a peer's seal or clear takes effect here at once. Recovery's own
+      // route passes: it is how a schedule finds out the realm is sealed.
+      if (
+        this.#history &&
+        requiredPermission !== 'read' &&
+        !dispatch.operationalEndpoint &&
+        localPath !== HISTORY_RECOVERY_PATH
+      ) {
+        let readOnly = await realmReadOnly(this.#dbAdapter, this.url);
+        if (readOnly) {
+          throw new ReadOnlyRealmError(
+            `Realm ${this.url} is read-only: ${readOnly.detail ?? readOnly.reason}`,
+            readOnly.reason,
+          );
+        }
+      }
       if (!isLocal && request.method === 'HEAD' && dispatch.coarseReadOnly) {
         let answer = await this.#headForNonReader(request, requestContext);
         if (answer) {
@@ -8971,6 +9176,32 @@ export class Realm {
             headers: {
               'content-type': SupportedMimeType.JSONAPI,
               'X-Boxel-Realm-Archived': 'true',
+              'X-Boxel-Realm-Url': requestContext.realm.url,
+            },
+          },
+          requestContext,
+        });
+      }
+
+      if (e instanceof ReadOnlyRealmError) {
+        // 423, not the archived 403: the realm is there and readable, and
+        // refuses only writes, until an operator clears it.
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '423',
+                code: 'realm-read-only',
+                title: 'Realm Read-Only',
+                detail: e.message,
+              },
+            ],
+          }),
+          init: {
+            status: 423,
+            headers: {
+              'content-type': SupportedMimeType.JSONAPI,
+              'X-Boxel-Realm-Read-Only': e.reason,
               'X-Boxel-Realm-Url': requestContext.realm.url,
             },
           },
@@ -9539,6 +9770,121 @@ export class Realm {
   // The realm's revision history, when it records one.
   get history(): RealmHistoryRecorder | undefined {
     return this.#history;
+  }
+
+  // Check the realm against its history and bring it back into agreement:
+  // complete revisions whose bytes or index pass a crash cut short, settle
+  // writes whose answer was lost, and record what disk holds that no revision
+  // explains (see `realm-history-recovery.ts`). A failure leaves the realm
+  // read-only. Resolves with nothing for a realm that does not record, or —
+  // unless an operator asked — one already read-only, which stays that way
+  // until an operator clears it. Concurrent calls share one run.
+  async recoverHistory({
+    trigger,
+  }: {
+    trigger: RecoveryTrigger;
+  }): Promise<RecoveryResult | undefined> {
+    if (!this.#history) {
+      return undefined;
+    }
+    if (this.#recovering) {
+      return await this.#recovering;
+    }
+    let run = (async () => {
+      if (
+        trigger !== 'operator' &&
+        (await realmReadOnly(this.#dbAdapter, this.url))
+      ) {
+        return undefined;
+      }
+      let result = await recoverRealmHistory(this.#recoveryHost(), trigger, {
+        leaseOwner: this.#recoveryLeaseOwner,
+      });
+      if (trigger === 'operator' && result.outcome !== 'read-only') {
+        await clearRealmReadOnly(this.#dbAdapter, this.url);
+      }
+      return result;
+    })();
+    this.#recovering = run;
+    try {
+      return await run;
+    } finally {
+      this.#recovering = undefined;
+    }
+  }
+
+  #recoveryHost() {
+    let history = this.#history!;
+    let adapter = this.#adapter;
+    async function* walk(dir: LocalPath): AsyncGenerator<LocalPath> {
+      for await (let entry of adapter.readdir(dir)) {
+        let path = entry.path as LocalPath;
+        if (!isRecordablePath(path)) {
+          continue;
+        }
+        if (entry.kind === 'directory') {
+          yield* walk(path);
+        } else {
+          yield path;
+        }
+      }
+    }
+    return {
+      url: this.url,
+      history,
+      dbAdapter: this.#dbAdapter,
+      listFiles: () => walk('' as LocalPath),
+      readFile: async (path: LocalPath) => {
+        let stored = await adapter.openFile(path);
+        if (!stored) {
+          return undefined;
+        }
+        return stored.size !== undefined
+          ? await readRangeBytes(adapter, path, 0, stored.size)
+          : await fileContentToBytes(stored);
+      },
+      withFileWriteLocks: <T>(
+        paths: LocalPath[],
+        fn: (releaseLocks: () => void) => Promise<T>,
+      ) => this.#dbAdapter.withFileWriteLocks(this.url, paths, fn),
+      applyRevisions: async (
+        contents: Map<LocalPath, Uint8Array | undefined>,
+        revisions: string[],
+        releaseLocks: () => void,
+      ) => {
+        let writes = new Map<LocalPath, WriteContent>();
+        let deletes: LocalPath[] = [];
+        for (let [path, content] of contents) {
+          if (content) {
+            writes.set(path, content);
+          } else {
+            deletes.push(path);
+          }
+        }
+        await this._commitBatchUnlocked(
+          { writes, deletes },
+          {
+            recording: {
+              ...systemWriteRecording(),
+              engaged: true,
+              recovered: revisions,
+            },
+            rewriteUnchanged: true,
+            // Queued rather than waited for: recovery runs at mount, which
+            // does not wait on the realm's indexing either.
+            waitForIndex: false,
+            onDurable: releaseLocks,
+          },
+        );
+      },
+      systemRecording: () => systemWriteRecording(),
+      reportError: (message: string, err: unknown) => {
+        this.#log.error(
+          err ? `${message}: ${stringifyErrorForLog(err)}` : message,
+        );
+        reportError(new Error(message));
+      },
+    };
   }
 
   // Whether the archived seal covers the request `dispatch` answers: the

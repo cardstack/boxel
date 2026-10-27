@@ -7,6 +7,8 @@ import {
   type HistoryCommitResult,
   type HistoryOutcome,
   type PreparedCommit,
+  type HistoryReadResult,
+  type HistoryTreeEntry,
 } from '@cardstack/runtime-common/realm-history';
 
 // How long a call to deckd may take before its outcome is treated as unknown.
@@ -92,6 +94,40 @@ export class DeckdHistoryBackend implements HistoryBackend {
   async head(): Promise<string> {
     let body = await this.#post('/head', { repo: this.repo });
     return String(body.revision);
+  }
+
+  async tree(revision: string): Promise<HistoryTreeEntry[]> {
+    let body = await this.#post('/tree', { repo: this.repo, revision });
+    return (body.entries as { path: string; blob: string }[]).map(
+      ({ path, blob }) => ({ path: String(path), blob: String(blob) }),
+    );
+  }
+
+  async read(revision: string, paths: string[]): Promise<HistoryReadResult> {
+    let body = await this.#post('/read', {
+      repo: this.repo,
+      revision,
+      paths,
+    });
+    return {
+      files: (
+        body.files as {
+          path: string;
+          contentBase64?: string;
+          absent?: boolean;
+        }[]
+      ).map((file) =>
+        file.absent || file.contentBase64 === undefined
+          ? { path: String(file.path) }
+          : {
+              path: String(file.path),
+              content: new Uint8Array(
+                Buffer.from(file.contentBase64, 'base64'),
+              ),
+            },
+      ),
+      remaining: (body.remaining as string[] | undefined) ?? [],
+    };
   }
 
   async #post(

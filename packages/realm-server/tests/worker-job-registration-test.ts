@@ -68,6 +68,7 @@ module(basename(import.meta.filename), function () {
         'media-cache-gc',
         'prerender-html-reconcile',
         'prerender_html',
+        'realm-history-recovery',
         'run-command',
         'scoped-css-gc',
         'screenshot-card',
