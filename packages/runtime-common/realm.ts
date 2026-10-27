@@ -2087,6 +2087,21 @@ function toISOStringOrNull(value: string | Date | null): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+// A recorded write carrying more than one revision takes. Each file can be
+// under the realm's own ceilings with the batch, or a file grown by appends,
+// still over this one.
+function historyCommitTooLarge(
+  bytes: number,
+  history: RealmHistoryRecorder,
+): OperationFailure {
+  return new OperationFailure({
+    status: 413,
+    code: 'payload-too-large',
+    title: 'Write too large to record',
+    detail: `the write would record ${bytes} bytes in one revision, over the ${history.maxCommitBytes} the realm's history takes`,
+  });
+}
+
 // Test seams that fail a recorded write between its steps.
 interface HistoryFaults {
   afterStage?: () => Promise<void>;
@@ -5260,7 +5275,7 @@ export class Realm {
         `a commit recorded in ${this.url}'s history stages its bytes before writing them, so it cannot serialize them as it writes`,
       );
     }
-    let staged = await this.#stageForHistory(batch);
+    let staged = await this.#stageForHistory(batch, history);
     await this.#testOnlyHistoryFaults?.afterStage?.();
     if (staged.length === 0) {
       recording.revision = await history.head(recording);
@@ -5307,6 +5322,7 @@ export class Realm {
   // refusal has to come before it.
   async #stageForHistory(
     batch: CommitBatch,
+    history: RealmHistoryRecorder,
   ): Promise<
     { change: HistoryChange; verb: 'Create' | 'Update' | 'Delete' }[]
   > {
@@ -5340,6 +5356,11 @@ export class Realm {
       let base = next.get(path);
       if (!base) {
         let stored = await this.#adapter.openFile(path);
+        if ((stored?.size ?? 0) > history.maxCommitBytes) {
+          // Refused before the file is read: it would be refused by size
+          // below, and reading it first costs its whole length.
+          throw historyCommitTooLarge(stored?.size ?? 0, history);
+        }
         base =
           stored?.size !== undefined
             ? await readRangeBytes(this.#adapter, path, 0, stored.size)
@@ -5376,6 +5397,13 @@ export class Realm {
       if (await this.#adapter.exists(path)) {
         staged.push({ change: { path, delete: true }, verb: 'Delete' });
       }
+    }
+    let bytes = staged.reduce(
+      (total, { change }) => total + (change.content?.byteLength ?? 0),
+      0,
+    );
+    if (bytes > history.maxCommitBytes) {
+      throw historyCommitTooLarge(bytes, history);
     }
     return staged;
   }

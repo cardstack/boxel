@@ -323,7 +323,17 @@ export interface JournalEntry {
 
 const MAX_REPARENT_ATTEMPTS = 8;
 
+// The most bytes one revision carries. deckd takes a commit as one JSON body
+// of at most 64 MiB with every file base64-encoded, which grows its bytes by a
+// third, so 48 MiB of content is the ceiling with nothing left for the rest of
+// the body. A write over this is refused before anything is recorded, since
+// deckd would refuse it on every attempt.
+export const HISTORY_COMMIT_MAX_BYTES = 40 * 1024 * 1024;
+
 export class RealmHistoryRecorder {
+  // See `HISTORY_COMMIT_MAX_BYTES`. Settable so a test can reach it without
+  // sending tens of megabytes.
+  maxCommitBytes = HISTORY_COMMIT_MAX_BYTES;
   #backend: HistoryBackend;
   #dbAdapter: DBAdapter;
   #realmURL: string;
@@ -544,6 +554,27 @@ export class RealmHistoryRecorder {
         });
       }
       recording.outcome = 'aborted';
+      if (err.code === 'payload-too-large') {
+        // Sending it again is refused again.
+        throw new OperationFailure({
+          status: 413,
+          code: 'payload-too-large',
+          title: 'Write too large to record',
+          detail: `operation ${recording.operationId} is larger than the realm's history takes in one revision, and nothing was written`,
+          meta: { operationId: recording.operationId },
+        });
+      }
+      if (err.code === 'invalid-request') {
+        // The realm built a request its history cannot read, which no retry
+        // changes.
+        throw new OperationFailure({
+          status: 500,
+          code: 'internal-error',
+          title: 'Write not recorded',
+          detail: `operation ${recording.operationId} was not recorded, and nothing was written (${describe(err)})`,
+          meta: { operationId: recording.operationId },
+        });
+      }
       throw this.#aborted(recording, err);
     }
     this.#log.warn(

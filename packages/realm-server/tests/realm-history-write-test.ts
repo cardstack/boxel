@@ -21,6 +21,7 @@ import {
   type RevisionWriteEvent,
 } from '@cardstack/runtime-common/card-operations';
 import {
+  HISTORY_COMMIT_MAX_BYTES,
   HISTORY_DIR,
   OPERATION_ID_HEADER,
   REVISION_HEADER,
@@ -738,6 +739,84 @@ module(basename(import.meta.filename), function (hooks) {
           stored('person-3.json').includes('Unknown Outcome'),
           'and the retry brought disk up to it',
         );
+      },
+    );
+
+    recordingTest(
+      'a line appended to a file records the file as it now stands',
+      async function (assert) {
+        let source = await request
+          .post('/log.txt')
+          .set('Accept', 'application/vnd.card+source')
+          .set('Authorization', asJohn())
+          .send('first\n');
+        assert.strictEqual(source.status, 204);
+        let [result] = await commitBatch(
+          realm.batchCore,
+          [
+            {
+              op: 'appendLine',
+              href: `${realmURL.href}log.txt`,
+              params: { line: 'second' },
+            },
+          ],
+          { recording: { operationId: 'append-1', channel: 'operations' } },
+        );
+        assert.ok(result, 'the line was appended');
+        let head = await history.head();
+        assert.deepEqual(readRevision(realmDir, head).changes, ['M log.txt']);
+        assert.strictEqual(
+          git(realmDir, 'show', `${head}:log.txt`),
+          stored('log.txt'),
+          'the revision holds what the file holds',
+        );
+        assert.true(stored('log.txt').startsWith('first\nsecond'));
+      },
+    );
+
+    recordingTest(
+      'a write larger than one revision takes is refused, not retried',
+      async function (assert) {
+        let source = await request
+          .post('/big.txt')
+          .set('Accept', 'application/vnd.card+source')
+          .set('Authorization', asJohn())
+          .send('x'.repeat(100));
+        assert.strictEqual(source.status, 204);
+        let head = await history.head();
+        realm.history!.maxCommitBytes = 64;
+        try {
+          let tooBig = await request
+            .post('/bigger.txt')
+            .set('Accept', 'application/vnd.card+source')
+            .set('Authorization', asJohn())
+            .send('y'.repeat(100));
+          assert.strictEqual(tooBig.status, 413, JSON.stringify(tooBig.body));
+          assert.false(existsSync(join(realmDir, 'bigger.txt')), 'not written');
+
+          let before = stored('big.txt');
+          await assert.rejects(
+            commitBatch(
+              realm.batchCore,
+              [
+                {
+                  op: 'appendLine',
+                  href: `${realmURL.href}big.txt`,
+                  params: { line: 'more' },
+                },
+              ],
+              {
+                recording: { operationId: 'append-big', channel: 'operations' },
+              },
+            ),
+            (err: { error?: { status?: number } }) => err.error?.status === 413,
+            'an append to a file already over it is refused',
+          );
+          assert.strictEqual(stored('big.txt'), before, 'not appended');
+        } finally {
+          realm.history!.maxCommitBytes = HISTORY_COMMIT_MAX_BYTES;
+        }
+        assert.strictEqual(await history.head(), head, 'nothing recorded');
       },
     );
 
