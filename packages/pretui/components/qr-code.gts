@@ -94,8 +94,8 @@ export interface QrSymbol {
   maskPattern: number;
 }
 
-// The vendored bundle ships no types (it is a built artifact), so the single
-// untyped boundary is asserted once, here, rather than leaking `any` outward.
+// The one call into the vendored encoder, narrowed once, here, to the slice
+// this component reads.
 const createQr = createQrRaw as (
   data: string,
   options?: { errorCorrectionLevel?: QrErrorCorrection },

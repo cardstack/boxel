@@ -732,7 +732,6 @@ export class NodeCanvas extends Component<NodeCanvasSignature> {
         @selectionMode={{this.selectionMode}}
         @snapToGrid={{this.snapToGrid}}
         @snapGrid={{this.snapGrid}}
-        {{! @glint-expect-error - the vendored Canvas bundle declares no element type }}
         aria-label={{@label}}
         aria-describedby={{this.describedBy}}
         as |store|
