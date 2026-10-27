@@ -18,14 +18,15 @@ import {
 
 type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
 
-// `POST /_secure-window/context`: what the secure window was opened for — a
-// realm, a card or type, an operation on it — described from the server's own
-// records (`lib/secure-window.ts`). Asked with the window's own session, as
-// every request the window makes is.
 // The realm a URL is in, among every realm the server serves, mounted or not.
 function realmFinder({ dbAdapter, realms, reconciler }: CreateRoutesArgs) {
   return (url: URL) => findRealm(url, { realms, reconciler, dbAdapter });
 }
+
+// `POST /_secure-window/context`: what the secure window was opened for — a
+// realm, a card or type, an operation on it — described from the server's own
+// records (`lib/secure-window.ts`). Asked with the window's own session, as
+// every request the window makes is.
 
 export function handleSecureWindowContext(args: CreateRoutesArgs): Handler {
   let { dbAdapter, definitionLookup, virtualNetwork } = args;
