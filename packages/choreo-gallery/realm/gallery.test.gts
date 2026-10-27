@@ -403,6 +403,20 @@ module('Choreo gallery | film frame', function (hooks) {
   function grip(): HTMLElement {
     return one('[data-test-film-grip]')!;
   }
+  /** presses Escape on the grip, and says how the press reached the host:
+   *  not at all, or whether as unhandled */
+  async function escapeToHost(): Promise<'stopped' | 'handled' | 'passed'> {
+    let reached: 'stopped' | 'handled' | 'passed' = 'stopped';
+    let listen = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        reached = event.defaultPrevented ? 'handled' : 'passed';
+      }
+    };
+    root().addEventListener('keydown', listen);
+    await triggerKeyEvent(grip(), 'keydown', 'Escape');
+    root().removeEventListener('keydown', listen);
+    return reached;
+  }
   function resetButton(): HTMLElement | undefined {
     return Array.from(root().querySelectorAll<HTMLElement>('button')).find(
       (button) => button.textContent?.includes('Default size'),
@@ -477,7 +491,11 @@ module('Choreo gallery | film frame', function (hooks) {
       'nor grows taller than it is wide',
     );
 
-    await triggerKeyEvent(grip(), 'keydown', 'Escape');
+    assert.strictEqual(
+      await escapeToHost(),
+      'stopped',
+      'Escape is the grip’s while there is a hand-set size to undo',
+    );
     assert.strictEqual(
       grip().getAttribute('aria-valuetext'),
       '1000 × 600, default size',
@@ -525,15 +543,9 @@ module('Choreo gallery | film frame', function (hooks) {
       'Enter snaps back too',
     );
 
-    let passedOn: boolean[] = [];
-    let listen = (event: KeyboardEvent) =>
-      passedOn.push(event.key === 'Escape' && !event.defaultPrevented);
-    root().addEventListener('keydown', listen);
-    await triggerKeyEvent(grip(), 'keydown', 'Escape');
-    root().removeEventListener('keydown', listen);
-    assert.deepEqual(
-      passedOn,
-      [true],
+    assert.strictEqual(
+      await escapeToHost(),
+      'passed',
       'at its own size Escape has nothing to undo and goes on to the host',
     );
   });
