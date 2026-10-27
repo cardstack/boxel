@@ -16,6 +16,7 @@ import {
   isSecureSession,
   matrixServerName,
   mintLoginToken,
+  renewSecureSession,
   resumeDeviceSweeps,
   SecureSessionError,
   secureSignInConfigured,
@@ -380,6 +381,24 @@ export function handleMintLoginToken(args: CreateRoutesArgs): Handler {
         ),
       },
     });
+  });
+}
+
+// POST /_secure-session/renewal: the window's session again, with a fresh
+// token, renewed while the app device it handed its sign-in to still exists
+// (`renewSecureSession`). The token presented may have expired. Answered only
+// for the secure origin, since only the window holds a session to renew: 401
+// `signed-out` once its session has ended.
+export function handleRenewSecureSession(args: CreateRoutesArgs): Handler {
+  return secureSessionHandler(async (ctxt) => {
+    requireSecureOrigin(ctxt, args.secureOriginURL);
+    await sendSession(
+      ctxt,
+      await renewSecureSession(
+        deps(args),
+        ctxt.state.token as RealmServerTokenClaim | undefined,
+      ),
+    );
   });
 }
 

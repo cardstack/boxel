@@ -143,6 +143,7 @@ export type ExtendedClient = Pick<
   | 'isUsernameAvailable'
   | 'joinRoom'
   | 'leave'
+  | 'login'
   | 'loginFlows'
   | 'loginWithToken'
   | 'logout'
