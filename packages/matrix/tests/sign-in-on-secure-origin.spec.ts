@@ -11,6 +11,7 @@ import {
   setupPermissions,
 } from '../helpers/index.ts';
 import { browserLogin } from '../../boxel-cli/src/lib/sso-login.ts';
+import jwt from 'jsonwebtoken';
 
 // With sign-in on the secure origin, the app draws no sign-in form: a
 // signed-out app sends the user to the secure origin's page, which signs them
@@ -22,6 +23,8 @@ import { browserLogin } from '../../boxel-cli/src/lib/sso-login.ts';
 
 const APP_ORIGIN = new URL(appURL).origin;
 const SECURE_SESSION_KEY = 'boxel-secure-session';
+// The isolated realm server's secret seed, which signs its sessions.
+const REALM_SECRET_SEED = "shhh! it's a secret";
 
 async function signInOnSecureOrigin(context: BrowserContext) {
   await context.addInitScript(() => {
@@ -207,14 +210,32 @@ test.describe('Sign in on the secure origin', () => {
       "the window's session is bound to the device the app signed in as",
     ).toEqual([appDevice]);
 
-    // A week on: the window's row has lapsed, and so has the session the
-    // window stored, as both do on the same day.
-    await sql.executeSQL(
-      `UPDATE secure_sessions SET expires_at = NOW() - interval '1 hour'
+    // A week on: the window's row has lapsed, and so has the token the
+    // window stored, which ends with it.
+    let [{ id }] = (await sql.executeSQL(
+      `SELECT id FROM secure_sessions
         WHERE user_id = '${userId}' AND client = 'window'`,
+    )) as { id: string }[];
+    let lapsedAt = Math.floor(Date.now() / 1000) - 60 * 60;
+    await sql.executeSQL(
+      `UPDATE secure_sessions SET expires_at = to_timestamp(${lapsedAt})
+        WHERE id = '${id}'`,
     );
+    let lapsed = {
+      token: jwt.sign(
+        {
+          user: userId,
+          sessionRoom: 'test-session',
+          secureSession: id,
+          exp: lapsedAt,
+        },
+        REALM_SECRET_SEED,
+      ),
+      user: userId,
+      expiresAt: new Date(lapsedAt * 1000).toISOString(),
+    };
     await page.context().addInitScript(
-      ({ secureOrigin, key }) => {
+      ({ secureOrigin, key, lapsed }) => {
         // Once, before the first secure-origin page this test opens next.
         if (
           location.origin !== secureOrigin ||
@@ -223,15 +244,12 @@ test.describe('Sign in on the secure origin', () => {
           return;
         }
         localStorage.setItem('test-session-aged', 'true');
-        let stored = JSON.parse(localStorage.getItem(key) ?? 'null');
-        if (stored) {
-          stored.expiresAt = new Date(Date.now() - 3_600_000).toISOString();
-          localStorage.setItem(key, JSON.stringify(stored));
-        }
+        localStorage.setItem(key, JSON.stringify(lapsed));
       },
       {
         secureOrigin: new URL(secureOriginURL).origin,
         key: SECURE_SESSION_KEY,
+        lapsed,
       },
     );
 
