@@ -341,15 +341,6 @@ export default class AiAssistantMessage extends Component<Signature> {
     }
   };
 
-  // Review brings the turn's first diff into view, from where the reader is.
-  private reviewTurn = () => {
-    let from =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : document.body;
-    this.args.answerFooter?.diff?.review(from);
-  };
-
   // The reasoning trace is shown, but closed by default: a transcript reads
   // as conclusions, and the reader opens the trace when they want it. Their
   // choice is remembered per message across re-renders.
@@ -660,15 +651,14 @@ export default class AiAssistantMessage extends Component<Signature> {
 
         {{#if @answerFooter.diff.perFile.length}}
           {{! what the turn changed, file by file, with its size; a file
-              opens in the editor, and Review brings the turn's diffs into
-              view (Pret UI's TurnChanges) }}
+              opens in the editor (Pret UI's TurnChanges). It has no Review:
+              the host has no view that reviews a turn's changes }}
           {{! a later answer does not take it away: what a turn changed is
               part of the turn (ADR 013 §1.16) }}
           <TurnChanges
             class='turn-changes-row'
             @files={{this.changedFiles}}
             @onOpen={{this.openChangedFile}}
-            @onReview={{this.reviewTurn}}
             data-test-turn-changes
           />
         {{/if}}

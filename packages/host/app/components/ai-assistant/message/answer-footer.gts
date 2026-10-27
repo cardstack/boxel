@@ -14,8 +14,9 @@ interface Signature {
 }
 
 // The quiet actions under a turn's final reply, as Pret UI's AnswerFooter
-// draws them: copy, keep it as a card, review what it changed, ask again, and
-// what the turn cost. The host supplies what each action does.
+// draws them: copy, keep it as a card, what it changed, ask again, and what
+// the turn cost. It has no Review: the host has no view that reviews a turn's
+// changes. The host supplies what each action does.
 export default class AnswerFooter extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
 
@@ -38,7 +39,7 @@ export default class AnswerFooter extends Component<Signature> {
   };
 
   // The turn's changes list above the footer already says what changed,
-  // file by file, with Review: the footer doesn't say it a third time.
+  // file by file: the footer doesn't say it a second time.
   private get diff() {
     let diff = this.args.footer.diff;
     return diff && !diff.perFile?.length
@@ -46,17 +47,12 @@ export default class AnswerFooter extends Component<Signature> {
       : undefined;
   }
 
-  private review = (from: HTMLElement) => {
-    this.args.footer.diff?.review(from);
-  };
-
   <template>
     <KitAnswerFooter
       @text={{@footer.markdown}}
       @onSave={{if @footer.saveAsCard this.save}}
       @onOpenSaved={{this.openSaved}}
       @diff={{this.diff}}
-      @onReview={{if this.diff this.review}}
       @onRetry={{@footer.retry}}
       @cost={{@footer.credits}}
       @superseded={{@footer.superseded}}

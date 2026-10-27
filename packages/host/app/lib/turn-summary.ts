@@ -149,14 +149,12 @@ export interface AnswerFooterData {
   /** saves the reply as a markdown card in the open workspace and gives
    * its URL; absent when there is nowhere sensible to save it */
   saveAsCard?: () => Promise<string>;
-  /** what the turn changed in source files, and how to show it: Review
-   * opens the turn and brings its first diff into view */
+  /** what the turn changed in source files */
   diff?: {
     files: number;
     added: number;
     removed: number;
     /** each file the turn changed, with its size, for TurnChanges */
     perFile?: ChangedFile[];
-    review: (from: HTMLElement) => void;
   };
 }

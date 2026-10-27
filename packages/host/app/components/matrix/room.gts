@@ -2983,7 +2983,7 @@ export default class Room extends Component<Signature> {
           seconds,
           at: asked.created,
           calls: tools.length,
-          files: this.turnDiff(tools, turn[0]!.eventId)?.files,
+          files: this.turnDiff(tools)?.files,
           thinking,
         });
       }
@@ -3045,7 +3045,7 @@ export default class Room extends Component<Signature> {
           }
         }
         let reply = messages[replyIndex]!;
-        let diff = this.turnDiff(tools, turn[0]!.eventId);
+        let diff = this.turnDiff(tools);
         footers.set(replyIndex, {
           diff,
           markdown: reply.body,
@@ -3134,17 +3134,12 @@ export default class Room extends Component<Signature> {
     return true;
   }
 
-  // What a turn's calls changed in source files, summed from their rows,
-  // with a Review that opens the turn and brings its first diff into view.
-  private turnDiff(
-    tools: { id?: string | null }[],
-    turnKey: string,
-  ): AnswerFooterData['diff'] {
+  // What a turn's calls changed in source files, summed from their rows.
+  private turnDiff(tools: { id?: string | null }[]): AnswerFooterData['diff'] {
     let files = 0;
     let added = 0;
     let removed = 0;
     let perFile: NonNullable<AnswerFooterData['diff']>['perFile'] = [];
-    let first: string | undefined;
     for (let tool of tools) {
       let stats = tool.id
         ? this.toolService.toolDiffStats.get(tool.id)
@@ -3154,33 +3149,12 @@ export default class Room extends Component<Signature> {
         added += stats.added;
         removed += stats.removed;
         perFile.push(...(stats.perFile ?? []));
-        first ??= tool.id!;
       }
     }
-    if (!files || !first) {
+    if (!files) {
       return undefined;
     }
-    return {
-      files,
-      added,
-      removed,
-      perFile,
-      review: (from: HTMLElement) => {
-        if (!this.expandedTurns.has(turnKey)) {
-          this.expandedTurns.add(turnKey);
-        }
-        schedule('afterRender', () => {
-          let transcript =
-            from.closest('.ai-assistant-conversation') ?? document;
-          let row = transcript.querySelector<HTMLElement>(
-            `[data-tool-call-id="${CSS.escape(first!)}"]`,
-          );
-          if (row) {
-            this.showRow(row);
-          }
-        });
-      },
-    };
+    return { files, added, removed, perFile };
   }
 
   private turnFoldFor = (index: number) => this.turns.folds.get(index);
