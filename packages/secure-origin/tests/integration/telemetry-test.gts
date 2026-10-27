@@ -45,6 +45,8 @@ const SESSION = {
 };
 
 type Answer = { status: number; body?: unknown };
+type FetchInit = NonNullable<Parameters<typeof fetch>[1]>;
+type QUnitAssert = Parameters<Parameters<typeof test>[1]>[0];
 
 function json(status: number, body: unknown): Answer {
   return { status, body };
@@ -150,7 +152,7 @@ module('Integration | telemetry', function (hooks) {
     document.head.append(meta);
     storeSession(SESSION);
     startTelemetry({
-      fetch: (async (_url: URL, init: RequestInit) => {
+      fetch: (async (_url: URL, init: FetchInit) => {
         beacons.push({
           headers: init.headers as Record<string, string>,
           body: String(init.body),
@@ -168,7 +170,7 @@ module('Integration | telemetry', function (hooks) {
     forgetSession();
   });
 
-  function assertNothingSecret(assert: Assert) {
+  function assertNothingSecret(assert: QUnitAssert) {
     stopTelemetry();
     assert.ok(beacons.length > 0, 'the pages beaconed');
     let sent = beacons.map((b) => b.body).join('\n');
@@ -341,7 +343,7 @@ module('Unit | telemetry errors', function () {
       window: win,
       serverURL: new URL(REALM_SERVER),
       session: () => undefined,
-      fetch: (async (_url: URL, init: RequestInit) => {
+      fetch: (async (_url: URL, init: FetchInit) => {
         bodies.push(String(init.body));
         return new Response(null, { status: 204 });
       }) as typeof fetch,
