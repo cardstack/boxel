@@ -483,7 +483,7 @@ export default class WorkspaceChooser extends Component<Signature> {
     >
       {{#if @topBarCenterElement}}
         {{#in-element @topBarCenterElement}}
-          <div class='sort-controls'>
+          <div class='sort-controls' data-theme='dark'>
             <BoxelSelect
               class='sort-select'
               @dropdownClass='workspace-chooser-sort-dropdown'
@@ -699,7 +699,6 @@ export default class WorkspaceChooser extends Component<Signature> {
         /* Keep the icon and label on one line at narrow top-bar widths. */
         --boxel-select-trigger-content-wrap: nowrap;
         --boxel-select-background-color: var(--boxel-800);
-        --boxel-select-text-color: var(--boxel-light);
         --boxel-select-border-color: var(--boxel-light-25);
         --boxel-select-focus-border-color: var(--boxel-light-50);
         --icon-color: var(--boxel-light);
@@ -723,7 +722,6 @@ export default class WorkspaceChooser extends Component<Signature> {
       :global(.boxel-select__dropdown.workspace-chooser-sort-dropdown) {
         --boxel-dropdown-background-color: var(--boxel-650);
         --boxel-dropdown-border-color: var(--boxel-light-25);
-        --boxel-dropdown-text-color: var(--boxel-light);
         --boxel-dropdown-selected-text-color: var(--boxel-light);
         --boxel-dropdown-hover-color: var(--boxel-700);
         --boxel-dropdown-highlight-color: var(--boxel-650);

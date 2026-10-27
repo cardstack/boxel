@@ -51,6 +51,7 @@ import {
   publishedRealmURLsFromInfo,
   skillsRealmURL,
 } from '@cardstack/host/lib/utils';
+import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -59,7 +60,6 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type WorkspaceDuplicationService from '@cardstack/host/services/workspace-duplication';
 
-import focusWhenSelected from './focus-when-selected';
 import ItemContainer from './item-container';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 import {
@@ -1677,7 +1677,7 @@ interface WorkspaceDeleteSummary {
   files: number;
 }
 
-function summarizeWorkspaceContents(
+export function summarizeWorkspaceContents(
   fileURLs: string[],
 ): WorkspaceDeleteSummary {
   return fileURLs.reduce(

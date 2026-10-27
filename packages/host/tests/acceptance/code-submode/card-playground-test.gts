@@ -108,7 +108,7 @@ const authorCard = `import { contains, field, CardDef, Component } from "@cardst
       </article>
       <style scoped>
         article {
-          margin-inline: 20px;
+          margin-inline: var(--boxel-sp-lg);
         }
       </style>
     </template>
@@ -155,7 +155,7 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
       </article>
       <style scoped>
         article {
-          margin-inline: 20px;
+          margin-inline: var(--boxel-sp-lg);
         }
       </style>
     </template>
@@ -245,9 +245,9 @@ async function waitForHeadPreviewText(
     });
   } catch (error) {
     let actual = readSelectorText(selector);
-    let googleTitle = readSelectorText('.google-title');
-    let googleDescription = readSelectorText('.google-description');
-    let googleSiteName = readSelectorText('.google-site-name');
+    let googleTitle = readSelectorText('[data-test-google-title]');
+    let googleDescription = readSelectorText('[data-test-google-description]');
+    let googleSiteName = readSelectorText('[data-test-google-site-name]');
     let previewPanel = safeQuerySelector('[data-test-playground-panel]');
 
     console.info(
@@ -677,23 +677,25 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       await selectFormat('head');
       await waitForHeadPreviewText(
-        '.google-title',
+        '[data-test-google-title]',
         'Definition Title',
         'initial head preview render in card playground',
       );
 
-      assert.dom('.google-title').hasText('Definition Title');
-      assert.dom('.google-description').hasText('Definition description');
-      assert.dom('.google-site-name').hasText('example.com');
+      assert.dom('[data-test-google-title]').hasText('Definition Title');
+      assert
+        .dom('[data-test-google-description]')
+        .hasText('Definition description');
+      assert.dom('[data-test-google-site-name]').hasText('example.com');
 
       setMonacoContent(headPreviewCard.replace('</title>', '!!</title>'));
       await waitForHeadPreviewText(
-        '.google-title',
+        '[data-test-google-title]',
         'Definition Title!!',
         'updated head preview render in card playground',
       );
 
-      assert.dom('.google-title').hasText('Definition Title!!');
+      assert.dom('[data-test-google-title]').hasText('Definition Title!!');
     });
 
     test('can populate instance chooser options from recent-files and recent-cards, ordered by last viewed timestamp', async function (assert) {
@@ -1182,7 +1184,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           </article>
           <style scoped>
             article {
-              margin-inline: 20px;
+              margin-inline: var(--boxel-sp-lg);
             }
           </style>
         </template>
@@ -1253,7 +1255,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
             </article>
             <style scoped>
               article {
-                margin-inline: 20px;
+                margin-inline: var(--boxel-sp-lg);
               }
             </style>
           </template>

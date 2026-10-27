@@ -1,7 +1,9 @@
 // Pretui — JumpChip: scroll orientation for a growing stream, plus the scrollEdge measurement modifier it pairs with.
 import Component from '@glimmer/component';
+import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
+import { VisuallyHidden } from './visually-hidden';
 
 // ── scrollEdge ───────────────────────────────────────────────────────────
 // The measurement JumpChip needs, and the reason the chip is not merely
@@ -38,7 +40,13 @@ export const scrollEdge = modifier(
 // ── JumpChip ─────────────────────────────────────────────────────────────
 // Scroll orientation for a stream that grows while you are reading it. Two
 // jobs in one control, distinguished by whether anything arrived: "3 new
-// messages" when it did, "Back to bottom" when it did not.
+// messages" when it did, "Back to bottom" when it did not. The news is also
+// said once through a polite status region, since a chip that appears at
+// the edge of the frame is easy to miss and invisible to a screen reader.
+//
+// A reader who takes the jump from the keyboard keeps their focus: when the
+// caller hides the chip in answer, it stays reachable (not inert) until
+// focus leaves it, so focus never drops to the page body.
 //
 // Presentational by contract — the caller owns the scroller and decides when
 // the chip is warranted (`scrollEdge` above is the measurement, offered
@@ -51,8 +59,10 @@ export interface JumpChipSignature {
     /** whether the chip is offered at all */
     visible?: boolean;
     /**
-     * items that arrived while the reader was away. Non-zero switches the
-     * chip to its "new message" voice and shows the count.
+     * messages that arrived while the reader was away: count messages, not
+     * transcript rows (a tool call or a system line is not a message).
+     * Non-zero switches the chip to its "new messages" voice and shows the
+     * count.
      */
     count?: number;
     /** override the derived label entirely */
@@ -64,6 +74,35 @@ export interface JumpChipSignature {
   };
   Element: HTMLDivElement;
 }
+
+const PLURAL = new Intl.PluralRules('en');
+const COUNT = new Intl.NumberFormat('en');
+
+/** "1 new message", "3 new messages", "1,204 new messages" */
+function newMessages(count: number): string {
+  let noun = PLURAL.select(count) === 'one' ? 'message' : 'messages';
+  return `${COUNT.format(count)} new ${noun}`;
+}
+
+// A hidden chip is inert, except while it holds keyboard focus: then inert
+// waits for focus to leave, because putting it on the focused button would
+// drop focus to the page body. Pointer focus does not hold it (the reader's
+// next action is not on the chip).
+const inertWhileHidden = modifier((el: HTMLElement, [visible]: [boolean]) => {
+  if (visible) {
+    el.inert = false;
+    return;
+  }
+  if (!el.querySelector(':focus-visible')) {
+    el.inert = true;
+    return;
+  }
+  let release = () => {
+    el.inert = true;
+  };
+  el.addEventListener('focusout', release, { once: true });
+  return () => el.removeEventListener('focusout', release);
+});
 
 export class JumpChip extends Component<JumpChipSignature> {
   get count(): number {
@@ -83,9 +122,14 @@ export class JumpChip extends Component<JumpChipSignature> {
       return this.args.label;
     }
     if (this.isNews) {
-      return this.count === 1 ? '1 new message' : this.count + ' new messages';
+      return newMessages(this.count);
     }
     return this.direction === 'up' ? 'Back to top' : 'Back to bottom';
+  }
+  /** what the status region says: the news while the chip offers it,
+   * nothing otherwise */
+  get announcement(): string {
+    return this.visible && this.isNews ? this.label : '';
   }
 
   jump = () => this.args.onJump?.();
@@ -96,29 +140,26 @@ export class JumpChip extends Component<JumpChipSignature> {
       data-visible={{if this.visible 'true'}}
       data-direction={{this.direction}}
       data-news={{if this.isNews 'true'}}
-      inert={{unless this.visible true}}
+      {{inertWhileHidden this.visible}}
       data-test-pretui-jump-chip
       ...attributes
     >
       <button
         type='button'
         class='pretui-jump-btn'
-        data-test-pretui-jump-chip-button
         {{on 'click' this.jump}}
+        data-test-pretui-jump-chip-button
       >
-        <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'>
-          <path
-            d='M12 5v14M6 13l6 6 6-6'
-            fill='none'
-            stroke='currentColor'
-            stroke-width='2.2'
-            stroke-linecap='round'
-            stroke-linejoin='round'
-          />
-        </svg>
+        <ArrowDownIcon width='13' height='13' aria-hidden='true' />
         <span>{{this.label}}</span>
       </button>
     </div>
+    {{! outside the chip, which is inert while hidden: an inert region is
+        not in the accessibility tree, so its change would not be heard }}
+    <VisuallyHidden
+      role='status'
+      data-test-pretui-jump-chip-status
+    >{{this.announcement}}</VisuallyHidden>
 
     <style scoped>
       @layer PretComponent {
@@ -127,7 +168,7 @@ export class JumpChip extends Component<JumpChipSignature> {
         .pretui-jump {
           position: absolute;
           inset-inline: 0;
-          bottom: var(--pretui-jump-offset, 12px);
+          bottom: var(--pretui-jump-offset, var(--boxel-sp-sm));
           display: flex;
           justify-content: center;
           pointer-events: none;
@@ -135,41 +176,47 @@ export class JumpChip extends Component<JumpChipSignature> {
         }
         .pretui-jump[data-direction='up'] {
           bottom: auto;
-          top: var(--pretui-jump-offset, 12px);
+          top: var(--pretui-jump-offset, var(--boxel-sp-sm));
         }
         .pretui-jump-btn {
           display: inline-flex;
           align-items: center;
-          gap: 7px;
-          min-height: 30px;
-          padding: 0 13px;
+          gap: var(--boxel-sp-3xs);
+          min-height: 1.75rem;
+          padding: 0 var(--boxel-sp-sm);
           border: 0;
-          border-radius: 999px;
-          background: var(--card);
+          border-radius: var(--boxel-border-radius-sm);
+          background-color: var(--card);
           box-shadow: var(
             --pretui-shadow-overlay,
             0 0 0 1px var(--border),
-            0 8px 28px rgb(0 0 0 / 0.18)
+            var(--shadow-lg)
           );
-          font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
-          font-weight: 500;
+          font-family: inherit;
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+          white-space: nowrap;
           color: var(--foreground);
           cursor: pointer;
           pointer-events: auto;
           opacity: 0;
-          transform: translateY(8px) scale(0.96);
+          transform: translateY(0.5rem) scale(0.96);
           transition:
             opacity 180ms ease-out,
             transform 220ms
               var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
         }
-        .pretui-jump[data-visible] .pretui-jump-btn {
+        /* shown while offered, and while it holds the keyboard focus a jump
+           left on it, so a focused control never vanishes under the reader */
+        .pretui-jump[data-visible] .pretui-jump-btn,
+        .pretui-jump:focus-within .pretui-jump-btn {
           opacity: 1;
           transform: none;
         }
         /* hidden means hidden: no pointer events, no tab stop, no hit area */
-        .pretui-jump:not([data-visible]) .pretui-jump-btn {
+        .pretui-jump:not([data-visible]):not(:focus-within) .pretui-jump-btn {
           pointer-events: none;
           visibility: hidden;
           transition:
@@ -177,45 +224,31 @@ export class JumpChip extends Component<JumpChipSignature> {
             transform 220ms ease-out,
             visibility 0s linear 220ms;
         }
+        /* --hover is translucent, so it lays over the card face rather than
+           replacing it: the chip floats over the transcript */
         .pretui-jump-btn:hover {
-          background: var(--hover, var(--boxel-100));
+          background-image: linear-gradient(var(--hover), var(--hover));
         }
         .pretui-jump-btn:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 2px;
         }
         .pretui-jump-btn > svg {
-          width: 13px;
-          height: 13px;
           flex: none;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-jump[data-direction='up'] .pretui-jump-btn > svg {
           transform: rotate(180deg);
         }
-        /* news is never colour alone — the count is in the label */
-        .pretui-jump[data-news] .pretui-jump-btn {
-          background: color-mix(
-            in oklch,
-            var(--primary) 12%,
-            var(--card)
-          );
-          box-shadow:
-            0 0 0 1px
-              color-mix(in oklch, var(--primary) 45%, var(--border)),
-            0 8px 28px rgb(0 0 0 / 0.18);
-        }
+        /* news is never colour alone — the count is in the label; the
+           arrow (the mark) takes the live state, the chip stays the card */
         .pretui-jump[data-news] .pretui-jump-btn > svg {
-          color: color-mix(
-            in oklch,
-            var(--foreground) 18%,
-            var(--primary)
-          );
+          color: var(--primary-ink);
         }
         @media (any-pointer: coarse) {
           .pretui-jump-btn {
-            min-height: 44px;
-            padding: 0 18px;
+            min-height: 2.75rem;
+            padding: 0 var(--boxel-sp);
           }
         }
         @media (prefers-reduced-motion: reduce) {

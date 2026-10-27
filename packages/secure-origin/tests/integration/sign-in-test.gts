@@ -315,7 +315,7 @@ module('Integration | sign-in', function (hooks) {
         .hasText('You’re signed in to Boxel');
       assert
         .dom('[data-test-secure-signed-in]')
-        .hasText('Key management is coming.');
+        .hasText('You can close this window.');
       let signIn = server.requests.find(
         (r) => r.method === 'POST' && r.path === '_secure-session',
       );

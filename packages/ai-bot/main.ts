@@ -63,6 +63,7 @@ import {
 import { isApprovalResult } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
+import { MAX_SCRIPT_SYNTAX_RETRIES } from './lib/script-syntax-check.ts';
 import { collectUsedToolCallIds } from './lib/tool-call-ids.ts';
 import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
 import { shouldSetRoomTitle, setTitle, roomHasTitle } from './lib/set-title.ts';
@@ -855,9 +856,23 @@ Common issues are:
           // A prompt the provider rejects as too long for the model is
           // compacted once (see lib/compaction.ts) and the turn runs again.
           let compactionAttempted = false;
-          let retryAfterCompaction: boolean;
+          // A reply whose run-realm-code script doesn't parse is handed back
+          // to the model, up to MAX_SCRIPT_SYNTAX_RETRIES times, and the turn
+          // goes on with its next reply (see lib/script-syntax-check.ts).
+          let scriptSyntaxRetries = 0;
+          // A newer message that lands between two replies finds no runner
+          // to abort; it marks the turn interrupted instead.
+          let interruptedBetweenReplies = false;
+          let retryGeneration = false;
           do {
-            retryAfterCompaction = false;
+            if (retryGeneration && interruptedBetweenReplies) {
+              log.info(
+                `[${eventId}] Generation was interrupted between two replies`,
+              );
+              await responder.finalize({ isCanceled: true });
+              break;
+            }
+            retryGeneration = false;
             log.info(
               `[${eventId}] Starting generation with model %s`,
               promptParts.model,
@@ -946,6 +961,36 @@ Common issues are:
               }
 
               log.info(`[${eventId}] Generation complete`);
+
+              let completedMessage = completion.choices?.[0]?.message;
+              let scriptSyntaxRetryMessages =
+                completedMessage &&
+                scriptSyntaxRetries < MAX_SCRIPT_SYNTAX_RETRIES &&
+                !stopped()
+                  ? responder.scriptSyntaxRetryMessages(completedMessage)
+                  : undefined;
+              if (scriptSyntaxRetryMessages) {
+                scriptSyntaxRetries++;
+                log.info(
+                  `[${eventId}] A run-realm-code script does not parse; handing it back to the model (${scriptSyntaxRetries} of ${MAX_SCRIPT_SYNTAX_RETRIES})`,
+                );
+                promptParts = {
+                  ...promptParts,
+                  messages: [
+                    ...(promptParts.messages ?? []),
+                    ...scriptSyntaxRetryMessages,
+                  ],
+                };
+                responder.startNewReply();
+                let activeGeneration = activeGenerations.get(room.roomId);
+                if (activeGeneration) {
+                  activeGeneration.runner = {
+                    abort: () => (interruptedBetweenReplies = true),
+                  };
+                }
+                retryGeneration = true;
+                continue;
+              }
               await profTime(eventId, 'response:finalize', async () =>
                 responder.finalize(),
               );
@@ -1034,7 +1079,7 @@ Common issues are:
                 } else if (compactedEventList && compactedPromptParts) {
                   eventList = compactedEventList;
                   promptParts = compactedPromptParts;
-                  retryAfterCompaction = true;
+                  retryGeneration = true;
                 } else {
                   await responder.onError(
                     nothingToCompact
@@ -1093,9 +1138,16 @@ Common issues are:
                   extra: { roomId: room.roomId, eventId },
                 });
               }
-              activeGenerations.delete(room.roomId);
+              // Each reply's cost is debited once, after that reply. Its
+              // generation id goes too, so a next reply that fails before
+              // its first chunk can't schedule a fallback debit for this one.
+              costInUsd = undefined;
+              generationId = undefined;
+              if (!retryGeneration) {
+                activeGenerations.delete(room.roomId);
+              }
             }
-          } while (retryAfterCompaction);
+          } while (retryGeneration);
           generationCompleted = true;
 
           if (

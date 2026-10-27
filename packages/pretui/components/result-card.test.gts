@@ -28,9 +28,9 @@ module('Pretui | components/result-card', function (hooks) {
   test('offers a named menu button only when given a handler', async function (assert) {
     let opened = 0;
     const onMenu = () => (opened += 1);
-    await render(<template><ResultCard @title='x' @onMenu={{onMenu}} /></template>);
-    let btn = card().querySelector('.pretui-resultcard-menu') as HTMLButtonElement;
-    assert.strictEqual(btn.getAttribute('aria-label'), 'More', 'a ⋯ needs a name');
+    await render(<template><ResultCard @title='Wuyi Origins' @onMenu={{onMenu}} /></template>);
+    let btn = card().querySelector('[data-test-pretui-result-card-menu]') as HTMLButtonElement;
+    assert.strictEqual(btn.getAttribute('aria-label'), 'More actions for Wuyi Origins', 'a ⋯ is named for what it acts on');
     await click(btn);
     assert.strictEqual(opened, 1);
     assert.strictEqual(card().querySelector('.pretui-eyebrow'), null, 'no empty eyebrow');

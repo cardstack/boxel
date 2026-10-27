@@ -1,0 +1,966 @@
+import {
+  click,
+  fillIn,
+  render,
+  settled,
+  triggerKeyEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
+import { module, test } from 'qunit';
+import { setupRenderingTest } from 'ember-qunit';
+
+import { forgetSession, storeSession } from '../../src/security/session.js';
+import { navigation } from '../../src/shell/navigation.js';
+import EnterKeyPage from '../../src/shell/keys/enter-key-page.gts';
+import KeyPage from '../../src/shell/keys/key-page.gts';
+import { openedFor } from '../../src/shell/keys/opened-for.ts';
+import SharePage from '../../src/shell/keys/share-key-page.gts';
+import SwapKeyPage from '../../src/shell/keys/swap-key-page.gts';
+
+// The key pages, against a realm server that answers the requests they make.
+// Every change to a key is made with a key write ticket the page mints with
+// its own session for that change alone, just before making it.
+
+const REALM_SERVER = 'https://realm-server.test/';
+const REALM = 'https://realm-server.test/someone/workspace/';
+// The same realm named in prefix form, as a page may open the window with it.
+// The server answers with the realm's URL, and the page acts on that answer.
+const REALM_PREFIX = '@someone/workspace/';
+const CARD = `${REALM}Weather/today`;
+const SESSION = {
+  token: 'secure-session-token',
+  user: '@someone:example.test',
+  expiresAt: '2099-01-01T00:00:00.000Z',
+};
+
+type Answer = { status: number; body?: unknown };
+type Route = (request: {
+  url: URL;
+  method: string;
+  body: any;
+}) => Answer | Promise<Answer>;
+
+function json(status: number, body: unknown): Answer {
+  return { status, body };
+}
+
+function refusal(status: number, detail: string) {
+  return json(status, { errors: [{ status, detail }] });
+}
+
+const KEYS = [
+  {
+    id: 'key-1',
+    name: 'Weather service',
+    kind: 'static',
+    state: 'active',
+    createdAt: '2026-10-01T12:00:00.000Z',
+    updatedAt: '2026-10-01T12:00:00.000Z',
+  },
+  {
+    id: 'key-2',
+    name: 'Maps',
+    kind: 'static',
+    state: 'active',
+    createdAt: '2026-10-02T12:00:00.000Z',
+    updatedAt: '2026-10-02T12:00:00.000Z',
+  },
+];
+
+// A key's attributes, as the server sends them: without its id.
+function attributesOf({ id: _id, ...attributes }: (typeof KEYS)[number]) {
+  return attributes;
+}
+
+function keyResources(keys = KEYS) {
+  return {
+    data: keys.map(({ id, ...attributes }) => ({
+      type: 'user-key',
+      id,
+      attributes,
+    })),
+  };
+}
+
+function context(attributes: Record<string, unknown>) {
+  return json(200, {
+    data: { type: 'secure-window-context', attributes },
+  });
+}
+
+const WORKSPACE = { url: REALM, name: 'Team Workspace', directWriter: true };
+
+module('Integration | key pages', function (hooks) {
+  setupRenderingTest(hooks);
+
+  let requests: { method: string; path: string; url: URL; body: any }[];
+  let routes: Record<string, Route>;
+  let tickets: number;
+  let navigations: { how: string; url?: string }[];
+  let originalFetch = window.fetch;
+  let originalNavigation = { ...navigation };
+  let originalURL: string;
+  let meta: HTMLMetaElement;
+
+  function serve(more: Record<string, Route>) {
+    Object.assign(routes, more);
+  }
+
+  function visitShell(query: string) {
+    history.replaceState(null, '', `/secure/${query}`);
+  }
+
+  function ticketRequests() {
+    return requests
+      .filter((r) => r.path === '_key-write-tickets')
+      .map((r) => r.body.data.attributes);
+  }
+
+  // Each test sets the page's address once, and the module puts it back once
+  // at the end: Chrome ignores history.replaceState past about 100 calls in
+  // ten seconds, and a suite that spent its allowance would leave the next
+  // module's addresses unset.
+  hooks.before(function () {
+    originalURL = window.location.href;
+  });
+
+  hooks.after(function () {
+    history.replaceState(null, '', originalURL);
+  });
+
+  hooks.beforeEach(function () {
+    requests = [];
+    tickets = 0;
+    navigations = [];
+    routes = {
+      'GET _secure-session': () => ({ status: 204 }),
+      'POST _key-write-tickets': () =>
+        json(201, {
+          data: {
+            attributes: {
+              ticket: `ticket-${++tickets}`,
+              expiresAt: '2099-01-01T00:00:00.000Z',
+            },
+          },
+        }),
+      'GET _user-keys': () => json(200, keyResources()),
+    };
+    window.fetch = async (
+      input: Parameters<typeof fetch>[0],
+      init: Parameters<typeof fetch>[1] = {},
+    ) => {
+      let url = new URL(String(input));
+      let method = init.method ?? 'GET';
+      let body = init.body ? JSON.parse(String(init.body)) : undefined;
+      let path = url.pathname.replace(/^\//, '');
+      requests.push({ method, path, url, body });
+      let route = routes[`${method} ${path}`];
+      let answer = route
+        ? await route({ url, method, body })
+        : refusal(404, 'Not found');
+      return new Response(
+        answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
+        {
+          status: answer.status,
+          headers: { 'Content-Type': 'application/vnd.api+json' },
+        },
+      );
+    };
+    navigation.assign = (url: string) =>
+      navigations.push({ how: 'assign', url });
+    navigation.replace = (url: string) =>
+      navigations.push({ how: 'replace', url });
+    navigation.close = () => navigations.push({ how: 'close' });
+    meta = document.createElement('meta');
+    meta.name = 'boxel-realm-server-url';
+    meta.content = REALM_SERVER;
+    document.head.append(meta);
+    storeSession(SESSION);
+    sessionStorage.clear();
+  });
+
+  hooks.afterEach(function () {
+    window.fetch = originalFetch;
+    Object.assign(navigation, originalNavigation);
+    meta.remove();
+    forgetSession();
+    sessionStorage.clear();
+  });
+
+  module('what a page was opened for', function () {
+    test('reads its realm, card, operation and reason from the fragment', function (assert) {
+      assert.deepEqual(
+        openedFor(
+          `#card=${encodeURIComponent(CARD)}&operation=forecast&reason=${encodeURIComponent('Needs\nyour   key')}`,
+        ),
+        {
+          target: { kind: 'instance', url: CARD },
+          operation: 'forecast',
+          reason: 'Needs your key',
+        },
+      );
+      assert.deepEqual(
+        openedFor(
+          `#module=${encodeURIComponent(`${REALM}weather`)}&name=Weather&realm=${encodeURIComponent(REALM)}&operation=forecast`,
+        ),
+        {
+          realm: REALM,
+          target: {
+            kind: 'type',
+            module: `${REALM}weather`,
+            name: 'Weather',
+            realm: REALM,
+          },
+          operation: 'forecast',
+        },
+      );
+      assert.deepEqual(
+        openedFor(
+          `#card=${encodeURIComponent('@cardstack/catalog/weather/today')}&operation=forecast`,
+        ),
+        {
+          target: { kind: 'instance', url: '@cardstack/catalog/weather/today' },
+          operation: 'forecast',
+        },
+        'a prefix-form id is passed on for the server to resolve',
+      );
+      assert.deepEqual(openedFor('#key=key-2'), { key: 'key-2' });
+      assert.deepEqual(
+        openedFor('#realm=javascript%3Aalert(1)&card=data%3Atext%2Fhtml,x'),
+        {},
+        'only http(s) URLs and prefix-form ids name anything',
+      );
+      let long = openedFor(`#reason=${'a'.repeat(500)}`).reason!;
+      assert.strictEqual([...long].length, 200, 'a reason is one short line');
+      assert.true(long.endsWith('…'));
+    });
+  });
+
+  module('the window', function () {
+    test('opened without a session, says to sign in to Boxel, and offers no sign-in of its own', async function (assert) {
+      forgetSession();
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-keys-signed-out]');
+      assert.dom('[data-test-keys-heading]').hasText('You’re not signed in');
+      assert
+        .dom('[data-test-keys-signed-out]')
+        .includesText('Sign in to Boxel in the Boxel window you opened this');
+      assert.dom('input').doesNotExist('nothing to type');
+      assert.dom('[data-test-key-page]').doesNotExist();
+      assert.false(
+        requests.some((r) => r.path === '_user-keys'),
+        'nothing is asked for',
+      );
+    });
+
+    test('signed out while open, stops and offers no sign-in of its own', async function (assert) {
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+
+      // Another window on this origin forgets the session, as the app's
+      // sign-out does through this origin's sign-out page.
+      forgetSession();
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: 'boxel-secure-session' }),
+      );
+      await waitFor('[data-test-keys-signed-out]');
+      assert.dom('[data-test-keys-heading]').hasText('You’re signed out');
+      assert.dom('[data-test-key-page]').doesNotExist();
+      assert.dom('input').doesNotExist();
+      await click('[data-test-keys-signed-out-close]');
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('a request the server refuses as signed out stops the window', async function (assert) {
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      serve({
+        'POST _key-write-tickets': () =>
+          refusal(403, 'key write tickets are issued only to a session'),
+        'GET _secure-session': () => refusal(401, 'signed out'),
+      });
+      await click('[data-test-key-row="Maps"] [data-test-key-replace]');
+      await fillIn('[data-test-key-value]', 'new-value');
+      await click('[data-test-key-replace-save]');
+      await waitFor('[data-test-keys-signed-out]');
+      assert.dom('[data-test-keys-heading]').hasText('You’re signed out');
+    });
+
+    test('the Close button closes the window', async function (assert) {
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-page]');
+      await click('[data-test-keys-close]');
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+  });
+
+  module('the key page', function () {
+    test('a key list that fails to load offers to try again, rather than reading as no keys', async function (assert) {
+      let attempts = 0;
+      serve({
+        'GET _user-keys': () =>
+          ++attempts === 1
+            ? refusal(503, 'the server is unavailable')
+            : json(200, keyResources()),
+      });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-keys-heading]')
+        .hasText('Your keys', 'the page keeps its own title');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText('Boxel couldn’t load this page.');
+      assert.dom('[data-test-error-details]').doesNotExist();
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-detail="Status"]').hasText('503');
+      assert
+        .dom('[data-test-error-detail="Message"]')
+        .hasText('The server is unavailable.');
+      assert.dom('[data-test-key-list-empty]').doesNotExist();
+      assert.dom('[data-test-key-page-add]').doesNotExist();
+      await click('[data-test-keys-retry]');
+      await waitFor('[data-test-key-row="Maps"]');
+      assert.dom('[data-test-key-row]').exists({ count: 2 });
+    });
+
+    test('a server that can’t be reached is said so', async function (assert) {
+      serve({
+        'GET _user-keys': () => {
+          throw new TypeError('Failed to fetch');
+        },
+      });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText(
+          'Boxel couldn’t be reached. Check your connection and try again.',
+        );
+      await click('[data-test-toggle-details]');
+      assert
+        .dom('[data-test-error-detail="Error"]')
+        .hasText('Boxel could not be reached.');
+      assert.dom('[data-test-error-detail="Status"]').doesNotExist();
+    });
+
+    test('lists the keys, and replaces one with a ticket for that key', async function (assert) {
+      serve({
+        'PATCH _user-keys/key-2': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-2',
+              attributes: attributesOf(KEYS[1]),
+            },
+          }),
+      });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      assert.dom('[data-test-key-row]').exists({ count: 2 });
+      assert.dom('[data-test-key-value]').doesNotExist('no value is shown');
+      await click('[data-test-key-row="Maps"] [data-test-key-replace]');
+      assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
+      await fillIn('[data-test-key-value]', 'sk-new-value');
+      await click('[data-test-key-replace-save]');
+      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
+      await settled();
+      assert.deepEqual(ticketRequests(), [
+        { action: 'replace', keyId: 'key-2' },
+      ]);
+      let patch = requests.find((r) => r.method === 'PATCH')!;
+      assert.deepEqual(patch.body, {
+        data: {
+          type: 'user-key',
+          id: 'key-2',
+          attributes: { value: 'sk-new-value' },
+        },
+        meta: { ticket: 'ticket-1' },
+      });
+      assert.dom('[data-test-key-replace-form]').doesNotExist();
+    });
+
+    test('deleting a key lists the shares it would stop, then deletes it', async function (assert) {
+      serve({
+        'GET _key-shares': ({ url }) => {
+          assert.strictEqual(url.searchParams.get('key'), 'key-1');
+          return json(200, {
+            data: [
+              {
+                type: 'key-share',
+                id: 'share-1',
+                attributes: { label: 'Weather', realm: REALM },
+              },
+            ],
+          });
+        },
+        'DELETE _user-keys/key-1': () => ({ status: 204 }),
+      });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      await click(
+        '[data-test-key-row="Weather service"] [data-test-key-delete]',
+      );
+      await waitFor('[data-test-key-delete-shares]');
+      assert.dom('[data-test-key-delete-shares]').includesText('Weather');
+      assert.dom('[data-test-key-delete-shares]').includesText(REALM);
+      await click('[data-test-key-delete-confirm-button]');
+      await waitUntil(() => requests.some((r) => r.method === 'DELETE'));
+      await settled();
+      assert.deepEqual(ticketRequests(), [
+        { action: 'delete', keyId: 'key-1' },
+      ]);
+      assert.deepEqual(requests.find((r) => r.method === 'DELETE')!.body, {
+        meta: { ticket: 'ticket-1' },
+      });
+    });
+
+    test('a delete can’t be confirmed until the shares it would stop have loaded', async function (assert) {
+      let release!: () => void;
+      serve({
+        'GET _key-shares': () =>
+          new Promise((resolve) => {
+            release = () => resolve(json(200, { data: [] }));
+          }),
+      });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      // Not awaited: the share list is held back until released.
+      click('[data-test-key-row="Maps"] [data-test-key-delete]');
+      await waitFor('[data-test-key-delete-loading]');
+      assert.dom('[data-test-key-delete-confirm-button]').isDisabled();
+      release();
+      await waitUntil(
+        () => !document.querySelector('[data-test-key-delete-loading]'),
+      );
+      assert.dom('[data-test-key-delete-confirm-button]').isNotDisabled();
+      assert
+        .dom('[data-test-key-delete-confirm]')
+        .includesText('It isn’t shared into any workspace');
+    });
+
+    test('a delete whose share lookup fails is withdrawn, not offered', async function (assert) {
+      serve({
+        'GET _key-shares': () => refusal(500, 'the server failed'),
+      });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      await click('[data-test-key-row="Maps"] [data-test-key-delete]');
+      await waitFor('[data-test-keys-error]');
+      assert.dom('[data-test-key-delete-confirm]').doesNotExist();
+      assert.false(requests.some((r) => r.method === 'DELETE'));
+    });
+
+    test('Share on a key goes to the share page for that key', async function (assert) {
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      await click('[data-test-key-row="Maps"] [data-test-key-share]');
+      assert.deepEqual(navigations, [
+        { how: 'assign', url: '/secure/?mode=share-key#key=key-2' },
+      ]);
+    });
+
+    test('Add a key goes to the key entry page, which comes back here', async function (assert) {
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-page]');
+      await click('[data-test-key-page-add]');
+      assert.deepEqual(navigations, [
+        { how: 'assign', url: '/secure/?mode=enter-key&then=keys' },
+      ]);
+    });
+  });
+
+  module('entering a key', function () {
+    test('adds a key with a ticket to add one, then closes', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: { ...attributesOf(KEYS[0]), name: 'Forecasts' },
+            },
+          }),
+      });
+      visitShell('?mode=enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      assert.dom('[data-test-opened-for]').doesNotExist();
+      assert.dom('[data-test-enter-key-save]').isDisabled();
+      assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
+      await fillIn('[data-test-key-name]', ' Forecasts ');
+      await fillIn('[data-test-key-value]', 'sk-forecast');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(ticketRequests(), [{ action: 'add' }]);
+      assert.deepEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_user-keys')!
+          .body,
+        {
+          data: {
+            type: 'user-key',
+            attributes: {
+              name: 'Forecasts',
+              kind: 'static',
+              value: 'sk-forecast',
+            },
+          },
+          meta: { ticket: 'ticket-1' },
+        },
+      );
+      assert.dom('[data-test-keys-done-name]').hasText('Forecasts');
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('opened for an operation, says what it is for, as the server describes it', async function (assert) {
+      serve({
+        'POST _secure-window/context': ({ body }) => {
+          assert.deepEqual(body.data.attributes, {
+            target: { kind: 'instance', url: CARD },
+            operation: 'forecast',
+          });
+          return context({
+            realm: WORKSPACE,
+            card: {
+              name: 'Weather',
+              module: `${REALM}weather`,
+              exportName: 'Weather',
+            },
+            operation: {
+              name: 'forecast',
+              label: 'Get the forecast',
+              base: 'callApi',
+              method: 'GET',
+              destination: {
+                href: 'https://api.weather.co.uk/v2/',
+                host: 'api.weather.co.uk',
+                path: '/v2/',
+                registrableDomain: 'weather.co.uk',
+              },
+              slots: [{ name: 'userKey', key: 'userKey' }],
+            },
+          });
+        },
+      });
+      visitShell(
+        `?mode=enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&reason=${encodeURIComponent('Forecasts need your weather key')}`,
+      );
+      await render(EnterKeyPage);
+      await waitFor('[data-test-opened-for]');
+      assert
+        .dom('[data-test-opened-for-operation]')
+        .hasText('Get the forecast');
+      assert.dom('[data-test-opened-for-card]').hasText('Weather');
+      assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
+      assert.dom('[data-test-destination-domain]').hasText('weather.co.uk');
+      assert.dom('[data-test-destination-host]').hasText('api.weather.co.uk');
+      assert.dom('[data-test-destination-path]').hasText('/v2/');
+      assert.dom('[data-test-destination-where]').includesText('GET');
+      assert
+        .dom('[data-test-opened-for-reason]')
+        .includesText('“Forecasts need your weather key”');
+      assert
+        .dom('[data-test-opened-for-reason]')
+        .includesText('Written by the card that opened this window');
+    });
+
+    test('opened for something the server doesn’t know of, shows the server’s answer', async function (assert) {
+      visitShell(
+        `?mode=enter-key#card=${encodeURIComponent(CARD)}&operation=forecast`,
+      );
+      await render(EnterKeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert.dom('[data-test-enter-key-form]').doesNotExist();
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-detail="Status"]').hasText('404');
+      assert.dom('[data-test-error-detail="Message"]').hasText('Not found.');
+    });
+
+    test('a load that fails for another reason offers to try again', async function (assert) {
+      let attempts = 0;
+      serve({
+        'POST _secure-window/context': () =>
+          ++attempts === 1
+            ? refusal(503, 'the server is unavailable')
+            : context({ realm: WORKSPACE }),
+      });
+      visitShell(`?mode=enter-key#realm=${encodeURIComponent(REALM)}`);
+      await render(EnterKeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert.dom('[data-test-keys-heading]').hasText('Enter a key');
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-detail="Status"]').hasText('503');
+      await click('[data-test-keys-retry]');
+      await waitFor('[data-test-enter-key-form]');
+      assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
+    });
+
+    test('reached from the key page, goes back to it', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: attributesOf(KEYS[0]),
+            },
+          }),
+      });
+      visitShell('?mode=enter-key&then=keys');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await fillIn('[data-test-key-name]', 'Forecasts');
+      await fillIn('[data-test-key-value]', 'sk-forecast');
+      await click('[data-test-enter-key-save]');
+      await waitUntil(() => navigations.length > 0);
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: '/secure/?mode=keys' },
+      ]);
+    });
+
+    test('shows why a key can’t be added', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          refusal(409, 'the owner already has a key of that name'),
+      });
+      visitShell('?mode=enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await fillIn('[data-test-key-name]', 'Maps');
+      await fillIn('[data-test-key-value]', 'sk-maps');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-error]');
+      assert
+        .dom('[data-test-keys-error]')
+        .hasText('The owner already has a key of that name.');
+      assert.deepEqual(navigations, []);
+    });
+  });
+
+  module('sharing a key', function () {
+    const OTHER_REALM = 'https://realm-server.test/someone/dashboard/';
+
+    function shares() {
+      return ({ body }: { body: any }) =>
+        json(201, {
+          data: {
+            type: 'key-share',
+            id: 'share-9',
+            attributes: { ...body.data.attributes, state: 'active' },
+          },
+        });
+    }
+
+    test('from the key page, picks a workspace the user writes, with a ticket for that key and realm', async function (assert) {
+      serve({
+        'GET _secure-window/realms': () =>
+          json(200, {
+            data: [
+              {
+                type: 'secure-window-realm',
+                id: OTHER_REALM,
+                attributes: { name: 'Dashboard' },
+              },
+              {
+                type: 'secure-window-realm',
+                id: REALM,
+                attributes: { name: 'Team Workspace' },
+              },
+            ],
+          }),
+        'POST _key-shares': shares(),
+      });
+      visitShell('?mode=share-key#key=key-2');
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      assert.dom('[data-test-share-key-key]').includesText('Maps');
+      assert.dom('[data-test-key-picker]').doesNotExist('the key is chosen');
+      assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
+      assert
+        .dom('[data-test-share-label]')
+        .hasValue('Maps', 'labelled with its key’s name until one is typed');
+      assert.dom('[data-test-share-key-save]').isDisabled();
+
+      await click('[data-test-workspace-dropdown-trigger]');
+      assert.dom('[data-test-workspace-option]').exists({ count: 2 });
+      let search = '[data-test-workspace-dropdown-search]';
+      assert.dom(search).hasAttribute('role', 'combobox');
+      assert
+        .dom(search)
+        .hasAttribute(
+          'aria-activedescendant',
+          'workspace-option-0',
+          'the highlighted option is named for a screen reader',
+        );
+      await triggerKeyEvent(search, 'keydown', 'ArrowDown');
+      assert
+        .dom(search)
+        .hasAttribute('aria-activedescendant', 'workspace-option-1');
+      assert
+        .dom('#workspace-option-1')
+        .hasAttribute('data-test-workspace-option', 'Team Workspace');
+      await triggerKeyEvent(search, 'keydown', 'Escape');
+      assert.dom('[data-test-workspace-dropdown-content]').doesNotExist();
+      assert
+        .dom('[data-test-workspace-dropdown-trigger]')
+        .isFocused('closing from the keyboard puts focus back on the trigger');
+
+      await click('[data-test-workspace-dropdown-trigger]');
+      await fillIn(search, 'team');
+      assert.dom('[data-test-workspace-option]').exists({ count: 1 });
+      await triggerKeyEvent(search, 'keydown', 'Enter');
+      assert
+        .dom('[data-test-workspace-dropdown-selected]')
+        .hasText('Team Workspace');
+      assert
+        .dom('[data-test-workspace-dropdown-trigger]')
+        .isFocused('as does choosing from it');
+      await fillIn('[data-test-share-label]', 'Team maps');
+      await click('[data-test-share-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(ticketRequests(), [
+        { action: 'share', keyId: 'key-2', realm: REALM },
+      ]);
+      assert.deepEqual(requests.find((r) => r.path === '_key-shares')!.body, {
+        data: {
+          type: 'key-share',
+          attributes: { realm: REALM, keyId: 'key-2', label: 'Team maps' },
+        },
+        meta: { ticket: 'ticket-1' },
+      });
+      assert.dom('[data-test-keys-done-label]').hasText('Team maps');
+      assert.deepEqual(navigations, [], 'the window stays open');
+      await click('[data-test-keys-done-close]');
+      assert.deepEqual(
+        navigations,
+        [{ how: 'replace', url: '/secure/?mode=keys' }],
+        'and goes back to the key page',
+      );
+    });
+
+    test('two workspaces with the same name are told apart by their addresses', async function (assert) {
+      const OTHER = 'https://realm-server.test/someone/another/';
+      const DASHBOARD = 'https://realm-server.test/someone/dashboard/';
+      serve({
+        'GET _secure-window/realms': () =>
+          json(200, {
+            data: [
+              [DASHBOARD, 'Dashboard'],
+              [OTHER, 'Team Workspace'],
+              [REALM, 'Team Workspace'],
+            ].map(([id, name]) => ({
+              type: 'secure-window-realm',
+              id,
+              attributes: { name },
+            })),
+          }),
+        'POST _key-shares': shares(),
+      });
+      visitShell('?mode=share-key#key=key-2');
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      await click('[data-test-workspace-dropdown-trigger]');
+      assert
+        .dom(
+          '[data-test-workspace-option="Dashboard"] [data-test-workspace-address]',
+        )
+        .doesNotExist('a name of its own needs no address');
+      assert.deepEqual(
+        [
+          ...document.querySelectorAll(
+            '[data-test-workspace-option="Team Workspace"] [data-test-workspace-address]',
+          ),
+        ].map((e) => e.textContent?.trim()),
+        [OTHER, REALM].map((url) => url.replace('https://', '')),
+      );
+      await click(
+        [...document.querySelectorAll('[data-test-workspace-option]')].find(
+          (e) => e.textContent?.includes(OTHER.replace('https://', '')),
+        )!,
+      );
+      assert
+        .dom('[data-test-workspace-address]')
+        .hasText(OTHER.replace('https://', ''));
+      await click('[data-test-share-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert
+        .dom('[data-test-keys-done]')
+        .includesText(`Team Workspace (${OTHER.replace('https://', '')})`);
+    });
+
+    test('opened for a workspace, picks one of the user’s keys, then closes', async function (assert) {
+      serve({
+        'POST _secure-window/context': ({ body }) => {
+          assert.strictEqual(
+            body.data.attributes.realm,
+            REALM_PREFIX,
+            'the fragment’s realm is only asked about',
+          );
+          return context({ realm: WORKSPACE });
+        },
+        'POST _key-shares': shares(),
+      });
+      visitShell(`?mode=share-key#realm=${encodeURIComponent(REALM_PREFIX)}`);
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
+      assert.dom('[data-test-workspace-dropdown-trigger]').doesNotExist();
+      assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
+      await click('[data-test-key-choice="Maps"] input');
+      await click('[data-test-share-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(
+        ticketRequests(),
+        [{ action: 'share', keyId: 'key-2', realm: REALM }],
+        'the ticket is for the realm the server described',
+      );
+      assert.strictEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_key-shares')!
+          .body.data.attributes.realm,
+        REALM,
+        'and so is the share',
+      );
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('with no keys, says to add one on the key page first', async function (assert) {
+      serve({
+        'GET _user-keys': () => json(200, keyResources([])),
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+      });
+      visitShell(`?mode=share-key#realm=${encodeURIComponent(REALM)}`);
+      await render(SharePage);
+      await waitFor('[data-test-key-picker-empty]');
+      await click('[data-test-key-picker-go-to-keys]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: '/secure/?mode=keys' },
+      ]);
+    });
+
+    test('a reader who isn’t a direct writer is told an administrator must set it up', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          context({ realm: { ...WORKSPACE, directWriter: false } }),
+      });
+      visitShell(`?mode=share-key#realm=${encodeURIComponent(REALM)}`);
+      await render(SharePage);
+      await waitFor('[data-test-keys-needs-admin]');
+      assert
+        .dom('[data-test-keys-needs-admin] h1')
+        .hasText('An administrator of this realm needs to set this up');
+      assert.dom('input').doesNotExist('nothing to type');
+      assert.false(
+        requests.some((r) => r.path === '_user-keys'),
+        'the user’s keys are not even listed',
+      );
+    });
+  });
+
+  module('sharing a key in place of a suspended one', function () {
+    const SHARE = {
+      id: 'share-4',
+      realm: REALM,
+      label: 'Team weather',
+      owner: '@former:example.test',
+      state: 'suspended',
+      suspensionReason: 'owner-lost-write',
+    };
+
+    function shares(share: Record<string, unknown>) {
+      return () =>
+        json(200, {
+          data: [{ type: 'key-share', id: share.id, attributes: { ...share } }],
+        });
+    }
+
+    test('puts one of the user’s keys in, with a ticket for that key and share', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+        'GET _key-shares': (request) => {
+          assert.strictEqual(
+            request.url.searchParams.get('realm'),
+            REALM,
+            'the shares are those of the realm the server described',
+          );
+          return shares(SHARE)();
+        },
+        'POST _key-shares/share-4/swap': () =>
+          json(200, {
+            data: {
+              type: 'key-share',
+              id: 'share-4',
+              attributes: { ...SHARE, state: 'active', keyId: 'key-1' },
+            },
+          }),
+      });
+      visitShell(
+        `?mode=swap-key#realm=${encodeURIComponent(REALM_PREFIX)}&share=share-4`,
+      );
+      await render(SwapKeyPage);
+      await waitFor('[data-test-swap-key-form]');
+      assert.dom('[data-test-swap-share-label]').hasText('Team weather');
+      assert
+        .dom('[data-test-swap-share]')
+        .includesText('can no longer edit this workspace');
+      assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
+      await click('[data-test-key-choice="Weather service"] input');
+      await click('[data-test-swap-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.dom('[data-test-keys-heading]').hasText('Key shared');
+      assert.deepEqual(ticketRequests(), [
+        { action: 'swap', keyId: 'key-1', shareId: 'share-4' },
+      ]);
+      assert.deepEqual(
+        requests.find((r) => r.path === '_key-shares/share-4/swap')!.body,
+        {
+          data: { type: 'key-share', attributes: { keyId: 'key-1' } },
+          meta: { ticket: 'ticket-1' },
+        },
+      );
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('a share that is working has nothing to put a key in place of', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+        'GET _key-shares': shares({
+          ...SHARE,
+          state: 'active',
+          suspensionReason: null,
+        }),
+      });
+      visitShell(
+        `?mode=swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`,
+      );
+      await render(SwapKeyPage);
+      await waitFor('[data-test-swap-key-active]');
+      assert.dom('[data-test-swap-key-form]').doesNotExist();
+    });
+
+    test('a reader who isn’t a direct writer is told an administrator must set it up', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          context({ realm: { ...WORKSPACE, directWriter: false } }),
+      });
+      visitShell(
+        `?mode=swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`,
+      );
+      await render(SwapKeyPage);
+      await waitFor('[data-test-keys-needs-admin]');
+      assert.dom('input').doesNotExist();
+    });
+  });
+});

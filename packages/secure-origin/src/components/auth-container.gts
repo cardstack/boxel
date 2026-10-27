@@ -28,7 +28,10 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
       --background: #272432;
       --foreground: var(--boxel-light);
       /* local color vars */
-      --auth-background: #191624;
+      /* The secure origin's pages name this colour (`global.css`); the
+         app's sign-in screens, which don't load that stylesheet, take the
+         fallback. */
+      --auth-background: var(--auth-page-background, #191624);
       --auth-foreground: var(--boxel-light);
 
       position: relative;

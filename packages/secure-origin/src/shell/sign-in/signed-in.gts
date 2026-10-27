@@ -3,8 +3,8 @@
 // carried to that page by navigating there, which the app redeems for a Matrix
 // session of its own. A hand-off to a program on the user's own machine waits
 // for the user to confirm it. Otherwise the window says it is signed in, and
-// shows nothing more: the app asks the realm server whether the window has a
-// session, rather than hearing it from the window.
+// offers a link to the key page: the app asks the realm server whether the
+// window has a session, rather than hearing it from the window.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -82,7 +82,15 @@ export default class SignedIn extends Component {
       </MessagePage>
     {{else}}
       <MessagePage @heading='You’re signed in to Boxel'>
-        <p class='info' data-test-secure-signed-in>Key management is coming.</p>
+        <p class='info' data-test-secure-signed-in>You can close this window.</p>
+        <div class='button-wrapper'>
+          <AuthButton
+            @as='anchor'
+            @href={{this.keyPage}}
+            @variant='secondary'
+            data-test-secure-manage-keys
+          >Manage your keys</AuthButton>
+        </div>
       </MessagePage>
     {{/if}}
 
@@ -113,6 +121,9 @@ export default class SignedIn extends Component {
   </template>
 
   private config = readConfig();
+  // The key page is a link away, never where signing in lands: a sign-in
+  // the app started hands back to the app, and one that didn't ends here.
+  private keyPage = modeURL('keys');
   private target = pendingReturn(appOrigins(this.config));
   private page = trackedObject<{ state: State }>({
     state: { name: 'signed-in' },

@@ -23,6 +23,8 @@ There are **two source-of-truth trees** in this package, because Grafana 12 mana
 | `grafanactl/resources/` | `grafanactl resources push`        | Dashboards, folders                       | API push (CI on merge)                                         |
 | `provisioning/`         | Grafana built-in file provisioning | Data sources, alert rules, contact points | Files mounted at `/etc/grafana/provisioning/`, read at startup |
 
+**The repo owns its folders.** `grafanactl resources push` creates and updates but never deletes, so after the push `apply.sh` runs `prune-dashboards.sh`: every dashboard in a folder that `grafanactl/resources/folders/` defines (today **Boxel Status**) whose UID is not in `grafanactl/resources/dashboards/` is deleted. Removing a dashboard's file therefore removes it from Grafana on the next apply. A dashboard made by hand in one of these folders is deleted too, so make those in another folder. `apply.sh --dry-run` only lists the deletions, and the observability-diff PR comment shows them for staging.
+
 **Why two trees?** `grafanactl` (Grafana Labs' official CLI replacing the archived Grizzly) only manages App Platform resources — `grafanactl resources list` shows dashboards, folders, playlists, snapshots, but **not data sources or alert rules**. Those still live behind the legacy HTTP API.
 
 Locally, `provisioning/` files are mounted into the Grafana container by `docker-compose.yml` and read at startup with `${ENV_VAR}` substitution. **For staging and production, `apply-datasources.sh` reads the same YAML files, env-var-substitutes them (e.g. `${LOKI_URL}` from SSM `/<env>/loki/internal_url`), and upserts each entry through Grafana's `/api/datasources` HTTP API** — a small bridge that gives us file-as-source-of-truth without needing image bakes or EFS mounts on the hosted side.
@@ -66,6 +68,8 @@ scripts/
   apply.sh             # ./scripts/apply.sh --env <local|staging|production>
   apply-datasources.sh # internal — pushes provisioning/datasources/* via HTTP API
                        # (called by apply.sh; staging/production only)
+  prune-dashboards.sh  # internal — deletes dashboards in the repo's folders that the
+                       # repo no longer defines (called by apply.sh; --dry-run lists them)
   pull.sh              # ./scripts/pull.sh  --env <name> --path <dir>
   check.sh             # ./scripts/check.sh --env <name>  (connectivity smoke test)
   tail-logs.sh         # ./scripts/tail-logs.sh --env <name> --service <task family>

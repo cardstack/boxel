@@ -105,8 +105,13 @@ Reviewing a bump PR:
    - Read a changed ported module against the Glimmer file the report names, and port what applies to
      Glimmer. Neither typecheck nor the ported suites, which are frozen at the upstream revision they came
      from, catch this drift.
-3. **Fixes** are ordinary commits on the bump branch.
-4. **Title.** The PR opens as `fix:`, for a catch-up. Retitle it `feat:` when upstream adds a capability
+3. **Private fields Choreo reads.** `@cardstack/choreo`'s `@maxFrameStep` (`holdBack` in `packages/choreo/src/run.ts`)
+   moves the start of each main-thread tween through motion-dom's private fields: `_animation` on the
+   `AsyncMotionValueAnimation` wrapper, and `startTime` and `holdTime` on `JSAnimation`. It tells a native
+   (WAAPI) animation apart by its `animation` property. Check that these still exist in the new release; the
+   run-clock tests fail when they move, and the run logs a warning.
+4. **Fixes** are ordinary commits on the bump branch.
+5. **Title.** The PR opens as `fix:`, for a catch-up. Retitle it `feat:` when upstream adds a capability
    glimmer-motion exposes. The prefix covers glimmer-motion and choreo, which release together.
 
 To decline a release, close its PR: the workflow skips a release that has a bump PR, open or closed.

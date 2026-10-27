@@ -127,35 +127,36 @@ export class SessionPrep extends Component<SessionPrepSignature> {
         .pretui-prep {
           display: flex;
           flex-direction: column;
-          gap: var(--space-4, 11px);
-          padding: var(--space-4, 13px);
-          border-radius: var(--radius-surface, 14px);
-          background: var(--card);
+          gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-sm) var(--boxel-sp);
+          border-radius: var(--boxel-border-radius-lg);
+          background-color: var(--card);
           box-shadow: var(
             --pretui-shadow-card,
             0 0 0 1px var(--border),
-            0 1px 2px rgb(0 0 0 / 0.08)
+            var(--shadow-xs)
           );
         }
         .pretui-prep-head {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: var(--boxel-sp-xs);
           flex-wrap: wrap;
         }
         .pretui-prep-title {
           margin: 0;
           flex: 1;
           min-width: 0;
-          font-size: 13px;
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           font-weight: 600;
-          letter-spacing: -0.01em;
+          color: var(--foreground);
         }
         .pretui-prep-note {
           margin: 0;
-          max-width: 62ch;
-          font-size: var(--text-ui-sm, 11.5px);
-          line-height: 1.6;
+          max-width: 68ch;
+          font-size: var(--boxel-ui-label-font-size);
+          line-height: var(--boxel-ui-label-line-height);
           color: var(--muted-foreground);
         }
       }

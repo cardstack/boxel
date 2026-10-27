@@ -973,6 +973,22 @@ module('Acceptance | workspace-chooser', function (hooks) {
 
       assert.dom('[data-test-sort-dropdown-trigger]').includesText('View All');
     });
+
+    // The dropdown copies the trigger's theme vars when it opens, so a light
+    // foreground on the trigger is what gives hovered options light text.
+    test('sort dropdown trigger carries the dark theme foreground', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let trigger = document.querySelector(
+        '[data-test-sort-dropdown-trigger]',
+      )!;
+      let styles = getComputedStyle(trigger);
+      assert.strictEqual(
+        styles.getPropertyValue('--foreground').trim(),
+        styles.getPropertyValue('--boxel-light').trim(),
+      );
+      assert.strictEqual(styles.color, 'rgb(255, 255, 255)');
+    });
   });
 
   module('hosted-only filtering', function () {

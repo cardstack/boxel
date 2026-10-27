@@ -334,6 +334,8 @@ export const BUNDLED_BASE_MODULES: Record<
   'components/countdown': () => import('@cardstack/base/components/countdown'),
   'components/expiration-warning': () =>
     import('@cardstack/base/components/expiration-warning'),
+  'components/resize-handle': () =>
+    import('@cardstack/base/components/resize-handle'),
   'components/time-ago': () => import('@cardstack/base/components/time-ago'),
   'components/timeline': () => import('@cardstack/base/components/timeline'),
   'frontmatter-field': () => import('@cardstack/base/frontmatter-field'),

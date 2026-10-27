@@ -112,6 +112,7 @@ import {
   REQUEST_FORWARD_PATH,
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
+  SECURE_WINDOW_PATH,
   USER_KEY_GRANTS_PATH,
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
@@ -125,6 +126,7 @@ import {
   handlePasswordChange,
   handlePasswordSignIn,
   handleSecureOriginInfo,
+  resumePasswordChangeDeviceSweeps,
 } from './handlers/handle-secure-session.ts';
 import { SignInLimiter } from './lib/sign-in-limiter.ts';
 import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
@@ -150,6 +152,10 @@ import {
   handleSwapKeyIntoShare,
   handleUnshareKey,
 } from './handlers/handle-key-shares.ts';
+import {
+  handleSecureWindowContext,
+  handleSecureWindowRealms,
+} from './handlers/handle-secure-window.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -338,6 +344,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${SECURE_SESSIONS_PATH}/password-change`,
     handlePasswordChange(args),
   );
+  resumePasswordChangeDeviceSweeps(args);
   router.post(
     KEY_WRITE_TICKETS_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -412,6 +419,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     KEY_SHARE_NOTICES_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListKeyShareNotices(args),
+  );
+  router.post(
+    `${SECURE_WINDOW_PATH}/context`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSecureWindowContext(args),
+  );
+  router.get(
+    `${SECURE_WINDOW_PATH}/realms`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSecureWindowRealms(args),
   );
   router.post(
     REQUEST_FORWARD_PATH,

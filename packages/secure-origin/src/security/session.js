@@ -363,6 +363,7 @@ function signedOut() {
 // answers `signed-out`: a key write ticket refuses an ended session with a
 // 403, as it does any session that isn't a secure one, so a 403 is checked
 // against the server.
+/** @returns {Promise<any>} */
 export async function authorizedRequest(config, path, options = {}) {
   let session = storedSession();
   if (!session) {
@@ -386,13 +387,25 @@ export async function authorizedRequest(config, path, options = {}) {
 }
 
 // A key write ticket for one change, minted with the window's own session.
-// `action` is 'add', or 'replace' or 'delete' with the id of the key.
-export async function mintKeyWriteTicket(config, { action, keyId }) {
+// `action` is 'add'; 'replace' or 'delete' with the id of the key; 'share'
+// with the key and the realm it goes into; or 'swap' with the key and the
+// share it goes into.
+/**
+ * @param {{ action: string, keyId?: string, realm?: string, shareId?: string }} change
+ * @returns {Promise<{ ticket: string, expiresAt: string }>}
+ */
+export async function mintKeyWriteTicket(config, change) {
+  let { action, keyId, realm, shareId } = change;
   let json = await authorizedRequest(config, '_key-write-tickets', {
     body: {
       data: {
         type: 'key-write-ticket',
-        attributes: { action, ...(keyId ? { keyId } : {}) },
+        attributes: {
+          action,
+          ...(keyId ? { keyId } : {}),
+          ...(realm ? { realm } : {}),
+          ...(shareId ? { shareId } : {}),
+        },
       },
     },
   });
@@ -439,4 +452,18 @@ export async function loginToken(config, session) {
       await new Promise((resolve) => setTimeout(resolve, wait));
     }
   }
+}
+
+// Calls `changed` whenever another window on this origin changes the stored
+// session: signing out (as the app's sign-out does, through this origin's
+// `sign-out` page), or signing in as someone else. Answers a function that
+// stops listening.
+export function onStoredSessionChange(changed) {
+  let listener = (event) => {
+    if (event.key === STORAGE_KEY || event.key === null) {
+      changed(storedSession());
+    }
+  };
+  window.addEventListener('storage', listener);
+  return () => window.removeEventListener('storage', listener);
 }
