@@ -27,7 +27,9 @@ them. Application state changes on its own, at full speed, and is never held
 back or broken by an animation. Components declare how they could move and
 how changes should move. One engine turns those declarations into animations
 and owns all imperative control, using the browser's native animation
-machinery wherever it can. Users author cards that run inside host, so motion
+machinery wherever it can. Scroll and focus moves that go with a change are
+part of that layer, so the engine times them against the motion. Users author
+cards that run inside host, so motion
 has to come from the platform's components, not from code woven through each
 caller. This ADR sets the architecture and the quality bar any host motion
 must meet.
@@ -54,8 +56,13 @@ flag that holds back a card's content until a flight ends.
 A failed, cancelled or interrupted animation MUST NOT throw into a state
 change, roll it back, or drop it.
 
-Once motion settles, the app MUST be in the same state, with the same DOM, as
-it is with motion off (in tests or an unsupported browser). Reduced motion
+Scroll position and focus are presentation, not application state. A scroll
+or focus move that waits for an animation is the engine's work (§1.6), not
+state waiting on motion.
+
+Once motion settles, the app MUST be in the same state, with the same DOM,
+focus and scroll position, as it is with motion off (in tests or an
+unsupported browser). Reduced motion
 (§1.5) changes how a state change animates, not where it ends.
 
 ### 1.2. One engine reacts to state changes
@@ -119,7 +126,7 @@ A new state change during an animation SHOULD retarget the animation from its
 current position. It SHOULD NOT wait behind the old animation.
 
 Pointer, keyboard and focus input SHOULD stay live while an animation plays.
-Focus SHOULD move when state changes, not when an animation ends.
+§1.6 covers when focus moves on its own.
 
 Durations SHOULD be:
 
@@ -153,6 +160,40 @@ happens and shows a loading state.
 Motion that starts automatically and runs longer than five seconds SHOULD give
 the user a way to pause it.
 
+### 1.6. Scroll and focus are timed by the engine
+
+Some state changes bring a scroll or focus move with them, such as autofocus
+on new content, scrolling a newly opened card into view, or restoring a saved
+scroll position. When the change animates, the engine MUST decide when that
+move happens. This covers moves the change causes. It does not cover moves
+that answer the user's own input directly, such as keyboard navigation in a
+list.
+
+Components SHOULD declare these moves as intents, such as an autofocus target
+or a scroll intent, for the engine to carry out. Code outside the engine MUST
+NOT time a scroll or focus move against an animation itself (§1.2).
+
+The engine MAY hold an autofocus until the animation that brings its target
+in has landed. Content that is still entering may be moving, clipped, covered
+or shown as a snapshot, so it is not yet a fit focus target.
+
+The engine SHOULD apply a scroll at the point in the motion that keeps the
+animation correct. For example, it scrolls after new content renders and
+before final positions are measured, so a flight lands where its element will
+rest. A scroll that goes with motion SHOULD be part of the engine's timeline,
+not a separate smooth scroll running against it.
+
+If the user moves focus while an autofocus is pending, the engine MUST NOT
+take focus back. While a focus move is pending, focus SHOULD stay on a live
+element and SHOULD NOT fall to the document body.
+
+A cancelled or interrupted animation MUST NOT drop a pending scroll or focus
+move. The engine carries it out at once, unless a later change's intent
+replaces it.
+
+With motion off, a scroll or focus move MUST happen in the same render as its
+state change. Under reduced motion, a scroll SHOULD jump, not animate.
+
 ## 2. Rationale
 
 The model is a game engine. Objects in the world go through their own state
@@ -180,9 +221,19 @@ render.
 The quality rules in §1.5 follow widely used guidance. WCAG 2.2 covers reduced
 motion (2.3.3) and pausing automatic motion (2.2.2). The duration ranges and
 easings are Boxel's own choice, informed by Material Design 3 and IBM Carbon.
-They are stated here so that every surface draws on one scale. Interruptibility, live input
-and immediate focus keep a productivity app fast, because people repeat its
-actions many times a day.
+They are stated here so that every surface draws on one scale. Interruptibility and live
+input keep a productivity app fast, because people repeat its actions many
+times a day.
+
+Scroll and focus belong with motion because their timing decides whether the
+motion reads correctly. Content still animating in is not necessarily
+eligible or appropriate to focus. Focusing it early can show a focus ring on a
+moving or clipped element, and by default `focus()` scrolls its target into
+view, which moves the page while the engine is measuring. A scroll applied
+outside the motion can likewise land a flight where its element won't rest.
+Only the engine knows when content has landed, so it owns the timing. Holding
+a move until then is still motion waiting on motion, never state waiting on
+motion.
 
 ## 3. Considered options
 
@@ -202,6 +253,9 @@ actions many times a day.
 - **Choreo as the engine.** Choreo already reacts to a region's render pass.
   But it declares motion per region and per screen. It has no low-level
   declarations of how a card could move. It stays a building block (§1.4).
+- **Move focus and scroll the moment state changes.** This is simple and
+  works with motion off. But it focuses content that isn't ready to take
+  focus, and it moves the page under an animation that is measuring it.
 
 ## 4. Consequences
 
@@ -225,6 +279,13 @@ it cannot, it uses live-DOM motion.
 
 - Edward Faulkner, 2026-10-02: the reactive-layer architecture, the
   two-level declarations, and native animation APIs.
+- Edward Faulkner, 2026-10-21: scroll and autofocus are in scope for the
+  engine. An autofocus may wait for an entering animation to end, because
+  content animating in is not necessarily eligible or appropriate to focus,
+  and scroll needs careful timing relative to motion.
+- `packages/choreo/src/choreo.gts`, the `scroll` region arg: a scroll intent
+  applied inside the pass, after the swap renders and before final bounds are
+  measured.
 - `.claude/skills/motion-pattern/SKILL.md`: View Transitions freeze live
   content.
 - WCAG 2.2, Success Criteria 2.3.3 (Animation from Interactions) and 2.2.2
