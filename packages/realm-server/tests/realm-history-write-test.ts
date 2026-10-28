@@ -709,6 +709,31 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     recordingTest(
+      'a retry that cannot be matched to what its id first asked for is refused',
+      async function (assert) {
+        let first = await patchPerson('/person-1', 'Unmatched', {
+          [OPERATION_ID_HEADER]: 'unmatched',
+        });
+        assert.strictEqual(first.status, 200, JSON.stringify(first.body));
+        let revision = first.get(REVISION_HEADER)!;
+        await dbAdapter.execute(
+          `UPDATE realm_history_revisions SET fingerprint = NULL WHERE operation_id = 'unmatched'`,
+        );
+
+        let retry = await patchPerson('/person-1', 'Unmatched', {
+          [OPERATION_ID_HEADER]: 'unmatched',
+        });
+        assert.strictEqual(retry.status, 409, JSON.stringify(retry.body));
+        assert.strictEqual(
+          events.at(-1)?.outcome,
+          'aborted',
+          'refused as a reused id, not answered as the earlier write',
+        );
+        assert.strictEqual(await history.head(), revision, 'nothing recorded');
+      },
+    );
+
+    recordingTest(
       'a write whose outcome is unknown is finished by a retry under its id, whatever the retry is correlated with',
       async function (assert) {
         history.loseNextCommitResponse = true;

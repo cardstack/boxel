@@ -8427,9 +8427,12 @@ export class Realm {
           if (!entry) {
             return undefined;
           }
+          // A retry asks for exactly what the first attempt asked for. Without
+          // a fingerprint on both sides that cannot be shown, so the id is
+          // treated as reused rather than answered as the earlier write.
           if (
-            entry.fingerprint !== undefined &&
-            recording.fingerprint !== undefined &&
+            entry.fingerprint === undefined ||
+            recording.fingerprint === undefined ||
             entry.fingerprint !== recording.fingerprint
           ) {
             recording.engaged = true;
