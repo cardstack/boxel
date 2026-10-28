@@ -176,6 +176,14 @@ never the key file. The code is `lib/outbound/google-service-account.ts`.
   `private_key`, with the subject and scopes, as one JSON value in a fixed
   member order (`serializeGoogleServiceAccount`). The file's own `token_uri`
   is dropped: the token endpoint is the platform's to choose.
+- **Its grants hold markers.** A service account is a minting kind
+  (`MINTING_KINDS`): each grant seals a marker bound to its destination, never
+  the key file. Sending opens the grant's marker to prove the grant real, then
+  `serviceAccountAccessToken` (`lib/google-service-account-keys.ts`) opens the
+  key's own sealed value and mints. The private key goes only to the token
+  endpoint; `https://oauth2.googleapis.com/` is in `FIXED_TOKEN_ENDPOINTS`, so
+  no grant covers it, and `createCallApiSender` refuses any `callApi`
+  addressed to it (see the `call-api` skill).
 - **Minting.** `googleAccessToken(keyId, credential)` signs an RS256 JWT
   (issuer the service account, `sub` the subject when there is one, `scope`
   the scopes, `aud` the token endpoint, one hour) and exchanges it at
@@ -192,7 +200,9 @@ never the key file. The code is `lib/outbound/google-service-account.ts`.
   email, never Google's description, which can quote the request. A 5xx, a
   429, `temporarily_unavailable`, a timeout or a broken connection is retried
   after 250 ms and 1 s, then `GoogleTokenEndpointUnavailableError`. Neither
-  is cached, so the next call asks Google again.
+  is cached, so the next call asks Google again. `fillSlots` answers both as
+  `credential-rejected` (424) with `meta.reason` `rejected` or `unavailable`,
+  and nothing reaches the API.
 
 ## Grants
 

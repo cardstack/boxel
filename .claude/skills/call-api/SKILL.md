@@ -194,7 +194,12 @@ application/json` unless the declaration set one.
    tokens.
 6. **Send** through `core.callApi`, the `CallApiSender` the realm server
    passes to `new Realm({ callApi })`. A realm without one (the host's
-   in-browser test realm) answers 501.
+   in-browser test realm) answers 501. The realm server's sender first
+   refuses a request addressed to a token endpoint (`tokenEndpointAt` in
+   `lib/outbound/token-endpoints.ts`: Google's, and every stored OAuth
+   client's token URL), key or no key, with `guard-refused` (502,
+   `meta.reason: 'platform-only'`): only the platform calls a token
+   endpoint.
 
 Which realm: an instance target's is the realm serving it; a type target's
 is the one the entry names in `data.meta.realmURL`, and `assertInRealm`
@@ -247,12 +252,12 @@ with every registered credential removed by the scrubber.
 
 Only these refuse the operation:
 
-| Code                 | Status                           | When                                                                                                                                                                                            |
-| -------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `guard-refused`      | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https (and not an allowlisted local host), a non-public address, too many redirects; or the built request left its lowered destination |
-| `upstream-timeout`   | 504                              | no connection within the connect timeout, or not finished within the total                                                                                                                      |
-| `response-too-large` | —                                | reserved for the enforced `call-api` response cap. The cap is in observe mode (see the `outbound-guard` skill), so a large response is logged and still delivered                               |
-| `internal-error`     | 502                              | the connection broke before any response arrived                                                                                                                                                |
+| Code                 | Status                           | When                                                                                                                                                                                                                                                                  |
+| -------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guard-refused`      | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https (and not an allowlisted local host), a non-public address, too many redirects; the built request left its lowered destination; or it is addressed to a token endpoint (`meta.reason: 'platform-only'`) |
+| `upstream-timeout`   | 504                              | no connection within the connect timeout, or not finished within the total                                                                                                                                                                                            |
+| `response-too-large` | —                                | reserved for the enforced `call-api` response cap. The cap is in observe mode (see the `outbound-guard` skill), so a large response is logged and still delivered                                                                                                     |
+| `internal-error`     | 502                              | the connection broke before any response arrived                                                                                                                                                                                                                      |
 
 ## The key-use channel
 
