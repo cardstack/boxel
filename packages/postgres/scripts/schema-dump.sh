@@ -40,6 +40,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=key_bindings \
   --exclude-table-and-children=key_binding_approvals \
   --exclude-table-and-children=key_binding_notices \
+  --exclude-table-and-children=user_key_grant_notices \
   --exclude-table-and-children=secure_sessions \
   --exclude-table-and-children=password_change_device_sweeps \
   --exclude-table-and-children=proxy_endpoint_history \

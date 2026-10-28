@@ -1706,6 +1706,10 @@ export type OperationErrorCode =
   // A `callApi` invoked interactively — from a browser, the AI assistant or
   // the CLI — whose binding was approved for pipelines only. Nothing was sent.
   | 'interactive-use-not-approved'
+  // A `callApi` slot's key was rejected by the vendor at the destination it is
+  // sent to (it answered 401). Nothing was sent, except a periodic probe; the
+  // key's owner replaces it, or a probe the vendor accepts brings it back.
+  | 'credential-rejected'
   // A `callApi` invoked while a card is being rendered. A render is replayed
   // and cached, and must not send requests to the world on anyone's behalf.
   // Nothing was sent.

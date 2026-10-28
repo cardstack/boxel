@@ -6,10 +6,20 @@ import {
 import {
   OperationFailure,
   type CallApiCredential,
+  type CallApiGrantUse,
   type CallApiRequest,
   type CallApiSender,
 } from '@cardstack/runtime-common/card-operations';
 import { fillSlots } from '../key-bindings.ts';
+import {
+  clearGrantRejection,
+  credentialRejected,
+  DEFAULT_PROBE_INTERVAL_MS,
+  emitKeyGrantEvent,
+  hostOf,
+  markGrantRejected,
+  recordVendorForbidden,
+} from '../key-grant-rejection.ts';
 import { secretsKeyring } from '../secrets-at-rest/index.ts';
 import {
   OutboundRefusedError,
@@ -68,12 +78,97 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 //
 // Whatever the vendor answers is the answer: a 404 or a 500 is a response the
 // card reads. Only a refusal by the guard, a timeout, or a send that broke
-// before any response arrived is a refusal of the operation.
-export function createCallApiSender(dbAdapter: DBAdapter): CallApiSender {
+// before any response arrived is a refusal of the operation — and a 401 to a
+// request that carried a credential, which rejects the grants it was sent
+// under and is refused `credential-rejected` (see `key-grant-rejection.ts`).
+export function createCallApiSender(
+  dbAdapter: DBAdapter,
+  {
+    // How long a grant the vendor rejected waits between probes.
+    probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
+  }: { probeIntervalMs?: number } = {},
+): CallApiSender {
   return {
-    fill: (lookup) => fillSlots(dbAdapter, secretsKeyring, lookup),
-    send: sendCallApiRequest,
+    fill: (lookup) =>
+      fillSlots(dbAdapter, secretsKeyring, lookup, { probeIntervalMs }),
+    send: async (request, credentials) => {
+      let grants = grantsOf(credentials);
+      let response: CallApiResponse;
+      try {
+        response = await sendCallApiRequest(request, credentials);
+      } catch (error) {
+        for (let grant of grants.filter(({ probe }) => probe)) {
+          emitKeyGrantEvent({
+            event: 'probe',
+            grant: grant.id,
+            host: hostOf(request.url),
+            status: null,
+          });
+        }
+        throw error;
+      }
+      await actOnVendorAnswer(dbAdapter, request, grants, response.status);
+      return response;
+    },
   };
+}
+
+// The grants a request's credentials were opened under, each once.
+function grantsOf(credentials: CallApiCredential[]): CallApiGrantUse[] {
+  let grants = new Map<string, CallApiGrantUse>();
+  for (let { grant } of credentials) {
+    if (grant && !grants.has(grant.id)) {
+      grants.set(grant.id, grant);
+    }
+  }
+  return [...grants.values()];
+}
+
+// What the vendor's status means for the grants the request was sent under.
+// A 401 rejects every one of them: the vendor doesn't say which credential it
+// refused, and each was sent to the destination it answered for. A 403 is
+// recorded and changes nothing. A probe the vendor answers below 400 clears its
+// grant; any other answer leaves it as it was.
+async function actOnVendorAnswer(
+  dbAdapter: DBAdapter,
+  request: CallApiRequest,
+  grants: CallApiGrantUse[],
+  status: number,
+): Promise<void> {
+  let host = hostOf(request.url);
+  emitKeyGrantEvent({ event: 'vendor-outcome', host, status });
+  for (let grant of grants.filter(({ probe }) => probe)) {
+    emitKeyGrantEvent({ event: 'probe', grant: grant.id, host, status });
+  }
+  if (grants.length === 0) {
+    return;
+  }
+  if (status === 401) {
+    for (let grant of grants) {
+      await markGrantRejected(dbAdapter, {
+        grantId: grant.id,
+        realmURL: grant.realmURL,
+        ...(grant.shareId ? { shareId: grant.shareId } : {}),
+      });
+    }
+    throw credentialRejected(undefined, grants[0].slot, grants[0].destination);
+  }
+  // Neither of these may cost the card the answer it already has.
+  try {
+    if (status === 403) {
+      for (let grant of grants) {
+        await recordVendorForbidden(dbAdapter, grant.id, host);
+      }
+    } else if (status < 400) {
+      for (let grant of grants.filter(({ probe }) => probe)) {
+        await clearGrantRejection(dbAdapter, grant.id);
+      }
+    }
+  } catch (error) {
+    log.error(
+      `could not record the vendor's ${status} for grants ${grants.map(({ id }) => id).join(', ')}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 export async function sendCallApiRequest(
