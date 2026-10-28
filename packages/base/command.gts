@@ -225,9 +225,24 @@ export class RealmKeySharesInput extends CardDef {
   @field realm = contains(StringField);
 }
 
+// An operation one of a realm's shares is approved for there: one binding,
+// naming the operation by the type it is invoked through (`module`, in RRI
+// form, and `name`), the card it was approved for when it is approved per
+// instance (`instance`, in RRI form), the credential slot the share fills, and
+// the binding's `state`: `active`, `needs-reapproval` or `suspended`.
+export class RealmKeyShareOperationField extends FieldDef {
+  @field bindingId = contains(StringField);
+  @field module = contains(StringField);
+  @field name = contains(StringField);
+  @field operation = contains(StringField);
+  @field instance = contains(StringField);
+  @field slot = contains(StringField);
+  @field state = contains(StringField);
+}
+
 // One of a realm's shares, as the realm's direct writers see it: no key and no
-// value, only what the share is called, whose key it holds and whether it is
-// in use. `state` is `active` or `suspended`; a suspended share carries its
+// value, only what the share is called, whose key it holds, whether it is in
+// use and the operations it is approved for (`operations`). `state` is `active` or `suspended`; a suspended share carries its
 // `suspensionReason` (`owner-lost-write`, `suspended-by-writer` or
 // `key-deleted`), and `suspendedBy` names the writer who suspended it. `own`
 // says the share holds the signed-in user's key, so they may unshare it, and
@@ -242,6 +257,7 @@ export class RealmKeyShareField extends FieldDef {
   @field suspendedBy = contains(StringField);
   @field suspendedByYou = contains(BooleanField);
   @field suspendedAt = contains(StringField);
+  @field operations = containsMany(RealmKeyShareOperationField);
 }
 
 // A realm's shares, by label. `visible` is false when the signed-in user is not

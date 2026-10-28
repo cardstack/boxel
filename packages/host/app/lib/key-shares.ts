@@ -17,6 +17,19 @@ export type KeyShareSuspensionReason =
   | 'suspended-by-writer'
   | 'key-deleted';
 
+export type KeyBindingState = 'active' | 'needs-reapproval' | 'suspended';
+
+// An operation a share is approved for in the realm: one binding. The realm
+// server names the type's module and the card in RRI form.
+export interface RealmKeyShareOperation {
+  bindingId: string;
+  type: { module: string; name: string };
+  operation: string;
+  instance: string | null;
+  slot: string;
+  state: KeyBindingState;
+}
+
 export interface RealmKeyShare {
   id: string;
   label: string;
@@ -26,6 +39,7 @@ export interface RealmKeyShare {
   suspensionReason: KeyShareSuspensionReason | null;
   suspendedBy: string | null;
   suspendedAt: string | null;
+  operations: RealmKeyShareOperation[];
 }
 
 // The realm server refused a change or a listing, with its status and its own
@@ -87,6 +101,7 @@ export async function listRealmKeyShares(
     suspensionReason: attributes.suspensionReason ?? null,
     suspendedBy: attributes.suspendedBy ?? null,
     suspendedAt: attributes.suspendedAt ?? null,
+    operations: attributes.operations ?? [],
   }));
 }
 

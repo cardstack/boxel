@@ -120,7 +120,7 @@ class ShareChange extends GlimmerComponent<ShareChangeSignature> {
 
   private get consequence(): string {
     return this.args.kind === 'suspend'
-      ? 'Cards in this workspace stop using this key until a direct writer swaps a key in.'
+      ? 'Cards in this workspace stop using this key until a direct writer swaps it with one of their own keys.'
       : 'Cards in this workspace stop using your key. The key itself is kept, and stays shared everywhere else.';
   }
 
@@ -194,8 +194,9 @@ interface RealmApiKeysSignature {
 // The realm's API Keys entry: the keys its direct writers have shared with it
 // for cards there to use, and what a direct writer does with them.
 //
-// The entry shows each share's label, its owner and whether it is in use, and
-// why a suspended one is suspended. It never shows or takes a key's value:
+// The entry shows each share's label, its owner and whether it is in use, why
+// a suspended one is suspended, and the card operations it is approved for in
+// this realm, by type and card as the realm server names them. It never shows or takes a key's value:
 // sharing a key, and swapping one into a suspended share, open the secure
 // window, which is the one place a key is chosen, and suspending a share or
 // withdrawing your own needs no key at all. A key is added on the secure
@@ -411,6 +412,66 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
                         {{suspensionText share}}
                       </p>
                     {{/if}}
+                    {{#if share.operations.length}}
+                      <div
+                        class='operations'
+                        data-test-realm-key-share-operations
+                      >
+                        <p class='note'>Approved for</p>
+                        <ul class='operation-list'>
+                          {{#each share.operations as |operation|}}
+                            <li
+                              class='operation'
+                              data-test-realm-key-share-operation={{operation.bindingId}}
+                            >
+                              <div class='operation-text'>
+                                <span
+                                  class='operation-name'
+                                  data-test-realm-key-share-operation-name
+                                >
+                                  {{operation.operation}}
+                                  on
+                                  {{operation.name}}
+                                </span>
+                                <span
+                                  class='operation-detail'
+                                  data-test-realm-key-share-operation-module
+                                >
+                                  {{operation.module}}
+                                </span>
+                                {{#if operation.instance}}
+                                  <span
+                                    class='operation-detail'
+                                    data-test-realm-key-share-operation-instance
+                                  >
+                                    For the card
+                                    {{operation.instance}}
+                                  </span>
+                                {{/if}}
+                              </div>
+                              {{#if (eq operation.state 'needs-reapproval')}}
+                                <Chip
+                                  @tone='warning'
+                                  @label='Needs re-approval'
+                                  class='state'
+                                  data-test-realm-key-share-operation-state={{operation.state}}
+                                />
+                              {{else if (eq operation.state 'suspended')}}
+                                <Chip
+                                  @label='Suspended'
+                                  class='state'
+                                  data-test-realm-key-share-operation-state={{operation.state}}
+                                />
+                              {{/if}}
+                            </li>
+                          {{/each}}
+                        </ul>
+                      </div>
+                    {{else}}
+                      <p class='note' data-test-realm-key-share-no-operations>
+                        No operation is approved to use it yet.
+                      </p>
+                    {{/if}}
                     <div class='actions'>
                       {{#if (eq share.state 'suspended')}}
                         <Button
@@ -420,7 +481,7 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
                           {{on 'click' (fn this.swapKey share)}}
                           data-test-realm-key-share-swap
                         >
-                          Swap one of my keys in
+                          Swap with one of my keys
                         </Button>
                       {{else}}
                         <ShareChange
@@ -533,6 +594,38 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
       }
       .state {
         flex-shrink: 0;
+      }
+      .operations {
+        display: grid;
+        gap: var(--boxel-sp-5xs);
+      }
+      .operation-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--boxel-sp-5xs);
+      }
+      .operation {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .operation-text {
+        display: grid;
+        min-width: 0;
+        flex: 1;
+      }
+      .operation-name {
+        font-weight: 600;
+        font-size: var(--boxel-font-size-xs);
+        overflow-wrap: break-word;
+      }
+      .operation-detail {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+        overflow-wrap: anywhere;
       }
       .note {
         margin: 0;
