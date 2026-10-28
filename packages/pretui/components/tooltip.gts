@@ -54,6 +54,8 @@ export interface TooltipSignature {
  *   referenced `aria-describedby` target is still announced while hidden —
  *   that is the accname rule this pattern is built on.
  * - **Dismissible.** Escape hides it, in the capture phase, while it is open.
+ * - **Keyboard focus only.** Focus from a mouse press doesn't open it, so a
+ *   clicked trigger doesn't keep its tip up after the pointer leaves.
  * - **Hoverable.** `pointer-events` are live and a transparent bridge spans
  *   the 6px gap, so the pointer can travel from trigger to bubble.
  *
@@ -65,6 +67,7 @@ export class Tooltip extends Component<TooltipSignature> {
   @tracked private hovered = false;
   @tracked private focused = false;
   @tracked private dismissed = false;
+  private pressed = false;
   tipId = `${guidFor(this)}-tip`;
   get side() {
     return this.args.side ?? 'top';
@@ -99,10 +102,17 @@ export class Tooltip extends Component<TooltipSignature> {
     this.hovered = false;
     this.dismissed = false;
   };
+  // A click focuses the trigger too, but only keyboard focus opens the tip:
+  // otherwise it would stay up after the pointer leaves, until focus moves.
+  onPress = () => {
+    this.pressed = true;
+    this.focused = false;
+  };
   onFocusIn = () => {
-    this.focused = true;
+    this.focused = !this.pressed;
   };
   onFocusOut = () => {
+    this.pressed = false;
     this.focused = false;
     this.dismissed = false;
   };
@@ -122,6 +132,7 @@ export class Tooltip extends Component<TooltipSignature> {
       {{this.describeTrigger this.tipId @labels}}
       {{listen 'mouseenter' this.onEnter}}
       {{listen 'mouseleave' this.onLeave}}
+      {{listen 'mousedown' this.onPress}}
       {{listen 'focusin' this.onFocusIn}}
       {{listen 'focusout' this.onFocusOut}}
       ...attributes

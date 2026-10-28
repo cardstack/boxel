@@ -6,6 +6,7 @@
 import { module, test } from 'qunit';
 import {
   render,
+  click,
   focus,
   blur,
   triggerEvent,
@@ -92,6 +93,29 @@ module('Pretui | components/tooltip', function (hooks) {
     assert.strictEqual(tip.dataset['open'], 'true', 'keyboard focus opens it too');
     await blur('[data-test-trigger]');
     assert.strictEqual(tip.dataset['open'], undefined);
+  });
+
+  test('Tooltip stays closed after a click once the pointer leaves', async function (assert) {
+    await render(
+      <template>
+        <Tooltip @content='Hint'>
+          <button type='button' data-test-trigger>Go</button>
+        </Tooltip>
+      </template>,
+    );
+    let wrap = q('[data-test-pretui-tooltip]');
+    let tip = q('[role="tooltip"]');
+
+    await triggerEvent(wrap, 'mouseenter');
+    await click('[data-test-trigger]');
+    assert.strictEqual(tip.dataset['open'], 'true', 'open while hovered');
+    await triggerEvent(wrap, 'mouseleave');
+    assert.strictEqual(document.activeElement, q('[data-test-trigger]'), 'the trigger keeps focus');
+    assert.strictEqual(tip.dataset['open'], undefined, 'and the tip closes');
+
+    await blur('[data-test-trigger]');
+    await focus('[data-test-trigger]');
+    assert.strictEqual(tip.dataset['open'], 'true', 'keyboard focus still opens it');
   });
 
   test('Tooltip is dismissible with Escape while the pointer stays put (WCAG 1.4.13)', async function (assert) {
