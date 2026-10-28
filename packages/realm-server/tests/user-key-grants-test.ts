@@ -808,6 +808,12 @@ module(basename(import.meta.filename), function () {
         .get('/_user-keys')
         .set('Authorization', appSession());
       assert.strictEqual(listed.body.data[0].attributes.grants.length, 3);
+      assert.deepEqual(
+        shown.body.data.attributes.usedWith,
+        ['openai.com'],
+        'the services the key is used with, by registrable domain, each once',
+      );
+      assert.deepEqual(listed.body.data[0].attributes.usedWith, ['openai.com']);
       assert.notOk(
         JSON.stringify([shown.body, listed.body, models.body]).includes(VALUE),
         'no response carries the value',
