@@ -365,7 +365,11 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(listed.body.data.attributes.kind, 'oauth-connection');
     assert.strictEqual(listed.body.data.attributes.name, 'my account');
     assert.deepEqual(listed.body.data.attributes.oauth.connection, {
-      client: { kind: 'own', label: 'stub app' },
+      client: {
+        kind: 'own',
+        label: 'stub app',
+        ref: { kind: 'own', keyId: client.id },
+      },
       scopes: 'read:user',
       status: 'active',
     });
