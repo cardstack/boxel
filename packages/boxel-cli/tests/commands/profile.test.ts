@@ -893,3 +893,54 @@ describe('MatrixAuthError integration', () => {
     expect(err.status).toBe(401);
   });
 });
+
+describe('migrateFromEnv', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-test-'));
+    vi.stubEnv('MATRIX_URL', 'http://localhost:8008');
+    vi.stubEnv('MATRIX_USERNAME', 'alice');
+    vi.stubEnv('MATRIX_PASSWORD', 'pw');
+    vi.stubEnv('REALM_SERVER_URL', 'http://localhost:4201/');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('keys the profile by the user id the homeserver signs in', async () => {
+    let login = vi.fn(async (matrixUrl: string) =>
+      fakeAuth('@alice:localhost', matrixUrl),
+    );
+    let manager = new ProfileManager(tmpDir, { matrixLogin: login });
+
+    let result = await manager.migrateFromEnv();
+
+    expect(login).toHaveBeenCalledWith('http://localhost:8008', 'alice', 'pw');
+    expect(result).toEqual({ profileId: '@alice:localhost', created: true });
+    let profile = manager.getProfile('@alice:localhost')!;
+    expect(profile.matrixUserId).toBe('@alice:localhost');
+    expect(profile.matrixUrl).toBe('http://localhost:8008');
+    expect(profile.realmServerUrl).toBe('http://localhost:4201/');
+  });
+
+  it('refreshes an existing profile and keeps its display name', async () => {
+    let login = vi.fn(async (matrixUrl: string) =>
+      fakeAuth('@alice:localhost', matrixUrl),
+    );
+    let manager = new ProfileManager(tmpDir, { matrixLogin: login });
+    await manager.addProfileWithAuth(
+      '@alice:localhost',
+      fakeAuth('@alice:localhost', 'http://localhost:8008'),
+      'Alice',
+      'http://localhost:4201/',
+    );
+
+    let result = await manager.migrateFromEnv();
+
+    expect(result).toEqual({ profileId: '@alice:localhost', created: false });
+    expect(manager.getProfile('@alice:localhost')!.displayName).toBe('Alice');
+  });
+});

@@ -33,6 +33,7 @@ import {
   retrieveIsolatedHTML,
 } from '../lib/index-html-injection.ts';
 import { retrieveScopedCSS } from '../lib/retrieve-scoped-css.ts';
+import { matrixServerName } from '../lib/secure-session.ts';
 import { fullRequestURL } from '../middleware/index.ts';
 import {
   findOrMountRealm,
@@ -245,6 +246,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     };
 
     let work = (async () => {
+      let serverName =
+        process.env.MATRIX_SERVER_NAME ||
+        (await matrixServerName({ matrixClient }));
       let indexHTML = (await getIndexHTML()).replace(
         // Closing matches both HTML5-style `">` and Vite's XHTML-style `" />`
         // so the rewrite runs against both production build and Vite dev HTML.
@@ -270,8 +274,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             hostsOwnAssets: false,
             assetsURL: assetsURL.href,
             matrixURL: matrixClient.matrixURL.href.replace(/\/$/, ''),
-            matrixServerName:
-              process.env.MATRIX_SERVER_NAME || matrixClient.matrixURL.hostname,
+            matrixServerName: serverName,
             realmServerURL: serverURL.href,
             // Stamp the deployed environment the host is running in so client
             // telemetry (and anything else) can report it, rather than the

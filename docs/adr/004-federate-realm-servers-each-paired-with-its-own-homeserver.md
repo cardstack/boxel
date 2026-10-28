@@ -222,8 +222,6 @@ Beyond the gaps under Remediation, federation needs this work:
   homeserver hostname.
 - `packages/boxel-cli/src/lib/seed-auth.ts` (`deriveHostFromRealmUrl`) breaks
   §1.2. It derives the server name from the realm hostname.
-- `packages/boxel-cli/src/lib/profile-manager.ts` (`migrateFromEnv`) breaks
-  §1.2. It picks the server name from the Matrix URL.
 - `packages/runtime-common/db-queries/realm-permission-queries.ts`
   (`fetchAllRealmsWithOwners`, `fetchRealmOwnerUsername`, `isBotAccount`)
   breaks §1.2. They reduce realm owners to localparts and recognize service
@@ -232,8 +230,6 @@ Beyond the gaps under Remediation, federation needs this work:
   (`effectiveRealmPermissions`) breaks §1.4. It applies the `users` row to any
   user the paired homeserver finds a profile for, which can include users of
   other homeservers.
-- `packages/realm-server/handlers/handle-delete-realm.ts` breaks §1.2. It
-  matches the caller's localpart against the realm's namespace.
 - `packages/realm-server/handlers/handle-publish-realm.ts` breaks §1.2. It
   matches the caller's localpart against the owner's published-space domain.
 - `packages/realm-server/handlers/create-realm.ts` breaks §1.5. It builds
