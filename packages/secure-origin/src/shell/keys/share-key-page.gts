@@ -88,7 +88,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     {{else if this.done}}
       <DonePage @heading='Key shared' @onClose={{this.finish}}>
         <strong>{{this.done.key}}</strong>
-        is shared into
+        is shared with
         <strong>{{this.done.realm}}</strong>
         as
         <strong data-test-keys-done-label>{{this.done.share.label}}</strong>.

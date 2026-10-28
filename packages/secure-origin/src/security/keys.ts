@@ -41,7 +41,7 @@ export interface UserKey {
   updatedAt: string;
 }
 
-// A realm one of the user's keys is shared into, with the key's shares there.
+// A realm one of the user's keys is shared with, with the key's shares there.
 // `name` is null when the user can no longer read the realm, or before its
 // name is indexed: the address is then all there is to show.
 export interface SharedWorkspace {
