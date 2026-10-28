@@ -1,5 +1,6 @@
 /* eslint-env browser */
 import { isPagePath } from './pages.js';
+import { flushTelemetry } from './telemetry.ts';
 
 // Where the shell's pages send the window: another of the shell's pages,
 // Google, or away, by closing it. Every navigation they make goes through
@@ -69,8 +70,10 @@ export const navigation = {
     }
   },
   // Closes the window. A window the user opened themselves, rather than one
-  // a page opened, can't be closed by script and stays as it is.
+  // a page opened, can't be closed by script and stays as it is. What the
+  // telemetry has buffered goes first, as the window may not get another beat.
   close() {
+    flushTelemetry('close');
     window.close();
   },
 };

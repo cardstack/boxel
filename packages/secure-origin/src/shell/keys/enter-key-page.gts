@@ -170,6 +170,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     let request = contextRequest(this.opened);
     if (!request) {
       this.page.state = { name: 'entering' };
+      this.args.api.visit.loaded();
       return;
     }
     this.page.state = { name: 'loading' };
@@ -179,10 +180,12 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
         request,
       )) as WindowContext;
       this.page.state = { name: 'entering', context };
+      this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       } else {
+        this.args.api.visit.loadFailed(e);
         this.page.state = {
           name: 'load-failed',
           failure: loadFailure(e),

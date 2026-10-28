@@ -86,11 +86,13 @@ module(basename(import.meta.filename), function () {
       afterEach: stop,
     });
 
-    function post(opts?: { authed?: boolean }) {
+    function post(opts?: { authed?: boolean; authorization?: string }) {
       let builder = request
         .post('/_client-telemetry')
         .set('Content-Type', 'application/json');
-      if (opts?.authed !== false) {
+      if (opts?.authorization) {
+        builder = builder.set('Authorization', opts.authorization);
+      } else if (opts?.authed !== false) {
         builder = builder.set(
           'Authorization',
           `Bearer ${createRealmServerJWT(token, realmSecretSeed)}`,
@@ -99,11 +101,101 @@ module(basename(import.meta.filename), function () {
       return builder;
     }
 
-    test('rejects an unauthenticated beacon', async function (assert) {
-      let response = await post({ authed: false }).send(
-        JSON.stringify({ events: [{ event_type: 'card-load' }] }),
+    test('accepts a beacon without a session, attributes it to nobody, and keeps it off the host', async function (assert) {
+      await withPerfLogCapture(async (captured) => {
+        let response = await post({ authed: false }).send(
+          JSON.stringify({
+            matrix_user_id: '@someone-else:evil',
+            client_app: 'host',
+            events: [{ event_type: 'page-load', page: 'sign-in' }],
+          }),
+        );
+        assert.strictEqual(response.status, 204, 'the beacon is accepted');
+        let lines = perfLines(captured);
+        assert.strictEqual(lines.length, 1, 'its event is emitted');
+        assert.strictEqual(
+          lines[0].matrix_user_id,
+          null,
+          'the self-reported user is not believed without a session',
+        );
+        assert.strictEqual(
+          lines[0].client_app,
+          'secure-origin',
+          'only the secure origin beacons without a session, whatever the batch names',
+        );
+      });
+    });
+
+    test('treats a beacon with a session the server does not honour as anonymous', async function (assert) {
+      await withPerfLogCapture(async (captured) => {
+        let response = await post({
+          authorization: `Bearer ${createRealmServerJWT(token, 'not-the-seed')}`,
+        }).send(
+          JSON.stringify({
+            matrix_user_id: AUTHED_USER,
+            events: [{ event_type: 'keepalive' }],
+          }),
+        );
+        assert.strictEqual(response.status, 204, 'the beacon is accepted');
+        let lines = perfLines(captured);
+        assert.strictEqual(lines.length, 1, 'its event is emitted');
+        assert.strictEqual(
+          lines[0].matrix_user_id,
+          null,
+          'a forged session attributes the beacon to nobody',
+        );
+      });
+    });
+
+    test('rate limits the events of beacons without a session by network', async function (assert) {
+      let body = JSON.stringify({
+        events: Array.from({ length: 100 }, () => ({
+          event_type: 'keepalive',
+        })),
+      });
+      // The bucket refills while the batches are sent, so count what is
+      // admitted before the first refusal rather than expecting the refusal at
+      // an exact position.
+      let admitted = 0;
+      let refused;
+      for (let i = 0; i < 20 && !refused; i++) {
+        let response = await post({ authed: false }).send(body);
+        if (response.status === 204) {
+          admitted++;
+        } else {
+          refused = response;
+        }
+      }
+      assert.true(
+        admitted >= 6,
+        `a burst of 600 events is admitted (${admitted} batches of 100)`,
       );
-      assert.strictEqual(response.status, 401, 'no token is rejected');
+      assert.strictEqual(refused?.status, 429, 'then a batch is refused');
+      assert.ok(refused?.headers['retry-after'], 'with a Retry-After');
+      let authed = await post().send(body);
+      assert.strictEqual(
+        authed.status,
+        204,
+        'a beacon with a session is not counted against the network',
+      );
+    });
+
+    test('names the app each line came from', async function (assert) {
+      await withPerfLogCapture(async (captured) => {
+        for (let clientApp of ['secure-origin', undefined, 'something-else']) {
+          await post().send(
+            JSON.stringify({
+              ...(clientApp ? { client_app: clientApp } : {}),
+              events: [{ event_type: 'keepalive', client_app: 'forged' }],
+            }),
+          );
+        }
+        assert.deepEqual(
+          perfLines(captured).map((l) => l.client_app),
+          ['secure-origin', 'host', 'host'],
+          'the batch names its app; none, or an unknown one, is the host',
+        );
+      });
     });
 
     test('accepts a batch and emits one line per event', async function (assert) {

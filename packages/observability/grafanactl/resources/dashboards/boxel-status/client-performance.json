@@ -119,7 +119,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
             "queryType": "range",
             "refId": "A",
             "interval": "1m"
@@ -190,7 +190,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
             "queryType": "range",
             "refId": "A",
             "interval": "1m"
@@ -257,7 +257,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
             "queryType": "range",
             "refId": "A",
             "interval": "1m"
@@ -324,7 +324,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
             "queryType": "range",
             "refId": "A",
             "interval": "1m"
@@ -417,7 +417,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__interval]) by ()",
             "queryType": "range",
             "refId": "A",
             "legendFormat": "card settle p95"
@@ -428,7 +428,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
             "queryType": "range",
             "refId": "B",
             "legendFormat": "server-request p95"
@@ -520,7 +520,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
             "queryType": "range",
             "refId": "A",
             "legendFormat": "wedge"
@@ -531,7 +531,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
             "queryType": "range",
             "refId": "B",
             "legendFormat": "rebuild"
@@ -542,7 +542,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
             "queryType": "range",
             "refId": "C",
             "legendFormat": "realm-event"
@@ -553,7 +553,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
             "queryType": "range",
             "refId": "D",
             "legendFormat": "card-load"
@@ -564,7 +564,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
             "queryType": "range",
             "refId": "E",
             "legendFormat": "client-error"
@@ -742,7 +742,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "count by (matrix_user_id, app_version) (count by (matrix_user_id, app_version, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])))",
+            "expr": "count by (matrix_user_id, app_version) (count by (matrix_user_id, app_version, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])))",
             "queryType": "range",
             "interval": "1m",
             "legendFormat": "{{matrix_user_id}}",
@@ -754,7 +754,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "count by (app_version) (count by (app_version, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])))",
+            "expr": "count by (app_version) (count by (app_version, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])))",
             "queryType": "range",
             "interval": "1m",
             "legendFormat": "build in use: {{app_version}}",
@@ -766,7 +766,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "count by (matrix_user_id, app_version) (count by (matrix_user_id, app_version, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])))",
+            "expr": "count by (matrix_user_id, app_version) (count by (matrix_user_id, app_version, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])))",
             "queryType": "range",
             "interval": "1m",
             "legendFormat": "{{matrix_user_id}} \u2192 {{app_version}}",
@@ -870,7 +870,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "p50"
@@ -881,7 +881,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "p95"
@@ -892,7 +892,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "C",
                 "legendFormat": "p99"
@@ -984,7 +984,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap loading_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap loading_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "p50"
@@ -995,7 +995,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap loading_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap loading_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "p95"
@@ -1006,7 +1006,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap loading_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap loading_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "C",
                 "legendFormat": "p99"
@@ -1077,7 +1077,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(20, max by (card_id, matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__range])))",
+                "expr": "topk(20, max by (card_id, matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__range])))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -1195,7 +1195,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "card-loads"
@@ -1206,7 +1206,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap num_loads [$__interval]) by ()",
+                "expr": "avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap num_loads [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "avg num_loads"
@@ -1312,7 +1312,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by (endpoint)",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by (endpoint)",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "{{endpoint}}"
@@ -1404,7 +1404,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "p50"
@@ -1415,7 +1415,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "p95"
@@ -1426,7 +1426,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "C",
                 "legendFormat": "p99"
@@ -1518,7 +1518,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum by (status) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | status=~\"[45]..\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+                "expr": "sum by (status) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | status=~\"[45]..\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "{{status}}"
@@ -1589,7 +1589,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(15, max by (endpoint, matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__range])))",
+                "expr": "topk(15, max by (endpoint, matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__range])))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -1600,7 +1600,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum by (endpoint, matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | retried=\"true\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
+                "expr": "sum by (endpoint, matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | retried=\"true\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
                 "queryType": "instant",
                 "refId": "B",
                 "legendFormat": ""
@@ -1662,7 +1662,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
+                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
                 "queryType": "range",
                 "refId": "A"
               }
@@ -1767,7 +1767,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by (card_type)",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by (card_type)",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "{{card_type}}"
@@ -1838,7 +1838,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "avg by (card_type) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__range]))",
+                "expr": "avg by (card_type) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__range]))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -1849,7 +1849,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "avg by (card_type) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap doc_bytes [$__range]))",
+                "expr": "avg by (card_type) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap doc_bytes [$__range]))",
                 "queryType": "instant",
                 "refId": "B",
                 "legendFormat": ""
@@ -1860,7 +1860,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "avg by (card_type) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap included_count [$__range]))",
+                "expr": "avg by (card_type) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap included_count [$__range]))",
                 "queryType": "instant",
                 "refId": "C",
                 "legendFormat": ""
@@ -2006,7 +2006,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "wedges"
@@ -2017,7 +2017,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "max by (matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap blocked_ms [$__interval]) by ())",
+                "expr": "max by (matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap blocked_ms [$__interval]) by ())",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "max blocked_ms \u00b7 {{matrix_user_id}}"
@@ -2056,7 +2056,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
+                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
                 "queryType": "range",
                 "refId": "A"
               }
@@ -2126,7 +2126,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(15, sum by (top_frame_function, top_frame_url) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" | top_frame_function!=\"\" [$__range])))",
+                "expr": "topk(15, sum by (top_frame_function, top_frame_url) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" | top_frame_function!=\"\" [$__range])))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -2191,7 +2191,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" | line_format \"{{.matrix_user_id}}  gap={{.worst_gap_ms}}ms blocked={{.blocked_ms}}ms  {{.top_frames}}\"",
+                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" | line_format \"{{.matrix_user_id}}  gap={{.worst_gap_ms}}ms blocked={{.blocked_ms}}ms  {{.top_frames}}\"",
                 "queryType": "range",
                 "refId": "A"
               }
@@ -2320,7 +2320,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum by (kind) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+                "expr": "sum by (kind) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "errors ({{kind}})"
@@ -2331,7 +2331,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum(sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__interval]))",
+                "expr": "sum(sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__interval]))",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "occurrences"
@@ -2408,7 +2408,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(200, sum by (message_key, kind, top_frame_function, folded_signatures) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range])))",
+                "expr": "topk(200, sum by (message_key, kind, top_frame_function, folded_signatures) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range])))",
                 "queryType": "instant",
                 "refId": "A"
               },
@@ -2418,7 +2418,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(200, sum by (message_key, kind, top_frame_function, folded_signatures) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__range])))",
+                "expr": "topk(200, sum by (message_key, kind, top_frame_function, folded_signatures) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__range])))",
                 "queryType": "instant",
                 "refId": "B"
               }
@@ -2530,7 +2530,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(200, sum by (matrix_user_id, message_key, folded_signatures) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range])))",
+                "expr": "topk(200, sum by (matrix_user_id, message_key, folded_signatures) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range])))",
                 "queryType": "instant",
                 "refId": "A"
               },
@@ -2540,7 +2540,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(200, sum by (matrix_user_id, message_key, folded_signatures) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__range])))",
+                "expr": "topk(200, sum by (matrix_user_id, message_key, folded_signatures) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__range])))",
                 "queryType": "instant",
                 "refId": "B"
               }
@@ -2612,7 +2612,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
+                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
                 "queryType": "range",
                 "refId": "A"
               }
@@ -2734,7 +2734,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum by (rebuild_source) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+                "expr": "sum by (rebuild_source) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "rebuilds ({{rebuild_source}})"
@@ -2745,7 +2745,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "p95 duration_ms"
@@ -2816,7 +2816,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum by (trigger_module) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
+                "expr": "sum by (trigger_module) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -2827,7 +2827,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "avg by (trigger_module) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | rebuild_source=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap modules_refetched [$__range]))",
+                "expr": "avg by (trigger_module) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"rebuild\" | rebuild_source=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap modules_refetched [$__range]))",
                 "queryType": "instant",
                 "refId": "B",
                 "legendFormat": ""
@@ -2838,7 +2838,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "avg by (trigger_module) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap cards_reloaded [$__range]))",
+                "expr": "avg by (trigger_module) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap cards_reloaded [$__range]))",
                 "queryType": "instant",
                 "refId": "C",
                 "legendFormat": ""
@@ -2967,7 +2967,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum(sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap invalidations_count [$__interval]))",
+                "expr": "sum(sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap invalidations_count [$__interval]))",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "invalidations"
@@ -2978,7 +2978,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum(sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap reloads_triggered [$__interval]))",
+                "expr": "sum(sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap reloads_triggered [$__interval]))",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "reloads triggered"
@@ -3070,7 +3070,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum by (own_write) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+                "expr": "sum by (own_write) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "own_write={{own_write}}"
@@ -3162,7 +3162,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap processing_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap processing_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "p50"
@@ -3173,7 +3173,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap processing_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap processing_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "p95"
@@ -3279,7 +3279,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"keepalive\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap max_gap_ms [$__interval]) by ()",
+                "expr": "max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"keepalive\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap max_gap_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "max_gap_ms"
@@ -3290,7 +3290,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"keepalive\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap window_ms [$__interval]) by ()",
+                "expr": "avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"keepalive\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap window_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "avg window_ms"
@@ -3343,7 +3343,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type!=\"keepalive\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
+                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type!=\"keepalive\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
                 "queryType": "range",
                 "refId": "A"
               }
@@ -3381,7 +3381,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
+                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
                 "queryType": "range",
                 "refId": "A"
               }
@@ -3473,7 +3473,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(200, max by (matrix_user_id, top_frame_function, top_frame_url) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" | unwrap blocked_ms [$__range])))",
+                "expr": "topk(200, max by (matrix_user_id, top_frame_function, top_frame_url) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" | unwrap blocked_ms [$__range])))",
                 "queryType": "instant",
                 "refId": "A"
               },
@@ -3483,7 +3483,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(200, sum by (matrix_user_id, top_frame_function, top_frame_url) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" [$__range])))",
+                "expr": "topk(200, sum by (matrix_user_id, top_frame_function, top_frame_url) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" [$__range])))",
                 "queryType": "instant",
                 "refId": "B"
               }
@@ -3593,7 +3593,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(25, max by (matrix_user_id, card_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"card-load\" | unwrap settle_ms [$__range])))",
+                "expr": "topk(25, max by (matrix_user_id, card_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"card-load\" | unwrap settle_ms [$__range])))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -3696,7 +3696,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum by (matrix_user_id, event_type) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type!=\"keepalive\" [$__range]))",
+                "expr": "sum by (matrix_user_id, event_type) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type!=\"keepalive\" [$__range]))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -3735,6 +3735,520 @@
             ]
           }
         ]
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 68
+        },
+        "id": 105,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Each secure-origin page opened, by its page label and how its load ended: loaded, load-failed, signed-out (the window had no session), or left (the window went before the load ended).",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "loads",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 69
+            },
+            "id": 100,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (page, outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=\"secure-origin\" | event_type=\"page-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "{{page}} {{outcome}}"
+              }
+            ],
+            "title": "Page loads by page and outcome",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "p95 data_loaded_ms by page: from the navigation's start until a key page's data had loaded. Only key pages load data; the others report first_render_ms alone.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 69
+            },
+            "id": 101,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=\"secure-origin\" | event_type=\"page-load\" | outcome=\"loaded\" | data_loaded_ms!=\"\"  | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap data_loaded_ms [$__interval]) by (page)",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "{{page}}"
+              }
+            ],
+            "title": "Key page data loaded p95",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Which call a failed load ended on: the page, the endpoint label of the last request of that page that failed, and its status (0: no response). The server's own message is never sent; the user sees it behind Show Details.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 0,
+              "y": 77
+            },
+            "id": 102,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": true,
+                  "displayName": "Value #A"
+                }
+              ]
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (page, failed_endpoint, failed_status) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=\"secure-origin\" | event_type=\"page-load\" | outcome=\"load-failed\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
+                "queryType": "instant",
+                "refId": "A"
+              }
+            ],
+            "title": "Failed page loads",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {
+                  "mode": "columns"
+                }
+              },
+              {
+                "id": "merge",
+                "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "events",
+                    "Value #B": "occurrences",
+                    "message_key": "error",
+                    "kind": "kind",
+                    "top_frame_function": "throwing function",
+                    "folded_signatures": "distinct errors folded"
+                  },
+                  "indexByName": {
+                    "message_key": 0,
+                    "kind": 1,
+                    "top_frame_function": 2,
+                    "Value #A": 3,
+                    "Value #B": 4,
+                    "folded_signatures": 5
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "p95 duration_ms of the secure origin's calls, by endpoint label. Realm-server calls carry a correlation_id that joins to realm:requests; Matrix calls don't.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 12,
+              "y": 77
+            },
+            "id": 103,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=\"secure-origin\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by (endpoint)",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "{{endpoint}}"
+              }
+            ],
+            "title": "Secure-origin request duration p95 by endpoint",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "client-error events from the secure origin's pages, by page and message_key. Messages are scrubbed before they leave the page: a refused request reads `request failed: status <n> (<code>)`, and anything quoted, any URL and any Matrix ID or email is `*`.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 24,
+              "x": 0,
+              "y": 86
+            },
+            "id": 104,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": true,
+                  "displayName": "Value #A"
+                }
+              ]
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(200, sum by (page, message_key, top_frame_function) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=\"secure-origin\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__range])))",
+                "queryType": "instant",
+                "refId": "A"
+              }
+            ],
+            "title": "Secure-origin errors by page",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {
+                  "mode": "columns"
+                }
+              },
+              {
+                "id": "merge",
+                "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "events",
+                    "Value #B": "occurrences",
+                    "message_key": "error",
+                    "kind": "kind",
+                    "top_frame_function": "throwing function",
+                    "folded_signatures": "distinct errors folded"
+                  },
+                  "indexByName": {
+                    "message_key": 0,
+                    "kind": 1,
+                    "top_frame_function": 2,
+                    "Value #A": 3,
+                    "Value #B": 4,
+                    "folded_signatures": 5
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "title": "Secure origin (sign-in, registration, key pages)",
+        "type": "row"
       }
     ],
     "refresh": "1m",
@@ -3792,6 +4306,39 @@
           "query": "",
           "skipUrlSync": false,
           "type": "textbox"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "All",
+            "value": ".*"
+          },
+          "description": "Which app's events the board reads: the host app, the secure origin's pages (sign-in, registration, the key pages), or both. Every line carries the client_app the realm server wrote from its batch.",
+          "hide": 0,
+          "includeAll": false,
+          "label": "App",
+          "multi": false,
+          "name": "client_app",
+          "options": [
+            {
+              "selected": true,
+              "text": "All",
+              "value": ".*"
+            },
+            {
+              "selected": false,
+              "text": "host",
+              "value": "host"
+            },
+            {
+              "selected": false,
+              "text": "secure-origin",
+              "value": "secure-origin"
+            }
+          ],
+          "query": "All : .*, host : host, secure-origin : secure-origin",
+          "skipUrlSync": false,
+          "type": "custom"
         },
         {
           "datasource": {

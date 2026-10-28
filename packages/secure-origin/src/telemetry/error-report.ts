@@ -6,9 +6,11 @@
 //
 // The two entry points are `reportFromErrorEvent` and `reportFromRejectionEvent`.
 // Both return the same shape, including a `signature` the instrument coalesces
-// repeats by.
+// repeats by. The host's instrument and the secure origin's both use them; the
+// secure origin passes `scrubMessage`, so no text a throw quotes leaves its
+// pages.
 
-import { truncate } from '@cardstack/host/lib/truncate';
+import { truncate } from './truncate.ts';
 
 // Bounds. The stack is the payload an error event exists to carry — a message
 // says the app broke, the stack says where — so it gets the generous budget and
@@ -38,6 +40,14 @@ export type ClientErrorKind = 'error' | 'unhandledrejection';
 
 // The fields a client-error event reports about the throw itself, plus the
 // identity repeats of it coalesce under.
+export interface ReportOptions {
+  // Applied to the message before anything reads it, the grouping key
+  // included, with the value that was thrown. With it, the stack keeps only
+  // its frames: V8 opens a stack with the message, and that copy would bypass
+  // the scrub.
+  scrubMessage?: (message: string, thrown: unknown) => string;
+}
+
 export interface ErrorReport {
   kind: ClientErrorKind;
   message: string;
@@ -53,11 +63,15 @@ export interface ErrorReport {
 // A `window` error event: an uncaught throw. Prefer the error object it carries,
 // and fall back to the event's own message so a cross-origin `Script error.` —
 // which carries no error at all — is still reported rather than dropped.
-export function reportFromErrorEvent(event: Event): ErrorReport {
+export function reportFromErrorEvent(
+  event: Event,
+  opts: ReportOptions = {},
+): ErrorReport {
   let e = event as ErrorEvent;
   let error = asErrorLike(e.error);
-  return buildReport({
+  return buildReport(opts, {
     kind: 'error',
+    thrown: e.error,
     message: error ? describeError(error) : stringifyReason(e.message),
     stack: error?.stack,
     sourceUrl: typeof e.filename === 'string' ? e.filename : '',
@@ -68,11 +82,15 @@ export function reportFromErrorEvent(event: Event): ErrorReport {
 
 // An unhandled rejection. `reason` is whatever was rejected with, and it carries
 // no location of its own, so the stack's first frame is the only one available.
-export function reportFromRejectionEvent(event: Event): ErrorReport {
+export function reportFromRejectionEvent(
+  event: Event,
+  opts: ReportOptions = {},
+): ErrorReport {
   let { reason } = event as PromiseRejectionEvent;
   let error = asErrorLike(reason);
-  return buildReport({
+  return buildReport(opts, {
     kind: 'unhandledrejection',
+    thrown: reason,
     message: error ? describeError(error) : stringifyReason(reason),
     stack: error?.stack,
     sourceUrl: '',
@@ -83,6 +101,7 @@ export function reportFromRejectionEvent(event: Event): ErrorReport {
 
 interface RawThrow {
   kind: ClientErrorKind;
+  thrown: unknown;
   message: string;
   stack: string | undefined;
   sourceUrl: string;
@@ -90,7 +109,10 @@ interface RawThrow {
   col: number;
 }
 
-function buildReport(raw: RawThrow): ErrorReport {
+function buildReport(opts: ReportOptions, raw: RawThrow): ErrorReport {
+  if (opts.scrubMessage) {
+    raw = { ...raw, message: opts.scrubMessage(raw.message, raw.thrown) };
+  }
   // The frame is read from the stack as the engine gave it, not from the bounded
   // copy: where the throw happened is a fact about the error, and must not depend
   // on how much of the stack fit in the budget.
@@ -104,7 +126,7 @@ function buildReport(raw: RawThrow): ErrorReport {
     kind: raw.kind,
     message: truncate(raw.message, MAX_ERROR_MESSAGE_CHARS),
     message_key: messageKey,
-    stack: boundStack(raw.stack),
+    stack: boundStack(raw.stack, { framesOnly: Boolean(opts.scrubMessage) }),
     top_frame_function: frame.functionName,
     source_url: raw.sourceUrl || frame.url,
     line: raw.line || frame.line,
@@ -165,7 +187,10 @@ function stringifyReason(reason: unknown): string {
 // dropped, first by line count and then to fit the character budget. The count
 // bounds lines rather than parsed frames: a real stack carries lines no parse
 // claims (`at new Promise (<anonymous>)`), and they occupy slots like any other.
-function boundStack(stack: string | undefined): string {
+function boundStack(
+  stack: string | undefined,
+  { framesOnly }: { framesOnly: boolean },
+): string {
   if (typeof stack !== 'string' || stack.length === 0) {
     return '';
   }
@@ -181,13 +206,22 @@ function boundStack(stack: string | undefined): string {
   // lines as it likes — so it is bounded separately rather than competing with the
   // frames for one allowance.
   let { header, frames: all } = splitStack(lines);
+  if (framesOnly) {
+    // A stack with no V8 frame is split as all frames, which for a V8 stack
+    // that has only its message would keep the message; keep only the lines
+    // that read as frames.
+    all = all.filter(
+      (line) => V8_FRAME_PREFIX_RE.test(line) || parseStackFrame(line),
+    );
+  }
   let frames = all
     .slice(0, MAX_ERROR_STACK_LINES)
     .map((frame) => truncate(frame, MAX_ERROR_STACK_LINE_CHARS));
   let dropped = all.length - frames.length;
-  let head = header.length
-    ? truncate(header.join('\n'), MAX_ERROR_STACK_LINE_CHARS)
-    : '';
+  let head =
+    header.length && !framesOnly
+      ? truncate(header.join('\n'), MAX_ERROR_STACK_LINE_CHARS)
+      : '';
   let assemble = (count: number) => {
     let kept = [...(head ? [head] : []), ...frames.slice(0, count)];
     // Say when the tail was cut, so a short stack cannot be misread as a whole

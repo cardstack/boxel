@@ -8,6 +8,7 @@ import type {
   Prerenderer,
   LinkShapePolicy,
 } from '@cardstack/runtime-common';
+import { DBRateLimitStore } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
 import { createRequire } from 'module';
@@ -452,13 +453,17 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   // Batched client performance beacons. The host sends its server session
-  // token as `Authorization: Bearer <token>`, so the standard jwtMiddleware
-  // authenticates the caller and the authenticated matrix user id is used in
-  // preference to the body's self-reported value.
+  // token as `Authorization: Bearer <token>`, and the secure origin's pages
+  // their window's own session once they have one. The handler authenticates
+  // the session itself, since a beacon without one is accepted too (rate
+  // limited, and attributed to nobody).
   router.post(
     '/_client-telemetry',
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleClientTelemetry(),
+    handleClientTelemetry({
+      realmSecretSeed: args.realmSecretSeed,
+      dbAdapter: args.dbAdapter,
+      rateLimitStore: new DBRateLimitStore(args.dbAdapter),
+    }),
   );
   router.post(
     OPENROUTER_PASSTHROUGH_PATH,

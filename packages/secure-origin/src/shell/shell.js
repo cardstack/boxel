@@ -12,6 +12,7 @@ import '../styles/layers.css';
 
 import { startShell } from './app.gts';
 import { LEGACY_MODES } from './pages.js';
+import { startTelemetry } from './telemetry.ts';
 import { pageURL } from './urls.js';
 
 // Moves an address's `mode` into its path: true when there is a page to
@@ -42,5 +43,6 @@ function fromLegacyMode() {
 
 let root = document.getElementById('secure-shell');
 if (root && fromLegacyMode()) {
+  startTelemetry();
   startShell(root);
 }

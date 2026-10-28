@@ -17,6 +17,10 @@ import {
 } from '../../src/shell/password-reset/reset-link.ts';
 import ResetPassword from '../../src/shell/password-reset/reset-password.gts';
 import { setupMockServers, setupPageAddress } from '../helpers/mock-servers.ts';
+import {
+  setupTelemetrySecretsCheck,
+  stringsIn,
+} from '../helpers/telemetry-secrets.ts';
 import { fieldNames } from '../helpers/field-names.ts';
 import { assertEnterSubmits } from '../helpers/implicit-submission.ts';
 
@@ -43,6 +47,20 @@ module('Integration | password reset', function (hooks) {
   hooks.afterEach(function () {
     navigation.assign = assign;
   });
+  setupTelemetrySecretsCheck(hooks, () => [
+    // What the page sent: bodies and credentials, not the method and path
+    // a label is made from.
+    ...stringsIn(
+      [...servers.requests('matrix'), ...servers.requests('realm-server')].map(
+        (r) => [r.body, r.authorization],
+      ),
+    ),
+    NEW_PASSWORD,
+    'the-client-secret',
+    'someone@example.com',
+    'nobody@example.com',
+    'something-else',
+  ]);
 
   module('forgot-password', function () {
     test('requests the reset email, with the secret in the link’s fragment', async function (assert) {

@@ -17,6 +17,10 @@ import KeyPage from '../../src/shell/keys/key-page.gts';
 import { openedFor } from '../../src/shell/keys/opened-for.ts';
 import SharePage from '../../src/shell/keys/share-key-page.gts';
 import SwapKeyPage from '../../src/shell/keys/swap-key-page.gts';
+import {
+  setupTelemetrySecretsCheck,
+  stringsIn,
+} from '../helpers/telemetry-secrets.ts';
 
 // The key pages, against a realm server that answers the requests they make.
 // Every change to a key is made with a key write ticket the page mints with
@@ -218,6 +222,28 @@ module('Integration | key pages', function (hooks) {
     forgetSession();
     sessionStorage.clear();
   });
+
+  // No beacon carries what a key page sent or showed: a key's value, name or
+  // id, a share's label or id, a workspace's name or address, a ticket, the
+  // session's token.
+  setupTelemetrySecretsCheck(hooks, () => [
+    ...stringsIn(requests.map((r) => r.body)),
+    SESSION.token,
+    REALM,
+    REALM_PREFIX,
+    'someone/workspace',
+    'someone/dashboard',
+    'Weather service',
+    'Team Workspace',
+    'Team weather',
+    'Team maps',
+    'Get the forecast',
+    '"key-1"',
+    '"key-2"',
+    '"share-1"',
+    '"share-4"',
+    '"share-9"',
+  ]);
 
   module('what a page was opened for', function () {
     test('reads its realm, card, operation and reason from the fragment', function (assert) {

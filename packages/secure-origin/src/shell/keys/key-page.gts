@@ -380,10 +380,12 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   private async load() {
     try {
       this.state.keys = await listKeys(this.args.api.config);
+      this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       } else {
+        this.args.api.visit.loadFailed(e);
         this.state.loadFailed = loadFailure(e);
       }
     }
