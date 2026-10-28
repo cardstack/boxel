@@ -29,7 +29,7 @@ const FORMER_WRITER = '@sample-former-writer:localhost';
 type ShareRow = {
   id: string;
   label: string;
-  owner: string;
+  owner: string | null;
   state: 'active' | 'suspended';
   suspensionReason:
     | 'owner-lost-write'
@@ -40,7 +40,8 @@ type ShareRow = {
 };
 
 // The shares a realm's direct writers see: one of the user's own, active; one
-// of another writer's, active; and three suspended shares, one for each reason.
+// of another writer's, active; three suspended shares, one for each reason;
+// and a suspended one whose owner the realm no longer names.
 function fixtureShares(): ShareRow[] {
   return [
     {
@@ -81,6 +82,16 @@ function fixtureShares(): ShareRow[] {
       owner: ME,
       state: 'suspended',
       suspensionReason: 'key-deleted',
+      suspendedBy: null,
+    },
+    {
+      // No permission row in the realm names this owner any more, so the
+      // realm server leaves them out.
+      id: '00000000-0000-4000-8000-000000000006',
+      label: 'Calendar',
+      owner: null,
+      state: 'suspended',
+      suspensionReason: 'owner-lost-write',
       suspendedBy: null,
     },
   ];
@@ -254,7 +265,7 @@ module('Acceptance | realm config | API Keys', function (hooks) {
         [...document.querySelectorAll('[data-test-realm-key-share]')].map(
           (el) => el.getAttribute('data-test-realm-key-share'),
         ),
-        ['OpenAI', 'Weather', 'Maps', 'Search', 'Translate'],
+        ['OpenAI', 'Weather', 'Maps', 'Search', 'Translate', 'Calendar'],
       );
       assert
         .dom(`${share('OpenAI')} [data-test-realm-key-share-owner]`)
@@ -312,11 +323,17 @@ module('Acceptance | realm config | API Keys', function (hooks) {
           `${share('Translate')} [data-test-realm-key-share-reason="key-deleted"]`,
         )
         .hasText('Its owner deleted the key.');
+      assert
+        .dom(`${share('Calendar')} [data-test-realm-key-share-owner]`)
+        .hasText(
+          'A former member of this workspace',
+          'an owner the realm no longer names is not shown by id',
+        );
 
-      for (let label of ['Maps', 'Search', 'Translate']) {
+      for (let label of ['Maps', 'Search', 'Translate', 'Calendar']) {
         assert.dom(`${share(label)} [data-test-realm-key-share-swap]`).exists();
         assert
-          .dom(`${share(label)} [data-test-realm-key-share-suspend]`)
+          .dom(`${share(label)} [data-test-realm-key-share-change="suspend"]`)
           .doesNotExist();
       }
       for (let label of ['OpenAI', 'Weather']) {
@@ -327,17 +344,19 @@ module('Acceptance | realm config | API Keys', function (hooks) {
           .dom(`${share(label)} [data-test-realm-key-share-swap]`)
           .doesNotExist();
         assert
-          .dom(`${share(label)} [data-test-realm-key-share-suspend]`)
+          .dom(`${share(label)} [data-test-realm-key-share-change="suspend"]`)
           .exists();
       }
       assert
-        .dom(`${share('OpenAI')} [data-test-realm-key-share-unshare]`)
+        .dom(`${share('OpenAI')} [data-test-realm-key-share-change="unshare"]`)
         .exists();
       assert
-        .dom(`${share('Translate')} [data-test-realm-key-share-unshare]`)
+        .dom(
+          `${share('Translate')} [data-test-realm-key-share-change="unshare"]`,
+        )
         .exists();
       assert
-        .dom(`${share('Weather')} [data-test-realm-key-share-unshare]`)
+        .dom(`${share('Weather')} [data-test-realm-key-share-change="unshare"]`)
         .doesNotExist("someone else's share can't be unshared here");
     });
 
@@ -392,24 +411,62 @@ module('Acceptance | realm config | API Keys', function (hooks) {
       assert.true(api!.listings().length > before);
     });
 
+    test('the listing is read again when the page becomes visible again', async function (assert) {
+      await visitConfig();
+      await waitFor(share('Maps'));
+      let before = api!.listings().length;
+      document.dispatchEvent(new Event('visibilitychange'));
+      await waitUntil(() => api!.listings().length > before);
+      assert.true(api!.listings().length > before);
+    });
+
+    test('a closed config card no longer reads the listing', async function (assert) {
+      await visitConfig('isolated');
+      await waitFor(share('Maps'));
+      await click('[data-test-close-button]');
+      await waitUntil(() => !document.querySelector(share('Maps')));
+      await settled();
+      let before = api!.listings().length;
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+      await settled();
+      assert.strictEqual(
+        api!.listings().length,
+        before,
+        'no listing after the entry is gone',
+      );
+    });
+
     test('suspending a share asks first, then suspends it', async function (assert) {
       await visitConfig();
       await waitFor(share('Weather'));
-      await click(`${share('Weather')} [data-test-realm-key-share-suspend]`);
+      await click(
+        `${share('Weather')} [data-test-realm-key-share-change="suspend"]`,
+      );
 
       assert
         .dom(
           `${share('Weather')} [data-test-realm-key-share-confirm="suspend"]`,
         )
         .containsText('Suspend “Weather”?');
-      await click(`${share('Weather')} [data-test-realm-key-share-cancel]`);
+      assert
+        .dom(`${share('Weather')} [data-test-pretui-popconfirm-panel]`)
+        .hasAttribute('role', 'dialog')
+        .hasAttribute('aria-label', 'Suspend “Weather”?');
+      assert
+        .dom(`${share('Weather')} [data-test-pretui-popconfirm-cancel]`)
+        .isFocused('focus moves into the question, onto Cancel');
+      await click(`${share('Weather')} [data-test-pretui-popconfirm-cancel]`);
       assert.dom('[data-test-realm-key-share-confirm]').doesNotExist();
+      assert
+        .dom(`${share('Weather')} [data-test-realm-key-share-change="suspend"]`)
+        .isFocused('and back to Suspend when it closes');
       assert.deepEqual(api!.changes(), [], 'Cancel changes nothing');
 
-      await click(`${share('Weather')} [data-test-realm-key-share-suspend]`);
       await click(
-        `${share('Weather')} [data-test-realm-key-share-confirm-button]`,
+        `${share('Weather')} [data-test-realm-key-share-change="suspend"]`,
       );
+      await click(`${share('Weather')} [data-test-pretui-popconfirm-confirm]`);
       await waitFor(
         `${share('Weather')}[data-test-realm-key-share-state="suspended"]`,
       );
@@ -424,7 +481,7 @@ module('Acceptance | realm config | API Keys', function (hooks) {
         .dom(
           `${share('Weather')} [data-test-realm-key-share-reason="suspended-by-writer"]`,
         )
-        .hasText(`Suspended by ${ME}.`);
+        .hasText('Suspended by you.');
       assert
         .dom(`${share('Weather')} [data-test-realm-key-share-swap]`)
         .exists();
@@ -433,13 +490,13 @@ module('Acceptance | realm config | API Keys', function (hooks) {
     test('unsharing your own share asks first, then withdraws it', async function (assert) {
       await visitConfig();
       await waitFor(share('OpenAI'));
-      await click(`${share('OpenAI')} [data-test-realm-key-share-unshare]`);
+      await click(
+        `${share('OpenAI')} [data-test-realm-key-share-change="unshare"]`,
+      );
       assert
         .dom(`${share('OpenAI')} [data-test-realm-key-share-confirm="unshare"]`)
         .containsText('Unshare “OpenAI”?');
-      await click(
-        `${share('OpenAI')} [data-test-realm-key-share-confirm-button]`,
-      );
+      await click(`${share('OpenAI')} [data-test-pretui-popconfirm-confirm]`);
       await waitUntil(() => !document.querySelector(share('OpenAI')));
 
       assert.deepEqual(api!.changes(), [
@@ -461,15 +518,16 @@ module('Acceptance | realm config | API Keys', function (hooks) {
       });
       await visitConfig();
       await waitFor(share('Weather'));
-      await click(`${share('Weather')} [data-test-realm-key-share-suspend]`);
       await click(
-        `${share('Weather')} [data-test-realm-key-share-confirm-button]`,
+        `${share('Weather')} [data-test-realm-key-share-change="suspend"]`,
       );
+      await click(`${share('Weather')} [data-test-pretui-popconfirm-confirm]`);
       await waitFor('[data-test-realm-key-share-change-error]');
 
       assert
         .dom('[data-test-realm-key-share-change-error]')
-        .hasText(`only a realm's direct writers suspend its shares`);
+        .hasText(`only a realm's direct writers suspend its shares`)
+        .hasAttribute('role', 'alert');
       assert
         .dom(
           `${share('Weather')} [data-test-realm-key-share-confirm="suspend"]`,

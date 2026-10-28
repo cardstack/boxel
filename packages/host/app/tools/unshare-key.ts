@@ -17,6 +17,11 @@ export default class UnshareKeyTool extends HostBaseTool<
 
   static actionVerb = 'Unshare';
 
+  // Deleting a share can't be undone: its label, and the cards that name it,
+  // come back only if its owner shares the key again. So the tool always waits
+  // for the user's click, even in a mode that runs other tools on its own.
+  static neverAutoExecutes = true;
+
   description =
     "Withdraw one of the user's own shared API keys (shareId) from its workspace. The key is kept and stays shared everywhere else.";
 

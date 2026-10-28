@@ -220,3 +220,13 @@ events, as proposed in #6906, breaks §1.3 and §1.5.
   and loads the invite module. `.github/workflows/sync-synapse-assets.yml`
   copies `packages/matrix/support/synapse/modules/` to those homeservers, but
   each configuration still has to list the module under `modules:`.
+- `packages/realm-server/lib/key-shares.ts` (`listRealmShares`) breaks §1.1.
+  It answers a realm's direct writers with each share's `owner` and
+  `suspendedBy` as Matrix ids, whether or not those people still hold a
+  permission row naming them in the realm. A share outlives its owner's
+  access (an owner who leaves keeps the share, suspended as
+  `owner-lost-write`), and the writer who suspended a share may have left
+  since. The listing has to withhold either id once no permission row in the
+  realm names that person. `packages/host/app/tools/list-realm-key-shares.ts`
+  relays them, and the realm config's API Keys entry
+  (`packages/base/realm-api-keys.gts`) shows them.

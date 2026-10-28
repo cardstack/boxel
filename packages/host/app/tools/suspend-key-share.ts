@@ -18,6 +18,11 @@ export default class SuspendKeyShareTool extends HostBaseTool<
 
   static actionVerb = 'Suspend';
 
+  // Only a direct writer swapping a key in brings the share back, and the
+  // cards that use it stop working until then, so the tool always waits for
+  // the user's click, even in a mode that runs other tools on its own.
+  static neverAutoExecutes = true;
+
   description =
     "Suspend one of a workspace's shared API keys (shareId), so cards there stop using it. Only the workspace's direct writers may.";
 

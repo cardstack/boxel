@@ -7,8 +7,8 @@ import type RealmServerService from '../services/realm-server';
 // Only the realm's direct writers see its shares; anyone else is refused with
 // a 403. Suspending a share and withdrawing your own take no key write ticket:
 // they only stop a key being used. Sharing, swapping and resuming, which put a
-// key into use, take one, and only the secure window mints those, so the app
-// page opens the window for them instead.
+// key into use, take one, which the app page can't mint, so it opens the
+// secure window for them instead.
 
 export type KeyShareState = 'active' | 'suspended';
 
@@ -20,7 +20,8 @@ export type KeyShareSuspensionReason =
 export interface RealmKeyShare {
   id: string;
   label: string;
-  owner: string;
+  // Null once no permission row in the realm names the owner.
+  owner: string | null;
   state: KeyShareState;
   suspensionReason: KeyShareSuspensionReason | null;
   suspendedBy: string | null;
@@ -81,7 +82,7 @@ export async function listRealmKeyShares(
   return data.map(({ id, attributes }) => ({
     id,
     label: attributes.label,
-    owner: attributes.owner,
+    owner: attributes.owner ?? null,
     state: attributes.state,
     suspensionReason: attributes.suspensionReason ?? null,
     suspendedBy: attributes.suspendedBy ?? null,

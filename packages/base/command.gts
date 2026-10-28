@@ -230,7 +230,8 @@ export class RealmKeySharesInput extends CardDef {
 // in use. `state` is `active` or `suspended`; a suspended share carries its
 // `suspensionReason` (`owner-lost-write`, `suspended-by-writer` or
 // `key-deleted`), and `suspendedBy` names the writer who suspended it. `own`
-// says the share holds the signed-in user's key, so they may unshare it.
+// says the share holds the signed-in user's key, so they may unshare it, and
+// `suspendedByYou` that the signed-in user is the writer who suspended it.
 export class RealmKeyShareField extends FieldDef {
   @field shareId = contains(StringField);
   @field label = contains(StringField);
@@ -239,6 +240,7 @@ export class RealmKeyShareField extends FieldDef {
   @field state = contains(StringField);
   @field suspensionReason = contains(StringField);
   @field suspendedBy = contains(StringField);
+  @field suspendedByYou = contains(BooleanField);
   @field suspendedAt = contains(StringField);
 }
 

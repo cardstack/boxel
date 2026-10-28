@@ -45,8 +45,9 @@ export default class ListRealmKeySharesTool extends HostBaseTool<
           new RealmKeyShareField({
             shareId: share.id,
             label: share.label,
-            owner: share.owner,
-            own: share.owner === user,
+            owner: share.owner ?? undefined,
+            own: Boolean(user) && share.owner === user,
+            suspendedByYou: Boolean(user) && share.suspendedBy === user,
             state: share.state,
             suspensionReason: share.suspensionReason ?? undefined,
             suspendedBy: share.suspendedBy ?? undefined,
