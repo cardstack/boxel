@@ -4245,6 +4245,127 @@
                 }
               }
             ]
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "wedge events from the secure origin's pages: a main-thread freeze of 10s or more, corroborated by long-animation-frame or longtask entries spanning at least half of it, so a wake from sleep isn't one. By page and the worst blocking script, which is named by its URL's origin and path and its function name only. The build is minified with no source map, so the function is often a mangled name: read the char offset into that file, built at the deployed commit. A blank frame is a freeze only a longtask corroborated (longtask_count above 0), a long-animation-frame that listed no script, or, with longtask_count 0, a gap in a browser with neither entry type, which nothing corroborated and may be a sleep. A function beside a blank script is one whose URL wasn't a script file's, so it was dropped.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 24,
+              "x": 0,
+              "y": 95
+            },
+            "id": 106,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": true,
+                  "displayName": "wedges"
+                }
+              ]
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(50, sum by (page, top_frame_function, top_frame_url, top_frame_char) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=\"secure-origin\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range])))",
+                "queryType": "instant",
+                "refId": "A"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "max by (page, top_frame_function, top_frame_url, top_frame_char) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=\"secure-origin\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__range]))",
+                "queryType": "instant",
+                "refId": "B"
+              }
+            ],
+            "title": "Secure-origin wedges by page and frame",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {
+                  "mode": "columns"
+                }
+              },
+              {
+                "id": "merge",
+                "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "wedges",
+                    "Value #B": "longest (ms)",
+                    "top_frame_function": "blocking function",
+                    "top_frame_url": "script",
+                    "top_frame_char": "char"
+                  },
+                  "indexByName": {
+                    "page": 0,
+                    "top_frame_function": 1,
+                    "top_frame_url": 2,
+                    "top_frame_char": 3,
+                    "Value #A": 4,
+                    "Value #B": 5
+                  }
+                }
+              }
+            ]
           }
         ],
         "title": "Secure origin (sign-in, registration, key pages)",

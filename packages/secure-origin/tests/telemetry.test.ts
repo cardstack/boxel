@@ -4,8 +4,10 @@ import { beforeEach, describe, test } from 'node:test';
 import { timedFetch } from '../src/security/session.js';
 import {
   SecureTelemetry,
+  scriptURL,
   scrubMessage,
   type TelemetryEvent,
+  type WedgeEvent,
 } from '../src/telemetry/instrument.ts';
 import { endpointLabel, pageLabel } from '../src/telemetry/labels.ts';
 
@@ -122,9 +124,66 @@ describe('scrubbing an error message', () => {
   });
 });
 
+describe('a script URL as a wedge reports it', () => {
+  test("keeps a script file's origin and path, never its query or fragment", () => {
+    assert.equal(
+      scriptURL('https://secure.example.test/assets/shell-1a2b.js?v=3#x'),
+      'https://secure.example.test/assets/shell-1a2b.js',
+    );
+    assert.equal(
+      scriptURL('http://localhost:4208/src/shell/app.gts'),
+      'http://localhost:4208/src/shell/app.gts',
+    );
+  });
+
+  test("never the document's own address, or a URL that isn't a script file's", () => {
+    for (let value of [
+      `https://secure.example.test/keys/${KEY}/share`,
+      'https://secure.example.test/reset-password?token=abc',
+      'blob:https://secure.example.test/0b6c1e9e',
+      'data:text/javascript,alert(1)',
+      'not a url',
+      '',
+      undefined,
+      42,
+    ]) {
+      assert.equal(scriptURL(value), '', String(value));
+    }
+  });
+});
+
+// A `PerformanceObserver` whose entries the test delivers by hand.
+class FakeObserver {
+  static supportedEntryTypes: string[] = [];
+  static live = new Set<FakeObserver>();
+  type: string | undefined;
+  callback: (list: { getEntries(): PerformanceEntry[] }) => void;
+  constructor(callback: (list: { getEntries(): PerformanceEntry[] }) => void) {
+    this.callback = callback;
+  }
+  observe({ type }: { type: string }) {
+    this.type = type;
+    FakeObserver.live.add(this);
+  }
+  disconnect() {
+    FakeObserver.live.delete(this);
+  }
+  static deliver(type: string, entries: object[]) {
+    for (let observer of FakeObserver.live) {
+      if (observer.type === type) {
+        observer.callback({
+          getEntries: () => entries as PerformanceEntry[],
+        });
+      }
+    }
+  }
+}
+
 // A window whose timers the test runs by hand.
 class FakeWindow {
   timers = new Map<number, () => void>();
+  timeouts = new Map<number, () => void>();
+  PerformanceObserver: typeof FakeObserver | undefined;
   listeners = new Map<string, Set<(event: Event) => void>>();
   nextTimer = 1;
   document = {
@@ -147,6 +206,19 @@ class FakeWindow {
   }
   clearInterval(id: number) {
     this.timers.delete(id);
+  }
+  setTimeout(fn: () => void) {
+    let id = this.nextTimer++;
+    this.timeouts.set(id, fn);
+    return id;
+  }
+  // Runs the timeouts pending now; those they set wait for the next call.
+  runTimeouts() {
+    let pending = [...this.timeouts];
+    for (let [id, fn] of pending) {
+      this.timeouts.delete(id);
+      fn();
+    }
   }
   addEventListener(type: string, fn: (event: Event) => void) {
     if (!this.listeners.has(type)) {
@@ -445,5 +517,221 @@ describe('the instrument', () => {
     assert.doesNotThrow(() => win.tick());
     assert.doesNotThrow(() => failing.flushAll('close'));
     failing.stop();
+  });
+  describe('wedges', () => {
+    const SCRIPT = 'https://secure.example.test/assets/shell-1a2b.js';
+
+    beforeEach(() => {
+      FakeObserver.live.clear();
+      FakeObserver.supportedEntryTypes = ['long-animation-frame', 'longtask'];
+      win.PerformanceObserver = FakeObserver;
+    });
+
+    function wedges() {
+      telemetry.flushAll('test');
+      return events().filter((e): e is WedgeEvent => e.event_type === 'wedge');
+    }
+
+    // The main thread runs nothing from 100 until 12,100.
+    function freeze() {
+      clock = 100;
+      win.tick();
+      clock = 12_100;
+      win.tick();
+    }
+
+    test('a freeze is attributed to the scripts that blocked it, by URL and function name alone', () => {
+      telemetry.start();
+      telemetry.pageOpened('keys.share');
+      freeze();
+      FakeObserver.deliver('long-animation-frame', [
+        {
+          startTime: 150,
+          duration: 11_950,
+          blockingDuration: 11_900,
+          scripts: [
+            {
+              sourceURL: `${SCRIPT}?v=3#${KEY}`,
+              sourceFunctionName: 'revealKey',
+              sourceCharPosition: 1234,
+              invoker: 'BUTTON#reveal-sk-live-SECRET.onclick',
+              invokerType: 'event-listener',
+              duration: 11_800,
+            },
+            {
+              sourceURL: `https://secure.example.test/keys/${KEY}/share?token=sk-live-SECRET`,
+              sourceFunctionName: 'inline',
+              sourceCharPosition: 9,
+              invoker: `https://secure.example.test/keys/${KEY}/share`,
+              invokerType: 'classic-script',
+              duration: 60,
+            },
+          ],
+        },
+      ]);
+      win.runTimeouts();
+      let [wedge, ...rest] = wedges();
+      assert.equal(rest.length, 0);
+      assert.ok(wedge);
+      assert.equal(wedge.page, 'keys/share');
+      assert.equal(wedge.duration_ms, 12_000);
+      assert.equal(wedge.worst_gap_ms, 12_000);
+      assert.equal(wedge.blocked_ms, 11_900);
+      assert.equal(wedge.longtask_count, 1);
+      assert.equal(wedge.top_frame_function, 'revealKey');
+      assert.equal(wedge.top_frame_url, SCRIPT);
+      assert.equal(wedge.top_frame_char, 1234);
+      assert.equal(wedge.top_frame_blocked_ms, 11_800);
+      assert.equal(
+        wedge.top_frames,
+        `revealKey @ ${SCRIPT}:1234  |  inline @ ?:9`,
+      );
+      assert.deepEqual(
+        wedge.loaf_scripts.map((s) => [s.source_url, s.invoker_type]),
+        [
+          [SCRIPT, 'event-listener'],
+          ['', 'classic-script'],
+        ],
+      );
+      let sent = JSON.stringify(beacons.map((b) => b.body));
+      for (let secret of [KEY, 'sk-live-SECRET', 'BUTTON', 'token=']) {
+        assert.ok(!sent.includes(secret), `${secret} in ${sent}`);
+      }
+      telemetry.stop();
+    });
+
+    test('a gap no frame corroborates, as a wake from sleep leaves, is not a wedge', () => {
+      telemetry.start();
+      freeze();
+      win.runTimeouts();
+      win.runTimeouts();
+      win.runTimeouts();
+      win.runTimeouts();
+      assert.equal(win.timeouts.size, 0, 'it stops retrying');
+      assert.deepEqual(wedges(), []);
+      telemetry.stop();
+    });
+
+    test('a short frame as the window wakes from sleep does not make the sleep a wedge', () => {
+      telemetry.start();
+      freeze();
+      FakeObserver.deliver('long-animation-frame', [
+        { startTime: 12_000, duration: 60, blockingDuration: 10 },
+      ]);
+      win.runTimeouts();
+      win.runTimeouts();
+      win.runTimeouts();
+      assert.deepEqual(wedges(), []);
+      telemetry.stop();
+    });
+
+    test('a freeze in the same frame as the heartbeat before it is a wedge', () => {
+      telemetry.start();
+      freeze();
+      FakeObserver.deliver('long-animation-frame', [
+        {
+          startTime: 95,
+          duration: 12_000,
+          blockingDuration: 11_950,
+          scripts: [
+            {
+              sourceURL: SCRIPT,
+              sourceFunctionName: 'deriveKey',
+              sourceCharPosition: 42,
+              invokerType: 'user-callback',
+              duration: 11_990,
+            },
+          ],
+        },
+      ]);
+      win.runTimeouts();
+      let [wedge] = wedges();
+      assert.equal(wedge?.top_frame_function, 'deriveKey');
+      assert.equal(wedge?.blocked_ms, 11_950);
+      telemetry.stop();
+    });
+
+    test('a freeze spread over several frames is a wedge', () => {
+      telemetry.start();
+      freeze();
+      FakeObserver.deliver('long-animation-frame', [
+        { startTime: 110, duration: 4_000, blockingDuration: 3_950 },
+        { startTime: 4_120, duration: 4_000, blockingDuration: 3_950 },
+        { startTime: 8_130, duration: 3_960, blockingDuration: 3_910 },
+      ]);
+      win.runTimeouts();
+      let [wedge] = wedges();
+      assert.equal(wedge?.longtask_count, 3);
+      assert.equal(wedge?.blocked_ms, 11_810);
+      telemetry.stop();
+    });
+
+    test('a frame whose entry arrives after the heartbeat still corroborates it', () => {
+      telemetry.start();
+      freeze();
+      win.runTimeouts();
+      FakeObserver.deliver('long-animation-frame', [
+        { startTime: 120, duration: 11_000, blockingDuration: 10_900 },
+      ]);
+      win.runTimeouts();
+      let [wedge] = wedges();
+      assert.equal(wedge?.blocked_ms, 10_900);
+      assert.equal(wedge?.top_frame_url, '');
+      assert.equal(wedge?.top_frame_char, -1);
+      telemetry.stop();
+    });
+
+    test('where there is no LoAF, a longtask corroborates it and says how long it blocked', () => {
+      FakeObserver.supportedEntryTypes = ['longtask'];
+      telemetry.start();
+      freeze();
+      FakeObserver.deliver('longtask', [
+        { startTime: 130, duration: 11_500 },
+        { startTime: 20_000, duration: 400 },
+      ]);
+      win.runTimeouts();
+      let [wedge] = wedges();
+      assert.equal(wedge?.blocked_ms, 11_500);
+      assert.equal(wedge?.longtask_count, 1);
+      assert.equal(wedge?.top_frames, '');
+      assert.deepEqual(wedge?.loaf_scripts, []);
+      telemetry.stop();
+    });
+
+    test('with no observer the gap is reported as it is', () => {
+      win.PerformanceObserver = undefined;
+      telemetry.start();
+      freeze();
+      win.runTimeouts();
+      let [wedge] = wedges();
+      assert.equal(wedge?.duration_ms, 12_000);
+      assert.equal(wedge?.longtask_count, 0);
+      telemetry.stop();
+    });
+
+    test('a short gap, or one while the window is hidden, is not a wedge', () => {
+      telemetry.start();
+      clock = 100;
+      win.tick();
+      clock = 9_000;
+      win.tick();
+      win.document.visibilityState = 'hidden';
+      clock = 60_000;
+      win.tick();
+      FakeObserver.deliver('long-animation-frame', [
+        { startTime: 200, duration: 8_000, blockingDuration: 8_000 },
+        { startTime: 30_000, duration: 11_000, blockingDuration: 11_000 },
+      ]);
+      win.runTimeouts();
+      assert.deepEqual(wedges(), []);
+      telemetry.stop();
+    });
+
+    test('stopping disconnects the observer', () => {
+      telemetry.start();
+      assert.equal(FakeObserver.live.size, 1);
+      telemetry.stop();
+      assert.equal(FakeObserver.live.size, 0);
+    });
   });
 });

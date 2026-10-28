@@ -64,10 +64,14 @@ MUST be matched, never copied, and a query string MUST NOT be read. A page
 MUST be named by a label from a fixed list, never by its address. An error's
 message MUST be scrubbed before it is recorded: a refused request's message
 replaced by its status and code, and anything quoted, any URL and any Matrix
-ID or email address cut. Its stack MUST keep only its frames. Tests MUST
-drive every page that takes a credential, a secret or a private name (the key
-pages, sign-in, the CLI pages, registration and password reset) with known
-values, and check that no beacon carries what was typed, sent or answered.
+ID or email address cut. Its stack MUST keep only its frames. A main-thread
+freeze MUST be attributed only by each blocking script's URL, reduced to its
+origin and path and dropped unless the path is a script file's, its function
+name and the type of what invoked it, never by the invoker itself, which can
+name an element or a URL with its query. Tests MUST drive every page that
+takes a credential, a secret or a private name (the key pages, sign-in, the CLI
+pages, registration and password reset) with known values, and check that no
+beacon carries what was typed, sent or answered.
 
 ### 1.4. Telemetry never fails a page
 
