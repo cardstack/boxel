@@ -168,8 +168,7 @@ class SlotPanel extends Component<{
             {{#if this.replacing.rejected}}
               <span class='rejected' data-test-replace-key-rejected>
                 {{this.serviceName}}
-                rejected this key. Boxel isn’t sending it there until you
-                replace it.
+                rejected this key. It will not be used until you replace it.
               </span>
             {{/if}}
           </p>

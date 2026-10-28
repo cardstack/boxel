@@ -1622,7 +1622,9 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-replace-key-name]').hasText('Weather service');
       assert
         .dom('[data-test-replace-key-rejected]')
-        .includesText('weather.co.uk rejected this key');
+        .hasText(
+          'weather.co.uk rejected this key. It will not be used until you replace it.',
+        );
       assert.dom('[data-test-key-name]').doesNotExist('a replace has no name');
       assert.dom('[data-test-replace-key-save]').isDisabled();
       await fillIn('[data-test-key-value]', 'sk-new-forecast');
