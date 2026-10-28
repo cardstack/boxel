@@ -34,6 +34,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=proxy_endpoints \
   --exclude-table-and-children=user_keys \
   --exclude-table-and-children=key_write_tickets \
+  --exclude-table-and-children=user_key_grants \
   --exclude-table-and-children=key_shares \
   --exclude-table-and-children=key_share_notices \
   --exclude-table-and-children=secure_sessions \
