@@ -107,13 +107,29 @@ request log line and Sentry breadcrumbs.
 | Route                      | Does                                                                                                                                                        |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /_key-write-tickets` | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}`            |
-| `GET /_user-keys`          | List the user's keys' metadata, by name, each with its `grants`                                                                                             |
-| `GET /_user-keys/:id`      | One key's metadata, with its `grants`                                                                                                                       |
+| `GET /_user-keys`          | List the user's keys' metadata, by name, each with its `grants`, `usedWith` and `sharedInto`                                                                |
+| `GET /_user-keys/:id`      | One key's metadata, with its `grants`, `usedWith` and `sharedInto`                                                                                          |
 | `POST /_user-keys`         | Add: `attributes.{name, kind?, value}`, `meta.{ticket}` (a ticket to `add`)                                                                                 |
 | `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value}`, `meta.{ticket}` (a ticket to `replace` this key); re-seals every grant's copy                                      |
 | `DELETE /_user-keys/:id`   | Delete: `meta.{ticket}` (a ticket to `delete` this key); deletes its grants, suspends every share holding it (`GET /_key-shares?key=<id>` lists them first) |
 
 An attribute other than these, such as a `destination`, is refused with 400.
+
+A listed or shown key says where it is used, so the key page draws every key's
+tile from the one listing. `usedWith` is the services its grants send to, each
+grant's destination host reduced to its registrable domain (`registrableDomain`
+in `lib/secure-window.ts`, the one the key pages show for a destination), each
+once, sorted. `sharedInto` is the realms the key's shares put it in
+(`listOwnSharedRealms` in `lib/key-shares.ts`), each once as
+`{url, name, shares: [{id, label, state}]}`, sorted by name and then address,
+so a page can unshare it from one realm without asking more. A suspended share
+still counts: the key is still what it holds. `name` is the realm's indexed
+`realm.json` name, given only while the owner can read the realm by a
+permission row of their own or a public one (`*`, `users`). A share outlives
+its owner's access, so an owner removed from a realm keeps its address and
+their shares there, never its current name. `name` is also null before the
+realm's `realm.json` is indexed.
+The answers to adding and replacing a key carry neither.
 
 From the terminal, `boxel keys` (`packages/boxel-cli/src/commands/keys/`)
 calls these routes and the shares routes (see the `key-shares` skill). A

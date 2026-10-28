@@ -41,6 +41,23 @@ export interface UserKey {
   updatedAt: string;
 }
 
+// A realm one of the user's keys is shared into, with the key's shares there.
+// `name` is null when the user can no longer read the realm, or before its
+// name is indexed: the address is then all there is to show.
+export interface SharedWorkspace {
+  url: string;
+  name: string | null;
+  shares: { id: string; label: string; state: 'active' | 'suspended' }[];
+}
+
+// A key as the key listing gives it, with where it is used: the services its
+// approved requests go to, by registrable domain, and the realms it is shared
+// into. The answers to adding and replacing a key carry neither.
+export interface ListedKey extends UserKey {
+  usedWith: string[];
+  sharedInto: SharedWorkspace[];
+}
+
 // A share of a key into a realm.
 export interface KeyShare {
   id: string;
@@ -78,9 +95,10 @@ export interface WindowContextRequest {
   operation?: string;
 }
 
-// The user's own keys' metadata, by name. No value is ever returned.
-export async function listKeys(config: Config): Promise<UserKey[]> {
-  return resources<UserKey>(
+// The user's own keys' metadata, by name, with where each is used. No value
+// is ever returned.
+export async function listKeys(config: Config): Promise<ListedKey[]> {
+  return resources<ListedKey>(
     await authorizedRequest(config, '_user-keys', { method: 'GET' }),
   );
 }
@@ -144,6 +162,18 @@ export async function sharesOfKey(
       `_key-shares?key=${encodeURIComponent(keyId)}`,
       { method: 'GET' },
     ),
+  );
+}
+
+// Takes one of the user's own shares out of its realm. Withdrawing one's own
+// key needs no ticket.
+export async function unshare(config: Config, shareId: string): Promise<void> {
+  await authorizedRequest(
+    config,
+    `_key-shares/${encodeURIComponent(shareId)}`,
+    {
+      method: 'DELETE',
+    },
   );
 }
 
