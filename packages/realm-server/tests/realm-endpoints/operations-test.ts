@@ -557,15 +557,19 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     }
 
     // Asserts that one index job carries every card in `cards` and that no
-    // other job carries any of them — the shape of a batch that commits
-    // together. The realm is shared by every test in the file, so its lane
-    // family also holds passes other tests started, some still landing while
-    // a later test runs; a batch's own jobs are the ones carrying the cards it
-    // wrote, which is what this counts rather than the realm's jobs overall.
+    // other job carries any of them — the shape of a batch whose writes commit
+    // together, as one pass. A job that carries none of them is not the
+    // batch's pass, and the realm is shared by every test in the file, so it
+    // is not counted: a later pass that re-indexes cards some other pass left
+    // stale is the queue's repair rather than the batch splitting, unless it
+    // re-indexes one of the batch's own cards.
     //
-    // On a mismatch the message lists every job of the realm's that `before`
-    // does not, with what each indexes and who asked for it, so the failure
-    // names the job it did not expect.
+    // Such a job is still worth knowing about, since it is not obvious what
+    // enqueues one inside a batch's window. Whenever the realm gained any
+    // number of jobs other than one, the jobs that `before` does not list, and
+    // any older job carrying one of the cards, are written to the log with
+    // what each indexes, who asked for it and what it reported, and the same
+    // dump goes in the failure message when the assertion fails.
     async function assertIndexedUnderOneJob(
       assert: Assert,
       cards: string[],
@@ -577,7 +581,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         `select id, status, priority, concurrency_group, lane_family,
                 initiated_by, created_at, finished_at,
                 args->'changes' as changes,
-                args->'coalescedCallers' as callers
+                args->'coalescedCallers' as callers,
+                args->'readsOwnWrite' as "readsOwnWrite",
+                args->'realmEvents' as "realmEvents",
+                result->'stats' as stats
          from jobs where job_type = 'incremental-index'
          and (concurrency_group = $1 or lane_family = $1) order by id`,
         { bind: [`indexing:${realm.url}`] },
@@ -585,17 +592,27 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         id: number | string;
         changes: { url: string }[] | null;
       }[];
-      let carrying = rows
-        .map((row) => ({
-          id: Number(row.id),
-          urls: (row.changes ?? []).map((change) => change.url),
-        }))
-        .filter((job) => job.urls.some((url) => urls.includes(url)));
-      let since = rows.filter((row) => !before.includes(Number(row.id)));
+      let carries = (row: (typeof rows)[number]) =>
+        (row.changes ?? []).some((change) => urls.includes(change.url));
+      let carrying = rows.filter(carries);
+      let relevant = rows.filter(
+        (row) => !before.includes(Number(row.id)) || carries(row),
+      );
+      let dump = JSON.stringify(relevant, null, 2);
+      let added = rows.filter((row) => !before.includes(Number(row.id)));
+      if (added.length !== 1) {
+        console.warn(
+          `${message}: the realm gained ${added.length} index jobs while the batch ran: ${dump}`,
+        );
+      }
       assert.deepEqual(
-        carrying.map((job) => urls.every((url) => job.urls.includes(url))),
+        carrying.map((row) =>
+          urls.every((url) =>
+            (row.changes ?? []).some((change) => change.url === url),
+          ),
+        ),
         [true],
-        `${message}; the realm's index jobs since the batch started: ${JSON.stringify(since, null, 2)}`,
+        `${message}; the realm's index jobs since the batch started, and any carrying its cards: ${dump}`,
       );
     }
 
