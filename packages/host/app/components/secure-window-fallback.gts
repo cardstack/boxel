@@ -69,6 +69,10 @@ export default class SecureWindowFallback extends Component {
       </ModalContainer>
     {{/if}}
     <style scoped>
+      .secure-window-fallback {
+        --boxel-modal-offset-top: var(--boxel-sp-xxxl);
+        height: auto;
+      }
       p {
         margin: 0 0 var(--boxel-sp-sm);
       }
