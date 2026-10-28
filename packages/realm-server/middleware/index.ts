@@ -628,8 +628,10 @@ export async function fetchRequestFromContext(
   });
 }
 
-// `expiredWithinSeconds` is for a route whose only effect is to end something
-// (see `retrieveTokenClaim`); every other route takes only an unexpired token.
+// `expiredWithinSeconds` is for a route that a token outlived by design: one
+// whose only effect is to end something, or the secure window's renewal,
+// where the row the token names decides (see `retrieveTokenClaim`). Every
+// other route takes only an unexpired token.
 export function jwtMiddleware(
   secretSeed: string,
   dbAdapter: DBAdapter,

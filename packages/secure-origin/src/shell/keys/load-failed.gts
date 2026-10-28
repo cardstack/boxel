@@ -1,7 +1,7 @@
 // What a key page shows when it couldn't load what it needs: the page keeps its
 // own title, and shows the error as the app does, with the response's status
-// and the server's own message behind Show Details. Trying again may work, so
-// it offers to.
+// and the server's own message behind Show Details. It offers to try again
+// only when that could go differently.
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
@@ -16,19 +16,32 @@ interface Signature {
 }
 
 const LoadFailed: TemplateOnlyComponent<Signature> = <template>
-  <EditPage @heading={{@heading}} data-test-keys-load-failed>
-    <:default>
+  {{#if @failure.retryable}}
+    <EditPage @heading={{@heading}} data-test-keys-load-failed>
+      <:default>
+        <ErrorDisplay
+          @headerText='Error'
+          @message={{@failure.message}}
+          @details={{@failure.details}}
+        />
+      </:default>
+      <:actions>
+        <Button
+          @kind='secondary'
+          data-test-keys-retry
+          {{on 'click' @onRetry}}
+        >Try again</Button>
+      </:actions>
+    </EditPage>
+  {{else}}
+    <EditPage @heading={{@heading}} data-test-keys-load-failed>
       <ErrorDisplay
         @headerText='Error'
         @message={{@failure.message}}
         @details={{@failure.details}}
       />
-    </:default>
-    <:actions>
-      <Button @kind='secondary' data-test-keys-retry {{on 'click' @onRetry}}>Try
-        again</Button>
-    </:actions>
-  </EditPage>
+    </EditPage>
+  {{/if}}
 </template>;
 
 export default LoadFailed;

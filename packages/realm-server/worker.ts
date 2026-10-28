@@ -30,7 +30,7 @@ writeSync(
 import {
   Worker,
   VirtualNetwork,
-  isUrlLike,
+  isPrefixForm,
   logger,
   IndexWriter,
   type StatusArgs,
@@ -159,7 +159,7 @@ let virtualNetwork = new VirtualNetwork();
 for (let i = 0; i < fromUrls.length; i++) {
   let from = String(fromUrls[i]);
   let to = new URL(String(toUrls[i]));
-  if (isUrlLike(from)) {
+  if (!isPrefixForm(from)) {
     virtualNetwork.addURLMapping(new URL(from), to);
     // Convention: https://cardstack.com/X/ aliases @cardstack/X/. Also
     // register the realm-prefix mapping so unresolveURL on either form

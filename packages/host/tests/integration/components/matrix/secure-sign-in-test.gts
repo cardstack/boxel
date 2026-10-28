@@ -170,6 +170,45 @@ module('Integration | Component | matrix/secure-sign-in', function (hooks) {
     }
   });
 
+  test('a hand-off that names a device signs the app in as that device, and both leave the address', async function (assert) {
+    window.location.href = `${APP_PAGE}#loginToken=handed-over&deviceId=WINDOWBOUND`;
+    let redeemed: { token: string; deviceId?: string } | undefined;
+    setLoginWithTokenInterceptor((token: string, deviceId?: string) => {
+      redeemed = { token, deviceId };
+      return Promise.resolve({
+        access_token: 't',
+        user_id: '@u:s',
+        device_id: deviceId,
+      } as any);
+    });
+    let replaced: (string | null | undefined)[] = [];
+    let originalReplaceState = window.history.replaceState;
+    (window.history as any).replaceState = (
+      _state: unknown,
+      _title: string,
+      url?: string | null,
+    ) => replaced.push(url);
+    let service = matrixService(this);
+    let originalStart = service.start.bind(service);
+    let started = false;
+    service.start = (async () => {
+      started = true;
+    }) as typeof service.start;
+    try {
+      await render(<template><SecureSignIn /></template>);
+      await waitUntil(() => started);
+      assert.deepEqual(redeemed, {
+        token: 'handed-over',
+        deviceId: 'WINDOWBOUND',
+      });
+      let address = new URL(replaced.at(-1) ?? '', 'http://x');
+      assert.strictEqual(address.hash, '', 'neither is left in the fragment');
+    } finally {
+      service.start = originalStart;
+      (window.history as any).replaceState = originalReplaceState;
+    }
+  });
+
   test('a sign-in that lands on the app’s root page shows the workspace chooser as soon as the session is up', async function (assert) {
     window.location.href = '/?loginToken=handed-over';
     setLoginWithTokenInterceptor(() =>

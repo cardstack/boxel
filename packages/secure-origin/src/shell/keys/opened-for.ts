@@ -72,9 +72,15 @@ function url(value: string | null): string | undefined {
 }
 
 // A reason is shown as plain text, on one line, and no longer than a line.
+// Invisible format characters are dropped, bidi controls among them, so a
+// reason can't reorder how it reads or hide text in it. The two joiners stay:
+// they hold emoji sequences together and shape Persian and Indic text.
+const FORMAT_BUT_JOINERS = /(?![\u200C\u200D])\p{Cf}/gu;
+
 function reasonOf(value: string | null): string | undefined {
   let text = value
-    ?.replace(/[\p{Cc}\u2028\u2029]/gu, ' ')
+    ?.replace(FORMAT_BUT_JOINERS, '')
+    .replace(/[\p{Cc}\u2028\u2029]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   if (!text) {

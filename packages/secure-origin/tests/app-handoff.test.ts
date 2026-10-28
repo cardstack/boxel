@@ -55,6 +55,14 @@ test('the token goes in the fragment, never the query', () => {
   assert.equal(url.pathname, '/a');
 });
 
+test('the device the app signs in as rides in the fragment beside the token', () => {
+  let url = new URL(
+    handOffURL('https://app.example.test/a?b=c', 'fresh', 'WINDOWBOUND'),
+  );
+  assert.equal(url.search, '?b=c');
+  assert.equal(url.hash, '#loginToken=fresh&deviceId=WINDOWBOUND');
+});
+
 test('a hand-off to a loopback origin asks first, whatever the scheme', () => {
   assert.equal(needsConfirmation('http://localhost:4200/', CONFIG), true);
   assert.equal(needsConfirmation('https://localhost:4200/', CONFIG), true);

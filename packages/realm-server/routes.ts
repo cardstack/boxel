@@ -113,6 +113,7 @@ import {
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
   SECURE_WINDOW_PATH,
+  USER_KEY_GRANTS_PATH,
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
 import {
@@ -122,6 +123,7 @@ import {
   handleGoogleSignIn,
   handleGoogleSignInStart,
   handleMintLoginToken,
+  handleRenewSecureSession,
   handlePasswordChange,
   handlePasswordSignIn,
   handleSecureOriginInfo,
@@ -138,6 +140,10 @@ import {
   handleReplaceUserKey,
   handleShowUserKey,
 } from './handlers/handle-user-keys.ts';
+import {
+  handleCreateUserKeyGrant,
+  handleRemoveUserKeyGrant,
+} from './handlers/handle-user-key-grants.ts';
 import {
   handleListKeyShareNotices,
   handleListKeyShares,
@@ -316,13 +322,26 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.delete(
     SECURE_SESSION_PATH,
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    // Signing out only ends a session, and a window's session bound to an
+    // app device outlives its token, so any expired token is taken here too.
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter, {
+      expiredWithinSeconds: Number.POSITIVE_INFINITY,
+    }),
     handleEndSecureSession(args),
   );
   router.post(
     `${SECURE_SESSION_PATH}/login-token`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleMintLoginToken(args),
+  );
+  router.post(
+    `${SECURE_SESSION_PATH}/renewal`,
+    // A window's session outlives its token while the app device it is bound
+    // to exists, so any expired token is taken here; the row it names decides.
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter, {
+      expiredWithinSeconds: Number.POSITIVE_INFINITY,
+    }),
+    handleRenewSecureSession(args),
   );
   router.delete(
     SECURE_SESSIONS_PATH,
@@ -369,6 +388,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${USER_KEYS_PATH}/:keyId`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteUserKey(args),
+  );
+  router.post(
+    USER_KEY_GRANTS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleCreateUserKeyGrant(args),
+  );
+  router.delete(
+    `${USER_KEY_GRANTS_PATH}/:grantId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleRemoveUserKeyGrant(args),
   );
   router.get(
     KEY_SHARES_PATH,

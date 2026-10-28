@@ -33,6 +33,7 @@ import { pageURL } from '../urls.js';
 import {
   failureMessage,
   isSignedOut,
+  LinkError,
   loadFailure,
   type LoadFailure,
 } from './context.ts';
@@ -56,7 +57,7 @@ interface Realm {
 type State =
   | { name: 'loading' }
   | { name: 'load-failed'; failure: LoadFailure }
-  | { name: 'needs-admin'; realm: string }
+  | { name: 'needs-admin'; realm: WindowContext['realm'] }
   // `key` is the key the page was opened for, if any, and `context` the
   // realm's, if it was opened for one; the other is chosen here.
   | {
@@ -95,8 +96,13 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     {{else if this.choosing}}
       <form novalidate {{on 'submit' this.save}} data-test-share-key-form>
         <EditPage @heading='Share a key' data-test-share-key>
-          <:intro>People in the workspace can use the key through the requests
-            you approve for it. They never see the key itself.</:intro>
+          <:intro>People who can access the workspace can use the key in their
+            requests. They never see the key itself.
+            <strong>Only signed-in people</strong>
+            with access to this workspace can use it. People who aren’t signed
+            in can’t. Requests made by people who have access to this workspace
+            will consume your quota and/or be billed against your account with
+            this service provider.</:intro>
           <:default>
             {{#if this.choosing.context}}
               <OpenedForSummary
@@ -146,7 +152,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
               <BoxelInput
                 @type='text'
                 @autocomplete='off'
-                @placeholder='What people in the workspace see it as'
+                @placeholder='What people with access to the workspace see it as'
                 @value={{this.form.label}}
                 @onInput={{this.setLabel}}
                 name='share-label'
@@ -244,20 +250,23 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     let { config } = this.args.api;
     try {
       if (!realm && !keyId) {
-        throw new Error('this page names neither a key nor a workspace');
+        throw new LinkError(
+          'this page names neither a key nor a workspace',
+          'This link doesn’t name a key or a workspace to share it into.',
+        );
       }
       let context: WindowContext | undefined;
       if (realm) {
         context = await windowContext(config, { realm });
         if (!context.realm.directWriter) {
-          this.page.state = { name: 'needs-admin', realm: context.realm.name };
+          this.page.state = { name: 'needs-admin', realm: context.realm };
           return;
         }
         this.form.realm = context.realm.url;
       } else {
         this.form.realms = await writableRealms(config);
         if (this.form.realms.length === 1) {
-          this.form.realm = this.form.realms[0].url;
+          this.selectRealm(this.form.realms[0].url);
         }
       }
       let keys = await listKeys(config);
@@ -266,7 +275,10 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       if (keyId) {
         key = keys.find((k) => k.id === keyId);
         if (!key) {
-          throw new Error('the key this page names isn’t one of your keys');
+          throw new LinkError(
+            'the key this page names isn’t one of your keys',
+            'This key isn’t one of yours. It may have been deleted.',
+          );
         }
         this.selectKey(key.id);
       } else if (keys.length === 1) {

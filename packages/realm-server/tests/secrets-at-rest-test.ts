@@ -399,6 +399,45 @@ module(basename(import.meta.filename), function (hooks) {
         },
       );
     });
+
+    test('a copy names the row it copies, and opens only beside that row', function (assert) {
+      let ring = keyring();
+      let parentId = '6f2d4c1e-0b7a-4e95-8c3d-1a2b3c4d5e6f';
+      let copy: SecretBinding = {
+        field: FIELD,
+        owner: OWNER,
+        id: ROW_ID,
+        parentId,
+        destination: DESTINATION,
+      };
+      assert.strictEqual(
+        secretEncryptionContext(copy).parent_id,
+        parentId,
+        'the context carries the parent id',
+      );
+      let sealed = ring.seal(SECRET, copy);
+      assert.strictEqual(ring.open(sealed, copy), SECRET);
+      assert.throws(
+        () =>
+          ring.open(sealed, {
+            ...copy,
+            parentId: '0e9a1b2c-3d4e-4f5a-8b6c-7d8e9f0a1b2c',
+          }),
+        SecretDecryptionError,
+        'not beside another parent',
+      );
+      let { parentId: _parentId, ...withoutParent } = copy;
+      assert.throws(
+        () => ring.open(sealed, withoutParent),
+        SecretDecryptionError,
+        'nor with no parent',
+      );
+      assert.throws(
+        () => ring.open(ring.seal(SECRET, withoutParent), copy),
+        SecretDecryptionError,
+        'and a value sealed with no parent does not open as a copy',
+      );
+    });
   });
 
   module('providers', function () {
