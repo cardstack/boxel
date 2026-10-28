@@ -747,6 +747,13 @@ export default class PlaygroundPanel extends Component<Signature> {
       // based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
       // a spec instance on playground instead of the field,
     );
+
+    // a field's example belongs to its spec card, and a file isn't a card
+    if (index === undefined && !this.args.isFileDef) {
+      this.operatorModeStateService.recordPlaygroundCard(
+        trimJsonExtension(selectedCardId),
+      );
+    }
   };
 
   @action private chooseInstance() {

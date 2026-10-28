@@ -698,6 +698,34 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-google-title]').hasText('Definition Title!!');
     });
 
+    test('a card previewed in the playground appears in Recents', async function (assert) {
+      removePlaygroundSelections();
+      removeRecentCards();
+      let ts = Date.now();
+      setRecentFiles([
+        [testRealmURL, 'Category/home-gym.json', null, ts],
+        [testRealmURL, 'Category/future-tech.json', null, ts - 1],
+      ]);
+
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Category',
+      });
+      assert.strictEqual(
+        getService('recent-cards-service').recentCardIds[0],
+        `${testRealmURL}Category/home-gym`,
+        'the pre-selected card is recorded',
+      );
+
+      await click('[data-test-instance-chooser]');
+      await click('[data-test-playground-panel] [data-option-index="1"]');
+      assert.dom('[data-test-selected-item]').containsText('Future Tech');
+      assert.strictEqual(
+        getService('recent-cards-service').recentCardIds[0],
+        `${testRealmURL}Category/future-tech`,
+        'the chosen card is recorded',
+      );
+    });
+
     test('can populate instance chooser options from recent-files and recent-cards, ordered by last viewed timestamp', async function (assert) {
       removePlaygroundSelections();
       removeRecentFiles();
@@ -1029,7 +1057,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       await chooseAnotherInstance();
       assert.dom('[data-test-card-chooser-modal]').exists();
-      assert.dom('[data-test-item-button]').exists({ count: 3 });
+      assert
+        .dom('[data-test-recent-card-result]')
+        .exists({ count: 1 }, 'the previewed card is under Recents');
+      assert
+        .dom(
+          `[data-test-recent-card-result="${testRealmURL}BlogPost/mad-hatter"]`,
+        )
+        .exists();
+      assert
+        .dom('[data-test-item-button]:not([data-test-recent-card-result])')
+        .exists({ count: 3 });
       assert
         .dom(`[data-test-item-button="${testRealmURL}BlogPost/mad-hatter"]`)
         .exists();
@@ -1099,8 +1137,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       assert
         .dom('[data-option-index]')
-        .exists({ count: 1 }, 'dropdown instance count is correct');
-      assert.dom('[data-option-index]').containsText('Blog Post');
+        .exists({ count: 2 }, 'dropdown instance count is correct');
+      assert.dom('[data-option-index="0"]').containsText('Blog Post');
+      assert.dom('[data-option-index="1"]').containsText('Mad As a Hatter');
     });
 
     test<TestContextWithSave>('can create new instance with CodeRef field', async function (assert) {
@@ -1494,7 +1533,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-autoattached-card]').doesNotExist();
 
       await click('[data-test-instance-chooser]');
-      await click('[data-option-index="0"]');
+      await click(
+        `[data-option-index] [data-test-card="${testRealmURL}Category/city-design"]`,
+      );
       assert
         .dom(`[data-test-card="${testRealmURL}Category/city-design"]`)
         .exists();

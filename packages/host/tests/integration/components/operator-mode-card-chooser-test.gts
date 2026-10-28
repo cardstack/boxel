@@ -88,7 +88,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
 
       await waitFor(`[data-test-grid-item-index="0"]`);
       await waitFor(`[data-test-grid-item-index="1"]`);
-      assert.dom(`[data-test-search-result]`).exists({ count: 2 });
+      assert.dom(`[data-test-search-result]`).exists({ count: 3 });
       assert
         .dom(
           `[data-test-grid-item-index="0"] [data-test-search-result="${testRealmURL}Person/burcu"]`,
@@ -99,6 +99,11 @@ module('Integration | operator-mode | card chooser', function (hooks) {
           `[data-test-grid-item-index="1"] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
         )
         .exists();
+      assert
+        .dom(
+          `[data-test-grid-item-index="2"] [data-test-search-result="${testRealmURL}grid"]`,
+        )
+        .exists('the card the stack opened on is recorded first');
     });
 
     test(`displays recently accessed card, maximum 10 cards`, async function (assert) {
@@ -265,7 +270,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       await click(`[data-test-open-search-field]`);
       await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
       await waitFor(`[data-test-search-result="${baseRealm.url}cards/skill"]`);
-      assert.dom('[data-test-search-result]').exists({ count: 4 });
+      assert.dom('[data-test-search-result]').exists({ count: 5 });
 
       await click('[data-test-realm-picker]');
       await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
@@ -280,7 +285,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       await click(`[data-test-boxel-picker-option-row="${testRealmURL}"]`);
       assert
         .dom('[data-section-sid="recents"] [data-test-search-result]')
-        .exists({ count: 4 });
+        .exists({ count: 5 });
 
       // expand search sheet
       await fillIn(`[data-test-search-field]`, ' ');
@@ -291,7 +296,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       );
       assert
         .dom('[data-section-sid="recents"] [data-test-search-result]')
-        .exists({ count: 2 });
+        .exists({ count: 3 });
       assert
         .dom(
           `[data-section-sid="recents"] [data-test-search-result="${testRealmURL}Pet/mango"]`,
@@ -300,6 +305,11 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       assert
         .dom(
           `[data-section-sid="recents"] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
+        )
+        .exists();
+      assert
+        .dom(
+          `[data-section-sid="recents"] [data-test-search-result="${testRealmURL}grid"]`,
         )
         .exists();
     });
