@@ -195,17 +195,48 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
+  // Finishes a sign-in as the `connected` page does: posts the code and
+  // state its fragment carries, under `user`'s secure session.
+  async function complete(user: string, landing: string) {
+    let fragment = new URLSearchParams(new URL(landing).hash.slice(1));
+    if (fragment.has('error')) {
+      return { error: fragment.get('error')!, text: '' };
+    }
+    let finished = await request
+      .post('/_oauth/connections/complete')
+      .set('Authorization', await secureSessionAuth(dbAdapter, user))
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'oauth-callback',
+          attributes: {
+            state: fragment.get('state'),
+            code: fragment.get('code'),
+          },
+        },
+      });
+    let attributes = finished.body.data?.attributes ?? {};
+    return {
+      keyId: attributes.connected as string | undefined,
+      error: attributes.error as string | undefined,
+      text: finished.text,
+    };
+  }
+
   // Signs `user` in through a client as the secure window does: starts the
   // sign-in, follows the vendor's redirect back to the realm server's
-  // callback, and answers with where the callback sends the window, and every
-  // body the browser saw on the way.
+  // callback, which hands the window the code, and finishes it as
+  // `completeAs` (the same user, unless a test says otherwise). Answers with
+  // the connection made or why not, and every body the browser saw.
   async function connect(
     user: string,
     client: Record<string, unknown>,
     {
       name = 'my account',
       reconnect,
-    }: { name?: string; reconnect?: string } = {},
+      completeAs = user,
+    }: { name?: string; reconnect?: string; completeAs?: string } = {},
   ) {
     let started = await request
       .post('/_oauth/connections')
@@ -224,26 +255,24 @@ module(basename(import.meta.filename), function (hooks) {
         },
       });
     if (started.status !== 201) {
-      return { started, location: undefined, seen: [started.text] };
+      return { started, seen: [started.text] } as any;
     }
     let authorize = await fetch(started.body.data.attributes.authorizeUrl, {
       redirect: 'manual',
     });
     let callback = new URL(authorize.headers.get('location')!);
     let back = await request.get(`${callback.pathname}${callback.search}`);
+    let location = back.headers.location as string;
+    let finished = await complete(completeAs, location);
     return {
       started,
       callback,
       back,
-      location: back.headers.location as string,
-      seen: [started.text, back.text, back.headers.location ?? ''],
+      location,
+      keyId: finished.keyId,
+      error: finished.error,
+      seen: [started.text, back.text, finished.text],
     };
-  }
-
-  function connectedKey(location: string) {
-    return new URLSearchParams(new URL(location).hash.slice(1)).get(
-      'connected',
-    );
   }
 
   async function approve(user: string, keyId: string, operation = 'me') {
@@ -306,8 +335,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function connectAndApprove(user = OWNER) {
     let client = await addClient(user);
-    let { location } = await connect(user, { kind: 'own', keyId: client.id });
-    let keyId = connectedKey(location!)!;
+    let { keyId } = await connect(user, { kind: 'own', keyId: client.id });
     let approved = await approve(user, keyId);
     return { client, keyId, approved };
   }
@@ -327,10 +355,13 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('connecting through a client stores a connection, and no token reaches the browser', async function (assert) {
     let client = await addClient();
-    let { started, callback, back, location, seen } = await connect(OWNER, {
-      kind: 'own',
-      keyId: client.id,
-    });
+    let { started, callback, back, location, keyId, seen } = await connect(
+      OWNER,
+      {
+        kind: 'own',
+        keyId: client.id,
+      },
+    );
     assert.strictEqual(started.status, 201, started.text);
     let [asked] = provider.authorizeRequests;
     assert.strictEqual(asked.get('client_id'), CLIENT_ID);
@@ -342,22 +373,30 @@ module(basename(import.meta.filename), function (hooks) {
       'the vendor sends the person back to the realm server',
     );
     assert.strictEqual(back!.status, 302);
-    assert.true(
-      location!.startsWith(`${secureOriginURL.href}/connected#connected=`),
-      `the realm server sends the window on to its connected page: ${location}`,
+    let landing = new URL(location);
+    assert.strictEqual(
+      `${landing.origin}${landing.pathname}`,
+      `${secureOriginURL.href}/connected`,
+      'the realm server sends the window on to its connected page',
     );
+    assert.strictEqual(landing.search, '', 'with nothing in the query string');
+    assert.deepEqual(
+      [...new URLSearchParams(landing.hash.slice(1)).keys()].sort(),
+      ['code', 'state'],
+      'and only the one-use code and the state in the fragment',
+    );
+    assert.ok(keyId, 'the connected page finished it');
     let [exchange] = provider.tokenRequests;
     assert.strictEqual(exchange.grantType, 'authorization_code');
     assert.ok(exchange.body.get('code_verifier'), 'with a PKCE verifier');
     assert.strictEqual(exchange.body.get('client_secret'), CLIENT_SECRET);
     for (let token of provider.issued) {
       assert.false(
-        seen.some((text) => text.includes(token)),
+        seen.some((text: string) => text.includes(token)),
         'nothing the browser sees carries a token the vendor issued',
       );
     }
 
-    let keyId = connectedKey(location!)!;
     let listed = await request
       .get(`/_user-keys/${keyId}`)
       .set('Authorization', `Bearer ${createJWT(realm, OWNER, [])}`);
@@ -365,7 +404,11 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(listed.body.data.attributes.kind, 'oauth-connection');
     assert.strictEqual(listed.body.data.attributes.name, 'my account');
     assert.deepEqual(listed.body.data.attributes.oauth.connection, {
-      client: { kind: 'own', label: 'stub app' },
+      client: {
+        kind: 'own',
+        label: 'stub app',
+        ref: { kind: 'own', keyId: client.id },
+      },
       scopes: 'read:user',
       status: 'active',
     });
@@ -376,15 +419,14 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a sign-in is used once, expires, and a declined one stores nothing', async function (assert) {
     let client = await addClient();
-    let { callback } = await connect(OWNER, { kind: 'own', keyId: client.id });
-    let again = await request.get(`${callback!.pathname}${callback!.search}`);
-    assert.strictEqual(
-      new URL(again.headers.location).hash,
-      '#error=expired',
-      'the same state is spent',
+    let { location } = await connect(OWNER, { kind: 'own', keyId: client.id });
+    let again = await complete(OWNER, location);
+    assert.strictEqual(again.error, 'expired', 'the same state is spent');
+    let forged = await complete(
+      OWNER,
+      `${secureOriginURL.href}/connected#code=x&state=nope`,
     );
-    let forged = await request.get('/_oauth/callback?code=x&state=nope');
-    assert.strictEqual(new URL(forged.headers.location).hash, '#error=expired');
+    assert.strictEqual(forged.error, 'expired');
 
     provider.deny = true;
     let declined = await connect(
@@ -392,7 +434,7 @@ module(basename(import.meta.filename), function (hooks) {
       { kind: 'own', keyId: client.id },
       { name: 'declined' },
     );
-    assert.strictEqual(new URL(declined.location!).hash, '#error=denied');
+    assert.strictEqual(declined.error, 'denied');
     let rows = await dbAdapter.execute(
       `SELECT name FROM user_keys WHERE owner = $1 AND kind = 'oauth-connection'`,
       { bind: [OWNER] },
@@ -524,7 +566,7 @@ module(basename(import.meta.filename), function (hooks) {
       { kind: 'own', keyId: client.id },
       { reconnect: keyId },
     );
-    assert.strictEqual(connectedKey(reconnected.location!), keyId);
+    assert.strictEqual(reconnected.keyId, keyId);
     assert.strictEqual(await keyState(keyId), 'active');
     let served = await call(OWNER);
     assert.strictEqual(
@@ -614,8 +656,8 @@ module(basename(import.meta.filename), function (hooks) {
 
     let mine = await connect(OWNER, { kind: 'own', keyId: client.id });
     let theirs = await connect(TEAMMATE, { kind: 'share', shareId: share.id });
-    let teammateKey = connectedKey(theirs.location!)!;
-    assert.notStrictEqual(connectedKey(mine.location!), teammateKey);
+    let teammateKey = theirs.keyId!;
+    assert.notStrictEqual(mine.keyId, teammateKey);
     let [row] = await dbAdapter.execute(
       `SELECT owner FROM user_keys WHERE id = $1`,
       { bind: [teammateKey] },
@@ -705,15 +747,172 @@ module(basename(import.meta.filename), function (hooks) {
       offered.body.data.map((c: any) => c.attributes.label),
       ['Boxel (read-only)'],
     );
-    let { location } = await connect(TEAMMATE, {
+    let connected = await connect(TEAMMATE, {
       kind: 'platform',
       clientId: platform.id,
     });
-    let keyId = connectedKey(location!)!;
-    assert.ok(keyId, location);
+    let keyId = connected.keyId!;
+    assert.ok(keyId, connected.error);
     let approved = await approve(TEAMMATE, keyId);
     assert.strictEqual(approved.status, 201, approved.text);
     let served = await call(TEAMMATE);
     assert.strictEqual(served.status, 200, JSON.stringify(served.body));
+  });
+  test('a sign-in finishes only for the person who started it', async function (assert) {
+    // Someone starts a sign-in and gets another person to approve it at the
+    // vendor: the code comes back to the other person's window.
+    let client = await addClient(TEAMMATE, {}, 'their app');
+    let hijack = await connect(
+      TEAMMATE,
+      { kind: 'own', keyId: client.id },
+      { completeAs: OWNER },
+    );
+    assert.strictEqual(hijack.error, 'expired');
+    assert.strictEqual(
+      provider.tokenRequests.length,
+      0,
+      'the code was never exchanged',
+    );
+    let rows = await dbAdapter.execute(
+      `SELECT owner FROM user_keys WHERE kind = 'oauth-connection'`,
+    );
+    assert.deepEqual(rows, [], 'nothing was stored for anyone');
+  });
+
+  test("GitHub's own error codes are classified", async function (assert) {
+    let { keyId } = await connectAndApprove();
+    clock += 3600 * 1000;
+    provider.fail = [{ error: 'bad_refresh_token' }];
+    let refused = await call(OWNER);
+    assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
+    assert.strictEqual(refused.body.errors[0].meta.reason, 'rejected');
+    assert.strictEqual(await keyState(keyId), 'rejected');
+  });
+
+  test("GitHub's refused client credentials break the client", async function (assert) {
+    await connectAndApprove();
+    clock += 3600 * 1000;
+    provider.fail = [{ error: 'incorrect_client_credentials' }];
+    let refused = await call(OWNER);
+    assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
+    assert.strictEqual(refused.body.errors[0].meta.reason, 'needs-admin');
+  });
+
+  test('a refused grant after an attempt the vendor may have acted on is unavailable, not rejected', async function (assert) {
+    let { keyId } = await connectAndApprove();
+    clock += 3600 * 1000;
+    provider.fail = [{ status: 502 }, { error: 'invalid_grant' }];
+    let refused = await call(OWNER);
+    assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
+    assert.strictEqual(refused.body.errors[0].meta.reason, 'unavailable');
+    assert.strictEqual(
+      await keyState(keyId),
+      'active',
+      'the first attempt may have spent the refresh token',
+    );
+  });
+
+  test("another person's client fences off nothing for anyone else's keys", async function (assert) {
+    // A client whose token URL names the API host itself.
+    await addClient(
+      TEAMMATE,
+      { tokenUrl: `${PROVIDER}/api/token` },
+      'squatting app',
+    );
+    let { approved } = await connectAndApprove(OWNER);
+    assert.strictEqual(approved.status, 201, approved.text);
+  });
+
+  test('a cached token stops serving the moment its client does', async function (assert) {
+    let client = await addClient(OWNER);
+    let share = await shareKey(dbAdapter, {
+      owner: OWNER,
+      realm: realmURL.href,
+      keyId: client.id,
+      label: 'Team app',
+      ticket: await ticket(OWNER, 'share', {
+        keyId: client.id,
+        realm: realmURL,
+      }),
+    });
+    let { keyId } = await connect(TEAMMATE, {
+      kind: 'share',
+      shareId: share.id,
+    });
+    await approve(TEAMMATE, keyId!);
+    assert.strictEqual((await call(TEAMMATE)).status, 200);
+    await suspendShare(dbAdapter, { user: OWNER, shareId: share.id });
+    let refused = await call(TEAMMATE);
+    assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
+    assert.strictEqual(refused.body.errors[0].meta.reason, 'needs-admin');
+  });
+
+  test('a refresh by another process makes this one mint again', async function (assert) {
+    let { keyId } = await connectAndApprove();
+    await call(OWNER);
+    assert.strictEqual(refreshes(), 0);
+    // What another process's refresh leaves behind.
+    await dbAdapter.execute(
+      `UPDATE oauth_connections SET generation = generation + 1 WHERE key_id = $1`,
+      { bind: [keyId] },
+    );
+    let served = await call(OWNER);
+    assert.strictEqual(served.status, 200, JSON.stringify(served.body));
+    assert.strictEqual(refreshes(), 1, 'its cached token may be revoked');
+    let [row] = await dbAdapter.execute(
+      `SELECT refreshing_until FROM oauth_connections WHERE key_id = $1`,
+      { bind: [keyId] },
+    );
+    assert.strictEqual(row.refreshing_until, null, 'the lease is released');
+  });
+
+  test('an access token issued with no refresh token stops serving when it expires', async function (assert) {
+    provider.issueRefreshTokens = false;
+    provider.expiresIn = 600;
+    let { keyId } = await connectAndApprove();
+    assert.strictEqual((await call(OWNER)).status, 200);
+    clock += 601 * 1000;
+    let refused = await call(OWNER);
+    assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
+    assert.strictEqual(refused.body.errors[0].meta.reason, 'rejected');
+    assert.ok(keyId);
+  });
+
+  test('a reconnect signs in through the same client, and lists only that one', async function (assert) {
+    let { keyId } = await connectAndApprove();
+    let other = await addClient(OWNER, {}, 'another app');
+    let moved = await connect(
+      OWNER,
+      { kind: 'own', keyId: other.id },
+      { reconnect: keyId },
+    );
+    assert.strictEqual(moved.started.status, 409, moved.started.text);
+    let listed = await request
+      .get('/_oauth/clients')
+      .query({ reconnect: keyId })
+      .set('Authorization', `Bearer ${createJWT(realm, OWNER, [])}`);
+    assert.deepEqual(
+      listed.body.data.map((c: any) => c.attributes.label),
+      ['stub app'],
+    );
+  });
+
+  test('a minting key gets fresh grant markers when what it mints with changes', async function (assert) {
+    let { client, keyId } = await connectAndApprove();
+    let nonce = async () =>
+      (
+        await dbAdapter.execute(
+          `SELECT encode(value_nonce, 'hex') AS nonce FROM user_key_grants WHERE key_id = $1`,
+          { bind: [keyId] },
+        )
+      )[0].nonce;
+    let before = await nonce();
+    await connect(
+      OWNER,
+      { kind: 'own', keyId: client.id },
+      { reconnect: keyId },
+    );
+    assert.notStrictEqual(await nonce(), before, 'a reconnect reseals');
+    assert.strictEqual((await call(OWNER)).status, 200, 'and still sends');
   });
 });

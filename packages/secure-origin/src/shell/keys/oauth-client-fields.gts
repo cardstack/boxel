@@ -16,6 +16,8 @@ import LayoutGrid from '../../components/icons/layout-grid.gts';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
 import BoxelInput from '../../components/input.gts';
 
+import { readConfig } from '../../security/session.js';
+
 import RadioChoices from './radio-choices.gts';
 
 export interface OAuthClientForm {
@@ -64,6 +66,16 @@ interface Signature {
 }
 
 export default class OAuthClientFields extends Component<Signature> {
+  // Where the service sends people back after they sign in: the realm
+  // server's own callback, which the service must be told about.
+  private get callbackURL() {
+    try {
+      return new URL('_oauth/callback', readConfig().realmServerURL).href;
+    } catch {
+      return '';
+    }
+  }
+
   <template>
     <RadioChoices
       @label='Who signs in'
@@ -90,6 +102,17 @@ export default class OAuthClientFields extends Component<Signature> {
           spellcheck='false'
           data-test-oauth-authorize-url
         />
+      </FieldContainer>
+      <FieldContainer
+        @label='Callback URL'
+        @icon={{Globe}}
+        data-test-key-field='callback-url'
+      >
+        <p class='callback'>
+          <code data-test-oauth-callback-url>{{this.callbackURL}}</code>
+          <span class='hint'>Register this as the app’s callback (redirect) URL
+            with the service.</span>
+        </p>
       </FieldContainer>
     {{/if}}
     <FieldContainer
@@ -156,6 +179,21 @@ export default class OAuthClientFields extends Component<Signature> {
     </FieldContainer>
 
     <style scoped>
+      .callback {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .callback code {
+        font-family: var(--boxel-monospace-font-family);
+        font-size: var(--boxel-font-size-sm);
+      }
+      .hint {
+        color: var(--muted-foreground, var(--boxel-450));
+        font-size: var(--boxel-font-size-xs);
+      }
       /* BoxelInput's look, for the one field that takes several lines. */
       .api-hosts {
         box-sizing: border-box;

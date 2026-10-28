@@ -25,6 +25,7 @@ import { normalizeGrantDestination } from './user-key-grants.ts';
 import {
   consumeKeyWriteTicket,
   insertUserKeyIn,
+  resealGrantMarkersIn,
   SEALED_COLUMN_VALUES,
   UserKeyError,
   userKeyBinding,
@@ -583,7 +584,15 @@ export async function listConnectableClients(
     owner,
     realmURL,
     destination,
-  }: { owner: string; realmURL?: string; destination?: string },
+    reconnect,
+  }: {
+    owner: string;
+    realmURL?: string;
+    destination?: string;
+    // A connection of the owner's: only the client it signs in through,
+    // which a reconnect must use, wherever that client is shared.
+    reconnect?: string;
+  },
 ): Promise<ConnectableClient[]> {
   let serves = (apiHosts: string[]) =>
     destination === undefined ||
@@ -603,6 +612,42 @@ export async function listConnectableClients(
     apiHosts: (row.api_hosts as string[]) ?? [],
     authorizeHost: new URL(row.authorize_url as string).host,
   });
+  if (reconnect !== undefined) {
+    let uuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuid.test(reconnect)) {
+      return [];
+    }
+    let [row] = await query(dbAdapter, [
+      `SELECT ${CLIENT_RESOLUTION_COLUMNS}, s.id AS share_ref,
+              COALESCE(own.scopes, shared.scopes, p.scopes) AS scopes,
+              COALESCE(own.api_hosts, shared.api_hosts, p.api_hosts) AS api_hosts
+         FROM oauth_connections n JOIN user_keys k ON k.id = n.key_id
+         ${CLIENT_RESOLUTION_JOINS}
+        WHERE n.key_id = `,
+      param(reconnect),
+      ` AND k.owner = `,
+      param(owner),
+    ]);
+    let ref = row ? clientRefOf(row) : null;
+    let resolved = row ? resolvedClientOf(row) : undefined;
+    if (!ref || !resolved?.usable || !resolved.authorizeURL) {
+      return [];
+    }
+    return [
+      describe(
+        {
+          client_id: resolved.clientId,
+          scopes: row.scopes,
+          api_hosts: row.api_hosts,
+          authorize_url: resolved.authorizeURL,
+        },
+        ref,
+        ref.kind,
+        resolved.label ?? '',
+      ),
+    ];
+  }
   for (let row of await query(dbAdapter, [
     `SELECT id, label, ${CLIENT_COLUMNS} FROM platform_oauth_clients WHERE state = 'active' ORDER BY label`,
   ])) {
@@ -922,6 +967,12 @@ interface OAuthSettings {
   // may pass: a 5xx, a timeout, a dropped connection or
   // `temporarily_unavailable`.
   retryDelaysMs: number[];
+  // How long one token request may take. Kept short, since a refresh holds
+  // its connection's refresh lease meanwhile.
+  tokenRequestTimeoutMs: number;
+  // How long a refresh lease lasts, after which another process may take
+  // the refresh over. Longer than every attempt and pause together.
+  refreshLeaseMs: number;
   // How long before an access token expires it is refreshed, at most; a
   // short-lived token is refreshed halfway through its life.
   refreshLeadMs: number;
@@ -930,6 +981,8 @@ interface OAuthSettings {
 
 const DEFAULT_OAUTH_SETTINGS: OAuthSettings = {
   retryDelaysMs: [500, 2000],
+  tokenRequestTimeoutMs: 15_000,
+  refreshLeaseMs: 60_000,
   refreshLeadMs: 60_000,
   now: () => Date.now(),
 };
@@ -944,6 +997,25 @@ export function resetOAuth(): void {
   oauthSettings = { ...DEFAULT_OAUTH_SETTINGS };
   tokenCache.clear();
 }
+
+// The error codes that mean the grant itself is refused: the code or refresh
+// token is revoked, expired, already spent or never was. `invalid_grant` is
+// the standard one; GitHub answers `bad_refresh_token` and
+// `bad_verification_code`, and some vendors `expired_token`.
+const REFUSED_GRANT = new Set([
+  'invalid_grant',
+  'bad_refresh_token',
+  'bad_verification_code',
+  'expired_token',
+]);
+
+// The error codes that mean the client is refused: its id or secret.
+// GitHub answers `incorrect_client_credentials`.
+const REFUSED_CLIENT = new Set([
+  'invalid_client',
+  'unauthorized_client',
+  'incorrect_client_credentials',
+]);
 
 class TokenEndpointError extends Error {
   readonly oauthError: string | null;
@@ -961,6 +1033,12 @@ class TokenEndpointError extends Error {
       this.status >= 500 ||
       this.oauthError === 'temporarily_unavailable'
     );
+  }
+  // Whether the vendor may have acted on the request without the answer
+  // arriving: no answer at all, or a 5xx. A refresh token may already have
+  // been spent by such a request.
+  get mayHaveActed(): boolean {
+    return this.status === null || this.status >= 500;
   }
 }
 
@@ -994,6 +1072,10 @@ async function postToTokenEndpoint(
       body: body.toString(),
       sizePath: 'system-key',
       scrubber,
+      // The body and the Authorization header carry the secrets, so a
+      // redirect to another origin is never followed.
+      sameOriginOnly: true,
+      signal: AbortSignal.timeout(oauthSettings.tokenRequestTimeoutMs),
     });
   } catch (error) {
     if (error instanceof OutboundRefusedError) {
@@ -1034,14 +1116,17 @@ async function postToTokenEndpoint(
 }
 
 // Sends a token request, retrying what may pass, and classifies what doesn't:
-// `invalid_grant` is the grant's fault, `invalid_client` and
-// `unauthorized_client` the client's.
+// a refused grant is the grant's fault (`rejected`), a refused client the
+// client's (`needs-admin`). A refused grant after an attempt the vendor may
+// have acted on is `unavailable` instead: that attempt may have spent the
+// refresh token, so the refusal says nothing about the connection.
 async function requestTokens(
   dbAdapter: DBAdapter,
   client: MintingClient,
   fields: Record<string, string>,
 ): Promise<TokenResponse> {
   let delays = oauthSettings.retryDelaysMs;
+  let acted = false;
   for (let attempt = 0; ; attempt++) {
     try {
       return await postToTokenEndpoint(client, fields);
@@ -1049,15 +1134,14 @@ async function requestTokens(
       if (!(error instanceof TokenEndpointError)) {
         throw error;
       }
-      if (error.oauthError === 'invalid_grant') {
+      if (error.oauthError && REFUSED_GRANT.has(error.oauthError) && !acted) {
         throw new OAuthTokenError(
           'rejected',
           'the vendor no longer accepts this connection; its owner signs in again',
         );
       }
       if (
-        error.oauthError === 'invalid_client' ||
-        error.oauthError === 'unauthorized_client' ||
+        (error.oauthError && REFUSED_CLIENT.has(error.oauthError)) ||
         (error.status === 401 && error.oauthError === null)
       ) {
         await markClientBroken(dbAdapter, client);
@@ -1066,6 +1150,7 @@ async function requestTokens(
           'the OAuth client was refused by its token endpoint; an administrator of the client replaces its secret',
         );
       }
+      acted ||= error.mayHaveActed;
       if (!error.retryable || attempt >= delays.length) {
         log.warn(`token request failed: ${error.message}`);
         throw new OAuthTokenError(
@@ -1130,13 +1215,27 @@ export async function startConnect(
       throw new UserKeyError(400, 'a reconnect names the connection');
     }
     let [key] = await query(dbAdapter, [
-      `SELECT name, kind FROM user_keys WHERE id = `,
+      `SELECT k.name, k.kind, n.client_key_id, n.client_share_id, n.platform_client_id
+         FROM user_keys k LEFT JOIN oauth_connections n ON n.key_id = k.id
+        WHERE k.id = `,
       param(reconnect),
-      ` AND owner = `,
+      ` AND k.owner = `,
       param(owner),
     ]);
     if (!key || key.kind !== 'oauth-connection') {
       throw new UserKeyError(404, 'no such connection');
+    }
+    // A reconnect signs in through the client the connection was made
+    // through, and no other: the connection keeps its grants, which were
+    // approved for that client's service.
+    let current = clientRefOf(key);
+    if (!current || JSON.stringify(current) !== JSON.stringify(client)) {
+      throw new UserKeyError(
+        409,
+        current
+          ? 'a connection is signed in again through the client it was made through'
+          : 'the client this connection was made through is gone; connect a new account instead',
+      );
     }
     reconnects = reconnect;
     validName = key.name as string;
@@ -1286,24 +1385,32 @@ export type ConnectOutcome =
       error: 'expired' | 'denied' | 'failed' | 'name-taken';
     };
 
-// Finishes a sign-in the vendor sent back to the realm server: spends the
-// request its `state` names (once, and only before it expires), exchanges the
-// code at the client's token endpoint with the derived PKCE verifier, and
-// stores the connection. A reconnect replaces the connection's token and
-// clears its rejection.
+// Finishes a sign-in: spends the request its `state` names (once, before it
+// expires, and only for the person who started it), exchanges the code at the
+// client's token endpoint with the derived PKCE verifier, and stores the
+// connection. A reconnect replaces the connection's token and clears its
+// rejection.
+//
+// The vendor sends the person back to the realm server's callback, which
+// only hands the code and `state` on to the secure window's `connected` page,
+// in its fragment. That page finishes the sign-in with its own secure
+// session, so a sign-in completes only for the user who started it, in a
+// window signed in as them. A sign-in started by one person and approved at
+// the vendor by another (a link sent to a victim) never stores the victim's
+// account under the person who started it.
 export async function completeConnect(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
   {
+    owner: sessionUser,
     state,
     code,
-    vendorError,
     serverURL,
     serverSecret,
   }: {
+    owner: string;
     state: unknown;
     code: unknown;
-    vendorError: unknown;
     serverURL: string;
     serverSecret: string;
   },
@@ -1311,16 +1418,18 @@ export async function completeConnect(
   if (typeof state !== 'string' || state.length === 0) {
     return { ok: false, error: 'expired' };
   }
+  if (typeof code !== 'string' || !code) {
+    return { ok: false, error: 'denied' };
+  }
   let [request] = await query(dbAdapter, [
     `DELETE FROM oauth_connect_requests WHERE state_sha256 = `,
     param(sha256(state)),
+    ` AND owner = `,
+    param(sessionUser),
     ` AND expires_at > NOW() RETURNING *`,
   ]);
   if (!request) {
     return { ok: false, error: 'expired' };
-  }
-  if (vendorError !== undefined || typeof code !== 'string' || !code) {
-    return { ok: false, error: 'denied' };
   }
   let client: MintingClient;
   try {
@@ -1352,6 +1461,12 @@ export async function completeConnect(
   let owner = request.owner as string;
   let tokenKind = tokens.refreshToken ? 'refresh' : 'access';
   let value = tokens.refreshToken ?? tokens.accessToken;
+  // An access token issued with no refresh token is the stored value, and
+  // stops serving when the vendor said it expires.
+  let accessExpiresAt =
+    !tokens.refreshToken && tokens.expiresIn !== undefined
+      ? new Date(oauthSettings.now() + tokens.expiresIn * 1000).toISOString()
+      : null;
   let clientColumns = {
     client_kind: request.client_kind as OAuthClientKind,
     client_key_id: (request.client_key_id as string | null) ?? null,
@@ -1360,6 +1475,8 @@ export async function completeConnect(
   };
   let reconnects = request.reconnects_key_id as string | null;
   let keyId: string;
+  // A new connection starts at generation 0; a reconnect moves it on.
+  let generation = 0;
   try {
     keyId = await dbAdapter.withTransaction(async (txQuery) => {
       if (reconnects) {
@@ -1376,22 +1493,20 @@ export async function completeConnect(
         if (!updated) {
           throw new UserKeyError(404, 'no such connection');
         }
+        await resealGrantMarkersIn(txQuery, keyring, owner, reconnects);
         await txQuery([
-          `UPDATE oauth_connections SET (client_kind, client_key_id, client_share_id, platform_client_id, token_kind, scopes, rejected_at) = (`,
-          param(clientColumns.client_kind),
-          `, `,
-          param(clientColumns.client_key_id),
-          `, `,
-          param(clientColumns.client_share_id),
-          `, `,
-          param(clientColumns.platform_client_id),
-          `, `,
+          `UPDATE oauth_connections SET (token_kind, scopes, access_expires_at, rejected_at, refreshing_until, generation) = (`,
           param(tokenKind),
           `, `,
           param(tokens.scope ?? ''),
-          `, NULL) WHERE key_id = `,
+          `, `,
+          param(accessExpiresAt),
+          `, NULL, NULL, generation + 1) WHERE key_id = `,
           param(reconnects),
-        ]);
+          ` RETURNING generation`,
+        ]).then(([row]) => {
+          generation = Number(row.generation);
+        });
         return reconnects;
       }
       let key = await insertUserKeyIn(txQuery, keyring, {
@@ -1402,7 +1517,7 @@ export async function completeConnect(
         value,
       });
       await txQuery([
-        `INSERT INTO oauth_connections (key_id, client_kind, client_key_id, client_share_id, platform_client_id, token_kind, scopes) VALUES (`,
+        `INSERT INTO oauth_connections (key_id, client_kind, client_key_id, client_share_id, platform_client_id, token_kind, scopes, access_expires_at) VALUES (`,
         param(key.id),
         `, `,
         param(clientColumns.client_kind),
@@ -1416,6 +1531,8 @@ export async function completeConnect(
         param(tokenKind),
         `, `,
         param(tokens.scope ?? ''),
+        `, `,
+        param(accessExpiresAt),
         `)`,
       ]);
       return key.id;
@@ -1429,10 +1546,8 @@ export async function completeConnect(
     }
     throw error;
   }
-  tokenCache.forget(keyId);
-  if (tokens.refreshToken) {
-    tokenCache.remember(keyId, tokens);
-  }
+  // The exchange's access token is the first one sent.
+  tokenCache.remember(keyId, tokens, generation);
   return { ok: true, keyId, reconnected: reconnects !== null };
 }
 
@@ -1440,8 +1555,69 @@ export async function completeConnect(
 
 interface CachedToken {
   accessToken: string;
+  // The connection's refresh generation it was minted at; null for a
+  // `client_credentials` client, which has none.
+  generation: number | null;
   // When to refresh it; null for a token the vendor gave no lifetime.
   refreshAt: number | null;
+}
+
+// What a key that mints tokens is now, read on every use: whether it may
+// mint at all (its state, its client, an access-only token's expiry), and
+// the connection's refresh generation. So a client that is deleted,
+// unshared, suspended or broken stops a connection on its next call, not
+// its next refresh.
+interface MintingStatus {
+  kind: 'oauth-client' | 'oauth-connection';
+  generation: number | null;
+}
+
+async function mintingStatus(
+  dbAdapter: DBAdapter,
+  keyId: string,
+): Promise<MintingStatus> {
+  let [row] = await query(dbAdapter, [
+    `SELECT k.kind, k.state AS key_state, n.token_kind, n.generation,
+            n.access_expires_at,
+            c.state AS client_state, ${CLIENT_RESOLUTION_COLUMNS}
+       FROM user_keys k
+       LEFT JOIN oauth_connections n ON n.key_id = k.id
+       LEFT JOIN oauth_clients c ON c.key_id = k.id
+       ${CLIENT_RESOLUTION_JOINS}
+      WHERE k.id = `,
+    param(keyId),
+  ]);
+  if (!row) {
+    throw new OAuthTokenError('rejected', 'the key no longer exists');
+  }
+  if (row.kind === 'oauth-client') {
+    if (row.client_state !== 'active') {
+      throw new OAuthTokenError(
+        'needs-admin',
+        'the OAuth client was refused by its token endpoint; an administrator of the client replaces its secret',
+      );
+    }
+    return { kind: 'oauth-client', generation: null };
+  }
+  if (row.kind !== 'oauth-connection') {
+    throw new Error(`key ${keyId} doesn't mint tokens`);
+  }
+  let accessExpired =
+    row.access_expires_at != null &&
+    new Date(row.access_expires_at as string).getTime() <= oauthSettings.now();
+  if (row.key_state === 'rejected' || accessExpired) {
+    throw new OAuthTokenError(
+      'rejected',
+      'the vendor no longer accepts this connection; its owner signs in again',
+    );
+  }
+  if (!resolvedClientOf(row).usable) {
+    throw new OAuthTokenError(
+      'needs-admin',
+      'the OAuth client this connection signs in through is unavailable',
+    );
+  }
+  return { kind: 'oauth-connection', generation: Number(row.generation) };
 }
 
 class OAuthTokens {
@@ -1457,7 +1633,7 @@ class OAuthTokens {
     this.#cache.delete(keyId);
   }
 
-  remember(keyId: string, tokens: TokenResponse) {
+  remember(keyId: string, tokens: TokenResponse, generation: number | null) {
     let now = oauthSettings.now();
     let refreshAt: number | null = null;
     if (tokens.expiresIn !== undefined) {
@@ -1465,21 +1641,35 @@ class OAuthTokens {
       refreshAt =
         now + lifetime - Math.min(oauthSettings.refreshLeadMs, lifetime / 2);
     }
-    this.#cache.set(keyId, { accessToken: tokens.accessToken, refreshAt });
+    this.#cache.set(keyId, {
+      accessToken: tokens.accessToken,
+      generation,
+      refreshAt,
+    });
   }
 
   // The current access token of a key that mints them: a connection, or a
-  // `client_credentials` client. A cached token is used until it is due for
-  // refresh; one refresh at a time runs per key, and callers that arrive
-  // meanwhile wait for it.
+  // `client_credentials` client. A cached token is used while it isn't due
+  // and no other process has refreshed the connection since it was minted;
+  // otherwise one refresh at a time runs per key in this process, and callers
+  // that arrive meanwhile wait for it.
+  //
+  // A refresh in another process moves the connection's generation on, and a
+  // token of an older generation is minted again: a vendor such as GitHub
+  // revokes the previous access token when a refresh token is spent, so it
+  // can't be trusted to still work. Processes serving one connection at the
+  // same moment may therefore each refresh in turn; each refresh is
+  // correct, only more frequent.
   async accessToken(
     dbAdapter: DBAdapter,
     keyring: SecretsKeyring,
     keyId: string,
   ): Promise<string> {
+    let status = await mintingStatus(dbAdapter, keyId);
     let cached = this.#cache.get(keyId);
     if (
       cached &&
+      cached.generation === status.generation &&
       (cached.refreshAt === null || oauthSettings.now() < cached.refreshAt)
     ) {
       return cached.accessToken;
@@ -1488,7 +1678,7 @@ class OAuthTokens {
     if (inflight) {
       return await inflight;
     }
-    let minting = this.#mint(dbAdapter, keyring, keyId).finally(() => {
+    let minting = this.#mint(dbAdapter, keyring, keyId, status).finally(() => {
       this.#inflight.delete(keyId);
     });
     this.#inflight.set(keyId, minting);
@@ -1499,99 +1689,123 @@ class OAuthTokens {
     dbAdapter: DBAdapter,
     keyring: SecretsKeyring,
     keyId: string,
+    status: MintingStatus,
   ): Promise<string> {
-    // The key's row stays locked through the token request, so another
-    // process refreshing the same connection waits, then reads the refresh
-    // token this one stored.
-    let outcome = await dbAdapter.withTransaction(async (txQuery) => {
-      let [key] = await txQuery([
-        `SELECT k.id, k.owner, k.kind, k.state, n.token_kind, n.client_key_id, n.client_share_id, n.platform_client_id, ${sealedColumnsSelect('value')}
-           FROM user_keys k LEFT JOIN oauth_connections n ON n.key_id = k.id
+    let run = (expression: Parameters<Querier>[0]) =>
+      query(dbAdapter, expression);
+    if (status.kind === 'oauth-client') {
+      let client = await openClientIn(run, keyring, { client_key_id: keyId });
+      let tokens = await requestTokens(dbAdapter, client, {
+        grant_type: 'client_credentials',
+      });
+      this.remember(keyId, tokens, null);
+      return tokens.accessToken;
+    }
+    let lease = await this.#takeRefreshLease(dbAdapter, keyId);
+    try {
+      let [key] = await run([
+        `SELECT k.owner, n.token_kind, n.client_key_id, n.client_share_id, n.platform_client_id, ${sealedColumnsSelect('value', 'k')}
+           FROM user_keys k JOIN oauth_connections n ON n.key_id = k.id
           WHERE k.id = `,
         param(keyId),
-        ` FOR UPDATE OF k`,
       ]);
-      if (!key) {
+      let sealed = key ? sealedFromColumns(key, 'value') : undefined;
+      if (!sealed) {
         throw new OAuthTokenError('rejected', 'the key no longer exists');
       }
-      let sealed = sealedFromColumns(key, 'value');
-      if (!sealed) {
-        throw new Error(`key ${keyId} holds no sealed value`);
-      }
       let owner = key.owner as string;
-      let stored = () => keyring.open(sealed!, userKeyBinding(owner, keyId));
-      if (key.kind === 'oauth-client') {
-        let client = await openClientIn(txQuery, keyring, {
-          client_key_id: keyId,
-        });
-        return {
-          tokens: await requestTokens(dbAdapter, client, {
-            grant_type: 'client_credentials',
-          }),
-          rotated: undefined,
-        };
-      }
-      if (key.kind !== 'oauth-connection') {
-        throw new Error(`key ${keyId} doesn't mint tokens`);
-      }
-      if (key.state === 'rejected') {
-        throw new OAuthTokenError(
-          'rejected',
-          'the vendor no longer accepts this connection; its owner signs in again',
-        );
-      }
+      let stored = keyring.open(sealed, userKeyBinding(owner, keyId));
       if (key.token_kind === 'access') {
-        // A vendor that issues no refresh token issues an access token that
-        // doesn't expire; it is the stored value, sent as it is.
-        await openClientIn(txQuery, keyring, key);
-        return {
-          tokens: { accessToken: stored() } as TokenResponse,
-          rotated: undefined,
-        };
+        // A vendor that issues no refresh token issues a long-lived access
+        // token; it is the stored value, sent as it is until it expires.
+        this.remember(keyId, { accessToken: stored }, lease.generation);
+        return stored;
       }
-      let client = await openClientIn(txQuery, keyring, key);
+      let client = await openClientIn(run, keyring, key);
       let tokens: TokenResponse;
       try {
         tokens = await requestTokens(dbAdapter, client, {
           grant_type: 'refresh_token',
-          refresh_token: stored(),
+          refresh_token: stored,
         });
       } catch (error) {
         if (error instanceof OAuthTokenError && error.reason === 'rejected') {
-          await txQuery([
+          await run([
             `UPDATE user_keys SET state = 'rejected', updated_at = NOW() WHERE id = `,
             param(keyId),
           ]);
-          await txQuery([
+          await run([
             `UPDATE oauth_connections SET rejected_at = NOW() WHERE key_id = `,
             param(keyId),
           ]);
-          return { rejected: error };
+          this.#cache.delete(keyId);
+          log.warn(`OAuth connection ${keyId} was refused as a dead grant`);
         }
         throw error;
       }
-      if (tokens.refreshToken) {
-        let resealed = keyring.seal(
-          tokens.refreshToken,
-          userKeyBinding(owner, keyId),
-        );
-        await txQuery([
-          `UPDATE user_keys SET (value_ciphertext, value_nonce, value_tag, value_key_id) = (`,
-          ...SEALED_COLUMN_VALUES(resealed),
-          `) WHERE id = `,
+      // The rotated refresh token and the new generation are stored together,
+      // under the lease, so the next refresh anywhere spends the new token.
+      let generation = await dbAdapter.withTransaction(async (txQuery) => {
+        if (tokens.refreshToken) {
+          let resealed = keyring.seal(
+            tokens.refreshToken,
+            userKeyBinding(owner, keyId),
+          );
+          await txQuery([
+            `UPDATE user_keys SET (value_ciphertext, value_nonce, value_tag, value_key_id) = (`,
+            ...SEALED_COLUMN_VALUES(resealed),
+            `) WHERE id = `,
+            param(keyId),
+          ]);
+        }
+        let [row] = await txQuery([
+          `UPDATE oauth_connections SET generation = generation + 1, refreshing_until = NULL WHERE key_id = `,
+          param(keyId),
+          ` RETURNING generation`,
+        ]);
+        return Number(row.generation);
+      });
+      lease.released = true;
+      this.remember(keyId, tokens, generation);
+      return tokens.accessToken;
+    } finally {
+      if (!lease.released) {
+        await run([
+          `UPDATE oauth_connections SET refreshing_until = NULL WHERE key_id = `,
           param(keyId),
         ]);
       }
-      return { tokens, rotated: tokens.refreshToken };
-    });
-    if ('rejected' in outcome && outcome.rejected) {
-      this.#cache.delete(keyId);
-      log.warn(`OAuth connection ${keyId} was refused as invalid_grant`);
-      throw outcome.rejected;
     }
-    let { tokens } = outcome as { tokens: TokenResponse };
-    this.remember(keyId, tokens);
-    return tokens.accessToken;
+  }
+
+  // Takes the connection's refresh lease: only its holder refreshes, so a
+  // rotating refresh token is spent once, and no database connection is held
+  // while the token endpoint answers. Another process's lease is waited out;
+  // a lease whose holder died lapses after `refreshLeaseMs`.
+  async #takeRefreshLease(
+    dbAdapter: DBAdapter,
+    keyId: string,
+  ): Promise<{ generation: number; released: boolean }> {
+    let deadline = Date.now() + oauthSettings.refreshLeaseMs;
+    for (;;) {
+      let [row] = await query(dbAdapter, [
+        `UPDATE oauth_connections SET refreshing_until = NOW() + `,
+        param(`${oauthSettings.refreshLeaseMs} milliseconds`),
+        `::interval WHERE key_id = `,
+        param(keyId),
+        ` AND (refreshing_until IS NULL OR refreshing_until < NOW()) RETURNING generation`,
+      ]);
+      if (row) {
+        return { generation: Number(row.generation), released: false };
+      }
+      if (Date.now() > deadline) {
+        throw new OAuthTokenError(
+          'unavailable',
+          'another refresh of this connection is taking too long; try again later',
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
   }
 }
 
