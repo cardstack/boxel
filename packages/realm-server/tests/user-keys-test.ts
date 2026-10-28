@@ -17,7 +17,7 @@ import { secureSessionAuth } from './helpers/secure-session.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
-import { randomBytes } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import {
   installSecretsKeyring,
   LocalKeyProvider,
@@ -38,6 +38,7 @@ import {
   USER_KEY_VALUE_FIELD,
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
+import { deserializeGoogleServiceAccount } from '../lib/outbound/google-service-account.ts';
 
 const require = createRequire(import.meta.url);
 const USER_KEYS_MIGRATION = join(
@@ -50,6 +51,27 @@ const OWNER = '@key-owner:localhost';
 const OTHER_USER = '@other-user:localhost';
 const VALUE = 'sk-user-key-value-5b0e7c21d9';
 const NEW_VALUE = 'sk-user-key-replacement-a41f93';
+
+// A Google service account's JSON key file, with a real RSA key so the
+// realm server can check it signs.
+function serviceAccountKeyFile(clientEmail: string): {
+  file: string;
+  privateKey: string;
+} {
+  let privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 })
+    .privateKey.export({ type: 'pkcs8', format: 'pem' })
+    .toString();
+  return {
+    privateKey,
+    file: JSON.stringify({
+      type: 'service_account',
+      private_key_id: 'kid-1',
+      private_key: privateKey,
+      client_email: clientEmail,
+    }),
+  };
+}
+const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
 const ADD_TICKET = {
   data: { type: 'key-write-ticket', attributes: { action: 'add' } },
 };
@@ -661,6 +683,133 @@ module(basename(import.meta.filename), function () {
           .set('Authorization', auth(OWNER, claims));
         assert.strictEqual(listed.status, status, `${kind} lists no key`);
       }
+    });
+
+    test('a Google service account is added from its key file, subject and scopes, and sealed as one value', async function (assert) {
+      let { file, privateKey } = serviceAccountKeyFile(
+        'sheets-bot@boxel-test.iam.gserviceaccount.com',
+      );
+      let added = await add(
+        {
+          name: 'sheets',
+          kind: 'google-service-account',
+          value: file,
+          subject: 'owner@example.com',
+          scopes: [SHEETS_SCOPE],
+        },
+        { ticket: await ticketFor() },
+      );
+      assert.strictEqual(added.status, 201, added.text);
+      assert.strictEqual(
+        added.body.data.attributes.kind,
+        'google-service-account',
+      );
+      let pemLine = privateKey.split('\n')[1];
+      assert.false(added.text.includes(pemLine), 'the answer carries no key');
+      let id = added.body.data.id as string;
+      let row = await sealedRow(dbAdapter, id);
+      assert.deepEqual(
+        deserializeGoogleServiceAccount(
+          keyring.open(row.sealed, bindingFor(OWNER, id)),
+        ),
+        {
+          clientEmail: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+          privateKeyId: 'kid-1',
+          privateKey,
+          subject: 'owner@example.com',
+          scopes: [SHEETS_SCOPE],
+        },
+      );
+
+      let next = serviceAccountKeyFile(
+        'sheets-bot@boxel-test.iam.gserviceaccount.com',
+      );
+      let replaced = await request
+        .patch(`/_user-keys/${id}`)
+        .set('Authorization', auth())
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'user-key',
+            id,
+            attributes: { value: next.file, scopes: ['openid', SHEETS_SCOPE] },
+          },
+          meta: { ticket: await ticketFor('replace', id) },
+        });
+      assert.strictEqual(replaced.status, 200, replaced.text);
+      let reopened = deserializeGoogleServiceAccount(
+        keyring.open(
+          (await sealedRow(dbAdapter, id)).sealed,
+          bindingFor(OWNER, id),
+        ),
+      );
+      assert.strictEqual(reopened.privateKey, next.privateKey);
+      assert.strictEqual(
+        reopened.subject,
+        null,
+        'a replace sets the subject anew',
+      );
+      assert.deepEqual(reopened.scopes, ['openid', SHEETS_SCOPE]);
+    });
+
+    test('a key file, subject or scopes a service account can’t use are refused, and leave the ticket unspent', async function (assert) {
+      let { file, privateKey } = serviceAccountKeyFile(
+        'sheets-bot@boxel-test.iam.gserviceaccount.com',
+      );
+      let ticket = await ticketFor();
+      let cases: [string, Record<string, unknown>, RegExp][] = [
+        [
+          'not a key file',
+          { value: file.slice(0, 200), scopes: [SHEETS_SCOPE] },
+          /not valid JSON/,
+        ],
+        [
+          'another kind of file',
+          {
+            value: JSON.stringify({ type: 'authorized_user' }),
+            scopes: [SHEETS_SCOPE],
+          },
+          /not a service account key file/,
+        ],
+        ['no scopes', { value: file }, /at least one scope/],
+        [
+          'a subject that is not an email address',
+          { value: file, subject: 'owner', scopes: [SHEETS_SCOPE] },
+          /email address/,
+        ],
+      ];
+      for (let [name, attributes, message] of cases) {
+        let response = await add(
+          { name: 'sheets', kind: 'google-service-account', ...attributes },
+          { ticket },
+        );
+        assert.strictEqual(response.status, 400, name);
+        assert.true(message.test(response.text), `${name}: ${response.text}`);
+        assert.false(
+          response.text.includes(privateKey.split('\n')[1]),
+          `${name}: the refusal quotes none of the key`,
+        );
+      }
+      let staticWithScopes = await add(
+        { name: 'weather', value: VALUE, scopes: [SHEETS_SCOPE] },
+        { ticket },
+      );
+      assert.strictEqual(staticWithScopes.status, 400);
+      assert.true(
+        /only a google-service-account key takes a subject or scopes/.test(
+          staticWithScopes.text,
+        ),
+      );
+      let added = await add(
+        {
+          name: 'sheets',
+          kind: 'google-service-account',
+          value: file,
+          scopes: [SHEETS_SCOPE],
+        },
+        { ticket },
+      );
+      assert.strictEqual(added.status, 201, 'the ticket is still good');
     });
 
     test('an add sets only a name, a kind and a value', async function (assert) {
