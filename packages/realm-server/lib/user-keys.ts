@@ -474,11 +474,11 @@ export function opensUnder(
 // grant's copy are sealed again in the same transaction, so the old value
 // opens nowhere afterwards and no grant asks for approval again. Every grant
 // the vendor rejected the old value at is active again: the new value hasn't
-// been refused anywhere. A grant is
-// sealed again only when its current copy opens under its own binding: the
-// binding is read from the row, so sealing one whose copy doesn't open would
-// make a row written or edited outside the realm server a real grant. Such a
-// row is left as it is, and still sends nothing.
+// been refused anywhere. A grant is sealed again only when its current copy
+// opens under its own binding: the binding is read from the row, so sealing
+// one whose copy doesn't open would make a row written or edited outside the
+// realm server a real grant. Such a row is left as it is, and still sends
+// nothing.
 export async function replaceUserKeyValue(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
