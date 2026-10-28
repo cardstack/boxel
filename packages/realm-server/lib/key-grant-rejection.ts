@@ -138,25 +138,30 @@ export function credentialRejected(
   destination: string,
 ): OperationFailure {
   let what = operation ? `operation "${operation}"` : 'this operation';
+  let whose =
+    slot.key === 'userKey' ? "the invoking user's own key" : "the realm's key";
   return new OperationFailure({
     status: 424,
     code: 'credential-rejected',
     title: 'Credential rejected',
-    detail: `${what} sends the key for the credential slot "${slot.name}" to ${destination}, and that service rejected the key, so nothing is sent with it until its owner replaces it or a periodic retry is accepted`,
+    detail: `${what} sends ${whose} for the credential slot "${slot.name}" to ${destination}, and that service rejected the key, so nothing more is sent with it there until its owner replaces it or a periodic retry is accepted`,
     meta: { slot: { name: slot.name, key: slot.key }, destination },
   });
 }
 
 // Moves a grant to `rejected` and records its notices, only when this is the
 // move: a grant already rejected was announced already. Answers whether this
-// call made the move.
+// call made the move. `copy` names the sealed copy the refused request was
+// sent with; when the key has been replaced since, the vendor refused the old
+// value, and the grant, which now holds the new one, is left as it is.
 export async function markGrantRejected(
   dbAdapter: DBAdapter,
   {
     grantId,
     realmURL,
     shareId,
-  }: { grantId: string; realmURL: string; shareId?: string },
+    copy,
+  }: { grantId: string; realmURL: string; shareId?: string; copy?: string },
 ): Promise<boolean> {
   // The realm's writers are read before the move, outside its transaction.
   // Only a vendor's refusal gets here, so a successful call never pays for it.
@@ -169,7 +174,9 @@ export async function markGrantRejected(
          FROM user_keys k
         WHERE g.id = `,
       param(grantId),
-      ` AND g.state = 'active' AND k.id = g.key_id
+      ` AND g.state = 'active' AND k.id = g.key_id`,
+      ...(copy ? [` AND encode(g.value_nonce, 'base64') = `, param(copy)] : []),
+      `
         RETURNING g.id, g.key_id, g.owner, g.destination, k.name AS key_name`,
     ]);
     if (!row) {
