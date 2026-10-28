@@ -191,7 +191,7 @@ interface RealmApiKeysSignature {
   };
 }
 
-// The realm's API Keys entry: the keys its direct writers have shared into it
+// The realm's API Keys entry: the keys its direct writers have shared with it
 // for cards there to use, and what a direct writer does with them.
 //
 // The entry shows each share's label, its owner and whether it is in use, and
@@ -287,7 +287,7 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
   private shareKey = () => {
     this.openWindow.perform({
       mode: 'share-key',
-      reason: 'Share one of your keys into this workspace',
+      reason: 'Share one of your keys with this workspace',
     });
   };
 
@@ -452,7 +452,7 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
               </ul>
             {{else}}
               <p class='note' data-test-realm-api-keys-empty>
-                No keys are shared into this workspace.
+                No keys are shared with this workspace.
               </p>
             {{/if}}
             <div class='actions'>

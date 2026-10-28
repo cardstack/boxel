@@ -200,7 +200,7 @@ export class SwitchSubmodeResult extends CardDef {
 // What the secure window is opened for. Every field names something; none
 // carries a value. `mode` is `enter-key`, `share-key` or `swap-key`. A key is
 // entered for an operation on a card instance (`cardId`) or on a card type
-// (`module`, `name` and `realm`); a key is shared into `realm`; and one of the
+// (`module`, `name` and `realm`); a key is shared with `realm`; and one of the
 // user's keys is swapped into the suspended share `share` of `realm`.
 // `reason` is one line the window shows as written by whoever opened it.
 export class OpenSecureWindowInput extends CardDef {
