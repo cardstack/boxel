@@ -73,7 +73,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
     {{else if this.choosing}}
       <form novalidate {{on 'submit' this.connect}} data-test-connect-form>
         <EditPage @heading={{this.heading}} data-test-connect>
-          <:intro>You sign in at the service itself, in this window. Boxel keeps
+          <:intro>You sign in on the site itself, in this window. Boxel keeps
             the sign-in encrypted, and cards can use it only for the requests
             you approve.</:intro>
           <:default>
@@ -120,7 +120,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
               {{/unless}}
             {{else}}
               <div class='no-clients' data-test-connect-no-clients>
-                <p class='message'>No app is set up to sign in to this service.</p>
+                <p class='message'>No sign-in app is set up for this site.</p>
                 {{#if this.needsAdmin}}
                   <p class='message' data-test-connect-needs-admin>Someone with
                     direct write access to
@@ -128,8 +128,9 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
                     (<span>{{addressOf this.needsAdmin.url}}</span>) needs to
                     share one with it.</p>
                 {{else}}
-                  <p class='message'>Add the app you registered with the service
-                    as an OAuth app on your key page, then connect through it.</p>
+                  <p class='message'>Add one on your key page with Add a key,
+                    choosing Sign-in app. Then come back here to connect your
+                    account.</p>
                 {{/if}}
               </div>
             {{/if}}

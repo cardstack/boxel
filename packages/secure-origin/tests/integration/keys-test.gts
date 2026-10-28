@@ -653,7 +653,7 @@ module('Integration | key pages', function (hooks) {
       let maps = '[data-test-key-row="Maps"]';
       assert
         .dom(`${maps} [data-test-key-used-with]`)
-        .hasText('Not used with any service yet');
+        .hasText('Not used with any site yet');
       assert
         .dom(`${maps} [data-test-key-shared-into]`)
         .hasText('Not shared with any workspace');
