@@ -280,9 +280,14 @@ module('Acceptance | open the secure window', function (hooks) {
     let { toolContext } = getService('tool-service');
     let tool = new OpenSecureWindowTool(toolContext);
     await assert.rejects(
-      tool.execute({ mode: 'swap-key', realm: testRealmURL }),
-      /mode must be one of "enter-key", "share-key"/,
+      tool.execute({ mode: 'delete-key', realm: testRealmURL }),
+      /mode must be one of "enter-key", "share-key", "swap-key"/,
       'an unsupported mode',
+    );
+    await assert.rejects(
+      tool.execute({ mode: 'swap-key', realm: testRealmURL }),
+      /share is required/,
+      'a swap with no share',
     );
     await assert.rejects(
       tool.execute({ mode: 'share-key' }),
