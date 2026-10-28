@@ -1,10 +1,14 @@
 import type { Readable } from 'stream';
 import { RealmPaths, ensureTrailingSlash, type LocalPath } from '../paths.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
-import { codeRefFromInternalKey } from '../index.ts';
+import { codeRefFromInternalKey, trimExecutableExtension } from '../index.ts';
 import { baseRealm } from '../constants.ts';
 import { indexedInstance, readOperation } from './read.ts';
-import { callApiOperation, type CallApiSender } from './call-api.ts';
+import {
+  callApiOperation,
+  type CallApiMode,
+  type CallApiSender,
+} from './call-api.ts';
 import { readSourceOperation } from './read-source.ts';
 import {
   hasTransforms,
@@ -336,6 +340,11 @@ export interface RunOperationOptions {
   // marked as a prerender's own fetch and for one made on a realm-authority
   // session, which only a realm rendering its own cards holds.
   duringPrerender?: boolean;
+  // How a `callApi` invocation arrived, which decides whether a binding
+  // approved for pipelines only fills its slots. Absent is `interactive`: the
+  // realm sets `pipeline` only for a run it makes on its own, never for a
+  // request off the network.
+  callApiMode?: CallApiMode;
   // Report a stored-bytes read's `version` only where the realm already
   // recorded one, rather than reading the file to fingerprint it.
   //
@@ -1586,7 +1595,9 @@ async function runBaseOperation(
       return await callApiOperation(canonical, definition, {
         realmURL: core.realmURL,
         duringPrerender: opts.duringPrerender ?? false,
+        mode: opts.callApiMode ?? 'interactive',
         sender: core.callApi,
+        type: () => resolvedTypeOf(core, canonical.target, scope),
         ...(canonical.target.kind === 'instance'
           ? {
               instance: () =>
@@ -1895,6 +1906,36 @@ async function definitionFor(
   } catch {
     return undefined;
   }
+}
+
+// The type an operation on `target` resolves through, as the module and export
+// a binding records: the type a type target names, or the one a card adopts
+// from, its module resolved against the realm with any executable extension
+// trimmed, as an approval resolves the type it names.
+async function resolvedTypeOf(
+  core: OperationCore,
+  target: OperationTarget,
+  scope: OperationScope,
+): Promise<{ module: string; name: string } | undefined> {
+  let codeRef: CodeRef | undefined;
+  let relativeTo: URL | undefined;
+  if (target.kind === 'type') {
+    codeRef = target.codeRef;
+    relativeTo = new URL(target.realm);
+  } else {
+    relativeTo = parseTargetURL(target.url);
+    codeRef = relativeTo ? await adoptsFromOf(scope, relativeTo) : undefined;
+  }
+  let resolved =
+    codeRef && relativeTo
+      ? core.resolveCodeRef(codeRef, relativeTo)
+      : undefined;
+  return resolved
+    ? {
+        module: trimExecutableExtension(String(resolved.module)),
+        name: resolved.name,
+      }
+    : undefined;
 }
 
 // The type a stored card names, read off the index row rather than the source

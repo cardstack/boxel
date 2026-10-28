@@ -106,6 +106,7 @@ import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import {
+  KEY_BINDINGS_PATH,
   KEY_SHARE_NOTICES_PATH,
   KEY_SHARES_PATH,
   KEY_WRITE_TICKETS_PATH,
@@ -145,6 +146,12 @@ import {
   handleCreateUserKeyGrant,
   handleRemoveUserKeyGrant,
 } from './handlers/handle-user-key-grants.ts';
+import {
+  handleApproveKeyBindings,
+  handleListKeyBindings,
+  handlePreviewKeyBindings,
+  handleRevokeKeyBinding,
+} from './handlers/handle-key-bindings.ts';
 import {
   handleListKeyShareNotices,
   handleListKeyShares,
@@ -399,6 +406,26 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${USER_KEY_GRANTS_PATH}/:grantId`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRemoveUserKeyGrant(args),
+  );
+  router.get(
+    KEY_BINDINGS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyBindings(args),
+  );
+  router.get(
+    `${KEY_BINDINGS_PATH}/preview`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handlePreviewKeyBindings(args),
+  );
+  router.post(
+    KEY_BINDINGS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleApproveKeyBindings(args),
+  );
+  router.delete(
+    `${KEY_BINDINGS_PATH}/:bindingId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleRevokeKeyBinding(args),
   );
   router.get(
     KEY_SHARES_PATH,

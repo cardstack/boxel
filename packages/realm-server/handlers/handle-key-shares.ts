@@ -1,4 +1,5 @@
 import type Koa from 'koa';
+import type { VirtualNetwork } from '@cardstack/runtime-common';
 import { setContextResponse } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import {
@@ -14,8 +15,12 @@ import {
   type KeyShareNotice,
 } from '../lib/key-shares.ts';
 import { UserKeyError } from '../lib/user-keys.ts';
+import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
+import { secureSessionClient } from '../lib/secure-session.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   keysHandler,
+  mayMintKeyWriteTicket,
   ownerOf,
   readJSON,
   sendJSON,
@@ -33,6 +38,26 @@ type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
 function serialize(share: KeyShare) {
   let { id, ...attributes } = share;
   return { type: 'key-share', id, attributes };
+}
+
+// A realm's listing names each binding's type and card in RRI form, as the
+// bindings API does.
+function serializeWithOperations(network: VirtualNetwork, share: KeyShare) {
+  let serialized = serialize(share);
+  if (!share.operations) {
+    return serialized;
+  }
+  return {
+    ...serialized,
+    attributes: {
+      ...serialized.attributes,
+      operations: share.operations.map(({ type, instance, ...rest }) => ({
+        ...rest,
+        type: { ...type, module: network.unresolveURL(type.module) },
+        instance: instance === null ? null : network.unresolveURL(instance),
+      })),
+    },
+  };
 }
 
 function serializeNotice(notice: KeyShareNotice) {
@@ -70,7 +95,10 @@ const SWAP_ATTRIBUTES = new Set(['keyId']);
 // `?key=<id>`, only those holding that key, which deleting it would suspend.
 // `GET /_key-shares?realm=<url>` lists a realm's shares, for one of its
 // direct writers.
-export function handleListKeyShares({ dbAdapter }: CreateRoutesArgs): Handler {
+export function handleListKeyShares({
+  dbAdapter,
+  virtualNetwork,
+}: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     let realm = ctxt.URL.searchParams.get('realm');
@@ -84,7 +112,11 @@ export function handleListKeyShares({ dbAdapter }: CreateRoutesArgs): Handler {
         : await listOwnShares(dbAdapter, user, {
             keyId: keyId ?? undefined,
           });
-    await sendJSON(ctxt, 200, { data: shares.map(serialize) });
+    await sendJSON(ctxt, 200, {
+      data: shares.map((share) =>
+        serializeWithOperations(virtualNetwork, share),
+      ),
+    });
   });
 }
 
@@ -151,18 +183,37 @@ export function handleResumeKeyShare({ dbAdapter }: CreateRoutesArgs): Handler {
   });
 }
 
+// A swap into a share with approved operations grants the new key their
+// destinations, so it needs the session a grant does (see
+// `handle-user-key-grants.ts`); one into a share with none takes the ticket
+// alone. The answer lists the bindings it moved to the new key.
 export function handleSwapKeyIntoShare({
   dbAdapter,
+  secureOriginURL,
 }: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     let { attributes, ticket } = await readShareBody(ctxt, SWAP_ATTRIBUTES);
-    let share = await swapKeyIntoShare(dbAdapter, {
-      user,
-      shareId: ctxt.params.shareId,
-      keyId: attributes.keyId,
-      ticket,
+    let via = mayMintKeyWriteTicket(ctxt, secureOriginURL)
+      ? await secureSessionClient(
+          dbAdapter,
+          ctxt.state.token as RealmServerTokenClaim | undefined,
+        )
+      : undefined;
+    let { share, reapprovedBindings } = await swapKeyIntoShare(
+      dbAdapter,
+      secretsKeyring(),
+      {
+        user,
+        shareId: ctxt.params.shareId,
+        keyId: attributes.keyId,
+        ticket,
+        via,
+      },
+    );
+    await sendJSON(ctxt, 200, {
+      data: serialize(share),
+      meta: { reapprovedBindings },
     });
-    await sendJSON(ctxt, 200, { data: serialize(share) });
   });
 }

@@ -140,4 +140,7 @@ export async function removeRealmDatabaseArtifacts(args: {
   // realm later made at the same URL that grants their owner write. Their
   // notices go with them.
   await q([`DELETE FROM key_shares WHERE realm_url =`, param(realmURL)]);
+  // Its bindings too, for the same reason: a realm later made at the same URL
+  // starts with no operation approved. A share's bindings went with the share.
+  await q([`DELETE FROM key_bindings WHERE realm_url =`, param(realmURL)]);
 }

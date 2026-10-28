@@ -6,7 +6,7 @@ import {
   type CallApiRequest,
 } from '@cardstack/runtime-common/card-operations';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
-import { callApiSender } from '../lib/outbound/call-api-sender.ts';
+import { sendCallApiRequest } from '../lib/outbound/call-api-sender.ts';
 import { REDACTED } from '../lib/outbound/scrubber.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 import { logLinesDuring } from './helpers/log-capture.ts';
@@ -57,7 +57,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a credential is filled into a header and the body at send time, and an echo of it comes back removed', async function (assert) {
-    let response = await callApiSender.send(
+    let response = await sendCallApiRequest(
       request({
         method: 'POST',
         url: `${vendor.url}/echo`,
@@ -84,7 +84,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a credential in the path fills one segment, and what is recorded is the request as declared', async function (assert) {
     let lines = await logLinesDuring(['outbound'], async () => {
-      let response = await callApiSender.send(
+      let response = await sendCallApiRequest(
         request({ url: `${vendor.url}/hooks/${TOKEN}` }),
         [{ token: TOKEN, value: 'a b?#' }],
       );
@@ -110,7 +110,7 @@ module(basename(import.meta.filename), function (hooks) {
   for (let value of ['a/b', '..\\admin', '..', '.']) {
     test(`a credential that would leave its path segment (${JSON.stringify(value)}) is refused, and nothing is sent`, async function (assert) {
       let refusal = await refusalOf(
-        callApiSender.send(request({ url: `${vendor.url}/hooks/${TOKEN}` }), [
+        sendCallApiRequest(request({ url: `${vendor.url}/hooks/${TOKEN}` }), [
           { token: TOKEN, value },
         ]),
       );
@@ -121,7 +121,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   test('a credential in a query value may hold a path separator', async function (assert) {
-    let response = await callApiSender.send(
+    let response = await sendCallApiRequest(
       request({ url: `${vendor.url}/hooks?key=${TOKEN}` }),
       [{ token: TOKEN, value: 'a/b' }],
     );
@@ -130,7 +130,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a filled request is not followed across a redirect to another origin', async function (assert) {
-    let response = await callApiSender.send(
+    let response = await sendCallApiRequest(
       request({
         url: `${vendor.url}/redirect?to=${encodeURIComponent(
           `${vendor.alternateUrl}/echo`,
@@ -153,7 +153,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a filled request follows a redirect within its own origin', async function (assert) {
-    let response = await callApiSender.send(
+    let response = await sendCallApiRequest(
       request({
         url: `${vendor.url}/redirect?to=${encodeURIComponent(
           `${vendor.url}/echo`,
@@ -172,7 +172,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test("a keyless request follows any redirect, and a vendor's error status is an answer", async function (assert) {
-    let redirected = await callApiSender.send(
+    let redirected = await sendCallApiRequest(
       request({
         url: `${vendor.url}/redirect?to=${encodeURIComponent(
           `${vendor.alternateUrl}/status/500`,
@@ -185,7 +185,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('only the headers that describe the body come back', async function (assert) {
-    let response = await callApiSender.send(
+    let response = await sendCallApiRequest(
       request({
         method: 'POST',
         url: `${vendor.url}/respond`,
@@ -215,7 +215,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a destination the guard refuses is refused as guard-refused', async function (assert) {
     let refusal = await refusalOf(
-      callApiSender.send(request({ url: 'https://10.0.0.1/items' }), []),
+      sendCallApiRequest(request({ url: 'https://10.0.0.1/items' }), []),
     );
     assert.strictEqual(refusal.error.code, 'guard-refused');
     assert.strictEqual(refusal.error.status, 502);
@@ -228,7 +228,7 @@ module(basename(import.meta.filename), function (hooks) {
       totalTimeoutMs: 200,
     });
     let refusal = await refusalOf(
-      callApiSender.send(request({ url: `${vendor.url}/slow?ms=2000` }), []),
+      sendCallApiRequest(request({ url: `${vendor.url}/slow?ms=2000` }), []),
     );
     assert.strictEqual(refusal.error.code, 'upstream-timeout');
     assert.strictEqual(refusal.error.status, 504);

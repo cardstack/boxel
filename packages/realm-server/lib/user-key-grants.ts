@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { param, query, type DBAdapter } from '@cardstack/runtime-common';
+import {
+  param,
+  query,
+  type DBAdapter,
+  type Querier,
+} from '@cardstack/runtime-common';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import {
   destinationCovers,
@@ -13,6 +18,7 @@ import {
 } from './secrets-at-rest/index.ts';
 import { isOutboundDevAllowlisted } from './outbound/client.ts';
 import type { SecureSessionClient } from './secure-session.ts';
+import { revokeBindingsIn } from './key-binding-revocation.ts';
 import {
   grantCopyBinding,
   opensUnder,
@@ -245,6 +251,23 @@ export async function listOwnerGrants(
 export async function createOrReuseGrant(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
+  args: {
+    owner: string;
+    keyId: string;
+    destination: unknown;
+    via: SecureSessionClient;
+  },
+): Promise<{ grant: UserKeyGrant; created: boolean }> {
+  return await dbAdapter.withTransaction((txQuery) =>
+    createOrReuseGrantIn(txQuery, keyring, args),
+  );
+}
+
+// `createOrReuseGrant` in a transaction the caller holds, for a change that
+// makes grants as one step of its own, such as swapping a key into a share.
+export async function createOrReuseGrantIn(
+  txQuery: Querier,
+  keyring: SecretsKeyring,
   {
     owner,
     keyId,
@@ -261,73 +284,71 @@ export async function createOrReuseGrant(
   if (!UUID.test(keyId)) {
     throw new UserKeyError(404, 'no such key');
   }
-  return await dbAdapter.withTransaction(async (txQuery) => {
-    let [key] = await txQuery([
-      `SELECT ${sealedColumnsSelect('value')} FROM user_keys WHERE id = `,
-      param(keyId),
-      ` AND owner = `,
-      param(owner),
-      ` FOR UPDATE`,
-    ]);
-    if (!key) {
-      throw new UserKeyError(404, 'no such key');
-    }
-    let rows = await txQuery([
-      `SELECT ${GRANT_COLUMNS}, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,
-      param(keyId),
-      ` AND owner = `,
-      param(owner),
-    ]);
-    let covering = rows
-      .map((row) => ({ row, grant: toGrant(row) }))
-      .filter(
-        ({ grant }) =>
-          grant.state === 'active' &&
-          destinationCovers(grant.destination, normalized),
-      )
-      .sort((a, b) => b.grant.destination.length - a.grant.destination.length)
-      .find(({ row, grant }) =>
-        opensUnder(
-          keyring,
-          sealedFromColumns(row, 'value'),
-          grantCopyBinding({
-            owner,
-            keyId,
-            grantId: grant.id,
-            destination: grant.destination,
-          }),
-        ),
-      );
-    if (covering) {
-      return { grant: covering.grant, created: false };
-    }
-    let master = sealedFromColumns(key, 'value');
-    if (!master) {
-      throw new Error(`key ${keyId} holds no sealed value`);
-    }
-    let value = keyring.open(master, userKeyBinding(owner, keyId));
-    let grantId = randomUUID();
-    let copy = keyring.seal(
-      value,
-      grantCopyBinding({ owner, keyId, grantId, destination: normalized }),
+  let [key] = await txQuery([
+    `SELECT ${sealedColumnsSelect('value')} FROM user_keys WHERE id = `,
+    param(keyId),
+    ` AND owner = `,
+    param(owner),
+    ` FOR UPDATE`,
+  ]);
+  if (!key) {
+    throw new UserKeyError(404, 'no such key');
+  }
+  let rows = await txQuery([
+    `SELECT ${GRANT_COLUMNS}, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,
+    param(keyId),
+    ` AND owner = `,
+    param(owner),
+  ]);
+  let covering = rows
+    .map((row) => ({ row, grant: toGrant(row) }))
+    .filter(
+      ({ grant }) =>
+        grant.state === 'active' &&
+        destinationCovers(grant.destination, normalized),
+    )
+    .sort((a, b) => b.grant.destination.length - a.grant.destination.length)
+    .find(({ row, grant }) =>
+      opensUnder(
+        keyring,
+        sealedFromColumns(row, 'value'),
+        grantCopyBinding({
+          owner,
+          keyId,
+          grantId: grant.id,
+          destination: grant.destination,
+        }),
+      ),
     );
-    let [row] = await txQuery([
-      `INSERT INTO user_key_grants (id, key_id, owner, destination, state, approved_via, value_ciphertext, value_nonce, value_tag, value_key_id) VALUES (`,
-      param(grantId),
-      `, `,
-      param(keyId),
-      `, `,
-      param(owner),
-      `, `,
-      param(normalized),
-      `, 'active', `,
-      param(via),
-      `, `,
-      ...SEALED_COLUMN_VALUES(copy),
-      `) RETURNING ${GRANT_COLUMNS}`,
-    ]);
-    return { grant: toGrant(row), created: true };
-  });
+  if (covering) {
+    return { grant: covering.grant, created: false };
+  }
+  let master = sealedFromColumns(key, 'value');
+  if (!master) {
+    throw new Error(`key ${keyId} holds no sealed value`);
+  }
+  let value = keyring.open(master, userKeyBinding(owner, keyId));
+  let grantId = randomUUID();
+  let copy = keyring.seal(
+    value,
+    grantCopyBinding({ owner, keyId, grantId, destination: normalized }),
+  );
+  let [row] = await txQuery([
+    `INSERT INTO user_key_grants (id, key_id, owner, destination, state, approved_via, value_ciphertext, value_nonce, value_tag, value_key_id) VALUES (`,
+    param(grantId),
+    `, `,
+    param(keyId),
+    `, `,
+    param(owner),
+    `, `,
+    param(normalized),
+    `, 'active', `,
+    param(via),
+    `, `,
+    ...SEALED_COLUMN_VALUES(copy),
+    `) RETURNING ${GRANT_COLUMNS}`,
+  ]);
+  return { grant: toGrant(row), created: true };
 }
 
 // `createOrReuseGrant` for the destination an operation in a realm sends to,
@@ -420,24 +441,38 @@ export async function openGrantForSending(
 }
 
 // Removes one of the owner's grants, and answers with the bindings that sent
-// under it, which go with it. No binding sends under a grant, so the list is
-// empty. Another user's grant answers as one that doesn't exist.
+// under it, in every realm. They are revoked with it, each with a revocation
+// recorded in its history, so a later call through one is refused
+// `binding-not-approved`. Another user's grant answers as one that doesn't
+// exist.
 export async function removeGrant(
   dbAdapter: DBAdapter,
-  { owner, grantId }: { owner: string; grantId: string },
+  {
+    owner,
+    grantId,
+    via,
+  }: { owner: string; grantId: string; via: SecureSessionClient },
 ): Promise<{ revokedBindings: string[] }> {
   if (!UUID.test(grantId)) {
     throw new UserKeyError(404, 'no such grant');
   }
-  let rows = await query(dbAdapter, [
-    `DELETE FROM user_key_grants WHERE id = `,
-    param(grantId),
-    ` AND owner = `,
-    param(owner),
-    ` RETURNING id`,
-  ]);
-  if (rows.length === 0) {
-    throw new UserKeyError(404, 'no such grant');
-  }
-  return { revokedBindings: [] };
+  return await dbAdapter.withTransaction(async (txQuery) => {
+    let [grant] = await txQuery([
+      `SELECT id FROM user_key_grants WHERE id = `,
+      param(grantId),
+      ` AND owner = `,
+      param(owner),
+      ` FOR UPDATE`,
+    ]);
+    if (!grant) {
+      throw new UserKeyError(404, 'no such grant');
+    }
+    let revokedBindings = await revokeBindingsIn(txQuery, {
+      where: [`grant_id = `, param(grantId)],
+      actor: owner,
+      via,
+    });
+    await txQuery([`DELETE FROM user_key_grants WHERE id = `, param(grantId)]);
+    return { revokedBindings };
+  });
 }

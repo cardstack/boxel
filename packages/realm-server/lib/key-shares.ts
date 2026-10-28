@@ -8,6 +8,9 @@ import {
 import type { Querier } from '@cardstack/runtime-common/expression';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
+import { moveShareBindingsIn } from './key-bindings.ts';
+import type { SecretsKeyring } from './secrets-at-rest/index.ts';
+import type { SecureSessionClient } from './secure-session.ts';
 
 // Shares: a key its owner has put into a realm for other people there to
 // consume. A share holds no secret, only the key it refers to, so one key may
@@ -65,6 +68,18 @@ export interface KeyShare {
   suspendedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // In a realm's listing: the operations the share is approved for there,
+  // one per binding, so the realm's writers see what each share is used by.
+  operations?: KeyShareOperation[];
+}
+
+export interface KeyShareOperation {
+  bindingId: string;
+  type: { module: string; name: string };
+  operation: string;
+  instance: string | null;
+  slot: string;
+  state: 'active' | 'needs-reapproval' | 'suspended';
 }
 
 export interface KeyShareNotice {
@@ -411,16 +426,27 @@ export async function resumeShare(
 
 // A direct writer puts one of their own keys into a suspended share. They
 // become its owner and it resumes; its label, and so every card that names
-// it, is unchanged.
+// it, is unchanged. Every operation approved for the share moves to the new
+// key: the swap is the new owner's approval of each, so it grants the new key
+// the destinations they send to, which takes a session signed in on the
+// secure origin (`via`) when the share has any.
 export async function swapKeyIntoShare(
   dbAdapter: DBAdapter,
+  keyring: SecretsKeyring,
   {
     user,
     shareId,
     keyId,
     ticket,
-  }: { user: string; shareId: string; keyId: unknown; ticket: unknown },
-): Promise<KeyShare> {
+    via,
+  }: {
+    user: string;
+    shareId: string;
+    keyId: unknown;
+    ticket: unknown;
+    via: SecureSessionClient | undefined;
+  },
+): Promise<{ share: KeyShare; reapprovedBindings: string[] }> {
   if (keyId === undefined || keyId === null) {
     throw new UserKeyError(400, 'a swap names the key it puts in');
   }
@@ -455,7 +481,13 @@ export async function swapKeyIntoShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    return toShare(updated, { withKey: true });
+    let reapprovedBindings = await moveShareBindingsIn(txQuery, keyring, {
+      shareId,
+      keyId,
+      owner: user,
+      via,
+    });
+    return { share: toShare(updated, { withKey: true }), reapprovedBindings };
   });
 }
 
@@ -587,7 +619,37 @@ export async function listRealmShares(
         ` ORDER BY label`,
       ]),
   );
-  return rows.map((row) => toShare(row, { withKey: row.owner === user }));
+  let operations = new Map<string, KeyShareOperation[]>();
+  if (rows.length > 0) {
+    let bindings = await query(dbAdapter, [
+      `SELECT id, share_id, definition_url, export_name, operation_name, instance_url, slot, state FROM key_bindings WHERE share_id IN (`,
+      ...rows.flatMap((row, i) => [
+        ...(i > 0 ? [', '] : []),
+        param(row.id as string),
+      ]),
+      `) ORDER BY definition_url, export_name, operation_name, instance_url NULLS FIRST, slot`,
+    ]);
+    for (let binding of bindings) {
+      let shareId = binding.share_id as string;
+      let list = operations.get(shareId) ?? [];
+      list.push({
+        bindingId: binding.id as string,
+        type: {
+          module: binding.definition_url as string,
+          name: binding.export_name as string,
+        },
+        operation: binding.operation_name as string,
+        instance: (binding.instance_url as string | null) ?? null,
+        slot: binding.slot as string,
+        state: binding.state as KeyShareOperation['state'],
+      });
+      operations.set(shareId, list);
+    }
+  }
+  return rows.map((row) => ({
+    ...toShare(row, { withKey: row.owner === user }),
+    operations: operations.get(row.id as string) ?? [],
+  }));
 }
 
 // The notices recorded when one of a realm's shares was suspended, or when
