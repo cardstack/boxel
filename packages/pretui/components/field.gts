@@ -42,11 +42,12 @@ export interface FieldSignature {
 // THE wrapper every input needs: label[for] + reserved message line so
 // side-by-side fields never shift when an error appears (alignment law).
 //
-// The message line is a `Cue`, so its tone carries a glyph as well as a
-// color and a status announces itself. `<:inlineStart>` / `<:inlineEnd>` hold
-// accessories at the LOGICAL edges of the control row (a currency prefix, a
-// unit suffix, a verified tick). The message line's id is the block's second
-// param, so a control can point `aria-describedby` at it.
+// The message line is a `Cue`, so its tone sets the color and a status
+// announces itself. Its glyph keeps the tone from being color alone.
+// `<:inlineStart>` / `<:inlineEnd>` hold accessories at the LOGICAL edges of
+// the control row (a currency prefix, a unit suffix, a verified tick). The
+// message line's id is the block's second param, so a control can point
+// `aria-describedby` at it.
 export class Field extends Component<FieldSignature> {
   get controlId() {
     return `${guidFor(this)}-ctl`;
@@ -74,8 +75,15 @@ export class Field extends Component<FieldSignature> {
     if (this.args.status) return resolveTone(this.args.statusTone, CUE_TONES, 'info');
     return 'neutral';
   }
+  get isStatus() {
+    return this.messageKind === 'status';
+  }
   get messageText() {
     return this.error ?? this.args.status ?? this.hint;
+  }
+  // the hint or error, which never announce on their own
+  get quietText() {
+    return this.isStatus ? undefined : this.messageText;
   }
   <template>
     <div class='pretui-fieldw' data-invalid={{if this.error 'true'}} data-test-pretui-field ...attributes>
@@ -100,14 +108,26 @@ export class Field extends Component<FieldSignature> {
       {{else}}
         {{yield this.controlId this.messageId}}
       {{/if}}
-      <div class='pretui-fieldmsg'>
-        {{#if this.messageText}}
+      <div class='pretui-fieldmsg' id={{this.messageId}}>
+        {{! always rendered, so a status's first message is announced too;
+            a live region added with its text can go unheard }}
+        <span
+          class='pretui-fieldlive'
+          role='status'
+          data-test-pretui-field-status
+        >
+          {{#if this.isStatus}}
+            <Cue
+              @tone={{this.messageTone}}
+              @text={{this.messageText}}
+            />
+          {{/if}}
+        </span>
+        {{#if this.quietText}}
           <Cue
             @kind={{this.messageKind}}
             @tone={{this.messageTone}}
-            @text={{this.messageText}}
-            @id={{this.messageId}}
-            @glyph={{false}}
+            @text={{this.quietText}}
           />
         {{/if}}
       </div>
@@ -124,9 +144,11 @@ export class Field extends Component<FieldSignature> {
           justify-items: start;
         }
         .pretui-fieldw > label {
+          font-family: var(--boxel-ui-label-font-family);
           font-size: var(--boxel-ui-label-font-size);
           font-weight: var(--boxel-ui-label-font-weight);
           line-height: var(--boxel-ui-label-line-height);
+          letter-spacing: var(--boxel-ui-label-letter-spacing);
           color: var(--foreground);
         }
         /* the control row: accessories sit at the LOGICAL edges, so an RTL
@@ -156,13 +178,18 @@ export class Field extends Component<FieldSignature> {
         .pretui-fieldw > :deep(.pretui-selectwrap) {
           justify-self: stretch;
         }
-        .pretui-fieldmsg {
-          min-height: 1rem;
-          line-height: 1rem;
+        /* a flex row, so the Cue sets the line and the inherited font can't
+           grow it; reads the Cue's line height, so an ancestor sets both */
+        .pretui-fieldmsg,
+        .pretui-fieldlive {
+          display: flex;
+          min-width: 0;
         }
-        /* the hint / error spans are gone: the message line is a <Cue>, which
-           brings its own type scale and its own tone. Its glyph is off: the
-           control's edge already shows an error, and the text says it. */
+        /* the column's width, not the message's, so a long one wraps */
+        .pretui-fieldmsg {
+          justify-self: stretch;
+          min-height: var(--pretui-cue-line-height, 1rem);
+        }
         /* the invalid dress is Input's: a --destructive-ink edge (the fill
            hue misses a field boundary's 3:1) and no tint, through --input,
            which the select-type triggers draw their edge from. A disabled
