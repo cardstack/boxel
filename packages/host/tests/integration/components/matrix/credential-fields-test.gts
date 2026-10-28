@@ -5,8 +5,15 @@ import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import CredentialFieldsFrame, {
+  FRAME_WAIT_LIMITS,
+} from '@cardstack/host/components/matrix/credential-fields';
 import Login from '@cardstack/host/components/matrix/login';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
+import {
+  CredentialFields,
+  type CredentialForm,
+} from '@cardstack/host/lib/credential-fields';
 
 import {
   testRealmURL,
@@ -231,6 +238,40 @@ module('Integration | credential fields', function (hooks) {
     } finally {
       link.remove();
       URL.revokeObjectURL(url);
+    }
+  });
+
+  test('a frame that never says it is ready is loaded once more', async function (assert) {
+    let limits = { ...FRAME_WAIT_LIMITS };
+    FRAME_WAIT_LIMITS.readyMs = 200;
+    FRAME_WAIT_LIMITS.loadMs = 3000;
+    // The frame refuses to start for a form it does not know, so it never
+    // says it is ready.
+    let form = 'no-such-form' as CredentialForm;
+    let fields = new CredentialFields();
+    try {
+      let rendering = render(
+        <template>
+          <CredentialFieldsFrame @form={{form}} @fields={{fields}} />
+        </template>,
+      );
+      let frame = await waitUntil(() =>
+        document.querySelector<HTMLIFrameElement>(
+          '[data-test-credential-fields-frame="no-such-form"]',
+        ),
+      );
+      let src = frame!.src;
+      let loaded: string[] = [];
+      frame!.addEventListener('load', () => loaded.push(frame!.src));
+      await rendering;
+      assert.deepEqual(
+        loaded.slice(-2),
+        ['about:blank', src],
+        'the frame was emptied and loaded again',
+      );
+      assert.strictEqual(frame!.src, src, 'it is back at its own page');
+    } finally {
+      Object.assign(FRAME_WAIT_LIMITS, limits);
     }
   });
 
