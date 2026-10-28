@@ -74,7 +74,9 @@ export default class AssistantQuickLookService extends Service {
   canOpenInCode = (request: QuickLookRequest) =>
     this.operatorModeStateService.codeSubmodeOffered(request.id);
 
-  private openFileInCode(url: string) {
+  // Opens a realm file in code mode; the changed-files list under a turn
+  // opens its files the same way.
+  openFileInCode(url: string) {
     let om = this.operatorModeStateService;
     if (om.workspaceChooserOpened) {
       om.closeWorkspaceChooser();

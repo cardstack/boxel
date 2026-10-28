@@ -28,7 +28,6 @@ import {
   MINIMUM_AI_CREDITS_TO_CONTINUE,
   type CardErrorJSONAPI,
   type getCardCollection,
-  rri,
 } from '@cardstack/runtime-common';
 
 import {
@@ -44,6 +43,7 @@ import type {
   TurnHead,
   ChangedFile,
 } from '@cardstack/host/lib/turn-summary';
+import type AssistantQuickLookService from '@cardstack/host/services/assistant-quick-look';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -326,19 +326,20 @@ export default class AiAssistantMessage extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private billingService: BillingService;
+  @service declare private assistantQuickLook: AssistantQuickLookService;
 
   // The files this turn changed, for TurnChanges.
   private get changedFiles(): ChangedFile[] {
     return this.args.answerFooter?.diff?.perFile ?? [];
   }
 
-  // A changed file opens in the code editor.
+  // A changed file opens in code mode, switching to it when needed.
   private openChangedFile = (file: { path: string }) => {
     let changed = this.changedFiles.find(
       (candidate) => candidate.path === file.path,
     );
     if (changed) {
-      this.operatorModeStateService.updateCodePath(rri(changed.url));
+      this.assistantQuickLook.openFileInCode(changed.url);
     }
   };
 
