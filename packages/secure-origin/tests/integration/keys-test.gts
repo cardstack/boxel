@@ -555,7 +555,7 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-key-replace-where]')
         .includesText(
           '2 workspaces use this key. Replacing it switches them all to the new key right away, so make sure all of these workspaces use the same key.',
-          'says how many workspaces the key is shared into',
+          'says how many workspaces the key is shared with',
         );
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
       await fillIn('[data-test-key-value]', 'sk-new-value');
@@ -577,7 +577,7 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-key-replace-form]').doesNotExist();
     });
 
-    test('each key says which services it is used with and lists the workspaces it is shared into, from the key listing alone', async function (assert) {
+    test('each key says which services it is used with and lists the workspaces it is shared with, from the key listing alone', async function (assert) {
       visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Weather service"]');
@@ -903,7 +903,7 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-key-delete-confirm-button]').isNotDisabled();
       assert
         .dom('[data-test-key-delete-confirm]')
-        .includesText('It isn’t shared into any workspace');
+        .includesText('It isn’t shared with any workspace');
     });
 
     test('a delete whose share lookup fails is withdrawn, not offered', async function (assert) {
@@ -1399,7 +1399,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-error-message]')
         .hasText(
-          'This link doesn’t name a key or a workspace to share it into.',
+          'This link doesn’t name a key or a workspace to share it with.',
         );
       assert.dom('[data-test-keys-retry]').doesNotExist();
       await click('[data-test-toggle-details]');

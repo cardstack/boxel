@@ -192,7 +192,7 @@ export default class WorkspaceDropdown extends Component<Signature> {
               {{#if this.state.term}}
                 No workspaces match “{{this.state.term}}”
               {{else}}
-                You don’t edit any workspace you could share a key into.
+                You don’t edit any workspace you could share a key with.
               {{/if}}
             </p>
           {{/if}}

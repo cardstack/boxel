@@ -88,7 +88,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     {{else if this.done}}
       <DonePage @heading='Key shared' @onClose={{this.finish}}>
         <strong>{{this.done.key}}</strong>
-        is shared into
+        is shared with
         <strong>{{this.done.realm}}</strong>
         as
         <strong data-test-keys-done-label>{{this.done.share.label}}</strong>.
@@ -252,7 +252,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       if (!realm && !keyId) {
         throw new LinkError(
           'this page names neither a key nor a workspace',
-          'This link doesn’t name a key or a workspace to share it into.',
+          'This link doesn’t name a key or a workspace to share it with.',
         );
       }
       let context: WindowContext | undefined;
