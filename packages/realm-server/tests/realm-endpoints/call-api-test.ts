@@ -313,6 +313,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     assert.deepEqual(response.body.errors[0].meta.slots, [
       { name: 'userKey', key: 'userKey' },
     ]);
+    assert.true(
+      response.body.errors[0].detail.includes(
+        `the credential slot "userKey" for the invoking user's own key`,
+      ),
+      `the detail says whose key fills the slot: ${response.body.errors[0].detail}`,
+    );
     assert.strictEqual(vendor.requests.length, 0);
   });
 
