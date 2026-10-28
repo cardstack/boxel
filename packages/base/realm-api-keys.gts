@@ -120,7 +120,7 @@ class ShareChange extends GlimmerComponent<ShareChangeSignature> {
 
   private get consequence(): string {
     return this.args.kind === 'suspend'
-      ? 'Cards in this workspace stop using this key until a direct writer swaps a key in.'
+      ? 'Cards in this workspace stop using this key until a direct writer swaps it with one of their own keys.'
       : 'Cards in this workspace stop using your key. The key itself is kept, and stays shared everywhere else.';
   }
 
@@ -481,7 +481,7 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
                           {{on 'click' (fn this.swapKey share)}}
                           data-test-realm-key-share-swap
                         >
-                          Swap one of my keys in
+                          Swap with one of my keys
                         </Button>
                       {{else}}
                         <ShareChange
