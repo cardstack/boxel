@@ -345,13 +345,12 @@ export async function createOrReuseGrantIn(
     ` AND owner = `,
     param(owner),
   ]);
+  // A rejected grant covers its destination as much as an active one: the
+  // vendor refused this key there, and a second grant at the same place would
+  // send the refused value again with nothing held back.
   let covering = rows
     .map((row) => ({ row, grant: toGrant(row) }))
-    .filter(
-      ({ grant }) =>
-        grant.state === 'active' &&
-        destinationCovers(grant.destination, normalized),
-    )
+    .filter(({ grant }) => destinationCovers(grant.destination, normalized))
     .sort((a, b) => b.grant.destination.length - a.grant.destination.length)
     .find(({ row, grant }) =>
       opensUnder(
@@ -469,6 +468,9 @@ export async function openGrantForSending(
   kind: UserKeyKind;
   destination: string;
   value: string;
+  // Identifies the sealed copy that was opened, which changes whenever the
+  // key's value is replaced.
+  copy: string;
 }> {
   if (!UUID.test(grantId)) {
     throw new UserKeyError(404, 'no such grant');
@@ -498,7 +500,13 @@ export async function openGrantForSending(
       destination,
     }),
   );
-  return { keyId, kind: row.kind as UserKeyKind, destination, value };
+  return {
+    keyId,
+    kind: row.kind as UserKeyKind,
+    destination,
+    value,
+    copy: copy.nonce.toString('base64'),
+  };
 }
 
 // Removes one of the owner's grants, and answers with the bindings that sent

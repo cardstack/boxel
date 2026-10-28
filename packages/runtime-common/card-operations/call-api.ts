@@ -793,6 +793,9 @@ export interface CallApiGrantUse {
   realmURL: string;
   // The share the key was used through, for an `apiKey` slot.
   shareId?: string;
+  // The grant's sealed copy that was opened, so a vendor's answer is held
+  // against the value it was sent, not one that replaced it meanwhile.
+  copy: string;
   // Whether this call is the probe of a grant the vendor rejected.
   probe: boolean;
 }
