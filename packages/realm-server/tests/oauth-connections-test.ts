@@ -142,7 +142,7 @@ module(basename(import.meta.filename), function (hooks) {
     secureOriginURL,
     permissions: {
       [OWNER]: ['read', 'write'],
-      [TEAMMATE]: ['read'],
+      [TEAMMATE]: ['read', 'write'],
       [REALM_USER]: ['read', 'write', 'realm-owner'],
     },
     fileSystem: {
