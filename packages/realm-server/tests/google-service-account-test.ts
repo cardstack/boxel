@@ -186,11 +186,10 @@ module(basename(import.meta.filename), function () {
       for (let [name, fn, message] of cases) {
         let error = keyErrorOf(fn);
         assert.true(message.test(error.message), `${name}: ${error.message}`);
-        assert.false(
+        let quotesKey =
           error.message.includes('BEGIN PRIVATE KEY') ||
-            error.message.includes(PRIVATE_KEY_PEM.split('\n')[1]),
-          `${name}: the message quotes none of the key`,
-        );
+          error.message.includes(PRIVATE_KEY_PEM.split('\n')[1]);
+        assert.false(quotesKey, `${name}: the message quotes none of the key`);
       }
     });
   });

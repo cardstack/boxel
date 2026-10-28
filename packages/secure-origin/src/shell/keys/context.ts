@@ -2,7 +2,9 @@
 // refusals. The shapes themselves are `security/keys.ts`'s.
 export type {
   DestinationDisplay,
+  KeyKind,
   KeyShare,
+  KeyValue,
   ListedKey,
   SharedWorkspace,
   UserKey,

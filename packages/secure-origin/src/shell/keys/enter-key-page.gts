@@ -1,5 +1,7 @@
-// The `enter-key` page: a new key, its name and its value, entered into this
-// window and added to the user's own keys. A key holds no destination. Opened
+// The `enter-key` page: a new key, its name, its kind and its value, entered
+// into this window and added to the user's own keys. A key is either pasted in
+// as it is, or a Google service account's JSON key file, chosen from disk with
+// the user to act as and its scopes. A key holds no destination. Opened
 // for an operation, the page first says which operation, card and realm the
 // key is for and where that operation sends it, as the realm server describes
 // them; where the key may be sent is granted when the operation is approved.
@@ -24,14 +26,17 @@ import {
   loadFailure,
   type LoadFailure,
 } from './context.ts';
-import type { UserKey, WindowContext } from './context.ts';
+import type { KeyKind, KeyValue, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
+import KeyKindChoice from './key-kind-choice.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { contextRequest, openedFor, returnsToKeyPage } from './opened-for.ts';
+import { ServiceAccountEntry } from './service-account-entry.ts';
+import ServiceAccountFields from './service-account-fields.gts';
 
 type State =
   | { name: 'loading' }
@@ -81,12 +86,21 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                 @reason={{this.opened.reason}}
               />
             {{/if}}
-            <KeyFields
-              @name={{this.form.name}}
-              @value={{this.form.value}}
-              @onName={{this.setName}}
-              @onValue={{this.setValue}}
-            />
+            <KeyKindChoice @kind={{this.form.kind}} @onKind={{this.setKind}} />
+            {{#if this.isServiceAccount}}
+              <KeyFields @name={{this.form.name}} @onName={{this.setName}} />
+              <ServiceAccountFields
+                @entry={{this.serviceAccount}}
+                @onChange={{this.clearError}}
+              />
+            {{else}}
+              <KeyFields
+                @name={{this.form.name}}
+                @value={{this.form.value}}
+                @onName={{this.setName}}
+                @onValue={{this.setValue}}
+              />
+            {{/if}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
@@ -143,6 +157,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
   });
   private form = trackedObject({
     name: '',
+    kind: 'static' as KeyKind,
     value: '',
     saving: false,
     error: undefined as string | undefined,
@@ -196,9 +211,38 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
 
   private back = () => navigation.back(pageURL('keys'));
 
-  private get submitDisabled() {
-    return this.form.saving || !this.form.name.trim() || !this.form.value;
+  private serviceAccount = new ServiceAccountEntry();
+
+  private get isServiceAccount() {
+    return this.form.kind === 'google-service-account';
   }
+
+  // What is entered, as the kind chosen says, or nothing while incomplete.
+  private get entered(): KeyValue | undefined {
+    if (this.isServiceAccount) {
+      return this.serviceAccount.value;
+    }
+    return this.form.value
+      ? { kind: 'static', value: this.form.value }
+      : undefined;
+  }
+
+  private get submitDisabled() {
+    return this.form.saving || !this.form.name.trim() || !this.entered;
+  }
+
+  // Switching kinds drops what was entered for the other, so a value typed
+  // for one is never sent as the other.
+  private setKind = (kind: KeyKind) => {
+    this.form.kind = kind;
+    this.form.value = '';
+    this.serviceAccount.clear();
+    this.form.error = undefined;
+  };
+
+  private clearError = () => {
+    this.form.error = undefined;
+  };
 
   private setName = (value: string) => {
     this.form.name = value;
@@ -212,7 +256,8 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
 
   private save = async (event: Event) => {
     event.preventDefault();
-    if (this.submitDisabled) {
+    let entered = this.entered;
+    if (this.submitDisabled || !entered) {
       return;
     }
     this.form.saving = true;
@@ -220,10 +265,11 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     try {
       let key = await addKey(this.args.api.config, {
         name: this.form.name.trim(),
-        value: this.form.value,
+        entered,
       });
       // The value is gone from the page the moment the server has it.
       this.form.value = '';
+      this.serviceAccount.clear();
       if (this.returnsToKeyPage) {
         navigation.back(pageURL('keys'));
         return;

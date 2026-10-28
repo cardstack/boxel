@@ -667,7 +667,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 44100,
+      "bytes": 46943,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -747,6 +747,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/08f04e9aa1.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/14c0ff8f1f.css"
         },
         {
@@ -799,6 +803,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/fc009b607d.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/register/52bee3ebbe.css"
         },
         {
@@ -836,7 +844,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 182475,
+      "bytes": 192137,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -991,7 +999,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/keys.ts",
-          "size": 2932
+          "size": 3201
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1036,17 +1044,22 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/enter-key-page.gts",
-          "size": 6842
+          "size": 8024
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-fields.gts",
-          "size": 1281
+          "size": 1332
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/key-kind-choice.gts",
+          "size": 2652
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 15285
+          "size": 16062
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1056,7 +1069,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-tile.gts",
-          "size": 1495
+          "size": 1800
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1087,6 +1100,16 @@
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/opened-for.ts",
           "size": 1972
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/service-account-entry.ts",
+          "size": 2089
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/service-account-fields.gts",
+          "size": 4542
         },
         {
           "package": "@cardstack/secure-origin",

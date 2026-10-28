@@ -2,11 +2,13 @@
 // bordered tile with the key's icon, its name and when it was added. What the
 // tile is given to hold (a key page's actions) goes on a line of its own under
 // the name, so neither crowds the other however long the name. Nothing about
-// its value is shown. Every key is the one kind there is, a secret
-// pasted in, so the tile doesn't name its kind.
+// its value is shown. A key pasted in as it is goes unlabelled; a Google
+// service account says so, since it is replaced with a key file rather than
+// a pasted value.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import KeyRound from '../../components/icons/key-round.gts';
+import { eq } from '../../helpers/truth-helpers.ts';
 
 import type { UserKey } from './context.ts';
 
@@ -36,7 +38,13 @@ const KeyTile: TemplateOnlyComponent<Signature> = <template>
         class='key-name'
         data-test-key-row-name
       >{{@key.name}}</div>
-      <div class='key-meta'>Added {{addedOn @key.createdAt}}</div>
+      <div class='key-meta'>
+        {{#if (eq @key.kind 'google-service-account')}}
+          <span data-test-key-kind-label>Google service account ·</span>
+        {{/if}}
+        Added
+        {{addedOn @key.createdAt}}
+      </div>
     </div>
     {{#if (has-block)}}
       <div class='key-extra'>{{yield}}</div>
