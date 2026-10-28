@@ -142,10 +142,23 @@ const SERVICE_ACCOUNT_FILE = JSON.stringify(
   2,
 );
 
+// Chooses a key file and waits until the page has read this one. The read is
+// a browser promise `settled()` doesn't track, so the wait is for what the
+// page says of this file by name: the service account it holds, or why it
+// can't be used.
 async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
   await triggerEvent('[data-test-service-account-file]', 'change', {
     files: [new File([contents], name, { type: 'application/json' })],
   });
+  await waitUntil(
+    () =>
+      document
+        .querySelector('[data-test-service-account-email]')
+        ?.textContent?.includes(name) ||
+      document
+        .querySelector('[data-test-service-account-problem]')
+        ?.getAttribute('data-test-service-account-problem-file') === name,
+  );
   await settled();
 }
 
