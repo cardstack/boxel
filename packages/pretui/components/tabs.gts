@@ -4,6 +4,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { guidFor } from '@ember/object/internals';
+import { listen, rovingTabindex } from '../focus';
 import { slidingHighlight, SlidingHighlight } from './sliding-highlight';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { SegmentOption } from './segmented-control';
@@ -21,6 +23,33 @@ export interface TabsSignature {
   };
   Blocks: { default: [active: string] };
   Element: HTMLDivElement;
+}
+
+interface TabView {
+  option: SegmentOption;
+  id: string;
+  active: boolean;
+  /** the list's one tab stop */
+  stop: boolean;
+}
+
+const STEP: Record<string, (index: number, count: number) => number> = {
+  next: (i, n) => (i + 1) % n,
+  previous: (i, n) => (i - 1 + n) % n,
+  Home: () => 0,
+  End: (_i, n) => n - 1,
+};
+
+function stepFor(event: KeyboardEvent, list: HTMLElement) {
+  let rtl = getComputedStyle(list).direction === 'rtl';
+  switch (event.key) {
+    case 'ArrowRight':
+      return STEP[rtl ? 'previous' : 'next'];
+    case 'ArrowLeft':
+      return STEP[rtl ? 'next' : 'previous'];
+    default:
+      return STEP[event.key];
+  }
 }
 
 // The underline is the same shared primitive the SegmentedControl wears, in
@@ -44,29 +73,88 @@ export class Tabs extends Component<TabsSignature> {
     }
     emit([this.args.onValueChange, this.args.onChange], option.value);
   };
-  isActive = (option: SegmentOption) => this.value === option.value;
+  private guid = guidFor(this);
+  get panelId() {
+    return `${this.guid}-panel`;
+  }
+  // APG Tabs: one tab stop for the whole list, on the active tab, or on the
+  // first tab when no option matches the value.
+  get tabs(): TabView[] {
+    let activeIndex = this.options.findIndex((o) => o.value === this.value);
+    let stop = activeIndex === -1 ? 0 : activeIndex;
+    return this.options.map((option, index) => ({
+      option,
+      id: `${this.guid}-tab-${index}`,
+      active: index === activeIndex,
+      stop: index === stop,
+    }));
+  }
+  get activeTabId() {
+    return this.tabs.find((tab) => tab.active)?.id;
+  }
+  // Automatic activation: the arrow keys move focus and select together,
+  // which APG recommends when every panel renders without a fetch.
+  // A modified key is the browser's or the page's (Alt+Left is Back).
+  onKeydown = (event: Event) => {
+    if (
+      !(event instanceof KeyboardEvent) ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey
+    ) {
+      return;
+    }
+    let list = event.currentTarget as HTMLElement;
+    let step = stepFor(event, list);
+    let tabs = [...list.querySelectorAll<HTMLElement>('[role="tab"]')];
+    let index = tabs.indexOf(event.target as HTMLElement);
+    let option = step ? this.options[step(index, tabs.length)] : undefined;
+    if (!option || index === -1) {
+      return;
+    }
+    event.preventDefault();
+    this.pick(option);
+    // A controlled parent may refuse the change; focus stays with the
+    // selection rather than landing on a tab that isn't selected.
+    if (this.value === option.value) {
+      tabs[this.options.indexOf(option)]?.focus();
+    }
+  };
   <template>
     <div data-test-pretui-tabs ...attributes>
-      <div class='pretui-tabs' role='tablist' {{slidingHighlight}}>
+      <div
+        class='pretui-tabs'
+        role='tablist'
+        {{slidingHighlight}}
+        {{listen 'keydown' this.onKeydown}}
+      >
         <div class='pretui-tabs-rail'></div>
-        <SlidingHighlight
-          @variant='underline'
-          @thickness={{2}}
-          @radius={{0}}
-        />
-        {{#each this.options as |option|}}
+        <SlidingHighlight @variant='underline' @thickness={{2}} @radius={{0}} />
+        {{#each this.tabs key='id' as |tab|}}
           <button
             type='button'
             role='tab'
-            aria-selected={{if (this.isActive option) 'true' 'false'}}
+            id={{tab.id}}
+            aria-selected={{if tab.active 'true' 'false'}}
+            aria-controls={{if (has-block) this.panelId}}
             class='pretui-tab'
-            data-state={{if (this.isActive option) 'active'}}
-            {{on 'click' (fn this.pick option)}}
-          >{{option.label}}</button>
+            data-state={{if tab.active 'active'}}
+            data-test-pretui-tab={{tab.option.value}}
+            {{rovingTabindex tab.stop}}
+            {{on 'click' (fn this.pick tab.option)}}
+          >{{tab.option.label}}</button>
         {{/each}}
       </div>
       {{#if (has-block)}}
-        <div role='tabpanel' class='pretui-tabpanel'>{{yield this.value}}</div>
+        <div
+          role='tabpanel'
+          id={{this.panelId}}
+          aria-labelledby={{this.activeTabId}}
+          tabindex='0'
+          class='pretui-tabpanel'
+          data-test-pretui-tabpanel
+        >{{yield this.value}}</div>
       {{/if}}
     </div>
     <style scoped>
@@ -114,4 +202,3 @@ export class Tabs extends Component<TabsSignature> {
     </style>
   </template>
 }
-

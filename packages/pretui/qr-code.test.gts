@@ -23,7 +23,7 @@ import type { QrRenderInfo } from './components/qr-code';
 
 interface Modules {
   size: number;
-  get(row: number, col: number): boolean;
+  get(row: number, col: number): number | boolean;
 }
 
 // The standard worked example: 'HELLO WORLD' encoded alphanumeric at

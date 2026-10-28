@@ -43,15 +43,13 @@
 //
 // Colour maths is VENDORED, not ported: see `color/README.md`.
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- the vendored bundle
-   ships no type declarations; its surface is re-declared as `Engine` below
-   and every use goes through that one narrow cast. */
+/* eslint-disable @typescript-eslint/no-explicit-any -- `./color/index.d.ts`
+   declares the vendored exports opaque; their surface is declared as `Engine`
+   below and every use goes through that one narrow cast. */
 import * as Vendor from './color/index.js';
 
 // ── The vendored surface, narrowly declared ──────────────────────────────
-// Only what this module actually calls. Declaring it here (rather than
-// shipping a .d.ts beside a minified bundle) keeps the contract readable and
-// keeps the realm free of a declaration file the loader would have to skip.
+// Only what this module actually calls, declared beside its one caller.
 
 /** A colour as the vendored engine models it: a space, three coordinates,
  *  and alpha. Coordinates may be NaN for an undefined hue — that is legal

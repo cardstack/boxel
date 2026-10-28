@@ -116,8 +116,8 @@ export interface SignatureApi {
   altText: string;
 }
 
-// The vendored bundle ships no types (it is a built artifact), so the untyped
-// boundary is asserted once, here, rather than leaking `any` outward.
+// The slice of the vendored engine this component uses, asserted once, here,
+// so nothing else in the file depends on the full upstream class.
 interface SigPadEngine {
   penColor: string;
   minWidth: number;
