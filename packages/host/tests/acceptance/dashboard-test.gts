@@ -642,9 +642,10 @@ module('Acceptance | dashboard', function (hooks) {
       let description = descriptionOf(
         '[data-test-favorites-list] [data-test-workspace-button="Workspace A"]',
       );
-      assert.strictEqual(description.length, 2);
-      assert.strictEqual(description[0], 'Private workspace');
-      assert.strictEqual(description[1], 'test-realm/testuser/workspace-a');
+      assert.deepEqual(description, [
+        'Private workspace',
+        'test-realm/testuser/workspace-a',
+      ]);
     });
 
     test("a hosted tile's site menu lists each published site and opens the one chosen", async function (assert) {
@@ -1401,14 +1402,15 @@ module('Acceptance | dashboard', function (hooks) {
           let description = descriptionOf(
             `[data-test-workspace-button="${rowName}"]`,
           );
-          assert.strictEqual(description.length, 3);
-          assert.strictEqual(
-            description[0],
-            'Private workspace',
-            'the full visibility, not only the chip',
+          assert.deepEqual(
+            description,
+            [
+              'Private workspace',
+              'Updated 9 days ago',
+              'test-realm/testuser/workspace-8',
+            ],
+            'the full visibility and time, not only the chip and the short time',
           );
-          assert.strictEqual(description[1], 'Updated 9 days ago');
-          assert.strictEqual(description[2], 'test-realm/testuser/workspace-8');
         });
 
         test("a tile's button is described by its full visibility and its address", async function (assert) {
@@ -1420,12 +1422,10 @@ module('Acceptance | dashboard', function (hooks) {
           let description = descriptionOf(
             `[data-test-workspace-button="${tileName}"]`,
           );
-          assert.strictEqual(description.length, 2);
-          assert.strictEqual(description[0], 'Private workspace');
-          assert.strictEqual(
-            description[1],
+          assert.deepEqual(description, [
+            'Private workspace',
             urlFor(tileName).replace(/^http:\/\/|\/$/g, ''),
-          );
+          ]);
         });
 
         module('keyboard cursor', function () {

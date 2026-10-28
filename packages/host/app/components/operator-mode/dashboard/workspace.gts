@@ -457,16 +457,14 @@ export default class Workspace extends Component<Signature> {
                 class='boxel-sr-only'
               >{{this.visibilityLabel}}</span>
             </span>
-            {{#if (eq @variant 'row')}}
-              {{#if this.updatedAtLabel}}
-                <span class='updated' data-test-workspace-updated>
-                  <span aria-hidden='true'>{{this.updatedAgoLabel}}</span>
-                  <span
-                    id={{this.updatedDescriptionId}}
-                    class='boxel-sr-only'
-                  >{{this.updatedAtLabel}}</span>
-                </span>
-              {{/if}}
+            {{#if this.showsUpdatedTime}}
+              <span class='updated' data-test-workspace-updated>
+                <span aria-hidden='true'>{{this.updatedAgoLabel}}</span>
+                <span
+                  id={{this.updatedDescriptionId}}
+                  class='boxel-sr-only'
+                >{{this.updatedAtLabel}}</span>
+              </span>
             {{/if}}
           </div>
         {{/unless}}
@@ -1347,11 +1345,15 @@ export default class Workspace extends Component<Signature> {
     return `${guidFor(this)}-updated`;
   }
 
+  private get showsUpdatedTime() {
+    return this.args.variant === 'row' && !!this.updatedAtLabel;
+  }
+
   // What the workspace's button says after its name. The chip and the row's
   // time show short forms, so each carries its full label for this.
   private get descriptionIds() {
     let ids = [this.visibilityDescriptionId];
-    if (this.args.variant === 'row' && this.updatedAtLabel) {
+    if (this.showsUpdatedTime) {
       ids.push(this.updatedDescriptionId);
     }
     ids.push(this.realmURLDescriptionId);
