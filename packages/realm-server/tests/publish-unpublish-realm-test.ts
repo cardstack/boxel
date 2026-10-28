@@ -231,8 +231,12 @@ module(basename(import.meta.filename), function () {
       test('POST /_publish-realm applies the owner space path rule to the space host of a dotted username', async function (assert) {
         // `first.last`'s own space is `first-last.localhost`: the dot becomes a
         // hyphen so the space stays one label under the space domain. The
-        // source realm grants realm-owner to every user, so the only thing
-        // that can reject this hand-picked path is the owner-space path rule.
+        // user owns the source realm, so the only thing that can reject this
+        // hand-picked path is the owner-space path rule.
+        await dbAdapter.execute(`
+          INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+          VALUES ('${sourceRealmUrlString}', '@first.last:localhost', true, true, true)
+        `);
         let response = await request
           .post('/_publish-realm')
           .set('Accept', 'application/vnd.api+json')
