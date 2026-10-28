@@ -1200,6 +1200,12 @@ module('Integration | key pages', function (hooks) {
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
       assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
+      assert
+        .dom('[data-test-key-picker-prompt]')
+        .hasText('Select a key', 'with several keys, it asks for one');
+      assert
+        .dom('[data-test-key-picker-prompt]')
+        .doesNotHaveClass('visually-hidden');
       assert.dom('[data-test-workspace-dropdown-trigger]').doesNotExist();
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       await click('[data-test-key-choice="Maps"] input');
