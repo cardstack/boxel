@@ -2,7 +2,7 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import { Button } from '@cardstack/pretui/components/button';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 
@@ -50,15 +50,16 @@ export default class SecureWindowFallback extends Component {
         <:footer>
           <div class='footer-buttons'>
             <Button
-              @size='tall'
+              @variant='secondary'
+              @size='l'
               {{on 'click' this.secureWindow.dismissBlocked}}
               data-test-secure-window-fallback-cancel
             >
               Cancel
             </Button>
             <Button
-              @kind='primary'
-              @size='tall'
+              @variant='primary'
+              @size='l'
               {{on 'click' this.secureWindow.openBlocked}}
               data-test-secure-window-fallback-open
             >
