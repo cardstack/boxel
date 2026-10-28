@@ -34,12 +34,13 @@ export interface WindowContext {
 // What fills one of an operation's slots for the user, as the realm server
 // says when asked with `bindings`: the key, and whether the service it is
 // sent to rejected it. For a key a workspace shares, the key is named only to
-// its owner, and the owner only to the workspace's direct writers.
+// its owner, the share's label only to its owner and the workspace's direct
+// writers, and its owner only to those writers while the share is active.
 export interface SlotBound {
   rejected: boolean;
   key: { id: string; name: string } | null;
   share?: {
-    label: string;
+    label?: string;
     suspended: boolean;
     ownedByYou: boolean;
     owner?: string;
@@ -117,6 +118,18 @@ export interface WindowContextRequest {
 export async function listKeys(config: Config): Promise<ListedKey[]> {
   return resources<ListedKey>(
     await authorizedRequest(config, '_user-keys', { method: 'GET' }),
+  );
+}
+
+// One of the user's own keys, with where it is used, as the listing gives it.
+export async function getKey(
+  config: Config,
+  keyId: string,
+): Promise<ListedKey> {
+  return resource<ListedKey>(
+    await authorizedRequest(config, `_user-keys/${encodeURIComponent(keyId)}`, {
+      method: 'GET',
+    }),
   );
 }
 

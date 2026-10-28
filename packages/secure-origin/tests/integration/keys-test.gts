@@ -1743,11 +1743,7 @@ module('Integration | key pages', function (hooks) {
                 bound: {
                   rejected: true,
                   key: null,
-                  share: {
-                    label: 'Team weather',
-                    suspended: false,
-                    ownedByYou: false,
-                  },
+                  share: { suspended: false, ownedByYou: false },
                 },
               },
             ],
@@ -1758,6 +1754,12 @@ module('Integration | key pages', function (hooks) {
       await render(ReplaceKeyPage);
       await waitFor('[data-test-replace-key-not-yours]');
       assert.dom('[data-test-replace-key-owner]').doesNotExist();
+      assert
+        .dom('[data-test-replace-key-not-yours]')
+        .includesText(
+          'weather.co.uk rejected the workspace’s key. Only the person who shared it can replace it.',
+          'names no share the reader can’t see',
+        );
       assert
         .dom('[data-test-replace-key-not-yours]')
         .includesText('Ask someone with direct write access to Team Workspace');
@@ -1777,7 +1779,7 @@ module('Integration | key pages', function (hooks) {
         .includesText('None of your keys is approved for this request yet');
     });
 
-    test('two slots: each is named, and the window closes once both keys are replaced', async function (assert) {
+    test('two slots: each is named, a replaced one says so, and the window closes once both keys are replaced', async function (assert) {
       serve({
         'POST _secure-window/context': () =>
           forecastWith([
@@ -1823,9 +1825,30 @@ module('Integration | key pages', function (hooks) {
       await click(
         '[data-test-replace-key-slot="first"] [data-test-replace-key-save]',
       );
-      await waitUntil(
-        () => !document.querySelector('[data-test-replace-key-slot="first"]'),
+      await waitFor(
+        '[data-test-replace-key-slot="first"] [data-test-replace-key-replaced]',
       );
+      assert
+        .dom(
+          '[data-test-replace-key-slot="first"] [data-test-replace-key-replaced]',
+        )
+        .hasText('Weather service is replaced.');
+      assert
+        .dom(
+          '[data-test-replace-key-slot="first"] [data-test-replace-key-form]',
+        )
+        .doesNotExist();
+      assert
+        .dom('[data-test-replace-key-slot="second"] h2')
+        .hasText('second', 'the remaining row keeps its heading');
+      await waitUntil(
+        () =>
+          document.activeElement ===
+          document.querySelector(
+            '[data-test-replace-key-slot="second"] [data-test-key-value]',
+          ),
+      );
+      assert.ok(true, 'focus moves to the next key’s value');
       assert.deepEqual(navigations, [], 'one key is still to replace');
       await fillIn(
         '[data-test-replace-key-slot="second"] [data-test-key-value]',
@@ -1840,6 +1863,120 @@ module('Integration | key pages', function (hooks) {
         { action: 'replace', keyId: 'key-2' },
       ]);
       assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('a key the service still accepts, beside one it rejected, isn’t offered for replacing', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'first',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+            {
+              name: 'second',
+              key: 'userKey',
+              bound: { rejected: false, key: { id: 'key-2', name: 'Maps' } },
+            },
+          ]),
+        'PATCH _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: attributesOf(KEYS[0]),
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-accepted]');
+      assert
+        .dom(
+          '[data-test-replace-key-slot="second"] [data-test-replace-key-form]',
+        )
+        .doesNotExist();
+      assert
+        .dom('[data-test-replace-key-accepted]')
+        .hasText(
+          'Maps still works: weather.co.uk accepts it, so there’s nothing to replace.',
+        );
+      await fillIn('[data-test-key-value]', 'sk-one');
+      await click('[data-test-replace-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(
+        ticketRequests(),
+        [{ action: 'replace', keyId: 'key-1' }],
+        'only the rejected key is replaced',
+      );
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('says how many workspaces the key it offers to replace is shared with', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'userKey',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+          ]),
+        'GET _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: attributesOf(KEYS[0]),
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-replace-key-where]')
+          ?.textContent?.replace(/\s+/g, ' ')
+          .includes('3 workspaces use this key'),
+      );
+      assert
+        .dom('[data-test-replace-key-where]')
+        .includesText(
+          'Replacing it switches them all to the new key right away',
+        );
+    });
+
+    test('a key whose shares can’t be listed is still offered, in general terms', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'userKey',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+          ]),
+        'GET _user-keys/key-1': () => refusal(500, 'boom'),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-form]');
+      await settled();
+      assert
+        .dom('[data-test-replace-key-where]')
+        .includesText(
+          'Replacing this key switches every workspace that uses it',
+        );
     });
 
     test('a link that names no operation names nothing it can show', async function (assert) {
