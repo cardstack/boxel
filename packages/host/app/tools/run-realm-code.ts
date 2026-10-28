@@ -2663,8 +2663,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         (url) => this.readSource(url),
         (url, content, expected, options) =>
           this.writeFile(roomId, url, content, expected, options),
-        (updates) =>
-          this.saveCards(roomId, rootURL, updates),
+        (updates) => this.saveCards(roomId, rootURL, updates),
         (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
         (url, expected) => this.deleteFile(url, expected),
         (url, maxBytes, signal) => this.downloadFile(url, maxBytes, signal),

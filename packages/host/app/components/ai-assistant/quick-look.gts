@@ -131,8 +131,10 @@ class QuickLookContent extends Component<ContentSignature> {
     if (this.instance) {
       return 'ready';
     }
-    if (this.resource?.cardError) {
-      return this.resource.cardError.status === 404 ? 'missing' : 'error';
+    let error = this.resource?.cardError;
+    // a 404 that awaits the index is a new card the realm has not indexed yet
+    if (error && !error.awaitingIndex) {
+      return error.status === 404 ? 'missing' : 'error';
     }
     return 'loading';
   }

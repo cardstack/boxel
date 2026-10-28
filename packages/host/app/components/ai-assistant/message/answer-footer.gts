@@ -5,6 +5,8 @@ import { AnswerFooter as KitAnswerFooter } from '@cardstack/pretui/components/an
 
 import { rri } from '@cardstack/runtime-common';
 
+import { Submodes } from '@cardstack/host/components/submode-switcher';
+
 import type { AnswerFooterData } from '@cardstack/host/lib/turn-summary';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -33,9 +35,14 @@ export default class AnswerFooter extends Component<Signature> {
   };
 
   private openSaved = () => {
-    if (this.savedUrl) {
-      this.operatorModeStateService.updateCodePath(rri(this.savedUrl));
+    if (!this.savedUrl) {
+      return;
     }
+    if (this.operatorModeStateService.workspaceChooserOpened) {
+      this.operatorModeStateService.closeWorkspaceChooser();
+    }
+    this.operatorModeStateService.updateSubmode(Submodes.Code);
+    this.operatorModeStateService.updateCodePath(rri(this.savedUrl));
   };
 
   // The turn's changes list above the footer already says what changed,

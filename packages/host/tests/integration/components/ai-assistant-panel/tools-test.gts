@@ -3653,6 +3653,70 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     }
   });
 
+  test('a reaction after each call has its result changes neither answer', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'may I read these?',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: ['approved-read', 'declined-read'].map(
+        (id) => ({
+          id,
+          name: 'readUrl',
+          arguments: JSON.stringify({ url: `https://example.com/${id}` }),
+          executedBy: AI_BOT_EXECUTOR,
+          approvalRequired: true,
+        }),
+      ),
+    });
+    let roomResource = getService('matrix-service').roomResources.get(roomId)!;
+    await waitUntil(() => roomResource.messages[0]?.tools.length === 2, {
+      timeout: 10000,
+    });
+    for (let [commandRequestId, key] of [
+      ['approved-read', 'approved'],
+      ['declined-read', 'invalid'],
+    ]) {
+      simulateRemoteMessage(
+        roomId,
+        '@testuser:localhost',
+        {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId,
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key,
+            event_id: eventId,
+          },
+          data: {},
+        },
+        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+      );
+    }
+    simulateRemoteMessage(
+      roomId,
+      '@testuser:localhost',
+      {
+        'm.relates_to': {
+          rel_type: 'm.annotation',
+          event_id: eventId,
+          key: '👎',
+        },
+      },
+      { type: 'm.reaction' },
+    );
+    await settled();
+    let [approved, declined] = roomResource.messages[0]!.tools;
+    assert.strictEqual(approved!.toolCallStatus, 'approved');
+    assert.strictEqual(
+      approved!.approvalAnswer,
+      undefined,
+      'the 👎 that follows the last answer does not decline the approved call',
+    );
+    assert.strictEqual(declined!.toolCallStatus, 'invalid');
+  });
+
   test('a 👍 from a room member approves the held call and says who', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     let stub = stubToolValidation();

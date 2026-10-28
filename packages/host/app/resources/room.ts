@@ -1031,7 +1031,10 @@ export class RoomResource extends Resource<Args> {
 
   // A person's 👍 or 👎 on a bot message holding calls for approval answers
   // them (see runtime-common/ai/approval-reaction.ts). The first answer on a
-  // message decides, and the bot never answers its own.
+  // message decides, and the bot never answers its own. A call that already
+  // has a result keeps it: the host answers each call with its own result,
+  // and its 👍 or 👎 follows the last one, so it speaks only for calls still
+  // waiting.
   private updateMessageApproval(roomId: string, event: { sender?: string }) {
     let reaction = approvalReaction(
       event as Parameters<typeof approvalReaction>[0],
@@ -1040,10 +1043,14 @@ export class RoomResource extends Resource<Args> {
       return;
     }
     let message = this._messageCache.get(reaction.targetEventId);
-    let held = (message?.tools ?? []).filter(
+    let tools = (message?.tools ?? []).filter(
       (tool) => tool.toolRequest.approvalRequired === true,
     );
-    if (!held.length || held.some((tool) => tool.approvalAnswer)) {
+    if (tools.some((tool) => tool.approvalAnswer)) {
+      return;
+    }
+    let held = tools.filter((tool) => tool.toolCallStatus === 'applying');
+    if (!held.length) {
       return;
     }
     let member = this.upsertRoomMember({ roomId, userId: reaction.sender });

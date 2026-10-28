@@ -698,6 +698,37 @@ module('readUrl approval', () => {
       ).inForce,
       'a 👍 after a 👎 already answered the call does not lift the stop',
     );
+    assert.ok(
+      readStopState(
+        [
+          humanMessage('go'),
+          held,
+          result('held', 'approved', USER),
+          stop,
+          reaction('$bot', '👍', USER),
+        ] as any,
+        BOT,
+      ).inForce,
+      'a 👍 that follows a result for every held call does not lift the stop',
+    );
+    let twoHeld = botMessage([
+      readUrlRequest('first', 'https://a.example/', true),
+      readUrlRequest('second', 'https://b.example/', true),
+    ]);
+    assert.strictEqual(
+      readStopState(
+        [
+          humanMessage('go'),
+          twoHeld,
+          result('first', 'invalid', USER),
+          stop,
+          reaction('$bot', '👍', USER),
+        ] as any,
+        BOT,
+      ).inForce,
+      undefined,
+      'a 👍 lifts the stop while a held call on the message has no result',
+    );
   });
   // The event handler's gate, with events as the matrix SDK hands them.
   function sdkEvent(event: DiscreteMatrixEvent) {
