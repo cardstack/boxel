@@ -27,6 +27,11 @@ describe('endpoint labels', () => {
       ],
       [`_key-shares/${KEY}/swap`, '_key-shares/:id/swap'],
       ['_key-write-tickets', '_key-write-tickets'],
+      [
+        '_oauth/clients?realm=https%3A%2F%2Frealm.example%2Fmine%2F',
+        '_oauth/clients',
+      ],
+      ['_oauth/connections', '_oauth/connections'],
       ['_secure-window/context', '_secure-window/context'],
       ['_secure-window/realms', '_secure-window/realms'],
       ['_secure-origin', '_secure-origin'],
@@ -82,6 +87,8 @@ describe('endpoint labels', () => {
     assert.equal(pageLabel('keys.index'), 'keys');
     assert.equal(pageLabel('keys.share'), 'keys/share');
     assert.equal(pageLabel('sign-in'), 'sign-in');
+    assert.equal(pageLabel('connect'), 'connect');
+    assert.equal(pageLabel('connected'), 'connected');
     assert.equal(pageLabel('nowhere'), 'other');
     assert.equal(pageLabel('constructor'), 'other');
     assert.equal(pageLabel(undefined), 'other');

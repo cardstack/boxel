@@ -341,7 +341,13 @@ export async function addOAuthClient(
 export interface OAuthKeyDescription {
   client?: OAuthClientSettings & { state: OAuthClientState };
   connection?: {
-    client: { kind: OAuthClientKind; label: string | null };
+    // `ref` names the client back to `startConnect`, for a reconnect; null
+    // once the client is gone.
+    client: {
+      kind: OAuthClientKind;
+      label: string | null;
+      ref: ClientRef | null;
+    };
     scopes: string;
     status: 'active' | 'rejected' | 'needs-admin';
   };
@@ -392,6 +398,7 @@ export async function describeOAuthKeys(
           client: {
             kind: row.client_kind as OAuthClientKind,
             label: client.label,
+            ref: clientRefOf(row),
           },
           scopes: row.scopes as string,
           status:
@@ -717,6 +724,19 @@ interface ResolvedClient {
   tokenURL?: string;
   authorizeURL?: string | null;
   tokenAuth?: OAuthTokenAuth;
+}
+
+function clientRefOf(row: Record<string, unknown>): ClientRef | null {
+  if (row.client_key_id) {
+    return { kind: 'own', keyId: row.client_key_id as string };
+  }
+  if (row.client_share_id) {
+    return { kind: 'share', shareId: row.client_share_id as string };
+  }
+  if (row.platform_client_id) {
+    return { kind: 'platform', clientId: row.platform_client_id as string };
+  }
+  return null;
 }
 
 function resolvedClientOf(row: Record<string, unknown>): ResolvedClient {
