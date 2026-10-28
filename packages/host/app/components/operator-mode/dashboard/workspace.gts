@@ -1643,20 +1643,24 @@ export default class Workspace extends Component<Signature> {
   }
 
   // Whether the workspace, or anything open from it, is on screen behind the
-  // dashboard; removing it then clears the stacks.
-  private get isActiveWorkspace() {
-    return this.isOnScreen(this.args.realmIdentifier);
-  }
-
+  // dashboard; removing it then clears the stacks. A stack's base card counts
+  // as well as its top one: a stack based on the workspace's index card makes
+  // it the current realm, and once it has left the available realms the
+  // current realm no longer says so.
   private isOnScreen(realmIdentifier: RealmIdentifier) {
     let realmPath = new RealmPaths(
       realmIdentifier,
       this.network.virtualNetwork,
     );
-    let { codePath } = this.operatorModeStateService.state;
+    let { codePath, stacks } = this.operatorModeStateService.state;
     return (
       this.operatorModeStateService.realmURL ===
         this.network.virtualNetwork.toURL(realmIdentifier).href ||
+      stacks.some((stack) =>
+        [stack[0], stack[stack.length - 1]].some((item) =>
+          item?.id ? realmPath.inRealm(rri(item.id)) : false,
+        ),
+      ) ||
       this.operatorModeStateService
         .getOpenCardIds()
         .some((cardId) => realmPath.inRealm(cardId)) ||
@@ -1672,11 +1676,11 @@ export default class Workspace extends Component<Signature> {
     }
   }
 
-  // A plain async method, not part of the task: archiving drops this
-  // workspace from the list before it returns, and the teardown that follows
-  // cancels the task, which would skip everything after the archive. With the
-  // row gone the dashboard is usable again, so whether the workspace is still
-  // on screen is checked once the archive returns.
+  // Plain async methods, not part of the tasks: archiving or deleting drops
+  // this workspace from the list before it returns, and the teardown that
+  // follows can cancel the task, which would skip everything after it. With
+  // the row gone the dashboard is usable again, so whether the workspace is
+  // still on screen is checked once the removal returns.
   private async archiveAndLeave() {
     let { realmIdentifier } = this.args;
     await this.realmServer.archiveRealm(realmIdentifier);
@@ -1758,22 +1762,23 @@ export default class Workspace extends Component<Signature> {
     }
   });
 
+  private async deleteAndLeave() {
+    let { realmIdentifier } = this.args;
+    let { publishedRealmURLs } = this;
+    await this.realmServer.deleteRealm(realmIdentifier);
+    await this.matrixService.removeRealmFromAccountData(realmIdentifier);
+    this.recentFilesService.removeRecentFilesForRealmURL(realmIdentifier);
+    for (let publishedRealmURL of publishedRealmURLs) {
+      this.recentFilesService.removeRecentFilesForRealmURL(publishedRealmURL);
+    }
+    this.realm.removeRealm(realmIdentifier);
+    await this.leaveRemovedWorkspace(this.isOnScreen(realmIdentifier));
+  }
+
   private deleteWorkspaceTask = dropTask(async () => {
     this.deleteError = undefined;
     try {
-      let wasActive = this.isActiveWorkspace;
-      await this.realmServer.deleteRealm(this.args.realmIdentifier);
-      await this.matrixService.removeRealmFromAccountData(
-        this.args.realmIdentifier,
-      );
-      this.recentFilesService.removeRecentFilesForRealmURL(
-        this.args.realmIdentifier,
-      );
-      for (let publishedRealmURL of this.publishedRealmURLs) {
-        this.recentFilesService.removeRecentFilesForRealmURL(publishedRealmURL);
-      }
-      this.realm.removeRealm(this.args.realmIdentifier);
-      await this.leaveRemovedWorkspace(wasActive);
+      await this.deleteAndLeave();
       this.showDeleteModal = false;
     } catch (error: any) {
       this.deleteError = error.message;

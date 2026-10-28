@@ -361,7 +361,13 @@ export default class RealmServerService
     await this.setAvailableRealmIdentifiers(
       this.userRealmIdentifiers.filter((url) => url !== identifier),
     );
-    await this.fetchArchivedRealms({ force: true });
+    // The realm is archived by now, so a failed refresh of the archived list
+    // doesn't fail the archive: callers still have to leave the sealed realm.
+    try {
+      await this.fetchArchivedRealms({ force: true });
+    } catch (err) {
+      console.error(`Failed to refresh archived realms after archiving`, err);
+    }
   }
 
   // Restore an archived realm via the owner-only `POST /_unarchive-realm`

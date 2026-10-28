@@ -127,6 +127,10 @@ async function pressKey(key: string) {
   await triggerKeyEvent(target, 'keydown', key);
 }
 
+function operatorModeState() {
+  return getService('operator-mode-state-service') as OperatorModeStateService;
+}
+
 module('Acceptance | dashboard', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -645,13 +649,10 @@ module('Acceptance | dashboard', function (hooks) {
       );
       await click('[data-test-boxel-menu-item-text="Realm Settings"]');
 
-      let operatorModeStateService = getService(
-        'operator-mode-state-service',
-      ) as OperatorModeStateService;
       assert.dom('[data-test-dashboard]').doesNotExist();
-      assert.false(operatorModeStateService.workspaceChooserOpened);
+      assert.false(operatorModeState().workspaceChooserOpened);
       assert.deepEqual(
-        operatorModeStateService.state.stacks.map((stack) =>
+        operatorModeState().state.stacks.map((stack) =>
           stack.map(({ id, format }) => ({ id, format })),
         ),
         [
@@ -782,12 +783,6 @@ module('Acceptance | dashboard', function (hooks) {
           ]);
         });
 
-        function operatorModeState() {
-          return getService(
-            'operator-mode-state-service',
-          ) as OperatorModeStateService;
-        }
-
         async function archiveRemovedWorkspace() {
           await click(
             `[data-test-workspace-menu-trigger="${removedRealmURL}"]`,
@@ -896,6 +891,64 @@ module('Acceptance | dashboard', function (hooks) {
 
           await deleteRemovedWorkspace();
 
+          await assertLeftRemovedWorkspace(assert);
+        });
+
+        test('archiving it clears the stacks when it is the current realm', async function (assert) {
+          // A stack based on its index card makes it the current realm, while
+          // the card on top comes from another workspace.
+          await visitOperatorMode({
+            workspaceChooserOpened: true,
+            stacks: [
+              [
+                { id: `${removedRealmURL}index`, format: 'isolated' },
+                { id: `${keptRealmURL}Person/1`, format: 'isolated' },
+              ],
+            ],
+          });
+          assert.strictEqual(operatorModeState().realmURL, removedRealmURL);
+          assert.deepEqual(operatorModeState().getOpenCardIds(), [
+            `${keptRealmURL}Person/1`,
+          ]);
+
+          await archiveRemovedWorkspace();
+
+          await assertLeftRemovedWorkspace(assert);
+        });
+
+        test('archiving it clears the stacks when the Archived list then fails to load', async function (assert) {
+          let archivedRoute = getRealmServerRoute(
+            new URL('http://test-realm/_archived-realms'),
+          );
+          if (!archivedRoute) {
+            throw new Error('no default archived-realms route');
+          }
+          let archivedListRequested = false;
+          registerRealmServerRoute({
+            path: '/_archived-realms',
+            handler: async () => {
+              archivedListRequested = true;
+              return new Response(null, { status: 500 });
+            },
+          });
+          try {
+            await visitOperatorMode({
+              workspaceChooserOpened: true,
+              stacks: [
+                [{ id: `${removedRealmURL}Person/1`, format: 'isolated' }],
+              ],
+            });
+
+            await click(
+              `[data-test-workspace-menu-trigger="${removedRealmURL}"]`,
+            );
+            await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
+            await click('[data-test-confirm-archive-button]');
+          } finally {
+            registerRealmServerRoute(archivedRoute);
+          }
+
+          assert.true(archivedListRequested, 'the Archived list is requested');
           await assertLeftRemovedWorkspace(assert);
         });
 
