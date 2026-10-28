@@ -1,0 +1,98 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Replace everything on this coffee shop card with realistic sample data so I can use it in a demo. Keep it a coffee shop, and don't change who owns it.",
+      "followUpPrompts": [
+        "Next, I need to forward the Kestrel monitor support ticket to our hardware vendor. Redact all the customer's personal information first, but keep everything they need to understand the problem, and mark the ticket as escalated to the vendor.",
+        "Last one: the Aurora earbuds launch plan is from last year. Update the dates so the plan starts today, but keep all the dates relative to each other."
+      ],
+      "successCriteria": "**A: sample data in `CoffeeShop/harbor-roast` (prompt 1)**\nA1. In the indexed document of `CoffeeShop/harbor-roast`, every non-computed attribute holds a plausible value its type accepts: a `name` and `tagline`; a `description` of at least two sentences; a `phone` that is not null (the field indexes a number without a country code as null, which is the known gap in the notes); an `email` with a real-looking domain; a `website` starting with `https://`; every `address` sub-field filled except `addressLine2` and `poBoxNumber`, with a `country` name and code; a positive `seatingCapacity`; `hasWifi` true or false; an `openedOn` date in the past; and a `priceLevel` of `$`, `$$` or `$$$`. None of `asdf`, `TODO`, `test@test`, `00000` or `123` is left anywhere in the instance file.\nA2. `menuHighlights` holds at least three items a coffee shop would sell.\nA3. The values agree with each other: the phone's country matches the address's country, and the description, email and website fit the shop's name.\nA4. `owner` still links to `ShopOwner/dana-whitfield`, and that owner card is byte-identical to the seed.\nA5. The indexed `cardTitle` equals the new `name`.\nA6. `CoffeeShop/ember-and-oak` is byte-identical to the seed.\nA7. The definition module (`card-mutation/sample-data/coffee-shop.gts`) is byte-identical to the seed, and the change was made in place: the same instance file, with the same `adoptsFrom`, and no new instance written beside it.\n\n**B: redact `SupportTicket/ticket-4821` (prompt 2)**\nB1. No attribute value of `SupportTicket/ticket-4821`, in its instance file or its indexed document (computed `cardTitle` and the address's `fullAddress` included), contains any of these, case-insensitively: `Margaret`, `Ellison`, `m.ellison82`, `5035550142`, `(206) 555-0187`, `555-0187`, `1982-07-19`, `4417`, `Belmont`, `Apt 3`, `97215`, `88203917`, the card digits `7731`.\nB2. The structured PII fields (`customerName`, `email`, `phone`, `dateOfBirth`, `accountNumber`, and every `shippingAddress` sub-field except `country`) are each either null or one consistent placeholder such as `[REDACTED]`, and the card still indexes: `dateOfBirth` is null, not a string.\nB3. Every line of the seed `transcript` that holds no PII is still there word for word (the firmware 1.0.4, DisplayPort, HDMI, 60 Hz / 144 Hz and two-cables lines among them), and in the lines that did hold PII only the PII spans were replaced, so the conversation still reads in order.\nB4. `status` is exactly `escalated_to_vendor` in the instance file and the indexed document, not the label `Escalated to vendor` or any other string.\nB5. `product`, `category`, `openedOn` and `resolution` are unchanged. The order number (`ORD-2026-55120`) may be kept or redacted, in the field and the transcript alike.\nB6. No assistant message in the room states any of the strings in criterion B1.\nB7. `SupportTicket/ticket-4790` is byte-identical to the seed.\nB8. The definition module (`card-mutation/redact-pii/support-ticket.gts`) is byte-identical to the seed, and the change was made in place: the same instance file, with the same `adoptsFrom`, and no new instance written beside it.\n\n**C: dates in `LaunchPlan/aurora-earbuds` (prompt 3)**\nC1. `kickoff` of `LaunchPlan/aurora-earbuds` equals today.\nC2. Every other date field is today plus its seed offset from kickoff, to the day: `designFreeze` +28, `betaStart` +49, `launchDate` +67, `retro` +81.\nC3. `launchEvent` is on the new `launchDate` and is still at `17:00:00` UTC.\nC4. The indexed `daysToLaunch` is still 67.\nC5. `product`, `owner` and `budget` are unchanged, and `LaunchPlan/nimbus-speaker` is byte-identical to the seed.\nC6. The definition module (`card-mutation/relative-dates/launch-plan.gts`) is byte-identical to the seed, and the change was made in place: the same instance file, with the same `adoptsFrom`, and no new instance written beside it.\n\n**All tasks**\nZ1. The three changed cards stay open and render with no error boundary at the end of the run (screenshot and indexed documents).\nZ2. Every tool call applied or was repaired by the model, and the assistant did not ask a question or wait for confirmation before acting after any prompt.",
+      "cardInfo": {
+        "name": "Card mutation: rewrite field values",
+        "summary": "Three cards are open, each with a decoy of the same type beside it: a Coffee Shop full of placeholder junk, a Support Ticket holding a customer's personal details, and a Launch Plan dated last year. Three prompts in one session ask to fill the coffee shop with realistic sample data, keeping its owner; to redact the ticket's personal information and mark it escalated; and to move the plan's dates to today, keeping them relative. This eval tests whether the assistant writes valid, coherent values into every field type (a compound address, a list, an enum, dates and a date-time), finds personal information inside free text and computed fields, and changes each card in place without touching its decoy.",
+        "notes": "Use case: card mutation. Every task changes card data only; every field it needs already exists, so an edit to a definition module is wrong. Each prompt goes out as its own message in one session, and each task is judged on its own card. The runner brings each task's card (`promptCards`) to the top of the stack before its prompt, so it is the card in the message context. Judge each criterion by comparing a card's seed (base64 under `files[].content` in the run's `evaluation.json`) with its file under `files` and its indexed document under `cards` in the workspace snapshot. The runner fails the render check unless every card in `expectedChangedCards` changed, and one of them is shown in the stack or the preview panel, not only embedded in another card.\n\nA (sample data): the trap criterion is A1, a compound field or the list left half-filled, or a value the field's type rejects. A4 (the `owner` link dropped) rarely fails, since only an `fs.replace` over the whole `relationships` could drop it; it stays as a guard. Known gap: the `phone` in A1 indexes as null when it is written without a country code (`+1…`). The skills don't tell the model this, so that part of A1 is expected to fail until a skill or tool handles it; read a low score there as the gap, not the model.\n\nB (redact): the trap criteria are B1 (PII left in the transcript or in the computed `cardTitle` / address `fullAddress`), B3 and B5 (over-redaction of the technical detail the vendor needs), B2 (a placeholder string written into the date-of-birth Date field) and B4 (`status` set to the label `Escalated to vendor` instead of the value `escalated_to_vendor`: the enum accepts any string, so the card still indexes). Judge note for B2: a placeholder in `phone` indexes as null while the file keeps it, and `email` keeps it in both, since email is not validated; both are fine.\n\nC (dates): today is the UTC date of the run's `startedAt` in the result JSON, which is the date in the assistant's system prompt; the local date is accepted too when the run crosses midnight. Seed offsets from kickoff: designFreeze +28, betaStart +49, launchDate +67, retro +81 days; launchEvent is on launchDate at 17:00:00Z. The trap criteria are C2 (a shift by months, or every date set to today) and C3 (the date-time losing its time of day).",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../card-mutation/sample-data/CoffeeShop/harbor-roast"
+        }
+      },
+      "initialCards.1": {
+        "links": {
+          "self": "../card-mutation/redact-pii/SupportTicket/ticket-4821"
+        }
+      },
+      "initialCards.2": {
+        "links": {
+          "self": "../card-mutation/relative-dates/LaunchPlan/aurora-earbuds"
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../card-mutation/sample-data/CoffeeShop/ember-and-oak.json"
+        }
+      },
+      "initialFiles.1": {
+        "links": {
+          "self": "../card-mutation/sample-data/ShopOwner/dana-whitfield.json"
+        }
+      },
+      "initialFiles.2": {
+        "links": {
+          "self": "../card-mutation/redact-pii/SupportTicket/ticket-4790.json"
+        }
+      },
+      "initialFiles.3": {
+        "links": {
+          "self": "../card-mutation/relative-dates/LaunchPlan/nimbus-speaker.json"
+        }
+      },
+      "expectedChangedCards.0": {
+        "links": {
+          "self": "../card-mutation/sample-data/CoffeeShop/harbor-roast"
+        }
+      },
+      "expectedChangedCards.1": {
+        "links": {
+          "self": "../card-mutation/redact-pii/SupportTicket/ticket-4821"
+        }
+      },
+      "expectedChangedCards.2": {
+        "links": {
+          "self": "../card-mutation/relative-dates/LaunchPlan/aurora-earbuds"
+        }
+      },
+      "promptCards.0": {
+        "links": {
+          "self": "../card-mutation/sample-data/CoffeeShop/harbor-roast"
+        }
+      },
+      "promptCards.1": {
+        "links": {
+          "self": "../card-mutation/redact-pii/SupportTicket/ticket-4821"
+        }
+      },
+      "promptCards.2": {
+        "links": {
+          "self": "../card-mutation/relative-dates/LaunchPlan/aurora-earbuds"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

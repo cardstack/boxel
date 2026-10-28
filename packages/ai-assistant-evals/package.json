@@ -24,6 +24,7 @@
   "devDependencies": {
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
     "@glint/ember-tsc": "catalog:",
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",

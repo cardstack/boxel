@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "customerName": "Tomás Reyes",
+      "email": "tomas.reyes@example.com",
+      "phone": "+12065550133",
+      "dateOfBirth": "1990-02-03",
+      "shippingAddress": {
+        "addressLine1": "88 Alder Way",
+        "addressLine2": null,
+        "city": "Tacoma",
+        "state": "WA",
+        "postalCode": "98402",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "accountNumber": "ACCT-77120455",
+      "orderNumber": "ORD-2026-54871",
+      "product": "Kestrel USB-C Dock (KD-8)",
+      "category": "shipping",
+      "status": "resolved",
+      "openedOn": "2026-10-02",
+      "transcript": "**Customer:** My dock arrived with a cracked case.\n\n**Agent:** Sorry about that, Tomás. I've sent a prepaid return label to tomas.reyes@example.com.",
+      "resolution": "Replacement shipped after the damaged unit was returned."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-ticket",
+        "name": "SupportTicket"
+      }
+    }
+  }
+}
