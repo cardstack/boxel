@@ -9,7 +9,7 @@
 // No assertion touches a computed style: `boxel test` stamps the scoped-css
 // attribute and delivers no stylesheet.
 import { module, test } from 'qunit';
-import { render, click, fillIn } from '@ember/test-helpers';
+import { render, click, fillIn, settled } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { tracked } from '@glimmer/tracking';
 import { Checkbox } from './components/checkbox';
@@ -24,6 +24,10 @@ import { firstDefined, resolveSize, resolveTone, PRETUI_TONES } from './pretui-p
 import { SearchInput } from './components/search-input';
 import { Stepper } from './components/stepper';
 import { Alert } from './components/alert';
+
+class FieldState {
+  @tracked status: string | undefined = undefined;
+}
 
 class Sink {
   @tracked last: unknown = undefined;
@@ -221,6 +225,21 @@ module('Pretui | React-dialect aliases — controls', function (hooks) {
       'true',
       '@errorMessage puts the field in the invalid dress',
     );
+  });
+
+  test('Field announces its first status from a region already in place', async function (assert) {
+    let state = new FieldState();
+    await render(<template>
+      <Field @label='Handle' @hint='Pick a handle.' @status={{state.status}} />
+    </template>);
+    let region = q('[data-test-pretui-field-status]') as HTMLElement;
+    assert.strictEqual(region.getAttribute('role'), 'status', 'the region exists before any status');
+    assert.dom(region).hasNoText('and is empty while the hint shows');
+
+    state.status = 'Checking availability…';
+    await settled();
+    assert.true(q('[data-test-pretui-field-status]') === region, 'the same element carries the status');
+    assert.dom(region).includesText('Checking availability…');
   });
 
   // ── controls-extras ────────────────────────────────────────────────────

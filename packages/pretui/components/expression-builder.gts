@@ -931,7 +931,11 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
         </ul>
       {{/if}}
 
-      <p class='pretui-sr' role='status'>{{this.announcement}}</p>
+      <p
+        class='pretui-sr'
+        role='status'
+        data-test-pretui-expression-announcement
+      >{{this.announcement}}</p>
 
     </section>
     <style scoped>
