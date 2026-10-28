@@ -26,7 +26,7 @@ module('Pretui | components/cue', function (hooks) {
     assert.strictEqual(el.dataset['position'], 'block-end');
     assert.strictEqual(el.dataset['tone'], 'neutral');
     assert.strictEqual(el.textContent?.trim(), 'Two decimal places');
-    assert.notOk(el.querySelector('.pretui-cue-glyph'), 'neutral is the one tone with no glyph');
+    assert.notOk(el.querySelector('[data-test-pretui-cue-glyph]'), 'neutral is the one tone with no glyph');
     assert.strictEqual(el.getAttribute('role'), null, 'a description is not a live region');
   });
 
@@ -44,7 +44,7 @@ module('Pretui | components/cue', function (hooks) {
     assert.true(ids.every(Boolean), 'every cue is referenceable');
   });
 
-  test('every non-neutral tone carries a glyph, so it survives greyscale', async function (assert) {
+  test('every non-neutral tone carries a glyph, so it survives grayscale', async function (assert) {
     await render(
       <template>
         <Cue @tone='info' @text='i' />
@@ -53,12 +53,13 @@ module('Pretui | components/cue', function (hooks) {
         <Cue @tone='danger' @text='d' />
       </template>,
     );
-    let glyphs = all('[data-test-pretui-cue]').map((e) =>
-      e.querySelector('.pretui-cue-glyph')?.textContent?.trim(),
-    );
-    assert.deepEqual(glyphs, ['i', '✓', '!', '✕'], 'colour is never the only signal');
+    let glyphs = all('[data-test-pretui-cue]').map((e) => {
+      let g = e.querySelector('[data-test-pretui-cue-glyph]');
+      return g?.querySelector('svg') ? 'icon' : g?.textContent?.trim();
+    });
+    assert.deepEqual(glyphs, ['i', 'icon', '!', 'icon'], 'color is never the only signal');
     assert.deepEqual(
-      all('.pretui-cue-glyph').map((g) => g.getAttribute('aria-hidden')),
+      all('[data-test-pretui-cue-glyph]').map((g) => g.getAttribute('aria-hidden')),
       Array(4).fill('true'),
       'and the glyph is decorative — the text carries the meaning',
     );
@@ -92,7 +93,7 @@ module('Pretui | components/cue', function (hooks) {
     let el = cue();
     assert.strictEqual(el.dataset['kind'], 'error');
     assert.strictEqual(el.dataset['tone'], 'danger', 'the tone follows the kind without being restated');
-    assert.strictEqual(el.querySelector('.pretui-cue-glyph')?.textContent?.trim(), '✕');
+    assert.dom('[data-test-pretui-cue-glyph="danger"] svg').exists();
   });
 
   test('an explicit tone still wins over the kind default', async function (assert) {
@@ -119,6 +120,30 @@ module('Pretui | components/cue', function (hooks) {
       'inline-start',
       'logical, so RTL is free — this is the reading start, not the left',
     );
+  });
+
+  test('a long URL breaks after its slashes, not mid-word', async function (assert) {
+    await render(<template><Cue @text='See https://example.com/docs/limits?plan=team' /></template>);
+    assert.strictEqual(
+      cue().textContent?.trim(),
+      'See https://example.com/docs/limits?plan=team',
+      'the break points add no text',
+    );
+    let lines: string[] = [''];
+    for (let node of Array.from(cue().childNodes).flatMap((n) => Array.from(n.childNodes))) {
+      if (node.nodeName === 'WBR') lines.push('');
+      else if (node.nodeName === '#text') lines[lines.length - 1] += node.textContent;
+    }
+    assert.deepEqual(
+      lines.slice(1),
+      ['example', '.com/', 'docs/', 'limits', '?plan', '=team'],
+      'a break after each slash and before . ? and =',
+    );
+  });
+
+  test('a long run with no slash gets no break points', async function (assert) {
+    await render(<template><Cue @text='Write to first.last@company-domain.example' /></template>);
+    assert.dom('[data-test-pretui-cue] wbr').doesNotExist('an email is not a URL');
   });
 
   test('yields a block when a cue needs markup, and @text wins over it', async function (assert) {
