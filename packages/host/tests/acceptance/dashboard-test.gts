@@ -597,13 +597,13 @@ module('Acceptance | dashboard', function (hooks) {
         '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-workspace-favorite-btn]';
       let tip =
         '[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-pretui-tooltip] [role="tooltip"]';
+      assert.dom(tip).hasText('Add to Favorites');
       assert
         .dom(star)
         .hasAttribute('aria-label', 'Favorite')
         .hasAttribute('aria-pressed', 'false')
-        .hasAttribute('aria-describedby', find(tip)!.id)
+        .hasAttribute('aria-describedby', find(tip)?.id ?? '')
         .doesNotHaveAttribute('title', 'no native tooltip over the tip');
-      assert.dom(tip).hasText('Add to Favorites');
 
       await click(star);
 

@@ -64,6 +64,7 @@ What is right:
 Gaps and cautions:
 
 - **`title` is set to the same string as `aria-label`.** This is deliberate — it gives sighted mouse users a native tooltip — but it is a known double-announcement risk: some screen reader and browser combinations read the accessible name and then the `title` as a description. It is also a UA-controlled tooltip, which means no styling and, per WCAG 1.4.13's exception, no dismissible/hoverable obligation. For a styled hint, pass `@tooltip`: the button renders a **Tooltip** with that text, which describes the button, and drops `title`, so the native tooltip doesn't show over it. Wrapping the button in **Tooltip** yourself keeps the `title` and shows both.
+- **`@tooltip` adds a wrapper.** The button sits inside Tooltip's `position: relative` inline-flex span, so a class passed to the IconButton styles the button, not the outer box: place or size it through a container instead. Adding or removing `@tooltip` re-renders the button, which loses focus.
 - **Target size**: 28×28 CSS px at the default size clears WCAG 2.5.8's 24×24 minimum, but only just, and adjacent icon buttons in a toolbar with no gap will have touching targets.
 - **Focus-visible ring inherited from Button**: `outline: 2px solid var(--ring)` with a 2px offset, which matters more here because there is no text to underline or shift.
 
