@@ -151,7 +151,13 @@ refusal also writes a key-use line.
 2. **`actor-required`** (401) — the request has a slot and no signed-in caller.
 3. **`binding-not-approved`** (403) — the request has a slot. No binding
    fills a slot, so every slotted request stops here, with
-   `meta.slots: [{name, key}]`. A keyless request continues.
+   `meta.slots: [{name, key}]`. The detail names each slot with whose key
+   fills it (`the credential slot "weather" for the invoking user's own key`,
+   `… for the realm's key`, from `describeSlots`), because a caller that sees
+   only the message, such as the AI assistant, gets neither the code nor
+   `meta`, and a slot's name alone doesn't say. The assistant's rule for
+   opening the secure window keys on that wording. A keyless request
+   continues.
 4. **Build** (`buildCallApiRequest`): markers filled from the payload, the
    caller, the realm's settings and — on an instance target — the card's
    _indexed_ document (`indexedInstance` in `read.ts`, so computed fields are

@@ -54,6 +54,7 @@ import * as OneShotLlmRequestToolModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomToolModule from './open-ai-assistant-room';
 import * as OpenCreateListingModalToolModule from './open-create-listing-modal';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
+import * as OpenSecureWindowToolModule from './open-secure-window';
 import * as OpenWorkspaceToolModule from './open-workspace';
 import * as PatchCardInstanceToolModule from './patch-card-instance';
 import * as PatchFieldsToolModule from './patch-fields';
@@ -323,6 +324,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'delete-workspace',
     DeleteWorkspaceToolModule,
   );
+  shimHostToolModule(
+    virtualNetwork,
+    'open-secure-window',
+    OpenSecureWindowToolModule,
+  );
   shimHostToolModule(virtualNetwork, 'open-workspace', OpenWorkspaceToolModule);
   shimHostToolModule(
     virtualNetwork,
@@ -524,6 +530,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   CreateWorkspaceToolModule.default,
   DeleteWorkspaceToolModule.default,
   OpenInInteractModeModule.default,
+  OpenSecureWindowToolModule.default,
   OpenWorkspaceToolModule.default,
   GenerateThemeExampleToolModule.default,
   RunRealmCodeToolModule.default,
