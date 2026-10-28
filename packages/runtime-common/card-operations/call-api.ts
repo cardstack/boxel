@@ -1183,11 +1183,23 @@ export async function callApiOperation(
   return { callApi: response };
 }
 
+// Says whose key fills each slot: the invoking user's own (`userKey`) or one
+// the realm holds (`apiKey`). A slot's name alone doesn't say, and this text is
+// all a caller such as the AI assistant sees of the refusal.
 function describeSlots(slots: CallApiSlot[]): string {
-  let names = slots.map(({ name }) => `"${name}"`).join(', ');
-  return slots.length === 1
-    ? `the credential slot ${names}`
-    : `the credential slots ${names}`;
+  let groups: [string, CallApiSlot[]][] = [
+    ["the invoking user's own key", slots.filter((s) => s.key === 'userKey')],
+    ["the realm's key", slots.filter((s) => s.key === 'apiKey')],
+  ];
+  return groups
+    .filter(([, group]) => group.length > 0)
+    .map(([whose, group]) => {
+      let names = group.map(({ name }) => `"${name}"`).join(', ');
+      return group.length === 1
+        ? `the credential slot ${names} for ${whose}`
+        : `the credential slots ${names} for ${whose}`;
+    })
+    .join(' and ');
 }
 
 // One line per invocation on the key-use channel. The URL is the origin and
