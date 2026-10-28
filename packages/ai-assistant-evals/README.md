@@ -86,11 +86,11 @@ the sample data, the mixed-type list, and the list whose items link to
 cards); their notes say so, and they are expected to fail there until it is
 fixed.
 The two `bulk-*` evaluations change many cards from one prompt, one task per
-prompt in a single session. `bulk-vendors-invoices` moves 45 vendors to NET 30
-past customer cards with the same field, lists the unpaid invoices more than
-60 days overdue as of a date the prompt names, and makes every vendor adopt
-from a subclass, which takes more files than one `run-realm-code` call can
-write. `bulk-records` raises the variant prices of 60 coffee products, more
+prompt in a single session. `bulk-vendors-invoices` sets all 45 vendors to
+NET 30 (6 already are) past customer cards with the same field, lists the
+unpaid invoices more than 60 days overdue as of a date the prompt names, and
+makes every vendor adopt from a subclass, which takes more files than one
+`run-realm-code` call can write. `bulk-records` raises the variant prices of 60 coffee products, more
 than a search returns when it names no page size, and reassigns a leaving
 agent's open tickets, which is a link change. Their seeds live under
 `eval-realm/bulk-operations/`. Their `expectedChangedCards` list a sample of
