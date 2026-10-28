@@ -489,6 +489,21 @@ module('Integration | key pages', function (hooks) {
 
     test('lists the keys, and replaces one with a ticket for that key', async function (assert) {
       serve({
+        'GET _key-shares': () =>
+          json(200, {
+            data: [
+              { realm: REALM, label: 'Maps' },
+              { realm: REALM, label: 'Team maps' },
+              {
+                realm: 'https://realm-server.test/someone/dashboard/',
+                label: 'Maps',
+              },
+            ].map((attributes, i) => ({
+              type: 'key-share',
+              id: `share-${i}`,
+              attributes,
+            })),
+          }),
         'PATCH _user-keys/key-2': () =>
           json(200, {
             data: {
@@ -504,6 +519,13 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-key-row]').exists({ count: 2 });
       assert.dom('[data-test-key-value]').doesNotExist('no value is shown');
       await click('[data-test-key-row="Maps"] [data-test-key-replace]');
+      await settled();
+      assert
+        .dom('[data-test-key-replace-where]')
+        .includesText(
+          '2 workspaces use this key. Replacing it switches them all to the new key right away, so make sure all of these workspaces use the same key.',
+          'says how many workspaces the key is shared into',
+        );
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
       await fillIn('[data-test-key-value]', 'sk-new-value');
       await click('[data-test-key-replace-save]');
@@ -522,6 +544,61 @@ module('Integration | key pages', function (hooks) {
         meta: { ticket: 'ticket-1' },
       });
       assert.dom('[data-test-key-replace-form]').doesNotExist();
+    });
+
+    test('replacing a key says what it switches, however many workspaces use it', async function (assert) {
+      let answer: () => Answer = () => json(200, { data: [] });
+      serve({ 'GET _key-shares': () => answer() });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      let where = '[data-test-key-replace-where]';
+      async function openReplace() {
+        await click('[data-test-key-row="Maps"] [data-test-key-replace]');
+        await settled();
+      }
+      async function closeReplace() {
+        await click('[data-test-key-replace-form] button[type="button"]');
+      }
+
+      answer = () =>
+        json(200, {
+          data: [
+            {
+              type: 'key-share',
+              id: 'share-1',
+              attributes: { realm: REALM, label: 'Maps' },
+            },
+          ],
+        });
+      await openReplace();
+      assert
+        .dom(where)
+        .hasText(
+          'One workspace uses this key. Replacing it switches that workspace to the new key right away, so make sure the new key is right for that workspace.',
+        );
+      await closeReplace();
+
+      answer = () => json(200, { data: [] });
+      await openReplace();
+      assert
+        .dom(where)
+        .hasText(
+          'No workspace uses this key. Make sure the new key is for the same service.',
+        );
+      await closeReplace();
+
+      answer = () => refusal(500, 'the shares could not be listed');
+      await openReplace();
+      assert
+        .dom(where)
+        .hasText(
+          'Replacing this key switches every workspace that uses it to the new key right away, so make sure all of them use the same key.',
+          'when the shares can’t be listed, it says so in general terms',
+        );
+      assert
+        .dom('[data-test-key-replace-save]')
+        .exists('and the replace is still offered');
     });
 
     test('deleting a key lists the shares it would stop, then deletes it', async function (assert) {
@@ -549,6 +626,14 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-key-delete-shares]');
       assert.dom('[data-test-key-delete-shares]').includesText('Weather');
       assert.dom('[data-test-key-delete-shares]').includesText(REALM);
+      assert
+        .dom('[data-test-key-delete-confirm]')
+        .includesText('is permanent', 'says the delete is permanent');
+      assert
+        .dom('[data-test-key-delete-confirm]')
+        .includesText(
+          'Someone with direct write access to one of them can put their own key in its place.',
+        );
       await click('[data-test-key-delete-confirm-button]');
       await waitUntil(() => requests.some((r) => r.method === 'DELETE'));
       await settled();
@@ -658,6 +743,9 @@ module('Integration | key pages', function (hooks) {
         },
       );
       assert.dom('[data-test-keys-done-name]').hasText('Forecasts');
+      assert
+        .dom('[data-test-keys-done-next]')
+        .doesNotExist('opened for no card, there is no card to mention');
       assert.deepEqual(navigations, [{ how: 'close' }]);
     });
 
@@ -692,7 +780,7 @@ module('Integration | key pages', function (hooks) {
         },
       });
       visitShell(
-        `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&reason=${encodeURIComponent('Forecasts need your weather key')}`,
+        `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&reason=${encodeURIComponent('Forecasts need your \u202eweather key')}`,
       );
       await render(EnterKeyPage);
       await waitFor('[data-test-opened-for]');
@@ -701,28 +789,95 @@ module('Integration | key pages', function (hooks) {
         .hasText('Get the forecast');
       assert.dom('[data-test-opened-for-card]').hasText('Weather');
       assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
+      assert
+        .dom('[data-test-opened-for-realm-address]')
+        .hasText('realm-server.test/someone/workspace/', 'and its address');
       assert.dom('[data-test-destination-domain]').hasText('weather.co.uk');
       assert.dom('[data-test-destination-host]').hasText('api.weather.co.uk');
       assert.dom('[data-test-destination-path]').hasText('/v2/');
-      assert.dom('[data-test-destination-where]').includesText('GET');
+      assert
+        .dom('[data-test-destination-method]')
+        .hasText('Reads from', 'the method in plain words');
+      assert
+        .dom('[data-test-destination-realm-address]')
+        .hasText('realm-server.test/someone/workspace/');
       assert
         .dom('[data-test-opened-for-reason]')
-        .includesText('“Forecasts need your weather key”');
+        .includesText(
+          '“Forecasts need your weather key”',
+          'with the bidi override dropped',
+        );
       assert
-        .dom('[data-test-opened-for-reason]')
-        .includesText('Written by the card that opened this window');
+        .dom('[data-test-opened-for-reason-by]')
+        .hasText('Given by Get the forecast when it opened this window.');
     });
 
-    test('opened for something the server doesn’t know of, shows the server’s answer', async function (assert) {
+    test('opened for a card, says once saved that the card will ask before it uses the key', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          context({
+            realm: WORKSPACE,
+            card: {
+              name: 'Weather',
+              module: `${REALM}weather`,
+              exportName: 'Weather',
+            },
+          }),
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: { ...attributesOf(KEYS[0]), name: 'Forecasts' },
+            },
+          }),
+      });
+      visitShell(`?mode=enter-key#card=${encodeURIComponent(CARD)}`);
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await fillIn('[data-test-key-name]', 'Forecasts');
+      await fillIn('[data-test-key-value]', 'sk-forecast');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert
+        .dom('[data-test-keys-done-next]')
+        .hasText(
+          'Saving it doesn’t give Weather the key. Weather will ask you to approve where it sends the key before it can use it.',
+        );
+    });
+
+    test('opened for something the server doesn’t know of, says so and doesn’t offer to try again', async function (assert) {
       visitShell(
         `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast`,
       );
       await render(EnterKeyPage);
       await waitFor('[data-test-keys-load-failed]');
       assert.dom('[data-test-enter-key-form]').doesNotExist();
+      assert
+        .dom('[data-test-error-message]')
+        .hasText(
+          'This workspace, card or request doesn’t exist, or you don’t have access to it.',
+        );
+      assert.dom('[data-test-keys-retry]').doesNotExist();
       await click('[data-test-toggle-details]');
       assert.dom('[data-test-error-detail="Status"]').hasText('404');
       assert.dom('[data-test-error-detail="Message"]').hasText('Not found.');
+    });
+
+    test('refused access, says so and doesn’t offer to try again', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          refusal(403, 'the secure window asks this with its own session'),
+      });
+      visitShell(`?mode=enter-key#realm=${encodeURIComponent(REALM)}`);
+      await render(EnterKeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText('You don’t have access to this.');
+      assert.dom('[data-test-keys-retry]').doesNotExist();
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-detail="Status"]').hasText('403');
     });
 
     test('a load that fails for another reason offers to try again', async function (assert) {
@@ -951,6 +1106,12 @@ module('Integration | key pages', function (hooks) {
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
       assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
+      assert
+        .dom('[data-test-key-picker-prompt]')
+        .hasText('Select a key', 'with several keys, it asks for one');
+      assert
+        .dom('[data-test-key-picker-prompt]')
+        .doesNotHaveClass('visually-hidden');
       assert.dom('[data-test-workspace-dropdown-trigger]').doesNotExist();
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       await click('[data-test-key-choice="Maps"] input');
@@ -982,7 +1143,40 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
     });
 
-    test('a reader who isn’t a direct writer is told an administrator must set it up', async function (assert) {
+    test('a link naming a key that isn’t the user’s says so and doesn’t offer to try again', async function (assert) {
+      serve({
+        'GET _secure-window/realms': () => json(200, { data: [] }),
+      });
+      visitShell('?mode=share-key#key=key-9');
+      await render(SharePage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText('This key isn’t one of yours. It may have been deleted.');
+      assert.dom('[data-test-keys-retry]').doesNotExist();
+    });
+
+    test('a link naming neither a key nor a workspace says so and doesn’t offer to try again', async function (assert) {
+      visitShell('?mode=share-key');
+      await render(SharePage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText(
+          'This link doesn’t name a key or a workspace to share it into.',
+        );
+      assert.dom('[data-test-keys-retry]').doesNotExist();
+      await click('[data-test-toggle-details]');
+      assert
+        .dom('[data-test-error-detail="Message"]')
+        .hasText('This page names neither a key nor a workspace.');
+      assert.false(
+        requests.some((r) => /^_(user-keys|secure-window)/.test(r.path)),
+        'no key or workspace is asked for',
+      );
+    });
+
+    test('a reader who isn’t a direct writer is told someone with direct write access must set it up', async function (assert) {
       serve({
         'POST _secure-window/context': () =>
           context({ realm: { ...WORKSPACE, directWriter: false } }),
@@ -992,7 +1186,12 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-keys-needs-admin]');
       assert
         .dom('[data-test-keys-needs-admin] h1')
-        .hasText('An administrator of this realm needs to set this up');
+        .hasText(
+          'Someone with direct write access to this workspace needs to set this up',
+        );
+      assert
+        .dom('[data-test-needs-admin-address]')
+        .hasText('realm-server.test/someone/workspace/');
       assert.dom('input').doesNotExist('nothing to type');
       assert.false(
         requests.some((r) => r.path === '_user-keys'),
@@ -1046,7 +1245,7 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-swap-share-label]').hasText('Team weather');
       assert
         .dom('[data-test-swap-share]')
-        .includesText('can no longer edit this workspace');
+        .includesText('no longer has direct write access to this workspace');
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       await click('[data-test-key-choice="Weather service"] input');
       await click('[data-test-swap-key-save]');
@@ -1065,6 +1264,24 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(navigations, [{ how: 'close' }]);
     });
 
+    test('a link naming a share the workspace doesn’t have says so and doesn’t offer to try again', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+        'GET _key-shares': shares(SHARE),
+      });
+      visitShell(
+        `?mode=swap-key#realm=${encodeURIComponent(REALM)}&share=share-9`,
+      );
+      await render(SwapKeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText(
+          'This shared key isn’t in that workspace. It may have been removed.',
+        );
+      assert.dom('[data-test-keys-retry]').doesNotExist();
+    });
+
     test('a share that is working has nothing to put a key in place of', async function (assert) {
       serve({
         'POST _secure-window/context': () => context({ realm: WORKSPACE }),
@@ -1080,7 +1297,7 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-swap-key-form]').doesNotExist();
     });
 
-    test('a reader who isn’t a direct writer is told an administrator must set it up', async function (assert) {
+    test('a reader who isn’t a direct writer is told someone with direct write access must set it up', async function (assert) {
       serve({
         'POST _secure-window/context': () =>
           context({ realm: { ...WORKSPACE, directWriter: false } }),

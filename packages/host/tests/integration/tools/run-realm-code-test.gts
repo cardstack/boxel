@@ -131,8 +131,10 @@ module('Integration | tools | run-realm-code', function (hooks) {
     captureRequests = [];
   });
 
+  let adapter: any;
+
   hooks.beforeEach(async function () {
-    await withCachedRealmSetup(async () =>
+    ({ adapter } = await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
@@ -287,7 +289,7 @@ boxel:
           },
         },
       }),
-    );
+    ));
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
@@ -372,6 +374,57 @@ return await realm.capture('seen.json');`,
       attachments[1].sourceUrl.startsWith(CAPTURE_SOURCE_URL_PREFIX),
       `the capture is named by a capture source URL, which keeps it out of correctness checks: ${attachments[1].sourceUrl}`,
     );
+  });
+
+  test('an edit that lint takes back is reported as unchanged, not saved', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let fileUrl = new URL(`${testRealmURL}tidy.gts`);
+    let unusedImport = "\nimport NumberField from '@cardstack/base/number';";
+    // the realm's lint deletes unused base imports; the test realm's lint
+    // passes text through, so this one does just that
+    let passThrough = adapter.lintStub;
+    adapter.lintStub = async (request: Request) => ({
+      output: (await request.text()).replace(unusedImport, ''),
+      fixed: true,
+      messages: [],
+    });
+
+    // a first run saves the module as lint leaves it
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('tidy.gts', "import StringField from '@cardstack/base/string';\\nimport { CardDef, field, contains } from '@cardstack/base/card-api';\\n\\nexport class Tidy extends CardDef {\\n  @field name = contains(StringField);\\n}\\n");`,
+    });
+    let before = (await cardService.getSource(fileUrl)).content;
+
+    // lint removes the unused import, which leaves the file as it was
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.replace(
+  'tidy.gts',
+  "import StringField from '@cardstack/base/string';",
+  "import StringField from '@cardstack/base/string';\\nimport NumberField from '@cardstack/base/number';",
+);`,
+    });
+
+    assert.deepEqual(
+      result.files.map((file) => [file.fileUrl, file.status]),
+      [[fileUrl.href, 'unchanged']],
+    );
+    assert.deepEqual(
+      command.resultAttachments(result),
+      [],
+      'an unchanged file is not attached, so no correctness check runs on it',
+    );
+    assert.strictEqual(
+      (await cardService.getSource(fileUrl)).content,
+      before,
+      'the file was not written',
+    );
+    adapter.lintStub = passThrough;
   });
 
   test('opens the card the script returns to show', async function (assert) {

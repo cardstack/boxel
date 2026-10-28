@@ -12,6 +12,10 @@ export function or<T>(...args: [T, T, ...T[]]): boolean {
   return args.some(Boolean);
 }
 
+export function gt(a: number, b: number): boolean {
+  return a > b;
+}
+
 export function not<T>(val: T): boolean {
   return !val;
 }
