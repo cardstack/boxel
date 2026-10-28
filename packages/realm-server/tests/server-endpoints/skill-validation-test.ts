@@ -3,11 +3,15 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import {
+  mintRealmLoaderEpoch,
   rri,
   type LooseSingleCardDocument,
   type ModulePrerenderArgs,
   type Prerenderer,
+  type Realm,
+  type RealmAdapter,
 } from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres/pg-adapter';
 import {
   getTestPrerenderer,
   realmServerSecretSeed,
@@ -274,6 +278,75 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(attributes.skillsChecked, 3, 'all skills checked');
         assert.strictEqual(attributes.toolsChecked, 2, 'tools checked');
         assert.deepEqual(attributes.failures, [], 'no failures');
+      });
+    });
+
+    // A sweep renders on the realm's authority tab, which keeps every module
+    // it has evaluated until something sends that tab a new loader epoch. A
+    // module write mints the new epoch at once, but the index pass that
+    // renders on the tab comes later. A sweep in between has to judge the
+    // module as written, not the copy the tab evaluated before the write.
+    module('_skill-validation after a tool module write', function (hooks) {
+      let request: SuperTest<Test>;
+      let dbAdapter: PgAdapter;
+      let testRealm: Realm;
+      let testRealmAdapter: RealmAdapter;
+
+      setupPermissionedRealmCached(hooks, {
+        fileSystem: {
+          'test-tool.gts': `export default class TestTool {}`,
+          'named-tool-skill.json': skillDoc([
+            { module: `${testRealmURL.href}test-tool`, name: 'NamedTestTool' },
+          ]),
+        },
+        permissions: {
+          '*': ['read', 'write'],
+        },
+        onRealmSetup(args) {
+          request = args.request;
+          dbAdapter = args.dbAdapter;
+          testRealm = args.testRealm;
+          testRealmAdapter = args.testRealmAdapter;
+        },
+      });
+
+      test('judges a tool module rewritten since the tab evaluated it', async function (assert) {
+        let token = await monitoringAuthToken(realmServerSecretSeed);
+        let sweep = () =>
+          request
+            .get(
+              `/_skill-validation?realm=${encodeURIComponent(
+                testRealmURL.href,
+              )}&refresh=true`,
+            )
+            .set('Authorization', `Bearer ${token}`);
+
+        let before = await sweep();
+        assert.strictEqual(before.status, 200, 'first sweep succeeds');
+        assert.strictEqual(
+          before.body.data.attributes.status,
+          'fail',
+          'the tool module has no NamedTestTool export yet',
+        );
+
+        // The bytes change and the epoch moves, as a write does, with no
+        // index pass rendering on the tab in between.
+        await testRealmAdapter.write('test-tool.gts', TOOL_MODULE_SOURCE);
+        testRealm.__testOnlyClearCaches();
+        await mintRealmLoaderEpoch(dbAdapter, testRealmURL.href);
+
+        let after = await sweep();
+        assert.strictEqual(after.status, 200, 'second sweep succeeds');
+        assert.deepEqual(
+          after.body.data.attributes.failures,
+          [],
+          'the rewritten module has the export',
+        );
+        assert.strictEqual(
+          after.body.data.attributes.status,
+          'pass',
+          'the sweep passes',
+        );
       });
     });
 

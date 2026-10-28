@@ -456,12 +456,15 @@ module(basename(import.meta.filename), function () {
     test('drops a caller-supplied loaderEpoch and clearCache before it reaches the prerenderer', async function (assert) {
       let { prerenderer, renderCalls } = makePrerenderer();
       let realm = 'http://example.test/';
+      // The stub answers every query with these rows, so the one row serves
+      // both the permissions lookup and the realm's loader epoch.
       let dbAdapter = makeDbAdapter([
         {
           username: '@someone:localhost',
           read: true,
           write: true,
           realm_owner: false,
+          loader_epoch: 'realm-epoch',
         },
       ]);
       let app = new Koa();
@@ -523,21 +526,17 @@ module(basename(import.meta.filename), function () {
         );
       }
       let [cardCall, fileExtractCall, moduleCall] = renderCalls;
-      assert.strictEqual(
-        cardCall?.args.renderOptions?.loaderEpoch,
-        undefined,
-        'card render carries no loaderEpoch',
-      );
-      assert.strictEqual(
-        fileExtractCall?.args.renderOptions?.loaderEpoch,
-        undefined,
-        'file-extract render carries no loaderEpoch',
-      );
-      assert.strictEqual(
-        typeof moduleCall?.args.renderOptions?.loaderEpoch,
-        'string',
-        "module render carries the realm's own loaderEpoch",
-      );
+      for (let [kind, call] of [
+        ['card', cardCall],
+        ['file-extract', fileExtractCall],
+        ['module', moduleCall],
+      ] as const) {
+        assert.strictEqual(
+          call?.args.renderOptions?.loaderEpoch,
+          'realm-epoch',
+          `${kind} render carries the realm's own loaderEpoch`,
+        );
+      }
     });
 
     // The realm verifies a session token by comparing its permissions claim
