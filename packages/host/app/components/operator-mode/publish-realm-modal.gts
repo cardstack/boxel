@@ -30,6 +30,7 @@ import {
   ensureTrailingSlash,
   isCardErrorJSONAPI,
   isCardInstance,
+  publishedSpaceSubdomain,
   resolvePublishedRealmUrl,
 } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
@@ -288,7 +289,7 @@ export default class PublishRealmModal extends Component<Signature> {
 
   // The "Unlisted Link" target: the user's own space subdomain with a random
   // path segment instead of the realm name, e.g.
-  // `https://<username>.<spaceDomain>/<random>/`. Like the Boxel Space target
+  // `https://<spaceSubdomain>.<spaceDomain>/<random>/`. Like the Boxel Space target
   // it is namespaced to the owner, so it needs no claim/availability check.
   get unlistedRealmUrl(): string | null {
     if (!this.unlistedPathSegment) {
@@ -306,7 +307,7 @@ export default class PublishRealmModal extends Component<Signature> {
 
   get unlistedRealmParts() {
     return {
-      baseUrl: `${this.getProtocol()}://${this.getMatrixUsername()}.${this.getDefaultPublishedRealmDomain()}/`,
+      baseUrl: `${this.getProtocol()}://${publishedSpaceSubdomain(this.getMatrixUsername())}.${this.getDefaultPublishedRealmDomain()}/`,
       pathSegment: this.unlistedPathSegment ?? '',
     };
   }
@@ -475,12 +476,12 @@ export default class PublishRealmModal extends Component<Signature> {
 
   get subdirectoryRealmParts() {
     const protocol = this.getProtocol();
-    const matrixUsername = this.getMatrixUsername();
+    const spaceSubdomain = publishedSpaceSubdomain(this.getMatrixUsername());
     const domain = this.getDefaultPublishedRealmDomain();
     const realmName = this.getRealmName();
 
     return {
-      baseUrl: `${protocol}://${matrixUsername}.${domain}/`,
+      baseUrl: `${protocol}://${spaceSubdomain}.${domain}/`,
       realmName: realmName,
     };
   }

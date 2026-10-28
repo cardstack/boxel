@@ -1035,6 +1035,52 @@ module('Acceptance | host submode', function (hooks) {
           .hasAttribute('target', '_blank');
       });
 
+      // The space domain is served under a one-level wildcard certificate, so
+      // a dotted username's Boxel Space has to stay one label deep.
+      test('publishes a dotted username to a single-label Boxel Space host', async function (assert) {
+        let matrixService = getService('matrix-service');
+        Object.defineProperty(matrixService, 'userName', {
+          configurable: true,
+          get: () => 'first.last',
+        });
+        let publishedURLs: string[] = [];
+        let realmServer = getService('realm-server');
+        let publishRealm = realmServer.publishRealm;
+        realmServer.publishRealm = async (
+          sourceRealmURL: string,
+          publishedRealmURL: string,
+        ) => {
+          publishedURLs.push(publishedRealmURL);
+          return publishRealm(sourceRealmURL, publishedRealmURL);
+        };
+        publishDeferred.fulfill();
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          assert
+            .dom('[data-test-publish-realm-modal]')
+            .containsText(`https://first-last.${publishedSpaceHost}/test/`);
+          assert
+            .dom('[data-test-publish-realm-modal]')
+            .doesNotContainText(`first.last.${publishedSpaceHost}`);
+
+          await click('[data-test-default-domain-checkbox]');
+          await click('[data-test-publish-button]');
+          await waitUntil(() => publishedURLs.length > 0);
+
+          assert.deepEqual(publishedURLs, [
+            `https://first-last.${publishedSpaceHost}/test/`,
+          ]);
+        } finally {
+          delete (matrixService as unknown as Record<string, unknown>).userName;
+        }
+      });
+
       // Indexing and prerendering a realm take minutes, and a bare spinner
       // can't tell slow progress from a hang. The popover is where a publish in
       // flight is inspected, so it has to name the pass and count through it.

@@ -14,6 +14,7 @@ import {
   uuidv4,
   userInitiatedPriority,
   deriveRealmName,
+  publishedSpaceSubdomain,
   notifyAllFileChanges,
   baseRealm,
   effectiveHasError,
@@ -521,19 +522,22 @@ export default function handlePublishRealm({
         return;
       }
 
-      // Within the owner's own published space (`<username>.<spaceDomain>`), a
+      // Within the owner's own published space
+      // (`<spaceSubdomain>.<spaceDomain>`, see `publishedSpaceSubdomain`), a
       // subdirectory publish may target only the realm-name path (the "Your
       // Boxel Space" target) or the server-issued unlisted-link slug — never an
       // arbitrary, client-chosen path — so the unlisted link's unguessable
       // path can't be hand-picked through a direct API call. Publishes to any
       // other host (claimed custom domains, etc.) are left permissive.
       let spaceDomain = domainsForPublishedRealms?.boxelSpace;
-      let matrixUsername = getMatrixUsername(ownerUserId);
+      let ownerSpaceHost = `${publishedSpaceSubdomain(
+        getMatrixUsername(ownerUserId),
+      )}.${spaceDomain}`;
       let publishedURLForPath = new URL(publishedRealmURL);
       let isOwnerSpaceHost =
         !!spaceDomain &&
-        (publishedURLForPath.host === `${matrixUsername}.${spaceDomain}` ||
-          publishedURLForPath.hostname === `${matrixUsername}.${spaceDomain}`);
+        (publishedURLForPath.host === ownerSpaceHost ||
+          publishedURLForPath.hostname === ownerSpaceHost);
       if (isOwnerSpaceHost) {
         let publishedPath = publishedURLForPath.pathname
           .split('/')

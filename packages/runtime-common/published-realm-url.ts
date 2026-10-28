@@ -4,9 +4,10 @@
 // (`operator-mode/publish-realm-modal.gts`):
 //
 //   - 'subdirectory': a Boxel Space under the user's space domain. The URL is
-//     `https://<matrixUsername>.<spaceDomain>/<realmName>/`, where `name` is the
-//     realm-name path segment (defaults to the last segment of the source realm
-//     URL when omitted).
+//     `https://<spaceSubdomain>.<spaceDomain>/<realmName>/`, where
+//     `spaceSubdomain` is `publishedSpaceSubdomain(matrixUsername)` and `name`
+//     is the realm-name path segment (defaults to the last segment of the
+//     source realm URL when omitted).
 //   - 'custom': a claimed custom domain. The URL is `https://<hostname>/`, where
 //     `name` is the full hostname (e.g. "mysite.boxel.site" or
 //     "mysite.localhost:4201").
@@ -146,6 +147,20 @@ export function generateObscureSlug(): string {
   return randomChars(OBSCURE_SLUG_CHARSET, OBSCURE_SLUG_LENGTH);
 }
 
+// The hostname label of a user's Boxel Space: `<label>.<spaceDomain>`. The
+// space domain is served under a one-level wildcard certificate
+// (`*.<spaceDomain>`), so the label must be a single DNS label. A Matrix
+// username may contain dots (`first.last`), which would otherwise put the space
+// two levels deep, outside the certificate; each dot becomes a hyphen
+// (`first-last`). Usernames without dots map to themselves.
+//
+// The mapping is not injective: `first.last` and `first-last` share a space
+// host. Every consumer that decides whether a host is a user's own space
+// derives it through this function so the host side and the server side agree.
+export function publishedSpaceSubdomain(matrixUsername: string): string {
+  return matrixUsername.replace(/\./g, '-');
+}
+
 export function resolvePublishedRealmUrl(
   target: PublishTargetSpec,
   ctx: PublishedRealmUrlContext = {},
@@ -177,7 +192,7 @@ export function resolvePublishedRealmUrl(
       if (!ctx.spaceDomain) {
         throw new Error('A subdirectory publish target requires `spaceDomain`');
       }
-      return `${protocol}://${ctx.matrixUsername}.${ctx.spaceDomain}/${realmName}/`;
+      return `${protocol}://${publishedSpaceSubdomain(ctx.matrixUsername)}.${ctx.spaceDomain}/${realmName}/`;
     }
     default: {
       throw new Error(

@@ -228,6 +228,42 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('POST /_publish-realm applies the owner space path rule to the space host of a dotted username', async function (assert) {
+        // `first.last`'s own space is `first-last.localhost`: the dot becomes a
+        // hyphen so the space stays one label under the space domain. The
+        // source realm grants realm-owner to every user, so the only thing
+        // that can reject this hand-picked path is the owner-space path rule.
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              {
+                user: '@first.last:localhost',
+                sessionRoom: 'session-room-test',
+              },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL:
+                'http://first-last.localhost:4445/hand-picked-path/',
+            }),
+          );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        assert.ok(
+          response.text.includes(
+            'must be the realm name or the server-issued unlisted link',
+          ),
+          'error explains the path restriction',
+        );
+      });
+
       test('POST /_publish-realm can publish realm successfully', async function (assert) {
         let response = await request
           .post('/_publish-realm')

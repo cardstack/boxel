@@ -5,6 +5,7 @@ import {
   deriveRealmName,
   generateObscureSlug,
   OBSCURE_SLUG_LENGTH,
+  publishedSpaceSubdomain,
   resolvePublishedRealmUrl,
 } from '@cardstack/runtime-common';
 
@@ -83,6 +84,27 @@ module(basename(import.meta.filename), function () {
         ),
         'http://mike.boxel.space/notes/',
       );
+    });
+
+    test('subdirectory keeps a dotted username to one label under the space domain', async function (assert) {
+      assert.strictEqual(
+        resolvePublishedRealmUrl(
+          { type: 'subdirectory', name: 'notes' },
+          { matrixUsername: 'first.last', spaceDomain: 'boxel.space' },
+        ),
+        'https://first-last.boxel.space/notes/',
+      );
+    });
+
+    // publishedSpaceSubdomain
+    test('publishedSpaceSubdomain leaves a username without dots unchanged', async function (assert) {
+      assert.strictEqual(publishedSpaceSubdomain('mike'), 'mike');
+      assert.strictEqual(publishedSpaceSubdomain('mike-t_2'), 'mike-t_2');
+    });
+
+    test('publishedSpaceSubdomain replaces every dot with a hyphen', async function (assert) {
+      assert.strictEqual(publishedSpaceSubdomain('first.last'), 'first-last');
+      assert.strictEqual(publishedSpaceSubdomain('a.b.c'), 'a-b-c');
     });
 
     test('subdirectory throws when name is blank and no sourceRealmURL is given', async function (assert) {
