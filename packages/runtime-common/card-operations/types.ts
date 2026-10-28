@@ -1502,6 +1502,11 @@ export interface OperationCallApi {
   query?: Record<string, OperationTemplate>;
   body?: CallApiBodyTemplate;
   slots: CallApiSlot[];
+  // Each instance is approved on its own: the binding that fills a slot names
+  // the card the operation is invoked on, so one card's key is never another
+  // card's (a webhook per channel card, say). Absent, one binding per realm
+  // serves every invocation there, on any instance or on the type.
+  perInstance?: true;
 }
 
 // What a `callApi` answers with: the vendor's response, whatever its status.
@@ -1686,9 +1691,21 @@ export type OperationErrorCode =
   // it turned the caller away rather than let it through uncounted. Nothing
   // was done. Carries a 503 with `Retry-After`.
   | 'rate-limit-unavailable'
-  // A `callApi` whose request carries a credential slot that no binding the
-  // realm's owner approved fills. Nothing was sent.
+  // A `callApi` whose request carries a credential slot that no binding fills:
+  // none was approved for the operation in this realm (for the caller, for a
+  // `{{userKey}}` slot), or the key or grant it named was removed. Nothing was
+  // sent.
   | 'binding-not-approved'
+  // A `callApi` slot's binding names a share the realm suspended. Nothing was
+  // sent.
+  | 'share-suspended'
+  // A `callApi` whose request differs from the one its key's owner approved:
+  // the declaration was edited since. Nothing was sent until they approve it
+  // again.
+  | 'binding-needs-reapproval'
+  // A `callApi` invoked interactively — from a browser, the AI assistant or
+  // the CLI — whose binding was approved for pipelines only. Nothing was sent.
+  | 'interactive-use-not-approved'
   // A `callApi` invoked while a card is being rendered. A render is replayed
   // and cached, and must not send requests to the world on anyone's behalf.
   // Nothing was sent.

@@ -1,10 +1,16 @@
-import { logger, type CallApiResponse } from '@cardstack/runtime-common';
+import {
+  logger,
+  type CallApiResponse,
+  type DBAdapter,
+} from '@cardstack/runtime-common';
 import {
   OperationFailure,
   type CallApiCredential,
   type CallApiRequest,
   type CallApiSender,
 } from '@cardstack/runtime-common/card-operations';
+import { fillSlots } from '../key-bindings.ts';
+import { secretsKeyring } from '../secrets-at-rest/index.ts';
 import {
   OutboundRefusedError,
   OutboundTimeoutError,
@@ -50,9 +56,11 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
   return safe;
 }
 
-// Sends a `callApi` operation's request through the guarded outbound client.
+// Fills a `callApi` request's slots from the bindings approved for it, and
+// sends it through the guarded outbound client.
 //
-// The request arrives as declared, every credential slot still a token, and
+// Each slot is filled from its binding's grant (`lib/key-bindings.ts`), and
+// nothing is filled for a slot no binding serves. The request arrives as declared, every credential slot still a token, and
 // that is the request the guard checks and every record describes. The
 // credentials are filled in by the client after its destination check, are
 // registered with the scrubber first so the vendor cannot echo them back, and
@@ -61,45 +69,53 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 // Whatever the vendor answers is the answer: a 404 or a 500 is a response the
 // card reads. Only a refusal by the guard, a timeout, or a send that broke
 // before any response arrived is a refusal of the operation.
-export const callApiSender: CallApiSender = {
-  async send(
-    request: CallApiRequest,
-    credentials: CallApiCredential[],
-  ): Promise<CallApiResponse> {
-    let scrubber = new CredentialScrubber();
-    for (let { value } of credentials) {
-      scrubber.register(value);
+export function createCallApiSender(dbAdapter: DBAdapter): CallApiSender {
+  return {
+    fill: (lookup) => fillSlots(dbAdapter, secretsKeyring(), lookup),
+    send: sendCallApiRequest,
+  };
+}
+
+export async function sendCallApiRequest(
+  request: CallApiRequest,
+  credentials: CallApiCredential[],
+): Promise<CallApiResponse> {
+  let scrubber = new CredentialScrubber();
+  for (let { value, raw } of credentials) {
+    scrubber.register(value);
+    if (raw !== undefined) {
+      scrubber.register(raw);
     }
-    let context = sendContext(undefined, request.url);
-    try {
-      let response = await outboundFetch({
-        url: request.url,
-        method: request.method,
-        headers: request.headers,
-        ...(request.body !== undefined ? { body: request.body } : {}),
-        sizePath: 'call-api',
-        scrubber,
-        ...(credentials.length > 0
-          ? {
-              substitutions: credentials.map(({ token, value }) => ({
-                token,
-                value,
-              })),
-            }
-          : {}),
-      });
-      let text = await response.text();
-      return {
-        status: response.status,
-        headers: safeResponseHeaders(response.headers),
-        body: bodyOf(text, response.headers.get('content-type')),
-      };
-    } catch (error) {
-      scrubError(error, scrubber);
-      throw refusalFor(error, describeOutboundError(error, context));
-    }
-  },
-};
+  }
+  let context = sendContext(undefined, request.url);
+  try {
+    let response = await outboundFetch({
+      url: request.url,
+      method: request.method,
+      headers: request.headers,
+      ...(request.body !== undefined ? { body: request.body } : {}),
+      sizePath: 'call-api',
+      scrubber,
+      ...(credentials.length > 0
+        ? {
+            substitutions: credentials.map(({ token, value }) => ({
+              token,
+              value,
+            })),
+          }
+        : {}),
+    });
+    let text = await response.text();
+    return {
+      status: response.status,
+      headers: safeResponseHeaders(response.headers),
+      body: bodyOf(text, response.headers.get('content-type')),
+    };
+  } catch (error) {
+    scrubError(error, scrubber);
+    throw refusalFor(error, describeOutboundError(error, context));
+  }
+}
 
 function bodyOf(text: string, contentType: string | null) {
   if (text.length === 0) {

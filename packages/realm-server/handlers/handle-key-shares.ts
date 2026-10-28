@@ -14,8 +14,12 @@ import {
   type KeyShareNotice,
 } from '../lib/key-shares.ts';
 import { UserKeyError } from '../lib/user-keys.ts';
+import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
+import { secureSessionClient } from '../lib/secure-session.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   keysHandler,
+  mayMintKeyWriteTicket,
   ownerOf,
   readJSON,
   sendJSON,
@@ -151,18 +155,37 @@ export function handleResumeKeyShare({ dbAdapter }: CreateRoutesArgs): Handler {
   });
 }
 
+// A swap into a share with approved operations grants the new key their
+// destinations, so it needs the session a grant does (see
+// `handle-user-key-grants.ts`); one into a share with none takes the ticket
+// alone. The answer lists the bindings it moved to the new key.
 export function handleSwapKeyIntoShare({
   dbAdapter,
+  secureOriginURL,
 }: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     let { attributes, ticket } = await readShareBody(ctxt, SWAP_ATTRIBUTES);
-    let share = await swapKeyIntoShare(dbAdapter, {
-      user,
-      shareId: ctxt.params.shareId,
-      keyId: attributes.keyId,
-      ticket,
+    let via = mayMintKeyWriteTicket(ctxt, secureOriginURL)
+      ? await secureSessionClient(
+          dbAdapter,
+          ctxt.state.token as RealmServerTokenClaim | undefined,
+        )
+      : undefined;
+    let { share, reapprovedBindings } = await swapKeyIntoShare(
+      dbAdapter,
+      secretsKeyring(),
+      {
+        user,
+        shareId: ctxt.params.shareId,
+        keyId: attributes.keyId,
+        ticket,
+        via,
+      },
+    );
+    await sendJSON(ctxt, 200, {
+      data: serialize(share),
+      meta: { reapprovedBindings },
     });
-    await sendJSON(ctxt, 200, { data: serialize(share) });
   });
 }

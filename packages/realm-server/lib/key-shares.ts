@@ -8,6 +8,9 @@ import {
 import type { Querier } from '@cardstack/runtime-common/expression';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
+import { moveShareBindingsIn } from './key-bindings.ts';
+import type { SecretsKeyring } from './secrets-at-rest/index.ts';
+import type { SecureSessionClient } from './secure-session.ts';
 
 // Shares: a key its owner has put into a realm for other people there to
 // consume. A share holds no secret, only the key it refers to, so one key may
@@ -411,16 +414,27 @@ export async function resumeShare(
 
 // A direct writer puts one of their own keys into a suspended share. They
 // become its owner and it resumes; its label, and so every card that names
-// it, is unchanged.
+// it, is unchanged. Every operation approved for the share moves to the new
+// key: the swap is the new owner's approval of each, so it grants the new key
+// the destinations they send to, which takes a session signed in on the
+// secure origin (`via`) when the share has any.
 export async function swapKeyIntoShare(
   dbAdapter: DBAdapter,
+  keyring: SecretsKeyring,
   {
     user,
     shareId,
     keyId,
     ticket,
-  }: { user: string; shareId: string; keyId: unknown; ticket: unknown },
-): Promise<KeyShare> {
+    via,
+  }: {
+    user: string;
+    shareId: string;
+    keyId: unknown;
+    ticket: unknown;
+    via: SecureSessionClient | undefined;
+  },
+): Promise<{ share: KeyShare; reapprovedBindings: string[] }> {
   if (keyId === undefined || keyId === null) {
     throw new UserKeyError(400, 'a swap names the key it puts in');
   }
@@ -455,7 +469,13 @@ export async function swapKeyIntoShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    return toShare(updated, { withKey: true });
+    let reapprovedBindings = await moveShareBindingsIn(txQuery, keyring, {
+      shareId,
+      keyId,
+      owner: user,
+      via,
+    });
+    return { share: toShare(updated, { withKey: true }), reapprovedBindings };
   });
 }
 

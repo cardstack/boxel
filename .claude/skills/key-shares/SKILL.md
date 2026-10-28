@@ -65,13 +65,13 @@ suspends what they made.
 
 ## Who may do what
 
-| Action  | Who                                                                                                                        | Ticket                       |
-| ------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| Share   | The key's owner, into a realm where they are a direct writer                                                               | `share` for that key + realm |
-| Unshare | The share's owner, whether or not they still write the realm                                                               | none                         |
-| Suspend | Any direct writer of the realm, on an active share                                                                         | none                         |
-| Resume  | Any direct writer of the realm, on a `suspended-by-writer` share                                                           | `resume` for that share      |
-| Swap    | Any direct writer of the realm, putting one of their own keys into a suspended share; they become its owner and it resumes | `swap` for that key + share  |
+| Action  | Who                                                                                                                                                                                                                                                        | Ticket                       |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| Share   | The key's owner, into a realm where they are a direct writer                                                                                                                                                                                               | `share` for that key + realm |
+| Unshare | The share's owner, whether or not they still write the realm                                                                                                                                                                                               | none                         |
+| Suspend | Any direct writer of the realm, on an active share                                                                                                                                                                                                         | none                         |
+| Resume  | Any direct writer of the realm, on a `suspended-by-writer` share                                                                                                                                                                                           | `resume` for that share      |
+| Swap    | Any direct writer of the realm, putting one of their own keys into a suspended share; they become its owner and it resumes, and its bindings move to grants of their key (a secure-origin session is needed when it has any; see the `key-bindings` skill) | `swap` for that key + share  |
 
 A direct writer is a person whose own permission row grants write
 (`isDirectWriter`): a `*` or `users` row, a bot account or a policy grant

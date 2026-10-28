@@ -53,6 +53,10 @@ batch's results, where a list reads as a group's answers and `null` as a
 removal. `input` works as on any operation. A `transformations` program is
 refused (`unrunnable-program`): there is no document to run it over.
 
+`perInstance: true` makes a key's owner approve the operation for each card
+on its own (one webhook per channel card): it lowers to
+`OperationCallApi.perInstance`, and a binding for it names the instance.
+
 `callApi` is declaration-only (nothing implies it) and is carried only by a
 card def. It is invocable on an instance and on the type: the client puts it
 in both buckets once declared (`carriesMember` in `card-operations/client.ts`).
@@ -149,15 +153,20 @@ refusal also writes a key-use line.
    (`assertMayWrite` in `services/operations.ts`), so this is the server's own
    copy of that rule.
 2. **`actor-required`** (401) — the request has a slot and no signed-in caller.
-3. **`binding-not-approved`** (403) — the request has a slot. No binding
-   fills a slot, so every slotted request stops here, with
-   `meta.slots: [{name, key}]`. The detail names each slot with whose key
-   fills it (`the credential slot "weather" for the invoking user's own key`,
-   `… for the realm's key`, from `describeSlots`), because a caller that sees
-   only the message, such as the AI assistant, gets neither the code nor
-   `meta`, and a slot's name alone doesn't say. The assistant's rule for
-   opening the secure window keys on that wording. A keyless request
-   continues.
+3. **Slots are filled** — the request has a slot, so the sender's `fill`
+   finds the binding for each (see the `key-bindings` skill) and opens its
+   key under the binding's grant, or refuses: `binding-not-approved` (409,
+   `meta.slots: [{name, key}]`), `share-suspended` (409),
+   `binding-needs-reapproval` (409) or `interactive-use-not-approved` (403).
+   Every invocation off the network is interactive, and every binding is
+   approved for pipelines only, so a slotted request is sent only from a
+   pipeline (`Realm.handlePipeline`). The `binding-not-approved` detail names
+   each slot with whose key fills it (`the credential slot "weather" for the
+invoking user's own key`, `… for the realm's key`, from `describeSlots`),
+   because a caller that sees only the message, such as the AI assistant,
+   gets neither the code nor `meta`, and a slot's name alone doesn't say. The
+   assistant's rule for opening the secure window keys on that wording. A
+   keyless request continues.
 4. **Build** (`buildCallApiRequest`): markers filled from the payload, the
    caller, the realm's settings and — on an instance target — the card's
    _indexed_ document (`indexedInstance` in `read.ts`, so computed fields are
@@ -177,9 +186,12 @@ refusal also writes a key-use line.
    appended with `URLSearchParams`. A JSON body gets `content-type:
 application/json` unless the declaration set one.
 5. **`guard-refused`** (502, `meta.reason: 'destination'`) — the built URL
-   is not covered by the lowered `destination`. Every value is encoded into a
-   segment or the query string, so a request can't leave it; this is the
-   send-time check that what goes out is what was declared.
+   is not covered by the lowered `destination`, or by the destination stored
+   on the grant a filled slot's key is sent under. Every value is encoded
+   into a segment or the query string, so a request can't leave it; these
+   are the send-time checks that what goes out is what was declared and what
+   the key's owner approved, made on the request with its slots still
+   tokens.
 6. **Send** through `core.callApi`, the `CallApiSender` the realm server
    passes to `new Realm({ callApi })`. A realm without one (the host's
    in-browser test realm) answers 501.
@@ -219,9 +231,9 @@ A secret destination — a credential in the path, like a webhook URL — is a
 `{{apiKey}}` in a `path` value; the recorded URL carries the token, never the
 value.
 
-The binding that fills a slot must pass the value _as sent_ (with `|basic`
-applied) as `CallApiCredential.value`, and register the raw value with the
-scrubber as well when the transform changes it.
+The binding fills each slot with the value _as sent_ (with `|basic`
+applied) as `CallApiCredential.value`, and its stored value as `raw` when
+the transform changes it, which the sender registers with the scrubber too.
 
 ### The answer
 
@@ -285,4 +297,5 @@ the `agent-peer-collaboration` skill on serving your own dist.
 - **`outbound-guard`** — what the client refuses, the response cap's observe
   mode, the scrubber.
 - **`operations-diagnosis`** — the `boxel:operations` channel around the call.
+- **`key-bindings`** — the bindings that fill slots, and their refusals.
 - **`secrets-at-rest`** — where a key a binding fills from is stored.

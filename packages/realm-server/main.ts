@@ -60,7 +60,7 @@ import {
   isDeployedServerURL,
   startOutboundGuard,
 } from './lib/outbound/client.ts';
-import { callApiSender } from './lib/outbound/call-api-sender.ts';
+import { createCallApiSender } from './lib/outbound/call-api-sender.ts';
 import {
   reportPlaintextCensus,
   reportSealedCensus,
@@ -837,7 +837,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
             reconciler
               ? findRealm(url, { realms, reconciler, dbAdapter })
               : Promise.resolve(undefined),
-          callApi: callApiSender,
+          callApi: createCallApiSender(dbAdapter),
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
