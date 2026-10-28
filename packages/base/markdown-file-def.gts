@@ -1,5 +1,6 @@
 import {
   byteStreamToUint8Array,
+  extensionOfIdentifier,
   extractCardReferenceUrls,
   extractFileReferenceUrls,
   FRONTMATTER_DIAGNOSTICS_SYMBOL,
@@ -58,18 +59,6 @@ function toFrontmatterParseError(err: unknown): FrontmatterParseError {
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 const EXCERPT_MAX_LENGTH = 500;
-
-function getExtension(url: string): string {
-  try {
-    let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? '';
-    let dot = name.lastIndexOf('.');
-    return dot === -1 ? '' : name.slice(dot).toLowerCase();
-  } catch {
-    let dot = url.lastIndexOf('.');
-    return dot === -1 ? '' : url.slice(dot).toLowerCase();
-  }
-}
 
 function fileNameWithoutExtension(name: string): string {
   return name.replace(/\.[^/.]+$/, '');
@@ -291,7 +280,7 @@ export class MarkdownDef extends FileDef {
       frontmatter?: Record<string, unknown>;
     }>
   > {
-    let extension = getExtension(url);
+    let extension = extensionOfIdentifier(url);
     if (!MARKDOWN_EXTENSIONS.has(extension)) {
       throw new FileContentMismatchError(
         `Expected markdown file extension, got "${extension || 'none'}"`,

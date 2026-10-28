@@ -1,4 +1,7 @@
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  extensionOfIdentifier,
+} from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import CsvIcon from '@cardstack/boxel-icons/csv';
 import GlimmerComponent from '@glimmer/component';
@@ -24,18 +27,6 @@ const EXCERPT_MAX_LENGTH = 500;
 // An embedded cell shows the head of the table with a "… N more rows" note;
 // the isolated view shows the whole thing.
 const EMBEDDED_MAX_ROWS = 20;
-
-function getExtension(url: string): string {
-  try {
-    let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? '';
-    let dot = name.lastIndexOf('.');
-    return dot === -1 ? '' : name.slice(dot).toLowerCase();
-  } catch {
-    let dot = url.lastIndexOf('.');
-    return dot === -1 ? '' : url.slice(dot).toLowerCase();
-  }
-}
 
 function fileNameWithoutExtension(name: string): string {
   return name.replace(/\.[^/.]+$/, '');
@@ -430,7 +421,7 @@ export class CsvFileDef extends FileDef {
       rowCount: number;
     }>
   > {
-    let extension = getExtension(url);
+    let extension = extensionOfIdentifier(url);
     if (extension !== '.csv') {
       throw new FileContentMismatchError(
         `Expected .csv file extension, got "${extension || 'none'}"`,

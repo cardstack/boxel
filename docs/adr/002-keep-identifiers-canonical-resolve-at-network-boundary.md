@@ -230,10 +230,8 @@ Neither sees card JSON. Elsewhere, reviewers enforce §1.2 and §1.4.
   `SerializedFile`, `SerializedFileDef`) breaks §1.1, §1.2 and §1.3. Types store
   ids as `string`, parses a file id with `new URL()`, and leaves FileDef ids and
   `linksTo` targets uncanonicalized.
-- `packages/base/components/card-list.gts` and
-  `packages/base/{command,csv-file-def,html-file-def,json-file-def,markdown-file-def,realm-config,skill-frontmatter-field,text-file-def,three-d-model-def,ts-file-def,zip-file-def}.gts`
-  break §1.2. Parses ids with `new URL()` to read a file name, extension or
-  path.
+- `packages/base/realm-config.gts` (`httpURL`) breaks §1.1. Tests a policy
+  pointer's form by parsing it with `new URL()`.
 - `packages/base/matrix-event.gts` (`ToolDefinitionSchema`,
   `DiscoveredToolDefinition`, `BoxelContext`) breaks §1.1. Types code-ref
   modules and skill ids as `string`.

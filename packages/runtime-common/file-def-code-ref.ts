@@ -1,6 +1,7 @@
 import { baseFileRef, baseRRI } from './constants.ts';
 import { canonicalModuleKey } from './code-ref.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
+import { lastSegmentOfIdentifier } from './realm-identifiers.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import { resolveRRIReference } from './url.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -111,6 +112,12 @@ export function isFileDefCodeRef(
 export function extensionOfName(name: string): string {
   let dot = name.lastIndexOf('.');
   return dot <= 0 ? '' : name.slice(dot).toLowerCase();
+}
+
+// The extension of an identifier's last path segment, in either form, as
+// `extensionOfName` spells it.
+export function extensionOfIdentifier(identifier: string): string {
+  return extensionOfName(lastSegmentOfIdentifier(identifier));
 }
 
 function extensionOf(url: URL): string {

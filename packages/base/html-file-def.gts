@@ -1,4 +1,7 @@
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  extensionOfIdentifier,
+} from '@cardstack/runtime-common';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import { StringField, contains, field } from './card-api';
 import {
@@ -17,18 +20,6 @@ import {
 
 const HTML_EXTENSIONS = new Set(['.html', '.htm']);
 const EXCERPT_MAX_LENGTH = 500;
-
-function getExtension(url: string): string {
-  try {
-    let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? '';
-    let dot = name.lastIndexOf('.');
-    return dot === -1 ? '' : name.slice(dot).toLowerCase();
-  } catch {
-    let dot = url.lastIndexOf('.');
-    return dot === -1 ? '' : url.slice(dot).toLowerCase();
-  }
-}
 
 function fileNameWithoutExtension(name: string): string {
   return name.replace(/\.[^/.]+$/, '');
@@ -62,7 +53,7 @@ export class HtmlDef extends FileDef {
       htmlMetadata: HtmlDocumentMetadata;
     }>
   > {
-    let extension = getExtension(url);
+    let extension = extensionOfIdentifier(url);
     if (!HTML_EXTENSIONS.has(extension)) {
       throw new FileContentMismatchError(
         `Expected HTML file extension, got "${extension || 'none'}"`,

@@ -1,4 +1,7 @@
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  extensionOfIdentifier,
+} from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import JsonIcon from '@cardstack/boxel-icons/json';
 import GlimmerComponent from '@glimmer/component';
@@ -56,18 +59,6 @@ function tag(name: string, content: string, attrs?: string): string {
 
 function spanWrap(cls: string, content: string): string {
   return tag('span', content, `class="${cls}"`);
-}
-
-function getExtension(url: string): string {
-  try {
-    let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? '';
-    let dot = name.lastIndexOf('.');
-    return dot === -1 ? '' : name.slice(dot).toLowerCase();
-  } catch {
-    let dot = url.lastIndexOf('.');
-    return dot === -1 ? '' : url.slice(dot).toLowerCase();
-  }
 }
 
 function fileNameWithoutExtension(name: string): string {
@@ -548,7 +539,7 @@ export class JsonFileDef extends FileDef {
       lineCount: number;
     }>
   > {
-    let extension = getExtension(url);
+    let extension = extensionOfIdentifier(url);
     if (extension !== '.json') {
       throw new FileContentMismatchError(
         `Expected .json file extension, got "${extension || 'none'}"`,

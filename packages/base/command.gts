@@ -1,5 +1,8 @@
 import { modifier } from 'ember-modifier';
-import { hasNothingToShow } from '@cardstack/runtime-common';
+import {
+  hasNothingToShow,
+  lastSegmentOfIdentifier,
+} from '@cardstack/runtime-common';
 import {
   CardDef,
   Component,
@@ -503,11 +506,14 @@ function lastPathSegment(url: string | undefined): string | undefined {
   if (!url) {
     return undefined;
   }
-  try {
-    let segments = new URL(url).pathname.split('/').filter(Boolean);
-    return decodeURIComponent(segments.pop() ?? url);
-  } catch {
+  let segment = lastSegmentOfIdentifier(url);
+  if (!segment) {
     return url;
+  }
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
   }
 }
 

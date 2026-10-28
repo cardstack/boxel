@@ -22,6 +22,7 @@ import { Pagination } from '@cardstack/pretui/components/pagination';
 
 import {
   isValidPrerenderedHtmlFormat,
+  lastSegmentOfIdentifier,
   removeFileExtension,
   rri,
   searchEntryWireQueryFromQuery,
@@ -207,14 +208,7 @@ export default class CardList extends Component<Signature> {
   // FileRender pass, so they carry no `html` rendering and fall back to a
   // `file-meta` `item`).
   fileNameFromUrl(url: string): string {
-    try {
-      let pathname = new URL(url).pathname;
-      let segment = pathname.split('/').filter(Boolean).pop();
-      return segment ?? url;
-    } catch {
-      let segments = url.split('/').filter(Boolean);
-      return segments[segments.length - 1] ?? url;
-    }
+    return lastSegmentOfIdentifier(url) || url;
   }
 
   // Render the cheap icon + filename placeholder for a file row that has no

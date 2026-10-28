@@ -1,4 +1,7 @@
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  extensionOfIdentifier,
+} from '@cardstack/runtime-common';
 import TextFileIcon from '@cardstack/boxel-icons/file-text';
 import GlimmerComponent from '@glimmer/component';
 import type { BaseDefComponent } from './card-api';
@@ -19,18 +22,6 @@ import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
 
 const EXCERPT_MAX_LENGTH = 500;
-
-function getExtension(url: string): string {
-  try {
-    let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? '';
-    let dot = name.lastIndexOf('.');
-    return dot === -1 ? '' : name.slice(dot).toLowerCase();
-  } catch {
-    let dot = url.lastIndexOf('.');
-    return dot === -1 ? '' : url.slice(dot).toLowerCase();
-  }
-}
 
 function fileNameWithoutExtension(name: string): string {
   return name.replace(/\.[^/.]+$/, '');
@@ -224,7 +215,7 @@ export class TextFileDef extends FileDef {
       lineCount: number;
     }>
   > {
-    let extension = getExtension(url);
+    let extension = extensionOfIdentifier(url);
     if (!this.textExtensions.includes(extension)) {
       throw new FileContentMismatchError(
         `Expected text file extension, got "${extension || 'none'}"`,
