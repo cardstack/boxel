@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "invoiceNumber": "INV-2026-1297",
+      "amount": 4666.86,
+      "issuedOn": "2026-11-10",
+      "dueDate": "2026-11-25",
+      "status": "paid"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "vendor": {
+        "links": {
+          "self": "../Vendor/yarrow-ink-and-toner"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../invoice",
+        "name": "Invoice"
+      }
+    }
+  }
+}

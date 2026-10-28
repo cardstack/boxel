@@ -1,0 +1,554 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Change all our vendors to NET 30 payment terms.",
+      "followUpPrompts": [
+        "Create a card listing all unpaid invoices that are overdue by more than 60 days as of November 1, 2026, and show it to me.",
+        "Update all Vendor cards to adopt from MySpecialVendor."
+      ],
+      "successCriteria": "**A: set every vendor to NET 30 (prompt 1)**\nA1. All 45 Vendor cards under `bulk-operations/payables/Vendor/` store `paymentTerms` as the value `net_30`, not the label `NET 30`, in their files and their indexed documents.\nA2. Every other attribute of every vendor (`name`, `category`, `city`, `contactEmail`) matches its seed, and no vendor was added or deleted.\nA3. All 6 Customer cards are byte-identical to the seed: they also have `paymentTerms`, and none is a vendor.\nA4. The vendors were changed by a script that finds them (a search or a folder listing), in at most three `run-realm-code` calls that write, not one call per vendor.\nA5. The reply to prompt 1 says how many vendors it changed (39, or 45 counting the 6 already on NET 30), and that number matches the snapshot.\n\n**B: list unpaid invoices more than 60 days overdue as of 1 November 2026 (prompt 2)**\nB1. A new card or Rich Markdown file lists exactly these nine Invoice cards, each once: INV-2026-1108, INV-2026-1143, INV-2026-1178, INV-2026-1241, INV-2026-1255, INV-2026-1276, INV-2026-1290, INV-2026-1304, INV-2026-1346. A card links them in a `linksToMany` field or a query-backed field whose results are exactly these nine; a Rich Markdown file embeds each one with a `:card` or `::card` directive.\nB2. The boundary is right: INV-2026-1304 (due 1 September, 61 days overdue) is listed, and INV-2026-1367 (due 2 September, exactly 60 days) is not. No paid or void invoice is listed, although eight paid and three void ones are due before 2 September.\nB3. The list is made of links to or embeds of the Invoice cards, not only invoice numbers or amounts copied into text.\nB4. Every Invoice card is byte-identical to the seed, and this task changed no Vendor or Customer card.\nB5. The new card or file, and a definition if the assistant wrote one, indexes or renders with no error and was shown on screen after the prompt.\n\n**C: make every vendor adopt from MySpecialVendor (prompt 3)**\nC1. All 45 Vendor instances adopt from `MySpecialVendor` in `bulk-operations/payables/my-special-vendor.gts` (`meta.adoptsFrom` `{ \"module\": \"../my-special-vendor\", \"name\": \"MySpecialVendor\" }`, or a module path that resolves to the same file), and each indexes as that type with no error.\nC2. Each vendor keeps its path and every attribute value, including `paymentTerms: net_30` from task A; no vendor was duplicated, moved or deleted.\nC3. `vendor.gts`, `my-special-vendor.gts` and `payment-terms.gts` are byte-identical to the seed: the change is in the instances, not a definition made to extend another.\nC4. Every Invoice still links to its vendor and indexes with no error, and every Customer card is byte-identical to the seed.\nC5. All 45 vendors were moved within the reply to prompt 3, across as many `run-realm-code` calls as the 20-file limit needs, without asking whether to go on.\n\n**All tasks**\nZ1. `Vendor/copperleaf-printing` stays open and renders with no error boundary at the end of the run.\nZ2. Every tool call applied or was repaired by the model, and the assistant did not ask a question or wait for confirmation before acting after any prompt.\nZ3. `invoice.gts` and `customer.gts` are byte-identical to the seed, and the only new files are task B's card (with its definition, if it has one) or Rich Markdown file.",
+      "cardInfo": {
+        "name": "Bulk operations: vendors and invoices",
+        "summary": "An accounts-payable workspace holds 45 vendors, 6 customers and 40 invoices, with one vendor open. Three prompts in one session ask to move every vendor to NET 30, to create a card listing the unpaid invoices more than 60 days overdue, and to make every vendor adopt from a subclass definition. This eval tests whether the assistant changes every card a request covers and nothing else: an enum stored by value, decoy cards with the same field, a date boundary, and an `adoptsFrom` rewrite across more files than one run can write.",
+        "notes": "Use case: bulk operations. Each prompt goes out as its own message in one session, and each task is judged on its own cards. The runner brings each task's card (`promptCards`) to the top of the stack before its prompt. Judge each criterion by comparing a card's seed (base64 under `files[].content` in the run's `evaluation.json`) with its file under `files` and its indexed document under `cards` in the workspace snapshot, and read the room for how the work was done. `expectedChangedCards` lists a sample of each task's targets, chosen at the edges of the set; the runner fails the render check unless every card in it changed and one of them is shown in the stack or the preview panel, so the rest of each set is judged from the snapshot. The bulk path the skills give (`source-code-editing`) is one `run-realm-code` script that searches, updates and reports, paging until `truncated` is false, within 200 `realm.cards.update` calls, 20 files and 55 seconds per run; `realm.cards.update` changes attributes only, so a link or `adoptsFrom` change goes through `realm.fs.replace`, which counts toward the 20 files.\n\nSeed (`bulk-operations/payables/`): 45 Vendor cards (11 due on receipt, 9 NET 15, 9 NET 45, 10 NET 60, and 6 already NET 30: `Vendor/brightline-office-supply`, `Vendor/fairmont-courier`, `Vendor/hearthstone-kitchens`, `Vendor/larkspur-labels`, `Vendor/riverbend-water-delivery`, `Vendor/timberline-furniture`); 6 Customer cards with a `paymentTerms` field of the same type; 40 Invoice cards, each linked to a vendor. `paymentTerms` is an enum that stores `net_30` and shows `NET 30`. `MySpecialVendor` extends `Vendor` with one extra field, `accountManager`.\n\nA (terms): the trap criteria are A1 (storing the label, or a free-text value) and A3 (a search on the `paymentTerms` field alone also finds the customers). The open vendor is the one prompt 1 is about.\n\nB (overdue invoices): the as-of date is in the prompt, so the answer never drifts with the run date. \"More than 60 days overdue\" means a due date before 2 September 2026. By status and due date: 9 unpaid more than 60 days overdue (the answer), INV-2026-1367 unpaid and exactly 60 days overdue, 4 unpaid 31 to 59 days overdue, 5 unpaid and recent or not yet due, 8 paid and 3 void with old due dates, and 10 paid recently. A query-backed listing, a static `linksToMany` and a Rich Markdown file that embeds the invoices (the form the skills give for a report) all pass B1; say in the analysis which one the assistant used. A query-backed list built on today's date instead of 1 November 2026 lists a different set, so it fails B1.\n\nC (adopt): the trap criteria are C1 and C3. `realm.cards.update` cannot change `adoptsFrom`, and 45 files are more than one run's 20, so a correct reply takes at least three writing runs, each rewriting `meta.adoptsFrom` with `realm.fs.replace`. Making `Vendor` extend `MySpecialVendor`, or the reverse, changes every vendor at once and fails C3. C2 also checks that task A's change survives the rewrite.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": [],
+      "secondsPerPrompt": 300
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/copperleaf-printing"
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../bulk-operations/payables/payment-terms.gts"
+        }
+      },
+      "initialFiles.1": {
+        "links": {
+          "self": "../bulk-operations/payables/vendor.gts"
+        }
+      },
+      "initialFiles.2": {
+        "links": {
+          "self": "../bulk-operations/payables/my-special-vendor.gts"
+        }
+      },
+      "initialFiles.3": {
+        "links": {
+          "self": "../bulk-operations/payables/customer.gts"
+        }
+      },
+      "initialFiles.4": {
+        "links": {
+          "self": "../bulk-operations/payables/invoice.gts"
+        }
+      },
+      "initialFiles.5": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/alder-creek-packaging.json"
+        }
+      },
+      "initialFiles.6": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/bluewater-freight-co.json"
+        }
+      },
+      "initialFiles.7": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/brightline-office-supply.json"
+        }
+      },
+      "initialFiles.8": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/cobalt-data-services.json"
+        }
+      },
+      "initialFiles.9": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/crescent-janitorial.json"
+        }
+      },
+      "initialFiles.10": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/driftwood-catering.json"
+        }
+      },
+      "initialFiles.11": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/eastgate-steel-supply.json"
+        }
+      },
+      "initialFiles.12": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/evergreen-pallet-works.json"
+        }
+      },
+      "initialFiles.13": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/fairmont-courier.json"
+        }
+      },
+      "initialFiles.14": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/fieldstone-paper-mill.json"
+        }
+      },
+      "initialFiles.15": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/foxglove-florals.json"
+        }
+      },
+      "initialFiles.16": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/granite-peak-it.json"
+        }
+      },
+      "initialFiles.17": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/harborview-signage.json"
+        }
+      },
+      "initialFiles.18": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/hearthstone-kitchens.json"
+        }
+      },
+      "initialFiles.19": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/ironbridge-fasteners.json"
+        }
+      },
+      "initialFiles.20": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/juniper-cloud-hosting.json"
+        }
+      },
+      "initialFiles.21": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/kestrel-air-cargo.json"
+        }
+      },
+      "initialFiles.22": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/lakeshore-linen.json"
+        }
+      },
+      "initialFiles.23": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/larkspur-labels.json"
+        }
+      },
+      "initialFiles.24": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/maple-row-stationers.json"
+        }
+      },
+      "initialFiles.25": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/meridian-security-systems.json"
+        }
+      },
+      "initialFiles.26": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/millbrook-corrugated.json"
+        }
+      },
+      "initialFiles.27": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/northwind-polymers.json"
+        }
+      },
+      "initialFiles.28": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/oakhurst-movers.json"
+        }
+      },
+      "initialFiles.29": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/orchard-lane-bakery.json"
+        }
+      },
+      "initialFiles.30": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/pinecrest-pest-control.json"
+        }
+      },
+      "initialFiles.31": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/quarry-hill-aggregates.json"
+        }
+      },
+      "initialFiles.32": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/redwood-print-house.json"
+        }
+      },
+      "initialFiles.33": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/riverbend-water-delivery.json"
+        }
+      },
+      "initialFiles.34": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/saltmarsh-shipping.json"
+        }
+      },
+      "initialFiles.35": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/silverline-telecom.json"
+        }
+      },
+      "initialFiles.36": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/sparrow-and-finch-design.json"
+        }
+      },
+      "initialFiles.37": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/stonebridge-uniforms.json"
+        }
+      },
+      "initialFiles.38": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/summit-ridge-electrical.json"
+        }
+      },
+      "initialFiles.39": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/tidewater-cold-storage.json"
+        }
+      },
+      "initialFiles.40": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/timberline-furniture.json"
+        }
+      },
+      "initialFiles.41": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/trillium-waste-services.json"
+        }
+      },
+      "initialFiles.42": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/union-square-coffee-service.json"
+        }
+      },
+      "initialFiles.43": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/valley-forge-tooling.json"
+        }
+      },
+      "initialFiles.44": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/westbrook-software.json"
+        }
+      },
+      "initialFiles.45": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/whitecap-marine-supply.json"
+        }
+      },
+      "initialFiles.46": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/willowmere-event-rentals.json"
+        }
+      },
+      "initialFiles.47": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/yarrow-ink-and-toner.json"
+        }
+      },
+      "initialFiles.48": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/zephyr-courier-network.json"
+        }
+      },
+      "initialFiles.49": {
+        "links": {
+          "self": "../bulk-operations/payables/Customer/acorn-valley-schools.json"
+        }
+      },
+      "initialFiles.50": {
+        "links": {
+          "self": "../bulk-operations/payables/Customer/bayside-medical-group.json"
+        }
+      },
+      "initialFiles.51": {
+        "links": {
+          "self": "../bulk-operations/payables/Customer/clearwater-hotels.json"
+        }
+      },
+      "initialFiles.52": {
+        "links": {
+          "self": "../bulk-operations/payables/Customer/dunmore-public-library.json"
+        }
+      },
+      "initialFiles.53": {
+        "links": {
+          "self": "../bulk-operations/payables/Customer/elmwood-dental.json"
+        }
+      },
+      "initialFiles.54": {
+        "links": {
+          "self": "../bulk-operations/payables/Customer/fernhill-property-management.json"
+        }
+      },
+      "initialFiles.55": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1101.json"
+        }
+      },
+      "initialFiles.56": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1108.json"
+        }
+      },
+      "initialFiles.57": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1115.json"
+        }
+      },
+      "initialFiles.58": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1122.json"
+        }
+      },
+      "initialFiles.59": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1129.json"
+        }
+      },
+      "initialFiles.60": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1136.json"
+        }
+      },
+      "initialFiles.61": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1143.json"
+        }
+      },
+      "initialFiles.62": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1150.json"
+        }
+      },
+      "initialFiles.63": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1157.json"
+        }
+      },
+      "initialFiles.64": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1164.json"
+        }
+      },
+      "initialFiles.65": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1171.json"
+        }
+      },
+      "initialFiles.66": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1178.json"
+        }
+      },
+      "initialFiles.67": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1185.json"
+        }
+      },
+      "initialFiles.68": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1192.json"
+        }
+      },
+      "initialFiles.69": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1199.json"
+        }
+      },
+      "initialFiles.70": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1206.json"
+        }
+      },
+      "initialFiles.71": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1213.json"
+        }
+      },
+      "initialFiles.72": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1220.json"
+        }
+      },
+      "initialFiles.73": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1227.json"
+        }
+      },
+      "initialFiles.74": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1234.json"
+        }
+      },
+      "initialFiles.75": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1241.json"
+        }
+      },
+      "initialFiles.76": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1248.json"
+        }
+      },
+      "initialFiles.77": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1255.json"
+        }
+      },
+      "initialFiles.78": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1262.json"
+        }
+      },
+      "initialFiles.79": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1269.json"
+        }
+      },
+      "initialFiles.80": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1276.json"
+        }
+      },
+      "initialFiles.81": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1283.json"
+        }
+      },
+      "initialFiles.82": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1290.json"
+        }
+      },
+      "initialFiles.83": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1297.json"
+        }
+      },
+      "initialFiles.84": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1304.json"
+        }
+      },
+      "initialFiles.85": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1311.json"
+        }
+      },
+      "initialFiles.86": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1318.json"
+        }
+      },
+      "initialFiles.87": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1325.json"
+        }
+      },
+      "initialFiles.88": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1332.json"
+        }
+      },
+      "initialFiles.89": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1339.json"
+        }
+      },
+      "initialFiles.90": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1346.json"
+        }
+      },
+      "initialFiles.91": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1353.json"
+        }
+      },
+      "initialFiles.92": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1360.json"
+        }
+      },
+      "initialFiles.93": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1367.json"
+        }
+      },
+      "initialFiles.94": {
+        "links": {
+          "self": "../bulk-operations/payables/Invoice/inv-2026-1374.json"
+        }
+      },
+      "expectedChangedCards.0": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/copperleaf-printing"
+        }
+      },
+      "expectedChangedCards.1": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/alder-creek-packaging"
+        }
+      },
+      "expectedChangedCards.2": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/kestrel-air-cargo"
+        }
+      },
+      "expectedChangedCards.3": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/sparrow-and-finch-design"
+        }
+      },
+      "expectedChangedCards.4": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/zephyr-courier-network"
+        }
+      },
+      "promptCards.0": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/copperleaf-printing"
+        }
+      },
+      "promptCards.1": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/copperleaf-printing"
+        }
+      },
+      "promptCards.2": {
+        "links": {
+          "self": "../bulk-operations/payables/Vendor/copperleaf-printing"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

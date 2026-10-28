@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Summit Ridge Electrical",
+      "category": "raw materials",
+      "city": "Boise",
+      "contactEmail": "accounts@summitridgeelectri.example.com",
+      "paymentTerms": "net_45"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor",
+        "name": "Vendor"
+      }
+    }
+  }
+}
