@@ -1,4 +1,4 @@
-import { click, render } from '@ember/test-helpers';
+import { click, render, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -203,6 +203,35 @@ module('Integration | credential fields', function (hooks) {
       window.location.origin,
       "the page's origin",
     );
+  });
+
+  test('a stylesheet the page loads after the fields were styled restyles them', async function (assert) {
+    await render(<template><Login @setMode={{noop}} /></template>);
+    assertFrameShown(assert, 'login');
+    let element = document.querySelector<HTMLElement>(
+      '[data-test-credential-fields="login"]',
+    )!;
+    let before = parseFloat(element.style.height);
+
+    let url = URL.createObjectURL(
+      new Blob(['.credential-fields { --boxel-form-control-height: 120px; }'], {
+        type: 'text/css',
+      }),
+    );
+    let link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = url;
+    document.head.append(link);
+    try {
+      await waitUntil(() => parseFloat(element.style.height) > before + 100, {
+        timeout: 10000,
+        timeoutMessage: 'the fields were not restyled',
+      });
+      assert.ok(true, 'the fields took the taller controls');
+    } finally {
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
   });
 
   test('a card on the page cannot read the change-password fields', async function (assert) {

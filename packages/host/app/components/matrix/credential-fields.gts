@@ -213,8 +213,10 @@ export default class CredentialFieldsFrame extends Component<Signature> {
     let post = (message: Record<string, unknown>) =>
       frame.contentWindow?.postMessage(message, secureOrigin);
 
+    // Off the page, the element has no styles to read, and the frame would
+    // draw the fields in none.
     let sendStyle = () => {
-      if (!requested) {
+      if (!requested || !element.isConnected) {
         return;
       }
       let computed = getComputedStyle(element);
@@ -278,11 +280,24 @@ export default class CredentialFieldsFrame extends Component<Signature> {
     resizeObserver.observe(element);
     // A layout centred in the window moves the fields as the window resizes.
     window.addEventListener('resize', sendStyle);
+    // A stylesheet the page loads after the frame was styled can change the
+    // values it was sent. Its `load` does not bubble, so it is heard on the
+    // way down.
+    let onStylesheetLoad = (event: Event) => {
+      if (
+        event.target instanceof HTMLLinkElement &&
+        event.target.rel === 'stylesheet'
+      ) {
+        sendStyle();
+      }
+    };
+    document.addEventListener('load', onStylesheetLoad, true);
 
     return () => {
       window.removeEventListener('message', onMessage);
       resizeObserver.disconnect();
       window.removeEventListener('resize', sendStyle);
+      document.removeEventListener('load', onStylesheetLoad, true);
       clearTimeout(loadTimer);
       endLoadWait();
       fields.disconnect();
