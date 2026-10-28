@@ -4509,7 +4509,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert.strictEqual(
       operatorModeStateService.state.codePath,
       rri(changedFile),
-      'the changed file is open in code mode',
+      'code mode opens on the changed file, not on the previous one',
     );
   });
 

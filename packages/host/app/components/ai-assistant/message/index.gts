@@ -333,14 +333,20 @@ export default class AiAssistantMessage extends Component<Signature> {
     return this.args.answerFooter?.diff?.perFile ?? [];
   }
 
-  // A changed file opens in code mode, switching to it when needed.
-  private openChangedFile = (file: { path: string }) => {
-    let changed = this.changedFiles.find(
-      (candidate) => candidate.path === file.path,
-    );
-    if (changed) {
-      this.assistantQuickLook.openFileInCode(changed.url);
+  // A changed file opens in code mode, over an open Quick Look. A deleted
+  // file has nothing to open, and a realm the reader may no longer read has
+  // no code mode.
+  private openChangedFile = (row: { path: string }) => {
+    // TurnChanges hands back the object it got from @files
+    let file = row as ChangedFile;
+    if (
+      file.status === 'deleted' ||
+      !this.operatorModeStateService.codeSubmodeOffered(file.url)
+    ) {
+      return;
     }
+    this.assistantQuickLook.close();
+    this.operatorModeStateService.openFileInCodeMode(file.url);
   };
 
   // The reasoning trace is shown, but closed by default: a transcript reads
