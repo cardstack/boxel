@@ -51,7 +51,12 @@ export default class ServiceAccountFields extends Component<Signature> {
             <span class='file-name'>from {{@entry.fileName}}</span>
           </p>
         {{else if @entry.fileProblem}}
-          <p class='problem' role='alert' data-test-service-account-problem>
+          <p
+            class='problem'
+            role='alert'
+            data-test-service-account-problem
+            data-test-service-account-problem-file={{@entry.fileName}}
+          >
             {{@entry.fileProblem}}
           </p>
         {{else}}
