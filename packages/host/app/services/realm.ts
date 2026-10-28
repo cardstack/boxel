@@ -788,8 +788,9 @@ export default class RealmService extends Service {
   // function of the realm URL string (cache entries never go stale), and a
   // resolved id→realm answer stays valid as long as that realm is still
   // known — validated against `realms` on every hit, so realm removal and
-  // resetState can't serve a stale answer — and no realm is learned after it,
-  // since a realm nested under the answer would now claim the id.
+  // resetState can't serve a stale answer — and learning a realm evicts the
+  // answers for ids inside it, since a realm nested under an answer takes its
+  // ids over.
   private realmPathsCache = new Map<string, RealmPaths>();
   private realmOfCache = new Map<string, string>();
   // The authorization middleware reads `token()` on every fetch, and a single
@@ -1290,29 +1291,7 @@ export default class RealmService extends Service {
       // stale id doesn't pay validation + full scan on every call.
       this.realmOfCache.delete(id);
     }
-    // The innermost realm wins: a realm nested under another realm's URL owns
-    // its own resources, whichever of the two was learned first.
-    let best: string | undefined;
-    let bestLength = -1;
-    for (const realm of this.realms.keys()) {
-      let paths = this.realmPathsCache.get(realm);
-      if (!paths) {
-        // Built from the identifier rather than parsed as a URL: a realm key
-        // is whatever form the realm was registered under, and only URL-form
-        // keys survive `new URL()`. The string overload ensures the trailing
-        // slash the URL constructor would have supplied.
-        paths = new RealmPaths(ri(realm));
-        this.realmPathsCache.set(realm, paths);
-      }
-      if (paths.inRealm(id)) {
-        // Compared in URL form, since keys may be registered in either form.
-        let length = this.toLookupURL(realm).length;
-        if (length > bestLength) {
-          best = realm;
-          bestLength = length;
-        }
-      }
-    }
+    let best = this.knownRealmKey(id);
     if (best !== undefined) {
       this.realmOfCache.set(id, best);
       return ri(best);
@@ -1658,28 +1637,44 @@ export default class RealmService extends Service {
     return vn.isRegisteredPrefix(url) ? vn.toURL(url).href : url;
   }
 
-  // Untracked: callers that render the answer pair it with a tracked read.
-  private knownRealmKey(url: string): string | undefined {
-    // `this.realms` is keyed by the user-facing realm URL (typically a
-    // virtual alias like `https://cardstack.com/base/`). Callers may
-    // pass the resolved real URL (e.g. `https://localhost:4201/base/`)
-    // or an RRI prefix (e.g. `@cardstack/base/`) — all three should
-    // match the same realm. Normalize both sides via
-    // `virtualNetwork.unresolveURL` (chases through any registered
-    // virtual → real URL mapping and unifies to the realm-prefix RRI
-    // form) so the comparison is form-agnostic.
+  // The known realm that owns `id`: the innermost one containing it, so a
+  // realm nested under another realm's URL owns its own resources whichever of
+  // the two was learned first. `this.realms` is keyed by the form each realm
+  // was registered under (typically a virtual alias like
+  // `https://cardstack.com/base/`), and `id` may come as that form, the
+  // resolved real URL or an RRI prefix, so both sides are compared after
+  // `virtualNetwork.unresolveURL` folds them onto one form, and nesting is
+  // measured in that form too. Untracked: callers that render the answer pair
+  // it with a tracked read.
+  private knownRealmKey(id: string): string | undefined {
     let vn = this.network.virtualNetwork;
-    let normalizedUrl = vn.unresolveURL(url);
+    let normalizedId = vn.unresolveURL(id);
+    let best: string | undefined;
+    let bestLength = -1;
     for (let key of this.realms.keys()) {
-      if (url.startsWith(key)) {
-        return key;
-      }
       let normalizedKey = vn.unresolveURL(key);
-      if (normalizedUrl.startsWith(normalizedKey)) {
-        return key;
+      if (
+        normalizedKey.length > bestLength &&
+        this.contains(normalizedKey, normalizedId)
+      ) {
+        best = key;
+        bestLength = normalizedKey.length;
       }
     }
-    return undefined;
+    return best;
+  }
+
+  private contains(realm: string, id: string): boolean {
+    let paths = this.realmPathsCache.get(realm);
+    if (!paths) {
+      // Built from the identifier rather than parsed as a URL: a realm key is
+      // whatever form the realm was registered under, and only URL-form keys
+      // survive `new URL()`. The string overload ensures the trailing slash
+      // the URL constructor would have supplied.
+      paths = new RealmPaths(ri(realm));
+      this.realmPathsCache.set(realm, paths);
+    }
+    return paths.inRealm(id as RealmResourceIdentifier);
   }
 
   // By default, this does a tracked read from currentKnownRealms so that your
@@ -1769,7 +1764,19 @@ export default class RealmService extends Service {
     if (!resource) {
       resource = this.createRealmResource(realmURL, token);
       this._realms.set(realmURL, resource);
-      this.realmOfCache.clear();
+      // A cached answer for an id inside the new realm may name a realm that
+      // contains it, which the new realm now takes over from.
+      let normalizedRealm = this.network.virtualNetwork.unresolveURL(realmURL);
+      for (let id of this.realmOfCache.keys()) {
+        if (
+          this.contains(
+            normalizedRealm,
+            this.network.virtualNetwork.unresolveURL(id),
+          )
+        ) {
+          this.realmOfCache.delete(id);
+        }
+      }
       // only after the set has happened can we safely do the tracked read to
       // establish our depenency.
       this.currentKnownRealms.add(realmURL);

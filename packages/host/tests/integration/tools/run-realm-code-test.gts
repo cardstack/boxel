@@ -37,7 +37,10 @@ const otherRealmURL = 'http://test-realm/test2/';
 // Makes the realm service know a workspace the user can read under
 // `identifier`, without a realm behind it: the capture endpoint is stubbed,
 // so only the realm service's view of the workspace matters.
-function knowReadableWorkspace(identifier: string) {
+function knowReadableWorkspace(
+  identifier: string,
+  permissions: ('read' | 'write')[] = ['read'],
+) {
   getService('realm').getOrCreateRealmResource(
     identifier,
     createJWT(
@@ -45,7 +48,7 @@ function knowReadableWorkspace(identifier: string) {
         user: '@testuser:localhost',
         realm: identifier,
         sessionRoom: 'boxel-session-room-id',
-        permissions: ['read'],
+        permissions,
         realmServerURL: 'http://test-realm/',
       },
       '1d',
@@ -1590,9 +1593,11 @@ return 'done';`,
         }),
         (error: Error) =>
           error.message ===
-          `${realm} is the folder card-mutation/relink/ in the workspace ` +
-            `${testRealmURL}, not its root. Pass ${testRealmURL} as realm, ` +
-            `and start each path in the folder with card-mutation/relink/`,
+          `${realm} is card-mutation/relink inside the workspace ${testRealmURL}, ` +
+            `not its root. Pass ${testRealmURL} as realm, and name each file ` +
+            `by its path from there: card-mutation/relink for that file, ` +
+            `card-mutation/relink.json for that card, or card-mutation/relink/ and the ` +
+            `file's name for a file in that folder`,
       );
     }
     let source = await cardService.getSource(
@@ -1604,23 +1609,46 @@ return 'done';`,
     );
   });
 
-  test('refuses a file in the realm as the realm, and names it by its path from the root', async function (assert) {
+  test('refuses a file or card in the realm as the realm, and names it by its path from the root', async function (assert) {
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
-    let file = `${testRealmURL}Event/intro-to-pottery.json`;
+
+    for (let local of [
+      'Event/intro-to-pottery.json',
+      'Event/intro-to-pottery',
+      'docs/README',
+    ]) {
+      let realm = `${testRealmURL}${local}`;
+      await assert.rejects(
+        command.execute({
+          realm,
+          roomId: '!room:example.com',
+          code: `return 'ran';`,
+        }),
+        (error: Error) =>
+          error.message ===
+          `${realm} is ${local} inside the workspace ${testRealmURL}, ` +
+            `not its root. Pass ${testRealmURL} as realm, and name each file ` +
+            `by its path from there: ${local} for that file, ` +
+            `${local}.json for that card, or ${local}/ and the ` +
+            `file's name for a file in that folder`,
+      );
+    }
+  });
+
+  test('refuses a realm with a malformed percent-encoding as one it cannot reach', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let realm = `${testRealmURL}folder%E0/`;
 
     await assert.rejects(
       command.execute({
-        realm: file,
+        realm,
         roomId: '!room:example.com',
         code: `return 'ran';`,
       }),
       (error: Error) =>
-        error.message ===
-        `${file} is the file Event/intro-to-pottery.json in the workspace ` +
-          `${testRealmURL}, not the workspace. Pass ${testRealmURL} as ` +
-          `realm, and name the file by its path from there: ` +
-          `Event/intro-to-pottery.json`,
+        error.message === `The current user cannot read or write ${realm}`,
     );
   });
 
@@ -1641,9 +1669,11 @@ return 'done';`,
         }),
         (error: Error) =>
           error.message ===
-          `${folder} is the folder card-mutation/relink/ in the workspace ` +
-            `${prefix}, not its root. Pass ${prefix} as realm, and start ` +
-            `each path in the folder with card-mutation/relink/`,
+          `${folder} is card-mutation/relink inside the workspace ${prefix}, ` +
+            `not its root. Pass ${prefix} as realm, and name each file ` +
+            `by its path from there: card-mutation/relink for that file, ` +
+            `card-mutation/relink.json for that card, or card-mutation/relink/ and the ` +
+            `file's name for a file in that folder`,
       );
     } finally {
       virtualNetwork.removeRealmMapping(prefix);
@@ -1676,6 +1706,25 @@ return 'done';`,
     });
 
     assert.strictEqual(JSON.parse(result.scriptResult!), 'ran');
+  });
+
+  test('asks a workspace nested under the realm for its own permissions', async function (assert) {
+    let nestedRealmURL = `${testRealmURL}nested/`;
+    knowReadableWorkspace(nestedRealmURL, []);
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: nestedRealmURL,
+        roomId: '!room:example.com',
+        code: `return 'ran';`,
+      }),
+      (error: Error) =>
+        error.message ===
+        `The current user cannot read or write ${nestedRealmURL}`,
+      'the readable outer realm does not answer for the nested one',
+    );
   });
 
   test('refuses paths outside the realm, and names the files it already saved', async function (assert) {

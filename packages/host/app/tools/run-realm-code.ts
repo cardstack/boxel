@@ -101,8 +101,6 @@ import type * as BaseToolModule from '@cardstack/base/command';
 const log = logger('tools:run-realm-code');
 
 const MAX_CODE_SIZE = 100_000;
-// A last path segment with an extension names a file rather than a folder.
-const FILE_NAME = /\.[^/.]+$/;
 const MAX_FILES = 20;
 // realm.cards.update has its own limit: a script that edits every card a
 // search found must not stop at MAX_FILES. The updates are saved in one
@@ -1865,24 +1863,24 @@ export default class RunRealmCodeTool extends HostBaseTool<
     ) {
       throw new Error(`The current user cannot read or write ${realmInput}`);
     }
-    // Paths in the script resolve from the realm root, so a folder or file
-    // inside the realm is refused rather than replaced by the root: the
+    let rootURL = this.realmRootURL(realmURL);
+    // Paths in the script resolve from the realm root, so a folder, file or
+    // card inside the realm is refused rather than replaced by the root: the
     // script's paths would otherwise resolve from somewhere the caller did not
-    // name. The root is named in the form the model is shown realms in.
+    // name. Which of the three it is isn't known without asking the realm, so
+    // the message holds for each. The root is named in the form the model is
+    // shown realms in.
     let { virtualNetwork } = this.network;
-    let local = new RealmPaths(new URL(this.realmRootURL(realmURL))).local(
+    let local = new RealmPaths(new URL(rootURL)).local(
       virtualNetwork.toURL(realmId),
     );
     if (local !== '') {
-      let root = virtualNetwork.unresolveURL(this.realmRootURL(realmURL));
+      let root = virtualNetwork.unresolveURL(rootURL);
       throw new Error(
-        !realmInput.endsWith('/') && FILE_NAME.test(local)
-          ? `${realmInput} is the file ${local} in the workspace ${root}, ` +
-              `not the workspace. Pass ${root} as realm, and name the file ` +
-              `by its path from there: ${local}`
-          : `${realmInput} is the folder ${local}/ in the workspace ${root}, ` +
-              `not its root. Pass ${root} as realm, and start each path in ` +
-              `the folder with ${local}/`,
+        `${realmInput} is ${local} inside the workspace ${root}, not its ` +
+          `root. Pass ${root} as realm, and name each file by its path from ` +
+          `there: ${local} for that file, ${local}.json for that card, or ` +
+          `${local}/ and the file's name for a file in that folder`,
       );
     }
 
@@ -1897,11 +1895,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let gatedRealmsOfRun: RealmIdentifier[] | undefined;
     let gatedRealms = () => (gatedRealmsOfRun ??= this.gatedRealms(roomId));
     let session = new RealmFsSession(
-      this.realmRootURL(realmURL),
+      rootURL,
       (url) => this.readSource(url),
       (url, content, expected, options) =>
         this.writeFile(roomId, url, content, expected, options),
-      (updates) => this.saveCards(roomId, this.realmRootURL(realmURL), updates),
+      (updates) => this.saveCards(roomId, rootURL, updates),
       (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
       (url, expected) => this.deleteFile(url, expected),
       (url, maxBytes, signal) => this.downloadFile(url, maxBytes, signal),
@@ -1930,7 +1928,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         this.captureURL(url, options, doneBy, signal),
       (reference) =>
         workspaceOf(reference, { network: this.network, realm: this.realm })
-          ?.realmURL === this.realmRootURL(realmURL),
+          ?.realmURL === rootURL,
       (workspaceInput) =>
         createWorkspace(
           { matrixService: this.matrixService, realm: this.realm },
@@ -1981,7 +1979,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       runnerResult = await runRealmCode(
         {
           code: input.code,
-          realmURL: this.realmRootURL(realmURL),
+          realmURL: rootURL,
           timeoutMs: runTimeoutMs,
         },
         (method, args) => session.call(method, args),
