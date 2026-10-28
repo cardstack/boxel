@@ -25,7 +25,7 @@ export function addedOn(iso: string): string {
 export function kindLabel(kind: string): string | undefined {
   switch (kind) {
     case 'oauth-client':
-      return 'OAuth app';
+      return 'Sign-in app';
     case 'oauth-connection':
       return 'Connected account';
     default:

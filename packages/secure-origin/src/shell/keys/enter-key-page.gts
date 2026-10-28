@@ -45,6 +45,8 @@ import KeyFields from './key-fields.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OAuthClientFields, {
+  GITHUB_SETTINGS,
+  OAuthProviderChoice,
   type OAuthClientField,
   type OAuthClientForm,
 } from './oauth-client-fields.gts';
@@ -62,8 +64,8 @@ const KINDS = [
   },
   {
     value: 'oauth-client',
-    label: 'OAuth app',
-    hint: 'An app you registered with the service, which accounts are connected through.',
+    label: 'Sign-in app (OAuth)',
+    hint: 'Lets people sign in with their own account on a site such as GitHub, instead of pasting a key. You create the app in that site’s developer settings, and it gives you a client ID and secret to enter here.',
   },
 ];
 
@@ -93,10 +95,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     {{else if this.done}}
       <DonePage @heading='Key saved' @onClose={{@api.close}}>
         {{#if (eq this.done.kind 'oauth-client')}}
-          Your OAuth app
+          Your sign-in app
           <strong data-test-keys-done-name>{{this.done.key.name}}</strong>
           is saved. Nothing can read its secret back, here or anywhere in Boxel.
-          Connect an account through it from your key page.
+          To use it, choose Connect an account on your key page.
         {{else}}
           Your key
           <strong data-test-keys-done-name>{{this.done.key.name}}</strong>
@@ -132,9 +134,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
               @onSelect={{this.setKind}}
             />
             {{#if this.isOAuthClient}}
-              <p class='note' data-test-oauth-github-note>For GitHub, register a
-                GitHub App, not an OAuth App: an OAuth App’s only
-                private-repository scope can write.</p>
+              <OAuthProviderChoice
+                @form={{this.form.oauth}}
+                @onProvider={{this.setProvider}}
+              />
             {{/if}}
             <KeyFields
               @name={{this.form.name}}
@@ -154,7 +157,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                     <BoxelInput
                       @type='text'
                       @autocomplete='off'
-                      @placeholder='The app’s client ID, from the service'
+                      @placeholder='The app’s Client ID, shown on the site'
                       @value={{this.form.clientId}}
                       @onInput={{this.setClientId}}
                       name='client-id'
@@ -165,7 +168,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                 {{/if}}
               </:beforeValue>
             </KeyFields>
-            {{#if this.isOAuthClient}}
+            {{#if this.otherProvider}}
               <OAuthClientFields
                 @form={{this.form.oauth}}
                 @onChange={{this.setOAuth}}
@@ -237,6 +240,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     value: '',
     clientId: '',
     oauth: trackedObject<OAuthClientForm>({
+      provider: 'github',
       grantType: 'authorization_code',
       authorizeUrl: '',
       tokenUrl: '',
@@ -308,16 +312,26 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     return (
       this.isOAuthClient &&
       (!clientId.trim() ||
-        !oauth.tokenUrl.trim() ||
-        (oauth.grantType === 'authorization_code' &&
-          !oauth.authorizeUrl.trim()))
+        (oauth.provider === 'other' &&
+          (!oauth.tokenUrl.trim() ||
+            (oauth.grantType === 'authorization_code' &&
+              !oauth.authorizeUrl.trim()))))
     );
+  }
+
+  private get otherProvider() {
+    return this.isOAuthClient && this.form.oauth.provider === 'other';
   }
 
   // What the realm server is told of an OAuth app beside its secret. The
   // authorization URL goes only with a grant people sign in through.
   private get oauthSettings(): OAuthClientSettings {
-    let { clientId, oauth } = this.form;
+    let { clientId } = this.form;
+    // GitHub's settings are known; another site's are what was entered.
+    let oauth =
+      this.form.oauth.provider === 'github'
+        ? { ...this.form.oauth, ...GITHUB_SETTINGS }
+        : this.form.oauth;
     let scopes = oauth.scopes.trim();
     let apiHosts = oauth.apiHosts
       .split('\n')
@@ -343,6 +357,11 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
 
   private setClientId = (value: string) => {
     this.form.clientId = value;
+    this.form.error = undefined;
+  };
+
+  private setProvider = (provider: 'github' | 'other') => {
+    this.form.oauth.provider = provider;
     this.form.error = undefined;
   };
 

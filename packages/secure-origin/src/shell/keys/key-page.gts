@@ -88,11 +88,12 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                   <li class='item' data-test-key-row={{key.name}}>
                     <div class='entry'>
                       <KeyTile @key={{key}}>
-                        <OAuthKeyStatus
-                          @key={{key}}
-                          @onReconnect={{this.reconnect}}
-                        />
-                        <KeyUse @key={{key}} @onUnshare={{this.unshare}} />
+                        <KeyUse @key={{key}} @onUnshare={{this.unshare}}>
+                          <OAuthKeyStatus
+                            @key={{key}}
+                            @onReconnect={{this.reconnect}}
+                          />
+                        </KeyUse>
                         <div class='tile-actions'>
                           {{#unless (eq key.kind 'oauth-connection')}}
                             <Button
