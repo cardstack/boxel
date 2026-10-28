@@ -6,6 +6,7 @@ import {
   focus,
   triggerEvent,
   triggerKeyEvent,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -219,5 +220,103 @@ module('Integration | section-rail', function (hooks) {
 
     await triggerEvent('[data-test-outside]', 'pointerdown');
     assert.dom('[data-test-section-rail-flyout]').doesNotExist();
+  });
+
+  test('marks the section being read as the page scrolls, and holds a jumped-to section until the user scrolls', async function (assert) {
+    let sections = new DashboardSections();
+    let intro: DashboardSection = {
+      id: 'intro',
+      label: 'Intro',
+      icon: IconPlus,
+    };
+    let shelf: DashboardSection = {
+      id: 'shelf',
+      label: 'Shelf',
+      icon: IconPlus,
+    };
+    let notes: DashboardSection = {
+      id: 'notes',
+      label: 'Notes',
+      icon: IconPlus,
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <div class='scroller' {{sections.trackScroller}} data-test-scroller>
+            <div>
+              <section class='tall' {{sections.register intro}}></section>
+              <section
+                class='tall'
+                {{sections.register shelf}}
+                data-test-shelf
+              ></section>
+              {{! Too short to reach the reading line, even at the bottom. }}
+              <section class='short' {{sections.register notes}}></section>
+            </div>
+          </div>
+          <SectionRail @sections={{sections}} />
+          <style scoped>
+            .scroller {
+              position: relative;
+              height: 10rem;
+              overflow-y: auto;
+            }
+            .tall {
+              height: 20rem;
+            }
+            .short {
+              height: 2rem;
+            }
+          </style>
+        </template>
+      },
+    );
+
+    let scroller = find('[data-test-scroller]') as HTMLElement;
+    let scrollTo = async (top: number) => {
+      scroller.scrollTop = top;
+      await triggerEvent(scroller, 'scroll');
+    };
+    let current = () =>
+      find(
+        '[data-test-section-rail-entry][aria-current="location"]',
+      )?.getAttribute('data-test-section-rail-entry');
+    let maxScrollTop = scroller.scrollHeight - scroller.clientHeight;
+
+    assert.strictEqual(current(), 'intro', 'the top of the page is the first');
+
+    await scrollTo((find('[data-test-shelf]') as HTMLElement).offsetTop);
+    assert.strictEqual(current(), 'shelf', 'past the reading line');
+
+    await scrollTo(maxScrollTop);
+    assert.strictEqual(
+      current(),
+      'notes',
+      'the bottom of the page is the last',
+    );
+
+    await scrollTo(0);
+    assert.strictEqual(current(), 'intro');
+
+    await click('[data-test-section-rail-entry="notes"]');
+    assert.strictEqual(current(), 'notes', 'a jump marks its section at once');
+    await waitUntil(() => scroller.scrollTop >= maxScrollTop - 1, {
+      timeout: 5000,
+    });
+
+    await scrollTo(0);
+    assert.strictEqual(
+      current(),
+      'notes',
+      'a scroll the user did not make keeps the jumped-to section',
+    );
+
+    await triggerEvent(scroller, 'wheel');
+    assert.strictEqual(
+      current(),
+      'intro',
+      'a scroll by hand hands the section back to the scroll-spy',
+    );
   });
 });

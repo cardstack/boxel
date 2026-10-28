@@ -19,6 +19,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
+import HostedPill from './hosted-pill';
+
 import type { SectionFlyoutSignature } from './sections';
 
 // The Workspaces entry's flyout: every favorite the page's Favorites lists,
@@ -77,13 +79,13 @@ export default class FavoritesFlyout extends Component<SectionFlyoutSignature> {
           </span>
           <span class='favorite-name'>{{favorite.info.name}}</span>
           {{#if favorite.isHosted}}
-            <span class='hosted-chip'>Hosted</span>
+            <HostedPill />
           {{/if}}
         </span>
       </Button>
     {{else}}
       <p class='flyout-empty' data-test-section-rail-favorites-empty>
-        Star a workspace to keep it here and at the top of the dashboard.
+        Favorite a workspace to keep it here and at the top of the dashboard.
       </p>
     {{/each}}
 
@@ -94,7 +96,6 @@ export default class FavoritesFlyout extends Component<SectionFlyoutSignature> {
       .flyout-title {
         font-size: var(--boxel-font-size);
         font-weight: 700;
-        letter-spacing: -0.01em;
       }
       .favorite {
         --pretui-button-h: 2.75rem;
@@ -143,22 +144,6 @@ export default class FavoritesFlyout extends Component<SectionFlyoutSignature> {
         white-space: nowrap;
         font-size: var(--boxel-font-size-sm);
         font-weight: 600;
-      }
-      /* The workspace tile's Hosted pill: lime, with its dot. */
-      .hosted-chip {
-        flex-shrink: 0;
-        padding: var(--boxel-sp-6xs) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius-lg);
-        background-color: var(--boxel-dark-40);
-        color: var(--boxel-lime);
-        font-family: var(--boxel-monospace-font-family);
-        font-size: var(--boxel-font-size-2xs);
-        font-weight: 600;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-      }
-      .hosted-chip::before {
-        content: '● ' / '';
       }
       .flyout-empty {
         margin: 0;

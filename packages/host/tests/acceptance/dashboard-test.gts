@@ -1562,7 +1562,7 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert
           .dom(`${FLYOUT} [data-test-section-rail-favorites-empty]`)
-          .includesText('Star a workspace');
+          .includesText('Favorite a workspace');
       });
 
       test('Escape closes the flyout with focus back on its entry, then folds the rail', async function (assert) {

@@ -174,23 +174,22 @@ export default class SectionRail extends Component<Signature> {
     },
   );
 
-  // Focus leaving the rail closes its flyout, as the pointer leaving it
-  // does. Focus can leave in the middle of a render (a pick inside a flyout
-  // removes the focused row), so the flyout closes on the next run loop.
+  // Focus leaving the rail unfolds it and closes its flyout, as the pointer
+  // leaving it does. Focus can leave in the middle of a render (a pick inside
+  // a flyout removes the focused row), so both wait for the next run loop.
   @action private onFocusOut(event: Event) {
     let { currentTarget, relatedTarget } = event as FocusEvent;
     if ((currentTarget as HTMLElement).contains(relatedTarget as Node)) {
       return;
     }
-    this.unfold();
     next(() => {
+      if (this.isDestroying || this.isDestroyed) {
+        return;
+      }
+      this.unfold();
       // A click on a part of the rail that takes no focus blurs it too; the
       // pointer still over the rail keeps it.
-      if (
-        this.isDestroying ||
-        this.isDestroyed ||
-        this.railElement?.matches(':hover')
-      ) {
+      if (this.railElement?.matches(':hover')) {
         return;
       }
       this.flyoutIntentTask.cancelAll();
@@ -252,7 +251,6 @@ export default class SectionRail extends Component<Signature> {
       }}
       aria-label='Dashboard sections'
       data-theme='dark'
-      data-dashboard-rail
       {{this.captureRail}}
       {{on 'pointermove' this.trackPointer}}
       {{on 'pointerenter' this.unfold}}
