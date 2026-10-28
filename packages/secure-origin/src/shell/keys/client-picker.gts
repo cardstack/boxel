@@ -44,7 +44,7 @@ interface Signature {
 const ClientPicker: TemplateOnlyComponent<Signature> = <template>
   <FieldContainer
     @tag='div'
-    @label='Sign in through'
+    @label='Sign in with'
     @icon={{Globe}}
     data-test-client-picker
   >

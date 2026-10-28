@@ -491,7 +491,7 @@ module('Integration | connecting an account', function (hooks) {
       await waitFor('[data-test-connect-no-clients]');
       assert
         .dom('[data-test-connect-no-clients]')
-        .includesText('No app is set up to sign in to this service.');
+        .includesText('No sign-in app is set up for this site.');
       assert
         .dom('[data-test-connect-needs-admin]')
         .hasText(
@@ -509,7 +509,7 @@ module('Integration | connecting an account', function (hooks) {
       assert.dom('[data-test-connect-needs-admin]').doesNotExist();
       assert
         .dom('[data-test-connect-no-clients]')
-        .includesText('Add the app you registered with the service');
+        .includesText('Add one on your key page');
     });
 
     test('a list of apps that fails to load offers to try again', async function (assert) {
@@ -648,10 +648,10 @@ module('Integration | connecting an account', function (hooks) {
       assert.dom(`${row} [data-test-key-kind]`).hasText('Connected account');
       assert
         .dom(`${row} [data-test-oauth-connection-client]`)
-        .hasText('Signs in through GitHub');
+        .hasText('Signs in with GitHub');
       assert
         .dom(`${row} [data-test-oauth-status="rejected"]`)
-        .includesText('Your sign-in expired or was revoked.');
+        .includesText('Your sign-in expired or was cancelled on the site.');
       assert
         .dom(`${row} [data-test-key-replace]`)
         .doesNotExist('a connection is signed in again, not replaced');
@@ -672,11 +672,11 @@ module('Integration | connecting an account', function (hooks) {
       await waitFor(row);
       assert
         .dom(`${row} [data-test-oauth-status="needs-admin"]`)
-        .hasText('The app it signs in through needs an administrator.');
+        .includesText('needs its owner to fix it');
       assert.dom(`${row} [data-test-key-reconnect]`).doesNotExist();
       assert
         .dom(`${row} [data-test-oauth-connection-client]`)
-        .hasText('Signs in through an app that is no longer available');
+        .hasText('Signs in with an app that is no longer available');
     });
 
     test('an OAuth app gives its client id and grant, and says when its secret was refused', async function (assert) {
@@ -700,21 +700,21 @@ module('Integration | connecting an account', function (hooks) {
       await render(KeyPage);
       let broken = '[data-test-key-row="Forge app"]';
       await waitFor(broken);
-      assert.dom(`${broken} [data-test-key-kind]`).hasText('OAuth app');
+      assert.dom(`${broken} [data-test-key-kind]`).hasText('Sign-in app');
       assert
         .dom(`${broken} [data-test-oauth-client-id]`)
         .hasText('forge-client-id');
       assert
         .dom(`${broken} [data-test-oauth-client-grant]`)
-        .hasText('People sign in through it');
+        .doesNotExist('people signing in is what an app is for');
       assert
         .dom(`${broken} [data-test-oauth-status="broken"]`)
-        .hasText('Its token endpoint refused the secret: replace it.');
+        .includesText('The site refused this app’s secret.');
       assert.dom(`${broken} [data-test-key-replace]`).exists();
       let robot = '[data-test-key-row="Robot app"]';
       assert
         .dom(`${robot} [data-test-oauth-client-grant]`)
-        .hasText('No person signs in: Boxel signs in as the app');
+        .hasText('· Signs in as itself, with no person’s account');
       assert.dom(`${robot} [data-test-oauth-status]`).doesNotExist();
     });
 
@@ -753,13 +753,9 @@ module('Integration | connecting an account', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
       assert.dom('[data-test-oauth-client-id-input]').doesNotExist();
-      assert.dom('[data-test-oauth-github-note]').doesNotExist();
       await click('[data-test-radio-choice="oauth-client"] input');
-      assert
-        .dom('[data-test-oauth-github-note]')
-        .hasText(
-          'For GitHub, register a GitHub App, not an OAuth App: an OAuth App’s only private-repository scope can write.',
-        );
+      await click('[data-test-radio-choice="other"] input');
+      assert.dom('[data-test-oauth-github-steps]').doesNotExist();
       assert.dom('[data-test-key-field="value"]').includesText('Client secret');
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
       assert
@@ -817,7 +813,44 @@ module('Integration | connecting an account', function (hooks) {
           meta: { ticket: 'ticket-1' },
         },
       );
-      assert.dom('[data-test-keys-done]').includesText('Your OAuth app');
+      assert.dom('[data-test-keys-done]').includesText('Your sign-in app');
+    });
+
+    test('for GitHub, says how to create the app and fills in GitHub’s settings', async function (assert) {
+      serve({ 'POST _user-keys': added });
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await click('[data-test-radio-choice="oauth-client"] input');
+      assert
+        .dom('[data-test-radio-choice="github"] input')
+        .isChecked('GitHub is the first choice');
+      assert
+        .dom('[data-test-oauth-github-steps]')
+        .includesText('create a GitHub App');
+      assert
+        .dom('[data-test-oauth-callback-url]')
+        .hasText(`${REALM_SERVER}_oauth/callback`);
+      assert
+        .dom('[data-test-oauth-token-url]')
+        .doesNotExist('nothing technical to fill in');
+      await fillIn('[data-test-key-name]', 'Team GitHub');
+      await fillIn('[data-test-oauth-client-id-input]', 'Iv23.team');
+      await fillIn('[data-test-key-value]', 'github-client-secret');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_user-keys')!
+          .body.data.attributes.oauth,
+        {
+          clientId: 'Iv23.team',
+          grantType: 'authorization_code',
+          authorizeUrl: 'https://github.com/login/oauth/authorize',
+          tokenUrl: 'https://github.com/login/oauth/access_token',
+          tokenAuth: 'client_secret_post',
+          apiHosts: ['https://api.github.com/'],
+        },
+      );
     });
 
     test('an app no person signs in through takes no authorization URL', async function (assert) {
@@ -826,6 +859,7 @@ module('Integration | connecting an account', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
       await click('[data-test-radio-choice="oauth-client"] input');
+      await click('[data-test-radio-choice="other"] input');
       assert.dom('[data-test-oauth-authorize-url]').exists();
       await click('[data-test-radio-choice="client_credentials"] input');
       assert.dom('[data-test-oauth-authorize-url]').doesNotExist();
