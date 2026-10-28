@@ -614,6 +614,7 @@ describe('boxel keys: Google service accounts', () => {
         profileManager: manager,
         keyFile,
         scope: ['https://www.googleapis.com/auth/spreadsheets'],
+        subject: false,
       });
     } finally {
       stdout.restore();
@@ -747,6 +748,34 @@ describe('boxel keys: Google service accounts', () => {
     });
     expect(stdout.text()).toContain('Kept its scopes');
     expect(stdout.text()).not.toContain('Kept acting');
+  });
+
+  it('refuses to replace a service account whose details the server doesn’t report without --subject or --no-subject, before minting a ticket', async () => {
+    let requests = serveKeys();
+    await expect(
+      keysReplace('sheets', {
+        profileManager: manager,
+        keyFile,
+        scope: [SHEETS_SCOPE],
+      }),
+    ).rejects.toThrow(/give --subject <email>, or --no-subject/);
+    expect(requests.filter((r) => r.path === '/_key-write-tickets')).toEqual(
+      [],
+    );
+    let stdout = captureStdout();
+    try {
+      await keysReplace('sheets', {
+        profileManager: manager,
+        keyFile,
+        scope: [SHEETS_SCOPE],
+        subject: false,
+      });
+    } finally {
+      stdout.restore();
+    }
+    expect(
+      requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+    ).toEqual({ value: KEY_FILE, scopes: [SHEETS_SCOPE] });
   });
 
   it('refuses to replace a service account whose scopes the server doesn’t report without --scope, before minting a ticket', async () => {

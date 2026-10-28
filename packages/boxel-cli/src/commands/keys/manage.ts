@@ -311,14 +311,17 @@ function checkAddKind(kind: string): void {
 // Refuses options that don't fit the key's kind. A service account's key file
 // is JSON, so it is read from a file or stdin, never typed at the masked
 // prompt, and it needs scopes: given with --scope, or for a replace, the ones
-// the key has. Any other kind, an OAuth app's included, takes neither
+// the key has. A replace of a key whose details the server doesn't report has
+// nothing to keep, so it needs the subject chosen too (--subject or
+// --no-subject). Any other kind, an OAuth app's included, takes neither
 // --subject nor --scope, and what its replacement may be is the realm
 // server's to say.
 function checkKindOptions(
   kind: string,
   options: ServiceAccountOptions & KeyValueSource,
-  current?: ServiceAccountDetails,
+  replacing?: { current: ServiceAccountDetails | undefined },
 ): void {
+  let current = replacing?.current;
   if (kind === 'google-service-account') {
     if (!options.keyFile && !options.stdin) {
       throw new Error(
@@ -328,6 +331,11 @@ function checkKindOptions(
     if (!options.scope?.length && !current?.scopes.length) {
       throw new Error(
         'A Google service account needs at least one --scope, such as https://www.googleapis.com/auth/spreadsheets',
+      );
+    }
+    if (replacing && !current && options.subject === undefined) {
+      throw new Error(
+        "This key's details aren't known: give --subject <email>, or --no-subject to act as the service account itself",
       );
     }
   } else if (options.subject !== undefined || options.scope !== undefined) {
@@ -448,7 +456,7 @@ export async function keysReplace(
     kind,
     serviceAccount: current,
   } = await findUserKey(ctx.realmServerUrl, token, name);
-  checkKindOptions(kind, options, current);
+  checkKindOptions(kind, options, { current });
   let value = await readValue(ctx, options);
   checkNotAKeyFile(kind, value);
   let key = await replaceUserKey(ctx.realmServerUrl, token, {
