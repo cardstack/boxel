@@ -12,7 +12,11 @@ import { pageURL, withFragment } from './secure-sign-in';
 // the address carries no ticket, session or value, and nothing the app page
 // sends can stand in for what the realm server says.
 
-export const SECURE_WINDOW_MODES = ['enter-key', 'share-key'] as const;
+export const SECURE_WINDOW_MODES = [
+  'enter-key',
+  'replace-key',
+  'share-key',
+] as const;
 export type SecureWindowMode = (typeof SECURE_WINDOW_MODES)[number];
 
 export function isSecureWindowMode(mode: unknown): mode is SecureWindowMode {
@@ -31,8 +35,15 @@ export type SecureWindowTarget =
       operation?: string;
     };
 
+// `replace-key` is for an operation, whose key the window finds from the
+// user's binding for it, so its target always names one.
 export type SecureWindowRequest =
   | { mode: 'enter-key'; target?: SecureWindowTarget; reason?: string }
+  | {
+      mode: 'replace-key';
+      target: SecureWindowTarget & { operation: string };
+      reason?: string;
+    }
   | { mode: 'share-key'; realm: string; reason?: string };
 
 // The popup's size. The share page lays a key's name and its fields out on one
@@ -67,7 +78,7 @@ export function secureWindowURL(request: SecureWindowRequest): string {
     fragment.name = request.target.name;
     fragment.realm = request.target.realm;
   }
-  if (request.mode === 'enter-key' && request.target?.operation) {
+  if (request.mode !== 'share-key' && request.target?.operation) {
     fragment.operation = request.target.operation;
   }
   if (request.reason) {

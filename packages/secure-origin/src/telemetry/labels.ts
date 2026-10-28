@@ -90,6 +90,7 @@ const PAGES: Record<string, string> = {
   'enter-key': 'enter-key',
   'share-key': 'share-key',
   'swap-key': 'swap-key',
+  'replace-key': 'replace-key',
 };
 
 export function pageLabel(routeName: string | undefined): string {

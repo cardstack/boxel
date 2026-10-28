@@ -107,6 +107,12 @@ const SHELL_PAGES: { page: string; address: string; marker: string }[] = [
     address: 'swap-key#realm=https%3A%2F%2Frealm.example%2F&share=example',
     marker: '[data-test-keys-page="swap-key"]',
   },
+  {
+    page: 'replace-key',
+    address:
+      'replace-key#card=https%3A%2F%2Frealm.example%2Fcard&operation=example',
+    marker: '[data-test-keys-page="replace-key"]',
+  },
 ];
 
 // Addresses that name a page by the `mode` query parameter, as earlier CLI

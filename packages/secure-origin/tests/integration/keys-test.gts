@@ -17,6 +17,7 @@ import KeyPage from '../../src/shell/keys/key-page.gts';
 import { openedFor } from '../../src/shell/keys/opened-for.ts';
 import SharePage from '../../src/shell/keys/share-key-page.gts';
 import SwapKeyPage from '../../src/shell/keys/swap-key-page.gts';
+import ReplaceKeyPage from '../../src/shell/keys/replace-key-page.gts';
 import {
   setupTelemetrySecretsCheck,
   stringsIn,
@@ -1542,6 +1543,313 @@ module('Integration | key pages', function (hooks) {
       await render(SwapKeyPage);
       await waitFor('[data-test-keys-needs-admin]');
       assert.dom('input').doesNotExist();
+    });
+  });
+
+  module('replacing the key an operation sends', function () {
+    const FORECAST = {
+      realm: WORKSPACE,
+      card: {
+        name: 'Weather',
+        module: `${REALM}weather`,
+        exportName: 'Weather',
+      },
+      operation: {
+        name: 'forecast',
+        label: 'Get the forecast',
+        base: 'callApi',
+        method: 'GET',
+        destination: {
+          href: 'https://api.weather.co.uk/v2/',
+          host: 'api.weather.co.uk',
+          path: '/v2/',
+          registrableDomain: 'weather.co.uk',
+        },
+      },
+    };
+
+    function forecastWith(
+      slots: { name: string; key: string; bound: unknown }[],
+      realm: Record<string, unknown> = WORKSPACE,
+    ) {
+      return context({
+        ...FORECAST,
+        realm,
+        operation: { ...FORECAST.operation, slots },
+      });
+    }
+
+    const OPENED = `replace-key#card=${encodeURIComponent(CARD)}&operation=forecast`;
+
+    test('replaces the key the user’s binding sends, which the server names, then closes', async function (assert) {
+      serve({
+        'POST _secure-window/context': ({ body }) => {
+          assert.deepEqual(
+            body.data.attributes,
+            {
+              target: { kind: 'instance', url: CARD },
+              operation: 'forecast',
+              bindings: true,
+            },
+            'asks what is bound to the operation’s slots',
+          );
+          return forecastWith([
+            {
+              name: 'userKey',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+          ]);
+        },
+        'PATCH _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: attributesOf(KEYS[0]),
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-form]');
+      assert
+        .dom('[data-test-opened-for-operation]')
+        .hasText('Get the forecast');
+      assert.dom('[data-test-replace-key-name]').hasText('Weather service');
+      assert
+        .dom('[data-test-replace-key-rejected]')
+        .includesText('weather.co.uk rejected this key');
+      assert.dom('[data-test-key-name]').doesNotExist('a replace has no name');
+      assert.dom('[data-test-replace-key-save]').isDisabled();
+      await fillIn('[data-test-key-value]', 'sk-new-forecast');
+      await click('[data-test-replace-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(ticketRequests(), [
+        { action: 'replace', keyId: 'key-1' },
+      ]);
+      assert.deepEqual(requests.find((r) => r.method === 'PATCH')!.body, {
+        data: {
+          type: 'user-key',
+          id: 'key-1',
+          attributes: { value: 'sk-new-forecast' },
+        },
+        meta: { ticket: 'ticket-1' },
+      });
+      assert.dom('[data-test-keys-done-name]').hasText('Weather service');
+      assert.dom('[data-test-keys-done-next]').includesText('Weather');
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('a refused replace says why and keeps the form', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'userKey',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+          ]),
+        'PATCH _user-keys/key-1': () => refusal(404, 'no such key'),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-form]');
+      await fillIn('[data-test-key-value]', 'sk-new-forecast');
+      await click('[data-test-replace-key-save]');
+      await waitFor('[data-test-keys-error]');
+      assert.dom('[data-test-keys-error]').hasText('No such key.');
+      assert.dom('[data-test-replace-key-form]').exists();
+      assert.deepEqual(navigations, []);
+    });
+
+    test('a key the user shares into the workspace is theirs to replace', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'apiKey',
+              key: 'apiKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+                share: {
+                  label: 'Team weather',
+                  suspended: false,
+                  ownedByYou: true,
+                  owner: SESSION.user,
+                },
+              },
+            },
+          ]),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-form]');
+      assert
+        .dom('[data-test-replace-key-slot="apiKey"]')
+        .includesText('as “Team weather”');
+    });
+
+    test('someone else’s shared key: says who can replace it, to a direct writer by name', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'apiKey',
+              key: 'apiKey',
+              bound: {
+                rejected: true,
+                key: null,
+                share: {
+                  label: 'Team weather',
+                  suspended: false,
+                  ownedByYou: false,
+                  owner: '@sharer:example.test',
+                },
+              },
+            },
+          ]),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-not-yours]');
+      assert.dom('[data-test-replace-key-form]').doesNotExist();
+      assert
+        .dom('[data-test-replace-key-not-yours]')
+        .includesText(
+          'weather.co.uk rejected the workspace’s key “Team weather”. Only the person who shared it can replace it.',
+        );
+      assert
+        .dom('[data-test-replace-key-owner]')
+        .hasText('@sharer:example.test');
+    });
+
+    test('someone else’s shared key: a reader is sent to the workspace’s writers', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith(
+            [
+              {
+                name: 'apiKey',
+                key: 'apiKey',
+                bound: {
+                  rejected: true,
+                  key: null,
+                  share: {
+                    label: 'Team weather',
+                    suspended: false,
+                    ownedByYou: false,
+                  },
+                },
+              },
+            ],
+            { ...WORKSPACE, directWriter: false },
+          ),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-not-yours]');
+      assert.dom('[data-test-replace-key-owner]').doesNotExist();
+      assert
+        .dom('[data-test-replace-key-not-yours]')
+        .includesText('Ask someone with direct write access to Team Workspace');
+    });
+
+    test('a slot nothing is bound to has nothing to replace', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([{ name: 'userKey', key: 'userKey', bound: null }]),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-unbound]');
+      assert.dom('[data-test-replace-key-form]').doesNotExist();
+      assert
+        .dom('[data-test-replace-key-unbound]')
+        .includesText('None of your keys is approved for this request yet');
+    });
+
+    test('two slots: each is named, and the window closes once both keys are replaced', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'first',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+            {
+              name: 'second',
+              key: 'userKey',
+              bound: { rejected: true, key: { id: 'key-2', name: 'Maps' } },
+            },
+          ]),
+        'PATCH _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: attributesOf(KEYS[0]),
+            },
+          }),
+        'PATCH _user-keys/key-2': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-2',
+              attributes: attributesOf(KEYS[1]),
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-slot="second"]');
+      assert.dom('[data-test-replace-key-slot="first"] h2').hasText('first');
+      await fillIn(
+        '[data-test-replace-key-slot="first"] [data-test-key-value]',
+        'sk-one',
+      );
+      await click(
+        '[data-test-replace-key-slot="first"] [data-test-replace-key-save]',
+      );
+      await waitUntil(
+        () => !document.querySelector('[data-test-replace-key-slot="first"]'),
+      );
+      assert.deepEqual(navigations, [], 'one key is still to replace');
+      await fillIn(
+        '[data-test-replace-key-slot="second"] [data-test-key-value]',
+        'sk-two',
+      );
+      await click(
+        '[data-test-replace-key-slot="second"] [data-test-replace-key-save]',
+      );
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(ticketRequests(), [
+        { action: 'replace', keyId: 'key-1' },
+        { action: 'replace', keyId: 'key-2' },
+      ]);
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('a link that names no operation names nothing it can show', async function (assert) {
+      visitShell(`replace-key#card=${encodeURIComponent(CARD)}`);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert.false(
+        requests.some((r) => r.path === '_secure-window/context'),
+        'asks the server nothing',
+      );
     });
   });
 });

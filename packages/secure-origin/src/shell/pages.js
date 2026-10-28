@@ -23,6 +23,7 @@ export const PAGE_PATHS = Object.freeze([
   'enter-key',
   'share-key',
   'swap-key',
+  'replace-key',
 ]);
 
 // The values of the `mode` query parameter that address a page. Earlier CLI

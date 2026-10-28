@@ -19,6 +19,7 @@ import { schedule } from '@ember/runloop';
 
 import EnterKeyPage from './keys/enter-key-page.gts';
 import KeyPage from './keys/key-page.gts';
+import ReplaceKeyPage from './keys/replace-key-page.gts';
 import ShareKeyPage from './keys/share-key-page.gts';
 import SwapKeyPage from './keys/swap-key-page.gts';
 import { useRouter } from './navigation.js';
@@ -61,6 +62,7 @@ Router.map(function () {
   this.route('enter-key');
   this.route('share-key');
   this.route('swap-key');
+  this.route('replace-key');
 });
 
 // The application route starts once, on the document's first transition: it
@@ -116,6 +118,7 @@ const registry: Record<string, unknown> = {
   'template:enter-key': EnterKeyPage,
   'template:share-key': ShareKeyPage,
   'template:swap-key': SwapKeyPage,
+  'template:replace-key': ReplaceKeyPage,
 };
 
 class ShellApplication extends Application {

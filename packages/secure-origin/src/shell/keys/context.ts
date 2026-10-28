@@ -5,6 +5,7 @@ export type {
   KeyShare,
   ListedKey,
   SharedWorkspace,
+  SlotBound,
   UserKey,
   WindowContext,
 } from '../../security/keys.ts';

@@ -27,7 +27,22 @@ export interface WindowContext {
     base: string;
     method?: string;
     destination?: DestinationDisplay;
-    slots: { name: string; key: string }[];
+    slots: { name: string; key: string; bound?: SlotBound | null }[];
+  };
+}
+
+// What fills one of an operation's slots for the user, as the realm server
+// says when asked with `bindings`: the key, and whether the service it is
+// sent to rejected it. For a key a workspace shares, the key is named only to
+// its owner, and the owner only to the workspace's direct writers.
+export interface SlotBound {
+  rejected: boolean;
+  key: { id: string; name: string } | null;
+  share?: {
+    label: string;
+    suspended: boolean;
+    ownedByYou: boolean;
+    owner?: string;
   };
 }
 
@@ -93,6 +108,8 @@ export interface WindowContextRequest {
     | { kind: 'instance'; url: string }
     | { kind: 'type'; module: string; name: string; realm: string };
   operation?: string;
+  // Whether to say what is bound to each of the operation's slots.
+  bindings?: boolean;
 }
 
 // The user's own keys' metadata, by name, with where each is used. No value
@@ -236,7 +253,9 @@ export async function swapKey(
 // What the window was opened for, as the realm server describes it: the
 // realm (its name, and whether the user is one of its direct writers), and
 // for a target, the card definition and the operation, with where that
-// operation sends a key. `request` is `{ realm?, target?, operation? }`.
+// operation sends a key. `request` is `{ realm?, target?, operation?,
+// bindings? }`; with `bindings`, each of the operation's slots says what is
+// bound to it.
 export async function windowContext(
   config: Config,
   request: WindowContextRequest,
