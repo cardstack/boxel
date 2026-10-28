@@ -54,11 +54,20 @@ const inboxModule = `
       url: 'https://api.mail.example.com/v1/team',
       headers: { authorization: 'Bearer {{apiKey}}' },
     };
+  }
+`;
 
-    @operation static perCard = {
+// An operation approved for each card on its own, in a module of its own.
+const LETTER = { module: rri(`${realmURL.href}letter`), name: 'Letter' };
+const letterModule = `
+  import { CardDef } from "@cardstack/base/card-api";
+  import { operation } from "@cardstack/base/operations";
+
+  export class Letter extends CardDef {
+    @operation static send = {
       base: 'callApi',
       perInstance: true,
-      url: 'https://api.mail.example.com/v1/card',
+      url: 'https://api.mail.example.com/v1/letters',
       headers: { authorization: 'Bearer {{userKey}}' },
     };
   }
@@ -89,6 +98,14 @@ module(basename(import.meta.filename), function (hooks) {
     },
     fileSystem: {
       'inbox.gts': inboxModule,
+      'letter.gts': letterModule,
+      'draft.json': {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: { adoptsFrom: LETTER },
+        },
+      },
       'today.json': {
         data: {
           type: 'card',
@@ -134,7 +151,7 @@ module(basename(import.meta.filename), function (hooks) {
     user: string,
     operation: string,
     slots: Record<string, { keyId?: string; shareId?: string }>,
-    instance?: string,
+    { instance, type = INBOX }: { instance?: string; type?: typeof INBOX } = {},
   ) {
     let auth = await secureSessionAuth(dbAdapter, user);
     let shown = (
@@ -142,8 +159,8 @@ module(basename(import.meta.filename), function (hooks) {
         .get('/_key-bindings/preview')
         .query({
           realm: realmURL.href,
-          module: INBOX.module,
-          name: INBOX.name,
+          module: type.module,
+          name: type.name,
           operation,
         })
         .set('Authorization', auth)
@@ -160,7 +177,7 @@ module(basename(import.meta.filename), function (hooks) {
             realm: realmURL.href,
             operations: [
               {
-                codeRef: INBOX,
+                codeRef: type,
                 operation,
                 ...(instance ? { instance } : {}),
                 expectedDestination: shown.destination,
@@ -199,6 +216,10 @@ module(basename(import.meta.filename), function (hooks) {
     user: string,
     operation: string,
     target: 'type' | 'instance' = 'type',
+    {
+      type = INBOX,
+      card = 'today',
+    }: { type?: typeof INBOX; card?: string } = {},
   ) {
     let response = await request
       .post('/_secure-window/context')
@@ -212,11 +233,11 @@ module(basename(import.meta.filename), function (hooks) {
               target === 'type'
                 ? {
                     kind: 'type',
-                    module: INBOX.module,
-                    name: INBOX.name,
+                    module: type.module,
+                    name: type.name,
                     realm: realmURL.href,
                   }
-                : { kind: 'instance', url: `${realmURL.href}today` },
+                : { kind: 'instance', url: `${realmURL.href}${card}` },
             operation,
             bindings: true,
           },
@@ -369,18 +390,19 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('an operation approved per card is answered for the card, not its type', async function (assert) {
     let key = await addKey();
+    let letter = { type: LETTER, card: 'draft' };
     await approve(
       OWNER,
-      'perCard',
+      'send',
       { userKey: { keyId: key.id } },
-      `${realmURL.href}today`,
+      { instance: `${realmURL.href}draft`, type: LETTER },
     );
-    assert.deepEqual((await bound(OWNER, 'perCard', 'instance'))[0].bound, {
-      rejected: false,
-      key: { id: key.id, name: 'mail' },
-    });
+    assert.deepEqual(
+      (await bound(OWNER, 'send', 'instance', letter))[0].bound,
+      { rejected: false, key: { id: key.id, name: 'mail' } },
+    );
     assert.strictEqual(
-      (await bound(OWNER, 'perCard'))[0].bound,
+      (await bound(OWNER, 'send', 'type', letter))[0].bound,
       null,
       'the type has no card to find the binding for',
     );

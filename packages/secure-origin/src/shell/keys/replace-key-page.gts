@@ -151,48 +151,52 @@ class SlotPanel extends Component<{
           </div>
         </form>
       {{else if this.someoneElses}}
-        <p class='message' data-test-replace-key-not-yours>
-          {{#if this.someoneElses.suspended}}
-            The workspace’s key “{{this.someoneElses.label}}” is suspended.
-            Someone with direct write access to
-            <strong>{{@context.realm.name}}</strong>
-            can put a key of their own in its place.
-          {{else}}
-            {{#if this.someoneElses.rejected}}
-              {{this.serviceName}}
-              rejected the workspace’s key “{{this.someoneElses.label}}”.
-            {{else}}
-              This request uses the workspace’s key “{{this.someoneElses.label}}”.
-            {{/if}}
-            Only the person who shared it can replace it.
-            {{#if this.someoneElses.owner}}
-              Ask
-              <strong
-                data-test-replace-key-owner
-              >{{this.someoneElses.owner}}</strong>
-              to replace it in their secure window.
-            {{else}}
-              Ask someone with direct write access to
+        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+          <p class='message' data-test-replace-key-not-yours>
+            {{#if this.someoneElses.suspended}}
+              The workspace’s key “{{this.someoneElses.label}}” is suspended.
+              Someone with direct write access to
               <strong>{{@context.realm.name}}</strong>
-              (<span>{{addressOf @context.realm.url}}</span>) who shared it.
+              can put a key of their own in its place.
+            {{else}}
+              {{#if this.someoneElses.rejected}}
+                {{this.serviceName}}
+                rejected the workspace’s key “{{this.someoneElses.label}}”.
+              {{else}}
+                This request uses the workspace’s key “{{this.someoneElses.label}}”.
+              {{/if}}
+              Only the person who shared it can replace it.
+              {{#if this.someoneElses.owner}}
+                Ask
+                <strong
+                  data-test-replace-key-owner
+                >{{this.someoneElses.owner}}</strong>
+                to replace it in their secure window.
+              {{else}}
+                Ask someone with direct write access to
+                <strong>{{@context.realm.name}}</strong>
+                (<span>{{addressOf @context.realm.url}}</span>) who shared it.
+              {{/if}}
             {{/if}}
-          {{/if}}
-        </p>
+          </p>
+        </FieldContainer>
       {{else}}
-        <p class='message' data-test-replace-key-unbound>
-          {{#if this.unboundShared}}
-            No key is shared into
-            <strong>{{@context.realm.name}}</strong>
-            for this request yet.
-          {{else}}
-            None of your keys is approved for this request yet, so there is
-            nothing to replace.
-            {{#if @context.card}}
-              <strong>{{@context.card.name}}</strong>
-              asks you to approve one when it needs it.
+        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+          <p class='message' data-test-replace-key-unbound>
+            {{#if this.unboundShared}}
+              No key is shared into
+              <strong>{{@context.realm.name}}</strong>
+              for this request yet.
+            {{else}}
+              None of your keys is approved for this request yet, so there is
+              nothing to replace.
+              {{#if @context.card}}
+                <strong>{{@context.card.name}}</strong>
+                asks you to approve one when it needs it.
+              {{/if}}
             {{/if}}
-          {{/if}}
-        </p>
+          </p>
+        </FieldContainer>
       {{/if}}
     </section>
 
@@ -210,12 +214,10 @@ class SlotPanel extends Component<{
       .value,
       .message {
         margin: 0;
+        padding-top: var(--boxel-sp-xs);
         font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
         overflow-wrap: anywhere;
-      }
-      .value {
-        padding-top: var(--boxel-sp-xs);
       }
       .note,
       .rejected {
