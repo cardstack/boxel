@@ -478,6 +478,78 @@ export async function listOwnShares(
   return rows.map((row) => toShare(row, { withKey: true }));
 }
 
+// A realm one of the user's keys is shared into: its address, its name as its
+// `realm.json` gives it, and the key's shares there. The name is null when
+// the user can't read the realm by a permission row of their own or a public
+// one (`*`, `users`), as after they are removed from it, and while its
+// `realm.json` isn't indexed. A share outlives its owner's access, so the
+// address is all an owner who can no longer read the realm keeps of it.
+export interface SharedRealm {
+  url: string;
+  name: string | null;
+  shares: { id: string; label: string; state: KeyShareState }[];
+}
+
+// The realms each of the user's keys is shared into, by key id, each realm
+// once with every share that puts the key there, by name and then address.
+// These are the shares `listOwnShares` lists, read for every key at once.
+// With `keyId`, only that key's.
+export async function listOwnSharedRealms(
+  dbAdapter: DBAdapter,
+  owner: string,
+  { keyId }: { keyId?: string } = {},
+): Promise<Map<string, SharedRealm[]>> {
+  let byKey = new Map<string, SharedRealm[]>();
+  if (keyId !== undefined && !isUUID(keyId)) {
+    return byKey;
+  }
+  let rows = (await query(dbAdapter, [
+    `SELECT ks.id, ks.label, ks.state, ks.key_id, ks.realm_url,
+            (SELECT config.pristine_doc->'attributes'->'cardInfo'->>'name'
+             FROM boxel_index config
+             WHERE config.url = ks.realm_url || 'realm.json'
+               AND config.realm_url = ks.realm_url
+               AND config.type = 'instance'
+               AND (config.is_deleted = FALSE OR config.is_deleted IS NULL)
+               AND EXISTS (
+                 SELECT 1 FROM realm_user_permissions rup
+                 WHERE rup.realm_url = ks.realm_url
+                   AND rup.read = true
+                   AND rup.username IN ('*', 'users', ks.owner))
+             LIMIT 1) AS name
+     FROM key_shares ks
+     WHERE ks.key_id IS NOT NULL AND ks.owner = `,
+    param(owner),
+    ...(keyId !== undefined ? [` AND ks.key_id = `, param(keyId)] : []),
+    ` ORDER BY ks.key_id, ks.realm_url, ks.label`,
+  ])) as {
+    id: string;
+    label: string;
+    state: KeyShareState;
+    key_id: string;
+    realm_url: string;
+    name: string | null;
+  }[];
+  for (let { id, label, state, key_id, realm_url, name } of rows) {
+    let realms = byKey.get(key_id) ?? [];
+    let realm = realms.find((r) => r.url === realm_url);
+    if (!realm) {
+      realm = { url: realm_url, name, shares: [] };
+      realms.push(realm);
+    }
+    realm.shares.push({ id, label, state });
+    byKey.set(key_id, realms);
+  }
+  for (let realms of byKey.values()) {
+    realms.sort(
+      (a, b) =>
+        (a.name ?? '').localeCompare(b.name ?? '') ||
+        a.url.localeCompare(b.url),
+    );
+  }
+  return byKey;
+}
+
 // Reads `realm`'s rows for one of its direct writers, with their permission
 // row locked for the read, so write removed meanwhile can't let them read on.
 async function readAsDirectWriter(
