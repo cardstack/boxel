@@ -33,6 +33,7 @@ import {
 } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
 import {
+  markKeyRejected,
   setKeyGrantSink,
   type KeyGrantEvent,
 } from '../lib/key-grant-rejection.ts';
@@ -506,7 +507,7 @@ module(basename(import.meta.filename), function (hooks) {
         owner: OWNER,
         realm_url: null,
         share_id: null,
-        reason: 'credential-rejected',
+        reason: 'key-rejected',
       },
     ]);
   });
@@ -572,5 +573,90 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(await readiness('values'), 'ready');
     assert.strictEqual((await invoke('values')).status, 200);
     assert.deepEqual(await notices(), []);
+  });
+
+  test('of two calls arriving together when the probe is due, only one probes', async function (assert) {
+    let key = await addServiceAccount();
+    await approve('values', { keyId: key.id });
+    vendor.googleTokenAnswers.push(REFUSED);
+    await invoke('values');
+    await probeIsDue(key.id);
+
+    // Google refuses the probe too, so the key stays rejected however the two
+    // calls interleave.
+    vendor.googleTokenAnswers.push(REFUSED, REFUSED);
+    let statuses = (
+      await Promise.all([invoke('values'), invoke('values')])
+    ).map((r) => r.status);
+    assert.deepEqual(statuses, [424, 424]);
+    assert.strictEqual(
+      events.filter((e) => e.event === 'key-probe').length,
+      1,
+      'one call claimed the probe',
+    );
+    assert.strictEqual(tokenRequests().length, 2, 'one refusal, one probe');
+  });
+
+  test('a probe asks Google even when this process cached a token for the key', async function (assert) {
+    let key = await addServiceAccount();
+    await approve('values', { keyId: key.id });
+    assert.strictEqual(
+      (await invoke('values')).status,
+      200,
+      'a token is cached',
+    );
+    // Another process found the key refused; this one still holds its token.
+    await dbAdapter.execute(
+      `UPDATE user_keys SET state = 'rejected', rejected_at = NOW(), last_probe_at = NOW() - interval '1 day' WHERE id = $1`,
+      { bind: [key.id] },
+    );
+    vendor.googleTokenAnswers.push(REFUSED);
+    let probed = await invoke('values');
+    assert.strictEqual(probed.status, 424, probed.text);
+    assert.strictEqual(tokenRequests().length, 2, 'the probe asked Google');
+    assert.strictEqual((await keyRow(key.id)).state, 'rejected');
+  });
+
+  test('a refusal of a value since replaced leaves the new value alone', async function (assert) {
+    let key = await addServiceAccount();
+    let values = await approve('values', { keyId: key.id });
+    let [{ copy }] = await dbAdapter.execute(
+      `SELECT encode(value_nonce, 'base64') AS copy FROM user_keys WHERE id = $1`,
+      { bind: [key.id] },
+    );
+    await replaceUserKeyValue(dbAdapter, keyring, {
+      owner: OWNER,
+      id: key.id,
+      value: keyFile(),
+      scopes: SCOPES,
+      ticket: await ticket('replace', { keyId: key.id }),
+    });
+    let moved = await markKeyRejected(dbAdapter, {
+      keyId: key.id,
+      grantId: values.meta.grant.id,
+      realmURL: realmURL.href,
+      copy: copy as string,
+    });
+    assert.false(moved);
+    assert.strictEqual((await keyRow(key.id)).state, 'active');
+    assert.deepEqual(await notices(), []);
+  });
+
+  test('readiness answers credential-rejected for any rejected key, whatever its kind', async function (assert) {
+    let key = await addUserKey(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'static sheets',
+      value: 'sk-static-sheets-value-3d81a0',
+      ticket: await ticket('add'),
+    });
+    await approve('values', { keyId: key.id });
+    assert.strictEqual(await readiness('values'), 'ready');
+    // An OAuth connection its vendor refused to refresh is `rejected` the
+    // same way.
+    await dbAdapter.execute(
+      `UPDATE user_keys SET state = 'rejected' WHERE id = $1`,
+      { bind: [key.id] },
+    );
+    assert.strictEqual(await readiness('values'), 'credential-rejected');
   });
 });

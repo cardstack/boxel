@@ -421,10 +421,16 @@ grants keep their own state.
 - **Replacing the key clears it**, and every rejected grant of it, in the
   transaction that seals the new value (`clearKeyRejected`,
   `clearKeyRejections`).
-- **One notice on entering the state**, in `user_key_grant_notices` like a
-  grant's, naming the grant the refused call came through and its
-  destination: to the key's owner and, through a share, the direct writers of
-  the share's realm.
+- **One notice on entering the state**, in `user_key_grant_notices` with
+  `reason` `key-rejected` (a grant's is `credential-rejected`), naming the
+  grant the refused call came through and its destination: to the key's owner
+  and, through a share, the direct writers of the share's realm.
+- **A refusal only rejects the value it was signed with.** The exchange
+  carries the sealed value's nonce, and the move to `rejected` matches it, so
+  an exchange that started before a replace can't reject the new value.
+- **A probe always asks Google.** It skips the in-memory token cache
+  (`googleAccessToken(…, { fresh: true })`), since a token another process
+  cached before the refusal says nothing about the key now.
 - **Readiness** (`lib/key-readiness.ts`) answers `credential-rejected` for a
   binding whose key is `rejected`, to every caller.
 

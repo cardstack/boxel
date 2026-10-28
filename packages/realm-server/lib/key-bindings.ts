@@ -1091,21 +1091,23 @@ async function checkedBindings(
     }
     checked.push({ slot, row, probe, keyProbe });
   }
-  if (rejection.claimProbe) {
-    // Two slots can send under one grant; one claim covers both. The claim
-    // is the check again, in one statement, so of calls arriving together
-    // only one probes.
-    for (let [grantId, { slot, destination }] of rejected) {
-      if (!(await claimProbe(dbAdapter, grantId, rejection.probeIntervalMs))) {
-        throw credentialRejected(lookup.operation, slot, destination);
+  if (rejection.claimProbe && (rejected.size > 0 || rejectedKeys.size > 0)) {
+    // Two slots can send under one grant, and two grants of one key share
+    // the key's one probe; one claim covers each. A claim is the check again,
+    // in one statement, so of calls arriving together only one probes. The
+    // claims are one transaction: a call refused at any of them claims none.
+    await dbAdapter.withTransaction(async (txQuery) => {
+      for (let [grantId, { slot, destination }] of rejected) {
+        if (!(await claimProbe(txQuery, grantId, rejection.probeIntervalMs))) {
+          throw credentialRejected(lookup.operation, slot, destination);
+        }
       }
-    }
-    // Two grants of one key share the key's one probe.
-    for (let [keyId, { slot, destination }] of rejectedKeys) {
-      if (!(await claimKeyProbe(dbAdapter, keyId, rejection.probeIntervalMs))) {
-        throw serviceAccountRejected(lookup.operation, slot, destination);
+      for (let [keyId, { slot, destination }] of rejectedKeys) {
+        if (!(await claimKeyProbe(txQuery, keyId, rejection.probeIntervalMs))) {
+          throw serviceAccountRejected(lookup.operation, slot, destination);
+        }
       }
-    }
+    });
   }
   return checked;
 }
@@ -1282,7 +1284,9 @@ async function mintedToken(
   try {
     let token =
       opened.kind === 'google-service-account'
-        ? await serviceAccountAccessToken(dbAdapter, keyring, opened.keyId)
+        ? await serviceAccountAccessToken(dbAdapter, keyring, opened.keyId, {
+            fresh: call.keyProbe,
+          })
         : await oauthAccessToken(dbAdapter, keyring, opened.keyId);
     if (call.keyProbe) {
       emitKeyGrantEvent({
@@ -1315,12 +1319,15 @@ async function mintedToken(
       error instanceof ServiceAccountTokenError &&
       error.reason === 'rejected'
     ) {
-      await markKeyRejected(dbAdapter, {
-        keyId: opened.keyId,
-        grantId: call.grantId,
-        realmURL: call.realmURL,
-        shareId: call.shareId,
-      });
+      if (error.copy) {
+        await markKeyRejected(dbAdapter, {
+          keyId: opened.keyId,
+          grantId: call.grantId,
+          realmURL: call.realmURL,
+          shareId: call.shareId,
+          copy: error.copy,
+        });
+      }
       throw serviceAccountRejected(operation, slot, opened.destination);
     }
     let why = MINTING_REFUSALS[error.reason];

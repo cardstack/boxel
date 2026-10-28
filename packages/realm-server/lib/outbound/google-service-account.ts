@@ -378,10 +378,13 @@ function cacheKey(keyId: string, credential: GoogleServiceAccountCredential) {
 export async function googleAccessToken(
   keyId: string,
   credential: GoogleServiceAccountCredential,
+  // Skips the cached token, so the answer is Google's, now: a token this
+  // process cached says nothing about whether Google still accepts the key.
+  { fresh = false }: { fresh?: boolean } = {},
 ): Promise<string> {
   let key = cacheKey(keyId, credential);
   let cached = cache.get(key);
-  if (cached && cached.refreshAt > settings.now()) {
+  if (!fresh && cached && cached.refreshAt > settings.now()) {
     return cached.token;
   }
   let pending = inflight.get(key);

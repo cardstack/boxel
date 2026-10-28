@@ -191,6 +191,7 @@ export async function markGrantRejected(
       writers,
       realmURL,
       shareId,
+      reason: 'credential-rejected',
     });
     return row;
   });
@@ -209,7 +210,9 @@ export async function markGrantRejected(
 
 // One notice per recipient, naming the key and the destination the refused
 // call was sent to: the key's owner and, for a call through a share, the
-// direct writers of the share's realm.
+// direct writers of the share's realm. `reason` says what was refused: the key
+// at that destination (`credential-rejected`), or the key itself, everywhere
+// (`key-rejected`).
 async function recordRejectionNotices(
   txQuery: Querier,
   {
@@ -221,6 +224,7 @@ async function recordRejectionNotices(
     writers,
     realmURL,
     shareId,
+    reason,
   }: {
     grantId: string;
     keyId: string;
@@ -230,6 +234,7 @@ async function recordRejectionNotices(
     writers: string[];
     realmURL: string;
     shareId?: string;
+    reason: 'credential-rejected' | 'key-rejected';
   },
 ): Promise<void> {
   for (let recipient of new Set<string>([owner, ...writers])) {
@@ -250,7 +255,9 @@ async function recordRejectionNotices(
       param(shareId ? realmURL : null),
       `, `,
       param(shareId ?? null),
-      `, 'credential-rejected')`,
+      `, `,
+      param(reason),
+      `)`,
     ]);
   }
 }
@@ -317,11 +324,11 @@ export async function recordVendorForbidden(
 // it, however many arrive at once, because the claim and the check are one
 // statement.
 export async function claimProbe(
-  dbAdapter: DBAdapter,
+  querier: Querier,
   grantId: string,
   intervalMs: number,
 ): Promise<boolean> {
-  let [row] = await query(dbAdapter, [
+  let [row] = await querier([
     `UPDATE user_key_grants SET last_probe_at = NOW() WHERE id = `,
     param(grantId),
     ` AND state = 'rejected' AND `,
@@ -343,7 +350,9 @@ export function probeDue(column: string, intervalMs: number): Expression {
 // Moves a key whose token endpoint refused it to `rejected` and records its
 // notices, only when this is the move: a key already rejected was announced
 // already. `grantId` is the grant the refused call came through, which the
-// notices name with its destination. Answers whether this call made the move.
+// notices name with its destination. `copy` names the sealed value the refused
+// exchange was signed with, so a refusal of a value since replaced changes
+// nothing. Answers whether this call made the move.
 export async function markKeyRejected(
   dbAdapter: DBAdapter,
   {
@@ -351,7 +360,14 @@ export async function markKeyRejected(
     grantId,
     realmURL,
     shareId,
-  }: { keyId: string; grantId: string; realmURL: string; shareId?: string },
+    copy,
+  }: {
+    keyId: string;
+    grantId: string;
+    realmURL: string;
+    shareId?: string;
+    copy: string;
+  },
 ): Promise<boolean> {
   let writers = shareId
     ? await fetchDirectWriters(dbAdapter, new URL(realmURL))
@@ -360,7 +376,9 @@ export async function markKeyRejected(
     let [row] = await txQuery([
       `UPDATE user_keys SET state = 'rejected', rejected_at = NOW(), last_probe_at = NOW() WHERE id = `,
       param(keyId),
-      ` AND state = 'active' RETURNING owner, name`,
+      ` AND state = 'active' AND encode(value_nonce, 'base64') = `,
+      param(copy),
+      ` RETURNING owner, name`,
     ]);
     if (!row) {
       return false;
@@ -379,6 +397,7 @@ export async function markKeyRejected(
         writers,
         realmURL,
         shareId,
+        reason: 'key-rejected',
       });
     }
     return true;
@@ -397,11 +416,11 @@ export async function markKeyRejected(
 // Claims the probe of a rejected key: at most one call per interval gets it,
 // whichever of the key's grants it comes through.
 export async function claimKeyProbe(
-  dbAdapter: DBAdapter,
+  querier: Querier,
   keyId: string,
   intervalMs: number,
 ): Promise<boolean> {
-  let [row] = await query(dbAdapter, [
+  let [row] = await querier([
     `UPDATE user_keys SET last_probe_at = NOW() WHERE id = `,
     param(keyId),
     ` AND state = 'rejected' AND `,

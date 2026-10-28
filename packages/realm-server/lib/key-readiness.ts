@@ -23,8 +23,10 @@ import { bindingSnapshot, fingerprintOf, slotToken } from './key-bindings.ts';
 //
 // A reader is told only an answer from the `KeyReadiness` list. A share's
 // owner, its name and its limits never appear in one, and every way a share
-// slot fails reads the same, `needs-admin`, to anyone but the owner of the
-// share's key, who is told what they could fix themselves.
+// slot isn't set up reads the same, `needs-admin`, to anyone but the owner of
+// the share's key, who is told what they could fix themselves. A share whose
+// key the vendor refused reads `credential-rejected` to every caller, as the
+// call itself is refused for each of them.
 
 // The order slot answers are reported in: the first slot to need something
 // further up the list decides the operation's answer. A slot only an
