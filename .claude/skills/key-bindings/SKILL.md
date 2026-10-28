@@ -154,6 +154,7 @@ the request. `fillSlots` checks, per slot, in this order:
 | `state` isn't `needs-reapproval` and the fingerprint matches                         | `binding-needs-reapproval`     | 409    |
 | Interactive invocation needs `interactive`                                           | `interactive-use-not-approved` | 403    |
 | A grant is set, opens, and belongs to the binding's key (or the share's current key) | `binding-not-approved`         | 409    |
+| The grant isn't `rejected`, unless this call claims its probe                        | `credential-rejected`          | 424    |
 
 The value is the grant's copy (`openGrantForSending`), never the key's master
 copy — or, for a key that mints its access tokens (an OAuth connection, a

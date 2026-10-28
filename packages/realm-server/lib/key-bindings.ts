@@ -44,6 +44,12 @@ import {
   serviceAccountAccessToken,
   ServiceAccountTokenError,
 } from './google-service-account-keys.ts';
+import {
+  claimProbe,
+  credentialRejected,
+  DEFAULT_PROBE_INTERVAL_MS,
+  probeDue,
+} from './key-grant-rejection.ts';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
 // to send a chosen key in one of the operation's credential slots. Card code
@@ -954,13 +960,21 @@ function refusal(
 // realm, for this operation (and this card, when it is approved per
 // instance), by the caller for a `userKey` slot; its share, if it has one, not
 // suspended; its fingerprint the one the request has now; and approved for
-// how the invocation arrived. A binding whose request has changed goes to
+// how the invocation arrived; and its grant not rejected by the vendor, unless
+// this call is the grant's probe. A binding whose request has changed goes to
 // `needs-reapproval` here, and its owner gets one notice. Throws the refusal
 // for the first slot that fails.
+//
+// A call claims a rejected grant's probe when one is due (`claimProbe: true`);
+// an admission only asks whether one is due, so a run that would probe is
+// admitted and one that would be refused is not.
 async function checkedBindings(
   dbAdapter: DBAdapter,
   lookup: CallApiSlotLookup,
-): Promise<{ slot: CallApiSlot; row: Record<string, unknown> }[]> {
+  rejection: { probeIntervalMs: number; claimProbe: boolean },
+): Promise<
+  { slot: CallApiSlot; row: Record<string, unknown>; probe: boolean }[]
+> {
   let { request } = lookup;
   let refuseNotApproved = () =>
     new OperationFailure(
@@ -973,11 +987,23 @@ async function checkedBindings(
     }
     instance = lookup.instance.replace(/\.json$/, '');
   }
-  let checked: { slot: CallApiSlot; row: Record<string, unknown> }[] = [];
+  let checked: {
+    slot: CallApiSlot;
+    row: Record<string, unknown>;
+    probe: boolean;
+  }[] = [];
+  // Two slots can send under one grant; the probe claimed for the first
+  // covers the second.
+  let probing = new Set<string>();
   for (let slot of request.slots) {
     let [row] = await query(dbAdapter, [
-      `SELECT b.id, b.key_id, b.share_id, b.grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state, s.state AS share_state, s.key_id AS share_key_id
+      `SELECT b.id, b.key_id, b.share_id, b.grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state, s.state AS share_state, s.key_id AS share_key_id,
+              g.state AS grant_state, g.destination AS grant_destination,
+              `,
+      ...probeDue('g.last_probe_at', rejection.probeIntervalMs),
+      ` AS probe_due
          FROM key_bindings b LEFT JOIN key_shares s ON s.id = b.share_id
+         LEFT JOIN user_key_grants g ON g.id = b.grant_id
         WHERE b.realm_url = `,
       param(lookup.realmURL),
       ` AND b.definition_url = `,
@@ -1039,7 +1065,26 @@ async function checkedBindings(
     if (!row.grant_id) {
       throw refuseNotApproved();
     }
-    checked.push({ slot, row });
+    let probe = false;
+    if (row.grant_state === 'rejected') {
+      let grantId = row.grant_id as string;
+      if (rejection.claimProbe) {
+        probe =
+          probing.has(grantId) ||
+          (await claimProbe(dbAdapter, grantId, rejection.probeIntervalMs));
+      } else {
+        probe = !!row.probe_due;
+      }
+      if (!probe) {
+        throw credentialRejected(
+          lookup.operation,
+          slot,
+          row.grant_destination as string,
+        );
+      }
+      probing.add(grantId);
+    }
+    checked.push({ slot, row, probe });
   }
   return checked;
 }
@@ -1068,16 +1113,25 @@ async function markNeedsReapproval(
 // opened from the binding's grant, under the destination the grant stored,
 // with the slot's transform applied. A grant that is gone, belongs to another
 // key than the binding's (or its share's), or whose copy doesn't open, fills
-// nothing: the binding is refused as not approved.
+// nothing: the binding is refused as not approved. A grant the vendor rejected
+// fills only the call that claims its probe; every other is refused
+// `credential-rejected`. Each slot reports its grant, so the sender can act on
+// the vendor's answer.
 export async function fillSlots(
   dbAdapter: DBAdapter,
   // Read only once a binding's grant is opened, so a slot nobody approved is
   // refused without the keyring.
   keyring: () => SecretsKeyring,
   lookup: CallApiSlotLookup,
+  {
+    probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
+  }: { probeIntervalMs?: number } = {},
 ): Promise<CallApiFilledSlot[]> {
   let filled: CallApiFilledSlot[] = [];
-  for (let { slot, row } of await checkedBindings(dbAdapter, lookup)) {
+  for (let { slot, row, probe } of await checkedBindings(dbAdapter, lookup, {
+    probeIntervalMs,
+    claimProbe: true,
+  })) {
     let opened: Awaited<ReturnType<typeof openGrantForSending>>;
     let ring = keyring();
     try {
@@ -1122,6 +1176,14 @@ export async function fillSlots(
       value,
       ...(value !== secret ? { raw: secret } : {}),
       destination: opened.destination,
+      grant: {
+        id: row.grant_id as string,
+        destination: opened.destination,
+        slot: { name: slot.name, key: slot.key },
+        realmURL: lookup.realmURL,
+        ...(row.share_id ? { shareId: row.share_id as string } : {}),
+        probe,
+      },
     });
   }
   return filled;
@@ -1180,7 +1242,9 @@ async function mintedToken(
 // same checks a call makes, without opening any key. A Scheduling System run
 // asks this at admission for each operation it declares, as its payer, so a
 // missing or changed approval stops the run before anything is sent. Answers
-// with the refusal the call would get, or nothing when it would be served.
+// with the refusal the call would get, or nothing when it would be served. A
+// grant the vendor rejected admits the run only while its probe is due, since
+// only then would the call be sent.
 export async function pipelineAdmission(
   dbAdapter: DBAdapter,
   {
@@ -1190,6 +1254,7 @@ export async function pipelineAdmission(
     operation,
     instance,
     payer,
+    probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
   }: {
     core: Pick<
       OperationCore,
@@ -1200,6 +1265,7 @@ export async function pipelineAdmission(
     operation: string;
     instance?: string;
     payer: string;
+    probeIntervalMs?: number;
   },
 ): Promise<OperationFailure | undefined> {
   let type = bindingType(core, codeRef, realmURL);
@@ -1230,15 +1296,21 @@ export async function pipelineAdmission(
     });
   }
   try {
-    await checkedBindings(dbAdapter, {
-      realmURL: realmURL.href,
-      type: type!,
-      operation,
-      ...(instance ? { instance: canonicalInstance(realmURL, instance) } : {}),
-      caller: payer,
-      mode: 'pipeline',
-      request: definition.callApi,
-    });
+    await checkedBindings(
+      dbAdapter,
+      {
+        realmURL: realmURL.href,
+        type: type!,
+        operation,
+        ...(instance
+          ? { instance: canonicalInstance(realmURL, instance) }
+          : {}),
+        caller: payer,
+        mode: 'pipeline',
+        request: definition.callApi,
+      },
+      { probeIntervalMs, claimProbe: false },
+    );
   } catch (error) {
     if (error instanceof OperationFailure) {
       return error;
