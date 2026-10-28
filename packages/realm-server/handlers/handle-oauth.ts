@@ -3,6 +3,7 @@ import { fetchRealmPermissions, logger } from '@cardstack/runtime-common';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
+import { setContextResponse } from '../middleware/index.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
 import {
   addPlatformClient,
@@ -159,11 +160,17 @@ export function handleOAuthCallback(args: CreateRoutesArgs): Handler {
       ? `${args.secureOriginURL.href.replace(/\/*$/, '/')}connected`
       : new URL('/', args.serverURL).href;
     let target = `${page}#${new URLSearchParams(fragment)}`;
-    ctxt.status = 302;
-    ctxt.set('Location', target);
-    ctxt.set('Cache-Control', 'no-store');
-    ctxt.set('Referrer-Policy', 'no-referrer');
-    ctxt.body = null;
+    await setContextResponse(
+      ctxt,
+      new Response(null, {
+        status: 302,
+        headers: {
+          Location: target,
+          'Cache-Control': 'no-store',
+          'Referrer-Policy': 'no-referrer',
+        },
+      }),
+    );
   };
 }
 

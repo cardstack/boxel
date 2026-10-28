@@ -6,6 +6,7 @@ import {
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { Querier } from '@cardstack/runtime-common/expression';
+import { destinationCovers } from '@cardstack/runtime-common/card-operations';
 import {
   PLATFORM_SECRET_OWNER,
   sealedColumnsSelect,
@@ -325,9 +326,9 @@ export async function addOAuthClient(
       param(settings.scopes),
       `, `,
       param(settings.tokenAuth),
-      `, `,
-      param(settings.apiHosts as any),
-      `)`,
+      `, ARRAY(SELECT jsonb_array_elements_text(`,
+      param(JSON.stringify(settings.apiHosts)),
+      `::jsonb)))`,
     ]);
     return key;
   });
@@ -340,7 +341,13 @@ export async function addOAuthClient(
 export interface OAuthKeyDescription {
   client?: OAuthClientSettings & { state: OAuthClientState };
   connection?: {
-    client: { kind: OAuthClientKind; label: string | null };
+    // `ref` names the client back to `startConnect`, for a reconnect; null
+    // once the client is gone.
+    client: {
+      kind: OAuthClientKind;
+      label: string | null;
+      ref: ClientRef | null;
+    };
     scopes: string;
     status: 'active' | 'rejected' | 'needs-admin';
   };
@@ -360,7 +367,11 @@ export async function describeOAuthKeys(
     .map((k) => k.id);
   if (clientIds.length > 0) {
     let rows = await query(dbAdapter, [
-      `SELECT key_id, ${CLIENT_COLUMNS} FROM oauth_clients c JOIN user_keys k ON k.id = c.key_id WHERE k.owner = `,
+      `SELECT c.key_id, ${CLIENT_COLUMNS.split(', ')
+        .map((c) => `c.${c}`)
+        .join(
+          ', ',
+        )} FROM oauth_clients c JOIN user_keys k ON k.id = c.key_id WHERE k.owner = `,
       param(owner),
     ]);
     for (let row of rows) {
@@ -387,6 +398,7 @@ export async function describeOAuthKeys(
           client: {
             kind: row.client_kind as OAuthClientKind,
             label: client.label,
+            ref: clientRefOf(row),
           },
           scopes: row.scopes as string,
           status:
@@ -499,9 +511,9 @@ export async function addPlatformClient(
     param(settings.scopes),
     `, `,
     param(settings.tokenAuth),
-    `, `,
-    param(settings.apiHosts as any),
-    `, `,
+    `, ARRAY(SELECT jsonb_array_elements_text(`,
+    param(JSON.stringify(settings.apiHosts)),
+    `::jsonb)), `,
     ...SEALED_COLUMN_VALUES(sealed),
     `) ON CONFLICT (name) DO NOTHING RETURNING ${PLATFORM_COLUMNS}`,
   ]);
@@ -575,7 +587,7 @@ export async function listConnectableClients(
 ): Promise<ConnectableClient[]> {
   let serves = (apiHosts: string[]) =>
     destination === undefined ||
-    apiHosts.some((host) => destination.startsWith(host));
+    apiHosts.some((host) => destinationCovers(host, destination));
   let offered: ConnectableClient[] = [];
   let describe = (
     row: Record<string, unknown>,
@@ -714,12 +726,23 @@ interface ResolvedClient {
   tokenAuth?: OAuthTokenAuth;
 }
 
+function clientRefOf(row: Record<string, unknown>): ClientRef | null {
+  if (row.client_key_id) {
+    return { kind: 'own', keyId: row.client_key_id as string };
+  }
+  if (row.client_share_id) {
+    return { kind: 'share', shareId: row.client_share_id as string };
+  }
+  if (row.platform_client_id) {
+    return { kind: 'platform', clientId: row.platform_client_id as string };
+  }
+  return null;
+}
+
 function resolvedClientOf(row: Record<string, unknown>): ResolvedClient {
   if (row.client_key_id) {
     return {
-      usable:
-        row.own_state === 'active' &&
-        row.own_grant_type === 'authorization_code',
+      usable: row.own_state === 'active',
       label: (row.own_name as string) ?? null,
       secretFrom: {
         kind: 'key',

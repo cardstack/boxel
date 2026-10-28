@@ -3,6 +3,8 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
 import { forgetSession, storeSession } from '../../src/security/session.js';
+import ConnectPage from '../../src/shell/keys/connect-page.gts';
+import ConnectedPage from '../../src/shell/keys/connected-page.gts';
 import EnterKeyPage from '../../src/shell/keys/enter-key-page.gts';
 import KeyPage from '../../src/shell/keys/key-page.gts';
 import SharePage from '../../src/shell/keys/share-key-page.gts';
@@ -36,10 +38,18 @@ const SECRETS = {
   shareLabel: 'Quokka Share Label',
   realmName: 'Classified Workspace Name',
   serverMessage: 'Nothing matched Pangolin Lookup Detail',
+  clientSecret: 'oauth-client-secret-TOPSECRET-4471',
+  clientId: 'Iv1.wombat-client-id',
+  clientLabel: 'Wombat Forge App',
+  connectionName: 'Capybara Work Account',
+  authorizeState: 'state-SHOULD-NOT-LEAK-8812',
+  authorizeHost: 'login.wombat-forge.example',
   // The beacon is attributed by its session; its body names no user.
   matrixUser: '@someone:example.test',
 };
-const IDS = [KEY_ID, OTHER_KEY_ID, SHARE_ID];
+const CONNECTION_ID = 'conn-id-3e4f5a6b';
+const CLIENT_KEY_ID = '9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a';
+const IDS = [KEY_ID, OTHER_KEY_ID, SHARE_ID, CONNECTION_ID, CLIENT_KEY_ID];
 
 const SESSION = {
   token: SECRETS.token,
@@ -205,6 +215,106 @@ module('Integration | telemetry', function (hooks) {
     assert.true(
       events.every((e: any) => !('key-id-new' in e)),
       'and not by what it created',
+    );
+  });
+
+  test('adding an OAuth app, connecting through it and coming back send none of it', async function (assert) {
+    routes['POST _user-keys'] = () =>
+      json(201, {
+        data: {
+          ...key(CLIENT_KEY_ID, SECRETS.clientLabel),
+          attributes: {
+            ...key(CLIENT_KEY_ID, SECRETS.clientLabel).attributes,
+            kind: 'oauth-client',
+          },
+        },
+      });
+    routes['GET _oauth/clients'] = () =>
+      json(200, {
+        data: [
+          {
+            type: 'oauth-client',
+            attributes: {
+              ref: { kind: 'own', keyId: CLIENT_KEY_ID },
+              kind: 'own',
+              label: SECRETS.clientLabel,
+              clientId: SECRETS.clientId,
+              scopes: 'repo',
+              apiHosts: [],
+              authorizeHost: SECRETS.authorizeHost,
+            },
+          },
+        ],
+      });
+    routes['POST _oauth/connections'] = () =>
+      json(201, {
+        data: {
+          type: 'oauth-connect',
+          attributes: {
+            authorizeUrl: `https://${SECRETS.authorizeHost}/authorize?state=${SECRETS.authorizeState}`,
+            expiresAt: '2099-01-01T00:00:00.000Z',
+          },
+        },
+      });
+    routes[`GET _user-keys/${CONNECTION_ID}`] = () =>
+      json(200, { data: key(CONNECTION_ID, SECRETS.connectionName) });
+
+    pageOpened('enter-key');
+    await render(EnterKeyPage);
+    await waitFor('[data-test-enter-key-form]');
+    await click('[data-test-radio-choice="oauth-client"] input');
+    await fillIn('[data-test-key-name]', SECRETS.clientLabel);
+    await fillIn('[data-test-oauth-client-id-input]', SECRETS.clientId);
+    await fillIn('[data-test-key-value]', SECRETS.clientSecret);
+    await fillIn(
+      '[data-test-oauth-authorize-url]',
+      `https://${SECRETS.authorizeHost}/authorize`,
+    );
+    await fillIn(
+      '[data-test-oauth-token-url]',
+      `https://${SECRETS.authorizeHost}/token`,
+    );
+    await click('[data-test-enter-key-save]');
+    await waitFor('[data-test-keys-done]');
+
+    pageOpened('connect');
+    await render(ConnectPage);
+    await waitFor('[data-test-connect-form]');
+    await fillIn('[data-test-connect-name]', SECRETS.connectionName);
+    await click('[data-test-connect-submit]');
+
+    history.replaceState(
+      null,
+      '',
+      `/secure/connected#connected=${CONNECTION_ID}`,
+    );
+    pageOpened('connected');
+    await render(ConnectedPage);
+    await waitFor('[data-test-connected-name]');
+
+    let events = assertNothingSecret(assert);
+    let endpoints = new Set(
+      events
+        .filter((e: any) => e.event_type === 'server-request')
+        .map((e: any) => e.endpoint),
+    );
+    for (let endpoint of [
+      '_user-keys',
+      '_oauth/clients',
+      '_oauth/connections',
+      '_user-keys/:id',
+    ]) {
+      assert.true(endpoints.has(endpoint), `${endpoint} is recorded`);
+    }
+    assert.deepEqual(
+      events
+        .filter((e: any) => e.event_type === 'page-load')
+        .map((e: any) => [e.page, e.outcome]),
+      [
+        ['enter-key', 'loaded'],
+        ['connect', 'loaded'],
+        ['connected', 'loaded'],
+      ],
     );
   });
 

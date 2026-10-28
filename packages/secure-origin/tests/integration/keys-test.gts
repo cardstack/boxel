@@ -1218,10 +1218,10 @@ module('Integration | key pages', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
       assert
-        .dom('[data-test-key-kind="static"] input')
+        .dom('[data-test-radio-choice="static"] input')
         .isChecked('a key pasted in as it is is the default');
       await fillIn('[data-test-key-value]', 'typed before switching');
-      await click('[data-test-key-kind="google-service-account"] input');
+      await click('[data-test-radio-choice="google-service-account"] input');
       assert
         .dom('[data-test-key-value]')
         .doesNotExist('a service account has no value to paste');
@@ -1289,7 +1289,7 @@ module('Integration | key pages', function (hooks) {
       visitShell('enter-key');
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
-      await click('[data-test-key-kind="google-service-account"] input');
+      await click('[data-test-radio-choice="google-service-account"] input');
       await fillIn('[data-test-key-name]', 'Sheets');
       await chooseKeyFile(SERVICE_ACCOUNT_FILE);
       await fillIn('[data-test-service-account-scopes]', 'openid');
@@ -1307,7 +1307,7 @@ module('Integration | key pages', function (hooks) {
       visitShell('enter-key');
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
-      await click('[data-test-key-kind="google-service-account"] input');
+      await click('[data-test-radio-choice="google-service-account"] input');
       await fillIn('[data-test-key-name]', 'Sheets');
       await fillIn('[data-test-service-account-scopes]', 'openid');
       await chooseKeyFile('{"type": "authorized_user"}', 'credentials.json');
@@ -1356,7 +1356,7 @@ module('Integration | key pages', function (hooks) {
         .isDisabled('a key file is never saved as a key sent as it is');
       await click('[data-test-use-service-account]');
       assert
-        .dom('[data-test-key-kind="google-service-account"] input')
+        .dom('[data-test-radio-choice="google-service-account"] input')
         .isChecked();
       assert
         .dom('[data-test-service-account-email]')
@@ -1409,9 +1409,9 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-google-destination-hint]')
         .includesText('This request goes to a Google API.');
       assert
-        .dom('[data-test-key-kind="static"] input')
+        .dom('[data-test-radio-choice="static"] input')
         .isChecked('the page doesn’t choose for the user');
-      await click('[data-test-key-kind="google-service-account"] input');
+      await click('[data-test-radio-choice="google-service-account"] input');
       assert.dom('[data-test-google-destination-hint]').doesNotExist();
     });
 
@@ -1467,10 +1467,10 @@ module('Integration | key pages', function (hooks) {
       await render(KeyPage);
       await waitFor('[data-test-key-row="Sheets"]');
       assert
-        .dom('[data-test-key-row="Sheets"] [data-test-key-kind-label]')
-        .hasText('Google service account ·');
+        .dom('[data-test-key-row="Sheets"] [data-test-key-kind]')
+        .hasText('Google service account');
       assert
-        .dom('[data-test-key-row="Maps"] [data-test-key-kind-label]')
+        .dom('[data-test-key-row="Maps"] [data-test-key-kind]')
         .doesNotExist('a key pasted in as it is goes unlabelled');
       await click('[data-test-key-row="Sheets"] [data-test-key-replace]');
       await settled();
