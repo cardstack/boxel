@@ -26,8 +26,10 @@ function compact(n: number): string {
  * context is, so a reader sees compaction coming before it happens. The
  * ring turns to the attention colour past @warnAt, and its name says
  * "nearly full". A conversation larger than the window, as after a switch
- * to a model with a smaller one, shows "Full" and says how far over it is:
- * the next prompt is too long, so its earlier messages get summarized.
+ * to a model with a smaller one, shows "Full" in the attention colour and
+ * says how far over it is: the next prompt is too long, so its earlier
+ * messages may get summarized. A limit of 0 or less is unknown, so it is
+ * never over.
  */
 export class ContextRing extends Component<ContextRingSignature> {
   get share(): number {
@@ -38,10 +40,11 @@ export class ContextRing extends Component<ContextRingSignature> {
     return Math.round(this.share * 100);
   }
   get over(): boolean {
-    return this.args.used > this.args.limit;
+    let { used, limit } = this.args;
+    return limit > 0 && used > limit;
   }
   get warns(): boolean {
-    return this.share >= (this.args.warnAt ?? 0.8);
+    return this.over || this.share >= (this.args.warnAt ?? 0.8);
   }
   get ringStyle() {
     return htmlSafe(`--pretui-ring-share: ${this.share * 360}deg`);
@@ -50,7 +53,8 @@ export class ContextRing extends Component<ContextRingSignature> {
    * the warning never rests on the ring's colour alone */
   get label(): string {
     if (this.over) {
-      return `Context full: ${compact(this.args.used)} tokens, more than the ${compact(this.args.limit)} this model holds. Earlier messages are summarized when the next one is sent`;
+      let { used, limit } = this.args;
+      return `Context full: ${compact(used)} tokens, ${compact(used - limit)} more than the ${compact(limit)} this model holds. Earlier messages may be summarized when the next one is sent`;
     }
     let warning = this.warns ? ', nearly full' : '';
     return `Context ${this.percent}% used${warning}: ${compact(this.args.used)} of ${compact(this.args.limit)} tokens`;
