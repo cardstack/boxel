@@ -59,7 +59,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     {{else}}
       <EditPage @heading='Your keys' data-test-key-page>
         <:intro>Keys you add here are encrypted, and nothing can read them back.
-          Cards use a key only through requests you approve for it.</:intro>
+          Cards can send a key only to the places you approve for it.</:intro>
         <:default>
           {{#if this.state.error}}
             <div class='keys-error' role='alert' data-test-keys-error>

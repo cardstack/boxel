@@ -65,14 +65,15 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
             <strong>{{this.done.context.card.name}}</strong>
             the key.
             <strong>{{this.done.context.card.name}}</strong>
-            will ask you to approve its requests before it can use it.</span>
+            will ask you to approve where it sends the key before it can use it.</span>
         {{/if}}
       </DonePage>
     {{else if this.entering}}
       <form novalidate {{on 'submit' this.save}} data-test-enter-key-form>
         <EditPage @heading='Enter a key' data-test-enter-key>
           <:intro>The key is encrypted as soon as it is saved, and nothing can
-            read it back. Cards use it only through requests you approve.</:intro>
+            read it back. Cards can send it only to the places you approve for
+            it.</:intro>
           <:default>
             {{#if this.entering.context}}
               <OpenedForSummary
