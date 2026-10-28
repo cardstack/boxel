@@ -50,9 +50,10 @@ interface KeyRequestBody {
   meta?: Record<string, unknown>;
 }
 
-// The attributes a request may set.
-const ADD_ATTRIBUTES = new Set(['name', 'kind', 'value']);
-const REPLACE_ATTRIBUTES = new Set(['value']);
+// The attributes a request may set. `subject` and `scopes` belong to a
+// google-service-account key, whose `value` is its JSON key file.
+const ADD_ATTRIBUTES = new Set(['name', 'kind', 'value', 'subject', 'scopes']);
+const REPLACE_ATTRIBUTES = new Set(['value', 'subject', 'scopes']);
 
 function serialize(key: UserKeyMetadata) {
   let { id, ...attributes } = key;
@@ -358,6 +359,8 @@ export function handleAddUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
       name: attributes.name,
       kind: attributes.kind,
       value: attributes.value,
+      subject: attributes.subject,
+      scopes: attributes.scopes,
       ticket: ticketOf(body),
     });
     await sendJSON(ctxt, 201, { data: serialize(key) });
@@ -373,6 +376,8 @@ export function handleReplaceUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
       owner,
       id: ctxt.params.keyId,
       value: attributes.value,
+      subject: attributes.subject,
+      scopes: attributes.scopes,
       ticket: ticketOf(body),
     });
     await sendJSON(ctxt, 200, { data: serialize(key) });

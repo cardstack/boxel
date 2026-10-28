@@ -13,6 +13,11 @@ import {
   sealedFromColumns,
 } from './secrets-at-rest/sealed-columns.ts';
 import { revokeBindingsIn } from './key-binding-revocation.ts';
+import {
+  GoogleServiceAccountKeyError,
+  parseGoogleServiceAccountKey,
+  serializeGoogleServiceAccount,
+} from './outbound/google-service-account.ts';
 
 // Keys that belong to people. Every key has one owner, the user who created
 // it, and only that owner lists, shows, replaces or deletes it. A key's value
@@ -37,7 +42,10 @@ import { revokeBindingsIn } from './key-binding-revocation.ts';
 export const USER_KEY_VALUE_FIELD = 'user_keys.value';
 export const USER_KEY_GRANT_VALUE_FIELD = 'user_key_grants.value';
 
-export const USER_KEY_KINDS = ['static'] as const;
+// `static`: the value is sent as it is. `google-service-account`: the value
+// is a Google service account's key, its subject and its scopes, and what is
+// sent is an access token minted from it (`lib/outbound/google-service-account.ts`).
+export const USER_KEY_KINDS = ['static', 'google-service-account'] as const;
 export type UserKeyKind = (typeof USER_KEY_KINDS)[number];
 
 export type UserKeyState = 'active';
@@ -300,6 +308,41 @@ function validateUserKeyValue(value: unknown): string {
   return value;
 }
 
+// What the owner entered, as the value a key of `kind` seals. A static key
+// seals its value as it is. A service account's value is its JSON key file,
+// sealed with the subject and scopes as one canonical value, so a key file that
+// can't mint a token is refused here rather than at its first call. Only a
+// service account takes a subject or scopes.
+export function sealedValueFor(
+  kind: UserKeyKind,
+  {
+    value,
+    subject,
+    scopes,
+  }: { value: unknown; subject?: unknown; scopes?: unknown },
+): string {
+  let validValue = validateUserKeyValue(value);
+  if (kind === 'static') {
+    if (subject !== undefined || scopes !== undefined) {
+      throw new UserKeyError(
+        400,
+        'only a google-service-account key takes a subject or scopes',
+      );
+    }
+    return validValue;
+  }
+  try {
+    return serializeGoogleServiceAccount(
+      parseGoogleServiceAccountKey({ keyFile: validValue, subject, scopes }),
+    );
+  } catch (e) {
+    if (e instanceof GoogleServiceAccountKeyError) {
+      throw new UserKeyError(400, e.message);
+    }
+    throw e;
+  }
+}
+
 // A key's master copy is bound to its field, its owner and its row, so a value
 // moved to another row or owner doesn't open.
 export function userKeyBinding(owner: string, id: string): SecretBinding {
@@ -407,18 +450,22 @@ export async function addUserKey(
     name,
     kind,
     value,
+    subject,
+    scopes,
     ticket,
   }: {
     owner: string;
     name: unknown;
     kind?: unknown;
     value: unknown;
+    subject?: unknown;
+    scopes?: unknown;
     ticket: unknown;
   },
 ): Promise<UserKeyMetadata> {
   let validName = validateUserKeyName(name);
   let validKind = validateUserKeyKind(kind);
-  let validValue = validateUserKeyValue(value);
+  let validValue = sealedValueFor(validKind, { value, subject, scopes });
   let id = randomUUID();
   return await dbAdapter.withTransaction(async (txQuery) => {
     await consumeKeyWriteTicket(txQuery, owner, ticket, {
@@ -469,7 +516,8 @@ export function opensUnder(
   }
 }
 
-// Replaces a key's value, keeping its name and kind. The master copy and every
+// Replaces a key's value, keeping its name and kind. A service account's
+// replacement is a whole new key file, subject and scopes. The master copy and every
 // grant's copy are sealed again in the same transaction, so the old value
 // opens nowhere afterwards and no grant asks for approval again. A grant is
 // sealed again only when its current copy opens under its own binding: the
@@ -483,17 +531,40 @@ export async function replaceUserKeyValue(
     owner,
     id,
     value,
+    subject,
+    scopes,
     ticket,
-  }: { owner: string; id: string; value: unknown; ticket: unknown },
+  }: {
+    owner: string;
+    id: string;
+    value: unknown;
+    subject?: unknown;
+    scopes?: unknown;
+    ticket: unknown;
+  },
 ): Promise<UserKeyMetadata> {
   assertKeyId(id);
-  let validValue = validateUserKeyValue(value);
   return await dbAdapter.withTransaction(async (txQuery) => {
     await consumeKeyWriteTicket(txQuery, owner, ticket, {
       action: 'replace',
       keyId: id,
       realmURL: null,
       shareId: null,
+    });
+    let [current] = await txQuery([
+      `SELECT kind FROM user_keys WHERE id = `,
+      param(id),
+      ` AND owner = `,
+      param(owner),
+      ` FOR UPDATE`,
+    ]);
+    if (!current) {
+      throw notFound();
+    }
+    let validValue = sealedValueFor(current.kind as UserKeyKind, {
+      value,
+      subject,
+      scopes,
     });
     let sealed = keyring.seal(validValue, userKeyBinding(owner, id));
     let [updated] = await txQuery([
