@@ -13,12 +13,7 @@ import {
 } from '../security/credentials.js';
 import { Changes } from './changes.ts';
 import CredentialFields from './credential-fields.gts';
-import {
-  applyStyle,
-  customProperties,
-  pendingStylesheets,
-  whenStyled,
-} from './style.ts';
+import { applyStyle, customProperties, whenStyled } from './style.ts';
 
 let config = readConfig(document);
 let { form, appOrigin } = readParams(window.location.href);
@@ -57,16 +52,8 @@ function start(appOrigin: string) {
     into: document.body,
     args: { frame, changes },
   });
-  let askForStyles = () => {
+  whenStyled(document).then(() => {
     requested = customProperties(document);
     frame.ready(requested);
-  };
-  whenStyled(document).then(() => {
-    // A stylesheet that loads after the wait may read custom properties the
-    // app was not asked for, so the app is asked again once it does.
-    for (let link of pendingStylesheets(document)) {
-      link.addEventListener('load', askForStyles, { once: true });
-    }
-    askForStyles();
   });
 }

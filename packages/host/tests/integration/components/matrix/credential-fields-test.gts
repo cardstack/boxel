@@ -244,7 +244,7 @@ module('Integration | credential fields', function (hooks) {
   test('a frame that never says it is ready is loaded once more', async function (assert) {
     let limits = { ...FRAME_WAIT_LIMITS };
     FRAME_WAIT_LIMITS.readyMs = 200;
-    FRAME_WAIT_LIMITS.loadMs = 3000;
+    FRAME_WAIT_LIMITS.loadMs = 500;
     // The frame refuses to start for a form it does not know, so it never
     // says it is ready.
     let form = 'no-such-form' as CredentialForm;
@@ -264,6 +264,10 @@ module('Integration | credential fields', function (hooks) {
       let loaded: string[] = [];
       frame!.addEventListener('load', () => loaded.push(frame!.src));
       await rendering;
+      await waitUntil(
+        () => loaded.includes('about:blank') && loaded.at(-1) === src,
+        { timeout: 10000, timeoutMessage: 'the frame was not loaded again' },
+      );
       assert.deepEqual(
         loaded.slice(-2),
         ['about:blank', src],

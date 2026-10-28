@@ -123,8 +123,10 @@ export const FRAME_WAIT_LIMITS = {
   // A frame that has not said it is ready by then is loaded once more. Its
   // script runs only once every stylesheet in its page has settled, so one
   // request that never does leaves it hidden and silent for good, where a
-  // second load asks for everything again.
-  readyMs: 8000,
+  // second load asks for everything again. The app can't tell a stalled
+  // frame from a slow one, so this is well past the time the frame takes to
+  // load on a slow connection, where a reload would only start it over.
+  readyMs: 20000,
   // A frame that never answers still lets a test settle, and fails on what
   // it was waiting to see.
   loadMs: 15000,

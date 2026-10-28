@@ -107,7 +107,9 @@ export function whenStyled(
   doc: Document,
   limitMs = STYLESHEET_WAIT_LIMIT_MS,
 ): Promise<void> {
-  let pending = pendingStylesheets(doc);
+  let pending = [
+    ...doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
+  ].filter((link) => !link.sheet);
   let loaded = Promise.all(
     pending.map(
       (link) =>
@@ -125,13 +127,6 @@ export function whenStyled(
     timer = setTimeout(resolve, limitMs);
   });
   return Promise.race([loaded, limit]).finally(() => clearTimeout(timer));
-}
-
-// The stylesheets in the document still loading.
-export function pendingStylesheets(doc: Document): HTMLLinkElement[] {
-  return [
-    ...doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
-  ].filter((link) => !link.sheet);
 }
 
 // The custom properties the stylesheets read, so the page can be asked for
