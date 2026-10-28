@@ -7,7 +7,7 @@ import {
   CardDocumentCache,
   Realm,
   VirtualNetwork,
-  isUrlLike,
+  isPrefixForm,
   logger,
   Deferred,
   CachingDefinitionLookup,
@@ -404,7 +404,7 @@ let urlMappings: [URL, URL][] = [];
 for (let i = 0; i < fromUrls.length; i++) {
   let from = String(fromUrls[i]);
   let to = new URL(String(toUrls[i]));
-  if (isUrlLike(from)) {
+  if (!isPrefixForm(from)) {
     let fromURL = new URL(from);
     virtualNetwork.addURLMapping(fromURL, to);
     urlMappings.push([fromURL, to]);

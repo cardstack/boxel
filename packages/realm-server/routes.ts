@@ -8,6 +8,7 @@ import type {
   Prerenderer,
   LinkShapePolicy,
 } from '@cardstack/runtime-common';
+import { DBRateLimitStore } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
 import { createRequire } from 'module';
@@ -112,6 +113,8 @@ import {
   REQUEST_FORWARD_PATH,
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
+  SECURE_WINDOW_PATH,
+  USER_KEY_GRANTS_PATH,
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
 import {
@@ -121,6 +124,7 @@ import {
   handleGoogleSignIn,
   handleGoogleSignInStart,
   handleMintLoginToken,
+  handleRenewSecureSession,
   handlePasswordChange,
   handlePasswordSignIn,
   handleSecureOriginInfo,
@@ -138,6 +142,10 @@ import {
   handleShowUserKey,
 } from './handlers/handle-user-keys.ts';
 import {
+  handleCreateUserKeyGrant,
+  handleRemoveUserKeyGrant,
+} from './handlers/handle-user-key-grants.ts';
+import {
   handleListKeyShareNotices,
   handleListKeyShares,
   handleResumeKeyShare,
@@ -146,6 +154,10 @@ import {
   handleSwapKeyIntoShare,
   handleUnshareKey,
 } from './handlers/handle-key-shares.ts';
+import {
+  handleSecureWindowContext,
+  handleSecureWindowRealms,
+} from './handlers/handle-secure-window.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -311,13 +323,26 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.delete(
     SECURE_SESSION_PATH,
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    // Signing out only ends a session, and a window's session bound to an
+    // app device outlives its token, so any expired token is taken here too.
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter, {
+      expiredWithinSeconds: Number.POSITIVE_INFINITY,
+    }),
     handleEndSecureSession(args),
   );
   router.post(
     `${SECURE_SESSION_PATH}/login-token`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleMintLoginToken(args),
+  );
+  router.post(
+    `${SECURE_SESSION_PATH}/renewal`,
+    // A window's session outlives its token while the app device it is bound
+    // to exists, so any expired token is taken here; the row it names decides.
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter, {
+      expiredWithinSeconds: Number.POSITIVE_INFINITY,
+    }),
+    handleRenewSecureSession(args),
   );
   router.delete(
     SECURE_SESSIONS_PATH,
@@ -365,6 +390,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteUserKey(args),
   );
+  router.post(
+    USER_KEY_GRANTS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleCreateUserKeyGrant(args),
+  );
+  router.delete(
+    `${USER_KEY_GRANTS_PATH}/:grantId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleRemoveUserKeyGrant(args),
+  );
   router.get(
     KEY_SHARES_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -401,6 +436,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleListKeyShareNotices(args),
   );
   router.post(
+    `${SECURE_WINDOW_PATH}/context`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSecureWindowContext(args),
+  );
+  router.get(
+    `${SECURE_WINDOW_PATH}/realms`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSecureWindowRealms(args),
+  );
+  router.post(
     REQUEST_FORWARD_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRequestForward({
@@ -408,13 +453,17 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   // Batched client performance beacons. The host sends its server session
-  // token as `Authorization: Bearer <token>`, so the standard jwtMiddleware
-  // authenticates the caller and the authenticated matrix user id is used in
-  // preference to the body's self-reported value.
+  // token as `Authorization: Bearer <token>`, and the secure origin's pages
+  // their window's own session once they have one. The handler authenticates
+  // the session itself, since a beacon without one is accepted too (rate
+  // limited, and attributed to nobody).
   router.post(
     '/_client-telemetry',
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleClientTelemetry(),
+    handleClientTelemetry({
+      realmSecretSeed: args.realmSecretSeed,
+      dbAdapter: args.dbAdapter,
+      rateLimitStore: new DBRateLimitStore(args.dbAdapter),
+    }),
   );
   router.post(
     OPENROUTER_PASSTHROUGH_PATH,

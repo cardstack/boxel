@@ -10,7 +10,7 @@ import {
 import { navigation } from '../navigation.js';
 import NewPasswordFields from '../new-password-fields.gts';
 import { NewPassword } from '../new-password.ts';
-import { cliParams, modeURL } from '../urls.js';
+import { cliParams, pageURL } from '../urls.js';
 import { signInURL } from '../cli-links.ts';
 import type { ResetLink } from './reset-link.ts';
 import CliWaitNotice from '../sign-in/cli-wait-notice.gts';
@@ -39,7 +39,7 @@ export default class ResetPassword extends Component<Signature> {
   }
 
   private get forgotPasswordURL() {
-    return modeURL('forgot-password', cliParams(this.args.link.cli));
+    return pageURL('forgot-password', cliParams(this.args.link.cli));
   }
 
   private get signInURL() {

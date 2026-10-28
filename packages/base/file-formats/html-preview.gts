@@ -18,6 +18,7 @@ import { modifier } from 'ember-modifier';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
+import { fetchRealmFile } from './file-presentation';
 import { fileContentRevision } from './file-revision';
 import type { FilePreviewSignature } from './file-preview-stage';
 
@@ -113,22 +114,13 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   // One authenticated fetch serves both the rendered frame and the source
-  // view. `same-origin` rather than `include`: the realm answers with
-  // `Access-Control-Allow-Origin: *`, which a credentialed cross-origin
-  // request rejects; the auth service worker carries the session instead.
-  // The realm serves file bytes with `max-age=0` and an ETag, so a refetch
+  // view. The realm serves file bytes with `max-age=0` and an ETag, so a refetch
   // after a write revalidates rather than reading a stale cached copy. The
   // previous source of the same file stays on screen until the new one
   // arrives, so a reload doesn't blank the frame.
   loadSource = async (sourceUrl: string, signal: AbortSignal) => {
     try {
-      let response = await fetch(sourceUrl, {
-        credentials: 'same-origin',
-        signal,
-      });
-      if (!response.ok) {
-        throw new Error(`HTML fetch failed with HTTP ${response.status}`);
-      }
+      let response = await fetchRealmFile(sourceUrl, signal);
       let text = await response.text();
       if (signal.aborted || this.isDestroyed || this.isDestroying) {
         return;

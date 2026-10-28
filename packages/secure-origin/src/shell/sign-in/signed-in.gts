@@ -3,8 +3,8 @@
 // carried to that page by navigating there, which the app redeems for a Matrix
 // session of its own. A hand-off to a program on the user's own machine waits
 // for the user to confirm it. Otherwise the window says it is signed in, and
-// shows nothing more: the app asks the realm server whether the window has a
-// session, rather than hearing it from the window.
+// offers a link to the key page: the app asks the realm server whether the
+// window has a session, rather than hearing it from the window.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -27,7 +27,7 @@ import AuthContainer from '../../components/auth-container.gts';
 import BusyMessage from '../../components/busy-message.gts';
 import { navigation } from '../navigation.js';
 import { asSentence } from '../sign-in-copy.js';
-import { modeURL } from '../urls.js';
+import { pageURL } from '../urls.js';
 
 import MessagePage from './message-page.gts';
 
@@ -82,7 +82,15 @@ export default class SignedIn extends Component {
       </MessagePage>
     {{else}}
       <MessagePage @heading='You’re signed in to Boxel'>
-        <p class='info' data-test-secure-signed-in>Key management is coming.</p>
+        <p class='info' data-test-secure-signed-in>You can close this window.</p>
+        <div class='button-wrapper'>
+          <AuthButton
+            @as='anchor'
+            @href={{this.keyPage}}
+            @variant='secondary'
+            data-test-secure-manage-keys
+          >Manage your keys</AuthButton>
+        </div>
       </MessagePage>
     {{/if}}
 
@@ -113,6 +121,9 @@ export default class SignedIn extends Component {
   </template>
 
   private config = readConfig();
+  // The key page is a link away, never where signing in lands: a sign-in
+  // the app started hands back to the app, and one that didn't ends here.
+  private keyPage = pageURL('keys');
   private target = pendingReturn(appOrigins(this.config));
   private page = trackedObject<{ state: State }>({
     state: { name: 'signed-in' },
@@ -171,7 +182,7 @@ export default class SignedIn extends Component {
         // The session ended since the window checked it, as signing out in
         // another tab ends it: sign in again, and the hand-off this tab is
         // waiting on follows.
-        navigation.replace(modeURL('sign-in'));
+        navigation.replace(pageURL('sign-in'));
         return;
       }
       this.page.state = { name: 'failed', error: asSentence(e.message) };
@@ -180,6 +191,6 @@ export default class SignedIn extends Component {
     forgetReturn();
     // Replaced, not pushed: Back from the app mustn't land on this page, nor
     // on the app's address with the spent token in it.
-    navigation.replace(handOffURL(target, minted.loginToken));
+    navigation.replace(handOffURL(target, minted.loginToken, minted.deviceId));
   };
 }

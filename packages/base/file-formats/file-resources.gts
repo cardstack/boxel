@@ -6,6 +6,7 @@ import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
+import { fetchRealmFile } from './file-presentation';
 import { profileForFile, type FileTypeProfile } from './file-type-profile';
 // The image primitive lives in its own lean module because card-api's
 // universal graph reaches it (via `image-preview`); re-exported here so this
@@ -257,16 +258,7 @@ const loadProtectedMediaBlob = modifier(
     element.removeAttribute('src');
     void (async () => {
       try {
-        // `same-origin` rather than `include`: the realm server answers with
-        // `Access-Control-Allow-Origin: *`, which a credentialed cross-origin
-        // request rejects.
-        let response = await fetch(resourceURL, {
-          credentials: 'same-origin',
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          throw new Error(`Media fetch failed with HTTP ${response.status}`);
-        }
+        let response = await fetchRealmFile(resourceURL, controller.signal);
         let blob = await response.blob();
         if (cancelled) {
           return;

@@ -1,4 +1,4 @@
-// The `sign-in` mode: the window's own session. Signed in, the window says so,
+// The `sign-in` page: the window's own session. Signed in, the window says so,
 // or hands the sign-in over to the app page that sent the user here (the
 // `return` in the address's fragment); otherwise it shows the sign-in form.
 import type Owner from '@ember/owner';

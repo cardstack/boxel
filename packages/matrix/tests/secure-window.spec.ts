@@ -67,9 +67,9 @@ async function signedInUser(secure: Page): Promise<string> {
   ).user;
 }
 
-async function openSecureWindow(page: Page, query: string): Promise<Page> {
+async function openSecureWindow(page: Page, address: string): Promise<Page> {
   let secure = await page.context().newPage();
-  await secure.goto(`${secureOriginURL}?${query}`);
+  await secure.goto(`${secureOriginURL}/${address}`);
   return secure;
 }
 
@@ -148,7 +148,7 @@ test.describe('the secure window signs in on its own', () => {
     let opened = page.context().waitForEvent('page');
     await page.evaluate((url) => {
       (window as any).__secureWindow = window.open(url, '_blank');
-    }, `${secureOriginURL}?mode=sign-in`);
+    }, `${secureOriginURL}/sign-in`);
     let secure = await opened;
     await expect(secure.locator('[data-test-secure-username]')).toBeVisible();
     await expect(secure.locator('[data-test-secure-google]')).toBeVisible();
@@ -235,7 +235,7 @@ test.describe('the secure window signs in on its own', () => {
     );
     await expectAppSignedIn(page);
 
-    let secure = await openSecureWindow(page, 'mode=sign-in');
+    let secure = await openSecureWindow(page, 'sign-in');
     await secure.locator('[data-test-secure-username]').fill(username);
     await secure.locator('[data-test-secure-password]').fill(password);
     await secure.locator('[data-test-secure-password-submit]').click();
@@ -278,13 +278,13 @@ test.describe('the secure window signs in on its own', () => {
 
     // A window opened with the ended session still stored checks it with the
     // server, forgets it, and offers to sign in, with no error.
-    let check = await openSecureWindow(page, 'mode=none');
+    let check = await openSecureWindow(page, '?mode=none');
     await check.evaluate(
       ([key, value]) => localStorage.setItem(key, value),
       [STORAGE_KEY, stored],
     );
     await check.close();
-    let reopened = await openSecureWindow(page, 'mode=sign-in');
+    let reopened = await openSecureWindow(page, 'sign-in');
     await expect(reopened.locator('[data-test-secure-username]')).toBeVisible();
     await expect(reopened.locator('[data-test-secure-error]')).toBeHidden();
     expect(
@@ -313,7 +313,7 @@ test.describe('the secure window signs in on its own', () => {
     await signInAtGoogle(page, identity);
     await expectAppSignedIn(page);
 
-    let secure = await openSecureWindow(page, 'mode=sign-in');
+    let secure = await openSecureWindow(page, 'sign-in');
     await secure.locator('[data-test-secure-google]').click();
     await signInAtGoogle(secure, identity);
 
@@ -330,8 +330,9 @@ test.describe('the secure window signs in on its own', () => {
       ).user,
       'the window is signed in as the account',
     ).toBe(credentials.userId);
+    expect(new URL(secure.url()).pathname).toBe('/secure/sign-in');
     expect(new URL(secure.url()).search, 'no code is left in the address').toBe(
-      '?mode=sign-in',
+      '',
     );
     await snapshot(testInfo, secure, 'secure-window-4-google-signed-in');
   });
@@ -348,7 +349,7 @@ test.describe('the secure window signs in on its own', () => {
     await updateSynapseUser(credentials.userId, { emailAddresses: [email] });
     let sub = subjectFor(username);
 
-    let secure = await openSecureWindow(page, 'mode=sign-in');
+    let secure = await openSecureWindow(page, 'sign-in');
     await secure.locator('[data-test-secure-google]').click();
     await signInAtGoogle(secure, { sub, email, name: 'Linked Google User' });
     expect(
@@ -365,7 +366,7 @@ test.describe('the secure window signs in on its own', () => {
     let localpart = `secure-new-${randomBytes(6).toString('hex')}`;
     let sub = subjectFor(localpart);
 
-    let secure = await openSecureWindow(page, 'mode=sign-in');
+    let secure = await openSecureWindow(page, 'sign-in');
     await secure.locator('[data-test-secure-google]').click();
     await signInAtGoogle(secure, {
       sub,
@@ -384,7 +385,7 @@ test.describe('the secure window signs in on its own', () => {
     page,
   }, testInfo) => {
     let localpart = `secure-unverified-${randomBytes(6).toString('hex')}`;
-    let secure = await openSecureWindow(page, 'mode=sign-in');
+    let secure = await openSecureWindow(page, 'sign-in');
     await secure.locator('[data-test-secure-google]').click();
     await signInAtGoogle(secure, {
       sub: subjectFor(localpart),
@@ -412,7 +413,7 @@ test.describe('the secure window signs in on its own', () => {
       email,
       name: 'Deactivated Google User',
     };
-    let secure = await openSecureWindow(page, 'mode=sign-in');
+    let secure = await openSecureWindow(page, 'sign-in');
     await secure.locator('[data-test-secure-google]').click();
     await signInAtGoogle(secure, identity);
     expect(await signedInUser(secure)).toBe(credentials.userId);
@@ -442,7 +443,7 @@ test.describe('the secure window signs in on its own', () => {
 
     let secure = await openSecureWindow(
       page,
-      `mode=cli-sign-in&port=${port}&state=${state}&user=${username}`,
+      `cli-sign-in?port=${port}&state=${state}&user=${username}`,
     );
     await expect(secure.locator('[data-test-secure-username]')).toHaveValue(
       username,
@@ -466,7 +467,7 @@ test.describe('the secure window signs in on its own', () => {
     // The window has left for the listener; the secure origin's storage,
     // read from a page of its own, holds no session.
     await secure.waitForURL(`http://127.0.0.1:${port}/callback`);
-    let check = await openSecureWindow(page, 'mode=none');
+    let check = await openSecureWindow(page, '?mode=none');
     expect(
       await check.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
       "the CLI's session is not kept in the window",
@@ -481,7 +482,7 @@ test.describe('the secure window signs in on its own', () => {
       'secure-window-limit',
     );
     await expectAppSignedIn(page);
-    let secure = await openSecureWindow(page, 'mode=sign-in');
+    let secure = await openSecureWindow(page, 'sign-in');
     let error = secure.locator('[data-test-secure-error]');
     await expect(secure.locator('[data-test-secure-username]')).toBeVisible();
     // An account may fail three times in a row; the fourth attempt waits for
@@ -529,12 +530,10 @@ test.describe('the secure window signs in on its own', () => {
   test('cancelling at Google returns the window to its sign-in', async ({
     page,
   }) => {
-    let secure = await openSecureWindow(page, 'mode=sign-in');
+    let secure = await openSecureWindow(page, 'sign-in');
     await returnFromGoogleWithError(secure, 'access_denied');
 
-    await secure.waitForURL(
-      (url) => url.searchParams.get('mode') === 'sign-in',
-    );
+    await secure.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     await expect(secure.locator('[data-test-secure-google]')).toBeVisible();
     await expect(secure.locator('[data-test-secure-error]')).toBeHidden();
   });
@@ -550,14 +549,14 @@ test.describe('the secure window signs in on its own', () => {
 
     let secure = await openSecureWindow(
       page,
-      `mode=cli-sign-in&port=${port}&state=${state}&user=${username}`,
+      `cli-sign-in?port=${port}&state=${state}&user=${username}`,
     );
     await returnFromGoogleWithError(secure, 'access_denied');
 
     // Back on the CLI's sign-in, for the same listener and username.
     await secure.waitForURL(
       (url) =>
-        url.searchParams.get('mode') === 'cli-sign-in' &&
+        url.pathname.endsWith('/cli-sign-in') &&
         url.searchParams.get('port') === String(port) &&
         url.searchParams.get('state') === state &&
         url.searchParams.get('user') === username,
@@ -581,7 +580,7 @@ test.describe('the secure window signs in on its own', () => {
     let state = randomBytes(16).toString('hex');
     let secure = await openSecureWindow(
       page,
-      `mode=cli-sign-in&port=4999&state=${state}&user=someone`,
+      `cli-sign-in?port=4999&state=${state}&user=someone`,
     );
     await returnFromGoogleWithError(secure, 'server_error');
 
@@ -594,8 +593,8 @@ test.describe('the secure window signs in on its own', () => {
         .getAttribute('href'))!,
       secure.url(),
     );
+    expect(startAgain.pathname).toBe('/secure/cli-sign-in');
     expect(Object.fromEntries(startAgain.searchParams)).toEqual({
-      mode: 'cli-sign-in',
       port: '4999',
       state,
       user: 'someone',
@@ -607,7 +606,7 @@ test.describe('the secure window signs in on its own', () => {
   }) => {
     let secure = await openSecureWindow(
       page,
-      'mode=cli-sign-in&port=not-a-port&state=x',
+      'cli-sign-in?port=not-a-port&state=x',
     );
     await expect(
       secure.locator('[data-test-secure-sign-in] [data-test-secure-title]'),

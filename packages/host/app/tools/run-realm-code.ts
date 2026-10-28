@@ -13,6 +13,7 @@ import {
   isRelativePath,
   isResolvedCodeRef,
   logger,
+  RealmPaths,
   resourceIdentity,
   ri,
   rri,
@@ -176,7 +177,7 @@ type WriteFile = (
   content: string,
   expected: string | undefined,
   options?: { lint?: boolean },
-) => Promise<string>;
+) => Promise<string | undefined>;
 
 // Saves the card instances realm.cards.update changed, all or none, in one
 // request. `expected` is each file's content when the run first read it; the
@@ -382,6 +383,10 @@ class RealmFsSession {
   // Files saved by this run, in the order of their first save. A file the
   // run deleted is no longer here.
   readonly saved = new Set<string>();
+  // Files the run wrote that came out of lint with the text they already
+  // held (lint removes unused imports), and that it never changed. Nothing
+  // was written, and the result says so rather than reporting them saved.
+  readonly unchanged = new Set<string>();
   // Files this run created that still exist, so a delete is reported as
   // undoing the run's own write rather than removing an earlier file.
   private created = new Set<string>();
@@ -1608,6 +1613,13 @@ class RealmFsSession {
       throw new Error(`The run has ended; ${url} was not saved`);
     }
     let saved = await this.writeFile(url, content, expected, options);
+    if (saved === undefined) {
+      if (!this.saved.has(url)) {
+        this.unchanged.add(url);
+      }
+      return;
+    }
+    this.unchanged.delete(url);
     this.known.set(url, saved);
     if (expected === undefined) {
       this.markCreated(url);
@@ -1628,6 +1640,7 @@ class RealmFsSession {
   private forgetDeleted(url: string) {
     this.created.delete(url);
     this.saved.delete(url);
+    this.unchanged.delete(url);
     this.binary.delete(url);
     this.binaryDigests.delete(url);
     this.known.set(url, undefined);
@@ -1793,7 +1806,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'realm.fs.download, can create workspaces with realm.workspaces.create, ' +
     'can change the skills and model of this room with room.*, and can ' +
     'refresh the index of the workspace with realm.index.*. In a workspace ' +
-    'the user can only read, reads work and each write is refused. Return ' +
+    'the user can only read, reads work and each write is refused. realm ' +
+    'is the root of the workspace, and paths are relative to it, so a file ' +
+    'in a folder is named with its folder (folder/file.json). Return ' +
     '{ show: "<card path>" } to open a card in the realm when the run ends.';
   static actionVerb = 'Run';
   // `room.*` changes the room the call came from. The tool service sets
@@ -1848,9 +1863,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
     // Resolve to the realm's own identifier: the fallback realm URL can come
     // without the trailing slash a realm root has.
-    let realmURL = this.realmOfInput(
-      rri(realmInput.endsWith('/') ? realmInput : `${realmInput}/`),
-    );
+    let realmId = rri(realmInput.endsWith('/') ? realmInput : `${realmInput}/`);
+    let realmURL = this.realmOfInput(realmId);
     // Read and write are separate grants, and either one is enough to run:
     // in a workspace the user can only read, each write is refused on its
     // own. In one the user can only write, the realm refuses each read,
@@ -1860,6 +1874,26 @@ export default class RunRealmCodeTool extends HostBaseTool<
       !(this.realm.canRead(realmURL) || this.realm.canWrite(realmURL))
     ) {
       throw new Error(`The current user cannot read or write ${realmInput}`);
+    }
+    let rootURL = this.realmRootURL(realmURL);
+    // Paths in the script resolve from the realm root, so a folder, file or
+    // card inside the realm is refused rather than replaced by the root: the
+    // script's paths would otherwise resolve from somewhere the caller did not
+    // name. Which of the three it is isn't known without asking the realm, so
+    // the message holds for each. The root is named in the form the model is
+    // shown realms in.
+    let { virtualNetwork } = this.network;
+    let local = new RealmPaths(new URL(rootURL)).local(
+      virtualNetwork.toURL(realmId),
+    );
+    if (local !== '') {
+      let root = virtualNetwork.unresolveURL(rootURL);
+      throw new Error(
+        `${realmInput} is ${local} inside the workspace ${root}, not its ` +
+          `root. Pass ${root} as realm, and name each file by its path from ` +
+          `there: ${local} for that file, ${local}.json for that card, or ` +
+          `${local}/ and the file's name for a file in that folder`,
+      );
     }
 
     let namedCalls = clickRequiredCallsIn(input.code);
@@ -1873,11 +1907,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let gatedRealmsOfRun: RealmIdentifier[] | undefined;
     let gatedRealms = () => (gatedRealmsOfRun ??= this.gatedRealms(roomId));
     let session = new RealmFsSession(
-      this.realmRootURL(realmURL),
+      rootURL,
       (url) => this.readSource(url),
       (url, content, expected, options) =>
         this.writeFile(roomId, url, content, expected, options),
-      (updates) => this.saveCards(roomId, this.realmRootURL(realmURL), updates),
+      (updates) => this.saveCards(roomId, rootURL, updates),
       (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
       (url, expected) => this.deleteFile(url, expected),
       (url, maxBytes, signal) => this.downloadFile(url, maxBytes, signal),
@@ -1906,7 +1940,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         this.captureURL(url, options, doneBy, signal),
       (reference) =>
         workspaceOf(reference, { network: this.network, realm: this.realm })
-          ?.realmURL === this.realmRootURL(realmURL),
+          ?.realmURL === rootURL,
       (workspaceInput) =>
         createWorkspace(
           { matrixService: this.matrixService, realm: this.realm },
@@ -1957,7 +1991,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       runnerResult = await runRealmCode(
         {
           code: input.code,
-          realmURL: this.realmRootURL(realmURL),
+          realmURL: rootURL,
           timeoutMs: runTimeoutMs,
         },
         (method, args) => session.call(method, args),
@@ -2009,6 +2043,15 @@ export default class RunRealmCodeTool extends HostBaseTool<
               detail: session.binary.has(fileUrl)
                 ? 'Binary file saved.'
                 : 'Source saved; correctness validation will run after this tool result.',
+            }),
+        ),
+        ...[...session.unchanged].map(
+          (fileUrl) =>
+            new commandModule.RealmCodeFileResult({
+              fileUrl,
+              status: 'unchanged',
+              detail:
+                "Not saved: after lint fixes (which remove unused imports) the text is the same as the file's current text, so nothing changed.",
             }),
         ),
         ...[...session.deleted].map(
@@ -2281,7 +2324,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     content: string,
     expected: string | undefined,
     options?: { lint?: boolean },
-  ): Promise<string> {
+  ): Promise<string | undefined> {
     if (options?.lint !== false && /\.(gts|ts)$/.test(url)) {
       let lint = await new LintAndFixTool(this.toolContext).execute({
         realm: this.realm.realmOf(rri(url))!,
@@ -2292,6 +2335,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
         throw new Error(`Lint errors in ${url}: ${lint.lintErrors.join('; ')}`);
       }
       content = lint.output;
+    }
+    // what is left to write is what the file holds: nothing to save
+    if (expected !== undefined && content === expected) {
+      return undefined;
     }
     let current = await this.readSource(url);
     if (expected === undefined) {

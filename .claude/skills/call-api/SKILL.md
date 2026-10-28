@@ -117,7 +117,8 @@ host. A host with a trailing dot is refused too, since it names the same host
 as one without.
 
 The definition cache holds both. The destination is the unit a key is
-approved for; nothing reads it for that until a binding fills a slot.
+approved for: creating a grant (see the `user-keys` skill) reads it from here
+and stores it on the grant, and sending under a grant never reads it again.
 
 **`destinationCovers(destination, url)`** is the one rule for whether a request
 goes where a destination says: the send-time check asks it of every request,
@@ -150,7 +151,13 @@ refusal also writes a key-use line.
 2. **`actor-required`** (401) — the request has a slot and no signed-in caller.
 3. **`binding-not-approved`** (403) — the request has a slot. No binding
    fills a slot, so every slotted request stops here, with
-   `meta.slots: [{name, key}]`. A keyless request continues.
+   `meta.slots: [{name, key}]`. The detail names each slot with whose key
+   fills it (`the credential slot "weather" for the invoking user's own key`,
+   `… for the realm's key`, from `describeSlots`), because a caller that sees
+   only the message, such as the AI assistant, gets neither the code nor
+   `meta`, and a slot's name alone doesn't say. The assistant's rule for
+   opening the secure window keys on that wording. A keyless request
+   continues.
 4. **Build** (`buildCallApiRequest`): markers filled from the payload, the
    caller, the realm's settings and — on an instance target — the card's
    _indexed_ document (`indexedInstance` in `read.ts`, so computed fields are

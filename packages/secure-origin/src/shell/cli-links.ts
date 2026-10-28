@@ -1,5 +1,5 @@
 import { type CliCallback, cliCallback } from '../security/cli-handoff.js';
-import { cliParams, cliSignInMode, modeURL } from './urls.js';
+import { cliParams, cliSignInPage, pageURL } from './urls.js';
 
 // The CLI a page of the shell signs in for, as the `port` and `state` query
 // or fragment parameters name it, and the sign-in page that carries it on.
@@ -22,6 +22,6 @@ export function cliFrom(params: URLSearchParams): {
 // suggested username, or else the window's own.
 export function signInURL(cli?: CliCallback, username?: string | null) {
   return cli
-    ? modeURL(cliSignInMode(cli), cliParams(cli, username || undefined))
-    : modeURL('sign-in');
+    ? pageURL(cliSignInPage(cli), cliParams(cli, username || undefined))
+    : pageURL('sign-in');
 }

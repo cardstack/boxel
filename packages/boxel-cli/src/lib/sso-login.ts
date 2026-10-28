@@ -570,7 +570,18 @@ export function buildCliAuthUrl(
   return url.href;
 }
 
-// The secure origin's sign-in for a new profile (its `cli-auth` mode). It
+// The address of one of the secure origin's pages, each at its own path
+// beneath the secure origin's URL.
+export function secureOriginPageUrl(
+  secureOriginUrl: string,
+  page: string,
+): URL {
+  const url = new URL(secureOriginUrl);
+  url.pathname = `${url.pathname.replace(/\/+$/, '')}/${page}`;
+  return url;
+}
+
+// The secure origin's sign-in for a new profile (its `cli-auth` page). It
 // hands the listener a Matrix login token to redeem, and, because this CLI
 // asks for one with `session=secure`, the secure session `boxel keys` uses,
 // so one sign-in sets up both. As with the app's page, the listener is named
@@ -579,8 +590,7 @@ export function buildSecureCliAuthUrl(
   secureOriginUrl: string,
   callback: { port: number; state: string },
 ): string {
-  const url = new URL(secureOriginUrl);
-  url.searchParams.set('mode', 'cli-auth');
+  const url = secureOriginPageUrl(secureOriginUrl, 'cli-auth');
   url.searchParams.set('port', String(callback.port));
   url.searchParams.set('state', callback.state);
   url.searchParams.set('session', 'secure');

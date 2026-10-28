@@ -113,6 +113,20 @@ export class EvaluationCard extends CardDef {
   // cards in the stack so they are part of the message context.
   @field initialCards = linksToMany(CardDef);
   @field initialFiles = linksToMany(FileDef);
+  // Seeded cards the prompt asks the assistant to change, each one also in
+  // `initialCards` or a card `.json` in `initialFiles`. When set, the runner's
+  // "a card rendered" check needs every one of these to differ from its seed
+  // and one of them to be shown in the stack or the preview panel, so a run
+  // can't clear the check with a card that was already on screen or that only
+  // renders inside another one.
+  @field expectedChangedCards = linksToMany(CardDef);
+  // The card each prompt is about, by position: the runner brings the first
+  // one to the top of the stack before the first prompt, the second before
+  // the first follow-up, and so on, the way a person opens the card they are
+  // talking about. Only the top card of a stack goes into the message
+  // context, so an evaluation that opens several cards needs this. Each one
+  // is also in `initialCards`; a prompt with no entry leaves the stack as is.
+  @field promptCards = linksToMany(CardDef);
   // Skill features the evaluation needs switched on (`boxel-debug:feature:
   // enable:<name>` in the room before the first prompt). A skill section
   // between `<!-- feature:<name> -->` markers is left out of the prompt
@@ -174,6 +188,28 @@ export class EvaluationCard extends CardDef {
             <h2>Initial files</h2>
             <div class='links'>
               <@fields.initialFiles @format='atom' />
+            </div>
+          </section>
+        {{/if}}
+
+        {{#if (gt @model.expectedChangedCards.length 0)}}
+          <section>
+            <h2>Expected changed cards</h2>
+            <p class='hint'>The run must change every one of these, and show
+              one of them.</p>
+            <div class='links'>
+              <@fields.expectedChangedCards @format='atom' />
+            </div>
+          </section>
+        {{/if}}
+
+        {{#if (gt @model.promptCards.length 0)}}
+          <section>
+            <h2>Prompt cards</h2>
+            <p class='hint'>Brought to the top of the stack before each
+              prompt, in order.</p>
+            <div class='links'>
+              <@fields.promptCards @format='atom' />
             </div>
           </section>
         {{/if}}

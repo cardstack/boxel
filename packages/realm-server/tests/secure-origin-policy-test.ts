@@ -6,6 +6,7 @@ import type { AddressInfo } from 'net';
 import Koa from 'koa';
 import puppeteer, { type Browser, type Frame, type Page } from 'puppeteer';
 import { createSecureOrigin, secureOriginGate } from '../lib/secure-origin.ts';
+import { PAGE_PATHS } from '@cardstack/secure-origin/shell/pages.js';
 
 // Each page the secure origin serves, loaded from its build in a real browser
 // under the origin's real policy, must run without the policy refusing
@@ -16,19 +17,156 @@ import { createSecureOrigin, secureOriginGate } from '../lib/secure-origin.ts';
 // The built pages are also where the theme's tokens resolve, so this is where
 // the error and muted text colours are checked against WCAG AA contrast.
 
-// Every mode the shell presents, and the address Google returns to.
-const SHELL_PAGES = [
-  '/secure',
-  '/secure?mode=sign-in',
-  '/secure?mode=cli-sign-in&port=4567&state=example-state',
-  '/secure?mode=cli-auth&port=4567&state=example-state-0123',
-  '/secure?mode=cli-auth&port=4567&state=example-state-0123&session=secure',
-  '/secure?mode=register',
-  '/secure?mode=verify-email',
-  '/secure?mode=forgot-password',
-  '/secure?mode=reset-password',
-  '/secure?mode=sign-out',
-  '/secure/google-callback',
+const KEY_ID = '0b6c1e9e-5a1f-4c47-9d0e-2f5b8f6f1a3c';
+// The window's own sign-in form: the CLI's sign-in pages draw the same form,
+// with a subtitle naming the CLI.
+const WINDOW_SIGN_IN =
+  'body:not(:has([data-test-secure-cli-sign-in-subtitle], [data-test-secure-cli-auth-subtitle])) [data-test-secure-sign-in-form]';
+const STATE = 'example-state-0123';
+
+// Every page the shell presents, loaded directly at its own path with what it
+// is told, and something only that page draws. A key page signed out draws
+// only the key window, which names its page. `page` is the page's entry in
+// `PAGE_PATHS` (`''` for the shell's own address).
+const SHELL_PAGES: { page: string; address: string; marker: string }[] = [
+  { page: '', address: '', marker: '[data-test-keys-page="keys"]' },
+  {
+    page: 'sign-in',
+    address: 'sign-in',
+    marker: WINDOW_SIGN_IN,
+  },
+  {
+    page: 'cli-sign-in',
+    address: `cli-sign-in?port=4567&state=${STATE}`,
+    marker: '[data-test-secure-cli-sign-in-subtitle]',
+  },
+  {
+    page: 'cli-auth',
+    address: `cli-auth?port=4567&state=${STATE}`,
+    marker: '[data-test-secure-cli-auth-subtitle]',
+  },
+  {
+    page: 'cli-auth',
+    address: `cli-auth?port=4567&state=${STATE}&session=secure`,
+    marker: '[data-test-secure-cli-auth-subtitle]',
+  },
+  {
+    page: 'register',
+    address: 'register',
+    marker: '[data-test-register-page]',
+  },
+  {
+    page: 'verify-email',
+    address: 'verify-email',
+    marker: '[data-test-email-validated]',
+  },
+  {
+    page: 'forgot-password',
+    address: 'forgot-password',
+    marker: '[data-test-forgot-password-form]',
+  },
+  {
+    page: 'reset-password',
+    address: 'reset-password',
+    marker: '[data-test-reset-password-form]',
+  },
+  // Signed out, it moves on to the sign-in page.
+  {
+    page: 'sign-out',
+    address: 'sign-out',
+    marker: WINDOW_SIGN_IN,
+  },
+  {
+    page: 'google-callback',
+    address: 'google-callback',
+    marker: '[data-test-secure-start-again]',
+  },
+  { page: 'keys', address: 'keys', marker: '[data-test-keys-page="keys"]' },
+  {
+    page: 'keys/add',
+    address: 'keys/add',
+    marker: '[data-test-keys-page="enter-key"]',
+  },
+  {
+    page: `keys/${KEY_ID}/share`,
+    address: `keys/${KEY_ID}/share`,
+    marker: '[data-test-keys-page="share-key"]',
+  },
+  {
+    page: 'enter-key',
+    address: 'enter-key',
+    marker: '[data-test-keys-page="enter-key"]',
+  },
+  {
+    page: 'share-key',
+    address: 'share-key#realm=https%3A%2F%2Frealm.example%2F',
+    marker: '[data-test-keys-page="share-key"]',
+  },
+  {
+    page: 'swap-key',
+    address: 'swap-key#realm=https%3A%2F%2Frealm.example%2F&share=example',
+    marker: '[data-test-keys-page="swap-key"]',
+  },
+];
+
+// Addresses that name a page by the `mode` query parameter, as earlier CLI
+// releases and emails already sent do: the address each lands on, and what
+// only that page draws.
+const LEGACY_ADDRESSES: { legacy: string; landed: string; marker: string }[] = [
+  {
+    legacy: '/secure?mode=sign-in',
+    landed: '/secure/sign-in',
+    marker: WINDOW_SIGN_IN,
+  },
+  {
+    legacy: `/secure?mode=cli-sign-in&port=4567&state=${STATE}&user=someone`,
+    landed: `/secure/cli-sign-in?port=4567&state=${STATE}&user=someone`,
+    marker: '[data-test-secure-cli-sign-in-subtitle]',
+  },
+  {
+    legacy: `/secure?mode=cli-auth&port=4567&state=${STATE}&session=secure`,
+    landed: `/secure/cli-auth?port=4567&state=${STATE}&session=secure`,
+    marker: '[data-test-secure-cli-auth-subtitle]',
+  },
+  {
+    legacy: '/secure?mode=register',
+    landed: '/secure/register',
+    marker: '[data-test-register-page]',
+  },
+  {
+    legacy: '/secure?mode=forgot-password',
+    landed: '/secure/forgot-password',
+    marker: '[data-test-forgot-password-form]',
+  },
+  // A registration email's link, with the Matrix server's session id.
+  {
+    legacy: '/secure/?mode=verify-email&sid=example-sid',
+    landed: '/secure/verify-email?sid=example-sid',
+    marker: '[data-test-email-validated]',
+  },
+  // A reset email's link: the page reads the fragment and takes it out of
+  // the address.
+  {
+    legacy:
+      '/secure?mode=reset-password#clientSecret=example-secret&email=someone%40example.test&sid=example-sid',
+    landed: '/secure/reset-password',
+    marker: '[data-test-reset-password-form]',
+  },
+  {
+    legacy: '/secure/?mode=keys',
+    landed: '/secure/keys',
+    marker: '[data-test-keys-page="keys"]',
+  },
+  {
+    legacy: '/secure?mode=enter-key&then=keys',
+    landed: '/secure/keys/add',
+    marker: '[data-test-keys-page="enter-key"]',
+  },
+  {
+    legacy: '/secure?mode=share-key#realm=https%3A%2F%2Frealm.example%2F',
+    landed: '/secure/share-key#realm=https%3A%2F%2Frealm.example%2F',
+    marker: '[data-test-keys-page="share-key"]',
+  },
 ];
 
 // Every form the credential fields present.
@@ -152,7 +290,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a violation of the policy is seen', async function (assert) {
-    await page.goto(`${secureOrigin}/secure?mode=sign-in`, {
+    await page.goto(`${secureOrigin}/secure/sign-in`, {
       waitUntil: 'networkidle0',
     });
     await page.evaluate(() =>
@@ -169,8 +307,16 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test("each of the shell's modes runs under the policy", async function (assert) {
-    for (let path of SHELL_PAGES) {
+  test("each of the shell's pages runs under the policy", async function (assert) {
+    assert.deepEqual(
+      [...new Set(SHELL_PAGES.map(({ page }) => page))]
+        .filter((page) => !page.startsWith('keys/') || page === 'keys/add')
+        .sort(),
+      ['', ...PAGE_PATHS].sort(),
+      'every page is loaded',
+    );
+    for (let { address, marker } of SHELL_PAGES) {
+      let path = `/secure/${address}`;
       let response = await page.goto(`${secureOrigin}${path}`, {
         waitUntil: 'networkidle0',
       });
@@ -181,12 +327,81 @@ module(basename(import.meta.filename), function (hooks) {
           ['content-security-policy']?.includes(`default-src 'self'`),
         `${path}: served with the policy`,
       );
-      if (path !== '/secure') {
-        await page.waitForSelector('#secure-shell > *', { timeout: 10000 });
-        assert.ok(true, `${path}: the mode rendered`);
-      }
+      await page.waitForSelector(marker, { timeout: 10000 });
+      assert.ok(true, `${path}: the page rendered`);
       assert.deepEqual(await violationsIn(page), [], `${path}: no violation`);
     }
+  });
+
+  test('an address naming a page by its `mode` lands on that page', async function (assert) {
+    for (let { legacy, landed, marker } of LEGACY_ADDRESSES) {
+      await page.goto(`${secureOrigin}${legacy}`, {
+        waitUntil: 'networkidle0',
+      });
+      await page.waitForSelector(marker, { timeout: 10000 });
+      let { pathname, search, hash } = await page.evaluate(() => ({
+        pathname: window.location.pathname,
+        search: window.location.search,
+        hash: window.location.hash,
+      }));
+      assert.strictEqual(`${pathname}${search}${hash}`, landed, legacy);
+      assert.deepEqual(await violationsIn(page), [], `${legacy}: no violation`);
+    }
+  });
+
+  test('moving between pages is a route transition, and back returns', async function (assert) {
+    // A mark left on the first document is still there after a move only if
+    // the move loaded no new one.
+    await page.goto(`${secureOrigin}/secure/sign-in`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.evaluate(() => {
+      (window as any).__document = 'first';
+    });
+    await page.waitForSelector('[data-test-forgot-password]', {
+      timeout: 10000,
+    });
+    await page.click('[data-test-forgot-password]');
+    await page.waitForFunction(
+      () => window.location.pathname === '/secure/forgot-password',
+      { timeout: 10000 },
+    );
+    await page.waitForSelector('[data-test-forgot-password-form]', {
+      timeout: 10000,
+    });
+    assert.strictEqual(
+      await page.evaluate(() => (window as any).__document),
+      'first',
+      'the move forward loads no new document',
+    );
+    await page.goBack();
+    await page.waitForFunction(
+      () => window.location.pathname === '/secure/sign-in',
+      { timeout: 10000 },
+    );
+    await page.waitForSelector('[data-test-forgot-password]', {
+      timeout: 10000,
+    });
+    assert.strictEqual(
+      await page.evaluate(() => (window as any).__document),
+      'first',
+      'nor does the move back',
+    );
+    assert.deepEqual(await violationsIn(page), [], 'no violation');
+
+    // The sign-out page moves on to the sign-in page itself once it has
+    // ended the window's session.
+    await page.goto(`${secureOrigin}/secure/sign-out`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForFunction(
+      () => window.location.pathname === '/secure/sign-in',
+      { timeout: 10000 },
+    );
+    await page.waitForSelector('[data-test-forgot-password]', {
+      timeout: 10000,
+    });
+    assert.deepEqual(await violationsIn(page), [], 'signed out: no violation');
   });
 
   test('the screens a sign-in is handed back to the app from run under the policy', async function (assert) {
@@ -207,7 +422,7 @@ module(basename(import.meta.filename), function (hooks) {
       ),
     );
     await page.goto(
-      `${secureOrigin}/secure?mode=sign-in#return=${encodeURIComponent(`${appOrigin}/`)}`,
+      `${secureOrigin}/secure/sign-in#return=${encodeURIComponent(`${appOrigin}/`)}`,
       { waitUntil: 'networkidle0' },
     );
     await page.waitForSelector('[data-test-secure-loopback-confirm]', {
@@ -230,75 +445,82 @@ module(basename(import.meta.filename), function (hooks) {
     await page.evaluate(() => localStorage.clear());
   });
 
-  test('error and muted text on the sign-in pages meet WCAG AA contrast', async function (assert) {
-    // Every mode's stylesheet ships with the shell, so this one page holds
-    // the error rules of all of them. Each colour is resolved inside the
-    // page's AuthContainer, under its theme, and composited over the page
-    // background on a canvas, which turns any CSS colour into sRGB.
-    await page.goto(`${secureOrigin}/secure?mode=sign-in`, {
-      waitUntil: 'networkidle0',
-    });
-    await page.waitForSelector('[data-test-secure-page]', { timeout: 10000 });
-    let { background, colors, nested } = await page.evaluate(() => {
-      let container = document.querySelector('[data-test-secure-page]')!;
-      let canvas = document.createElement('canvas');
-      canvas.width = canvas.height = 1;
-      let context = canvas.getContext('2d', { willReadFrequently: true })!;
-      let backgroundColor = getComputedStyle(container).backgroundColor;
-      let toRGB = (color: string) => {
-        context.fillStyle = backgroundColor;
-        context.fillRect(0, 0, 1, 1);
-        context.fillStyle = color;
-        context.fillRect(0, 0, 1, 1);
-        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
-      };
-      let resolve = (value: string) => {
-        let probe = document.createElement('span');
-        probe.style.setProperty('color', value);
-        container.append(probe);
-        let color = getComputedStyle(probe).color;
-        probe.remove();
-        return toRGB(color);
-      };
-      let errorRule = /^\.error(-message)?(\[[^\]]+\])?$/;
-      let colors: { label: string; rgb: number[] }[] = [];
-      let nested = 0;
-      // The components' rules sit inside `@layer` blocks, so the walk
-      // descends into every grouping rule.
-      let visit = (rules: CSSRuleList, depth: number) => {
-        for (let rule of rules) {
-          if (rule instanceof CSSGroupingRule) {
-            visit(rule.cssRules, depth + 1);
-            continue;
-          }
-          if (!(rule instanceof CSSStyleRule)) {
-            continue;
-          }
-          let value = rule.style.getPropertyValue('color');
-          if (
-            value &&
-            rule.selectorText.split(',').some((s) => errorRule.test(s.trim()))
-          ) {
-            if (depth > 0) {
-              nested++;
+  // The error rules a selector pattern picks out of every stylesheet the
+  // shell ships, and the page's muted text, each resolved inside `container`
+  // under its theme and composited over its background on a canvas, which
+  // turns any CSS colour into sRGB.
+  async function textColors(container: string, errorRule: RegExp) {
+    return await page.evaluate(
+      (container, source, flags) => {
+        let element = document.querySelector(container)!;
+        let canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        let context = canvas.getContext('2d', { willReadFrequently: true })!;
+        let backgroundColor = getComputedStyle(element).backgroundColor;
+        let toRGB = (color: string) => {
+          context.fillStyle = backgroundColor;
+          context.fillRect(0, 0, 1, 1);
+          context.fillStyle = color;
+          context.fillRect(0, 0, 1, 1);
+          return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+        };
+        let resolve = (value: string) => {
+          let probe = document.createElement('span');
+          probe.style.setProperty('color', value);
+          element.append(probe);
+          let color = getComputedStyle(probe).color;
+          probe.remove();
+          return toRGB(color);
+        };
+        let errorRule = new RegExp(source, flags);
+        let colors: { label: string; rgb: number[] }[] = [];
+        let nested = 0;
+        // The components' rules sit inside `@layer` blocks, so the walk
+        // descends into every grouping rule.
+        let visit = (rules: CSSRuleList, depth: number) => {
+          for (let rule of rules) {
+            if (rule instanceof CSSGroupingRule) {
+              visit(rule.cssRules, depth + 1);
+              continue;
             }
-            colors.push({
-              label: `${rule.selectorText} { color: ${value} }`,
-              rgb: resolve(value),
-            });
+            if (!(rule instanceof CSSStyleRule)) {
+              continue;
+            }
+            let value = rule.style.getPropertyValue('color');
+            if (
+              value &&
+              rule.selectorText.split(',').some((s) => errorRule.test(s.trim()))
+            ) {
+              if (depth > 0) {
+                nested++;
+              }
+              colors.push({
+                label: `${rule.selectorText} { color: ${value} }`,
+                rgb: resolve(value),
+              });
+            }
           }
+        };
+        for (let sheet of document.styleSheets) {
+          visit(sheet.cssRules, 0);
         }
-      };
-      for (let sheet of document.styleSheets) {
-        visit(sheet.cssRules, 0);
-      }
-      colors.push({
-        label: 'var(--muted-foreground)',
-        rgb: resolve('var(--muted-foreground)'),
-      });
-      return { background: toRGB(backgroundColor), colors, nested };
-    });
+        colors.push({
+          label: 'var(--muted-foreground)',
+          rgb: resolve('var(--muted-foreground)'),
+        });
+        return { background: toRGB(backgroundColor), colors, nested };
+      },
+      container,
+      errorRule.source,
+      errorRule.flags,
+    );
+  }
 
+  function assertContrast(
+    assert: Assert,
+    where: string,
+    { background, colors, nested }: Awaited<ReturnType<typeof textColors>>,
+  ) {
     let luminance = (rgb: number[]) => {
       let [r, g, b] = rgb.map((channel) => {
         let c = channel / 255;
@@ -313,19 +535,54 @@ module(basename(import.meta.filename), function (hooks) {
 
     assert.ok(
       colors.length > 1,
-      `the shell's stylesheets hold error rules (${colors.length - 1})`,
+      `${where}: the shell's stylesheets hold error rules (${colors.length - 1})`,
     );
-    assert.ok(
-      nested > 0,
-      `error rules inside @layer blocks are checked (${nested})`,
-    );
+    // The sign-in pages' rules sit inside `@layer` blocks; this shows the
+    // walk reached them.
+    if (where === 'sign-in') {
+      assert.ok(
+        nested > 0,
+        `${where}: error rules inside @layer blocks are checked (${nested})`,
+      );
+    }
     for (let { label, rgb } of colors) {
       let ratio = contrast(rgb, background);
       assert.ok(
         ratio >= 4.5,
-        `${label}: rgb(${rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+        `${where}: ${label}: rgb(${rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
       );
     }
+  }
+
+  test('error and muted text on the sign-in pages meet WCAG AA contrast', async function (assert) {
+    // Every page's stylesheet ships with the shell, so this one page holds
+    // the error rules of all the sign-in pages.
+    await page.goto(`${secureOrigin}/secure/sign-in`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-secure-page]', { timeout: 10000 });
+    assertContrast(
+      assert,
+      'sign-in',
+      await textColors(
+        '[data-test-secure-page]',
+        /^\.error(-message)?(\[[^\]]+\])?$/,
+      ),
+    );
+  });
+
+  test('error and muted text on the key pages meet WCAG AA contrast', async function (assert) {
+    // The key pages draw their errors on the key window's own panel, which
+    // has a theme and background of its own.
+    await page.goto(`${secureOrigin}/secure/keys`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });
+    assertContrast(
+      assert,
+      'key pages',
+      await textColors('[data-test-keys-panel]', /^\.keys-error(\[[^\]]+\])?$/),
+    );
   });
 
   test('each credential form runs under the policy, framed by the app', async function (assert) {

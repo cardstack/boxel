@@ -163,6 +163,10 @@ model, from four sources:
      were asked for is a duplicated link, and it shows here as four.
    - a computed value is arithmetically right: check it against the fields it
      derives from, in the same card document.
+   - a card in the evaluation's `expectedChangedCards` is the target of the
+     change: compare it with its seed bytes in the run's `evaluation.json`
+     (base64 under `files[].content`, keyed by `path`). The
+     result JSON's `changedCards` lists the ones whose data differs.
 2. The screenshot next to it (open it with the Read tool): what the user would
    have seen, and whether it rendered at all.
 3. The result JSON in `eval-results/<session-id>/<model>.json`: verdict,
@@ -187,6 +191,8 @@ evidence, whether each holds. Then score:
 - **0**: the verdict is `model-failure`, or no card of the asked-for kind exists
   in the test workspace. A pass with the wrong card (a placeholder, an
   unrelated card, only the pre-copied card untouched) is also 0.
+- An evaluation whose notes name a **known gap** is scored the same way, but
+  the analysis says which failed criteria are the gap and which are the model.
 - **Not scored**: the verdict is `host-failure`, `bot-failure` or
   `runner-failure`. The run says nothing about the model, so the result card
   leaves it out of the scores (tier `unscored`) whatever score is recorded.

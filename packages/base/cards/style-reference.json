@@ -5,13 +5,13 @@
       "cardTitle": "Style Reference",
       "specType": "card",
       "ref": {
-        "module": "https://cardstack.com/base/style-reference",
+        "module": "@cardstack/base/style-reference",
         "name": "default"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

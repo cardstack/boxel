@@ -6,13 +6,13 @@
       "cardDescription": "Guide to brand elements and visual style",
       "specType": "card",
       "ref": {
-        "module": "https://cardstack.com/base/brand-guide",
+        "module": "@cardstack/base/brand-guide",
         "name": "default"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

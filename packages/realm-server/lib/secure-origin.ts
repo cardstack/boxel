@@ -5,6 +5,10 @@ import { dirname, extname, join } from 'path';
 import { logger } from '@cardstack/runtime-common';
 import { registerSecureOriginHost } from './request-telemetry.ts';
 import { parseListedOrigin } from '@cardstack/secure-origin/security/app-origins.js';
+import {
+  PAGE_PATHS,
+  keyOfSharePath,
+} from '@cardstack/secure-origin/shell/pages.js';
 
 // The secure origin is where a user types a credential: a page on an origin
 // that card code can't reach, so the same-origin policy keeps what is typed
@@ -26,7 +30,7 @@ const APP_ORIGINS_PLACEHOLDER = /%APP_ORIGINS%/g;
 const REALM_SERVER_URL_PLACEHOLDER = /%REALM_SERVER_URL%/g;
 
 // Where Google sends the secure window back to after a sign-in, beneath the
-// shell. It serves the shell itself.
+// shell: one of the shell's pages.
 export const GOOGLE_CALLBACK_PATH = 'google-callback';
 
 // Where the sign-in page hands a session to the CLI: a listener on this
@@ -160,8 +164,8 @@ export interface SecureOriginHeaderOptions {
 // secure window keeps to it. Same-origin policy already stops that page
 // reading the window, but not navigating it: without this, card code in the
 // app could swap the window for a look-alike partway through a credential
-// flow. It also cuts `postMessage` back to the opener, which no mode uses —
-// a mode never takes input from the page that opened it.
+// flow. It also cuts `postMessage` back to the opener, which no page uses —
+// a page never takes input from the page that opened it.
 export function secureOriginHeaders({
   frameAncestors = [],
   connectSrc = [],
@@ -224,10 +228,10 @@ export interface CredentialFieldsOptions {
 }
 
 export interface ShellOptions {
-  // The realm server the shell's modes sign in to and act on. It comes from
+  // The realm server the shell's pages sign in to and act on. It comes from
   // the realm server's own configuration, never from the page.
   realmServerURL: URL;
-  // The Matrix server the shell's modes create accounts on and reset
+  // The Matrix server the shell's pages create accounts on and reset
   // passwords with. With the realm server, it is the only server the shell
   // talks to, and it too comes from the realm server's configuration.
   matrixURL?: URL;
@@ -237,7 +241,7 @@ export interface ShellOptions {
 // path is the shell's (`https://secure.boxel.ai/`, or
 // `https://localhost:4208/secure` in development). With `credentialFields`,
 // the origin also serves the credential fields the app frames, at
-// `credentials` beneath the shell. With `shellOptions`, the shell's modes talk
+// `credentials` beneath the shell. With `shellOptions`, the shell's pages talk
 // to the realm server and the Matrix server it names, and the sign-in page may
 // hand a session to the CLI's loopback listener.
 export function createSecureOrigin(
@@ -284,9 +288,14 @@ export function createSecureOrigin(
         }
       : {}),
   };
+  // The shell is one document at its own address and at each of its pages'
+  // paths (`PAGE_PATHS`, and a key's share page at `keys/<key id>/share`,
+  // matched in `route`); its router shows the page the path names.
   routes.set(shellBase, shell);
   routes.set(`${shellBase}/`, shell);
-  routes.set(`${shellBase}/${GOOGLE_CALLBACK_PATH}`, shell);
+  for (let page of PAGE_PATHS) {
+    routes.set(`${shellBase}/${page}`, shell);
+  }
   addFileRoutes(routes, shellBase, [
     ...build.entries[SHELL_DOCUMENT].filter(
       (name) => name !== SHELL_DOCUMENT,
@@ -295,6 +304,12 @@ export function createSecureOrigin(
   ]);
   if (credentialFields) {
     addCredentialFieldRoutes(routes, shellBase, build, credentialFields);
+  }
+  function keySharePage(path: string) {
+    return path.startsWith(`${shellBase}/`) &&
+      keyOfSharePath(path.slice(shellBase.length + 1))
+      ? shell
+      : undefined;
   }
   let expectedHost = url.host.toLowerCase();
   registerSecureOriginHost(expectedHost);
@@ -314,7 +329,7 @@ export function createSecureOrigin(
   }
 
   function route(ctx: Koa.Context) {
-    let match = routes.get(ctx.path);
+    let match = routes.get(ctx.path) ?? keySharePage(ctx.path);
     if (!match) {
       respond(ctx, 404, 'Not Found', 'text/plain; charset=utf-8');
       return;

@@ -112,7 +112,12 @@
   }
 }
 
-/* AuthContainer draws on this. */
+/* The purple behind the shell's pages, which AuthContainer and the key
+   window draw on. */
+:root {
+  --auth-page-background: #191624;
+}
+
 body {
-  background-color: #191624;
+  background-color: var(--auth-page-background);
 }

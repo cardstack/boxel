@@ -51,7 +51,7 @@ const matrixId = `@${TEST_USERNAME}:localhost`;
 async function actAsSecureWindow(link: string): Promise<boolean> {
   let url = new URL(link);
   expect(url.origin).toBe(secureOriginURL.origin);
-  expect(url.searchParams.get('mode')).toBe('cli-sign-in');
+  expect(url.pathname).toBe('/secure/cli-sign-in');
   let completed = await fetch(`${realmServerUrl}_secure-session`, {
     method: 'POST',
     headers: {

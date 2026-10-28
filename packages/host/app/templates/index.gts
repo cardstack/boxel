@@ -30,6 +30,7 @@ import {
 import HostModeContent from '@cardstack/host/components/host-mode/content';
 import OperatorModeContainer from '@cardstack/host/components/operator-mode/container';
 import CardContextSearchResults from '@cardstack/host/components/search/card-context-search-results';
+import SecureWindowFallback from '@cardstack/host/components/secure-window-fallback';
 
 import config from '@cardstack/host/config/environment';
 
@@ -309,6 +310,9 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
         {{this.removeIsolatedMarkup}}
       />
     {{/if}}
+    {{! Both modes give cards the tool that opens the secure window, so both
+        offer its button when the browser blocks the popup. }}
+    <SecureWindowFallback />
   </template>
 }
 

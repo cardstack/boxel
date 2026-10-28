@@ -850,6 +850,9 @@ importers:
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(supports-color@8.1.1)(typescript@5.9.3)
@@ -3679,6 +3682,9 @@ importers:
       puppeteer:
         specifier: ^25.0.2
         version: 25.2.1
+      tldts:
+        specifier: ^6.1.86
+        version: 6.1.86
     devDependencies:
       '@aws-crypto/sha256-js':
         specifier: 'catalog:'

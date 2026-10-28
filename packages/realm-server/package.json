@@ -160,6 +160,7 @@
     "@aws-sdk/lib-storage": "^3.1065.0",
     "@cardstack/secure-origin": "workspace:*",
     "morphdom": "^2.7.8",
-    "puppeteer": "^25.0.2"
+    "puppeteer": "^25.0.2",
+    "tldts": "^6.1.86"
   }
 }

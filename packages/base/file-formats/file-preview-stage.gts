@@ -7,13 +7,22 @@
 // supplies that renderer as `static previewComponent`; a file whose family has
 // no renderer yet gets an honest generic pane rather than a broken one.
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 // The boxel-ui icon barrel is a single module already in every card's
 // dependency graph, so a glyph taken from it costs nothing extra.
 import { Warning } from '@cardstack/boxel-ui/icons';
 
-import { downloadNameFor, fileIconFor, humanSize } from './file-presentation';
+import {
+  downloadLabelFor,
+  downloadNameFor,
+  downloadStateAttr,
+  downloadViaFetch,
+  fileIconFor,
+  humanSize,
+  type DownloadState,
+} from './file-presentation';
 import type {
   FileFormat,
   FileModelLike,
@@ -83,6 +92,12 @@ interface StageSignature {
 }
 
 export class FilePreviewStage extends GlimmerComponent<StageSignature> {
+  @tracked downloadState: DownloadState = 'idle';
+
+  setDownloadState = (state: DownloadState) => {
+    this.downloadState = state;
+  };
+
   get model() {
     return this.args.model;
   }
@@ -184,8 +199,11 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
                   class='gp-download'
                   href={{@model.url}}
                   download={{downloadNameFor @model}}
+                  data-download-state={{downloadStateAttr this.downloadState}}
+                  aria-live='polite'
+                  {{downloadViaFetch onStateChange=this.setDownloadState}}
                   data-test-file-generic-download
-                >Download</a>
+                >{{downloadLabelFor this.downloadState}}</a>
               {{/if}}
             {{else}}
               <span class='pane-label'>No preview</span>
@@ -310,6 +328,15 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
         border-radius: 6px;
         padding: 5px 14px;
         line-height: 1.4;
+      }
+      .gp-download[data-download-state='pending'] {
+        cursor: progress;
+        opacity: 0.6;
+      }
+      .gp-download[data-download-state='failed'] {
+        background-color: transparent;
+        border-color: var(--destructive-ink);
+        color: var(--destructive-ink);
       }
       /* The glyph paints with `fill`, so tint it rather than setting `color`. */
       .warn-icon {

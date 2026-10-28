@@ -9,9 +9,14 @@ import { mailHost } from './index.ts';
 
 export const STORAGE_KEY = 'boxel-secure-session';
 
-export async function openSecurePage(page: Page, query: string): Promise<Page> {
+// Opens one of the secure origin's pages, `address` beneath its URL: a page's
+// path, with its query string and fragment.
+export async function openSecurePage(
+  page: Page,
+  address: string,
+): Promise<Page> {
   let secure = await page.context().newPage();
-  await secure.goto(`${secureOriginURL}?${query}`);
+  await secure.goto(`${secureOriginURL}/${address}`);
   return secure;
 }
 
@@ -32,7 +37,7 @@ export async function signInSecureSession(
   username: string,
   password: string,
 ): Promise<string> {
-  let secure = await openSecurePage(page, 'mode=sign-in');
+  let secure = await openSecurePage(page, 'sign-in');
   try {
     let { status, body } = await secure.evaluate(
       async ({ username, password }) => {
@@ -69,7 +74,7 @@ export async function keyWriteTicketStatus(
   page: Page,
   token: string,
 ): Promise<number> {
-  let secure = await openSecurePage(page, 'mode=sign-in');
+  let secure = await openSecurePage(page, 'sign-in');
   try {
     return await secure.evaluate(async (token) => {
       let realmServerURL = document

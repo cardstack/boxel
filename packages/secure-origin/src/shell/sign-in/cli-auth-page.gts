@@ -1,4 +1,4 @@
-// The `cli-auth` mode: `boxel profile add` signing in for a Matrix device of
+// The `cli-auth` page: `boxel profile add` signing in for a Matrix device of
 // its own, for the CLI waiting on the loopback port the URL names with `port`
 // and `state`. Signed in, the CLI is handed a single-use login token (see
 // `CliHandoff`); this window keeps none of it. A CLI whose URL carries

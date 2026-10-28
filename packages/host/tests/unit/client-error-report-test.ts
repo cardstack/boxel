@@ -1,10 +1,9 @@
-import { module, test } from 'qunit';
-
 import {
   reportFromErrorEvent,
   reportFromRejectionEvent,
   type ErrorReport,
-} from '@cardstack/host/lib/client-error-report';
+} from '@cardstack/secure-origin/telemetry/error-report.ts';
+import { module, test } from 'qunit';
 
 // Building an ErrorEvent / PromiseRejectionEvent without dispatching it: these
 // are pure functions over the event object, so nothing here needs a window

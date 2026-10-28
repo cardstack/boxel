@@ -255,6 +255,49 @@ export async function fetchDirectWriters(
     .map(({ username }) => username);
 }
 
+export interface DirectWriterRealm {
+  url: string;
+  // From the realm's indexed `realm.json`; null until that is indexed.
+  name: string | null;
+}
+
+/**
+ * The realms `userId` is a direct writer of, as `isDirectWriter` answers it,
+ * named from each realm's indexed `realm.json` so that listing them mounts
+ * none of them. Archived realms and published snapshots are left out. A
+ * permission row is all this reads, so a caller that offers these realms
+ * checks that each is still served. In URL order.
+ */
+export async function fetchDirectWriterRealms(
+  dbAdapter: DBAdapter,
+  userId: string,
+): Promise<DirectWriterRealm[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT rup.realm_url, rup.username, rup.write,
+            config.pristine_doc->'attributes'->'cardInfo'->>'name' AS name
+     FROM realm_user_permissions rup
+     LEFT JOIN realm_registry rr
+       ON rr.url = rup.realm_url AND rr.kind = 'published'
+     LEFT JOIN boxel_index config
+       ON config.url = rup.realm_url || 'realm.json'
+      AND config.realm_url = rup.realm_url
+      AND config.type = 'instance'
+      AND (config.is_deleted = FALSE OR config.is_deleted IS NULL)
+     WHERE rr.url IS NULL AND rup.write = true AND rup.username =`,
+    param(userId),
+    `AND rup.realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)
+     ORDER BY rup.realm_url`,
+  ])) as {
+    realm_url: string;
+    username: string;
+    write: boolean;
+    name: string | null;
+  }[];
+  return rows
+    .filter(({ username, write }) => isDirectWriterRow(username, write))
+    .map(({ realm_url, name }) => ({ url: realm_url, name }));
+}
+
 export async function fetchUserPermissions(
   dbAdapter: DBAdapter,
   args: {

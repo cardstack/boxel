@@ -19,6 +19,8 @@ scope:
   - packages/host/app/services/realm-server.ts
   - packages/host/app/services/matrix-service.ts
   - packages/host/app/lib/secure-sign-in.ts
+  - packages/host/app/utils/login-token.ts
+  - packages/postgres/migrations/1793069013762_add-secure-sessions-app-device.js
   - packages/host/app/components/matrix/secure-sign-in.gts
 ---
 
@@ -114,8 +116,14 @@ every Matrix OpenID token requested before the sweep has expired. The sweep
 and that revocation MUST still run when the realm server that scheduled them
 stops before they are due.
 
-A secure window whose session has ended MUST forget it and offer to sign in
-again.
+A secure window whose session has ended MUST forget it. A sign-in page then
+offers to sign in again. A key page MUST NOT: it offers no sign-in of its own,
+as it offers no sign-out, and says to sign in to Boxel from the page that
+opened it. The one sign-in is Boxel's own, which leaves the window its session
+on the secure origin only on a deployment that signs users in there (§1.7),
+so a key page never gathers a credential for a session of its own. A
+deployment MUST NOT open a key page unless it signs users in on the secure
+origin.
 
 ### 1.7. Signing in to the app on the secure origin
 
@@ -144,6 +152,18 @@ A login token is something card code can get (§1.3), so the session the app
 redeems it for MUST NOT be a secure session. Signing out of the app SHOULD
 also sign out on the secure origin, by a top-level navigation there once the
 app's own sign-out has finished.
+
+### 1.8. How long a window's session lasts
+
+A secure window's session MAY last as long as the app session it handed a
+sign-in to, by being renewed while the Matrix device that app session signed
+in as exists. Only the realm server MAY choose that device: it MUST name the
+device when it mints the hand-off's login token, under the window's own
+session, and MUST NOT bind a session to a device named by anything the app
+page sends. A renewal MUST be answered only for a request whose `Origin` is
+the secure origin's, and MUST check that the device still exists. Ending a
+window's session (§1.6) MUST also end its binding, so the device can't renew
+it. The CLI's sessions MUST NOT be bound.
 
 ## 2. Rationale
 
@@ -289,6 +309,27 @@ program happens to listen there, so only a hand-off to one is confirmed. An
 already-signed-in window hands over to any other listed origin with no click,
 as an app already signed in would show the user straight into the app.
 
+A window's session lasts a week, but the app's can last much longer, and the
+app comes back from the secure origin only when it signs in. Without
+renewal, a user signed in to the app for over a week would find the key pages
+signed out, and the only fix would be to sign out of the app and back in.
+The app's Matrix device lives exactly as long as the app's session: signing
+out of the app, switching accounts and changing the password each sign it
+out. So the window's session follows that device (§1.8). The realm server
+picks the device id when it mints the hand-off's token, and the app signs in
+as that device when it redeems the token, before any card code loads. The
+app page never reads, holds or extends the window's session (§1.4). Card code
+could learn the device id, since it is the app's own device, but knowing it
+gets card code nothing. The binding is fixed when the token is minted, and
+signing out of the app ends the window's session and its binding together,
+so bringing back a device with that id renews nothing. A token the app never
+redeems names a device that doesn't exist, which renews nothing either.
+Renewal asks the Matrix server about the device only in the session's last
+day, so a window that is opened often asks about once a day. A window's
+token expires with its row, and a renewal accepts an expired token, since
+the row it names decides. The CLI's session stays a week: the CLI keeps it
+beside a device of its own, and `boxel keys sign-in` signs it in again.
+
 ## 3. Considered options
 
 - **A separate session, signed in on the secure origin (chosen).**
@@ -365,6 +406,15 @@ as an app already signed in would show the user straight into the app.
 - **The token in the app page's query string.** The realm server's request
   log and the load balancer's access log would both record a token that is
   live for two minutes.
+- **Renewing a window's session each time the window uses it.** A user who
+  doesn't open the key pages for a week would still find them signed out
+  while the app stays signed in.
+- **Renewing it when the app comes back from the secure origin with a login
+  token.** That happens only when the app signs in, so it does nothing for
+  an app that stays signed in.
+- **Letting the app tell the realm server which device it signed in as.**
+  Card code could then bind the window's session to a device it keeps
+  signed in, which would let the app page extend that session (§1.4).
 - **Confirming every hand-off, not only a loopback one.** Every sign-in
   would ask a question whose answer is always yes; the listed origins other
   than loopback are the deployment's own.
