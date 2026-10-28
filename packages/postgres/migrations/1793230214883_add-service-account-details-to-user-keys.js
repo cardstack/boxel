@@ -5,13 +5,22 @@
 // them too: minting reads only the sealed value. Only a service account has
 // them. `user_keys` is already withheld from the read-only role, and its new
 // columns with it.
+//
+// `service_account_details_at` is the `updated_at` the details were written
+// with, in the same statement that sealed the value. Details whose stamp
+// differs from the row's `updated_at` belong to an earlier value: a revision
+// that seals a service account's value without writing these columns (one
+// still serving during a rollout, or after a rollback) moves `updated_at` and
+// leaves the stamp behind, so the details are never shown for a value they
+// don't describe.
 
 exports.up = (pgm) => {
   pgm.sql(`
     ALTER TABLE user_keys
       ADD COLUMN IF NOT EXISTS service_account_email varchar,
       ADD COLUMN IF NOT EXISTS service_account_subject varchar,
-      ADD COLUMN IF NOT EXISTS service_account_scopes varchar[]
+      ADD COLUMN IF NOT EXISTS service_account_scopes varchar[],
+      ADD COLUMN IF NOT EXISTS service_account_details_at timestamptz
   `);
   pgm.sql(`
     ALTER TABLE user_keys
@@ -21,6 +30,7 @@ exports.up = (pgm) => {
           service_account_email IS NULL
           AND service_account_subject IS NULL
           AND service_account_scopes IS NULL
+          AND service_account_details_at IS NULL
         )
       )
   `);
@@ -32,6 +42,7 @@ exports.down = (pgm) => {
   );
   pgm.sql(`
     ALTER TABLE user_keys
+      DROP COLUMN IF EXISTS service_account_details_at,
       DROP COLUMN IF EXISTS service_account_scopes,
       DROP COLUMN IF EXISTS service_account_subject,
       DROP COLUMN IF EXISTS service_account_email

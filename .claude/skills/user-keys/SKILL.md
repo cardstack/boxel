@@ -23,16 +23,16 @@ has lost track of a value replaces it.
 
 `user_keys` — one row per key:
 
-| Column                                                                       | Holds                                                                                                                                                                            |
-| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                                                                         | UUID, minted by the realm server before sealing (the value is bound to it)                                                                                                       |
-| `owner`                                                                      | The owner's Matrix user id                                                                                                                                                       |
-| `name`                                                                       | A label for people, unique among the owner's keys (`user_keys_owner_name_key`); two owners may share a name                                                                      |
-| `kind`                                                                       | `static`; `google-service-account` (see [Google service accounts](#google-service-accounts)); `oauth-client` or `oauth-connection` (see the `oauth-connections` skill)           |
-| `state`                                                                      | `active`, or `rejected` for a connection its vendor refused to refresh                                                                                                           |
-| `value_ciphertext`, `value_nonce`, `value_tag`, `value_key_id`               | The sealed value                                                                                                                                                                 |
-| `service_account_email`, `service_account_subject`, `service_account_scopes` | A `google-service-account` key's email, the user it acts as (null for itself) and its scopes, none of them secret; null for every other kind (`user_keys_service_account_check`) |
-| `created_at`, `updated_at`                                                   | `timestamptz`                                                                                                                                                                    |
+| Column                                                                                                     | Holds                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                                                                                       | UUID, minted by the realm server before sealing (the value is bound to it)                                                                                                                                                    |
+| `owner`                                                                                                    | The owner's Matrix user id                                                                                                                                                                                                    |
+| `name`                                                                                                     | A label for people, unique among the owner's keys (`user_keys_owner_name_key`); two owners may share a name                                                                                                                   |
+| `kind`                                                                                                     | `static`; `google-service-account` (see [Google service accounts](#google-service-accounts)); `oauth-client` or `oauth-connection` (see the `oauth-connections` skill)                                                        |
+| `state`                                                                                                    | `active`, or `rejected` for a connection its vendor refused to refresh                                                                                                                                                        |
+| `value_ciphertext`, `value_nonce`, `value_tag`, `value_key_id`                                             | The sealed value                                                                                                                                                                                                              |
+| `service_account_email`, `service_account_subject`, `service_account_scopes`, `service_account_details_at` | A `google-service-account` key's email, the user it acts as (null for itself) and its scopes, none of them secret, and the `updated_at` they were written with; null for every other kind (`user_keys_service_account_check`) |
+| `created_at`, `updated_at`                                                                                 | `timestamptz`                                                                                                                                                                                                                 |
 
 `key_write_tickets` — one row per unused ticket: `ticket_sha256`, `owner`,
 `action` (`add`, `replace`, `delete`, `share`, `swap` or `resume`), `key_id`
@@ -184,7 +184,12 @@ never the key file. The code is `lib/outbound/google-service-account.ts`.
   clear, to the `service_account_*` columns in the same statement that seals
   the value, so the key listing, `GET /_user-keys/:id` and the answers to an
   add or replace carry them as `serviceAccount: {email, subject, scopes}`.
-  Minting reads only the sealed value. The key file, its private key and its
+  Minting reads only the sealed value. `service_account_details_at` is the
+  `updated_at` of the statement that wrote them, and they are returned only
+  while it equals the row's `updated_at`: a revision that seals a new value
+  without writing them (one still serving during a rollout, or after a
+  rollback) moves `updated_at`, and the key then lists without
+  `serviceAccount` until it is replaced again. The key file, its private key and its
   `private_key_id` are never returned. The key page's tile and
   `boxel keys show` show them.
 - **Its grants hold markers.** A service account is a minting kind

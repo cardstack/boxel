@@ -439,7 +439,11 @@ export function grantCopyBinding({
   };
 }
 
-const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at, service_account_email, service_account_subject, service_account_scopes`;
+// A service account's details are returned only while they describe the
+// sealed value: they carry the `updated_at` of the statement that wrote them,
+// and anything that seals a new value without writing them moves `updated_at`
+// past that stamp.
+const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at, service_account_email, service_account_subject, service_account_scopes, (service_account_details_at IS NOT DISTINCT FROM updated_at) AS service_account_current`;
 
 function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
   return {
@@ -449,7 +453,8 @@ function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
     state: row.state as UserKeyState,
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
-    ...(typeof row.service_account_email === 'string'
+    ...(typeof row.service_account_email === 'string' &&
+    row.service_account_current
       ? {
           serviceAccount: {
             email: row.service_account_email,
@@ -516,8 +521,9 @@ export const SEALED_COLUMN_VALUES = (sealed: SealedSecret): Expression => [
   param(sealed.keyId),
 ];
 
-// A service account's details as the values of the three
-// `service_account_*` columns, in that order; nulls for any other kind.
+// A service account's details as the values of the `service_account_*`
+// columns (email, subject, scopes, and the stamp that ties them to this
+// statement's `updated_at`), in that order; nulls for any other kind.
 const SERVICE_ACCOUNT_VALUES = (
   serviceAccount: ServiceAccountDetails | null,
 ): Expression =>
@@ -528,9 +534,9 @@ const SERVICE_ACCOUNT_VALUES = (
         param(serviceAccount.subject),
         `, ARRAY(SELECT jsonb_array_elements_text(`,
         param(JSON.stringify(serviceAccount.scopes)),
-        `::jsonb))`,
+        `::jsonb)), NOW()`,
       ]
-    : [`NULL, NULL, NULL`];
+    : [`NULL, NULL, NULL, NULL`];
 
 export async function addUserKey(
   dbAdapter: DBAdapter,
@@ -604,7 +610,7 @@ export async function insertUserKeyIn(
 ): Promise<UserKeyMetadata> {
   let sealed = keyring.seal(value, userKeyBinding(owner, id));
   let rows = await txQuery([
-    `INSERT INTO user_keys (id, owner, name, kind, state, value_ciphertext, value_nonce, value_tag, value_key_id, service_account_email, service_account_subject, service_account_scopes) VALUES (`,
+    `INSERT INTO user_keys (id, owner, name, kind, state, value_ciphertext, value_nonce, value_tag, value_key_id, service_account_email, service_account_subject, service_account_scopes, service_account_details_at) VALUES (`,
     param(id),
     `, `,
     param(owner),
@@ -702,7 +708,7 @@ export async function replaceUserKeyValue(
     );
     let sealed = keyring.seal(validValue, userKeyBinding(owner, id));
     let [updated] = await txQuery([
-      `UPDATE user_keys SET (value_ciphertext, value_nonce, value_tag, value_key_id, service_account_email, service_account_subject, service_account_scopes, updated_at) = (`,
+      `UPDATE user_keys SET (value_ciphertext, value_nonce, value_tag, value_key_id, service_account_email, service_account_subject, service_account_scopes, service_account_details_at, updated_at) = (`,
       ...SEALED_COLUMN_VALUES(sealed),
       `, `,
       ...SERVICE_ACCOUNT_VALUES(serviceAccount),

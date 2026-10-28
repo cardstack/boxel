@@ -846,6 +846,42 @@ module(basename(import.meta.filename), function () {
       assert.false(reshown.text.includes(next.privateKey.split('\n')[1]));
     });
 
+    test('a service account’s details are not shown once its value is sealed without them', async function (assert) {
+      let { file } = serviceAccountKeyFile(
+        'sheets-bot@boxel-test.iam.gserviceaccount.com',
+      );
+      let added = await add(
+        {
+          name: 'sheets',
+          kind: 'google-service-account',
+          value: file,
+          subject: 'owner@example.com',
+          scopes: [SHEETS_SCOPE],
+        },
+        { ticket: await ticketFor() },
+      );
+      assert.strictEqual(added.status, 201, added.text);
+      let id = added.body.data.id as string;
+      // What a revision that seals a new value without writing the details
+      // leaves behind: `updated_at` moves, the details stay as they were.
+      await dbAdapter.execute(
+        `UPDATE user_keys SET updated_at = updated_at + interval '1 second' WHERE id = $1`,
+        { bind: [id] },
+      );
+      let shown = await request
+        .get(`/_user-keys/${id}`)
+        .set('Authorization', auth());
+      assert.strictEqual(shown.status, 200, shown.text);
+      assert.false(
+        'serviceAccount' in shown.body.data.attributes,
+        'details written for an earlier value are not shown',
+      );
+      let listed = await request
+        .get('/_user-keys')
+        .set('Authorization', auth());
+      assert.false('serviceAccount' in listed.body.data[0].attributes);
+    });
+
     test('a key file, subject or scopes a service account can’t use are refused, and leave the ticket unspent', async function (assert) {
       let { file, privateKey } = serviceAccountKeyFile(
         'sheets-bot@boxel-test.iam.gserviceaccount.com',
