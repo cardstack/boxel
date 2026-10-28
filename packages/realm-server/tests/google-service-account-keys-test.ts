@@ -325,11 +325,9 @@ module(basename(import.meta.filename), function (hooks) {
   test('an operation addressed to the token endpoint is refused, and nothing is sent', async function (assert) {
     let response = await invoke('mintOwn');
     assert.strictEqual(response.status, 502, response.text);
-    let body = JSON.parse(response.text);
-    let [result] = body['boxel:results'] ?? [body];
-    let error = result.errors?.[0] ?? result;
-    assert.strictEqual(error.code, 'guard-refused');
-    assert.strictEqual(error.meta?.reason, 'platform-only');
+    let [refusal] = JSON.parse(response.text).errors;
+    assert.strictEqual(refusal.code, 'guard-refused');
+    assert.strictEqual(refusal.meta.reason, 'platform-only');
     assert.deepEqual(sentTo('/google-token'), [], 'the endpoint never heard');
   });
 
@@ -343,8 +341,9 @@ module(basename(import.meta.filename), function (hooks) {
     });
     let rejected = await invoke('values');
     assert.strictEqual(rejected.status, 424, rejected.text);
-    assert.true(rejected.text.includes('credential-rejected'));
-    assert.true(rejected.text.includes('"reason":"rejected"'));
+    let [refusal] = JSON.parse(rejected.text).errors;
+    assert.strictEqual(refusal.code, 'credential-rejected');
+    assert.strictEqual(refusal.meta.reason, 'rejected');
     assert.false(
       rejected.text.includes('Invalid grant.'),
       "Google's own description stays on the server",
@@ -358,7 +357,10 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let unavailable = await invoke('values');
     assert.strictEqual(unavailable.status, 424, unavailable.text);
-    assert.true(unavailable.text.includes('"reason":"unavailable"'));
+    assert.strictEqual(
+      JSON.parse(unavailable.text).errors[0].meta.reason,
+      'unavailable',
+    );
 
     let recovered = await invoke('values');
     assert.strictEqual(
