@@ -198,11 +198,14 @@ application/json` unless the declaration set one.
 6. **Send** through `core.callApi`, the `CallApiSender` the realm server
    passes to `new Realm({ callApi })`. A realm without one (the host's
    in-browser test realm) answers 501. The realm server's sender first
-   refuses a request addressed to a token endpoint (`tokenEndpointAt` in
-   `lib/outbound/token-endpoints.ts`: Google's, and every stored OAuth
-   client's token URL), key or no key, with `guard-refused` (502,
-   `meta.reason: 'platform-only'`): only the platform calls a token
-   endpoint.
+   refuses a request addressed to one of the platform's token endpoints
+   (`tokenEndpointAt` in `lib/outbound/token-endpoints.ts`: Google's, at each
+   address Google exchanges an assertion, and each platform OAuth client's
+   token URL), key or no key, with `guard-refused` (502,
+   `meta.reason: 'platform-only'`). A user's own OAuth client is never
+   consulted: any user may store one with any token URL, and one user's must
+   not refuse another's requests. The check is made on the address the
+   operation declares.
 
 Which realm: an instance target's is the realm serving it; a type target's
 is the one the entry names in `data.meta.realmURL`, and `assertInRealm`

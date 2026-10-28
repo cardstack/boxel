@@ -292,16 +292,22 @@ export interface ServiceAccountOptions {
   scope?: string[];
 }
 
-// Refuses options that don't fit the key's kind, before anything that would
-// make the person wait. A service account's key file is JSON, so it is read
-// from a file or stdin, never typed at the masked prompt.
+// Refuses a `--kind` that `add` doesn't take, before anything that would make
+// the person wait.
+function checkAddKind(kind: string): void {
+  if (!(KEY_KINDS as readonly string[]).includes(kind)) {
+    throw new Error(`--kind is one of: ${KEY_KINDS.join(', ')}`);
+  }
+}
+
+// Refuses options that don't fit the key's kind. A service account's key file
+// is JSON, so it is read from a file or stdin, never typed at the masked
+// prompt. Any other kind, an OAuth app's included, takes neither --subject
+// nor --scope, and what its replacement may be is the realm server's to say.
 function checkKindOptions(
   kind: string,
   options: ServiceAccountOptions & KeyValueSource,
 ): void {
-  if (!(KEY_KINDS as readonly string[]).includes(kind)) {
-    throw new Error(`--kind is one of: ${KEY_KINDS.join(', ')}`);
-  }
   if (kind === 'google-service-account') {
     if (!options.keyFile && !options.stdin) {
       throw new Error(
@@ -363,6 +369,7 @@ export async function keysAdd(
 ): Promise<UserKeyMetadata> {
   let ctx = context(options.json, options);
   let kind = options.kind ?? 'static';
+  checkAddKind(kind);
   checkKindOptions(kind, options);
   checkKeyValueSource(options, ctx.deps.input ?? process.stdin);
   let token = await secureToken(ctx);

@@ -615,6 +615,46 @@ describe('boxel keys: Google service accounts', () => {
     });
   });
 
+  it('replaces an OAuth app’s secret, a kind add doesn’t take', async () => {
+    let oauthApp = {
+      ...SERVICE_ACCOUNT,
+      name: 'github-app',
+      kind: 'oauth-client',
+    };
+    let requests = stubServer(({ method, path }) => {
+      if (path === '/_secure-session') return { status: 204 };
+      if (path === '/_key-write-tickets')
+        return { status: 201, body: { data: { attributes: { ticket: 't' } } } };
+      if (method === 'GET')
+        return {
+          body: {
+            data: [{ type: 'user-key', id: oauthApp.id, attributes: oauthApp }],
+          },
+        };
+      return {
+        body: {
+          data: { type: 'user-key', id: oauthApp.id, attributes: oauthApp },
+        },
+      };
+    });
+    let secretFile = join(configDir, 'secret.txt');
+    fs.writeFileSync(secretFile, 'new-client-secret\n');
+    let stdout = captureStdout();
+    try {
+      await keysReplace('github-app', {
+        profileManager: manager,
+        keyFile: secretFile,
+      });
+    } finally {
+      stdout.restore();
+    }
+    expect(
+      requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+    ).toEqual({
+      value: 'new-client-secret',
+    });
+  });
+
   it('refuses to replace a service account without its scopes, before minting a ticket', async () => {
     let requests = serveKeys();
     await expect(

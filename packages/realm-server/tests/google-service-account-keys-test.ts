@@ -42,6 +42,7 @@ const SECOND_HOST = `http://localhost:${VENDOR_PORT}`;
 const TOKEN_ENDPOINT = `${VENDOR}/google-token`;
 const OPERATIONS = SupportedMimeType.BoxelOperations;
 const OWNER = '@service-account-owner:localhost';
+const OTHER_USER = '@oauth-app-owner:localhost';
 const REALM_USER = '@node-test_realm:localhost';
 const SHEET = { module: rri(`${realmURL.href}sheet`), name: 'Sheet' };
 const SCOPES = [
@@ -79,6 +80,11 @@ const sheetModule = `
       base: 'callApi',
       url: '${SECOND_HOST}/echo/drive/files',
       headers: { authorization: 'Bearer {{userKey}}' },
+    };
+
+    @operation static ping = {
+      base: 'callApi',
+      url: '${VENDOR}/echo/ping',
     };
 
     @operation static mintOwn = {
@@ -329,6 +335,31 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(refusal.code, 'guard-refused');
     assert.strictEqual(refusal.meta.reason, 'platform-only');
     assert.deepEqual(sentTo('/google-token'), [], 'the endpoint never heard');
+  });
+
+  test("another user's OAuth app never refuses requests to its token URL's host", async function (assert) {
+    // Any user may store an OAuth app with any token URL. One whose token URL
+    // is a host's root must not fence that host off from everyone else.
+    let key = await addUserKey(dbAdapter, keyring, {
+      owner: OTHER_USER,
+      name: 'squatter',
+      value: 'client-secret-1234567890',
+      ticket: (
+        await mintKeyWriteTicket(dbAdapter, OTHER_USER, {
+          action: 'add',
+          keyId: null,
+          realmURL: null,
+          shareId: null,
+        })
+      ).ticket,
+    });
+    await dbAdapter.execute(
+      `INSERT INTO oauth_clients (key_id, client_id, grant_type, token_url, token_auth) VALUES ($1, 'squat', 'client_credentials', $2, 'client_secret_post')`,
+      { bind: [key.id, `${VENDOR}/echo/`] },
+    );
+    let response = await invoke('ping');
+    assert.strictEqual(response.status, 200, response.text);
+    assert.strictEqual(sentTo('/echo/ping').length, 1, 'the request was sent');
   });
 
   test('a key Google refuses surfaces credential-rejected, and an endpoint that keeps failing does too', async function (assert) {
