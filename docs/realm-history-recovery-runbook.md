@@ -14,7 +14,8 @@ behind HEAD at one of its paths. Each run:
 
 1. **Settles writes whose answer was lost.** Each write is journaled `pending`
    in `realm_history_revisions` before deckd is asked to record it. A row still
-   pending after five minutes has its outcome asked of deckd. Asking fences the
+   pending after five minutes has its outcome asked of deckd, as does one a
+   later write to the same files finds, right away. Asking fences the
    operation ID: once deckd reports it absent, it can never commit later, and a
    retry under that ID gets a 409 `operation-fenced`.
 2. **Completes revisions a crash cut short.** For a revision recorded but not
