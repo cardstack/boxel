@@ -68,8 +68,8 @@ export interface KeyShare {
   keyId?: string | null;
   state: KeyShareState;
   suspensionReason: KeyShareSuspensionReason | null;
-  // Null when no writer suspended the share, or once no permission row in the
-  // realm names the one who did.
+  // Null when no writer suspended the share, or once permission rows in the
+  // realm no longer name both the viewer and the one who did.
   suspendedBy: string | null;
   suspendedAt: string | null;
   createdAt: string;
@@ -129,47 +129,59 @@ function toShare(
   };
 }
 
-// `realm`'s share or notice rows with `owner` and `suspended_by` set to null
-// for anyone no permission row in the realm names, for a writer's view of
-// them: a person's Matrix id is shown only to people who share a realm with
-// them (ADR 011 §1.1, §1.2), and a share and its notices outlive their owner's
-// and their suspender's rows. A `*` or `users` row, or a policy grant, names
-// no one; a row granting nothing is deleted, so any row names its user.
+// Share or notice rows as `viewer` may see them: `owner` and `suspended_by`
+// are null except for the viewer's own id and the ids of people who, with the
+// viewer, are named by a permission row in the row's realm. A person's Matrix
+// id is shown only to people who share a realm with them (ADR 011 §1.1, §1.2),
+// and a share and its notices outlive their owner's and their suspender's
+// rows. A `*` or `users` row, or a policy grant, names no one; a row granting
+// nothing is deleted, so any row names its user.
 async function withholdUnnamed(
   txQuery: Querier,
-  realm: string,
+  viewer: string,
   rows: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
+  let realms = [...new Set(rows.map((row) => row.realm_url as string))];
   let ids = [
-    ...new Set(
-      rows.flatMap((row) =>
+    ...new Set([
+      viewer,
+      ...rows.flatMap((row) =>
         [row.owner, row.suspended_by].filter(
           (id): id is string => typeof id === 'string',
         ),
       ),
-    ),
+    ]),
   ];
-  if (ids.length === 0) {
+  if (ids.length === 1) {
     return rows;
   }
+  let list = (values: string[]) =>
+    values.flatMap((value, i) => [...(i > 0 ? [', '] : []), param(value)]);
   let named = new Set(
     (
       await txQuery([
-        `SELECT username FROM realm_user_permissions WHERE realm_url = `,
-        param(realm),
-        ` AND username IN (`,
-        ...ids.flatMap((id, i) => [...(i > 0 ? [', '] : []), param(id)]),
+        `SELECT realm_url, username FROM realm_user_permissions WHERE realm_url IN (`,
+        ...list(realms),
+        `) AND username IN (`,
+        ...list(ids),
         `)`,
       ])
-    ).map((row) => row.username as string),
+    ).map((row) => `${row.realm_url}\n${row.username}`),
   );
-  let shown = (id: unknown) =>
-    typeof id === 'string' && named.has(id) ? id : null;
-  return rows.map((row) => ({
-    ...row,
-    owner: shown(row.owner),
-    suspended_by: shown(row.suspended_by),
-  }));
+  return rows.map((row) => {
+    let realm = row.realm_url as string;
+    let shown = (id: unknown) =>
+      typeof id === 'string' &&
+      (id === viewer ||
+        (named.has(`${realm}\n${viewer}`) && named.has(`${realm}\n${id}`)))
+        ? id
+        : null;
+    return {
+      ...row,
+      owner: shown(row.owner),
+      suspended_by: shown(row.suspended_by),
+    };
+  });
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -422,9 +434,7 @@ export async function suspendShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    let [shown] = await withholdUnnamed(txQuery, updated.realm_url as string, [
-      updated,
-    ]);
+    let [shown] = await withholdUnnamed(txQuery, user, [updated]);
     return toShare(shown, { withKey: shown.owner === user });
   });
 }
@@ -473,9 +483,7 @@ export async function resumeShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    let [shown] = await withholdUnnamed(txQuery, updated.realm_url as string, [
-      updated,
-    ]);
+    let [shown] = await withholdUnnamed(txQuery, user, [updated]);
     return toShare(shown, { withKey: shown.owner === user });
   });
 }
@@ -557,12 +565,16 @@ export async function listOwnShares(
   if (keyId !== undefined && !isUUID(keyId)) {
     return [];
   }
-  let rows = await query(dbAdapter, [
-    `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE owner = `,
-    param(owner),
-    ...(keyId !== undefined ? [` AND key_id = `, param(keyId)] : []),
-    ` ORDER BY realm_url, label`,
-  ]);
+  let rows = await withholdUnnamed(
+    (expression) => query(dbAdapter, expression),
+    owner,
+    await query(dbAdapter, [
+      `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE owner = `,
+      param(owner),
+      ...(keyId !== undefined ? [` AND key_id = `, param(keyId)] : []),
+      ` ORDER BY realm_url, label`,
+    ]),
+  );
   return rows.map((row) => toShare(row, { withKey: true }));
 }
 
@@ -671,7 +683,7 @@ export async function listRealmShares(
     async (txQuery, realmURL) =>
       await withholdUnnamed(
         txQuery,
-        realmURL.href,
+        user,
         await txQuery([
           `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE realm_url = `,
           param(realmURL.href),
@@ -727,7 +739,7 @@ export async function listRealmShareNotices(
     async (txQuery, realmURL) =>
       await withholdUnnamed(
         txQuery,
-        realmURL.href,
+        user,
         await txQuery([
           `SELECT id, share_id, realm_url, label, owner, reason, suspended_by, created_at FROM key_share_notices WHERE realm_url = `,
           param(realmURL.href),

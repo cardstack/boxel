@@ -598,6 +598,16 @@ module(basename(import.meta.filename), function () {
           ],
         );
       }
+      async function ownSuspendedBy() {
+        let own = await request
+          .get('/_key-shares')
+          .set('Authorization', auth(OWNER));
+        assert.strictEqual(own.status, 200, own.text);
+        return own.body.data.map(
+          (s: { attributes: Record<string, unknown> }) =>
+            s.attributes.suspendedBy,
+        );
+      }
       async function noticed() {
         let listed = await notices(WRITER);
         assert.strictEqual(listed.status, 200, listed.text);
@@ -621,6 +631,11 @@ module(basename(import.meta.filename), function () {
         ],
         'an owner whose row grants only read is still named',
       );
+      assert.deepEqual(
+        await ownSuspendedBy(),
+        [SUSPENDER],
+        'the owner sees who suspended their share while rows name them both',
+      );
 
       await insertPermissions(dbAdapter, new URL(REALM), { [SUSPENDER]: [] });
       assert.deepEqual(
@@ -630,6 +645,11 @@ module(basename(import.meta.filename), function () {
           ['Weather', OWNER, null],
         ],
         'the suspender is withheld once their row is deleted',
+      );
+      assert.deepEqual(
+        await ownSuspendedBy(),
+        [null],
+        `the owner's own listing withholds the suspender too`,
       );
 
       await insertPermissions(dbAdapter, new URL(REALM), {
