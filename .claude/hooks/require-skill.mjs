@@ -8,9 +8,14 @@
 // Each rule names a skill and says which tool calls need it. A call that
 // matches a rule is allowed once the transcript of the session or subagent
 // making it shows the skill was loaded (through the Skill tool or its slash
-// command), and refused with the skill's name otherwise. A call no rule
-// matches never reads a transcript. Rules err toward matching: a needless
-// refusal costs one skill load, and a miss is the mistake the rule exists for.
+// command), and refused with the skill's name otherwise. The UI-lens rules
+// also accept a Read of a file of the skill, for a copy the Skill tool can't
+// load, and for a skill the session can't load at all, a review body that
+// says it wasn't reviewed; they read the transcript (the skill listing, the
+// loads) to decide whether they match, so a review of a UI change reads it
+// even when the rule ends up not matching. A call no other rule matches
+// never reads a transcript. Rules err toward matching: a needless refusal
+// costs one skill load, and a miss is the mistake the rule exists for.
 //
 // The hook fails open: input it can't parse, or a transcript it can't find or
 // read, allows the call rather than wedging the session.
@@ -713,11 +718,11 @@ function uiLensRule(load, { gtsOnly = false } = {}) {
       if (available) {
         return 'posting a review of a UI change';
       }
-      // A skill this session can't load can't be required. Its SKILL.md read
-      // from another copy (boxel-ui-guidelines from the fetch:skills cache)
-      // stands in for it; otherwise the review's body says it wasn't
-      // reviewed, naming better-interface for the whole interfaces plugin
-      // when that is what's missing.
+      // A skill this session can't load can't be required. Reading another
+      // copy of it (boxel-ui-guidelines from the fetch:skills cache) stands
+      // in for it; otherwise the review's body says it wasn't reviewed,
+      // naming better-interface for the whole interfaces plugin when that is
+      // what's missing.
       let transcript = sessionTranscript(input);
       if (
         transcript === undefined ||
@@ -864,11 +869,12 @@ function loaded(transcript, skill) {
   return false;
 }
 
-// Whether the session read the skill's SKILL.md with the Read tool, as it
-// does for a copy the Skill tool can't load.
+// Whether the session read a file of the skill with the Read tool, as it
+// does for a copy the Skill tool can't load: its SKILL.md, or one of its
+// references, which is where boxel-ui-guidelines keeps the procedure itself.
 function readSkillFile(transcript, skill) {
   for (let line of transcript.split('\n')) {
-    if (!line.includes(`/${skill}/SKILL.md`)) {
+    if (!line.includes(`/${skill}/`)) {
       continue;
     }
     let entry;
@@ -885,7 +891,7 @@ function readSkillFile(transcript, skill) {
         (block) =>
           block?.type === 'tool_use' &&
           block.name === 'Read' &&
-          String(block.input?.file_path ?? '').endsWith(`/${skill}/SKILL.md`),
+          String(block.input?.file_path ?? '').includes(`/${skill}/`),
       )
     ) {
       return true;
