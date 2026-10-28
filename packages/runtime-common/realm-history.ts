@@ -608,6 +608,29 @@ export class RealmHistoryRecorder {
     return row ? String(row.revision) : undefined;
   }
 
+  // Writes other than `operationId` journaled `pending` that touch one of
+  // `paths`. Asked by a write holding those paths' locks: a writer keeps its
+  // locks until it has its answer or has given up on it, so each one's
+  // answer was lost.
+  async pendingOperationsTouching(
+    paths: string[],
+    operationId: string,
+  ): Promise<string[]> {
+    if (paths.length === 0) {
+      return [];
+    }
+    let rows = await query(this.#dbAdapter, [
+      `SELECT operation_id FROM realm_history_revisions WHERE realm_url =`,
+      param(this.#realmURL),
+      `AND state = 'pending' AND operation_id <>`,
+      param(operationId),
+      `AND paths &&`,
+      ...textArray(paths),
+      `ORDER BY seq`,
+    ]);
+    return rows.map((row) => String(row.operation_id));
+  }
+
   // Writes journaled `pending` since before `olderThan`: each one's answer was
   // lost, along with any chance of asking for it then.
   async pendingOperations(olderThan: Date): Promise<string[]> {

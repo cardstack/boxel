@@ -715,6 +715,110 @@ module(basename(import.meta.filename), function (hooks) {
         );
       },
     );
+
+    recordingTest(
+      'that committed holds back a later write to its paths until recovery completes it',
+      async function (assert) {
+        let { realm, history } = await mount();
+        history!.loseCommitResponses = true;
+        history!.failOutcomes = true;
+        await failure(write(realm, { 'c.txt': 'charlie' }, 'lost-then-edit'));
+        let head = await backend().head();
+        assert.strictEqual(await atHead('c.txt'), 'charlie');
+        assert.strictEqual(onDisk('c.txt'), undefined);
+        history!.loseCommitResponses = false;
+        history!.failOutcomes = false;
+
+        let err = await failure(
+          write(realm, { 'c.txt': 'charlie, again' }, 'edit-after-lost'),
+        );
+        assert.deepEqual(
+          { status: err.status, code: err.code },
+          { status: 503, code: 'realm-recovering' },
+          `refused while disk lacks the lost write: ${err.message}`,
+        );
+        assert.strictEqual(await backend().head(), head, 'nothing recorded');
+        assert.strictEqual(
+          (await journal()).find((row) => row.operation_id === 'lost-then-edit')
+            ?.state,
+          'committed',
+          'the lost write was settled without waiting out its grace period',
+        );
+
+        await realm.recoverHistory({ trigger: 'write' });
+        assert.strictEqual(onDisk('c.txt'), 'charlie', 'brought up to HEAD');
+        await write(realm, { 'c.txt': 'charlie, again' }, 'edit-after-lost');
+        assert.strictEqual(await atHead('c.txt'), 'charlie, again');
+        let retry = await failure(
+          write(realm, { 'c.txt': 'charlie' }, 'lost-then-edit'),
+        );
+        assert.deepEqual(
+          { code: retry.code, revision: retry.meta?.revision },
+          { code: 'revision-already-applied', revision: head },
+          `a retry of the lost write is told it landed: ${retry.message}`,
+        );
+      },
+    );
+
+    recordingTest(
+      'that never committed is fenced by a later write to its paths',
+      async function (assert) {
+        let { realm, history } = await mount();
+        history!.dropCommits = true;
+        history!.failOutcomes = true;
+        await failure(
+          write(realm, { 'c.txt': 'charlie' }, 'dropped-then-edit'),
+        );
+        history!.dropCommits = false;
+        history!.failOutcomes = false;
+
+        await write(realm, { 'c.txt': 'charlie, again' }, 'edit-after-dropped');
+        assert.strictEqual(onDisk('c.txt'), 'charlie, again');
+        assert.strictEqual(await atHead('c.txt'), 'charlie, again');
+        assert.strictEqual(
+          (await journal()).find(
+            (row) => row.operation_id === 'dropped-then-edit',
+          )?.state,
+          'aborted',
+        );
+        let retry = await failure(
+          write(realm, { 'c.txt': 'charlie' }, 'dropped-then-edit'),
+        );
+        assert.deepEqual(
+          { status: retry.status, code: retry.code },
+          { status: 409, code: 'operation-fenced' },
+          `a retry of the dropped write is refused: ${retry.message}`,
+        );
+      },
+    );
+
+    recordingTest(
+      'whose outcome still cannot be had holds back a later write to its paths',
+      async function (assert) {
+        let { realm, history } = await mount();
+        history!.loseCommitResponses = true;
+        history!.failOutcomes = true;
+        await failure(write(realm, { 'c.txt': 'charlie' }, 'lost-unreachable'));
+        let head = await backend().head();
+        history!.loseCommitResponses = false;
+
+        let err = await failure(
+          write(realm, { 'c.txt': 'charlie, again' }, 'edit-unreachable'),
+        );
+        assert.deepEqual(
+          { status: err.status, code: err.code },
+          { status: 503, code: 'revision-aborted' },
+          err.message,
+        );
+        assert.strictEqual(await backend().head(), head, 'nothing recorded');
+        assert.strictEqual(
+          (await journal()).find(
+            (row) => row.operation_id === 'lost-unreachable',
+          )?.state,
+          'pending',
+        );
+      },
+    );
   });
 
   module('an edit made to the realm directory directly', function () {

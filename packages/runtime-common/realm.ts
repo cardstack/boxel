@@ -5384,6 +5384,29 @@ export class Realm {
       ...(batch.appends?.keys() ?? []),
       ...(batch.deletes ?? []),
     ];
+    // A write whose answer was lost stays pending until something asks
+    // history for its outcome, and it may have committed: staging over the
+    // older bytes on disk would record its paths back as they were before it.
+    // Asking now settles it. One that never committed is fenced, so it cannot
+    // commit later either; one that did is a revision disk lacks, which the
+    // check below holds this write back for.
+    for (let pending of await history.pendingOperationsTouching(
+      paths,
+      recording.operationId,
+    )) {
+      try {
+        await history.resolvePending(pending);
+      } catch (err: unknown) {
+        recording.outcome = 'aborted';
+        throw new OperationFailure({
+          status: 503,
+          code: 'revision-aborted',
+          title: 'Write not recorded',
+          detail: `could not establish whether earlier operation ${pending} to the same files of ${this.url} was recorded (${err instanceof Error ? err.message : String(err)}), so operation ${recording.operationId} was not recorded, and nothing was written; retry this write`,
+          meta: { operationId: recording.operationId, pending },
+        });
+      }
+    }
     let behind = await history.unmaterializedRevisionTouching(
       paths,
       recording.operationId,
