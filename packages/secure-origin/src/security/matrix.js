@@ -7,6 +7,8 @@
 // goes through the realm server instead (`changePassword` in `session.js`),
 // which ends the account's secure sessions once the Matrix server sets it.
 
+import { timedFetch } from './session.js';
+
 export class MatrixError extends Error {
   // `status` 0 is a request that never reached the server.
   constructor(status, body) {
@@ -38,13 +40,17 @@ async function request(path, { method = 'POST', body, accessToken } = {}) {
   }
   let response;
   try {
-    response = await fetch(new URL(`_matrix/client/v3/${path}`, matrixURL()), {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      credentials: 'omit',
-      referrerPolicy: 'no-referrer',
-    });
+    response = await timedFetch(
+      new URL(`_matrix/client/v3/${path}`, matrixURL()),
+      {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+      },
+      'matrix',
+    );
   } catch {
     throw new MatrixError(0, { error: 'Could not connect to server' });
   }

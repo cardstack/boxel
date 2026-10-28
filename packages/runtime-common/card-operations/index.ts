@@ -280,10 +280,14 @@ export {
 export {
   buildCallApiRequest,
   destinationCovers,
+  notApproved,
   slotsIn,
   type CallApiCredential,
+  type CallApiFilledSlot,
+  type CallApiMode,
   type CallApiRequest,
   type CallApiSender,
+  type CallApiSlotLookup,
 } from './call-api.ts';
 export type {
   BaseOperation,

@@ -12,6 +12,7 @@ import {
   sealedColumnsSelect,
   sealedFromColumns,
 } from './secrets-at-rest/sealed-columns.ts';
+import { revokeBindingsIn } from './key-binding-revocation.ts';
 
 // Keys that belong to people. Every key has one owner, the user who created
 // it, and only that owner lists, shows, replaces or deletes it. A key's value
@@ -553,15 +554,24 @@ export async function deleteUserKey(
       realmURL: null,
       shareId: null,
     });
-    let rows = await txQuery([
-      `DELETE FROM user_keys WHERE id = `,
+    let [key] = await txQuery([
+      `SELECT id FROM user_keys WHERE id = `,
       param(id),
       ` AND owner = `,
       param(owner),
-      ` RETURNING id`,
+      ` FOR UPDATE`,
     ]);
-    if (rows.length === 0) {
+    if (!key) {
       throw notFound();
     }
+    // The key's own bindings are revoked with it, each recorded in its
+    // history. A share's bindings stay: the share is suspended, and a key
+    // swapped into it takes them over.
+    await revokeBindingsIn(txQuery, {
+      where: [`key_id = `, param(id)],
+      actor: owner,
+      via: null,
+    });
+    await txQuery([`DELETE FROM user_keys WHERE id = `, param(id)]);
   });
 }

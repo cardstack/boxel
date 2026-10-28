@@ -7,6 +7,7 @@ import {
   triggerEvent,
   triggerKeyEvent,
   waitFor,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -124,6 +125,10 @@ async function pressKey(key: string) {
     throw new Error('nothing has focus');
   }
   await triggerKeyEvent(target, 'keydown', key);
+}
+
+function operatorModeState() {
+  return getService('operator-mode-state-service') as OperatorModeStateService;
 }
 
 module('Acceptance | dashboard', function (hooks) {
@@ -636,6 +641,32 @@ module('Acceptance | dashboard', function (hooks) {
         .hasAttribute('rel', 'noopener noreferrer');
     });
 
+    test("Realm Settings opens the workspace's realm card in edit mode and closes the dashboard", async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      await click(
+        '[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-workspace-menu-trigger]',
+      );
+      await click('[data-test-boxel-menu-item-text="Realm Settings"]');
+
+      assert.dom('[data-test-dashboard]').doesNotExist();
+      assert.false(operatorModeState().workspaceChooserOpened);
+      assert.deepEqual(
+        operatorModeState().state.stacks.map((stack) =>
+          stack.map(({ id, format }) => ({ id, format })),
+        ),
+        [
+          [
+            { id: `${realmURL}index`, format: 'isolated' },
+            { id: `${realmURL}realm`, format: 'edit' },
+          ],
+        ],
+        "the realm card opens in edit mode over the workspace's index",
+      );
+      await waitFor(`[data-test-stack-card="${realmURL}realm"]`);
+      assert.dom(`[data-test-stack-card="${realmURL}realm"]`).exists();
+    });
+
     test('Restore in Archived unarchives the workspace and returns it to Your Workspaces', async function (assert) {
       let unarchiveRoute = getRealmServerRoute(
         new URL('http://test-realm/_unarchive-realm'),
@@ -693,6 +724,313 @@ module('Acceptance | dashboard', function (hooks) {
         .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
         .exists('it is back in Your Workspaces');
     });
+
+    // Removing the workspace open behind the dashboard clears the stacks and
+    // the code path. Each test opens the removed workspace one way only, with
+    // another workspace's card holding the rest of the state.
+    module(
+      'removing the workspace open behind the dashboard',
+      function (hooks) {
+        const removedRealmURL = 'http://test-realm/testuser/removed-workspace/';
+        const keptRealmURL = 'http://test-realm/testuser/kept-workspace/';
+
+        function workspaceContents(name: string) {
+          return {
+            'realm.json': realmConfigCardJSON({ name }),
+            'index.json': {
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/cards-grid',
+                    name: 'CardsGrid',
+                  },
+                },
+              },
+            },
+            'Person/1.json': {
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/card-api',
+                    name: 'CardDef',
+                  },
+                },
+              },
+            },
+          };
+        }
+
+        hooks.beforeEach(async function () {
+          for (let [url, name] of [
+            [removedRealmURL, 'Removed Workspace'],
+            [keptRealmURL, 'Kept Workspace'],
+          ]) {
+            await setupAcceptanceTestRealm({
+              realmURL: url,
+              mockMatrixUtils,
+              permissions: {
+                '@testuser:localhost': ['read', 'write', 'realm-owner'],
+              },
+              contents: workspaceContents(name),
+            });
+          }
+          mockMatrixUtils.setActiveRealms([
+            realmURL,
+            removedRealmURL,
+            keptRealmURL,
+          ]);
+        });
+
+        async function archiveRemovedWorkspace() {
+          await click(
+            `[data-test-workspace-menu-trigger="${removedRealmURL}"]`,
+          );
+          await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
+          await click('[data-test-confirm-archive-button]');
+          // The row goes before the archive returns; the Archived list is
+          // filled last, so the dashboard's handling of it follows from here.
+          await waitUntil(() =>
+            getService('realm-server').archivedRealms.some(
+              ({ url }) => url === removedRealmURL,
+            ),
+          );
+          await settled();
+        }
+
+        async function deleteRemovedWorkspace() {
+          await click(
+            `[data-test-workspace-menu-trigger="${removedRealmURL}"]`,
+          );
+          await click('[data-test-boxel-menu-item-text="Delete Workspace"]');
+          await click('[data-test-confirm-delete-button]');
+          await waitUntil(
+            () =>
+              !find(
+                '[data-test-workspace-list] [data-test-workspace="Removed Workspace"]',
+              ),
+          );
+        }
+
+        async function assertLeftRemovedWorkspace(assert: Assert) {
+          await waitUntil(
+            () =>
+              operatorModeState().getOpenCardIds().length === 0 &&
+              operatorModeState().state.codePath === null,
+            { timeoutMessage: 'the removed workspace is left' },
+          );
+          assert.deepEqual(
+            operatorModeState().getOpenCardIds(),
+            [],
+            'the stacks are cleared',
+          );
+          assert.strictEqual(
+            operatorModeState().state.codePath,
+            null,
+            'the code path is cleared',
+          );
+          assert
+            .dom('[data-test-dashboard]')
+            .exists('the dashboard stays open');
+        }
+
+        test('archiving it clears the stacks when one of its cards is open', async function (assert) {
+          await visitOperatorMode({
+            workspaceChooserOpened: true,
+            stacks: [
+              [{ id: `${removedRealmURL}Person/1`, format: 'isolated' }],
+              [{ id: `${keptRealmURL}index`, format: 'isolated' }],
+            ],
+          });
+          assert.strictEqual(operatorModeState().realmURL, keptRealmURL);
+          assert.strictEqual(operatorModeState().state.codePath, null);
+
+          await archiveRemovedWorkspace();
+
+          await assertLeftRemovedWorkspace(assert);
+        });
+
+        test('deleting it clears the stacks and the code path when the code path is in it', async function (assert) {
+          await visitOperatorMode({
+            workspaceChooserOpened: true,
+            stacks: [[{ id: `${keptRealmURL}index`, format: 'isolated' }]],
+            codePath: `${removedRealmURL}Person/1.json`,
+          });
+          assert.strictEqual(operatorModeState().realmURL, keptRealmURL);
+          assert.deepEqual(operatorModeState().getOpenCardIds(), [
+            `${keptRealmURL}index`,
+          ]);
+          assert.strictEqual(
+            operatorModeState().state.codePath,
+            `${removedRealmURL}Person/1.json`,
+          );
+
+          await deleteRemovedWorkspace();
+
+          await assertLeftRemovedWorkspace(assert);
+        });
+
+        test('deleting it clears the stacks when it is the current realm', async function (assert) {
+          // A stack based on its index card makes it the current realm, while
+          // the card on top comes from another workspace.
+          await visitOperatorMode({
+            workspaceChooserOpened: true,
+            stacks: [
+              [
+                { id: `${removedRealmURL}index`, format: 'isolated' },
+                { id: `${keptRealmURL}Person/1`, format: 'isolated' },
+              ],
+            ],
+          });
+          assert.strictEqual(operatorModeState().realmURL, removedRealmURL);
+          assert.deepEqual(operatorModeState().getOpenCardIds(), [
+            `${keptRealmURL}Person/1`,
+          ]);
+          assert.strictEqual(operatorModeState().state.codePath, null);
+
+          await deleteRemovedWorkspace();
+
+          await assertLeftRemovedWorkspace(assert);
+        });
+
+        test('archiving it clears the stacks when it is the current realm', async function (assert) {
+          // A stack based on its index card makes it the current realm, while
+          // the card on top comes from another workspace.
+          await visitOperatorMode({
+            workspaceChooserOpened: true,
+            stacks: [
+              [
+                { id: `${removedRealmURL}index`, format: 'isolated' },
+                { id: `${keptRealmURL}Person/1`, format: 'isolated' },
+              ],
+            ],
+          });
+          assert.strictEqual(operatorModeState().realmURL, removedRealmURL);
+          assert.deepEqual(operatorModeState().getOpenCardIds(), [
+            `${keptRealmURL}Person/1`,
+          ]);
+
+          await archiveRemovedWorkspace();
+
+          await assertLeftRemovedWorkspace(assert);
+        });
+
+        test('archiving it clears the stacks when the Archived list then fails to load', async function (assert) {
+          let archivedRoute = getRealmServerRoute(
+            new URL('http://test-realm/_archived-realms'),
+          );
+          if (!archivedRoute) {
+            throw new Error('no default archived-realms route');
+          }
+          let archivedListRequested = false;
+          registerRealmServerRoute({
+            path: '/_archived-realms',
+            handler: async () => {
+              archivedListRequested = true;
+              return new Response(null, { status: 500 });
+            },
+          });
+          try {
+            await visitOperatorMode({
+              workspaceChooserOpened: true,
+              stacks: [
+                [{ id: `${removedRealmURL}Person/1`, format: 'isolated' }],
+              ],
+            });
+
+            await click(
+              `[data-test-workspace-menu-trigger="${removedRealmURL}"]`,
+            );
+            await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
+            await click('[data-test-confirm-archive-button]');
+          } finally {
+            registerRealmServerRoute(archivedRoute);
+          }
+
+          assert.true(archivedListRequested, 'the Archived list is requested');
+          await assertLeftRemovedWorkspace(assert);
+        });
+
+        test('archiving another workspace leaves the stacks and the code path', async function (assert) {
+          await visitOperatorMode({
+            workspaceChooserOpened: true,
+            stacks: [[{ id: `${keptRealmURL}index`, format: 'isolated' }]],
+            codePath: `${keptRealmURL}Person/1.json`,
+          });
+          let codePath = operatorModeState().state.codePath;
+          assert.ok(codePath, 'a code path is set');
+
+          await archiveRemovedWorkspace();
+
+          assert.deepEqual(operatorModeState().getOpenCardIds(), [
+            `${keptRealmURL}index`,
+          ]);
+          assert.strictEqual(operatorModeState().state.codePath, codePath);
+        });
+
+        test('opening another workspace while the archive finishes keeps it open', async function (assert) {
+          let archivedRoute = getRealmServerRoute(
+            new URL('http://test-realm/_archived-realms'),
+          );
+          if (!archivedRoute) {
+            throw new Error('no default archived-realms route');
+          }
+          let releaseArchivedList!: () => void;
+          let archivedListHeld = new Promise<void>(
+            (resolve) => (releaseArchivedList = resolve),
+          );
+          let archivedListRequested = false;
+          registerRealmServerRoute({
+            path: '/_archived-realms',
+            handler: async (req, url, state) => {
+              archivedListRequested = true;
+              await archivedListHeld;
+              return archivedRoute.handler(req, url, state);
+            },
+          });
+          try {
+            await visitOperatorMode({
+              workspaceChooserOpened: true,
+              stacks: [
+                [{ id: `${removedRealmURL}Person/1`, format: 'isolated' }],
+              ],
+            });
+
+            await click(
+              `[data-test-workspace-menu-trigger="${removedRealmURL}"]`,
+            );
+            await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
+            // Not awaited: the click settles only once the held request
+            // returns.
+            let confirmed = click('[data-test-confirm-archive-button]');
+            await waitUntil(() => archivedListRequested);
+            await operatorModeState().openWorkspace(keptRealmURL);
+            releaseArchivedList();
+            // The Archived list is filled last, so the dashboard's handling
+            // of the archive follows from here.
+            await waitUntil(() =>
+              getService('realm-server').archivedRealms.some(
+                ({ url }) => url === removedRealmURL,
+              ),
+            );
+            await confirmed;
+            await settled();
+          } finally {
+            releaseArchivedList();
+            registerRealmServerRoute(archivedRoute);
+          }
+
+          assert.deepEqual(operatorModeState().getOpenCardIds(), [
+            `${keptRealmURL}index`,
+          ]);
+          assert.false(
+            operatorModeState().workspaceChooserOpened,
+            'the dashboard stays closed',
+          );
+        });
+      },
+    );
 
     module('workspaces', function () {
       let moreRealmURLs: string[] = [];
@@ -925,6 +1263,49 @@ module('Acceptance | dashboard', function (hooks) {
             ).realmURL,
             urlFor(rowName),
           );
+        });
+
+        test("a hosted row's globe opens the same site menu as a tile's chin", async function (assert) {
+          await visitDashboard(assert, 2);
+          let rowName = workspaceNames(ROWS).find(
+            (name) => name !== 'Workspace A',
+          )!;
+          let now = Date.now();
+          markHosted(urlFor(rowName), {
+            'https://older.example.com/': String(now - 60_000),
+            'https://newer.example.com/': String(now),
+          });
+          await settled();
+
+          let row = `${ROWS}[data-test-workspace="${rowName}"]`;
+          let menuItems = `${row} [data-test-pretui-menu-panel] [role="menuitem"]`;
+          assert.dom(`${row}[data-test-workspace-variant="row"]`).exists();
+          assert
+            .dom(`${row} [data-test-host-trigger]`)
+            .hasAttribute('aria-label', 'Hosted at newer.example.com');
+          assert.dom(menuItems).doesNotExist('the menu starts closed');
+
+          let windowOpen = stubWindowOpen();
+          try {
+            await click(`${row} [data-test-host-trigger]`);
+
+            assert.deepEqual(
+              findAll(menuItems).map((item) => item.textContent?.trim()),
+              ['https://newer.example.com/', 'https://older.example.com/'],
+              'every published site is listed, most recently published first',
+            );
+
+            await click(findAll(menuItems)[1]);
+
+            assert.deepEqual(windowOpen.calls, [
+              ['https://older.example.com/', '_blank', 'noopener,noreferrer'],
+            ]);
+          } finally {
+            windowOpen.restore();
+          }
+          assert
+            .dom('[data-test-dashboard]')
+            .exists('choosing a site does not open the workspace');
         });
 
         module('keyboard cursor', function () {

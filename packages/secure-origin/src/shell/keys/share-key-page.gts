@@ -88,7 +88,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     {{else if this.done}}
       <DonePage @heading='Key shared' @onClose={{this.finish}}>
         <strong>{{this.done.key}}</strong>
-        is shared into
+        is shared with
         <strong>{{this.done.realm}}</strong>
         as
         <strong data-test-keys-done-label>{{this.done.share.label}}</strong>.
@@ -252,7 +252,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       if (!realm && !keyId) {
         throw new LinkError(
           'this page names neither a key nor a workspace',
-          'This link doesn’t name a key or a workspace to share it into.',
+          'This link doesn’t name a key or a workspace to share it with.',
         );
       }
       let context: WindowContext | undefined;
@@ -260,6 +260,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         context = await windowContext(config, { realm });
         if (!context.realm.directWriter) {
           this.page.state = { name: 'needs-admin', realm: context.realm };
+          this.args.api.visit.loaded();
           return;
         }
         this.form.realm = context.realm.url;
@@ -285,10 +286,12 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         this.selectKey(keys[0].id);
       }
       this.page.state = { name: 'choosing', key, context };
+      this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       } else {
+        this.args.api.visit.loadFailed(e);
         this.page.state = {
           name: 'load-failed',
           failure: loadFailure(e),

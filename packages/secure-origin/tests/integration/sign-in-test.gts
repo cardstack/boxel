@@ -19,6 +19,10 @@ import CliSignInPage from '../../src/shell/sign-in/cli-sign-in-page.gts';
 import GoogleCallback from '../../src/shell/sign-in/google-callback.gts';
 import SignInPage from '../../src/shell/sign-in/sign-in-page.gts';
 import SignOutPage from '../../src/shell/sign-in/sign-out-page.gts';
+import {
+  setupTelemetrySecretsCheck,
+  stringsIn,
+} from '../helpers/telemetry-secrets.ts';
 
 // The realm server the pages talk to, named by the page's meta tag as the
 // shell's document names it.
@@ -98,6 +102,9 @@ module('Integration | sign-in', function (hooks) {
   setupRenderingTest(hooks);
 
   let server: ReturnType<typeof realmServer> | undefined;
+  // What the pages sent, still readable once the module's afterEach has let
+  // the server go.
+  let sent: ReturnType<typeof realmServer>['requests'] = [];
   let navigations: { how: 'assign' | 'replace'; url: string }[];
   let handoffs: HTMLFormElement[];
   let originalNavigation = { ...navigation };
@@ -107,6 +114,7 @@ module('Integration | sign-in', function (hooks) {
 
   function serve(...routes: Record<string, Route>[]) {
     server = realmServer(Object.assign({}, ...routes));
+    sent = server.requests;
     return server;
   }
 
@@ -117,6 +125,7 @@ module('Integration | sign-in', function (hooks) {
 
   hooks.beforeEach(function () {
     originalURL = window.location.href;
+    sent = [];
     navigations = [];
     handoffs = [];
     navigation.assign = (url: string) => {
@@ -151,6 +160,20 @@ module('Integration | sign-in', function (hooks) {
     sessionStorage.clear();
     history.replaceState(null, '', originalURL);
   });
+
+  setupTelemetrySecretsCheck(hooks, () => [
+    // What the page sent: bodies, not the method and path a label is made
+    // from. A Google callback's code, verifier and state are among them.
+    ...stringsIn(sent.map((r) => r.body)),
+    'a-password',
+    'not-the-password',
+    'another-password',
+    'someone@example.test',
+    '"someone"',
+    SESSION.token,
+    STATE,
+    'single-use-login-token',
+  ]);
 
   module('the sign-in form', function () {
     test('offers no Google sign-in when the realm server has no Google client', async function (assert) {

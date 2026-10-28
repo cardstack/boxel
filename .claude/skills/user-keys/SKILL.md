@@ -104,14 +104,14 @@ the ticket goes in `meta`. A body is at most
 exceed that. A query string on these routes is ignored, and left out of the
 request log line and Sentry breadcrumbs.
 
-| Route                      | Does                                                                                                                                                        |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /_key-write-tickets` | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}`            |
-| `GET /_user-keys`          | List the user's keys' metadata, by name, each with its `grants`, `usedWith` and `sharedInto`                                                                |
-| `GET /_user-keys/:id`      | One key's metadata, with its `grants`, `usedWith` and `sharedInto`                                                                                          |
-| `POST /_user-keys`         | Add: `attributes.{name, kind?, value}`, `meta.{ticket}` (a ticket to `add`)                                                                                 |
-| `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value}`, `meta.{ticket}` (a ticket to `replace` this key); re-seals every grant's copy                                      |
-| `DELETE /_user-keys/:id`   | Delete: `meta.{ticket}` (a ticket to `delete` this key); deletes its grants, suspends every share holding it (`GET /_key-shares?key=<id>` lists them first) |
+| Route                      | Does                                                                                                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /_key-write-tickets` | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}`                                      |
+| `GET /_user-keys`          | List the user's keys' metadata, by name, each with its `grants`, `usedWith` and `sharedInto`                                                                                          |
+| `GET /_user-keys/:id`      | One key's metadata, with its `grants`, `usedWith` and `sharedInto`                                                                                                                    |
+| `POST /_user-keys`         | Add: `attributes.{name, kind?, value}`, `meta.{ticket}` (a ticket to `add`)                                                                                                           |
+| `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value}`, `meta.{ticket}` (a ticket to `replace` this key); re-seals every grant's copy                                                                |
+| `DELETE /_user-keys/:id`   | Delete: `meta.{ticket}` (a ticket to `delete` this key); revokes its own bindings, deletes its grants, suspends every share holding it (`GET /_key-shares?key=<id>` lists them first) |
 
 An attribute other than these, such as a `destination`, is refused with 400.
 
@@ -266,7 +266,7 @@ minting a key write ticket does. No ticket is involved.
 | Route                               | Does                                                                                                                                                                                                        |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /_user-key-grants`            | Create or reuse: type `user-key-grant`, `attributes.{keyId, realm, codeRef: {module, name}, operation, expectedDestination}`; answers 201 with a new grant or 200 with the one reused, and `meta.{created}` |
-| `DELETE /_user-key-grants/:grantId` | Remove one of the user's grants; answers `meta.{revokedBindings}`, the bindings that sent under it                                                                                                          |
+| `DELETE /_user-key-grants/:grantId` | Remove one of the user's grants; revokes every binding that sent under it, in every realm, and answers `meta.{revokedBindings}` (see the `key-bindings` skill)                                              |
 
 | Status | Means                                                                                                                                                                                            |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

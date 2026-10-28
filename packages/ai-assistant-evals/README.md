@@ -33,7 +33,13 @@ endpoint is the URL.
   relative `adoptsFrom` references keep working; the cards are opened in the
   stack so they are in the message context), `skillFeatures` switched on in
   each room before the first prompt (`EVAL_SKILL_FEATURES` adds more, and a
-  name with a leading `-` leaves one out),
+  name with a leading `-` leaves one out), `expectedChangedCards` naming the
+  seeded cards the prompt asks to change (when set, the runner's rendered-card
+  check needs every one of these changed from its seed, and one of them shown
+  in the stack or the preview panel, not only embedded in another card),
+  `promptCards` naming, by position, the open card each prompt is about (the
+  runner brings it to the top of the stack before that prompt, since only a
+  stack's top card goes into the message context),
   `secondsPerPrompt` replacing the default 200 s time target for each prompt,
   and a query-backed `sessionReports` list.
 - **EvaluationResult**: one per model per session. The runner fills the
@@ -46,7 +52,7 @@ endpoint is the URL.
 - **EvaluationReport**: one per session, with a query-backed `results` table
   and the total cost.
 
-Nine evaluations ship. `hello-world` is the smallest build there is, one
+Eighteen evaluations ship. `hello-world` is the smallest build there is, one
 definition and one instance shown on screen — the one to start from, and the
 one to reach for when checking that a change did not break the basics.
 `linkedin-profile-computed-edit-restyle` is the step up: one definition with a
@@ -64,7 +70,21 @@ acknowledgement after the write passes its correctness check.
 how much of a brief the assistant answers from catalog parts, and whether it
 references a catalog definition or installs its own copy. The three
 `search-route-*` evaluations check that a search runs through a
-`run-realm-code` script.
+`run-realm-code` script. The three `mutation-*` evaluations change card
+data, never a definition, one task per prompt in a single session, each task
+on its own card. `mutation-field-values` fills a card with sample data,
+redacts personal information and sets an enum, and moves dates to today while
+keeping them relative. `mutation-lists` adds entries to `containsMany` fields,
+adds an item to a list of mixed item types, and edits a list whose items link
+to cards. `mutation-links` moves linked cards from one `linksToMany` to
+another, and changes a linked card rather than the open one. Their seeds live
+under `eval-realm/card-mutation/`, most with a decoy card beside the one to
+change, and their criteria are judged by comparing each card's seed with what
+the workspace snapshot holds afterwards. Three tasks cover a known gap, where
+the skills say nothing or a tool silently does the wrong thing (the phone in
+the sample data, the mixed-type list, and the list whose items link to
+cards); their notes say so, and they are expected to fail there until it is
+fixed.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace
@@ -152,8 +172,10 @@ A run also prints the table at the end.
    failed or invalid tool call or an error alert, or eight in all, the same
    call repeated three times, a pill stuck past the host's tool timeout) or
    after the safety wall clock.
-4. Looks for a rendered card in the stack that is not the workspace index and
-   has no error state; screenshots the page.
+4. Looks for a rendered card in the stack that is not the workspace index, not
+   a card the run seeded, and has no error state; for an evaluation with
+   `expectedChangedCards`, checks each of those against its seed and waits
+   for the index to catch up first. Screenshots the page.
 5. Reads the room's Matrix events: turns, tokens, cost, tool calls and their
    outcomes, run-realm-code writes and other writing tool calls, files written.
 6. Classifies: `pass` (card rendered, and at least one applied run-realm-code

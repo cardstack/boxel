@@ -25,6 +25,7 @@
     "./screens/*": "./src/screens/*",
     "./security/*": "./src/security/*",
     "./shell/*": "./src/shell/*",
+    "./telemetry/*": "./src/telemetry/*",
     "./dist/*": "./dist/*"
   },
   "dependencies": {

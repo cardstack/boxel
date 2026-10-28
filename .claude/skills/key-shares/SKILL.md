@@ -65,13 +65,13 @@ suspends what they made.
 
 ## Who may do what
 
-| Action  | Who                                                                                                                        | Ticket                       |
-| ------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| Share   | The key's owner, into a realm where they are a direct writer                                                               | `share` for that key + realm |
-| Unshare | The share's owner, whether or not they still write the realm                                                               | none                         |
-| Suspend | Any direct writer of the realm, on an active share                                                                         | none                         |
-| Resume  | Any direct writer of the realm, on a `suspended-by-writer` share                                                           | `resume` for that share      |
-| Swap    | Any direct writer of the realm, putting one of their own keys into a suspended share; they become its owner and it resumes | `swap` for that key + share  |
+| Action  | Who                                                                                                                                                                                                                                                        | Ticket                       |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| Share   | The key's owner, into a realm where they are a direct writer                                                                                                                                                                                               | `share` for that key + realm |
+| Unshare | The share's owner, whether or not they still write the realm                                                                                                                                                                                               | none                         |
+| Suspend | Any direct writer of the realm, on an active share                                                                                                                                                                                                         | none                         |
+| Resume  | Any direct writer of the realm, on a `suspended-by-writer` share                                                                                                                                                                                           | `resume` for that share      |
+| Swap    | Any direct writer of the realm, putting one of their own keys into a suspended share; they become its owner and it resumes, and its bindings move to grants of their key (a secure-origin session is needed when it has any; see the `key-bindings` skill) | `swap` for that key + share  |
 
 A direct writer is a person whose own permission row grants write
 (`isDirectWriter`): a `*` or `users` row, a bot account or a policy grant
@@ -87,7 +87,9 @@ no route sets it.
   (`GET /_key-shares`); `?key=<id>` narrows that to the shares holding one
   key — the ones deleting it would suspend.
 - A realm's direct writers see its shares with owner and state, without the
-  key of a share they don't own (`GET /_key-shares?realm=<url>`), and its
+  key of a share they don't own, each with the operations it is approved for
+  there (`operations`: one per binding, with its type, operation, instance,
+  slot and state; see the `key-bindings` skill) (`GET /_key-shares?realm=<url>`), and its
   notices, newest first, at most 100 (`GET /_key-share-notices?realm=<url>`).
   An owner who loses write stops seeing the realm's shares and notices, and
   still sees their own.

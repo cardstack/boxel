@@ -1,0 +1,103 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "On my Lisbon & Porto trip, add dinner at Taberna da Rua das Flores on day 2 at 20:00, a morning visit to Livraria Lello on day 3, and add my sister Inês as a traveller (ines.costa@example.com).",
+      "followUpPrompts": [
+        "In the Intro to SQL course, add a short quiz after the second block that checks the reader understood SELECT.",
+        "On DevDay 2026, cancel the 11:00 talk and add a coffee break at 10:30."
+      ],
+      "successCriteria": "**A: add entries to `Trip/lisbon-porto` (prompt 1)**\nA1. All six seed `stops` of `Trip/lisbon-porto` are still present with every sub-field (`day`, `time`, `place`, `kind`, `notes`) unchanged.\nA2. Two new stops exist: Taberna da Rua das Flores on day 2 at `20:00` with kind `meal`, and Livraria Lello on day 3 with a `time` in `HH:MM` before `12:00` and kind `sight`.\nA3. `stops` is ordered by day, then time: the dinner sits between the 15:30 Ribeira walk and the 21:30 fado, and Livraria Lello before the 12:30 Café Santiago.\nA4. `travelers` holds Joana Costa, unchanged, and Inês with `ines.costa@example.com`, once.\nA5. The indexed `stopCount` is 8 and `days` is 3; no stop or traveller appears twice.\nA6. The definition module (`card-mutation/contains-many/trip.gts`) is byte-identical to the seed, and the change was made in place: the same instance file, with the same `adoptsFrom`, and no new instance written beside it.\n\n**B: add a quiz to `Course/intro-to-sql` (prompt 2)**\nB1. `blocks` of `Course/intro-to-sql` has five items, and the new one is third.\nB2. In the indexed document each of the four seed blocks keeps its type (`VideoBlock`, `ReadingBlock`, `VideoBlock`, `ReadingBlock`) and every field (`title`, `videoUrl`, `minutes`, `body`) unchanged.\nB3. The new block is a `QuizBlock` with a `question` about SELECT and an `answer`.\nB4. The indexed `blockCount` is 5.\nB5. The definition module (`card-mutation/mixed-list/course.gts`) is byte-identical to the seed, and the change was made in place: the same instance file, with the same `adoptsFrom`, and no new instance written beside it.\n\n**C: edit the sessions of `Conference/devday` (prompt 3)**\nC1. `sessions` of `Conference/devday` holds, in time order, the 09:00 and 10:00 talks, a 10:30 coffee break, and the 13:00 and 14:00 talks, each talk's `title` unchanged; the 11:00 talk is gone.\nC2. In the indexed document every remaining talk links to its own seed speaker: 09:00 Ana Silva, 10:00 Ben Okoro, 13:00 Dev Patel, 14:00 Erin Walsh. The coffee break links to no speaker.\nC3. Chloé Martin (the cancelled talk's speaker) is linked from nowhere on the card, and every Speaker card is byte-identical to the seed.\nC4. The definition module (`card-mutation/list-links/conference.gts`) is byte-identical to the seed, and the change was made in place: the same instance file, with the same `adoptsFrom`, and no new instance written beside it.\n\n**All tasks**\nZ1. The three changed cards stay open and render with no error boundary at the end of the run (screenshot and indexed documents).\nZ2. Every tool call applied or was repaired by the model, and the assistant did not ask a question or wait for confirmation before acting after any prompt.",
+      "cardInfo": {
+        "name": "Card mutation: edit lists",
+        "summary": "Three cards are open, each holding a list: a Trip with travellers and itinerary stops in `containsMany` fields, a Course whose `blocks` list mixes subclasses of one field type, and a Conference whose sessions each link to a Speaker card. Three prompts in one session ask to add entries in order to the trip, to insert a quiz block into the course, and to cancel a talk and add a coffee break to the conference. This eval tests whether every existing entry survives with its own fields, type and link: `realm.cards.update` replaces a whole array, drops each item's subclass, and leaves links keyed by position.",
+        "notes": "Use case: card mutation. Every task changes card data only; every field it needs already exists, so an edit to a definition module is wrong. Each prompt goes out as its own message in one session, and each task is judged on its own card. The runner brings each task's card (`promptCards`) to the top of the stack before its prompt, so it is the card in the message context. Judge each criterion by comparing a card's seed (base64 under `files[].content` in the run's `evaluation.json`) with its file under `files` and its indexed document under `cards` in the workspace snapshot. The runner fails the render check unless every card in `expectedChangedCards` changed, and one of them is shown in the stack or the preview panel, not only embedded in another card.\n\nA (trip): the trap criterion is A1, since a run that updates `stops` or `travelers` with only the new entries loses the existing ones. A3 checks that the day-2 dinner was inserted in order rather than appended.\n\nB (course): the trap criterion is B2. Each item's type lives in the card's `meta.fields.blocks`, which `realm.cards.get` does not show, and replacing the array with `realm.cards.update` deletes it, so every block falls back to the base `LessonBlock` and loses `videoUrl`, `minutes` and `body`. A correct run edits the JSON with `realm.fs.replace`, keeping each item's `meta.fields` entry and adding a `QuizBlock` one. Known gap: replacing a list of mixed item types through `realm.cards.update` drops each item's type. The skills don't tell the model this, so B2 is expected to fail until a skill or tool handles it; read a low score there as the gap, not the model.\n\nC (conference): the trap criterion is C2. A link inside a list item is stored under the item's position (`sessions.2.speaker`), and `realm.cards.update` rewrites the list without touching `relationships`, so each link stays at its old position. Here the 10:30 coffee break takes the cancelled 11:00 talk's place in the list, so a run that only updates the list leaves the coffee break linked to that talk's speaker (Chloé) while the card renders fine; the later talks keep their positions, and their speakers. A correct run also rewrites the `sessions.N.speaker` keys with `realm.fs.replace`. Known gap: links inside containsMany items do not move with their items when the list is updated. The skills don't tell the model this, so C2 is expected to fail until a skill or tool handles it; read a low score there as the gap, not the model.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../card-mutation/contains-many/Trip/lisbon-porto"
+        }
+      },
+      "initialCards.1": {
+        "links": {
+          "self": "../card-mutation/mixed-list/Course/intro-to-sql"
+        }
+      },
+      "initialCards.2": {
+        "links": {
+          "self": "../card-mutation/list-links/Conference/devday"
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../card-mutation/list-links/Speaker/ana-silva.json"
+        }
+      },
+      "initialFiles.1": {
+        "links": {
+          "self": "../card-mutation/list-links/Speaker/ben-okoro.json"
+        }
+      },
+      "initialFiles.2": {
+        "links": {
+          "self": "../card-mutation/list-links/Speaker/chloe-martin.json"
+        }
+      },
+      "initialFiles.3": {
+        "links": {
+          "self": "../card-mutation/list-links/Speaker/dev-patel.json"
+        }
+      },
+      "initialFiles.4": {
+        "links": {
+          "self": "../card-mutation/list-links/Speaker/erin-walsh.json"
+        }
+      },
+      "expectedChangedCards.0": {
+        "links": {
+          "self": "../card-mutation/contains-many/Trip/lisbon-porto"
+        }
+      },
+      "expectedChangedCards.1": {
+        "links": {
+          "self": "../card-mutation/mixed-list/Course/intro-to-sql"
+        }
+      },
+      "expectedChangedCards.2": {
+        "links": {
+          "self": "../card-mutation/list-links/Conference/devday"
+        }
+      },
+      "promptCards.0": {
+        "links": {
+          "self": "../card-mutation/contains-many/Trip/lisbon-porto"
+        }
+      },
+      "promptCards.1": {
+        "links": {
+          "self": "../card-mutation/mixed-list/Course/intro-to-sql"
+        }
+      },
+      "promptCards.2": {
+        "links": {
+          "self": "../card-mutation/list-links/Conference/devday"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

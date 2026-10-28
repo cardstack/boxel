@@ -8,6 +8,7 @@ import type {
   Prerenderer,
   LinkShapePolicy,
 } from '@cardstack/runtime-common';
+import { DBRateLimitStore } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
 import { createRequire } from 'module';
@@ -105,6 +106,7 @@ import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import {
+  KEY_BINDINGS_PATH,
   KEY_SHARE_NOTICES_PATH,
   KEY_SHARES_PATH,
   KEY_WRITE_TICKETS_PATH,
@@ -144,6 +146,12 @@ import {
   handleCreateUserKeyGrant,
   handleRemoveUserKeyGrant,
 } from './handlers/handle-user-key-grants.ts';
+import {
+  handleApproveKeyBindings,
+  handleListKeyBindings,
+  handlePreviewKeyBindings,
+  handleRevokeKeyBinding,
+} from './handlers/handle-key-bindings.ts';
 import {
   handleListKeyShareNotices,
   handleListKeyShares,
@@ -400,6 +408,26 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleRemoveUserKeyGrant(args),
   );
   router.get(
+    KEY_BINDINGS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyBindings(args),
+  );
+  router.get(
+    `${KEY_BINDINGS_PATH}/preview`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handlePreviewKeyBindings(args),
+  );
+  router.post(
+    KEY_BINDINGS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleApproveKeyBindings(args),
+  );
+  router.delete(
+    `${KEY_BINDINGS_PATH}/:bindingId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleRevokeKeyBinding(args),
+  );
+  router.get(
     KEY_SHARES_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListKeyShares(args),
@@ -452,13 +480,17 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   // Batched client performance beacons. The host sends its server session
-  // token as `Authorization: Bearer <token>`, so the standard jwtMiddleware
-  // authenticates the caller and the authenticated matrix user id is used in
-  // preference to the body's self-reported value.
+  // token as `Authorization: Bearer <token>`, and the secure origin's pages
+  // their window's own session once they have one. The handler authenticates
+  // the session itself, since a beacon without one is accepted too (rate
+  // limited, and attributed to nobody).
   router.post(
     '/_client-telemetry',
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleClientTelemetry(),
+    handleClientTelemetry({
+      realmSecretSeed: args.realmSecretSeed,
+      dbAdapter: args.dbAdapter,
+      rateLimitStore: new DBRateLimitStore(args.dbAdapter),
+    }),
   );
   router.post(
     OPENROUTER_PASSTHROUGH_PATH,

@@ -37,7 +37,10 @@ const otherRealmURL = 'http://test-realm/test2/';
 // Makes the realm service know a workspace the user can read under
 // `identifier`, without a realm behind it: the capture endpoint is stubbed,
 // so only the realm service's view of the workspace matters.
-function knowReadableWorkspace(identifier: string) {
+function knowReadableWorkspace(
+  identifier: string,
+  permissions: ('read' | 'write')[] = ['read'],
+) {
   getService('realm').getOrCreateRealmResource(
     identifier,
     createJWT(
@@ -45,7 +48,7 @@ function knowReadableWorkspace(identifier: string) {
         user: '@testuser:localhost',
         realm: identifier,
         sessionRoom: 'boxel-session-room-id',
-        permissions: ['read'],
+        permissions,
         realmServerURL: 'http://test-realm/',
       },
       '1d',
@@ -1621,6 +1624,168 @@ return 'done';`,
     });
     let source = await cardService.getSource(new URL(fileUrl));
     assert.true(source.content.includes('"count": 2'));
+  });
+
+  test('resolves paths against the realm root named without its trailing slash', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL.replace(/\/$/, ''),
+      roomId: '!room:example.com',
+      code: `return await realm.fs.readText('task.json');`,
+    });
+
+    assert.true(JSON.parse(result.scriptResult!).includes('"count"'));
+  });
+
+  test('refuses a folder in the realm as the realm, and names the root and the path to use', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let folder = `${testRealmURL}card-mutation/relink/`;
+
+    for (let realm of [folder, folder.replace(/\/$/, '')]) {
+      await assert.rejects(
+        command.execute({
+          realm,
+          roomId: '!room:example.com',
+          code: `return await realm.fs.replace('task.json', '"count": 1', '"count": 2');`,
+        }),
+        (error: Error) =>
+          error.message ===
+          `${realm} is card-mutation/relink inside the workspace ${testRealmURL}, ` +
+            `not its root. Pass ${testRealmURL} as realm, and name each file ` +
+            `by its path from there: card-mutation/relink for that file, ` +
+            `card-mutation/relink.json for that card, or card-mutation/relink/ and the ` +
+            `file's name for a file in that folder`,
+      );
+    }
+    let source = await cardService.getSource(
+      new URL(`${testRealmURL}task.json`),
+    );
+    assert.true(
+      source.content.includes('"count": 1'),
+      'the script does not run against the root',
+    );
+  });
+
+  test('refuses a file or card in the realm as the realm, and names it by its path from the root', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    for (let local of [
+      'Event/intro-to-pottery.json',
+      'Event/intro-to-pottery',
+      'docs/README',
+    ]) {
+      let realm = `${testRealmURL}${local}`;
+      await assert.rejects(
+        command.execute({
+          realm,
+          roomId: '!room:example.com',
+          code: `return 'ran';`,
+        }),
+        (error: Error) =>
+          error.message ===
+          `${realm} is ${local} inside the workspace ${testRealmURL}, ` +
+            `not its root. Pass ${testRealmURL} as realm, and name each file ` +
+            `by its path from there: ${local} for that file, ` +
+            `${local}.json for that card, or ${local}/ and the ` +
+            `file's name for a file in that folder`,
+      );
+    }
+  });
+
+  test('refuses a realm with a malformed percent-encoding as one it cannot reach', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let realm = `${testRealmURL}folder%E0/`;
+
+    await assert.rejects(
+      command.execute({
+        realm,
+        roomId: '!room:example.com',
+        code: `return 'ran';`,
+      }),
+      (error: Error) =>
+        error.message === `The current user cannot read or write ${realm}`,
+    );
+  });
+
+  test('refuses a folder of a realm named by a prefix, and names the root by that prefix', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    let prefix = '@test/folder-input/';
+    virtualNetwork.addRealmMapping(prefix, testRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+      let folder = `${prefix}card-mutation/relink/`;
+
+      await assert.rejects(
+        command.execute({
+          realm: folder,
+          roomId: '!room:example.com',
+          code: `return 'ran';`,
+        }),
+        (error: Error) =>
+          error.message ===
+          `${folder} is card-mutation/relink inside the workspace ${prefix}, ` +
+            `not its root. Pass ${prefix} as realm, and name each file ` +
+            `by its path from there: card-mutation/relink for that file, ` +
+            `card-mutation/relink.json for that card, or card-mutation/relink/ and the ` +
+            `file's name for a file in that folder`,
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping(prefix);
+    }
+  });
+
+  test('runs in the realm root named with a query string', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: `${testRealmURL}?x=1`,
+      roomId: '!room:example.com',
+      code: `return await realm.fs.readText('task.json');`,
+    });
+
+    assert.true(JSON.parse(result.scriptResult!).includes('"count"'));
+  });
+
+  test('runs in a workspace nested under the realm, learned after it', async function (assert) {
+    let nestedRealmURL = `${testRealmURL}nested/`;
+    knowReadableWorkspace(nestedRealmURL);
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: nestedRealmURL,
+      roomId: '!room:example.com',
+      code: `return 'ran';`,
+    });
+
+    assert.strictEqual(JSON.parse(result.scriptResult!), 'ran');
+  });
+
+  test('asks a workspace nested under the realm for its own permissions', async function (assert) {
+    let nestedRealmURL = `${testRealmURL}nested/`;
+    knowReadableWorkspace(nestedRealmURL, []);
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: nestedRealmURL,
+        roomId: '!room:example.com',
+        code: `return 'ran';`,
+      }),
+      (error: Error) =>
+        error.message ===
+        `The current user cannot read or write ${nestedRealmURL}`,
+      'the readable outer realm does not answer for the nested one',
+    );
   });
 
   test('refuses paths outside the realm, and names the files it already saved', async function (assert) {

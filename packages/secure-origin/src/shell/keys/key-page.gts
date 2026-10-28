@@ -1,6 +1,6 @@
 // The key page: the user's own keys, laid out as a linksToMany field is in a
 // card's edit format: each key a tile saying which services it is used with
-// and listing the workspaces it is shared into, each of which it can be
+// and listing the workspaces it is shared with, each of which it can be
 // unshared from, with Share and Replace on it and a delete button beside it,
 // and a button under them to add another.
 // It is what the secure origin shows at its own address and at `keys`.
@@ -169,7 +169,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                             <p class='confirm'>Deleting
                               <strong>{{key.name}}</strong>
                               is permanent, and stops it working in the
-                              workspaces it’s shared into:</p>
+                              workspaces it’s shared with:</p>
                             <ul class='shares' data-test-key-delete-shares>
                               {{#each this.deletingShares as |share|}}
                                 <li>{{share.label}}
@@ -183,7 +183,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           {{else}}
                             <p class='confirm'>Delete
                               <strong>{{key.name}}</strong>? This is permanent.
-                              It isn’t shared into any workspace. Requests that
+                              It isn’t shared with any workspace. Requests that
                               use it stop working.</p>
                           {{/if}}
                           <div class='panel-actions'>
@@ -380,10 +380,12 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   private async load() {
     try {
       this.state.keys = await listKeys(this.args.api.config);
+      this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       } else {
+        this.args.api.visit.loadFailed(e);
         this.state.loadFailed = loadFailure(e);
       }
     }
@@ -431,9 +433,9 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.state.action = { name: 'none' };
   };
 
-  // Replacing changes the key every workspace it's shared into uses, so the
-  // panel says how many. If the shares can't be listed, it says so in general
-  // terms instead, and the replace is still offered.
+  // Replacing changes the key that every workspace it's shared with uses, so
+  // the panel says how many. If the shares can't be listed, it says so in
+  // general terms instead, and the replace is still offered.
   private startReplace = async (key: UserKey) => {
     this.form.value = '';
     this.state.action = { name: 'replacing', key, shares: undefined };
@@ -460,7 +462,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     return this.replacingShares !== undefined;
   }
 
-  // The number of workspaces the key is shared into.
+  // The number of workspaces the key is shared with.
   private get replacingWorkspaces(): number {
     return new Set(this.replacingShares?.map((share) => share.realm)).size;
   }

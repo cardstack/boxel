@@ -2897,6 +2897,10 @@ export class Realm {
   #virtualNetwork: VirtualNetwork;
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #callApi: CallApiSender | undefined;
+  // The requests the realm server handed to `handlePipeline`: runs it makes
+  // on its own, never a request off the network, which is a new object every
+  // time and so never in here.
+  #pipelineRequests = new WeakSet<Request>();
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   // Shared with every realm the process serves — the cache keys on absolute
   // card URLs, and one byte cap for the process is the bound that matters.
@@ -6763,6 +6767,10 @@ export class Realm {
               this.#duringRender(request, requestContext)
                 ? { duringPrerender: true }
                 : {}),
+              ...(definition.base === 'callApi' &&
+              this.#pipelineRequests.has(request)
+                ? { callApiMode: 'pipeline' as const }
+                : {}),
             },
           );
         } catch (err: unknown) {
@@ -8260,6 +8268,20 @@ export class Realm {
       return null;
     }
     return await this.internalHandle(request, false);
+  };
+
+  // Handles a request a pipeline makes: an `_operations` batch the realm server
+  // runs on its own, carrying the session of the user it runs as (a
+  // schedule's payer, or whoever started the run). It is authorized as that
+  // user's request would be, and a `callApi` in it is a pipeline invocation,
+  // which a binding approved for pipelines only fills. Only code in this
+  // process can call this; nothing that arrives off the network is a pipeline
+  // invocation.
+  handlePipeline = async (
+    request: Request,
+  ): Promise<ResponseWithNodeStream | null> => {
+    this.#pipelineRequests.add(request);
+    return await this.handle(request);
   };
 
   async getRealmOwnerUserId(): Promise<string> {

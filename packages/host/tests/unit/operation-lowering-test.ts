@@ -2355,6 +2355,32 @@ module('Unit | operation lowering', function (hooks) {
     });
   });
 
+  test('an operation approved per instance says so in its lowered request', async function (assert) {
+    let perInstance = await lowerRequest({
+      url: 'https://hooks.example.com/services/{hook}',
+      path: { hook: '{{apiKey:hook}}' },
+      perInstance: true,
+    });
+    assert.deepEqual(codes(perInstance), []);
+    assert.true(perInstance.operations.fetch.callApi?.perInstance);
+
+    let perRealm = await lowerRequest({
+      url: 'https://api.example.com/items',
+      perInstance: false,
+    });
+    assert.deepEqual(codes(perRealm), []);
+    assert.false(
+      'perInstance' in (perRealm.operations.fetch.callApi ?? {}),
+      'false is the same as leaving it out',
+    );
+
+    let notABoolean = await lowerRequest({
+      url: 'https://api.example.com/items',
+      perInstance: 'yes',
+    });
+    assert.deepEqual(codes(notABoolean), ['invalid-request']);
+  });
+
   test('the URL lowers to its normalized form and its destination', async function (assert) {
     let result = await lowerRequest(
       { url: 'https://API.openai.com:443/v1/../chat/{id}', path: { id: '7' } },

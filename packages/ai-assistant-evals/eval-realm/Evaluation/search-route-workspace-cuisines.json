@@ -58,6 +58,26 @@
         "links": {
           "self": "../search-route/Recipe/moussaka"
         }
+      },
+      "expectedChangedCards.0": {
+        "links": {
+          "self": "../search-route/Recipe/margherita-pizza"
+        }
+      },
+      "expectedChangedCards.1": {
+        "links": {
+          "self": "../search-route/Recipe/beef-bourguignon"
+        }
+      },
+      "expectedChangedCards.2": {
+        "links": {
+          "self": "../search-route/Recipe/ramen"
+        }
+      },
+      "expectedChangedCards.3": {
+        "links": {
+          "self": "../search-route/Recipe/moussaka"
+        }
       }
     },
     "meta": {

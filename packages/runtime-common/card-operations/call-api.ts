@@ -122,6 +122,7 @@ export interface CallApiClauses {
   query?: unknown;
   json?: unknown;
   graphql?: unknown;
+  perInstance?: unknown;
 }
 
 const METHODS: readonly CallApiMethod[] = [
@@ -382,6 +383,18 @@ export function lowerCallApi(
     }
   }
 
+  // Whether each instance is approved on its own.
+  if (
+    clauses.perInstance !== undefined &&
+    typeof clauses.perInstance !== 'boolean'
+  ) {
+    fail(
+      'invalid-request',
+      'perInstance',
+      `\`perInstance\` is true, to approve each card's key on its own, or left out`,
+    );
+  }
+
   if (!ok || !lowered?.url || !lowered.destination) {
     return undefined;
   }
@@ -394,6 +407,7 @@ export function lowerCallApi(
     ...(query ? { query } : {}),
     ...(body ? { body } : {}),
     slots: slots.map(({ text: _text, ...slot }) => slot),
+    ...(clauses.perInstance === true ? { perInstance: true as const } : {}),
   };
 }
 
@@ -760,14 +774,57 @@ export interface CallApiCredential {
   token: string;
   // The value exactly as it is sent, transform applied.
   value: string;
+  // The value as stored, where a transform makes what is sent differ from it.
+  // Removed from the response as well, since a vendor can echo either.
+  raw?: string;
 }
 
-// The realm server's side of a `callApi`: it sends the request through its
-// guarded outbound client and answers with the vendor's response, its
-// credentials removed. A refusal or a failure to get any response at all is
-// thrown as an `OperationFailure` carrying `guard-refused`, `upstream-timeout`
-// or `response-too-large`.
+// How an invocation arrived. An interactive one carries a user's session: a
+// card in the browser, the AI assistant, the CLI. A pipeline one is a run the
+// realm server makes on its own, as a schedule's payer or whoever started it,
+// and is never reached from a request off the network.
+export type CallApiMode = 'interactive' | 'pipeline';
+
+// What names the binding that fills a request's slots.
+export interface CallApiSlotLookup {
+  realmURL: string;
+  // The type the operation was resolved on, and the operation's name there.
+  // The binding is for this type's operation, whichever class declared it.
+  type: { module: string; name: string };
+  operation: string;
+  // The card the operation was invoked on; absent for one invoked on the type.
+  instance?: string;
+  // Who the invocation acts for: the signed-in caller, or a pipeline's payer.
+  // A `{{userKey}}` slot is filled only from this user's own binding.
+  caller: string;
+  mode: CallApiMode;
+  // The request as the definition cache holds it now, which the binding's
+  // fingerprint is checked against.
+  request: OperationCallApi;
+}
+
+// One slot's credential, as the binding that fills it provides it.
+export interface CallApiFilledSlot {
+  name: string;
+  // As it is sent, transform applied.
+  value: string;
+  // As stored, where a transform makes `value` differ from it.
+  raw?: string;
+  // Where the key's owner approved it to be sent: the request, as built and
+  // before anything is filled into it, must be under this destination.
+  destination: string;
+}
+
+// The realm server's side of a `callApi`. `fill` finds the binding for every
+// slot a request carries and opens its key under the grant it names, or
+// refuses with `binding-not-approved`, `share-suspended`,
+// `binding-needs-reapproval` or `interactive-use-not-approved`. `send` sends
+// the request through the guarded outbound client and answers with the
+// vendor's response, its credentials removed; a refusal or a failure to get
+// any response at all is thrown as an `OperationFailure` carrying
+// `guard-refused`, `upstream-timeout` or `response-too-large`.
 export interface CallApiSender {
+  fill(lookup: CallApiSlotLookup): Promise<CallApiFilledSlot[]>;
   send(
     request: CallApiRequest,
     credentials: CallApiCredential[],
@@ -1065,7 +1122,10 @@ export interface CallApiInvocation {
   realmURL: string;
   // Whether the request this invocation arrived in is part of a render.
   duringPrerender: boolean;
+  mode: CallApiMode;
   sender: CallApiSender | undefined;
+  // The type the operation resolved on, read only once a slot needs filling.
+  type: () => Promise<{ module: string; name: string } | undefined>;
   // The target's indexed document, read only once the request is going to be
   // built.
   instance?: () => Promise<SingleCardDocument>;
@@ -1115,17 +1175,6 @@ export async function callApiOperation(
       detail: `operation "${request.name}" sends a credential, and this request authenticated nobody`,
     });
   }
-  // A slot is filled only by a key its realm's owner bound to it, and no
-  // binding fills one here, so a request that carries a slot is not sent.
-  if (declared.slots.length > 0) {
-    return refuse({
-      status: 403,
-      code: 'binding-not-approved',
-      title: 'Binding not approved',
-      detail: `operation "${request.name}" sends ${describeSlots(declared.slots)}, and no binding approved for realm ${invocation.realmURL} fills ${declared.slots.length === 1 ? 'it' : 'them'}`,
-      meta: { slots: declared.slots.map(({ name, key }) => ({ name, key })) },
-    });
-  }
   if (!invocation.sender) {
     return refuse({
       status: 501,
@@ -1133,6 +1182,32 @@ export async function callApiOperation(
       title: 'Operation not implemented',
       detail: `this realm sends no request to an outside service, so operation "${request.name}" cannot be carried out here`,
     });
+  }
+  // A slot is filled only by the key a binding names: one its owner approved
+  // for this operation in this realm. The binding is found before anything is
+  // built, so a request nobody approved reads nothing of the card either.
+  let filled: CallApiFilledSlot[] = [];
+  if (declared.slots.length > 0) {
+    let type = await invocation.type();
+    if (!type) {
+      return refuse(notApproved(request.name, declared, invocation.realmURL));
+    }
+    try {
+      filled = await invocation.sender.fill({
+        realmURL: invocation.realmURL,
+        type,
+        operation: request.name,
+        ...(id ? { instance: id } : {}),
+        caller: request.actor,
+        mode: invocation.mode,
+        request: declared,
+      });
+    } catch (error) {
+      if (error instanceof OperationFailure) {
+        return refuse(error.error);
+      }
+      throw error;
+    }
   }
   let built: CallApiRequest;
   try {
@@ -1164,9 +1239,36 @@ export async function callApiOperation(
       built.url,
     );
   }
+  // Each key is sent only under the destination its owner approved it for,
+  // which the grant stored when they did. The request is checked as built,
+  // with every slot still a token, so a credential in the path can't move it.
+  let credentials: CallApiCredential[] = [];
+  for (let slot of built.slots) {
+    let fill = filled.find(({ name }) => name === slot.name);
+    if (!fill) {
+      return refuse(notApproved(request.name, declared, invocation.realmURL));
+    }
+    if (!destinationCovers(fill.destination, built.url)) {
+      return refuse(
+        {
+          status: 502,
+          code: 'guard-refused',
+          title: 'Destination refused',
+          detail: `operation "${request.name}" built a request outside ${fill.destination}, where the key for the credential slot "${slot.name}" was approved to be sent`,
+          meta: { reason: 'destination' },
+        },
+        built.url,
+      );
+    }
+    credentials.push({
+      token: slot.token,
+      value: fill.value,
+      ...(fill.raw !== undefined ? { raw: fill.raw } : {}),
+    });
+  }
   let response: CallApiResponse;
   try {
-    response = await invocation.sender.send(built, []);
+    response = await invocation.sender.send(built, credentials);
   } catch (error) {
     if (error instanceof OperationFailure) {
       return refuse(error.error, built.url);
@@ -1181,6 +1283,24 @@ export async function callApiOperation(
     status: response.status,
   });
   return { callApi: response };
+}
+
+// The refusal for a slot no binding fills. The detail names each slot with
+// whose key fills it, because a caller that sees only the message, such as the
+// AI assistant, gets neither the code nor `meta`, and a slot's name alone
+// doesn't say.
+export function notApproved(
+  name: string,
+  declared: OperationCallApi,
+  realmURL: string,
+): ConstructorParameters<typeof OperationFailure>[0] {
+  return {
+    status: 409,
+    code: 'binding-not-approved',
+    title: 'Binding not approved',
+    detail: `operation "${name}" sends ${describeSlots(declared.slots)}, and no binding approved for realm ${realmURL} fills ${declared.slots.length === 1 ? 'it' : 'them'}`,
+    meta: { slots: declared.slots.map(({ name, key }) => ({ name, key })) },
+  };
 }
 
 // Says whose key fills each slot: the invoking user's own (`userKey`) or one
