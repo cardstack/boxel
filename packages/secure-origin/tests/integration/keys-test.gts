@@ -1373,7 +1373,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-error-message]')
         .hasText(
-          'This link doesn’t name a key or a workspace to share it into.',
+          'This link doesn’t name a key or a workspace to share it with.',
         );
       assert.dom('[data-test-keys-retry]').doesNotExist();
       await click('[data-test-toggle-details]');

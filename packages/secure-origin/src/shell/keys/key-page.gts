@@ -431,9 +431,9 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.state.action = { name: 'none' };
   };
 
-  // Replacing changes the key every workspace it's shared with uses, so the
-  // panel says how many. If the shares can't be listed, it says so in general
-  // terms instead, and the replace is still offered.
+  // Replacing changes the key that every workspace it's shared with uses, so
+  // the panel says how many. If the shares can't be listed, it says so in
+  // general terms instead, and the replace is still offered.
   private startReplace = async (key: UserKey) => {
     this.form.value = '';
     this.state.action = { name: 'replacing', key, shares: undefined };
