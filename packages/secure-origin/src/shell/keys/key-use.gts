@@ -1,6 +1,6 @@
 // Where one of the user's keys is used, as the key page's tile shows it: the
 // services its approved requests go to, by registrable domain, and each
-// workspace it is shared into, by name and address as the share page shows a
+// workspace it is shared with, by name and address as the share page shows a
 // workspace, with the labels cards there know it by. Both come with the key in
 // the key listing (`usedWith`, `sharedInto`), so drawing them asks nothing
 // more of the realm server. A domain is the realm server's; the page never
@@ -69,7 +69,7 @@ export default class KeyUse extends Component<Signature> {
               class='use-text heading'
               id='key-shared-into-{{@key.id}}'
               data-test-key-shared-into-summary
-            >Shared into
+            >Shared with
               {{@key.sharedInto.length}}
               {{if (eq @key.sharedInto.length 1) 'workspace' 'workspaces'}}</p>
             <ul
@@ -142,7 +142,7 @@ export default class KeyUse extends Component<Signature> {
             </ul>
           </div>
         {{else}}
-          <p class='use-text none'>Not shared into any workspace</p>
+          <p class='use-text none'>Not shared with any workspace</p>
         {{/if}}
       </div>
     </div>

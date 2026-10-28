@@ -566,7 +566,7 @@ module('Integration | key pages', function (hooks) {
         .hasText('Used with github.com, openweathermap.org');
       assert
         .dom(`${weather} [data-test-key-shared-into-summary]`)
-        .hasText('Shared into 3 workspaces');
+        .hasText('Shared with 3 workspaces');
       let dashboard = `${weather} [data-test-key-shared-into-workspace="https://realm-server.test/someone/dashboard/"]`;
       assert
         .dom(`${dashboard} [data-test-workspace-name]`)
@@ -599,7 +599,7 @@ module('Integration | key pages', function (hooks) {
         .hasText('Not used with any service yet');
       assert
         .dom(`${maps} [data-test-key-shared-into]`)
-        .hasText('Not shared into any workspace');
+        .hasText('Not shared with any workspace');
       assert.dom(`${maps} [data-test-key-unshare]`).doesNotExist();
 
       assert.deepEqual(
@@ -673,7 +673,7 @@ module('Integration | key pages', function (hooks) {
         .dom(
           '[data-test-key-row="Weather service"] [data-test-key-shared-into-summary]',
         )
-        .hasText('Shared into 2 workspaces', 'and the key stays in the rest');
+        .hasText('Shared with 2 workspaces', 'and the key stays in the rest');
     });
 
     test('an unshare the server refuses says why and keeps the workspace', async function (assert) {
