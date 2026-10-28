@@ -150,6 +150,15 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                             {{/if}}
                           </p>
                           {{#if (this.isServiceAccount key)}}
+                            <p
+                              class='confirm'
+                              data-test-service-account-replace-note
+                            >A replacement sets the key file, the scopes and who
+                              it acts as all anew. Enter the scopes again, and
+                              leave
+                              <strong>Act as</strong>
+                              empty only if it should act as the service account
+                              itself.</p>
                             <ServiceAccountFields
                               @entry={{this.serviceAccount}}
                             />
