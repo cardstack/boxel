@@ -377,15 +377,37 @@ module(basename(import.meta.filename), function (hooks) {
       {
         rejected: true,
         key: null,
-        share: { label: 'Team mail', suspended: false, ownedByYou: false },
+        share: { suspended: false, ownedByYou: false },
       },
-      'a reader isn’t told who shared it',
+      'a reader sees nothing of the share but that it fills the slot',
     );
 
     let response = await replaceAsTheWindowDoes(OWNER, key.id);
     assert.strictEqual(response.status, 200, response.text);
     assert.strictEqual(await grantState(approved.meta.grant.id), 'active');
     assert.false((await slot(READER)).rejected);
+  });
+
+  test('a suspended share doesn’t name its owner, who may have left the workspace', async function (assert) {
+    let key = await addKey();
+    let share = await shareKey(dbAdapter, {
+      owner: OWNER,
+      realm: realmURL.href,
+      keyId: key.id,
+      label: 'Team mail',
+      ticket: await ticket(OWNER, 'share', { keyId: key.id, realm: realmURL }),
+    });
+    await approve(OWNER, 'shared', { apiKey: { shareId: share.id } });
+    let suspended = await request
+      .post(`/_key-shares/${share.id}/suspend`)
+      .set('Authorization', await secureSessionAuth(dbAdapter, WRITER));
+    assert.strictEqual(suspended.status, 200, suspended.text);
+    let [slot] = await bound(WRITER, 'shared');
+    assert.deepEqual(slot.bound, {
+      rejected: false,
+      key: null,
+      share: { label: 'Team mail', suspended: true, ownedByYou: false },
+    });
   });
 
   test('an operation approved per card is answered for the card, not its type', async function (assert) {

@@ -71,14 +71,17 @@ export interface SecureWindowOperation {
 
 // What fills a slot for the user asking, from the binding a call fills it
 // from: the key, and whether the service it is sent to rejected it. For a
-// share, the key is named only to its owner, and who owns it only to the
-// realm's direct writers, who see a realm's shares already; anyone else
-// learns only that the workspace's key fills the slot.
+// share, what the user may see of a realm's shares (the `key-shares` rules):
+// the key only to its owner; the label to its owner and the realm's direct
+// writers; and who owns it to the direct writers only while the share is
+// active, since an active share's owner always holds a write row there and a
+// suspended one's may have left. Anyone else learns only that the workspace's
+// key fills the slot.
 export interface SlotBound {
   rejected: boolean;
   key: { id: string; name: string } | null;
   share?: {
-    label: string;
+    label?: string;
     suspended: boolean;
     ownedByYou: boolean;
     owner?: string;
@@ -422,14 +425,17 @@ function slotBound(
   if (!bound.share) {
     return { rejected, key: bound.key };
   }
+  let ownedByYou = bound.key !== null;
   return {
     rejected,
     key: bound.key,
     share: {
-      label: bound.share.label,
+      ...(directWriter || ownedByYou ? { label: bound.share.label } : {}),
       suspended: bound.share.state !== 'active' || bound.state === 'suspended',
-      ownedByYou: bound.key !== null,
-      ...(directWriter ? { owner: bound.share.owner } : {}),
+      ownedByYou,
+      ...(directWriter && bound.share.state === 'active'
+        ? { owner: bound.share.owner }
+        : {}),
     },
   };
 }
