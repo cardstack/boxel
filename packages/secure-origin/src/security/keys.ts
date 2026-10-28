@@ -23,8 +23,6 @@ export interface WindowContext {
     url: string;
     name: string;
     directWriter: boolean;
-    // Who beyond its members can read it.
-    readableBy: 'anyone' | 'signed-in' | 'members';
   };
   card?: { name: string; module: string; exportName: string };
   operation?: {

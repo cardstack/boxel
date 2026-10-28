@@ -48,7 +48,6 @@ import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedForShare } from './opened-for.ts';
 import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
-import WorkspaceMembers from './workspace-members.gts';
 
 interface Realm {
   url: string;
@@ -139,9 +138,6 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                 />
               </FieldContainer>
             {{/unless}}
-            {{#if this.members}}
-              <WorkspaceMembers @realm={{this.members}} />
-            {{/if}}
             <FieldContainer
               @tag='label'
               @label='Shared as'
@@ -220,9 +216,6 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     labelTyped: false,
     saving: false,
     error: undefined as string | undefined,
-    // The workspace picked from the list, as the server describes it, for
-    // who the share puts the key in front of.
-    picked: undefined as WindowContext['realm'] | undefined,
   });
 
   constructor(owner: Owner, args: ShareKeyArgs) {
@@ -334,36 +327,9 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     }
   };
 
-  // Who is in the workspace the key goes into: the one the page was opened
-  // for, or the one picked from the list once the server has described it.
-  private get members(): WindowContext['realm'] | undefined {
-    let context = this.choosing?.context;
-    if (context) {
-      return context.realm;
-    }
-    let picked = this.form.picked;
-    return picked && picked.url === this.form.realm ? picked : undefined;
-  }
-
   private selectRealm = (url: string) => {
     this.form.realm = url;
     this.form.error = undefined;
-    void this.describePicked(url);
-  };
-
-  // A workspace that can't be described just goes without the description;
-  // sharing into it is still checked by the server.
-  private describePicked = async (url: string) => {
-    try {
-      let context = await windowContext(this.args.api.config, { realm: url });
-      if (this.form.realm === url) {
-        this.form.picked = context.realm;
-      }
-    } catch (e) {
-      if (isSignedOut(e)) {
-        this.args.api.signedOut();
-      }
-    }
   };
 
   private setLabel = (value: string) => {

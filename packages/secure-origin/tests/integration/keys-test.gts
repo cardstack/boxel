@@ -124,7 +124,6 @@ const WORKSPACE = {
   url: REALM,
   name: 'Team Workspace',
   directWriter: true,
-  readableBy: 'members',
 };
 
 module('Integration | key pages', function (hooks) {
@@ -1065,16 +1064,6 @@ module('Integration | key pages', function (hooks) {
               },
             ],
           }),
-        'POST _secure-window/context': ({ body }) => {
-          assert.strictEqual(
-            body.data.attributes.realm,
-            REALM,
-            'the picked workspace is described',
-          );
-          return context({
-            realm: { ...WORKSPACE, readableBy: 'anyone' },
-          });
-        },
         'POST _key-shares': shares(),
       });
       visitShell('keys/key-2/share');
@@ -1122,10 +1111,6 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-workspace-dropdown-trigger]')
         .isFocused('as does choosing from it');
-      await waitFor('[data-test-workspace-readers]');
-      assert
-        .dom('[data-test-workspace-readers]')
-        .hasText('Anyone, signed in or not');
       await fillIn('[data-test-share-label]', 'Team maps');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
@@ -1215,16 +1200,6 @@ module('Integration | key pages', function (hooks) {
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
       assert.dom('[data-test-opened-for-realm]').hasText('Team Workspace');
-      assert
-        .dom('[data-test-workspace-readers]')
-        .hasText(
-          'Members of this workspace, and anyone its permissions policy lets in',
-        );
-      assert
-        .dom('[data-test-workspace-billing]')
-        .hasText(
-          'Requests made with this key are billed to your account at the service.',
-        );
       assert.dom('[data-test-workspace-dropdown-trigger]').doesNotExist();
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       await click('[data-test-key-choice="Maps"] input');

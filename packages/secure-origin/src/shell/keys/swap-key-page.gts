@@ -31,7 +31,6 @@ import {
 } from './context.ts';
 import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
-import WorkspaceMembers from './workspace-members.gts';
 import EditPage from './edit-page.gts';
 import KeyPicker from './key-picker.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
@@ -99,7 +98,6 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @context={{this.choosing.context}}
               @reason={{this.opened.reason}}
             />
-            <WorkspaceMembers @realm={{this.choosing.context.realm}} />
             <FieldContainer
               @tag='div'
               @label='Shared key'
