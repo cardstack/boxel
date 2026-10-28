@@ -829,23 +829,69 @@ module('command runner', () => {
     );
   });
 
-  test('pr-listing-retry with existing PrCard re-collects but skips create-pr-card', async (assert) => {
-    let workflowCardUrl =
-      'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
-    let prCardUrl = 'http://localhost:4201/submissions/PrCard/pr-1';
-    let publishedJobs: Array<{
-      args: Record<string, any>;
-      concurrencyGroup: string;
-    }> = [];
+  for (let { form, workflowCardUrl, listingId } of [
+    {
+      form: 'URL-form',
+      workflowCardUrl:
+        'http://localhost:4201/test/SubmissionWorkflowCard/abc-123',
+      listingId: 'http://localhost:4201/test/Listing/1',
+    },
+    {
+      form: 'prefix-form',
+      workflowCardUrl: '@cardstack/catalog/SubmissionWorkflowCard/abc-123',
+      listingId: '@cardstack/catalog/Listing/1',
+    },
+  ]) {
+    test(`pr-listing-retry with existing PrCard re-collects but skips create-pr-card (${form} workflow card id)`, async (assert) => {
+      let prCardUrl = 'http://localhost:4201/submissions/PrCard/pr-1';
+      let publishedJobs: Array<{
+        args: Record<string, any>;
+        concurrencyGroup: string;
+      }> = [];
 
-    let queuePublisher: QueuePublisher = {
-      publish: async (job: any) => {
-        publishedJobs.push(job);
-        let command = (job.args.command as string | undefined) ?? '';
-        let url = (job.args.commandInput as any)?.cardIdentifier;
+      let queuePublisher: QueuePublisher = {
+        publish: async (job: any) => {
+          publishedJobs.push(job);
+          let command = (job.args.command as string | undefined) ?? '';
+          let url = (job.args.commandInput as any)?.cardIdentifier;
 
-        if (command.endsWith('/fetch-card-json/default')) {
-          if (url === workflowCardUrl) {
+          if (command.endsWith('/fetch-card-json/default')) {
+            if (url === workflowCardUrl) {
+              return {
+                id: publishedJobs.length,
+                done: Promise.resolve({
+                  status: 'ready',
+                  cardResultString: JSON.stringify({
+                    data: {
+                      attributes: {
+                        document: {
+                          data: {
+                            id: workflowCardUrl,
+                            attributes: {
+                              roomId: '!abc123:localhost',
+                              // title is the display-formatted "Submit <X>";
+                              // retry must NOT derive branchName from it.
+                              title: 'Submit My Listing',
+                              branchName: 'a1b2c3-my-listing',
+                            },
+                            relationships: {
+                              // The realm-server serializes same-realm links
+                              // relative to the card.
+                              listing: {
+                                links: { self: '../Listing/1' },
+                              },
+                              prCard: { links: { self: prCardUrl } },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  }),
+                }),
+              } as any;
+            }
+          }
+          if (command.endsWith('/collect-submission-files/default')) {
             return {
               id: publishedJobs.length,
               done: Promise.resolve({
@@ -853,54 +899,171 @@ module('command runner', () => {
                 cardResultString: JSON.stringify({
                   data: {
                     attributes: {
-                      document: {
-                        data: {
-                          id: workflowCardUrl,
-                          attributes: {
-                            roomId: '!abc123:localhost',
-                            // title is the display-formatted "Submit <X>";
-                            // retry must NOT derive branchName from it.
-                            title: 'Submit My Listing',
-                            branchName: 'a1b2c3-my-listing',
-                          },
-                          relationships: {
-                            // The realm-server serializes same-realm links
-                            // relative to the card.
-                            listing: {
-                              links: { self: '../Listing/1' },
-                            },
-                            prCard: { links: { self: prCardUrl } },
-                          },
+                      allFileContents: [
+                        {
+                          filename: 'catalog/MyListing/listing.json',
+                          contents: '{"data":{"type":"card"}}',
                         },
-                      },
+                      ],
                     },
                   },
                 }),
               }),
             } as any;
           }
-        }
-        if (command.endsWith('/collect-submission-files/default')) {
+          // patch-card-instance — lint status, link, and clear patches
           return {
             id: publishedJobs.length,
-            done: Promise.resolve({
-              status: 'ready',
-              cardResultString: JSON.stringify({
-                data: {
-                  attributes: {
-                    allFileContents: [
-                      {
-                        filename: 'catalog/MyListing/listing.json',
-                        contents: '{"data":{"type":"card"}}',
-                      },
-                    ],
-                  },
-                },
-              }),
-            }),
+            done: Promise.resolve({ status: 'ready', cardResultString: null }),
           } as any;
-        }
-        // patch-card-instance — lint status, link, and clear patches
+        },
+        destroy: async () => {},
+      };
+
+      let createdBranches: unknown[] = [];
+      let branchWrites: unknown[] = [];
+      let openedPRs: unknown[] = [];
+      let githubClient: GitHubClient = {
+        createBranch: async (params) => {
+          createdBranches.push(params);
+          return { ref: 'refs/heads/test', sha: 'abc123' };
+        },
+        writeFileToBranch: async () => ({ commitSha: 'def456' }),
+        writeFilesToBranch: async (params) => {
+          branchWrites.push(params);
+          return { commitSha: 'def456' };
+        },
+        openPullRequest: async (params) => {
+          openedPRs.push(params);
+          return { number: 1, html_url: 'https://example/pr/1' };
+        },
+      };
+
+      let commandsByRegistrationId = new Map<
+        string,
+        Record<string, PgPrimitive>[]
+      >([
+        [
+          'bot-registration-retry',
+          [
+            {
+              command_filter: {
+                type: 'matrix-event',
+                event_type: 'app.boxel.bot-trigger',
+                content_type: 'pr-listing-retry',
+              },
+              command:
+                '@cardstack/catalog/commands/collect-submission-files/default',
+            },
+          ],
+        ],
+      ]);
+      let dbAdapter = {
+        kind: 'pg',
+        notify: async () => {},
+        isClosed: false,
+        execute: async (sql: string, opts?: ExecuteOptions) => {
+          if (sql.includes('FROM bot_commands WHERE bot_id =')) {
+            let registrationId = opts?.bind?.[0];
+            if (typeof registrationId !== 'string') {
+              return [];
+            }
+            return commandsByRegistrationId.get(registrationId) ?? [];
+          }
+          return [];
+        },
+        close: async () => {},
+        getColumnNames: async () => [],
+        withWriteLock: async (_url, fn) => fn(undefined),
+        withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
+        withUserCostLock: async (_userId, fn) => fn(),
+        withTransaction: async (fn) => fn(async () => []),
+      } as DBAdapter;
+
+      let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
+
+      await commandRunner.maybeEnqueueCommand(
+        '@alice:localhost',
+        {
+          type: 'pr-listing-retry',
+          realm: 'http://localhost:4201/test/',
+          userId: '@alice:localhost',
+          input: { workflowCardUrl },
+        },
+        'bot-registration-retry',
+      );
+
+      let commands = publishedJobs.map((j) => j.args.command);
+      assert.ok(
+        commands.some((c: string) =>
+          c.endsWith('/collect-submission-files/default'),
+        ),
+        'retry re-collects submission files from the source realm',
+      );
+      assert.strictEqual(
+        publishedJobs.find((j) =>
+          (j.args.command as string).endsWith(
+            '/collect-submission-files/default',
+          ),
+        )?.args.commandInput.listingId,
+        listingId,
+        'retry resolves the relative listing link against the workflow card id',
+      );
+      assert.notOk(
+        commands.some((c: string) => c.endsWith('/create-pr-card/default')),
+        'retry skips create-pr-card and reuses the linked PrCard',
+      );
+      assert.strictEqual(
+        commands.filter((c: string) => c.endsWith('/fetch-card-json/default'))
+          .length,
+        1,
+        'retry fetches only the workflow card, never the PrCard contents',
+      );
+      let patchAttrs = publishedJobs
+        .filter((j) =>
+          (j.args.command as string).endsWith('/patch-card-instance/default'),
+        )
+        .map(
+          (j) =>
+            j.args.commandInput.patch.attributes as Record<string, unknown>,
+        );
+      assert.deepEqual(
+        patchAttrs[0],
+        { prCreationError: null, failedStep: null },
+        'retry clears the stale error before running the steps',
+      );
+      assert.strictEqual(createdBranches.length, 1, 'creates GitHub branch');
+      assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
+      assert.deepEqual(
+        (
+          branchWrites[0] as { files: { path: string; content: string }[] }
+        ).files.map((f) => ({ path: f.path, content: f.content })),
+        [
+          {
+            path: 'a1b2c3-my-listing/catalog/MyListing/listing.json',
+            content: '{"data":{"type":"card"}}',
+          },
+        ],
+        'pushed files come from the fresh collection, not the PrCard',
+      );
+      assert.strictEqual(openedPRs.length, 1, 'opens pull request');
+      // Regression: retry must reuse the *persisted* branchName, not recompute
+      // from the workflow card's display-formatted title. Without this guard,
+      // retry creates a different branch than the original attempt and orphans
+      // any previous commits/PR.
+      assert.strictEqual(
+        (createdBranches[0] as { branch: string }).branch,
+        'a1b2c3-my-listing',
+        'retry uses the persisted branchName from the workflow card',
+      );
+    });
+  }
+
+  test('pr-listing-retry with a relative workflow card id fails before running any step', async (assert) => {
+    let publishedJobs: Array<{ args: Record<string, any> }> = [];
+    let queuePublisher: QueuePublisher = {
+      publish: async (job: any) => {
+        publishedJobs.push(job);
         return {
           id: publishedJobs.length,
           done: Promise.resolve({ status: 'ready', cardResultString: null }),
@@ -908,56 +1071,32 @@ module('command runner', () => {
       },
       destroy: async () => {},
     };
-
-    let createdBranches: unknown[] = [];
-    let branchWrites: unknown[] = [];
-    let openedPRs: unknown[] = [];
     let githubClient: GitHubClient = {
-      createBranch: async (params) => {
-        createdBranches.push(params);
-        return { ref: 'refs/heads/test', sha: 'abc123' };
-      },
+      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
       writeFileToBranch: async () => ({ commitSha: 'def456' }),
-      writeFilesToBranch: async (params) => {
-        branchWrites.push(params);
-        return { commitSha: 'def456' };
-      },
-      openPullRequest: async (params) => {
-        openedPRs.push(params);
-        return { number: 1, html_url: 'https://example/pr/1' };
-      },
+      writeFilesToBranch: async () => ({ commitSha: 'def456' }),
+      openPullRequest: async () => ({
+        number: 1,
+        html_url: 'https://example/pr/1',
+      }),
     };
-
-    let commandsByRegistrationId = new Map<
-      string,
-      Record<string, PgPrimitive>[]
-    >([
-      [
-        'bot-registration-retry',
-        [
-          {
-            command_filter: {
-              type: 'matrix-event',
-              event_type: 'app.boxel.bot-trigger',
-              content_type: 'pr-listing-retry',
-            },
-            command:
-              '@cardstack/catalog/commands/collect-submission-files/default',
-          },
-        ],
-      ],
-    ]);
     let dbAdapter = {
       kind: 'pg',
       notify: async () => {},
       isClosed: false,
-      execute: async (sql: string, opts?: ExecuteOptions) => {
+      execute: async (sql: string) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
-          let registrationId = opts?.bind?.[0];
-          if (typeof registrationId !== 'string') {
-            return [];
-          }
-          return commandsByRegistrationId.get(registrationId) ?? [];
+          return [
+            {
+              command_filter: {
+                type: 'matrix-event',
+                event_type: 'app.boxel.bot-trigger',
+                content_type: 'pr-listing-retry',
+              },
+              command:
+                '@cardstack/catalog/commands/collect-submission-files/default',
+            },
+          ];
         }
         return [];
       },
@@ -971,78 +1110,27 @@ module('command runner', () => {
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
 
-    await commandRunner.maybeEnqueueCommand(
-      '@alice:localhost',
-      {
-        type: 'pr-listing-retry',
-        realm: 'http://localhost:4201/test/',
-        userId: '@alice:localhost',
-        input: { workflowCardUrl },
-      },
-      'bot-registration-retry',
-    );
-
-    let commands = publishedJobs.map((j) => j.args.command);
-    assert.ok(
-      commands.some((c: string) =>
-        c.endsWith('/collect-submission-files/default'),
-      ),
-      'retry re-collects submission files from the source realm',
-    );
-    assert.strictEqual(
-      publishedJobs.find((j) =>
-        (j.args.command as string).endsWith(
-          '/collect-submission-files/default',
-        ),
-      )?.args.commandInput.listingId,
-      'http://localhost:4201/test/Listing/1',
-      'retry resolves the relative listing link against the workflow card id',
-    );
-    assert.notOk(
-      commands.some((c: string) => c.endsWith('/create-pr-card/default')),
-      'retry skips create-pr-card and reuses the linked PrCard',
-    );
-    assert.strictEqual(
-      commands.filter((c: string) => c.endsWith('/fetch-card-json/default'))
-        .length,
-      1,
-      'retry fetches only the workflow card, never the PrCard contents',
-    );
-    let patchAttrs = publishedJobs
-      .filter((j) =>
-        (j.args.command as string).endsWith('/patch-card-instance/default'),
-      )
-      .map(
-        (j) => j.args.commandInput.patch.attributes as Record<string, unknown>,
-      );
-    assert.deepEqual(
-      patchAttrs[0],
-      { prCreationError: null, failedStep: null },
-      'retry clears the stale error before running the steps',
-    );
-    assert.strictEqual(createdBranches.length, 1, 'creates GitHub branch');
-    assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
-    assert.deepEqual(
-      (
-        branchWrites[0] as { files: { path: string; content: string }[] }
-      ).files.map((f) => ({ path: f.path, content: f.content })),
-      [
+    await assert.rejects(
+      commandRunner.maybeEnqueueCommand(
+        '@alice:localhost',
         {
-          path: 'a1b2c3-my-listing/catalog/MyListing/listing.json',
-          content: '{"data":{"type":"card"}}',
+          type: 'pr-listing-retry',
+          realm: 'http://localhost:4201/test/',
+          userId: '@alice:localhost',
+          input: { workflowCardUrl: '../SubmissionWorkflowCard/abc-123' },
         },
-      ],
-      'pushed files come from the fresh collection, not the PrCard',
+        'bot-registration-retry',
+      ),
+      /workflowCardUrl is not an absolute card id/,
     );
-    assert.strictEqual(openedPRs.length, 1, 'opens pull request');
-    // Regression: retry must reuse the *persisted* branchName, not recompute
-    // from the workflow card's display-formatted title. Without this guard,
-    // retry creates a different branch than the original attempt and orphans
-    // any previous commits/PR.
-    assert.strictEqual(
-      (createdBranches[0] as { branch: string }).branch,
-      'a1b2c3-my-listing',
-      'retry uses the persisted branchName from the workflow card',
+    let commands = publishedJobs.map((j) => j.args.command as string);
+    assert.notOk(
+      commands.some(
+        (c) =>
+          c.endsWith('/fetch-card-json/default') ||
+          c.endsWith('/collect-submission-files/default'),
+      ),
+      'no workflow step runs',
     );
   });
 

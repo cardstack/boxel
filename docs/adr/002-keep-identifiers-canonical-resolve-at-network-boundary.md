@@ -248,6 +248,10 @@ Neither sees card JSON. Elsewhere, reviewers enforce §1.2 and §1.4.
   `packages/software-factory/src/run-log.ts` break §1.3. `codeRef()` builds
   URL-form code refs with `new URL()`; these files define it, call it or teach
   it.
+- `packages/bot-runner/lib/pr-listing/pr-listing-workflow-handler.ts`
+  (`buildCreateContext`, `buildRetryContext`) breaks §1.2. Derives the
+  submissions realm by naming convention, passing the event's realm to
+  `new URL()`, which throws on a prefix-form realm.
 - `packages/boxel-cli/plugin/skills/search/SKILL.md` breaks §1.1. Says a type
   filter needs the card's full module URL.
 - `packages/boxel-cli/src/commands/capture.ts`,

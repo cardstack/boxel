@@ -1,4 +1,5 @@
 import {
+  isPrefixForm,
   logger,
   resolveRRIReference,
   toBranchName,
@@ -175,10 +176,10 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     let input = eventContent.input as Record<string, unknown>;
     let realmURL = eventContent.realm as string;
 
-    let workflowCardUrl = requireString(
+    let workflowCardUrl = requireCardId(
       input.workflowCardUrl,
       'workflowCardUrl',
-    ) as RealmResourceIdentifier;
+    );
     let workflowCardRealm = optionalString(input.workflowCardRealm) ?? realmURL;
 
     // Recover the rest from the workflow card itself — single source of truth.
@@ -196,11 +197,13 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     let roomId = requireString(attrs.roomId, 'workflow card roomId');
     // Resolve relative `links.self` against the workflow card id — the
     // realm-server serializes them as e.g. "../CardListing/abc".
-    let rawListingSelf = requireString(
-      rels.listing?.links?.self,
+    let listingId = requireCardId(
+      resolveRRIReference(
+        requireString(rels.listing?.links?.self, 'workflow card listing.self'),
+        workflowCardUrl,
+      ),
       'workflow card listing.self',
     );
-    let listingId = resolveRRIReference(rawListingSelf, workflowCardUrl);
     // Reuse the persisted branchName so retry targets the same branch as the
     // original create attempt; recover listingName from `Submit <X>` title
     // for PR title/commit messages.
@@ -212,7 +215,10 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       toBranchName(listingName ?? 'UntitledListing');
     let rawPrCardSelf = optionalString(rels.prCard?.links?.self);
     let existingPrCardUrl = rawPrCardSelf
-      ? resolveRRIReference(rawPrCardSelf, workflowCardUrl)
+      ? requireCardId(
+          resolveRRIReference(rawPrCardSelf, workflowCardUrl),
+          'workflow card prCard.self',
+        )
       : null;
 
     return {
@@ -615,6 +621,21 @@ function requireString(value: unknown, fieldName: string): string {
     throw new Error(`pr-listing trigger missing required field: ${fieldName}`);
   }
   return value.trim();
+}
+
+// A card id in either RRI form. A relative or malformed id is refused here, so
+// a retry fails while its context is built instead of in a later step.
+function requireCardId(
+  value: unknown,
+  fieldName: string,
+): RealmResourceIdentifier {
+  let id = requireString(value, fieldName);
+  if (!isPrefixForm(id) && !URL.canParse(id)) {
+    throw new Error(
+      `pr-listing trigger field ${fieldName} is not an absolute card id: ${id}`,
+    );
+  }
+  return id as RealmResourceIdentifier;
 }
 
 function optionalString(value: unknown): string | null {
