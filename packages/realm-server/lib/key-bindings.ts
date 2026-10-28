@@ -1282,11 +1282,11 @@ async function mintedToken(
   },
 ): Promise<string> {
   let { operation } = call;
-  let serviceAccount = opened.kind === 'google-service-account';
   try {
-    let token = serviceAccount
-      ? await serviceAccountAccessToken(dbAdapter, keyring, opened.keyId)
-      : await oauthAccessToken(dbAdapter, keyring, opened.keyId);
+    let token =
+      opened.kind === 'google-service-account'
+        ? await serviceAccountAccessToken(dbAdapter, keyring, opened.keyId)
+        : await oauthAccessToken(dbAdapter, keyring, opened.keyId);
     if (call.keyProbe) {
       emitKeyGrantEvent({
         event: 'key-probe',
