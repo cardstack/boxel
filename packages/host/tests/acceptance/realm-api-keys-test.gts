@@ -37,11 +37,30 @@ type ShareRow = {
     | 'key-deleted'
     | null;
   suspendedBy: string | null;
+  operations: OperationRow[];
 };
+
+type OperationRow = {
+  bindingId: string;
+  type: { module: string; name: string };
+  operation: string;
+  instance: string | null;
+  slot: string;
+  state: 'active' | 'needs-reapproval' | 'suspended';
+};
+
+// The realm server names an operation's module and card in RRI form: by its
+// prefix when the realm has one, and otherwise by URL.
+const CATALOG_INBOX = '@cardstack/catalog/inbox/inbox';
+const CHANNEL = `${testRealmURL}channel`;
 
 // The shares a realm's direct writers see: one of the user's own, active; one
 // of another writer's, active; three suspended shares, one for each reason;
-// and a suspended one whose owner the realm no longer names.
+// and a suspended one whose owner the realm no longer names. The user's own
+// share is approved for an operation on a type and, per card, for one on an
+// instance, one of them awaiting re-approval; another writer's for one; a
+// suspended share keeps its operation, suspended; the rest are approved for
+// none.
 function fixtureShares(): ShareRow[] {
   return [
     {
@@ -51,6 +70,24 @@ function fixtureShares(): ShareRow[] {
       state: 'active',
       suspensionReason: null,
       suspendedBy: null,
+      operations: [
+        {
+          bindingId: '00000000-0000-4000-8000-0000000000b1',
+          type: { module: CATALOG_INBOX, name: 'Inbox' },
+          operation: 'summarize',
+          instance: null,
+          slot: 'apiKey',
+          state: 'active',
+        },
+        {
+          bindingId: '00000000-0000-4000-8000-0000000000b2',
+          type: { module: CHANNEL, name: 'Channel' },
+          operation: 'postReply',
+          instance: `${testRealmURL}Channel/general`,
+          slot: 'apiKey',
+          state: 'needs-reapproval',
+        },
+      ],
     },
     {
       id: '00000000-0000-4000-8000-000000000002',
@@ -59,6 +96,16 @@ function fixtureShares(): ShareRow[] {
       state: 'active',
       suspensionReason: null,
       suspendedBy: null,
+      operations: [
+        {
+          bindingId: '00000000-0000-4000-8000-0000000000b3',
+          type: { module: `${testRealmURL}forecast`, name: 'Forecast' },
+          operation: 'fetchForecast',
+          instance: null,
+          slot: 'apiKey',
+          state: 'active',
+        },
+      ],
     },
     {
       id: '00000000-0000-4000-8000-000000000003',
@@ -67,6 +114,16 @@ function fixtureShares(): ShareRow[] {
       state: 'suspended',
       suspensionReason: 'owner-lost-write',
       suspendedBy: null,
+      operations: [
+        {
+          bindingId: '00000000-0000-4000-8000-0000000000b4',
+          type: { module: `${testRealmURL}directions`, name: 'Directions' },
+          operation: 'route',
+          instance: null,
+          slot: 'apiKey',
+          state: 'suspended',
+        },
+      ],
     },
     {
       id: '00000000-0000-4000-8000-000000000004',
@@ -75,6 +132,7 @@ function fixtureShares(): ShareRow[] {
       state: 'suspended',
       suspensionReason: 'suspended-by-writer',
       suspendedBy: FORMER_WRITER,
+      operations: [],
     },
     {
       id: '00000000-0000-4000-8000-000000000005',
@@ -83,6 +141,7 @@ function fixtureShares(): ShareRow[] {
       state: 'suspended',
       suspensionReason: 'key-deleted',
       suspendedBy: null,
+      operations: [],
     },
     {
       // No permission row in the realm names this owner any more, so the
@@ -93,6 +152,7 @@ function fixtureShares(): ShareRow[] {
       state: 'suspended',
       suspensionReason: 'owner-lost-write',
       suspendedBy: null,
+      operations: [],
     },
   ];
 }
@@ -300,6 +360,77 @@ module('Acceptance | realm config | API Keys', function (hooks) {
         .dom('[data-test-field="policy"]')
         .exists('the config keeps its other entries');
       assert.dom('[data-test-field="config"]').exists();
+    });
+
+    test('each share names the operations it is approved for, as the realm server names them', async function (assert) {
+      await visitConfig();
+      await waitFor(share('OpenAI'));
+
+      let operation = (bindingId: string) =>
+        `[data-test-realm-key-share-operation="00000000-0000-4000-8000-0000000000${bindingId}"]`;
+
+      assert
+        .dom(`${share('OpenAI')} [data-test-realm-key-share-operation]`)
+        .exists({ count: 2 });
+      assert
+        .dom(`${operation('b1')} [data-test-realm-key-share-operation-name]`)
+        .hasText('summarize on Inbox');
+      assert
+        .dom(`${operation('b1')} [data-test-realm-key-share-operation-module]`)
+        .hasText(CATALOG_INBOX, 'a module in prefix form is shown as given');
+      assert
+        .dom(
+          `${operation('b1')} [data-test-realm-key-share-operation-instance]`,
+        )
+        .doesNotExist('an operation approved for the type names no card');
+      assert
+        .dom(`${operation('b1')} [data-test-realm-key-share-operation-state]`)
+        .doesNotExist('an active operation needs no state');
+
+      assert
+        .dom(`${operation('b2')} [data-test-realm-key-share-operation-name]`)
+        .hasText('postReply on Channel');
+      assert
+        .dom(`${operation('b2')} [data-test-realm-key-share-operation-module]`)
+        .hasText(CHANNEL);
+      assert
+        .dom(
+          `${operation('b2')} [data-test-realm-key-share-operation-instance]`,
+        )
+        .hasText(
+          `For the card ${testRealmURL}Channel/general`,
+          'an operation approved per card names its card',
+        );
+      assert
+        .dom(
+          `${operation('b2')} [data-test-realm-key-share-operation-state="needs-reapproval"]`,
+        )
+        .hasText('Needs re-approval');
+
+      assert
+        .dom(`${share('Weather')} [data-test-realm-key-share-operation]`)
+        .exists({ count: 1 });
+      assert
+        .dom(`${operation('b3')} [data-test-realm-key-share-operation-name]`)
+        .hasText('fetchForecast on Forecast');
+
+      assert
+        .dom(
+          `${operation('b4')} [data-test-realm-key-share-operation-state="suspended"]`,
+        )
+        .hasText('Suspended', "a suspended share's operation is suspended");
+
+      for (let label of ['Search', 'Translate', 'Calendar']) {
+        assert
+          .dom(`${share(label)} [data-test-realm-key-share-operation]`)
+          .doesNotExist();
+        assert
+          .dom(`${share(label)} [data-test-realm-key-share-no-operations]`)
+          .hasText('No operation is approved to use it yet.');
+      }
+      assert
+        .dom(`${share('OpenAI')} [data-test-realm-key-share-no-operations]`)
+        .doesNotExist();
     });
 
     test('a suspended share shows why, and offers to swap a key in', async function (assert) {
