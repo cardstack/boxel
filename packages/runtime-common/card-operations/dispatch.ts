@@ -1,7 +1,7 @@
 import type { Readable } from 'stream';
 import { RealmPaths, ensureTrailingSlash, type LocalPath } from '../paths.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
-import { codeRefFromInternalKey } from '../index.ts';
+import { codeRefFromInternalKey, trimExecutableExtension } from '../index.ts';
 import { baseRealm } from '../constants.ts';
 import { indexedInstance, readOperation } from './read.ts';
 import {
@@ -1908,9 +1908,10 @@ async function definitionFor(
   }
 }
 
-// The type an operation on `target` resolves through, as the module URL and
-// export a binding records: the type a type target names, or the one a card
-// adopts from.
+// The type an operation on `target` resolves through, as the module and export
+// a binding records: the type a type target names, or the one a card adopts
+// from, its module resolved against the realm with any executable extension
+// trimmed, as an approval resolves the type it names.
 async function resolvedTypeOf(
   core: OperationCore,
   target: OperationTarget,
@@ -1930,7 +1931,10 @@ async function resolvedTypeOf(
       ? core.resolveCodeRef(codeRef, relativeTo)
       : undefined;
   return resolved
-    ? { module: String(resolved.module), name: resolved.name }
+    ? {
+        module: trimExecutableExtension(String(resolved.module)),
+        name: resolved.name,
+      }
     : undefined;
 }
 

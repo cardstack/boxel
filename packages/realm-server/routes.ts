@@ -148,6 +148,7 @@ import {
 import {
   handleApproveKeyBindings,
   handleListKeyBindings,
+  handlePreviewKeyBindings,
   handleRevokeKeyBinding,
 } from './handlers/handle-key-bindings.ts';
 import {
@@ -409,6 +410,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     KEY_BINDINGS_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListKeyBindings(args),
+  );
+  router.get(
+    `${KEY_BINDINGS_PATH}/preview`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handlePreviewKeyBindings(args),
   );
   router.post(
     KEY_BINDINGS_PATH,

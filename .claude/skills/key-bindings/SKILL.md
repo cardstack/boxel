@@ -30,9 +30,15 @@ One row of `key_bindings` per slot:
 - `definition_url`, `export_name`, `operation_name` — the operation, as the
   **type it is invoked through** resolves it: the type a type target names, or
   the one an instance adopts from (`resolvedTypeOf` in `dispatch.ts`). An
-  operation inherited from a parent class is bound per subclass.
+  operation inherited from a parent class is bound per subclass. The module is
+  resolved against the realm with its executable extension trimmed, at
+  approval (`bindingType`) and at call time alike, so `…/inbox` and
+  `…/inbox.gts` name one type.
 - `instance_url` — the card, for an operation declared `perInstance: true`
-  (one webhook per channel card); null otherwise. Invoking a per-instance
+  (one webhook per channel card), as invocations address it once the realm
+  canonicalizes the target (`canonicalInstance`: the realm root is its index
+  card; a `.json`, trailing slash, query or fragment names the card); null
+  otherwise. Invoking a per-instance
   operation on the type, or on a card it wasn't approved for, is
   `binding-not-approved`.
 - `slot` — the token as written: `userKey`, `apiKey`, or `apiKey:<name>`.
@@ -67,7 +73,9 @@ approve bindings could spend the user's key.
           "codeRef": { "module": "https://…/inbox", "name": "Inbox" },
           "operation": "listPRs",
           "expectedDestination": "https://api.github.com/",
-          "slots": { "userKey": { "keyId": "<uuid>" } }
+          "slots": {
+            "userKey": { "keyId": "<uuid>", "expectedFingerprint": "<hex>" }
+          }
         }
       ]
     }
@@ -75,15 +83,26 @@ approve bindings could spend the user's key.
 }
 ```
 
-A per-instance operation adds `"instance": "<card URL>"`; a share slot is
-`{ "shareId": "<uuid>" }`, and only the owner of the share's key approves it,
-while the share is active. One request is one confirmation: every row it
-writes shares a `batch_id`. For each operation, in order:
+Before approving, the approval screen reads what it shows from
+`GET /_key-bindings/preview?realm=&module=&name=&operation=` (any session
+that can read the realm): the destination, whether the operation is approved
+per instance, and for each slot the request snapshot and its fingerprint. The
+approval names those back.
+
+A per-instance operation adds `"instance": "<card id>"`; a share slot is
+`{ "shareId": "<uuid>", "expectedFingerprint": … }`, and only the owner of the
+share's key approves it, while the share is active. A realm, card or module
+may be named in prefix form; answers name them in RRI form. One request is one
+confirmation: every row it writes shares a `batch_id`. For each operation, in
+order:
 
 1. The operation is read from the realm's definition cache (the caller must
    be able to read the realm and the module's realm, as for a grant). Its
-   destination must equal `expectedDestination`, the one the user was shown,
-   or nothing is approved (409).
+   destination must equal `expectedDestination`, and each slot's request must
+   hash to its `expectedFingerprint` — what the user was shown — or nothing
+   is approved (409). So an edit between showing and approving, such as the
+   key moved from a header into the body at the same destination, is never
+   approved unseen.
 2. A grant of the key (the share's key, for a share) covering that destination
    is reused, or one is created (`createOrReuseGrantIn`).
 3. The binding is written or moved to this approval, `active`, and an
@@ -204,13 +223,17 @@ SELECT created_at, owner FROM key_binding_notices WHERE binding_id = '<id>';
 - **`binding-not-approved`** with no row: never approved here, approved for
   another type (a subclass), another instance, or (for `userKey`) by another
   user; or revoked — look for a `revoked` row by operation name in
-  `key_binding_approvals`. With a row: `grant_id` null (the share's key was
-  deleted; swap a key in), or the grant doesn't open (see the `user-keys`
-  skill on hand-written grant rows).
+  `key_binding_approvals`. With a row: its grant doesn't open, or belongs to
+  another key than the binding's (see the `user-keys` skill on hand-written
+  grant rows); the realm server logs which on `realm:key-bindings`. A fault
+  opening the grant other than those (the database, the keyring) is an error,
+  not this refusal.
 - **`binding-needs-reapproval`**: diff the last approval row's snapshot
   against the declaration now; the owner approves again.
 - **`share-suspended`**: the share's `suspension_reason` (see the
-  `key-shares` skill).
+  `key-shares` skill). For `key-deleted`, the binding's `grant_id` is null
+  too, since its grants went with the key: a direct writer swaps a key in,
+  which grants it the binding's destination again.
 - **`interactive-use-not-approved`**: expected for every call off the network.
 
 The binding tables hold no secret, but like the keys tables they are withheld
@@ -223,8 +246,10 @@ the application role.
   stub vendor: approve then call as a pipeline, grant reuse and a second
   grant at another host, realm and caller scoping, interactive refusal, the
   app session refused, re-approval on edits (and not on label or `output`
-  edits), grant removal, key deletion, share suspension and swap, and
-  per-instance bindings. It indexes a card using `perInstance`, so it needs a
+  edits), approving refused when the request shown has changed, share
+  approval only by its key's owner and only while active, grant removal, key
+  deletion, share suspension and swap, per-instance bindings, keyless
+  operations untouched, and the fingerprint pinned to a fixed value. It indexes a card using `perInstance`, so it needs a
   host dist built from your tree (see the `call-api` skill).
 - `packages/realm-server/tests/card-operations-dispatch-test.ts` — the
   executor's use of `fill` and the grant-destination check, with a fake

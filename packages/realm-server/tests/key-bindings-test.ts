@@ -24,7 +24,12 @@ import {
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
 import { shareKey, swapKeyIntoShare } from '../lib/key-shares.ts';
-import { fillSlots, pipelineAdmission } from '../lib/key-bindings.ts';
+import {
+  bindingSnapshot,
+  fillSlots,
+  fingerprintOf,
+  pipelineAdmission,
+} from '../lib/key-bindings.ts';
 import { removeGrant } from '../lib/user-key-grants.ts';
 
 // ============================================================================
@@ -98,6 +103,11 @@ function inboxModule({
         base: 'callApi',
         url: '${VENDOR}/echo/shared',
         headers: { authorization: 'Basic {{apiKey|basic}}' },
+      };
+
+      @operation static ping = {
+        base: 'callApi',
+        url: '${VENDOR}/echo/ping',
       };
 
       @operation static post = {
@@ -210,7 +220,10 @@ module(basename(import.meta.filename), function (hooks) {
 
   function approval(
     operation: string,
-    slots: Record<string, { keyId?: string; shareId?: string }>,
+    slots: Record<
+      string,
+      { keyId?: string; shareId?: string; expectedFingerprint?: string }
+    >,
     extra: Record<string, unknown> = {},
   ) {
     return {
@@ -222,9 +235,24 @@ module(basename(import.meta.filename), function (hooks) {
     };
   }
 
+  // What the approval screen shows for an operation, by slot.
+  async function preview(user: string, operation: string) {
+    return await request
+      .get('/_key-bindings/preview')
+      .query({
+        realm: realmURL.href,
+        module: INBOX.module,
+        name: INBOX.name,
+        operation,
+      })
+      .set('Authorization', await secureSessionAuth(dbAdapter, user));
+  }
+
+  // Approves as `user`, naming for each slot the fingerprint the preview shows
+  // now unless the approval names one itself.
   async function approve(
     user: string,
-    operations: unknown[],
+    operations: ReturnType<typeof approval>[],
     {
       authorization,
       origin = secureOriginURL.origin,
@@ -235,6 +263,15 @@ module(basename(import.meta.filename), function (hooks) {
       attributes?: Record<string, unknown>;
     } = {},
   ) {
+    for (let operation of operations) {
+      let shown = (await preview(user, operation.operation)).body.data
+        ?.attributes;
+      for (let [slot, fill] of Object.entries(operation.slots)) {
+        fill.expectedFingerprint ??= shown?.slots.find(
+          (s: { slot: string }) => s.slot === slot,
+        )?.fingerprint;
+      }
+    }
     return await request
       .post('/_key-bindings')
       .set(
@@ -746,10 +783,15 @@ module(basename(import.meta.filename), function (hooks) {
       approval(
         'post',
         { 'apiKey:hook': { shareId: share.id } },
-        { instance: `${realmURL.href}general` },
+        { instance: `${realmURL.href}general.json` },
       ),
     ]);
     assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    assert.strictEqual(
+      approved.body.data[0].attributes.instance,
+      `${realmURL.href}general`,
+      'the card is recorded as invocations address it',
+    );
 
     let general = await runAsPipeline(
       WRITER,
@@ -766,7 +808,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(vendor.requests.length, 1, 'nothing more was sent');
   });
 
-  test('approving refuses a destination other than the one shown, and keyless operations are unchanged', async function (assert) {
+  test('approving refuses a destination or a request other than the one shown', async function (assert) {
     let key = await addKey();
     let moved = await approve(OWNER, [
       {
@@ -780,9 +822,139 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
     assert.strictEqual(wrongSlot.status, 400);
 
+    let shown = (await preview(OWNER, 'list')).body.data.attributes;
+    assert.strictEqual(shown.destination, `${VENDOR}/echo/`);
+    assert.strictEqual(shown.slots[0].snapshot.placementName, 'authorization');
+    await edit({ listHeader: 'x-api-key' });
+    let edited = await approve(OWNER, [
+      approval('list', {
+        userKey: {
+          keyId: key.id,
+          expectedFingerprint: shown.slots[0].fingerprint,
+        },
+      }),
+    ]);
+    assert.strictEqual(
+      edited.status,
+      409,
+      'the key moved since the request was shown, at the same destination',
+    );
+
     let listed = await request
       .get('/_key-bindings')
       .set('Authorization', await secureSessionAuth(dbAdapter, OWNER));
     assert.deepEqual(listed.body.data, [], 'nothing was approved');
+  });
+
+  test("a share is approved only by its key's owner, and only while it is active", async function (assert) {
+    let key = await addKey();
+    let share = await shareKey(dbAdapter, {
+      owner: OWNER,
+      realm: realmURL.href,
+      keyId: key.id,
+      label: 'Vendor',
+      ticket: await ticket(OWNER, 'share', { keyId: key.id, realm: realmURL }),
+    });
+    let byWriter = await approve(WRITER, [
+      approval('shared', { apiKey: { shareId: share.id } }),
+    ]);
+    assert.strictEqual(byWriter.status, 404, "another writer can't approve it");
+
+    await dbAdapter.execute(
+      `UPDATE realm_user_permissions SET write = false WHERE realm_url = $1 AND username = $2`,
+      { bind: [realmURL.href, OWNER] },
+    );
+    let suspended = await approve(OWNER, [
+      approval('shared', { apiKey: { shareId: share.id } }),
+    ]);
+    assert.strictEqual(suspended.status, 409, 'nor its owner while suspended');
+    let [{ n }] = await dbAdapter.execute(
+      `SELECT COUNT(*)::int AS n FROM key_bindings`,
+    );
+    assert.strictEqual(n, 0);
+  });
+
+  test('a keyless operation is sent from an interactive and a pipeline invocation alike, with no binding', async function (assert) {
+    let interactive = await request
+      .post(`/key-bindings-test/_operations`)
+      .set('Accept', OPERATIONS)
+      .set('Content-Type', OPERATIONS)
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(realm, OWNER, ['read', 'write'])}`,
+      )
+      .send(envelope('ping', { href: '/general' }));
+    assert.strictEqual(
+      interactive.status,
+      200,
+      JSON.stringify(interactive.body),
+    );
+    let pipeline = await runAsPipeline(
+      OWNER,
+      envelope('ping', { href: '/general' }),
+    );
+    assert.strictEqual(pipeline.status, 200, JSON.stringify(pipeline.body));
+    assert.deepEqual(
+      vendor.requests.map((r) => r.path),
+      ['/echo/ping', '/echo/ping'],
+    );
+  });
+
+  test('the fingerprint is a fixed encoding of what reaches the vendor, whatever order members are written in', async function (assert) {
+    let slot = {
+      name: 'userKey',
+      key: 'userKey' as const,
+      placement: 'header' as const,
+      at: 'headers.authorization',
+    };
+    let request = {
+      method: 'POST' as const,
+      url: 'https://api.example.com/v1/repos/{owner}/issues',
+      destination: 'https://api.example.com/v1/repos/',
+      path: { owner: { $ref: 'params', key: 'owner' } },
+      query: { state: 'open' },
+      headers: {
+        authorization: 'Bearer {{userKey}}',
+        accept: 'application/json',
+      },
+      body: {
+        kind: 'json' as const,
+        value: { title: { $ref: 'params', key: 'title' }, labels: ['bug'] },
+      },
+      slots: [slot],
+    };
+    // Changing this value changes every stored binding's fingerprint, and so
+    // asks every owner to approve again. Change the encoding's version tag
+    // with it, deliberately.
+    assert.strictEqual(
+      fingerprintOf(bindingSnapshot(request as never, slot)),
+      'fc056eab8001f8eaabc7a318aa9c28e61bd951d2ca44d76cd5596ac3753e9f57',
+    );
+    let reordered = {
+      ...request,
+      headers: {
+        accept: 'application/json',
+        authorization: 'Bearer {{userKey}}',
+      },
+      body: {
+        value: { labels: ['bug'], title: { key: 'title', $ref: 'params' } },
+        kind: 'json' as const,
+      },
+    };
+    assert.strictEqual(
+      fingerprintOf(bindingSnapshot(reordered as never, slot)),
+      fingerprintOf(bindingSnapshot(request as never, slot)),
+      'member order does not change it',
+    );
+    assert.notStrictEqual(
+      fingerprintOf(
+        bindingSnapshot(
+          { ...request, query: { state: 'closed' } } as never,
+          slot,
+        ),
+      ),
+      fingerprintOf(bindingSnapshot(request as never, slot)),
+      'a query value does',
+    );
   });
 });

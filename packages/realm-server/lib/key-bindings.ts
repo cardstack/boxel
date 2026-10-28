@@ -1,8 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  logger,
   param,
   query,
+  RealmPaths,
+  rri,
+  trimExecutableExtension,
   type DBAdapter,
+  type LocalPath,
   type Querier,
 } from '@cardstack/runtime-common';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
@@ -15,7 +20,10 @@ import {
   type OperationCallApi,
   type OperationCore,
 } from '@cardstack/runtime-common/card-operations';
-import type { SecretsKeyring } from './secrets-at-rest/index.ts';
+import {
+  SecretDecryptionError,
+  type SecretsKeyring,
+} from './secrets-at-rest/index.ts';
 import type { SecureSessionClient } from './secure-session.ts';
 import { revokeBindingsIn } from './key-binding-revocation.ts';
 import {
@@ -109,6 +117,8 @@ export interface BindingSnapshot {
 
 const BINDING_COLUMNS = `id, realm_url, definition_url, export_name, operation_name, instance_url, slot, key_id, share_id, grant_id, approved_by, interactive, anonymous, fingerprint, approval_id, state`;
 
+const log = logger('realm:key-bindings');
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // The most operation slots one confirmation may approve.
@@ -143,7 +153,8 @@ export function slotToken(slot: Pick<CallApiSlot, 'key' | 'name'>): string {
   return slot.name === slot.key ? slot.key : `${slot.key}:${slot.name}`;
 }
 
-// JSON with every object's members in code-point order, so one template
+// JSON with every object's members in UTF-16 code-unit order (the order `<`
+// compares strings in), so one template
 // always encodes to the same text however its declaration was written.
 function canonicalJSON(value: unknown): string {
   if (value === undefined) {
@@ -220,7 +231,92 @@ export interface OperationApproval {
   expectedDestination: string;
   // What fills each slot being approved, by its token: one of the approver's
   // own keys for a `userKey` slot, a share in the realm for an `apiKey` slot.
-  slots: Record<string, { keyId?: string; shareId?: string }>;
+  // `expectedFingerprint` is the fingerprint of the request the approver was
+  // shown for that slot (`previewBindings`). Approving is refused when the
+  // operation sends anything else now, so an edit between showing a request
+  // and approving it — the key moved from a header into the body, say — is
+  // never approved unseen.
+  slots: Record<
+    string,
+    { keyId?: string; shareId?: string; expectedFingerprint?: string }
+  >;
+}
+
+function codeRefOf(type: { module: string; name: string }): CodeRef {
+  return { module: rri(type.module), name: type.name };
+}
+
+// The type an operation is bound through, as bindings record it and calls
+// look it up: the module resolved against the realm with any executable
+// extension trimmed, so `…/inbox` and `…/inbox.gts` name one type.
+export function bindingType(
+  core: Pick<OperationCore, 'resolveCodeRef'>,
+  codeRef: CodeRef,
+  relativeTo: URL,
+): { module: string; name: string } | undefined {
+  let resolved = core.resolveCodeRef(codeRef, relativeTo);
+  return resolved
+    ? {
+        module: trimExecutableExtension(String(resolved.module)),
+        name: resolved.name,
+      }
+    : undefined;
+}
+
+export interface SlotPreview {
+  slot: string;
+  key: CallApiSlot['key'];
+  snapshot: BindingSnapshot;
+  fingerprint: string;
+}
+
+// What approving an operation would record for each of its slots, read from
+// the definition cache now: the request as the approval screen shows it, and
+// the fingerprint an approval of it names as `expectedFingerprint`. Reads
+// nothing of anyone's keys.
+export async function previewBindings(
+  core: Pick<
+    OperationCore,
+    'resolveCodeRef' | 'definitionLookup' | 'readsRealmOf'
+  >,
+  {
+    realmURL,
+    codeRef,
+    operation,
+    caller,
+  }: { realmURL: URL; codeRef: CodeRef; operation: string; caller: string },
+): Promise<{
+  type: { module: string; name: string };
+  destination: string;
+  perInstance: boolean;
+  slots: SlotPreview[];
+}> {
+  let type = bindingType(core, codeRef, realmURL);
+  let definition = type
+    ? await lookupGrantOperation(
+        core,
+        realmURL,
+        codeRefOf(type),
+        operation,
+        caller,
+      )
+    : undefined;
+  let destination = operationGrantDestination(definition);
+  let request = definition!.callApi!;
+  return {
+    type: type!,
+    destination,
+    perInstance: request.perInstance === true,
+    slots: request.slots.map((slot) => {
+      let snapshot = bindingSnapshot(request, slot);
+      return {
+        slot: slotToken(slot),
+        key: slot.key,
+        snapshot,
+        fingerprint: fingerprintOf(snapshot),
+      };
+    }),
+  };
 }
 
 export interface ApprovedBinding {
@@ -292,12 +388,12 @@ export async function approveBindings(
     fills: { slot: CallApiSlot; keyId?: string; shareId?: string }[];
   }[] = [];
   for (let approval of operations) {
-    let resolved = core.resolveCodeRef(approval.codeRef, realmURL);
-    let definition = resolved
+    let type = bindingType(core, approval.codeRef, realmURL);
+    let definition = type
       ? await lookupGrantOperation(
           core,
           realmURL,
-          resolved,
+          codeRefOf(type),
           approval.operation,
           approver,
         )
@@ -336,6 +432,21 @@ export async function approveBindings(
           `slot ${token} is filled with a key or a share`,
         );
       }
+      if (typeof fill.expectedFingerprint !== 'string') {
+        throw new UserKeyError(
+          400,
+          `slot ${token} names the fingerprint of the request its approver was shown, as expectedFingerprint`,
+        );
+      }
+      if (
+        fill.expectedFingerprint !==
+        fingerprintOf(bindingSnapshot(request, slot))
+      ) {
+        throw new UserKeyError(
+          409,
+          `operation "${approval.operation}" sends another request than the one shown for slot ${token}; show it again`,
+        );
+      }
       if (slot.key === 'userKey') {
         if (typeof fill.keyId !== 'string' || fill.shareId !== undefined) {
           throw new UserKeyError(
@@ -355,7 +466,7 @@ export async function approveBindings(
       }
     }
     planned.push({
-      type: { module: String(resolved!.module), name: resolved!.name },
+      type: type!,
       operation: approval.operation,
       instance,
       request,
@@ -406,7 +517,30 @@ export async function approveBindings(
   return { batchId, approved };
 }
 
-// A card of the realm, as an operation approved per instance names it.
+// A card of the realm, as an operation approved per instance names it: the
+// URL an invocation on it is addressed by once the realm canonicalizes its
+// target (`canonicalizeTarget`), with the realm's root naming its index card
+// and a trailing slash, query or fragment naming what it hangs off. A card's
+// `.json` source names the card too. A prefix-form id is resolved to its URL
+// before this is called.
+export function canonicalInstance(realmURL: URL, instance: string): string {
+  let url: URL;
+  try {
+    url = new URL(instance);
+  } catch {
+    throw new UserKeyError(400, 'an instance is the id of a card');
+  }
+  let paths = new RealmPaths(realmURL);
+  let local: LocalPath;
+  try {
+    local = paths.local(url);
+  } catch {
+    throw new UserKeyError(400, 'an instance is a card in the realm');
+  }
+  local = local.replace(/\.json$/, '') as LocalPath;
+  return paths.fileURL(local === '' ? ('index' as LocalPath) : local).href;
+}
+
 function instanceIn(
   realmURL: URL,
   instance: unknown,
@@ -418,16 +552,7 @@ function instanceIn(
       `operation "${operation}" is approved per instance, so an approval of it names the card`,
     );
   }
-  let url: URL;
-  try {
-    url = new URL(instance);
-  } catch {
-    throw new UserKeyError(400, 'an instance is an absolute URL');
-  }
-  if (!url.href.startsWith(realmURL.href) || url.search || url.hash) {
-    throw new UserKeyError(400, 'an instance is a card in the realm');
-  }
-  return url.href.replace(/\.json$/, '');
+  return canonicalInstance(realmURL, instance);
 }
 
 // The key a share in the realm holds, for its key's owner to approve it with,
@@ -842,7 +967,7 @@ async function checkedBindings(
   let checked: { slot: CallApiSlot; row: Record<string, unknown> }[] = [];
   for (let slot of request.slots) {
     let [row] = await query(dbAdapter, [
-      `SELECT b.id, b.key_id, b.share_id, b.grant_id, b.approved_by, b.interactive, b.fingerprint, b.state, s.state AS share_state, s.key_id AS share_key_id
+      `SELECT b.id, b.key_id, b.share_id, b.grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state, s.state AS share_state, s.key_id AS share_key_id
          FROM key_bindings b LEFT JOIN key_shares s ON s.id = b.share_id
         WHERE b.realm_url = `,
       param(lookup.realmURL),
@@ -880,7 +1005,11 @@ async function checkedBindings(
     }
     let fingerprint = fingerprintOf(bindingSnapshot(request, slot));
     if (row.state === 'needs-reapproval' || row.fingerprint !== fingerprint) {
-      await markNeedsReapproval(dbAdapter, row.id as string);
+      await markNeedsReapproval(
+        dbAdapter,
+        row.id as string,
+        row.approval_id as string,
+      );
       throw refusal(
         409,
         'binding-needs-reapproval',
@@ -908,13 +1037,18 @@ async function checkedBindings(
 
 // Moves a binding to `needs-reapproval`, recording the notice its owner gets
 // only when this is the move: a binding already there is notified already.
+// Only the approval that was compared moves, so an owner approving again while
+// a call is checking the old approval keeps their new one.
 async function markNeedsReapproval(
   dbAdapter: DBAdapter,
   bindingId: string,
+  approvalId: string,
 ): Promise<void> {
   await query(dbAdapter, [
     `WITH moved AS (UPDATE key_bindings SET state = 'needs-reapproval', updated_at = NOW() WHERE id = `,
     param(bindingId),
+    ` AND approval_id = `,
+    param(approvalId),
     ` AND state <> 'needs-reapproval' RETURNING id, approved_by)
     INSERT INTO key_binding_notices (binding_id, owner, reason)
     SELECT id, approved_by, 'needs-reapproval' FROM moved`,
@@ -942,7 +1076,19 @@ export async function fillSlots(
         owner: row.approved_by as string,
         grantId: row.grant_id as string,
       });
-    } catch {
+    } catch (error) {
+      // A grant that is gone, or whose copy doesn't open, fills nothing: the
+      // binding is as good as unapproved. Anything else is a fault, not a
+      // refusal.
+      let unusable =
+        (error instanceof UserKeyError && error.status === 404) ||
+        error instanceof SecretDecryptionError;
+      log.warn(
+        `binding ${row.id} can't fill slot "${slot.name}": its grant ${unusable ? 'is unusable' : 'failed to open'} (${error instanceof Error ? error.name : 'unknown error'})`,
+      );
+      if (!unusable) {
+        throw error;
+      }
       throw new OperationFailure(
         notApproved(lookup.operation, lookup.request, lookup.realmURL),
       );
@@ -993,9 +1139,15 @@ export async function pipelineAdmission(
     payer: string;
   },
 ): Promise<OperationFailure | undefined> {
-  let resolved = core.resolveCodeRef(codeRef, realmURL);
-  let definition = resolved
-    ? await lookupGrantOperation(core, realmURL, resolved, operation, payer)
+  let type = bindingType(core, codeRef, realmURL);
+  let definition = type
+    ? await lookupGrantOperation(
+        core,
+        realmURL,
+        codeRefOf(type),
+        operation,
+        payer,
+      )
     : undefined;
   if (!definition || definition.base !== 'callApi' || !definition.callApi) {
     return new OperationFailure({
@@ -1017,9 +1169,9 @@ export async function pipelineAdmission(
   try {
     await checkedBindings(dbAdapter, {
       realmURL: realmURL.href,
-      type: { module: String(resolved!.module), name: resolved!.name },
+      type: type!,
       operation,
-      ...(instance ? { instance } : {}),
+      ...(instance ? { instance: canonicalInstance(realmURL, instance) } : {}),
       caller: payer,
       mode: 'pipeline',
       request: definition.callApi,
