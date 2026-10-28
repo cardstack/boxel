@@ -126,6 +126,55 @@ module('Integration | section-rail', function (hooks) {
       .hasAttribute('aria-expanded', 'false');
   });
 
+  test('a press with no hover opens the flyout, and a click after a hover closes it', async function (assert) {
+    let sections = new DashboardSections();
+    let shelf: DashboardSection = {
+      id: 'shelf',
+      label: 'Shelf',
+      icon: IconPlus,
+      flyout: ShelfFlyout,
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <section {{sections.register shelf}}></section>
+          <SectionRail @sections={{sections}} />
+        </template>
+      },
+    );
+
+    // As a screen reader's press arrives: a mouse's pointer events and click,
+    // with no hover before them.
+    await triggerEvent(
+      '[data-test-section-rail-entry="shelf"]',
+      'pointerdown',
+      {
+        pointerType: 'mouse',
+      },
+    );
+    await click('[data-test-section-rail-entry="shelf"]');
+    assert.dom('[data-test-section-rail-flyout="shelf"]').exists();
+
+    await click('[data-test-section-rail-entry="shelf"]');
+    assert
+      .dom('[data-test-section-rail-flyout]')
+      .doesNotExist('pressing again closes it');
+
+    await triggerEvent(
+      '[data-test-section-rail-item="shelf"]',
+      'pointerenter',
+      {
+        pointerType: 'mouse',
+      },
+    );
+    assert.dom('[data-test-section-rail-flyout="shelf"]').exists();
+    await click('[data-test-section-rail-entry="shelf"]');
+    assert
+      .dom('[data-test-section-rail-flyout]')
+      .doesNotExist('a mouse click after its hover closes it');
+  });
+
   test('a press outside the rail closes a flyout the pointer switched to', async function (assert) {
     let sections = new DashboardSections();
     let shelf: DashboardSection = {

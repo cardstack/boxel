@@ -38,8 +38,7 @@ function isTouch(event: Event) {
 
 // The dashboard's section rail: one entry per registered section, in page
 // order, with its count. An entry jumps to its section and is marked while
-// that section is being read; hovering one, or pressing it by tap or key,
-// opens its flyout.
+// that section is being read; hovering or pressing one opens its flyout.
 export default class SectionRail extends Component<Signature> {
   @tracked private openId: string | null = null;
   // Escape folds the rail back to its icons while focus stays on an entry;
@@ -69,7 +68,6 @@ export default class SectionRail extends Component<Signature> {
   private railElement: HTMLElement | null = null;
   private flyoutElement: HTMLElement | null = null;
 
-  // Pointer down, not up: a tap's focus lands before its pointer comes up.
   // A flyout opened by hover or a tap leaves focus on the page, so Escape is
   // heard from anywhere, and a press outside the rail closes an open flyout.
   // Inside the rail, the rail's own handler has already taken Escape. These
@@ -78,11 +76,9 @@ export default class SectionRail extends Component<Signature> {
   // listeners.
   private captureRail = modifier((element: HTMLElement) => {
     this.railElement = element;
-    element.addEventListener('pointerdown', this.onRailPointerDown);
     document.addEventListener('keydown', this.onKeydown);
     document.addEventListener('pointerdown', this.onPointerDownOutside);
     return () => {
-      element.removeEventListener('pointerdown', this.onRailPointerDown);
       document.removeEventListener('keydown', this.onKeydown);
       document.removeEventListener('pointerdown', this.onPointerDownOutside);
       this.railElement = null;
@@ -122,14 +118,6 @@ export default class SectionRail extends Component<Signature> {
   @action private showFlyout(section: DashboardSection) {
     this.flyoutIntentTask.cancelAll();
     this.openId = section.flyout ? section.id : null;
-  }
-
-  // What pressed an entry last. A tap or a key has no hover to open the
-  // flyout, so its click toggles it.
-  private lastInput: 'mouse' | 'touch' | 'keyboard' = 'mouse';
-
-  @action private onRailPointerDown(event: Event) {
-    this.lastInput = isTouch(event) ? 'touch' : 'mouse';
   }
 
   @action private onPointerDownOutside(event: Event) {
@@ -213,7 +201,6 @@ export default class SectionRail extends Component<Signature> {
   // Escape closes an open flyout, then folds the rail, and goes no further
   // than the rail.
   @action private onKeydown(event: Event) {
-    this.lastInput = 'keyboard';
     if ((event as KeyboardEvent).key !== 'Escape') {
       return;
     }
@@ -238,16 +225,14 @@ export default class SectionRail extends Component<Signature> {
     this.openId = null;
   }
 
-  // A click jumps to the section. With a mouse, whose hover opened the
-  // flyout, it closes the flyout too; a tap or a key, which have no hover,
-  // toggle it.
-  @action private jumpTo(section: DashboardSection, event: Event) {
-    let toggles = this.lastInput !== 'mouse' || isTouch(event);
+  // A click jumps to the section and toggles its flyout. A mouse's hover has
+  // already opened it, so its click closes it; a tap, a key, or a screen
+  // reader's press, which no click can tell apart from a mouse's, has no
+  // hover, so its click opens it.
+  @action private jumpTo(section: DashboardSection) {
     this.flyoutIntentTask.cancelAll();
     this.openId =
-      toggles && section.flyout && this.openId !== section.id
-        ? section.id
-        : null;
+      section.flyout && this.openId !== section.id ? section.id : null;
     this.args.sections.scrollTo(section.id);
   }
 

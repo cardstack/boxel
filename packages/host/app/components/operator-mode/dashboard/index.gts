@@ -252,7 +252,7 @@ export default class Dashboard extends Component<Signature> {
   }
 
   @cached
-  private get listedFavoriteRealmIdentifiers() {
+  private get listedFavorites() {
     return listedFavoriteRealmIdentifiers(
       this.matrixService.workspaceFavorites,
       this.realmServer.userRealmIdentifiers,
@@ -262,7 +262,7 @@ export default class Dashboard extends Component<Signature> {
 
   @cached
   private get favoriteRealmIdentifiers() {
-    return this.filterByScope(this.listedFavoriteRealmIdentifiers);
+    return this.filterByScope(this.listedFavorites);
   }
 
   // Only desks show Cards / Files / Definitions counts, so they are
@@ -278,7 +278,7 @@ export default class Dashboard extends Component<Signature> {
     if (this.favoriteRealmIdentifiers.length > 0) {
       return null;
     }
-    return this.listedFavoriteRealmIdentifiers.length === 0
+    return this.listedFavorites.length === 0
       ? 'You have no favorites yet'
       : 'No matching results';
   }

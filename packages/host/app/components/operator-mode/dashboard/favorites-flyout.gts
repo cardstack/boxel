@@ -149,6 +149,7 @@ export default class FavoritesFlyout extends Component<SectionFlyoutSignature> {
         flex-shrink: 0;
         padding: var(--boxel-sp-6xs) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius-lg);
+        background-color: var(--boxel-dark-40);
         color: var(--boxel-lime);
         font-family: var(--boxel-monospace-font-family);
         font-size: var(--boxel-font-size-2xs);
