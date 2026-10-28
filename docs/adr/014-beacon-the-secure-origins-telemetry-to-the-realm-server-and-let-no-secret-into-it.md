@@ -57,8 +57,9 @@ address, or an IPv6 /64), sized for the busiest page's traffic.
 ### 1.3. Nothing sensitive leaves a page
 
 The instrument MUST record a request only as an endpoint label from a fixed
-list, its method, status, timing, size and correlation id, and MUST NOT read a
-request's or response's headers or body. A path segment that can carry an id
+list, its method, status, timing, size and correlation id. It MUST NOT read a
+request's or response's body, nor any header but the response's
+`Content-Length`, which gives its size. A path segment that can carry an id
 MUST be matched, never copied, and a query string MUST NOT be read. A page
 MUST be named by a label from a fixed list, never by its address. An error's
 message MUST be scrubbed before it is recorded: a refused request's message

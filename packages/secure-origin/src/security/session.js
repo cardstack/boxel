@@ -32,9 +32,9 @@ const RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000;
 // fields load `session.js` too and never start it.
 //
 // The observer is told the request's URL, method, status, duration and
-// response size, and the correlation id it was sent with. Never its headers or
-// body, nor the response's: the telemetry reduces the URL to a fixed label
-// before it records anything.
+// response size, and the correlation id it was sent with. Never a body, and no
+// header but the response's `Content-Length`, which gives the size: the
+// telemetry reduces the URL to a fixed label before it records anything.
 
 // The realm server writes this id on its `realm:requests` log line, so a
 // request's telemetry joins to the server's record of it. Only the realm
