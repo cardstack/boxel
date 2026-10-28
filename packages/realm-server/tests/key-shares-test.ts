@@ -275,6 +275,7 @@ module(basename(import.meta.filename), function () {
             suspendedAt: null,
             createdAt: attributes.createdAt,
             updatedAt: attributes.updatedAt,
+            operations: [],
           },
         ],
         `another writer sees the share's owner and state, not its key`,

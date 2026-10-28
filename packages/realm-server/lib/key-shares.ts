@@ -68,6 +68,18 @@ export interface KeyShare {
   suspendedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // In a realm's listing: the operations the share is approved for there,
+  // one per binding, so the realm's writers see what each share is used by.
+  operations?: KeyShareOperation[];
+}
+
+export interface KeyShareOperation {
+  bindingId: string;
+  type: { module: string; name: string };
+  operation: string;
+  instance: string | null;
+  slot: string;
+  state: 'active' | 'needs-reapproval' | 'suspended';
 }
 
 export interface KeyShareNotice {
@@ -607,7 +619,37 @@ export async function listRealmShares(
         ` ORDER BY label`,
       ]),
   );
-  return rows.map((row) => toShare(row, { withKey: row.owner === user }));
+  let operations = new Map<string, KeyShareOperation[]>();
+  if (rows.length > 0) {
+    let bindings = await query(dbAdapter, [
+      `SELECT id, share_id, definition_url, export_name, operation_name, instance_url, slot, state FROM key_bindings WHERE share_id IN (`,
+      ...rows.flatMap((row, i) => [
+        ...(i > 0 ? [', '] : []),
+        param(row.id as string),
+      ]),
+      `) ORDER BY definition_url, export_name, operation_name, instance_url NULLS FIRST, slot`,
+    ]);
+    for (let binding of bindings) {
+      let shareId = binding.share_id as string;
+      let list = operations.get(shareId) ?? [];
+      list.push({
+        bindingId: binding.id as string,
+        type: {
+          module: binding.definition_url as string,
+          name: binding.export_name as string,
+        },
+        operation: binding.operation_name as string,
+        instance: (binding.instance_url as string | null) ?? null,
+        slot: binding.slot as string,
+        state: binding.state as KeyShareOperation['state'],
+      });
+      operations.set(shareId, list);
+    }
+  }
+  return rows.map((row) => ({
+    ...toShare(row, { withKey: row.owner === user }),
+    operations: operations.get(row.id as string) ?? [],
+  }));
 }
 
 // The notices recorded when one of a realm's shares was suspended, or when

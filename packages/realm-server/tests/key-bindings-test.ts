@@ -703,6 +703,23 @@ module(basename(import.meta.filename), function (hooks) {
       approval('shared', { apiKey: { shareId: share.id } }),
     ]);
     let bindingId = approved.body.data[0].id;
+    let listed = await request
+      .get(`/_key-shares?realm=${encodeURIComponent(realmURL.href)}`)
+      .set('Authorization', await secureSessionAuth(dbAdapter, WRITER));
+    assert.deepEqual(
+      listed.body.data[0].attributes.operations,
+      [
+        {
+          bindingId,
+          type: { module: String(INBOX.module), name: INBOX.name },
+          operation: 'shared',
+          instance: null,
+          slot: 'apiKey',
+          state: 'active',
+        },
+      ],
+      "the realm's writers see what the share is approved for",
+    );
 
     await dbAdapter.execute(
       `UPDATE realm_user_permissions SET write = false WHERE realm_url = $1 AND username = $2`,
