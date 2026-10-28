@@ -25,12 +25,13 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
-import { logger, ri } from '@cardstack/runtime-common';
+import { logger } from '@cardstack/runtime-common';
 
 import { catalogRealmURL, leadWith } from '@cardstack/host/lib/utils';
 import {
   isHostedRealm,
   listedCatalogRealmURLs,
+  listedFavoriteRealmIdentifiers,
   sortByCreatedAtDesc,
   unreachableRealmServersMessage,
 } from '@cardstack/host/lib/workspace-list';
@@ -250,17 +251,13 @@ export default class Dashboard extends Component<Signature> {
     );
   }
 
-  // Favorites outside the listed workspaces and catalogs (archived or removed
-  // realms) aren't shown.
   @cached
   private get listedFavoriteRealmIdentifiers() {
-    let listedURLs = new Set<string>([
-      ...this.realmServer.userRealmIdentifiers,
-      ...this.catalogRealmIdentifiers,
-    ]);
-    return this.matrixService.workspaceFavorites
-      .filter((url) => listedURLs.has(url))
-      .map(ri);
+    return listedFavoriteRealmIdentifiers(
+      this.matrixService.workspaceFavorites,
+      this.realmServer.userRealmIdentifiers,
+      this.realmServer.displayedCatalogRealmIdentifiers,
+    );
   }
 
   @cached
@@ -510,7 +507,7 @@ export default class Dashboard extends Component<Signature> {
   <template>
     {{! template-lint-disable no-invalid-interactive }}
     <section
-      class='dashboard'
+      class={{cn 'dashboard' is-compact=@sections.isCompact}}
       aria-label='Dashboard'
       data-theme='dark'
       {{on 'keydown' this.cursor.onKeydown}}
@@ -1234,23 +1231,21 @@ export default class Dashboard extends Component<Signature> {
           --dashboard-gutter: 1rem;
         }
       }
-      /* Below 80rem, where the section rail stays as icons, the page
-         tightens too: less room above and between its parts, and a smaller,
-         lighter greeting. */
-      @container dashboard (width < 80rem) {
-        .dashboard-page {
-          --dashboard-page-padding-top: calc(
-            var(--dashboard-top-bar-clearance) + var(--boxel-sp-xs)
-          );
-          gap: var(--boxel-sp-2xl);
-        }
-        .page-head {
-          gap: var(--boxel-sp-xs);
-        }
-        .greeting {
-          --dashboard-greeting-font-size: var(--boxel-font-size-lg);
-          --dashboard-greeting-font-weight: 400;
-        }
+      /* Compact, where the section rail stays as icons, the page tightens
+         too: less room above and between its parts, and a smaller, lighter
+         greeting. */
+      .is-compact .dashboard-page {
+        --dashboard-page-padding-top: calc(
+          var(--dashboard-top-bar-clearance) + var(--boxel-sp-xs)
+        );
+        gap: var(--boxel-sp-2xl);
+      }
+      .is-compact .page-head {
+        gap: var(--boxel-sp-xs);
+      }
+      .is-compact .greeting {
+        --dashboard-greeting-font-size: var(--boxel-font-size-lg);
+        --dashboard-greeting-font-weight: 400;
       }
       /* One tile per row, filling the dashboard's width. */
       @media (prefers-reduced-motion: reduce) {

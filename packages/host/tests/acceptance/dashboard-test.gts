@@ -1488,6 +1488,20 @@ module('Acceptance | dashboard', function (hooks) {
         matrixService.workspaceFavorites = [realmURL];
       }
 
+      // As a browser does for Enter on a focused button: the key, then its
+      // click.
+      async function pressEntry() {
+        await focus(ENTRY);
+        await triggerKeyEvent(ENTRY, 'keydown', 'Enter');
+        await click(ENTRY);
+      }
+
+      function openCardIds() {
+        return (
+          getService('operator-mode-state-service') as OperatorModeStateService
+        ).getOpenCardIds();
+      }
+
       test('lists the sections that register, and marks the one being read', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
 
@@ -1507,11 +1521,16 @@ module('Acceptance | dashboard', function (hooks) {
         assert.dom(ENTRY).hasAttribute('aria-current', 'location');
       });
 
-      test('focusing the Workspaces entry opens its flyout of favorites, and a favorite opens its workspace', async function (assert) {
+      test('pressing Enter on the Workspaces entry opens its flyout of favorites, and a favorite opens its workspace', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
         favoriteWorkspaceA();
 
         await focus(ENTRY);
+        assert
+          .dom(FLYOUT)
+          .doesNotExist('focus alone leaves it closed, so Tab passes the rail');
+
+        await pressEntry();
 
         assert.dom(ENTRY).hasAttribute('aria-expanded', 'true');
         assert.dom(FLYOUT).exists();
@@ -1539,7 +1558,7 @@ module('Acceptance | dashboard', function (hooks) {
       test('with no favorites, the flyout says how to add one', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
 
-        await focus(ENTRY);
+        await pressEntry();
 
         assert
           .dom(`${FLYOUT} [data-test-section-rail-favorites-empty]`)
@@ -1547,9 +1566,12 @@ module('Acceptance | dashboard', function (hooks) {
       });
 
       test('Escape closes the flyout with focus back on its entry, then folds the rail', async function (assert) {
-        await visitOperatorMode({ workspaceChooserOpened: true });
+        await visitOperatorMode({
+          workspaceChooserOpened: true,
+          stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+        });
         favoriteWorkspaceA();
-        await focus(ENTRY);
+        await pressEntry();
         await focus(
           `${FLYOUT} [data-test-section-rail-favorite="Workspace A"]`,
         );
@@ -1574,7 +1596,11 @@ module('Acceptance | dashboard', function (hooks) {
             'the second Escape folds the rail to its icons',
           );
         assert.dom(ENTRY).isFocused('focus stays on the entry');
-        assert.dom('[data-test-dashboard]').exists('Escape stays in the rail');
+        assert.deepEqual(
+          openCardIds(),
+          [`${realmURL}index`],
+          'Escape stays in the rail, so the card behind the dashboard stays open',
+        );
       });
 
       test('a tap on an entry toggles its flyout, and a tap outside the rail closes it', async function (assert) {
@@ -1601,7 +1627,10 @@ module('Acceptance | dashboard', function (hooks) {
       });
 
       test('Escape closes a flyout opened by hover while focus is elsewhere on the page', async function (assert) {
-        await visitOperatorMode({ workspaceChooserOpened: true });
+        await visitOperatorMode({
+          workspaceChooserOpened: true,
+          stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+        });
         await triggerEvent(
           '[data-test-section-rail-item="workspaces"]',
           'pointerenter',
@@ -1614,7 +1643,11 @@ module('Acceptance | dashboard', function (hooks) {
         await triggerKeyEvent(document.body, 'keydown', 'Escape');
 
         assert.dom(FLYOUT).doesNotExist();
-        assert.dom('[data-test-dashboard]').exists();
+        assert.deepEqual(
+          openCardIds(),
+          [`${realmURL}index`],
+          'the card behind the dashboard stays open',
+        );
       });
 
       test('a flyout stays open while the pointer comes back within the grace period, and closes once it has passed', async function (assert) {

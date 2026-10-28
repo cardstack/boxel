@@ -40,12 +40,17 @@ const READING_LINE = 0.35;
 // to the scroll-spy after a jump.
 const USER_SCROLL_EVENTS = ['wheel', 'touchstart', 'keydown', 'pointerdown'];
 
+// Below this width the dashboard tightens its page and the rail stays as
+// icons. One measure of the scroller decides both, so they never disagree.
+const COMPACT_WIDTH_REM = 80;
+
 // The dashboard's sections, in page order, and the one being read. Sections
 // register with `register`, the page's scroller with `trackScroller`, and the
 // rail reads `sections` and `currentId` and jumps with `scrollTo`.
 export default class DashboardSections {
   @tracked private registrations: Registration[] = [];
   @tracked private spiedId: string | undefined;
+  @tracked isCompact = false;
 
   private scroller: HTMLElement | null = null;
 
@@ -54,8 +59,7 @@ export default class DashboardSections {
   // passes over the sections between.
   private heldId: string | undefined;
 
-  // In page order, which a section that moves (as Catalogs will, ahead of
-  // Workspaces for a new user) follows without registering again.
+  // In page order, so a section that moves follows without registering again.
   get sections(): DashboardSection[] {
     return this.ordered.map(({ section }) => section);
   }
@@ -108,7 +112,11 @@ export default class DashboardSections {
     }
     // A resize, or a section growing or shrinking, moves the sections
     // without a scroll.
-    let resizeObserver = new ResizeObserver(onScroll);
+    let resizeObserver = new ResizeObserver(() => {
+      this.readCompact();
+      this.readCurrentSection();
+    });
+    schedule('afterRender', () => this.readCompact());
     resizeObserver.observe(scroller);
     if (scroller.firstElementChild) {
       resizeObserver.observe(scroller.firstElementChild);
@@ -145,6 +153,17 @@ export default class DashboardSections {
       this.scroller.scrollTo({ top: 0, behavior });
     } else {
       registration.element.scrollIntoView({ behavior, block: 'start' });
+    }
+  }
+
+  private readCompact() {
+    if (!this.scroller) {
+      return;
+    }
+    let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    let isCompact = this.scroller.offsetWidth < COMPACT_WIDTH_REM * rem;
+    if (isCompact !== this.isCompact) {
+      this.isCompact = isCompact;
     }
   }
 

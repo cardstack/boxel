@@ -38,7 +38,8 @@ function isTouch(event: Event) {
 
 // The dashboard's section rail: one entry per registered section, in page
 // order, with its count. An entry jumps to its section and is marked while
-// that section is being read; hovering or focusing one opens its flyout.
+// that section is being read; hovering one, or pressing it by tap or key,
+// opens its flyout.
 export default class SectionRail extends Component<Signature> {
   @tracked private openId: string | null = null;
   // Escape folds the rail back to its icons while focus stays on an entry;
@@ -69,26 +70,28 @@ export default class SectionRail extends Component<Signature> {
   private flyoutElement: HTMLElement | null = null;
 
   // Pointer down, not up: a tap's focus lands before its pointer comes up.
+  // A flyout opened by hover or a tap leaves focus on the page, so Escape is
+  // heard from anywhere, and a press outside the rail closes an open flyout.
+  // Inside the rail, the rail's own handler has already taken Escape. These
+  // live on the rail, not the flyout: switching flyouts installs the next
+  // one before the last one's teardown runs, which would remove the shared
+  // listeners.
   private captureRail = modifier((element: HTMLElement) => {
     this.railElement = element;
     element.addEventListener('pointerdown', this.onRailPointerDown);
+    document.addEventListener('keydown', this.onKeydown);
+    document.addEventListener('pointerdown', this.onPointerDownOutside);
     return () => {
       element.removeEventListener('pointerdown', this.onRailPointerDown);
+      document.removeEventListener('keydown', this.onKeydown);
+      document.removeEventListener('pointerdown', this.onPointerDownOutside);
       this.railElement = null;
     };
   });
 
-  // A flyout opened by hover or a tap leaves focus on the page, so Escape is
-  // heard from anywhere while one is open, and a press outside the rail
-  // closes it. Inside the rail, the rail's own handler has already taken
-  // Escape.
   private captureFlyout = modifier((element: HTMLElement) => {
     this.flyoutElement = element;
-    document.addEventListener('keydown', this.onKeydown);
-    document.addEventListener('pointerdown', this.onPointerDownOutside);
     return () => {
-      document.removeEventListener('keydown', this.onKeydown);
-      document.removeEventListener('pointerdown', this.onPointerDownOutside);
       if (this.flyoutElement === element) {
         this.flyoutElement = null;
       }
@@ -121,24 +124,16 @@ export default class SectionRail extends Component<Signature> {
     this.openId = section.flyout ? section.id : null;
   }
 
-  // Focus moved onto an entry by Escape returns there without reopening it.
-  private isReturningFocus = false;
-  // A tap can focus the entry it lands on (Safari doesn't); its click
-  // decides the flyout instead, so the focus doesn't open it first.
-  private isTapping = false;
-
-  @action private onEntryFocus(section: DashboardSection) {
-    if (!this.isReturningFocus && !this.isTapping) {
-      this.showFlyout(section);
-    }
-  }
+  // What pressed an entry last. A tap or a key has no hover to open the
+  // flyout, so its click toggles it.
+  private lastInput: 'mouse' | 'touch' | 'keyboard' = 'mouse';
 
   @action private onRailPointerDown(event: Event) {
-    this.isTapping = isTouch(event);
+    this.lastInput = isTouch(event) ? 'touch' : 'mouse';
   }
 
   @action private onPointerDownOutside(event: Event) {
-    if (!this.railElement?.contains(event.target as Node)) {
+    if (this.openId && !this.railElement?.contains(event.target as Node)) {
       this.closeFlyout();
     }
   }
@@ -218,8 +213,7 @@ export default class SectionRail extends Component<Signature> {
   // Escape closes an open flyout, then folds the rail, and goes no further
   // than the rail.
   @action private onKeydown(event: Event) {
-    // Keys mean the keyboard is in use, so focus opens flyouts again.
-    this.isTapping = false;
+    this.lastInput = 'keyboard';
     if ((event as KeyboardEvent).key !== 'Escape') {
       return;
     }
@@ -239,21 +233,21 @@ export default class SectionRail extends Component<Signature> {
       let entry = this.railElement?.querySelector<HTMLElement>(
         `[data-section-rail-entry="${openId}"]`,
       );
-      this.isReturningFocus = true;
       entry?.focus();
-      this.isReturningFocus = false;
     }
     this.openId = null;
   }
 
   // A click jumps to the section. With a mouse, whose hover opened the
-  // flyout, it closes the flyout too; a tap, which has no hover, toggles it.
+  // flyout, it closes the flyout too; a tap or a key, which have no hover,
+  // toggle it.
   @action private jumpTo(section: DashboardSection, event: Event) {
-    let isTap = this.isTapping || isTouch(event);
-    this.isTapping = false;
+    let toggles = this.lastInput !== 'mouse' || isTouch(event);
     this.flyoutIntentTask.cancelAll();
     this.openId =
-      isTap && section.flyout && this.openId !== section.id ? section.id : null;
+      toggles && section.flyout && this.openId !== section.id
+        ? section.id
+        : null;
     this.args.sections.scrollTo(section.id);
   }
 
@@ -266,7 +260,11 @@ export default class SectionRail extends Component<Signature> {
     {{! Escape closes the flyout from any control inside the rail. }}
     {{! template-lint-disable no-invalid-interactive }}
     <nav
-      class={{cn 'section-rail' is-folded=this.isFolded}}
+      class={{cn
+        'section-rail'
+        is-folded=this.isFolded
+        is-compact=@sections.isCompact
+      }}
       aria-label='Dashboard sections'
       data-theme='dark'
       data-dashboard-rail
@@ -295,13 +293,12 @@ export default class SectionRail extends Component<Signature> {
           >
             <Button
               class={{cn 'rail-button' is-current=isCurrent}}
-              @tone={{if isCurrent 'primary' 'neutral'}}
+              @tone={{if isOpen 'neutral' (if isCurrent 'primary' 'neutral')}}
               @appearance={{if isOpen 'filled' 'plain'}}
               aria-current={{if isCurrent 'location'}}
               aria-expanded={{if section.flyout (if isOpen 'true' 'false')}}
               aria-controls={{if isOpen (this.flyoutId section.id)}}
               data-section-rail-entry={{section.id}}
-              {{on 'focus' (fn this.onEntryFocus section)}}
               {{on 'click' (fn this.jumpTo section)}}
               data-test-section-rail-entry={{section.id}}
             >
@@ -396,19 +393,20 @@ export default class SectionRail extends Component<Signature> {
         transition: width 180ms var(--_rail-ease);
       }
       /* Labels and counts slide out over the page on hover or focus; the
-         icons hold still. */
-      .section-rail:is(:hover, :focus-within) {
+         icons hold still. A touch screen's hover sticks after a tap, so only
+         a pointer that can hover opens the rail by it. */
+      @media (hover: hover) {
+        .section-rail:hover {
+          width: var(--_rail-open-width);
+        }
+      }
+      .section-rail:focus-within {
         width: var(--_rail-open-width);
       }
-      .section-rail.is-folded {
-        width: var(--_rail-closed-width);
-      }
-      /* Below 80rem the page has no room to spare, so the rail stays as
+      /* A compact dashboard has no room to spare, so the rail stays as
          icons; a flyout still opens beside it. */
-      @media (width < 80rem) {
-        .section-rail:is(:hover, :focus-within) {
-          width: var(--_rail-closed-width);
-        }
+      .section-rail:is(.is-folded, .is-compact) {
+        width: var(--_rail-closed-width);
       }
 
       .rail-item {
@@ -426,7 +424,7 @@ export default class SectionRail extends Component<Signature> {
       }
       /* The section being read. The filled wordmark above already says which
          screen this is, so the rail marks its section with a ring, never a
-         second fill. */
+         second fill; an open entry's fill is the neutral one. */
       .rail-button.is-current {
         box-shadow: inset 0 0 0 1.5px var(--_rail-ring);
       }
@@ -458,8 +456,13 @@ export default class SectionRail extends Component<Signature> {
       }
 
       .flyout {
-        /* A phone leaves the flyout the width past the rail. */
-        --_flyout-width: min(20rem, 100vw - 6rem);
+        /* The viewport, not a container: the rail stands outside the
+           dashboard. A phone leaves the flyout the width past the rail. */
+        --_flyout-width: min(
+          20rem,
+          100vw - var(--_rail-closed-width) + var(--_rail-pad) -
+            var(--boxel-sp-sm) - 2 * var(--operator-mode-spacing)
+        );
         --_flyout-max-height: 26rem;
         position: absolute;
         top: calc(-1 * var(--_rail-pad));
@@ -476,6 +479,7 @@ export default class SectionRail extends Component<Signature> {
         width: var(--_flyout-width);
         max-height: var(--_flyout-max-height);
         overflow-y: auto;
+        overscroll-behavior: contain;
         box-sizing: border-box;
         padding: var(--boxel-sp-xs);
         border: 1px solid var(--boxel-light-10);

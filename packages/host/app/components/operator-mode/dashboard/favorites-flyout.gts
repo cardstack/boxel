@@ -12,7 +12,7 @@ import { cssVar } from '@cardstack/boxel-ui/helpers';
 
 import {
   isHostedRealm,
-  listedCatalogRealmURLs,
+  listedFavoriteRealmIdentifiers,
 } from '@cardstack/host/lib/workspace-list';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -31,25 +31,21 @@ export default class FavoritesFlyout extends Component<SectionFlyoutSignature> {
 
   @cached
   private get favorites() {
-    let listedURLs = new Set<string>([
-      ...this.realmServer.userRealmIdentifiers,
-      ...listedCatalogRealmURLs(
-        this.realmServer.displayedCatalogRealmIdentifiers,
-      ),
-    ]);
-    return this.matrixService.workspaceFavorites
-      .filter((url) => listedURLs.has(url))
-      .map((url) => {
-        let info = this.realm.info(url);
-        return {
-          url,
-          info,
-          isHosted: isHostedRealm(info),
-          wallpaper: info.backgroundURL
-            ? `url("${info.backgroundURL}")`
-            : undefined,
-        };
-      });
+    return listedFavoriteRealmIdentifiers(
+      this.matrixService.workspaceFavorites,
+      this.realmServer.userRealmIdentifiers,
+      this.realmServer.displayedCatalogRealmIdentifiers,
+    ).map((url) => {
+      let info = this.realm.info(url);
+      return {
+        url,
+        info,
+        isHosted: isHostedRealm(info),
+        wallpaper: info.backgroundURL
+          ? `url("${info.backgroundURL}")`
+          : undefined,
+      };
+    });
   }
 
   @action private async openWorkspace(url: string) {
@@ -148,22 +144,20 @@ export default class FavoritesFlyout extends Component<SectionFlyoutSignature> {
         font-size: var(--boxel-font-size-sm);
         font-weight: 600;
       }
-      /* Lime is Hosted's color everywhere on the dashboard. */
+      /* The workspace tile's Hosted pill: lime, with its dot. */
       .hosted-chip {
         flex-shrink: 0;
-        padding: 0 var(--boxel-sp-4xs);
-        border-radius: var(--boxel-border-radius-sm);
-        background-color: color-mix(
-          in oklch,
-          var(--boxel-lime) 14%,
-          transparent
-        );
+        padding: var(--boxel-sp-6xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-lg);
         color: var(--boxel-lime);
         font-family: var(--boxel-monospace-font-family);
         font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
         letter-spacing: 0.1em;
         text-transform: uppercase;
+      }
+      .hosted-chip::before {
+        content: '● ' / '';
       }
       .flyout-empty {
         margin: 0;

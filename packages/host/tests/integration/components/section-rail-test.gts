@@ -1,5 +1,12 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { find, findAll, focus } from '@ember/test-helpers';
+import {
+  click,
+  find,
+  findAll,
+  focus,
+  triggerEvent,
+  triggerKeyEvent,
+} from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -85,10 +92,83 @@ module('Integration | section-rail', function (hooks) {
       .doesNotExist('a count of zero shows none');
 
     await focus('[data-test-section-rail-entry="shelf"]');
+    assert
+      .dom('[data-test-section-rail-flyout]')
+      .doesNotExist('focus alone leaves the flyout closed');
+
+    // As a browser does for Enter on a button: the key, then its click.
+    await triggerKeyEvent(
+      '[data-test-section-rail-entry="shelf"]',
+      'keydown',
+      'Enter',
+    );
+    await click('[data-test-section-rail-entry="shelf"]');
+    assert
+      .dom('[data-test-section-rail-entry="shelf"]')
+      .hasAttribute('aria-expanded', 'true');
     let flyout = find('[data-test-section-rail-flyout="shelf"]')!;
     let title = document.getElementById(
       flyout.getAttribute('aria-labelledby')!,
     );
     assert.strictEqual(title?.textContent, 'Shelf picks');
+
+    await triggerKeyEvent(
+      '[data-test-section-rail-entry="shelf"]',
+      'keydown',
+      'Enter',
+    );
+    await click('[data-test-section-rail-entry="shelf"]');
+    assert
+      .dom('[data-test-section-rail-flyout]')
+      .doesNotExist('pressing Enter again closes it');
+    assert
+      .dom('[data-test-section-rail-entry="shelf"]')
+      .hasAttribute('aria-expanded', 'false');
+  });
+
+  test('a press outside the rail closes a flyout the pointer switched to', async function (assert) {
+    let sections = new DashboardSections();
+    let shelf: DashboardSection = {
+      id: 'shelf',
+      label: 'Shelf',
+      icon: IconPlus,
+      flyout: ShelfFlyout,
+    };
+    let notes: DashboardSection = {
+      id: 'notes',
+      label: 'Notes',
+      icon: IconPlus,
+      flyout: ShelfFlyout,
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <section {{sections.register shelf}}></section>
+          <section {{sections.register notes}}></section>
+          <SectionRail @sections={{sections}} />
+          <div data-test-outside></div>
+        </template>
+      },
+    );
+
+    await triggerEvent(
+      '[data-test-section-rail-item="shelf"]',
+      'pointerenter',
+      {
+        pointerType: 'mouse',
+      },
+    );
+    await triggerEvent(
+      '[data-test-section-rail-item="notes"]',
+      'pointerenter',
+      {
+        pointerType: 'mouse',
+      },
+    );
+    assert.dom('[data-test-section-rail-flyout="notes"]').exists();
+
+    await triggerEvent('[data-test-outside]', 'pointerdown');
+    assert.dom('[data-test-section-rail-flyout]').doesNotExist();
   });
 });
