@@ -600,7 +600,9 @@ module('Acceptance | dashboard', function (hooks) {
       assert
         .dom(star)
         .hasAttribute('aria-label', 'Favorite')
-        .hasAttribute('aria-pressed', 'false');
+        .hasAttribute('aria-pressed', 'false')
+        .hasAttribute('aria-describedby', find(tip)!.id)
+        .doesNotHaveAttribute('title', 'no native tooltip over the tip');
       assert.dom(tip).hasText('Add to Favorites');
 
       await click(star);
