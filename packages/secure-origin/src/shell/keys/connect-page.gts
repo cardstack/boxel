@@ -244,10 +244,17 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
       let context = request
         ? ((await windowContext(config, request)) as WindowContext)
         : undefined;
-      let clients = await connectableClients(config, {
-        realm: context?.realm.url,
-        destination: context?.operation?.destination?.href,
-      });
+      // A reconnect signs in through the connection's own client, wherever
+      // it is shared, so only that one is offered.
+      let clients = await connectableClients(
+        config,
+        this.opened.reconnect
+          ? { reconnect: this.opened.reconnect }
+          : {
+              realm: context?.realm.url,
+              destination: context?.operation?.destination?.href,
+            },
+      );
       this.page.state = { name: 'choosing', clients, context, connection };
       let client = connection?.oauth?.connection?.client;
       let same = client

@@ -489,6 +489,11 @@ export interface OutboundRequest {
   // response, since a filled value can sit in the body or a header that a
   // redirect would carry on.
   substitutions?: OutboundSubstitution[];
+  // Never follow a redirect to another origin: the redirect itself is the
+  // response. For a request whose body or headers carry a secret the caller
+  // put there itself, such as a token request's client secret or refresh
+  // token, which a 307 or 308 would otherwise resend wherever it points.
+  sameOriginOnly?: boolean;
   // Every form of the attached credential is registered here, and the
   // response comes back with each registered value removed. A caller that
   // sends a credential some other way (substituted into the body, or a
@@ -731,7 +736,8 @@ async function send(
     scrubber,
   );
   let url = attached.url;
-  let carriesSubstitutions = (request.substitutions?.length ?? 0) > 0;
+  let staysOnOrigin =
+    (request.substitutions?.length ?? 0) > 0 || request.sameOriginOnly === true;
 
   for (let hop = 0; ; hop++) {
     let current = checkDestination(url);
@@ -758,7 +764,7 @@ async function send(
     if (
       !REDIRECT_STATUSES.has(response.status) ||
       !location ||
-      (carriesSubstitutions && leavesOrigin(location, current))
+      (staysOnOrigin && leavesOrigin(location, current))
     ) {
       let observed = observeResponseSize(response, {
         destination: recordedURL(request.url),

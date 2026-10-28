@@ -169,6 +169,7 @@ import {
 } from './handlers/handle-secure-window.ts';
 import {
   handleAddPlatformClient,
+  handleCompleteConnect,
   handleDeletePlatformClient,
   handleListConnectableClients,
   handleListPlatformClients,
@@ -483,8 +484,13 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleStartConnect(args),
   );
-  // The vendor sends the person here with no Boxel session; the `state` it
-  // carries back names whose sign-in it finishes.
+  router.post(
+    `${OAUTH_PATH}/connections/complete`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleCompleteConnect(args),
+  );
+  // The vendor sends the person here with no Boxel session; it only hands
+  // the code on to the secure window, which finishes under its own session.
   router.get(`${OAUTH_PATH}/callback`, handleOAuthCallback(args));
   router.post(
     `${SECURE_WINDOW_PATH}/context`,

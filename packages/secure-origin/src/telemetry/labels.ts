@@ -16,6 +16,7 @@ const REALM_SERVER_ENDPOINTS = [
   '_key-write-tickets',
   '_oauth/clients',
   '_oauth/connections',
+  '_oauth/connections/complete',
   '_secure-window/context',
   '_secure-window/realms',
   '_secure-origin',

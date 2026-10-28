@@ -315,13 +315,14 @@ export async function createOrReuseGrantIn(
         'an OAuth client that people sign in through is never sent anywhere: connect through it, and use the connection',
       );
     }
-    let endpoint = await tokenEndpointCoveredBy(txQuery, normalized);
-    if (endpoint) {
-      throw new UserKeyError(
-        400,
-        `a token endpoint is called only by the platform, so no key is granted ${normalized}`,
-      );
-    }
+  }
+  // No key, of any kind, is granted a token endpoint.
+  let endpoint = await tokenEndpointCoveredBy(txQuery, normalized, { keyId });
+  if (endpoint) {
+    throw new UserKeyError(
+      400,
+      `a token endpoint is called only by the platform, so no key is granted ${normalized}`,
+    );
   }
   let rows = await txQuery([
     `SELECT ${GRANT_COLUMNS}, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,

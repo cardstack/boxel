@@ -32,6 +32,7 @@ describe('endpoint labels', () => {
         '_oauth/clients',
       ],
       ['_oauth/connections', '_oauth/connections'],
+      ['_oauth/connections/complete', '_oauth/connections/complete'],
       ['_secure-window/context', '_secure-window/context'],
       ['_secure-window/realms', '_secure-window/realms'],
       ['_secure-origin', '_secure-origin'],

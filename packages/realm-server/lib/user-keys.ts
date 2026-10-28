@@ -589,6 +589,7 @@ export async function replaceUserKeyValue(
         `UPDATE oauth_clients SET state = 'active', broken_at = NULL WHERE key_id = `,
         param(id),
       ]);
+      await resealGrantMarkersIn(txQuery, keyring, owner, id);
       return toMetadata(updated);
     }
     let grants = await txQuery([
@@ -618,6 +619,46 @@ export async function replaceUserKeyValue(
     }
     return toMetadata(updated);
   });
+}
+
+// Seals a fresh marker into each grant of a key that mints its tokens, for a
+// change to what the key mints with (a client's new secret, a connection's
+// new sign-in). The markers prove nothing new, but each gets a new nonce, so
+// anything that compares a grant's copy from before the change (a refusal
+// that was in flight for the old secret) sees it was made for another one.
+// As for a static key's replace, a row whose marker doesn't open under its
+// own binding is left as it is.
+export async function resealGrantMarkersIn(
+  txQuery: Querier,
+  keyring: SecretsKeyring,
+  owner: string,
+  keyId: string,
+): Promise<void> {
+  let grants = await txQuery([
+    `SELECT id, destination, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,
+    param(keyId),
+    ` AND owner = `,
+    param(owner),
+    ` FOR UPDATE`,
+  ]);
+  for (let grant of grants) {
+    let binding = grantCopyBinding({
+      owner,
+      keyId,
+      grantId: grant.id as string,
+      destination: grant.destination as string,
+    });
+    if (!opensUnder(keyring, sealedFromColumns(grant, 'value'), binding)) {
+      continue;
+    }
+    let marker = keyring.seal(randomBytes(32).toString('base64url'), binding);
+    await txQuery([
+      `UPDATE user_key_grants SET (value_ciphertext, value_nonce, value_tag, value_key_id) = (`,
+      ...SEALED_COLUMN_VALUES(marker),
+      `) WHERE id = `,
+      param(grant.id as string),
+    ]);
+  }
 }
 
 // Deletes a key, and its grants with it (`user_key_grants` cascades). Every

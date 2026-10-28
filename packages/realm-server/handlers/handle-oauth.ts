@@ -55,7 +55,8 @@ async function readsRealm(
 // `GET /_oauth/clients?realm=<url>&destination=<url>`: the clients connect
 // mode offers the signed-in user — the platform's, the realm's shared ones
 // (when they read the realm) and their own — each with the permissions it
-// asks for. With a destination, only those whose API hosts cover it.
+// asks for. With a destination, only those whose API hosts cover it. With
+// `reconnect=<key id>`, only the client that connection signs in through.
 export function handleListConnectableClients(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
@@ -69,9 +70,13 @@ export function handleListConnectableClients(args: CreateRoutesArgs): Handler {
       }
       realmURL = url.href;
     }
+    let reconnect = ctxt.query.reconnect;
     let clients = await listConnectableClients(args.dbAdapter, {
       owner,
       realmURL,
+      ...(typeof reconnect === 'string' && reconnect.length > 0
+        ? { reconnect }
+        : {}),
       destination:
         typeof destination === 'string' && destination.length > 0
           ? normalizeGrantDestination(destination)
@@ -132,30 +137,22 @@ export function handleStartConnect(args: CreateRoutesArgs): Handler {
 }
 
 // `GET /_oauth/callback?code&state`: where the vendor sends the person back.
-// The code is exchanged here, on the server, and the person is sent on to the
-// secure window's `connected` page, told in the fragment only the new
-// connection's id or why it failed. Nothing a vendor issued goes to a
-// browser.
+// It finishes nothing itself: it hands the code and `state` on to the secure
+// window's `connected` page in the URL fragment, which never reaches a
+// server, and that page finishes the sign-in with its own secure session
+// (`POST /_oauth/connections/complete`). So a sign-in completes only in a
+// window signed in as the person who started it. Nothing the vendor issued
+// beyond the one-use code reaches a browser; the code is useless without
+// the PKCE verifier and client secret, which only the realm server holds.
 export function handleOAuthCallback(args: CreateRoutesArgs): Handler {
   return async (ctxt) => {
-    let outcome;
-    try {
-      outcome = await completeConnect(args.dbAdapter, secretsKeyring(), {
-        state: ctxt.query.state,
-        code: ctxt.query.code,
-        vendorError: ctxt.query.error,
-        serverURL: args.serverURL,
-        serverSecret: args.realmSecretSeed,
-      });
-    } catch (e: any) {
-      log.error(
-        `completing an OAuth sign-in failed: ${e?.name ?? 'Error'}: ${e?.message ?? e}`,
-      );
-      outcome = { ok: false as const, error: 'failed' as const };
-    }
-    let fragment: Record<string, string> = outcome.ok
-      ? { connected: outcome.keyId }
-      : { error: outcome.error };
+    let { code, state, error } = ctxt.query;
+    let fragment: Record<string, string> =
+      error !== undefined ||
+      typeof code !== 'string' ||
+      typeof state !== 'string'
+        ? { error: 'denied' }
+        : { code, state };
     let page = args.secureOriginURL
       ? `${args.secureOriginURL.href.replace(/\/*$/, '/')}connected`
       : new URL('/', args.serverURL).href;
@@ -172,6 +169,48 @@ export function handleOAuthCallback(args: CreateRoutesArgs): Handler {
       }),
     );
   };
+}
+
+// `POST /_oauth/connections/complete`: the secure window's `connected` page
+// finishes a sign-in with `{state, code}` from its fragment, under its own
+// secure session. Only the person who started the sign-in can finish it.
+// Answers the connection's id, or why it failed.
+export function handleCompleteConnect(args: CreateRoutesArgs): Handler {
+  return keysHandler(async (ctxt) => {
+    let owner = ownerOf(ctxt);
+    await secureClientOf(ctxt, args, 'connections are made');
+    let body = await readJSON(ctxt);
+    let data = body.data as
+      | { type?: unknown; attributes?: Record<string, unknown> }
+      | undefined;
+    if (!data || typeof data !== 'object' || data.type !== 'oauth-callback') {
+      throw new UserKeyError(400, `the resource type is 'oauth-callback'`);
+    }
+    let outcome;
+    try {
+      outcome = await completeConnect(args.dbAdapter, secretsKeyring(), {
+        owner,
+        state: data.attributes?.state,
+        code: data.attributes?.code,
+        serverURL: args.serverURL,
+        serverSecret: args.realmSecretSeed,
+      });
+    } catch (e: any) {
+      log.error(
+        `completing an OAuth sign-in failed: ${e?.name ?? 'Error'}: ${e?.message ?? e}`,
+      );
+      outcome = { ok: false as const, error: 'failed' as const };
+    }
+    // A sign-in that didn't finish is an answer, not a refused request.
+    await sendJSON(ctxt, outcome.ok ? 201 : 200, {
+      data: {
+        type: 'oauth-connection-result',
+        attributes: outcome.ok
+          ? { connected: outcome.keyId, reconnected: outcome.reconnected }
+          : { error: outcome.error },
+      },
+    });
+  });
 }
 
 // The operator routes for the platform's own clients, reached with an
