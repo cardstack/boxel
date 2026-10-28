@@ -402,6 +402,23 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(vendor.requests.length, 3);
     });
 
+    test('a redirect to another origin is not followed with the assertion, and reads as unavailable', async function (assert) {
+      configureGoogleTokens({
+        tokenEndpoint: `${vendor.url}/redirect?to=${encodeURIComponent(`${vendor.alternateUrl}/google-token`)}&status=307`,
+      });
+      try {
+        await googleAccessToken('key-1', credential());
+        assert.ok(false, 'expected a refusal');
+      } catch (e) {
+        assert.true(e instanceof GoogleTokenEndpointUnavailableError);
+      }
+      assert.deepEqual(
+        vendor.requests.filter((r) => r.path.startsWith('/google-token')),
+        [],
+        'the assertion never reached the other origin',
+      );
+    });
+
     test('an endpoint failing through every retry is unavailable, and says nothing of the key', async function (assert) {
       vendor.googleTokenAnswers.push(
         { status: 500, body: {} },

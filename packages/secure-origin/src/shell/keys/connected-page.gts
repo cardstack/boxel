@@ -1,9 +1,12 @@
 // The `connected` page, where the realm server sends the window once a
-// service has sent the user back from signing in. Its fragment says only how
-// the sign-in ended: `#connected=<key id>`, the connection made or signed in
-// again, or `#error=<why>`. The page reads it, takes it out of the address
-// bar, and says what happened in plain words, naming a new connection as the
-// key listing does. The window can't tell whether it was opened for
+// service has sent the user back from signing in. Its fragment carries the
+// service's one-use `code` and the sign-in's `state`, or `#error=<why>` when
+// the service declined. The page reads it, takes it out of the address bar,
+// and finishes the sign-in with the window's own session: the realm server
+// exchanges the code, and only for the user who started the sign-in, so a
+// sign-in link someone else started can't put this user's account under
+// theirs. The page then says what happened in plain words, naming a new
+// connection as the key listing does. The window can't tell whether it was opened for
 // something, so it offers to close and to go back to the user's keys, and
 // closes itself only when the user asks.
 import { on } from '@ember/modifier';
@@ -11,7 +14,7 @@ import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
-import { showKey } from '../../security/keys.ts';
+import { completeConnect, showKey } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { navigation } from '../navigation.js';
@@ -49,7 +52,12 @@ const FAILURES: Record<string, { heading: string; message: string }> = {
 
 // What the fragment says, read once as the page starts and then taken out of
 // the address bar, so going back or reloading doesn't show it again.
-function takeOutcome(): { connected?: string; error?: string } {
+function takeOutcome(): {
+  code?: string;
+  state?: string;
+  connected?: string;
+  error?: string;
+} {
   let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   if (window.location.hash) {
     history.replaceState(
@@ -59,6 +67,8 @@ function takeOutcome(): { connected?: string; error?: string } {
     );
   }
   return {
+    code: fragment.get('code') || undefined,
+    state: fragment.get('state') || undefined,
     connected: fragment.get('connected') || undefined,
     error: fragment.get('error') || undefined,
   };
@@ -165,7 +175,22 @@ class Connected extends Component<{ Args: { api: KeysWindowAPI } }> {
   }
 
   private async load() {
-    let { connected, error } = this.outcome;
+    let { connected, error, code, state } = this.outcome;
+    if (code && state) {
+      try {
+        ({ connected, error } = await completeConnect(this.args.api.config, {
+          state,
+          code,
+        }));
+      } catch (e) {
+        if (isSignedOut(e)) {
+          this.args.api.signedOut();
+          return;
+        }
+        this.args.api.visit.loadFailed(e);
+        error = 'failed';
+      }
+    }
     if (connected) {
       try {
         let key = await showKey(this.args.api.config, connected);

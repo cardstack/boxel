@@ -50,11 +50,17 @@ only scope that reaches private repositories, `repo`, can also write.
    `state`, `scope` and an S256 PKCE challenge. The verifier is derived from
    the state with the realm secret seed, so nothing stored could finish the
    sign-in.
-3. The vendor sends the person back to `GET /_oauth/callback?code&state`. The
-   request is spent (once, before it expires), the code exchanged at the
-   client's token endpoint, and the connection stored. The window then goes to
-   the secure origin's `connected` page with only `#connected=<key id>` or
-   `#error=<code>` in the fragment. **No token ever passes through a browser.**
+3. The vendor sends the person back to `GET /_oauth/callback?code&state`.
+   The callback finishes nothing: it sends the window on to the secure
+   origin's `connected` page with the code and `state` in the URL fragment,
+   which never reaches a server. That page finishes the sign-in with its own
+   secure session (`POST /_oauth/connections/complete`), and the realm server
+   spends the request only for **the user who started it**, before it
+   expires, then exchanges the code at the client's token endpoint and stores
+   the connection. A sign-in link one person started and another approved at
+   the vendor therefore never puts the second person's account under the
+   first's. **No token ever passes through a browser**; only the one-use code
+   does, and it is useless without the PKCE verifier and client secret.
 
 The callback's query string carries the authorization code. `/_oauth` is a key
 route, so the request log and telemetry keep only its method and path; the load
@@ -62,24 +68,32 @@ balancer's access log does record the query string, which is tolerable only
 because the code is single-use, PKCE-bound and useless without the client
 secret, which only the realm server holds.
 
-| `#error=`    | Means                                                                              |
-| ------------ | ---------------------------------------------------------------------------------- |
-| `expired`    | No such sign-in in progress: unknown state, already used, or older than 10 minutes |
-| `denied`     | The person (or the vendor) declined: the vendor sent `error=` back                 |
-| `failed`     | The code exchange failed, or the client is unavailable (see the refresh errors)    |
-| `name-taken` | The person added a key of that name while signing in                               |
+| `error`      | Means                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `expired`    | No such sign-in in progress for this user: unknown state, already used, older than 10 minutes, or started by someone else |
+| `denied`     | The person (or the vendor) declined: the vendor sent `error=` back to the callback                                        |
+| `failed`     | The code exchange failed, or the client is unavailable (see the refresh errors)                                           |
+| `name-taken` | The person added a key of that name while signing in                                                                      |
 
 ## Minting and refreshing
 
 Access tokens live **only in the realm server's memory**, keyed by the
-connection (or the `client_credentials` client). A token is reused until it is
-due, which is `min(60 s, half its lifetime)` before it expires, and then
-refreshed. One refresh per key runs at a time in a process, and callers that
-arrive meanwhile share its result. The refresh holds the key's `user_keys` row
-locked through the token request, so another process refreshing the same
-connection waits and then reads the refresh token this one stored: a rotating
-refresh token is never spent twice. A rotated refresh token is sealed in the
-same transaction.
+connection (or the `client_credentials` client). Every use first reads what
+the key is now: its state, its client (deleted, unshared, suspended or broken
+stops it at once, not at its next refresh), an access-only token's expiry, and
+the connection's **refresh generation**. A cached token is reused while it
+isn't due (`min(60 s, half its lifetime)` before expiry) and no other process
+has refreshed the connection since it was minted; one refresh per key runs at
+a time in a process, and callers that arrive meanwhile share its result.
+
+A refresh takes the connection's **refresh lease** (`refreshing_until`, 60 s)
+first, so only one process spends a rotating refresh token, and holds no
+database connection while the vendor answers (each token request has 15 s).
+It stores the rotated refresh token and moves `generation` on together. A
+process holding a token of an older generation mints again, since a vendor
+such as GitHub revokes the previous access token on refresh; processes
+serving one connection at the same moment may each refresh in turn. A lease
+whose holder died lapses on its own.
 
 A restart forgets every access token; each connection refreshes once on its
 next call.
@@ -92,10 +106,13 @@ destination — proving the grant was made by the realm server — and then
 attaches the access token it mints. Reconnecting or rotating a refresh token
 re-seals nothing on the grants.
 
-**A token endpoint is the platform's alone.** No key is ever granted a
-destination that covers a known token endpoint (every client's `token_url`,
-plus the fixed list in `lib/outbound/token-endpoints.ts`), so no `callApi` can
-carry a credential to one. An authorization-code client is never granted
+**A token endpoint is the platform's alone.** No key, of any kind, is granted
+a destination that covers a token endpoint: the fixed list in
+`lib/outbound/token-endpoints.ts`, every platform client's, and the token URL
+of the client the key itself mints through. Another person's client is never
+consulted, since anyone can store a client naming any URL. A token request
+never follows a redirect to another origin, since its body and headers carry
+the client secret and refresh token. An authorization-code client is never granted
 anything: it only signs people in.
 
 ## Refresh errors
@@ -165,4 +182,8 @@ them.
   `invalid_grant` then reconnect, `invalid_client` then secret rotation,
   retries and `unavailable`, a shared client giving per-user connections and
   following its share, no token in anything the browser sees, no grant of a
-  token endpoint, `client_credentials`, and a platform client.
+  token endpoint, `client_credentials`, a platform client, a sign-in finishing
+  only for the person who started it, GitHub's error codes, another person's
+  client fencing off nothing, a cached token stopping with its client, minting
+  again after another process's refresh, access-only expiry, reconnecting
+  through the same client, and fresh grant markers on reconnect.

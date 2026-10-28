@@ -443,8 +443,8 @@ function describe(error: unknown): string {
 }
 
 // One exchange of a freshly signed assertion for an access token. A 5xx, a
-// 429, a `temporarily_unavailable` answer, a timeout or a broken connection
-// is thrown as retryable; any other refusal is `GoogleServiceAccountRejectedError`.
+// 429, a redirect to another origin, a `temporarily_unavailable` answer, a
+// timeout or a broken connection is thrown as retryable; any other refusal is `GoogleServiceAccountRejectedError`.
 async function exchange(
   credential: GoogleServiceAccountCredential,
 ): Promise<CachedToken> {
@@ -470,6 +470,9 @@ async function exchange(
         assertion,
       }).toString(),
       sizePath: 'call-api',
+      // The body carries the signed assertion, which a 307 or 308 to another
+      // origin would resend there.
+      sameOriginOnly: true,
       scrubber,
     });
     text = await response.text();
@@ -499,9 +502,12 @@ async function exchange(
   }
   let oauthError =
     typeof body?.error === 'string' ? (body.error as string) : undefined;
+  // A redirect away from the token endpoint is answered, not followed (see
+  // `sameOriginOnly`); like a 5xx, it says nothing about the key.
   if (
     response.status >= 500 ||
     response.status === 429 ||
+    (response.status >= 300 && response.status < 400) ||
     oauthError === 'temporarily_unavailable'
   ) {
     log.warn(
