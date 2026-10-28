@@ -800,6 +800,19 @@ module(basename(import.meta.filename), function () {
           staticWithScopes.text,
         ),
       );
+      let keyFileAsStatic = await add(
+        { name: 'sheets', value: file },
+        { ticket },
+      );
+      assert.strictEqual(
+        keyFileAsStatic.status,
+        400,
+        'a key file is never stored as a key sent as it is',
+      );
+      assert.true(
+        /add it as a google-service-account key/.test(keyFileAsStatic.text),
+        keyFileAsStatic.text,
+      );
       let added = await add(
         {
           name: 'sheets',
