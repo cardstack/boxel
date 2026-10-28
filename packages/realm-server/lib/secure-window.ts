@@ -62,16 +62,10 @@ export interface SecureWindowOperation {
   slots: { name: string; key: string }[];
 }
 
-// Who can read a realm beyond its members: `anyone` for a `*` row granting
-// read, `signed-in` for a `users` row (any registered user), and `members`
-// when only the people named in its rows can.
-export type RealmReaders = 'anyone' | 'signed-in' | 'members';
-
 export interface SecureWindowRealm {
   url: string;
   name: string;
   directWriter: boolean;
-  readableBy: RealmReaders;
 }
 
 export interface SecureWindowContext {
@@ -297,17 +291,11 @@ export async function secureWindowContext(
     throw notFound();
   }
   let info = await realm.getRealmInfo();
-  let permissions = await fetchRealmPermissions(dbAdapter, new URL(realm.url));
   let context: SecureWindowContext = {
     realm: {
       url: realm.url,
       name: info.name,
       directWriter: await isDirectWriter(dbAdapter, new URL(realm.url), user),
-      readableBy: permissions['*']?.includes('read')
-        ? 'anyone'
-        : permissions['users']?.includes('read')
-          ? 'signed-in'
-          : 'members',
     },
   };
   if (!target) {

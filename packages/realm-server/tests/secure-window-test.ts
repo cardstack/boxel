@@ -131,8 +131,7 @@ module(basename(import.meta.filename), function () {
     const LAZY = 'https://realms.example.test/lazy/';
     const USER = '@someone:example.test';
     const PERMISSIONS: Record<string, Record<string, [boolean, boolean]>> = {
-      // Readable by anyone.
-      [OPEN]: { [USER]: [true, true], '*': [true, false] },
+      [OPEN]: { [USER]: [true, true] },
       [CLOSED]: { '@owner:example.test': [true, true] },
       [LAZY]: { [USER]: [true, true] },
       // A permission row left behind by a realm the server no longer serves.
@@ -348,7 +347,6 @@ module(basename(import.meta.filename), function () {
         validateContextRequest({ realm: '@example/open/' }),
       );
       assert.true(byPrefix.realm.directWriter);
-      assert.strictEqual(byPrefix.realm.readableBy, 'anyone');
     });
 
     test('lists only the realms the user is a direct writer of', async function (assert) {
@@ -411,7 +409,6 @@ module(basename(import.meta.filename), function () {
           url: REALM.href,
           name: 'Team Workspace',
           directWriter: true,
-          readableBy: 'members',
         },
       });
 
@@ -434,7 +431,6 @@ module(basename(import.meta.filename), function () {
           url: REALM.href,
           name: 'Team Workspace',
           directWriter: false,
-          readableBy: 'members',
         },
         card: {
           name: 'Weather Report',
