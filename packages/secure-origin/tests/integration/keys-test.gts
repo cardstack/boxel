@@ -765,7 +765,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-keys-done-next]')
         .hasText(
-          'Saving it doesn’t give Weather the key. Weather will ask you to approve its requests before it can use it.',
+          'Saving it doesn’t give Weather the key. Weather will ask you to approve where it sends the key before it can use it.',
         );
     });
 
