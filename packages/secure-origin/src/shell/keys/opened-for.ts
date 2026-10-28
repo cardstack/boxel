@@ -72,11 +72,14 @@ function url(value: string | null): string | undefined {
 }
 
 // A reason is shown as plain text, on one line, and no longer than a line.
-// Format characters (bidi overrides and isolates among them) are dropped, so
-// a reason can't reorder how it reads.
+// Bidi controls (marks, embeddings, overrides and isolates) are dropped, so a
+// reason can't reorder how it reads. Other format characters stay: joiners
+// hold emoji sequences together and shape Persian and Indic text.
+const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+
 function reasonOf(value: string | null): string | undefined {
   let text = value
-    ?.replace(/\p{Cf}/gu, '')
+    ?.replace(BIDI_CONTROLS, '')
     .replace(/[\p{Cc}\u2028\u2029]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();

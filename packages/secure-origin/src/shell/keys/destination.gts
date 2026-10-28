@@ -9,21 +9,8 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import type { DestinationDisplay } from '../../security/keys.ts';
 
+import { methodPhrase } from './context.ts';
 import { addressOf } from './workspace-dropdown.gts';
-
-// What a request with this HTTP method does at its destination, for someone
-// who doesn't read HTTP.
-export function methodPhrase(method: string): string {
-  switch (method.toUpperCase()) {
-    case 'GET':
-    case 'HEAD':
-      return 'Reads from';
-    case 'DELETE':
-      return 'Deletes at';
-    default:
-      return 'Sends data to';
-  }
-}
 
 interface Signature {
   Args: {
