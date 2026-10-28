@@ -36,12 +36,12 @@ const FAILURES: Record<string, { heading: string; message: string }> = {
   denied: {
     heading: 'The sign-in was declined',
     message:
-      'The service didn’t give Boxel access, because the sign-in was cancelled there or the service refused it. Nothing was connected.',
+      'The site didn’t give Boxel access: the sign-in was cancelled there, or the site refused it. Nothing was connected.',
   },
   failed: {
     heading: 'The sign-in didn’t finish',
     message:
-      'The service didn’t complete the sign-in, so nothing was connected. Try connecting again. If it keeps happening, the app may need its settings checked.',
+      'The site didn’t complete the sign-in, so nothing was connected. Try connecting again. If it keeps happening, the sign-in app’s settings may need checking.',
   },
   'name-taken': {
     heading: 'That name is taken',

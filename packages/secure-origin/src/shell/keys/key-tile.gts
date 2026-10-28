@@ -28,7 +28,7 @@ export function kindLabel(kind: string): string | undefined {
     case 'google-service-account':
       return 'Google service account';
     case 'oauth-client':
-      return 'OAuth app';
+      return 'Sign-in app';
     case 'oauth-connection':
       return 'Connected account';
     default:
