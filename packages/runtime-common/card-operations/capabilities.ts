@@ -5,12 +5,14 @@ import {
   CAPABILITY_CHECK_CAP,
   type CapabilityAnswer,
   type CapabilityCheck,
+  type KeyReadiness,
 } from './capability-wire.ts';
 import { settledWithin, STAGING_WIDTH } from './coordinator.ts';
 import {
   canonicalizeTarget,
   newOperationScope,
   resolveGatedOperation,
+  resolvedTypeOf,
   resolvesToWrite,
   type CoarseDeclined,
   type GatedOperation,
@@ -27,6 +29,7 @@ import {
   isOperationFailure,
   travelsAsWrite,
   type OperationErrorCode,
+  type OperationDefinition,
   type OperationTarget,
 } from './types.ts';
 
@@ -87,6 +90,13 @@ import {
 //
 // A query pair's target is that type. A card target names no search a query
 // could run in, and is refused the way invoking the query on the card is.
+//
+// A pair may also ask for the operation's readiness: whether a `callApi`
+// invoked from a card would have every credential it sends, and what would fix
+// it if not. It is asked only of a pair the gate admits, since a caller who may
+// not invoke the operation has nothing to be ready for, and answered by the
+// realm server's sender from its bindings and grants without opening any key.
+// It is advisory in the same way: the call checks its bindings again.
 // ============================================================================
 
 // What the realm supplies about the caller for a whole request: who they are,
@@ -151,7 +161,7 @@ export async function checkCapabilities(
   });
   let distinct = new Map<string, CapabilityCheck>();
   let keys = checks.map((check) => {
-    let key = `${check.operation}\u0000${targetKey(check.target)}`;
+    let key = `${check.operation}\u0000${targetKey(check.target)}\u0000${check.readiness ? 'readiness' : ''}`;
     if (!distinct.has(key)) {
       distinct.set(key, check);
     }
@@ -220,7 +230,32 @@ async function decide(
     answer: bare ? { allowed: false } : { allowed: false, reason },
     admitted: false,
   });
-  let admitted: PairDecision = { answer: { allowed: true }, admitted: true };
+  // An admitted pair that asked for readiness carries it, read once the
+  // operation it is about has resolved.
+  let admittedWith = async (
+    definition: OperationDefinition,
+    target: OperationTarget,
+    pairScope: OperationScope,
+    answer: CapabilityDecision,
+    outright: boolean,
+  ): Promise<PairDecision> => {
+    // A readiness the realm can't read leaves the pair without one, never
+    // refused: whether the caller may invoke the operation is already decided.
+    let readiness = check.readiness
+      ? await readinessOf(
+          core,
+          check,
+          definition,
+          target,
+          who,
+          pairScope,
+        ).catch(() => undefined)
+      : undefined;
+    return {
+      answer: readiness ? { ...answer, readiness } : answer,
+      admitted: outright,
+    };
+  };
   try {
     let target = targetFor(core, check.target);
     // A write the realm declines outright is judged and told as a
@@ -262,7 +297,27 @@ async function decide(
       return refused('wrong-entry-point');
     }
     if (who.writesRefused && travelsAsWrite(definition.base)) {
-      return refused(who.writesRefused);
+      // A caller refused for want of signing in is told what signing in
+      // would leave them needing, since that is the next thing the card
+      // shows. Only a caller who may read the realm: anyone else learns
+      // nothing about its operations.
+      let readiness =
+        check.readiness &&
+        who.coarseDeclined !== 'all' &&
+        who.writesRefused === 'actor-required'
+          ? await readinessOf(
+              core,
+              check,
+              definition,
+              target,
+              who,
+              pairScope,
+            ).catch(() => undefined)
+          : undefined;
+      let refusal = refused(who.writesRefused);
+      return readiness
+        ? { ...refusal, answer: { ...refusal.answer, readiness } }
+        : refusal;
     }
     // An operation that reads `actor()` has no actor to read for a caller
     // who isn't signed in, and the realm refuses its invocation with a 401
@@ -271,7 +326,13 @@ async function decide(
       return refused('actor-required');
     }
     if (decision.kind !== 'pending') {
-      return admitted;
+      return await admittedWith(
+        definition,
+        target,
+        pairScope,
+        { allowed: true },
+        true,
+      );
     }
     // A write the gate matched a grant for and left to its predicate. The
     // write lock decides it against the card as the lock holds it, and a
@@ -287,7 +348,15 @@ async function decide(
         decision,
         scope: pairScope,
       });
-      return refusal ? refused(refusal.error.code) : admitted;
+      return refusal
+        ? refused(refusal.error.code)
+        : await admittedWith(
+            definition,
+            target,
+            pairScope,
+            { allowed: true },
+            true,
+          );
     }
     // A create against a type is judged by the card it would mint, which does
     // not exist while the control that would mint it is being rendered. So
@@ -296,16 +365,60 @@ async function decide(
     // showing, and what it reveals — that the realm's policy grants creates
     // of this type — is what the create itself would reveal, and is no answer
     // about which cards exist.
-    return {
-      answer: bare ? { allowed: true } : { allowed: true, conditional: true },
-      admitted: false,
-    };
+    return await admittedWith(
+      definition,
+      target,
+      pairScope,
+      bare ? { allowed: true } : { allowed: true, conditional: true },
+      false,
+    );
   } catch (e: unknown) {
     // Anything that is not a refusal is a fault rather than an answer, and the
     // check fails closed on it — one pair the realm could not decide, reported
     // as itself, rather than a request the caller cannot read at all.
     return refused(isOperationFailure(e) ? e.error.code : 'internal-error');
   }
+}
+
+// Whether the `callApi` a pair names would have its credentials, as the realm
+// server's sender reads its bindings. An operation that is not a `callApi`, or
+// that sends no key, is ready as far as keys go. One whose declaration did not
+// lower sends nothing, and a realm with no sender that can tell answers
+// nothing, so neither carries an answer.
+async function readinessOf(
+  core: OperationCore,
+  check: CapabilityCheck,
+  definition: OperationDefinition,
+  target: OperationTarget,
+  who: CapabilityCaller,
+  scope: OperationScope,
+): Promise<KeyReadiness | undefined> {
+  if (definition.base !== 'callApi') {
+    return 'ready';
+  }
+  let request = definition.callApi;
+  if (!request || definition.invalid) {
+    return undefined;
+  }
+  if (request.slots.length === 0) {
+    return 'ready';
+  }
+  let ask = core.callApi?.readiness?.bind(core.callApi);
+  if (!ask) {
+    return undefined;
+  }
+  let type = await resolvedTypeOf(core, target, scope);
+  if (!type) {
+    return undefined;
+  }
+  return await ask({
+    realmURL: core.realmURL,
+    type,
+    operation: check.operation,
+    ...(target.kind === 'instance' ? { instance: target.url } : {}),
+    caller: who.caller.kind === 'user' ? who.caller.actor : undefined,
+    request,
+  });
 }
 
 // A query pair, answered as the search that runs the query would authorize it:
@@ -375,17 +488,24 @@ export function parseCapabilityChecks(body: unknown): CapabilityCheck[] {
 }
 
 function parseCheck(check: unknown, index: number): CapabilityCheck {
-  let { target, operation } = (check ?? {}) as {
+  let { target, operation, readiness } = (check ?? {}) as {
     target?: unknown;
     operation?: unknown;
+    readiness?: unknown;
   };
   if (typeof operation !== 'string' || !operation) {
     throw invalidCapabilityRequest(
       `pair ${index} names no operation; each pair carries an operation name`,
     );
   }
+  if (readiness !== undefined && readiness !== true) {
+    throw invalidCapabilityRequest(
+      `pair ${index} asks for readiness with something other than true`,
+    );
+  }
+  let asks = readiness === true ? { readiness: true as const } : {};
   if (typeof target === 'string' && target) {
-    return { target, operation };
+    return { target, operation, ...asks };
   }
   let { module, name } = (target ?? {}) as { module?: unknown; name?: unknown };
   if (
@@ -394,7 +514,7 @@ function parseCheck(check: unknown, index: number): CapabilityCheck {
     typeof name === 'string' &&
     name
   ) {
-    return { target: { module: rri(module), name }, operation };
+    return { target: { module: rri(module), name }, operation, ...asks };
   }
   throw invalidCapabilityRequest(
     `pair ${index} names no target; a target is a card's URL or a type's ` +

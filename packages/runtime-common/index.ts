@@ -1847,13 +1847,15 @@ export * from './card-operations/client.ts';
 // reaching neither bxl nor a realm.
 export * from './card-operations/label.ts';
 // The capability check's wire shapes and its cap, for the same reason and on
-// the same terms: a card asking `@context.canInvoke` holds these and nothing
+// the same terms: a card asking `@context.canInvoke` or `@context.keyReadiness`
+// holds these and nothing
 // else, and this module reaches neither bxl nor a realm. The check itself does
 // both, and stays behind the `card-operations` entry.
 export { CAPABILITY_CHECK_CAP } from './card-operations/capability-wire.ts';
 export type {
   CapabilityAnswer,
   CapabilityCheck,
+  KeyReadiness,
 } from './card-operations/capability-wire.ts';
 // Only the lowered *shapes*, not the pass that produces them: lowering reaches
 // `@cardstack/bxl` for the program canonicalizer, and a barrel re-export would

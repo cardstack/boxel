@@ -43,7 +43,11 @@ export {
 export { checkCapabilities, parseCapabilityChecks } from './capabilities.ts';
 export type { CapabilityCaller } from './capabilities.ts';
 export { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
-export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
+export type {
+  CapabilityAnswer,
+  CapabilityCheck,
+  KeyReadiness,
+} from './capability-wire.ts';
 export {
   policyQueryScope,
   principalQueryScope,
@@ -286,6 +290,7 @@ export {
   type CallApiFilledSlot,
   type CallApiGrantUse,
   type CallApiMode,
+  type CallApiReadinessLookup,
   type CallApiRequest,
   type CallApiSender,
   type CallApiSlotLookup,
