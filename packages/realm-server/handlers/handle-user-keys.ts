@@ -24,6 +24,8 @@ import {
   listOwnerGrants,
   type UserKeyGrant,
 } from '../lib/user-key-grants.ts';
+import { listOwnSharedRealms, type SharedRealm } from '../lib/key-shares.ts';
+import { registrableDomain } from '../lib/secure-window.ts';
 
 // The management API for the signed-in user's own keys. The shares API
 // (`handle-key-shares.ts`) answers with the same helpers. Every route answers
@@ -57,9 +59,16 @@ function serialize(key: UserKeyMetadata) {
   return { type: 'user-key', id, attributes };
 }
 
-// A key's metadata as listed and shown, with the destinations it may be sent
-// to: its grants.
-function serializeWithGrants(key: UserKeyMetadata, grants: UserKeyGrant[]) {
+// A key's metadata as listed and shown, with where it is used: the
+// destinations it may be sent to (its grants), the services those are, by
+// registrable domain (`usedWith`), and the realms it is shared into, with the
+// key's shares in each (`sharedInto`). The key page shows every key's from
+// this one listing.
+function serializeWithUse(
+  key: UserKeyMetadata,
+  grants: UserKeyGrant[],
+  sharedInto: SharedRealm[],
+) {
   let serialized = serialize(key);
   return {
     ...serialized,
@@ -74,6 +83,14 @@ function serializeWithGrants(key: UserKeyMetadata, grants: UserKeyGrant[]) {
           approvedVia,
         }),
       ),
+      usedWith: [
+        ...new Set(
+          grants.map(({ destination }) =>
+            registrableDomain(new URL(destination).hostname),
+          ),
+        ),
+      ].sort(),
+      sharedInto,
     },
   };
 }
@@ -304,9 +321,14 @@ export function handleListUserKeys({ dbAdapter }: CreateRoutesArgs): Handler {
     let owner = ownerOf(ctxt);
     let keys = await listUserKeys(dbAdapter, owner);
     let grants = await listOwnerGrants(dbAdapter, owner);
+    let sharedInto = await listOwnSharedRealms(dbAdapter, owner);
     await sendJSON(ctxt, 200, {
       data: keys.map((key) =>
-        serializeWithGrants(key, grants.get(key.id) ?? []),
+        serializeWithUse(
+          key,
+          grants.get(key.id) ?? [],
+          sharedInto.get(key.id) ?? [],
+        ),
       ),
     });
   });
@@ -317,7 +339,12 @@ export function handleShowUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
     let owner = ownerOf(ctxt);
     let key = await getUserKey(dbAdapter, owner, ctxt.params.keyId);
     let grants = await listKeyGrants(dbAdapter, owner, key.id);
-    await sendJSON(ctxt, 200, { data: serializeWithGrants(key, grants) });
+    let sharedInto = await listOwnSharedRealms(dbAdapter, owner, {
+      keyId: key.id,
+    });
+    await sendJSON(ctxt, 200, {
+      data: serializeWithUse(key, grants, sharedInto.get(key.id) ?? []),
+    });
   });
 }
 

@@ -36,6 +36,14 @@ module('Pretui | components/field-error', function (hooks) {
     assert.strictEqual(el().dataset['severity'], 'error');
   });
 
+  test("an error's glyph is Cue's x icon; warning and info stay text", async function (assert) {
+    await render(<template><FieldError @issue={{ERR}} /></template>);
+    assert.dom('[data-test-pretui-field-error-glyph="error"] svg').exists();
+
+    await render(<template><FieldError @issue={{WARN}} /></template>);
+    assert.dom('[data-test-pretui-field-error-glyph="warning"]').hasText('!');
+  });
+
   test('renders each severity, and fails closed on one it does not recognise', async function (assert) {
     await render(
       <template>
