@@ -97,9 +97,11 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       <form novalidate {{on 'submit' this.save}} data-test-share-key-form>
         <EditPage @heading='Share a key' data-test-share-key>
           <:intro>People who can access the workspace can use the key in their
-            requests. They never see the key itself. Requests made by people who
-            have access to this workspace will consume your quota and/or be
-            billed against your account with this service provider.</:intro>
+            requests. They never see the key itself. Only signed-in people with
+            access to this workspace can use it. People who aren’t signed in
+            can’t. Requests made by people who have access to this workspace
+            will consume your quota and/or be billed against your account with
+            this service provider.</:intro>
           <:default>
             {{#if this.choosing.context}}
               <OpenedForSummary
