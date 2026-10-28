@@ -72,21 +72,21 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 // card reads. Only a refusal by the guard, a timeout, or a send that broke
 // before any response arrived is a refusal of the operation.
 //
-// A request addressed to a token endpoint is refused before anything is sent,
-// key or no key: only the platform calls a token endpoint.
+// A request addressed to one of the platform's token endpoints is refused
+// before anything is sent, key or no key (see `tokenEndpointAt`).
 export function createCallApiSender(dbAdapter: DBAdapter): CallApiSender {
   return {
     fill: (lookup) => fillSlots(dbAdapter, secretsKeyring, lookup),
     send: async (request, credentials) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {
         log.warn(
-          `callApi refused: ${recordedURL(request.url)} is a token endpoint, which only the platform calls`,
+          `callApi refused: ${recordedURL(request.url)} is one of the platform's token endpoints`,
         );
         throw new OperationFailure({
           status: 502,
           code: 'guard-refused',
           title: 'Destination refused',
-          detail: `the request is addressed to a token endpoint, which only the platform calls`,
+          detail: `the request is addressed to a token endpoint that only the platform calls`,
           meta: { reason: 'platform-only' },
         });
       }

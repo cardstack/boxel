@@ -1477,6 +1477,11 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-key-replace-form] [data-test-key-value]')
         .doesNotExist();
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText(
+          'sets the key file, the scopes and who it acts as all anew',
+        );
       assert.dom('[data-test-key-replace-save]').isDisabled();
       await chooseKeyFile(SERVICE_ACCOUNT_FILE);
       await fillIn(

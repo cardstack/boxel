@@ -181,16 +181,18 @@ never the key file. The code is `lib/outbound/google-service-account.ts`.
   the key file. Sending opens the grant's marker to prove the grant real, then
   `serviceAccountAccessToken` (`lib/google-service-account-keys.ts`) opens the
   key's own sealed value and mints. The private key goes only to the token
-  endpoint; `https://oauth2.googleapis.com/` is in `FIXED_TOKEN_ENDPOINTS`, so
-  no grant covers it, and `createCallApiSender` refuses any `callApi`
-  addressed to it (see the `call-api` skill).
+  endpoint; `https://oauth2.googleapis.com/token` is in
+  `FIXED_TOKEN_ENDPOINTS`, so no grant covers it, and `createCallApiSender`
+  refuses any `callApi` addressed to it or to Google's other token addresses
+  (see the `call-api` skill).
 - **Minting.** `googleAccessToken(keyId, credential)` signs an RS256 JWT
   (issuer the service account, `sub` the subject when there is one, `scope`
   the scopes, `aud` the token endpoint, one hour) and exchanges it at
   `https://oauth2.googleapis.com/token` through the guarded outbound client,
   with the private key and the assertion registered with the scrubber.
-  The access token is kept in memory only, keyed by the key and a hash of its
-  sealed value (so a replaced key never serves the old one's token), until
+  The access token is kept in memory only, keyed by the key and a hash of the
+  credential it was minted from (so a replaced key never serves the old one's
+  token), until
   five minutes before Google's `expires_in` (half the life of a token shorter
   than ten minutes). Concurrent calls for one key share one exchange.
 - **Failures.** An `invalid_grant`, `invalid_client`, `unauthorized_client`,
