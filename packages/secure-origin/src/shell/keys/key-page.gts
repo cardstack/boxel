@@ -24,6 +24,7 @@ import RefreshCw from '../../components/icons/refresh-cw.gts';
 import ShareIcon from '../../components/icons/share-2.gts';
 import Trash from '../../components/icons/trash-2.gts';
 import IconPlus from '../../components/icons/icon-plus.gts';
+import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { keySharePath } from '../pages.js';
 import { pageURL } from '../urls.js';
@@ -43,7 +44,7 @@ import LoadFailed from './load-failed.gts';
 
 type Action =
   | { name: 'none' }
-  | { name: 'replacing'; key: UserKey }
+  | { name: 'replacing'; key: UserKey; shares: KeyShare[] | undefined }
   // `shares` is undefined until the list of shares the key is in has loaded.
   | { name: 'deleting'; key: UserKey; shares: KeyShare[] | undefined };
 
@@ -58,7 +59,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     {{else}}
       <EditPage @heading='Your keys' data-test-key-page>
         <:intro>Keys you add here are encrypted, and nothing can read them back.
-          Cards use a key only through requests you approve for it.</:intro>
+          Cards can send a key only to the places you approve for it.</:intro>
         <:default>
           {{#if this.state.error}}
             <div class='keys-error' role='alert' data-test-keys-error>
@@ -79,16 +80,18 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                             class='action'
                             @kind='secondary'
                             @size='extra-small'
+                            aria-describedby='key-name-{{key.id}}'
                             data-test-key-share
                             {{on 'click' (fn this.share key)}}
                           ><ShareIcon
                               class='action-icon'
                               aria-hidden='true'
-                            />Share</Button>
+                            />Share with Workspace</Button>
                           <Button
                             class='action'
                             @kind='secondary'
                             @size='extra-small'
+                            aria-describedby='key-name-{{key.id}}'
                             data-test-key-replace
                             {{on 'click' (fn this.startReplace key)}}
                           ><RefreshCw
@@ -104,6 +107,25 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           {{on 'submit' this.replace}}
                           data-test-key-replace-form
                         >
+                          <p class='confirm' data-test-key-replace-where>
+                            {{#if (eq this.replacingWorkspaces 1)}}
+                              One workspace uses this key. Replacing it switches
+                              that workspace to the new key right away, so make
+                              sure the new key is right for that workspace.
+                            {{else if this.replacingWorkspaces}}
+                              {{this.replacingWorkspaces}}
+                              workspaces use this key. Replacing it switches
+                              them all to the new key right away, so make sure
+                              all of these workspaces use the same key.
+                            {{else if this.replacingSharesKnown}}
+                              No workspace uses this key. Make sure the new key
+                              is for the same service.
+                            {{else}}
+                              Replacing this key switches every workspace that
+                              uses it to the new key right away, so make sure
+                              all of them use the same key.
+                            {{/if}}
+                          </p>
                           <KeyFields
                             @value={{this.form.value}}
                             @onValue={{this.setValue}}
@@ -136,8 +158,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           {{else if this.deletingShares.length}}
                             <p class='confirm'>Deleting
                               <strong>{{key.name}}</strong>
-                              stops it working in the workspaces it’s shared
-                              into:</p>
+                              is permanent, and stops it working in the
+                              workspaces it’s shared into:</p>
                             <ul class='shares' data-test-key-delete-shares>
                               {{#each this.deletingShares as |share|}}
                                 <li>{{share.label}}
@@ -146,11 +168,13 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                                   >{{share.realm}}</span></li>
                               {{/each}}
                             </ul>
+                            <p class='confirm'>Someone with direct write access
+                              to one of them can put their own key in its place.</p>
                           {{else}}
                             <p class='confirm'>Delete
-                              <strong>{{key.name}}</strong>? It isn’t shared
-                              into any workspace. Requests that use it stop
-                              working.</p>
+                              <strong>{{key.name}}</strong>? This is permanent.
+                              It isn’t shared into any workspace. Requests that
+                              use it stop working.</p>
                           {{/if}}
                           <div class='panel-actions'>
                             <Button
@@ -257,6 +281,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       }
       .tile-actions {
         display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
         gap: var(--boxel-sp-4xs);
       }
       .entry {
@@ -394,10 +420,39 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.state.action = { name: 'none' };
   };
 
-  private startReplace = (key: UserKey) => {
+  // Replacing changes the key every workspace it's shared into uses, so the
+  // panel says how many. If the shares can't be listed, it says so in general
+  // terms instead, and the replace is still offered.
+  private startReplace = async (key: UserKey) => {
     this.form.value = '';
-    this.state.action = { name: 'replacing', key };
+    this.state.action = { name: 'replacing', key, shares: undefined };
+    let shares: KeyShare[] | undefined;
+    try {
+      shares = await sharesOfKey(this.args.api.config, key.id);
+    } catch (e) {
+      if (isSignedOut(e)) {
+        this.args.api.signedOut();
+        return;
+      }
+    }
+    if (this.isActing('replacing', key) && shares) {
+      this.state.action = { name: 'replacing', key, shares };
+    }
   };
+
+  private get replacingShares(): KeyShare[] | undefined {
+    let action = this.state.action;
+    return action.name === 'replacing' ? action.shares : undefined;
+  }
+
+  private get replacingSharesKnown(): boolean {
+    return this.replacingShares !== undefined;
+  }
+
+  // The number of workspaces the key is shared into.
+  private get replacingWorkspaces(): number {
+    return new Set(this.replacingShares?.map((share) => share.realm)).size;
+  }
 
   // A delete can't be confirmed until the page knows which shares it
   // suspends; if it can't find out, it offers no delete.

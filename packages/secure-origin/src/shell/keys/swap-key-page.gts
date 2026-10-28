@@ -25,6 +25,7 @@ import { pageURL } from '../urls.js';
 import {
   failureMessage,
   isSignedOut,
+  LinkError,
   loadFailure,
   type LoadFailure,
 } from './context.ts';
@@ -49,8 +50,9 @@ type State =
 // Why a share stopped serving, in the words its writers see.
 const SUSPENDED_BECAUSE: Record<string, string> = {
   'owner-lost-write':
-    'The person who shared its key can no longer edit this workspace.',
-  'suspended-by-writer': 'Someone who edits this workspace suspended it.',
+    'The person who shared its key no longer has direct write access to this workspace.',
+  'suspended-by-writer':
+    'Someone with direct write access to this workspace suspended it.',
   'key-deleted': 'The person who shared its key deleted it.',
 };
 
@@ -65,7 +67,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         @onRetry={{this.load}}
       />
     {{else if this.needsAdmin}}
-      <NeedsAdmin @realm={{this.needsAdmin.context.realm.name}} />
+      <NeedsAdmin @realm={{this.needsAdmin.context.realm}} />
     {{else if this.active}}
       <EditPage @heading='This shared key is working' data-test-swap-key-active>
         <:intro><strong>{{this.active.share.label}}</strong>
@@ -88,8 +90,9 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
           data-test-swap-key
         >
           <:intro>This shared key stopped working. Share one of your own keys in
-            its place, and the cards that use it work again under the same name.
-            You become the person sharing it.</:intro>
+            its place: every request in the workspace that uses this shared key
+            then sends your key instead, to wherever that request goes, and runs
+            on your account at the service. You become the person sharing it.</:intro>
           <:default>
             <OpenedForSummary
               @context={{this.choosing.context}}
@@ -216,7 +219,10 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     let { config } = this.args.api;
     try {
       if (!realm || !shareId) {
-        throw new Error('this page names no workspace and shared key');
+        throw new LinkError(
+          'this page names no workspace and shared key',
+          'This link doesn’t name a workspace and a shared key.',
+        );
       }
       let context = await windowContext(config, { realm });
       if (!context.realm.directWriter) {
@@ -227,7 +233,10 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         (s) => s.id === shareId,
       );
       if (!share) {
-        throw new Error('that workspace has no such shared key');
+        throw new LinkError(
+          'that workspace has no such shared key',
+          'This shared key isn’t in that workspace. It may have been removed.',
+        );
       }
       if (share.state === 'active') {
         this.page.state = { name: 'active', context, share };
