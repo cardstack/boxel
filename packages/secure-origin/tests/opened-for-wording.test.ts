@@ -39,3 +39,10 @@ test('a reason keeps its joiners, which hold emoji and shape scripts', () => {
   assert.equal(reasonIn(`For the ${family}`), `For the ${family}`);
   assert.equal(reasonIn(persian), persian);
 });
+
+test('a reason loses other invisible format characters too', () => {
+  assert.equal(
+    reasonIn('Fore​casts need⁠ your﻿ key­'),
+    'Forecasts need your key',
+  );
+});

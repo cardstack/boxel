@@ -72,14 +72,14 @@ function url(value: string | null): string | undefined {
 }
 
 // A reason is shown as plain text, on one line, and no longer than a line.
-// Bidi controls (marks, embeddings, overrides and isolates) are dropped, so a
-// reason can't reorder how it reads. Other format characters stay: joiners
-// hold emoji sequences together and shape Persian and Indic text.
-const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+// Invisible format characters are dropped, bidi controls among them, so a
+// reason can't reorder how it reads or hide text in it. The two joiners stay:
+// they hold emoji sequences together and shape Persian and Indic text.
+const FORMAT_BUT_JOINERS = /(?![\u200C\u200D])\p{Cf}/gu;
 
 function reasonOf(value: string | null): string | undefined {
   let text = value
-    ?.replace(BIDI_CONTROLS, '')
+    ?.replace(FORMAT_BUT_JOINERS, '')
     .replace(/[\p{Cc}\u2028\u2029]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
