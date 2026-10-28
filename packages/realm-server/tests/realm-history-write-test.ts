@@ -709,6 +709,56 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     recordingTest(
+      'a retry of a source write, an upload or a removal is answered as the write it retries',
+      async function (assert) {
+        // History starts empty, so the card is written once to give the
+        // removal a file in HEAD to remove.
+        let written = await patchPerson('/person-2', 'Before Removal');
+        assert.strictEqual(written.status, 200, JSON.stringify(written.body));
+        let source = () =>
+          request
+            .post('/retried.txt')
+            .set('Accept', 'application/vnd.card+source')
+            .set('Authorization', asJohn())
+            .set(OPERATION_ID_HEADER, 'retried-source')
+            .send('retried notes');
+        let upload = () =>
+          request
+            .post('/retried.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .set('Authorization', asJohn())
+            .set(OPERATION_ID_HEADER, 'retried-upload')
+            .send(Buffer.from([1, 2, 3]));
+        let removal = () =>
+          request
+            .delete('/person-2')
+            .set('Accept', 'application/vnd.card+json')
+            .set('Authorization', asJohn())
+            .set(OPERATION_ID_HEADER, 'retried-removal');
+
+        for (let [name, send, status] of [
+          ['source write', source, 204],
+          ['upload', upload, 204],
+          ['removal', removal, 204],
+        ] as const) {
+          let first = await send();
+          assert.strictEqual(first.status, status, `${name}: ${first.text}`);
+          let revision = first.get(REVISION_HEADER);
+          assert.ok(revision, `${name} recorded a revision`);
+
+          let retry = await send();
+          assert.strictEqual(retry.status, status, `${name}: ${retry.text}`);
+          assert.strictEqual(retry.get(REVISION_HEADER), revision, name);
+          assert.strictEqual(
+            events.at(-1)?.outcome,
+            'replayed',
+            `${name}: the retry is matched to its first attempt`,
+          );
+        }
+      },
+    );
+
+    recordingTest(
       'a retry that cannot be matched to what its id first asked for is refused',
       async function (assert) {
         let first = await patchPerson('/person-1', 'Unmatched', {

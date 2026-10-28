@@ -178,26 +178,11 @@ export function writeRecordingFor(
   };
 }
 
-// The methods a request writes by, and so the requests a realm that records
-// history fingerprints.
-export const WRITE_METHODS: ReadonlySet<string> = new Set([
-  'POST',
-  'PUT',
-  'PATCH',
-  'DELETE',
-]);
-
 // A digest of a write request as the client sent it: its method, URL,
-// content type and body. Read from a clone, so the handler still reads the
-// body. Taken before the handler runs because what a handler derives from a
-// request can depend on the realm's state, which a retry finds moved on.
-// Undefined for a request whose body has already been read.
-export async function requestDigest(
-  request: Request,
-): Promise<string | undefined> {
-  if (request.bodyUsed) {
-    return undefined;
-  }
+// content type and body. Taken from the body the handler read, before
+// anything is derived from it, because what a handler derives from a request
+// can depend on the realm's state, which a retry finds moved on.
+export function requestDigest(request: Request, body: Uint8Array): string {
   let hash = new Sha256();
   let encoder = new TextEncoder();
   let field = (bytes: Uint8Array) => {
@@ -207,21 +192,10 @@ export async function requestDigest(
   field(encoder.encode(request.method));
   field(encoder.encode(request.url));
   field(encoder.encode(request.headers.get('Content-Type') ?? ''));
-  let body = request.clone().body;
-  if (body) {
-    let reader = body.getReader();
-    for (;;) {
-      let { done, value } = await reader.read();
-      if (done || !value) {
-        break;
-      }
-      hash.update(value);
-    }
-  }
-  let digest = await hash.digest();
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join(
-    '',
-  );
+  hash.update(body);
+  return Array.from(hash.digestSync(), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
 }
 
 export function systemWriteRecording(): WriteRecording {

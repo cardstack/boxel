@@ -558,7 +558,6 @@ import {
   UnchangedTreeSignal,
   requestDigest,
   systemWriteRecording,
-  WRITE_METHODS,
   writeRecordingFor,
   type HistoryChannel,
   type HistoryBackend,
@@ -2636,8 +2635,8 @@ export type RequestContext = {
   // that writes. The commit fills in its revision, which the response carries
   // (see `createResponse`).
   writeRecording?: WriteRecording;
-  // A digest of the request as sent (see `requestDigest`), taken before a
-  // write's handler runs in a realm that records history.
+  // A digest of the request as sent (see `requestDigest`), taken from the body
+  // a write's handler read, in a realm that records history.
   requestDigest?: string;
   // Set by `checkPermission` when the request presented no Authorization
   // header at all. A provably credential-less caller has no read-your-writes
@@ -6809,7 +6808,11 @@ export class Realm {
     }
     let body: unknown;
     try {
-      body = JSON.parse(await request.text());
+      body = JSON.parse(
+        new TextDecoder().decode(
+          await this.#readRequestBody(request, requestContext),
+        ),
+      );
     } catch {
       throw new OperationFailure({
         status: 400,
@@ -7125,7 +7128,7 @@ export class Realm {
           {
             clientRequestId: caller.clientRequestId || null,
             actor: caller.actor || undefined,
-            recording: this.#writeRecording(
+            recording: await this.#writeRecording(
               request,
               requestContext,
               'operations',
@@ -8928,9 +8931,6 @@ export class Realm {
       if (turnedAway) {
         return turnedAway;
       }
-      if (this.#history && WRITE_METHODS.has(request.method)) {
-        requestContext.requestDigest = await requestDigest(request);
-      }
       return await this.#anonymous.charge(
         request,
         requestContext,
@@ -9487,16 +9487,45 @@ export class Realm {
   // The request's write as the realm's history records it, kept on the request
   // context so the response can carry the revision the commit fills in. Throws
   // an `OperationFailure` for an operation id the history cannot take.
-  #writeRecording(
+  //
+  // A handler that reads the body reads it through `#readRequestBody`, which
+  // digests it; a body no handler read is read here for its digest. A body
+  // read any other way leaves the write without a fingerprint, so a retry
+  // under its id is refused rather than answered.
+  async #writeRecording(
     request: Request,
     requestContext: RequestContext,
     channel: HistoryChannel,
-  ): WriteRecording {
-    return (requestContext.writeRecording ??= writeRecordingFor(
+  ): Promise<WriteRecording> {
+    if (requestContext.writeRecording) {
+      return requestContext.writeRecording;
+    }
+    if (
+      this.#history &&
+      requestContext.requestDigest === undefined &&
+      !request.bodyUsed
+    ) {
+      await this.#readRequestBody(request, requestContext);
+    }
+    return (requestContext.writeRecording = writeRecordingFor(
       request,
       requestContext,
       channel,
     ));
+  }
+
+  // A write request's body, read once. In a realm that records history its
+  // digest is kept for the write's recording (see `requestDigest`), so the
+  // body is not read a second time to take it.
+  async #readRequestBody(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Uint8Array> {
+    let body = new Uint8Array(await request.arrayBuffer());
+    if (this.#history) {
+      requestContext.requestDigest = requestDigest(request, body);
+    }
+    return body;
   }
 
   // Runs at the named steps of a recorded write, so a test can fail the write
@@ -12249,7 +12278,9 @@ export class Realm {
     return await this.replaceFileContent(
       request,
       requestContext,
-      await request.text(),
+      new TextDecoder().decode(
+        await this.#readRequestBody(request, requestContext),
+      ),
     );
   }
 
@@ -12260,7 +12291,7 @@ export class Realm {
     return await this.replaceFileContent(
       request,
       requestContext,
-      new Uint8Array(await request.arrayBuffer()),
+      await this.#readRequestBody(request, requestContext),
     );
   }
 
@@ -12302,7 +12333,11 @@ export class Realm {
           actor: requestContext.authenticatedUser ?? undefined,
           waitForIndex: false,
           broadcastRealmEvents: !realmEventsSuppressed(request),
-          recording: this.#writeRecording(request, requestContext, 'host'),
+          recording: await this.#writeRecording(
+            request,
+            requestContext,
+            'host',
+          ),
         },
       );
     } catch (err: unknown) {
@@ -13256,7 +13291,9 @@ export class Realm {
     // back out of the index or echoed) and nothing prerender-specific beyond
     // them.
     let answerFromEcho = skipsIndexWait(request);
-    let body = await request.text();
+    let body = new TextDecoder().decode(
+      await this.#readRequestBody(request, requestContext),
+    );
     let json;
     try {
       json = JSON.parse(body);
@@ -13327,7 +13364,11 @@ export class Realm {
         await commitBatch(this.batchCore, [entry], {
           ...admission.batch,
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-          recording: this.#writeRecording(request, requestContext, 'host'),
+          recording: await this.#writeRecording(
+            request,
+            requestContext,
+            'host',
+          ),
           ...(requestContext.authenticatedUser
             ? { actor: requestContext.authenticatedUser }
             : {}),
@@ -13786,7 +13827,11 @@ export class Realm {
     // serialized echo.
     let answerFromEcho = skipsIndexWait(request);
 
-    let { data: patch, included: maybeIncluded } = await request.json();
+    let { data: patch, included: maybeIncluded } = JSON.parse(
+      new TextDecoder().decode(
+        await this.#readRequestBody(request, requestContext),
+      ),
+    );
     if (!isCardResource(patch)) {
       return await admission.answer(
         badRequest({
@@ -13860,7 +13905,11 @@ export class Realm {
               : {}),
             // Shared by the re-commit below, which runs only when this one
             // changed nothing and so recorded nothing under the id.
-            recording: this.#writeRecording(request, requestContext, 'host'),
+            recording: await this.#writeRecording(
+              request,
+              requestContext,
+              'host',
+            ),
             // The same trade a create makes, for the same two reasons — see
             // `createCard`, where the deadlock this avoids is spelled out.
             ...indexWaitOptions(request, { bounded: false }),
@@ -15710,7 +15759,11 @@ export class Realm {
         [{ op: 'delete', href: url.href, ...admission.entry }],
         {
           ...admission.batch,
-          recording: this.#writeRecording(request, requestContext, 'host'),
+          recording: await this.#writeRecording(
+            request,
+            requestContext,
+            'host',
+          ),
           // A 204 reads nothing from the index, so the removal's own pass is
           // waited for only as long as `indexWaitOptions` allows.
           ...indexWaitOptions(request, { bounded: true }),
