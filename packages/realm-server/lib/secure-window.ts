@@ -62,14 +62,8 @@ export interface SecureWindowOperation {
   slots: { name: string; key: string }[];
 }
 
-export interface SecureWindowRealm {
-  url: string;
-  name: string;
-  directWriter: boolean;
-}
-
 export interface SecureWindowContext {
-  realm: SecureWindowRealm;
+  realm: { url: string; name: string; directWriter: boolean };
   card?: { name: string; module: string; exportName: string };
   operation?: SecureWindowOperation;
 }

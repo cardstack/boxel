@@ -89,11 +89,7 @@ function context(attributes: Record<string, unknown>) {
   });
 }
 
-const WORKSPACE = {
-  url: REALM,
-  name: 'Team Workspace',
-  directWriter: true,
-};
+const WORKSPACE = { url: REALM, name: 'Team Workspace', directWriter: true };
 
 module('Integration | key pages', function (hooks) {
   setupRenderingTest(hooks);
@@ -522,6 +518,61 @@ module('Integration | key pages', function (hooks) {
         meta: { ticket: 'ticket-1' },
       });
       assert.dom('[data-test-key-replace-form]').doesNotExist();
+    });
+
+    test('replacing a key says what it switches, however many workspaces use it', async function (assert) {
+      let answer: () => Answer = () => json(200, { data: [] });
+      serve({ 'GET _key-shares': () => answer() });
+      visitShell('?mode=keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      let where = '[data-test-key-replace-where]';
+      async function openReplace() {
+        await click('[data-test-key-row="Maps"] [data-test-key-replace]');
+        await settled();
+      }
+      async function closeReplace() {
+        await click('[data-test-key-replace-form] button[type="button"]');
+      }
+
+      answer = () =>
+        json(200, {
+          data: [
+            {
+              type: 'key-share',
+              id: 'share-1',
+              attributes: { realm: REALM, label: 'Maps' },
+            },
+          ],
+        });
+      await openReplace();
+      assert
+        .dom(where)
+        .hasText(
+          'One workspace uses this key. Replacing it switches that workspace to the new key right away, so make sure the new key is right for that workspace.',
+        );
+      await closeReplace();
+
+      answer = () => json(200, { data: [] });
+      await openReplace();
+      assert
+        .dom(where)
+        .hasText(
+          'No workspace uses this key. Make sure the new key is for the same service.',
+        );
+      await closeReplace();
+
+      answer = () => refusal(500, 'the shares could not be listed');
+      await openReplace();
+      assert
+        .dom(where)
+        .hasText(
+          'Replacing this key switches every workspace that uses it to the new key right away, so make sure all of them use the same key.',
+          'when the shares can’t be listed, it says so in general terms',
+        );
+      assert
+        .dom('[data-test-key-replace-save]')
+        .exists('and the replace is still offered');
     });
 
     test('deleting a key lists the shares it would stop, then deletes it', async function (assert) {
@@ -1099,7 +1150,7 @@ module('Integration | key pages', function (hooks) {
       );
     });
 
-    test('a reader who isn’t a direct writer is told an administrator must set it up', async function (assert) {
+    test('a reader who isn’t a direct writer is told someone with direct write access must set it up', async function (assert) {
       serve({
         'POST _secure-window/context': () =>
           context({ realm: { ...WORKSPACE, directWriter: false } }),
@@ -1220,7 +1271,7 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-swap-key-form]').doesNotExist();
     });
 
-    test('a reader who isn’t a direct writer is told an administrator must set it up', async function (assert) {
+    test('a reader who isn’t a direct writer is told someone with direct write access must set it up', async function (assert) {
       serve({
         'POST _secure-window/context': () =>
           context({ realm: { ...WORKSPACE, directWriter: false } }),
