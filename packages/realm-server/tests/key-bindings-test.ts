@@ -4,7 +4,11 @@ import { basename } from 'path';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
-import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
+import type {
+  LooseSingleCardDocument,
+  Realm,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 import { createJWT, setupPermissionedRealmCached } from './helpers/index.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
@@ -134,6 +138,7 @@ module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
   let request: SuperTest<Test>;
   let dbAdapter: PgAdapter;
+  let virtualNetwork: VirtualNetwork;
   let keyring: SecretsKeyring;
   let vendor: StubVendor;
 
@@ -172,6 +177,7 @@ module(basename(import.meta.filename), function (hooks) {
       realm = args.testRealm;
       request = args.request;
       dbAdapter = args.dbAdapter;
+      virtualNetwork = args.virtualNetwork;
       vendor.requests.length = 0;
     },
   });
@@ -781,6 +787,43 @@ module(basename(import.meta.filename), function (hooks) {
       `Basic ${Buffer.from(OTHER_VALUE).toString('base64')}`,
       "the new key, under the new key's grant",
     );
+  });
+
+  test("a realm's share listing names each operation's type and card in RRI form, as the bindings listing does", async function (assert) {
+    let key = await addKey();
+    let share = await shareKey(dbAdapter, {
+      owner: OWNER,
+      realm: realmURL.href,
+      keyId: key.id,
+      label: 'Vendor',
+      ticket: await ticket(OWNER, 'share', { keyId: key.id, realm: realmURL }),
+    });
+    await approve(OWNER, [
+      approval('shared', { apiKey: { shareId: share.id } }),
+    ]);
+    let prefix = '@test/key-bindings/';
+    virtualNetwork.addRealmMapping(prefix, realmURL.href);
+    try {
+      let shares = await request
+        .get(`/_key-shares?realm=${encodeURIComponent(realmURL.href)}`)
+        .set('Authorization', await secureSessionAuth(dbAdapter, WRITER));
+      let bindings = await request
+        .get('/_key-bindings')
+        .set('Authorization', await secureSessionAuth(dbAdapter, OWNER));
+      let [operation] = shares.body.data[0].attributes.operations;
+      assert.strictEqual(
+        operation.type.module,
+        `${prefix}inbox`,
+        'the module is named by its prefix',
+      );
+      assert.deepEqual(
+        operation.type,
+        bindings.body.data[0].attributes.type,
+        'both listings spell the type the same way',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping(prefix);
+    }
   });
 
   test('an operation approved per instance serves only the card it was approved for', async function (assert) {

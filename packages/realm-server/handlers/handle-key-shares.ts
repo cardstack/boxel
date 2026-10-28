@@ -1,4 +1,5 @@
 import type Koa from 'koa';
+import type { VirtualNetwork } from '@cardstack/runtime-common';
 import { setContextResponse } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import {
@@ -39,6 +40,26 @@ function serialize(share: KeyShare) {
   return { type: 'key-share', id, attributes };
 }
 
+// A realm's listing names each binding's type and card in RRI form, as the
+// bindings API does.
+function serializeWithOperations(network: VirtualNetwork, share: KeyShare) {
+  let serialized = serialize(share);
+  if (!share.operations) {
+    return serialized;
+  }
+  return {
+    ...serialized,
+    attributes: {
+      ...serialized.attributes,
+      operations: share.operations.map(({ type, instance, ...rest }) => ({
+        ...rest,
+        type: { ...type, module: network.unresolveURL(type.module) },
+        instance: instance === null ? null : network.unresolveURL(instance),
+      })),
+    },
+  };
+}
+
 function serializeNotice(notice: KeyShareNotice) {
   let { id, ...attributes } = notice;
   return { type: 'key-share-notice', id, attributes };
@@ -74,7 +95,10 @@ const SWAP_ATTRIBUTES = new Set(['keyId']);
 // `?key=<id>`, only those holding that key, which deleting it would suspend.
 // `GET /_key-shares?realm=<url>` lists a realm's shares, for one of its
 // direct writers.
-export function handleListKeyShares({ dbAdapter }: CreateRoutesArgs): Handler {
+export function handleListKeyShares({
+  dbAdapter,
+  virtualNetwork,
+}: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     let realm = ctxt.URL.searchParams.get('realm');
@@ -88,7 +112,11 @@ export function handleListKeyShares({ dbAdapter }: CreateRoutesArgs): Handler {
         : await listOwnShares(dbAdapter, user, {
             keyId: keyId ?? undefined,
           });
-    await sendJSON(ctxt, 200, { data: shares.map(serialize) });
+    await sendJSON(ctxt, 200, {
+      data: shares.map((share) =>
+        serializeWithOperations(virtualNetwork, share),
+      ),
+    });
   });
 }
 
