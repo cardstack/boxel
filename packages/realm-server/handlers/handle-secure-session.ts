@@ -289,6 +289,7 @@ export function resumePasswordChangeDeviceSweeps(args: CreateRoutesArgs): void {
 // client.
 export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
   return secureSessionHandler(async (ctxt) => {
+    requireSecureOrigin(ctxt, args.secureOriginURL);
     await sendJSON(ctxt, 200, {
       data: {
         type: 'google-sign-in',
