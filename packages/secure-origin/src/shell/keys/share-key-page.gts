@@ -96,8 +96,8 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     {{else if this.choosing}}
       <form novalidate {{on 'submit' this.save}} data-test-share-key-form>
         <EditPage @heading='Share a key' data-test-share-key>
-          <:intro>People in the workspace can use the key in their requests.
-            They never see the key itself.</:intro>
+          <:intro>People who can access the workspace can use the key in their
+            requests. They never see the key itself.</:intro>
           <:default>
             {{#if this.choosing.context}}
               <OpenedForSummary
@@ -147,7 +147,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
               <BoxelInput
                 @type='text'
                 @autocomplete='off'
-                @placeholder='What people in the workspace see it as'
+                @placeholder='What people with access to the workspace see it as'
                 @value={{this.form.label}}
                 @onInput={{this.setLabel}}
                 name='share-label'
