@@ -4154,7 +4154,9 @@ export class Realm {
       body: JSON.stringify(
         result
           ? { outcome: result.outcome, recovery: result.event }
-          : { outcome: 'not-recording' },
+          : // Left alone: a realm that records gets here only when it is
+            // already read-only.
+            { outcome: this.#history ? 'read-only' : 'not-recording' },
       ),
       init: {
         status: 200,
