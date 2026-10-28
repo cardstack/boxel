@@ -15,6 +15,7 @@ A square **Button** carrying an icon instead of text, with a mandatory label. Us
 @href?: string   (renders an <a>; @busy and @pressed do not apply)
 @pressed?: boolean   (toggle state as aria-pressed; leave undefined for a plain action)
 @pressedTint?: boolean   (default true; false drops the pressed tint, for a toggle whose icon already shows its state)
+@tooltip?: string   (shown in a Tooltip in place of the native title, and read as the button's description; the name stays @label)
 @busy?, @loading?, @isLoading?, @isPending?   (forwarded to Button)
 @busyLabel?: string   (added after @label in the accessible name while busy; forwarded to Button, which shows it when the button is wide enough)
 @disabled?, @isDisabled?
@@ -22,9 +23,9 @@ A square **Button** carrying an icon instead of text, with a mandatory label. Us
 Element: HTMLButtonElement | HTMLAnchorElement
 ```
 
-**Every Button argument is accepted, with the same meaning and aliases**: the signature is Button's plus `@label`, `@icon`, `@iconWidth`/`@iconHeight`, `@pressed` and `@pressedTint`. Only the default treatment differs: `neutral` / `outlined`.
+**Every Button argument is accepted, with the same meaning and aliases**: the signature is Button's plus `@label`, `@icon`, `@iconWidth`/`@iconHeight`, `@pressed`, `@pressedTint` and `@tooltip`. Only the default treatment differs: `neutral` / `outlined`.
 
-**`@label` is required, and it is the whole point of the component existing.** An icon-only `<Button>` has no accessible name and nothing warns you; `IconButton` makes the name non-optional at the type level and applies it as both `aria-label` and `title`. That is the single reason this is a separate export rather than a `size='icon'` variant.
+**`@label` is required, and it is the whole point of the component existing.** An icon-only `<Button>` has no accessible name and nothing warns you; `IconButton` makes the name non-optional at the type level and applies it as `aria-label`, and as `title` unless `@tooltip` is set. That is the single reason this is a separate export rather than a `size='icon'` variant.
 
 **`@icon` takes an icon component, as boxel-ui's IconButton does**, and sizes it with `width`/`height` attributes so it has an intrinsic size before any stylesheet applies. The default is `1.25em`, so the icon follows the button's font size: it scales with `@size` and with a theme's text scale. `@iconWidth`/`@iconHeight` override that size. boxel-ui calls them `@width`/`@height`; the `icon` prefix keeps them from reading as the button's own size. Block content still works and renders after `@icon`, so a text glyph or an inline SVG needs no wrapper component.
 
