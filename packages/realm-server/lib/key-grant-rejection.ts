@@ -324,11 +324,11 @@ export async function recordVendorForbidden(
 // it, however many arrive at once, because the claim and the check are one
 // statement.
 export async function claimProbe(
-  querier: Querier,
+  db: DBAdapter | Querier,
   grantId: string,
   intervalMs: number,
 ): Promise<boolean> {
-  let [row] = await querier([
+  let [row] = await querierOf(db)([
     `UPDATE user_key_grants SET last_probe_at = NOW() WHERE id = `,
     param(grantId),
     ` AND state = 'rejected' AND `,
@@ -336,6 +336,11 @@ export async function claimProbe(
     ` RETURNING id`,
   ]);
   return !!row;
+}
+
+// Runs on a transaction's querier when given one, otherwise on the adapter.
+function querierOf(db: DBAdapter | Querier): Querier {
+  return typeof db === 'function' ? db : (expression) => query(db, expression);
 }
 
 // The SQL condition that a rejected grant's next probe is due.
@@ -416,11 +421,11 @@ export async function markKeyRejected(
 // Claims the probe of a rejected key: at most one call per interval gets it,
 // whichever of the key's grants it comes through.
 export async function claimKeyProbe(
-  querier: Querier,
+  db: DBAdapter | Querier,
   keyId: string,
   intervalMs: number,
 ): Promise<boolean> {
-  let [row] = await querier([
+  let [row] = await querierOf(db)([
     `UPDATE user_keys SET last_probe_at = NOW() WHERE id = `,
     param(keyId),
     ` AND state = 'rejected' AND `,
