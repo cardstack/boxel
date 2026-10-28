@@ -26,6 +26,7 @@ import {
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
+import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -2550,18 +2551,21 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   // Holds every store load of the discovered skill until released, so every
   // resolution of its tool stays in flight.
   //
-  // The skill and the tool's module are loaded once before the hold. The
-  // drain's validation timeout runs while the hold is in place, so whatever
-  // the resolution still has to load after the release has to fit in the rest
-  // of that budget. Loaded beforehand, that work is a cache hit; loaded for
-  // the first time after the release, it can overrun the budget on a busy
-  // runner, and the tool fails with a validation timeout instead of running.
+  // The skill, the tool's module and the field modules behind the tool's
+  // input schema are loaded once before the hold. The drain's validation
+  // timeout runs while the hold is in place, so whatever the resolution still
+  // has to load after the release has to fit in the rest of that budget.
+  // Loaded beforehand, that work is a cache hit; loaded for the first time
+  // after the release, it can overrun the budget on a busy runner, and the
+  // tool fails with a validation timeout instead of running.
   async function holdDiscoveredSkillLoads() {
     let store = getService('store');
     await loadSkillSource(store, discoveredSkillUrl);
-    await getService('loader-service').loader.import(
+    let loader = getService('loader-service').loader;
+    await loader.import(
       '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
     );
+    await basicMappings(loader);
     let release = new Deferred<void>();
     let heldLoads = 0;
     let originalGet = store.get;
