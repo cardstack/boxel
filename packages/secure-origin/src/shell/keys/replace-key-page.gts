@@ -244,10 +244,6 @@ class SlotPanel extends Component<{
             {{else}}
               None of your keys is approved for this request yet, so there is
               nothing to replace.
-              {{#if @context.card}}
-                <strong>{{@context.card.name}}</strong>
-                asks you to approve one when it needs it.
-              {{/if}}
             {{/if}}
           </p>
         </FieldContainer>

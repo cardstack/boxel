@@ -1778,7 +1778,9 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-replace-key-form]').doesNotExist();
       assert
         .dom('[data-test-replace-key-unbound]')
-        .includesText('None of your keys is approved for this request yet');
+        .hasText(
+          'None of your keys is approved for this request yet, so there is nothing to replace.',
+        );
     });
 
     test('two slots: each is named, a replaced one says so, and the window closes once both keys are replaced', async function (assert) {
