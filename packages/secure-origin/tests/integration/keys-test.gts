@@ -675,6 +675,71 @@ module('Integration | key pages', function (hooks) {
         .hasText('Shared with 2 workspaces', 'and the key stays in the rest');
     });
 
+    test('an unshare refused part-way through shows what is left, and unsharing again removes only that', async function (assert) {
+      let teamShares = KEYS[0].sharedInto.find((w) => w.url === REALM)!.shares;
+      let left = teamShares;
+      let refuseSecond = true;
+      serve({
+        'GET _user-keys': () =>
+          json(
+            200,
+            keyResources([
+              {
+                ...KEYS[0],
+                sharedInto: KEYS[0].sharedInto
+                  .map((w) => (w.url === REALM ? { ...w, shares: left } : w))
+                  .filter((w) => w.shares.length),
+              },
+              KEYS[1],
+            ]),
+          ),
+        'DELETE _key-shares/share-team-1': () => {
+          left = left.filter((s) => s.id !== 'share-team-1');
+          return { status: 204 };
+        },
+        'DELETE _key-shares/share-team-2': () => {
+          if (refuseSecond) {
+            return refusal(403, 'Not now');
+          }
+          left = left.filter((s) => s.id !== 'share-team-2');
+          return { status: 204 };
+        },
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      let team = `[data-test-key-row="Weather service"] [data-test-key-shared-into-workspace="${REALM}"]`;
+      await click(`${team} [data-test-key-unshare]`);
+      await click(`${team} [data-test-key-unshare-confirm-button]`);
+      await waitFor('[data-test-keys-error]');
+      await settled();
+      assert.dom('[data-test-keys-error]').includesText('Not now');
+      assert
+        .dom(`${team} [data-test-workspace-labels]`)
+        .hasText(
+          'As “Team weather” (suspended)',
+          'the list is read again, so the share already removed is gone',
+        );
+      assert
+        .dom(`${team} [data-test-key-unshare-confirm]`)
+        .exists('the question stays open');
+
+      refuseSecond = false;
+      let before = requests.length;
+      await click(`${team} [data-test-key-unshare-confirm-button]`);
+      await settled();
+      assert.deepEqual(
+        requests
+          .slice(before)
+          .filter((r) => r.method === 'DELETE')
+          .map((r) => r.path),
+        ['_key-shares/share-team-2'],
+        'unsharing again removes only the share that is left',
+      );
+      assert.dom(team).doesNotExist('the workspace is gone from the list');
+      assert.strictEqual(teamShares.length, 2);
+    });
+
     test('an unshare the server refuses says why and keeps the workspace', async function (assert) {
       serve({
         'DELETE _key-shares/share-dash': () =>

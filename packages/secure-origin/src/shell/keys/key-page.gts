@@ -80,7 +80,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
           {{else}}
             {{#if this.state.keys.length}}
               <ul class='list' data-test-key-list>
-                {{#each this.state.keys as |key|}}
+                {{#each this.state.keys key='id' as |key|}}
                   <li class='item' data-test-key-row={{key.name}}>
                     <div class='entry'>
                       <KeyTile @key={{key}}>
@@ -485,15 +485,20 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   // needs no ticket since a key's owner may always withdraw it. The key stays
   // shared everywhere else, and the list is read again to show it.
   private unshare = async (
-    key: ListedKey,
+    _key: ListedKey,
     workspace: SharedWorkspace,
   ): Promise<boolean> => {
+    let removed = 0;
     let unshared = await this.guard(async () => {
       for (let share of workspace.shares) {
         await unshare(this.args.api.config, share.id);
+        removed++;
       }
     });
-    if (unshared && this.state.keys.some((k) => k.id === key.id)) {
+    // Read the list again once any share is gone, even when a later one was
+    // refused, so the page never offers to remove a share that no longer
+    // exists. A refusal stays shown, as the load leaves it.
+    if (removed > 0) {
       await this.load();
     }
     return unshared;
