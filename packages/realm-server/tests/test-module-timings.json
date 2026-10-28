@@ -86,6 +86,7 @@
   "full-reindex-test.ts": 1,
   "get-boxel-claimed-domain-test.ts": 5.1,
   "google-account-test.ts": 0,
+  "google-service-account-keys-test.ts": 20,
   "google-service-account-test.ts": 1.2,
   "health-check-test.ts": 0,
   "host-routing-validation-test.ts": 0,

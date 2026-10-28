@@ -16,9 +16,11 @@ import {
   OutboundTimeoutError,
   describeOutboundError,
   outboundFetch,
+  recordedURL,
   sendContext,
 } from './client.ts';
 import { CredentialScrubber } from './scrubber.ts';
+import { tokenEndpointAt } from './token-endpoints.ts';
 import { scrubError } from './scrub-error.ts';
 
 const log = logger('call-api');
@@ -69,10 +71,27 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 // Whatever the vendor answers is the answer: a 404 or a 500 is a response the
 // card reads. Only a refusal by the guard, a timeout, or a send that broke
 // before any response arrived is a refusal of the operation.
+//
+// A request addressed to a token endpoint is refused before anything is sent,
+// key or no key: only the platform calls a token endpoint.
 export function createCallApiSender(dbAdapter: DBAdapter): CallApiSender {
   return {
     fill: (lookup) => fillSlots(dbAdapter, secretsKeyring, lookup),
-    send: sendCallApiRequest,
+    send: async (request, credentials) => {
+      if (await tokenEndpointAt(dbAdapter, request.url)) {
+        log.warn(
+          `callApi refused: ${recordedURL(request.url)} is a token endpoint, which only the platform calls`,
+        );
+        throw new OperationFailure({
+          status: 502,
+          code: 'guard-refused',
+          title: 'Destination refused',
+          detail: `the request is addressed to a token endpoint, which only the platform calls`,
+          meta: { reason: 'platform-only' },
+        });
+      }
+      return await sendCallApiRequest(request, credentials);
+    },
   };
 }
 

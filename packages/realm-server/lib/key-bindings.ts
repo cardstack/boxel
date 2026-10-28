@@ -34,7 +34,16 @@ import {
   operationGrantDestination,
   type UserKeyGrant,
 } from './user-key-grants.ts';
-import { UserKeyError } from './user-keys.ts';
+import { MINTING_KINDS, UserKeyError } from './user-keys.ts';
+import {
+  oauthAccessToken,
+  OAuthTokenError,
+  type OAuthTokenFailure,
+} from './oauth.ts';
+import {
+  serviceAccountAccessToken,
+  ServiceAccountTokenError,
+} from './google-service-account-keys.ts';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
 // to send a chosen key in one of the operation's credential slots. Card code
@@ -1069,7 +1078,7 @@ export async function fillSlots(
 ): Promise<CallApiFilledSlot[]> {
   let filled: CallApiFilledSlot[] = [];
   for (let { slot, row } of await checkedBindings(dbAdapter, lookup)) {
-    let opened: { keyId: string; destination: string; value: string };
+    let opened: Awaited<ReturnType<typeof openGrantForSending>>;
     let ring = keyring();
     try {
       opened = await openGrantForSending(dbAdapter, ring, {
@@ -1099,18 +1108,72 @@ export async function fillSlots(
         notApproved(lookup.operation, lookup.request, lookup.realmURL),
       );
     }
+    // A key that mints its access tokens sends the one it mints now; its
+    // grant's marker has only proved the grant real.
+    let secret = MINTING_KINDS.has(opened.kind)
+      ? await mintedToken(dbAdapter, ring, opened, slot, lookup.operation)
+      : opened.value;
     let value =
       slot.transform === 'basic'
-        ? Buffer.from(opened.value, 'utf8').toString('base64')
-        : opened.value;
+        ? Buffer.from(secret, 'utf8').toString('base64')
+        : secret;
     filled.push({
       name: slot.name,
       value,
-      ...(value !== opened.value ? { raw: opened.value } : {}),
+      ...(value !== secret ? { raw: secret } : {}),
       destination: opened.destination,
     });
   }
   return filled;
+}
+
+const MINTING_REFUSALS: Record<OAuthTokenFailure, string> = {
+  rejected: 'its vendor no longer accepts it, so its owner signs in again',
+  'needs-admin':
+    'the OAuth client it mints through is unavailable, so an administrator of that client needs to set it up again',
+  unavailable:
+    'its token endpoint kept failing, so asking again later may succeed',
+};
+
+const SERVICE_ACCOUNT_REJECTED =
+  'Google no longer accepts its service account key, so its owner replaces the key';
+
+// The access token a minting key sends now, or the refusal for why it has
+// none: `credential-rejected`, with the reason.
+async function mintedToken(
+  dbAdapter: DBAdapter,
+  keyring: SecretsKeyring,
+  opened: { keyId: string; kind: string; destination: string },
+  slot: CallApiSlot,
+  operation: string,
+): Promise<string> {
+  try {
+    return opened.kind === 'google-service-account'
+      ? await serviceAccountAccessToken(dbAdapter, keyring, opened.keyId)
+      : await oauthAccessToken(dbAdapter, keyring, opened.keyId);
+  } catch (error) {
+    if (
+      !(error instanceof OAuthTokenError) &&
+      !(error instanceof ServiceAccountTokenError)
+    ) {
+      throw error;
+    }
+    let why =
+      error instanceof ServiceAccountTokenError && error.reason === 'rejected'
+        ? SERVICE_ACCOUNT_REJECTED
+        : MINTING_REFUSALS[error.reason];
+    throw new OperationFailure({
+      status: 424,
+      code: 'credential-rejected',
+      title: 'Credential rejected',
+      detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${why}`,
+      meta: {
+        slot: { name: slot.name, key: slot.key },
+        destination: opened.destination,
+        reason: error.reason,
+      },
+    });
+  }
 }
 
 // Whether a pipeline may invoke an operation, asked before the run starts: the
