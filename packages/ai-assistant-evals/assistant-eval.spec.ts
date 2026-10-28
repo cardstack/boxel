@@ -9,11 +9,15 @@ import {
 } from './matrix-api.ts';
 import { analyzeRoom } from './room-analysis.ts';
 import { grade, type RunResult, type Verdict } from './run-result.ts';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
 
-import { RealmClient } from './realm-api.ts';
+import {
+  RealmClient,
+  RealmResponseError,
+  type CardDocument,
+} from './realm-api.ts';
 import {
   expectedChangedSeeds,
+  promptCardIds,
   prepopulate,
   type EvaluationBundle,
 } from './eval-card.ts';
@@ -358,30 +362,63 @@ async function ensureInsideWorkspace(
   ) {
     // Re-enter through the URL rather than the tile, so this works whatever
     // state the chooser is in.
-    let state = encodeURIComponent(
-      JSON.stringify({
-        stacks: [
-          [
-            { id: `${realmUrl}index`, format: 'isolated' },
-            ...openCards.map((id) => ({ id, format: 'isolated' })),
-          ],
-        ],
-        submode: 'interact',
-        workspaceChooserOpened: false,
-        aiAssistantOpen: true,
-      }),
-    );
-    await page.goto(`/?operatorModeState=${state}`);
-    await indexCard.waitFor({ timeout: 60_000 });
-    for (let id of openCards) {
-      await page
-        .locator(`[data-test-stack-card="${id}"]`)
-        .waitFor({ timeout: 60_000 });
-    }
-    await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
+    await openStack(page, realmUrl, openCards);
   }
   await expect(chooser).toHaveCount(0);
   await expect(indexCard).toBeVisible();
+}
+
+// One stack: the workspace index, then `openCards` in order, the last on top.
+async function openStack(page: Page, realmUrl: string, openCards: string[]) {
+  let state = encodeURIComponent(
+    JSON.stringify({
+      stacks: [
+        [
+          { id: `${realmUrl}index`, format: 'isolated' },
+          ...openCards.map((id) => ({ id, format: 'isolated' })),
+        ],
+      ],
+      submode: 'interact',
+      workspaceChooserOpened: false,
+      aiAssistantOpen: true,
+    }),
+  );
+  await page.goto(`/?operatorModeState=${state}`);
+  await page
+    .locator(`[data-test-stack-card="${realmUrl}index"]`)
+    .waitFor({ timeout: 60_000 });
+  for (let id of openCards) {
+    await page
+      .locator(`[data-test-stack-card="${id}"]`)
+      .waitFor({ timeout: 60_000 });
+  }
+  await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
+}
+
+// Puts the card a prompt is about on top of the stack, above the other open
+// cards, since only a stack's top card goes into the message context. Does
+// nothing when it is already the top card.
+async function bringToTop(
+  page: Page,
+  realmUrl: string,
+  openCards: string[],
+  cardId: string,
+  roomId: string,
+) {
+  let top = await page.evaluate(
+    () =>
+      [...document.querySelectorAll('[data-test-stack-card]')]
+        .at(-1)
+        ?.getAttribute('data-test-stack-card') ?? null,
+  );
+  if (top === cardId) {
+    return;
+  }
+  await openStack(page, realmUrl, [
+    ...openCards.filter((id) => id !== cardId),
+    cardId,
+  ]);
+  await returnToRoom(page, roomId);
 }
 
 async function sendPrompt(
@@ -726,44 +763,67 @@ async function waitForIdle(
 // render the instance through the card renderer, which stamps
 // `data-test-card="<id>"`, so look for that anywhere on the page.
 //
-// `seededCardIds` are the evaluation's `initialCards`, which the run copies in
-// and stacks before the prompt goes out. They render exactly like a card the
-// assistant produced, so they are excluded here — otherwise an evaluation that
-// seeds cards clears the "a card rendered" leg before the assistant does
-// anything.
+// `seeded` are the card instances the run copies in before the prompt goes out
+// (`initialCards` and card `.json` files in `initialFiles`). They render
+// exactly like a card the assistant produced, so they are excluded here —
+// otherwise an evaluation that seeds cards clears the "a card rendered" leg
+// before the assistant does anything.
 //
-// `requiredCardIds`, when given, are the only cards that count: an evaluation
-// that names the cards it expects changed is satisfied only by one of those,
-// changed, on screen — not by a seeded card that happens to render beside or
-// inside it.
+// `required`, when given, are the only cards that count, and `seeded` is not
+// consulted: an evaluation that names the cards it expects changed is
+// satisfied only by one of those, changed and shown in the stack or the
+// preview panel — not rendered embedded inside another card, the way a linked
+// card appears in the card that links to it.
 async function findRenderedCard(
   page: Page,
   realmUrl: string,
-  seededCardIds: string[] = [],
-  requiredCardIds?: string[],
+  {
+    seeded = [],
+    required,
+    missingReason = 'no card the assistant produced is rendered, in the stack or the preview panel',
+  }: { seeded?: string[]; required?: string[]; missingReason?: string },
 ) {
-  let seeded = new Set(seededCardIds);
-  let required = requiredCardIds ? new Set(requiredCardIds) : undefined;
+  let excluded = new Set(required ? [] : seeded);
+  let counted = required ? new Set(required) : undefined;
   let cardIds: string[] = [];
   try {
     await expect
       .poll(
         async () => {
-          let ids = (await page
+          // A card is shown, rather than embedded in another one, when it is
+          // the card of the stack item or the preview panel it renders in.
+          let rendered = await page
             .locator('[data-test-card]')
             .evaluateAll((els) =>
-              els.map((el) => el.getAttribute('data-test-card')),
-            )) as (string | null)[];
+              els.map((el) => {
+                let id = el.getAttribute('data-test-card');
+                let stackCard = el
+                  .closest('[data-test-stack-card]')
+                  ?.getAttribute('data-test-stack-card');
+                let previewCard = el.closest(
+                  '[data-test-code-mode-card-renderer-body]',
+                )
+                  ? document
+                      .querySelector(
+                        '[data-test-code-mode-card-renderer-header]',
+                      )
+                      ?.getAttribute('data-test-code-mode-card-renderer-header')
+                  : undefined;
+                return { id, shown: id === stackCard || id === previewCard };
+              }),
+            );
           cardIds = [
             ...new Set(
-              ids.filter(
-                (id): id is string =>
-                  !!id &&
-                  id.startsWith(realmUrl) &&
-                  !id.endsWith('index') &&
-                  !seeded.has(id) &&
-                  (!required || required.has(id)),
-              ),
+              rendered
+                .filter(({ id, shown }) =>
+                  counted
+                    ? !!id && counted.has(id) && shown
+                    : !!id &&
+                      id.startsWith(realmUrl) &&
+                      !id.endsWith('index') &&
+                      !excluded.has(id),
+                )
+                .map(({ id }) => id as string),
             ),
           ];
           return cardIds.length;
@@ -774,9 +834,7 @@ async function findRenderedCard(
   } catch {
     return {
       cardId: undefined,
-      reasons: [
-        'no card the assistant produced is rendered, in the stack or the preview panel',
-      ],
+      reasons: [missingReason],
       where: undefined,
     };
   }
@@ -809,21 +867,109 @@ async function findRenderedCard(
 
 type ExpectedSeed = ReturnType<typeof expectedChangedSeeds>[number];
 
-// Whether a seeded card's file still holds the bytes it was seeded with, or
-// `undefined` when it cannot be read back (the run deleted it, say).
-async function matchesSeed(
+interface SeedState {
+  seed: ExpectedSeed;
+  // `missing` when the file is gone (the run deleted or renamed it).
+  state: 'same' | 'changed' | 'missing';
+  // The file's Last-Modified, in whole seconds.
+  lastModified?: number;
+}
+
+// How a seeded card's file compares with its seed. `bytes` compares the file
+// byte for byte, which is what the copy has to keep. `data` compares the
+// card's data (attributes, relationships and `adoptsFrom`, whatever their key
+// order), so a write that only reformats the file is not a change; it falls
+// back to bytes when either side does not parse. Any read failure but a 404
+// throws, so it ends the run as a runner failure rather than reading as a
+// card the model left alone.
+async function seedState(
   client: RealmClient,
   realmUrl: string,
   seed: ExpectedSeed,
-): Promise<boolean | undefined> {
+  compare: 'bytes' | 'data',
+): Promise<SeedState> {
+  let source;
   try {
-    let { body } = await client.getSource(
-      realmUrl,
-      new RealmPaths(new URL(realmUrl)).fileURL(seed.path).href,
-    );
-    return seed.content.equals(Buffer.from(body));
+    source = await client.getSource(realmUrl, seed.cardId + '.json');
+  } catch (error) {
+    if (error instanceof RealmResponseError && error.status === 404) {
+      return { seed, state: 'missing' };
+    }
+    throw error;
+  }
+  let body = Buffer.from(source.body);
+  let same =
+    compare === 'bytes'
+      ? seed.content.equals(body)
+      : (sameCardData(seed.content, body) ?? seed.content.equals(body));
+  return {
+    seed,
+    state: same ? 'same' : 'changed',
+    lastModified: source.lastModified,
+  };
+}
+
+function sameCardData(a: Buffer, b: Buffer): boolean | undefined {
+  let data = (bytes: Buffer) => {
+    let doc = JSON.parse(bytes.toString('utf8')) as CardDocument;
+    return canonicalJSON({
+      attributes: doc.data.attributes ?? {},
+      relationships: doc.data.relationships ?? {},
+      adoptsFrom: doc.data.meta?.adoptsFrom,
+    });
+  };
+  try {
+    return data(a) === data(b);
   } catch {
     return undefined;
+  }
+}
+
+// JSON with object keys sorted, so two documents that differ only in key order
+// serialize the same.
+function canonicalJSON(value: unknown): string {
+  return JSON.stringify(value, (_key, v) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        )
+      : v,
+  );
+}
+
+// Waits until the realm's index has caught up with a changed card's file, so
+// the render check sees the card the change produced rather than the one still
+// on screen from before it. Returns why it gave up, if it did.
+async function waitForIndexedChange(
+  client: RealmClient,
+  realmUrl: string,
+  { seed, lastModified }: SeedState,
+  timeoutMs = 60_000,
+): Promise<string | undefined> {
+  let deadline = Date.now() + timeoutMs;
+  let problem = 'it never indexed';
+  for (;;) {
+    try {
+      let doc = await client.getCard(realmUrl, seed.cardId);
+      let indexed = doc.data.meta.lastModified;
+      if (
+        lastModified === undefined ||
+        typeof indexed !== 'number' ||
+        indexed >= lastModified
+      ) {
+        return undefined;
+      }
+      problem = 'the index still serves the version before the change';
+    } catch (error) {
+      if (!(error instanceof RealmResponseError)) {
+        throw error;
+      }
+      problem = `the realm answers ${error.status} for it`;
+    }
+    if (Date.now() > deadline) {
+      return `the change to ${seed.path} did not index within ${timeoutMs / 1000}s: ${problem}`;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
   }
 }
 
@@ -1008,6 +1154,7 @@ async function runModel(
   // run ends early.
   let realmClient: RealmClient | undefined;
   let expected: ExpectedSeed[] = [];
+  let seededCards: string[] = [];
   let step = 'start';
   let setStep = (next: string) => {
     step = next;
@@ -1047,13 +1194,19 @@ async function runModel(
       );
       result.initialCards = copied.cards;
       result.initialFiles = copied.files;
+      seededCards = copied.seededCards;
       // Read the cards the evaluation expects changed back before the prompt:
-      // the check after the run counts a card as changed when its bytes
-      // differ from the seed, so the copy has to have kept them.
+      // the check after the run compares each one with its seed, so the copy
+      // has to have kept the seed's bytes.
       expected = expectedChangedSeeds(evaluation, result.realmUrl);
       result.expectedChangedCards = expected.map((seed) => seed.cardId);
-      for (let seed of expected) {
-        if (!(await matchesSeed(realmClient, result.realmUrl, seed))) {
+      let client = realmClient;
+      let realmUrl = result.realmUrl;
+      let states = await Promise.all(
+        expected.map((seed) => seedState(client, realmUrl, seed, 'bytes')),
+      );
+      for (let { seed, state } of states) {
+        if (state !== 'same') {
           throw new Error(
             `${seed.path} does not read back as its seed after the copy, so a change to it could not be told apart`,
           );
@@ -1099,7 +1252,20 @@ async function runModel(
     let deadline = Date.now() + MAX_MINUTES * 60_000;
     let botMessagesBefore = 0;
     let roomReturns = { count: 0 };
+    let promptCards = evaluation
+      ? promptCardIds(evaluation, result.realmUrl)
+      : [];
     for (let [index, prompt] of prompts.entries()) {
+      if (promptCards[index]) {
+        setStep(`open the card for prompt ${index + 1}`);
+        await bringToTop(
+          page,
+          result.realmUrl,
+          result.initialCards,
+          promptCards[index],
+          result.roomId,
+        );
+      }
       setStep(
         index === 0 ? 'send prompt' : `send follow-up prompt ${index + 1}`,
       );
@@ -1152,40 +1318,45 @@ async function runModel(
     result.roomReturns = roomReturns.count;
     setStep('check render');
 
-    // An evaluation that names the cards it expects changed is satisfied only
-    // by one of them, once its file differs from the seed and it is shown.
-    for (let seed of expected) {
-      if ((await matchesSeed(realmClient, result.realmUrl, seed)) === false) {
-        result.changedCards.push(seed.cardId);
-      }
-    }
-    let paths = expected.map((seed) => seed.path).join(', ');
+    // An evaluation that names the cards it expects changed passes only when
+    // every one of them differs from its seed, and one of them is shown, after
+    // the index has caught up with it.
+    let checkClient = realmClient;
+    let checkRealmUrl = result.realmUrl;
+    let states = await Promise.all(
+      expected.map((seed) =>
+        seedState(checkClient, checkRealmUrl, seed, 'data'),
+      ),
+    );
+    let changed = states.filter(({ state }) => state === 'changed');
+    result.changedCards = changed.map(({ seed }) => seed.cardId);
+    let cardReasons = states.flatMap(({ seed, state }) =>
+      state === 'same'
+        ? [`${seed.path} is expected to change but still holds its seed data`]
+        : state === 'missing'
+          ? [`${seed.path} is expected to change but no longer exists`]
+          : [],
+    );
+    let indexProblems = await Promise.all(
+      changed.map((state) =>
+        waitForIndexedChange(checkClient, checkRealmUrl, state),
+      ),
+    );
+    cardReasons.push(...indexProblems.filter((p): p is string => !!p));
     let rendered =
-      expected.length > 0 && result.changedCards.length === 0
-        ? {
-            cardId: undefined,
-            reasons: [
-              `none of the cards the evaluation expects to change were changed (${paths})`,
-            ],
-            where: undefined,
-          }
-        : await findRenderedCard(
-            page,
-            result.realmUrl,
-            result.initialCards.filter(
-              (id) => !result.changedCards.includes(id),
-            ),
-            expected.length > 0 ? result.changedCards : undefined,
-          );
-    if (
-      !rendered.cardId &&
-      expected.length > 0 &&
-      result.changedCards.length > 0
-    ) {
-      rendered.reasons = [
-        `a card the evaluation expects to change was changed but is not shown (${paths})`,
-      ];
-    }
+      expected.length === 0
+        ? await findRenderedCard(page, result.realmUrl, {
+            seeded: seededCards,
+          })
+        : changed.length === 0
+          ? { cardId: undefined, reasons: [], where: undefined }
+          : await findRenderedCard(page, result.realmUrl, {
+              required: result.changedCards,
+              missingReason: `no card the evaluation expects to change is shown in the stack or the preview panel (${changed
+                .map(({ seed }) => seed.path)
+                .join(', ')} changed)`,
+            });
+    rendered.reasons = [...cardReasons, ...rendered.reasons];
     result.cardRendered = rendered.cardId;
     result.renderedIn = rendered.where;
     result.screenshot = join(RESULTS_DIR, `${slug}.png`);
