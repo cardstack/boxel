@@ -252,15 +252,19 @@ function escapeHTML(text: string) {
 // The page a person approves an app on, drawn as a vendor's would be.
 function consentPage(params: URLSearchParams) {
   let scopes = (params.get('scope') ?? '').split(/\s+/).filter(Boolean);
-  let approve = new URL('/authorize', 'http://placeholder');
-  for (let [name, value] of params) {
-    approve.searchParams.set(name, value);
-  }
+  // A GET form replaces its action's query with its fields, so each
+  // parameter rides as a hidden field.
+  let hidden = [...params]
+    .map(
+      ([name, value]) =>
+        `<input type="hidden" name="${escapeHTML(name)}" value="${escapeHTML(value)}">`,
+    )
+    .join('');
   return `<!doctype html><html><head><title>Authorize application</title>
 <style>body{font-family:system-ui;background:#f6f8fa;display:flex;justify-content:center;padding:48px}
 main{background:#fff;border:1px solid #d0d7de;border-radius:12px;padding:32px;width:420px}
 h1{font-size:20px}li{margin:6px 0}button{background:#1f883d;color:#fff;border:0;border-radius:6px;padding:10px 16px;font-size:15px}</style></head>
 <body><main><h1>Authorize ${escapeHTML(params.get('client_id') ?? '')}</h1>
 <p>This application will be able to:</p><ul>${scopes.map((s) => `<li>${escapeHTML(s)}</li>`).join('') || '<li>Read your public profile</li>'}</ul>
-<form method="get" action="${escapeHTML(approve.pathname + approve.search)}"><button type="submit">Authorize</button></form></main></body></html>`;
+<form method="get" action="/authorize">${hidden}<button type="submit">Authorize</button></form></main></body></html>`;
 }

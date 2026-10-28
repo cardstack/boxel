@@ -634,6 +634,23 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(suspended.body.errors[0].meta.reason, 'needs-admin');
   });
 
+  test('a connection is never shared; its client is', async function (assert) {
+    let { keyId } = await connectAndApprove();
+    try {
+      await shareKey(dbAdapter, {
+        owner: OWNER,
+        realm: realmURL.href,
+        keyId,
+        label: 'my sign-in',
+        ticket: await ticket(OWNER, 'share', { keyId, realm: realmURL }),
+      });
+      assert.ok(false, 'sharing a connection should be refused');
+    } catch (e: any) {
+      assert.strictEqual(e.status, 400);
+      assert.true(/never shared/.test(e.message), e.message);
+    }
+  });
+
   test("a connection's token goes only to a destination it was granted, never a token endpoint", async function (assert) {
     let { keyId } = await connectAndApprove();
     let elsewhere = await call(OWNER, 'elsewhere');
