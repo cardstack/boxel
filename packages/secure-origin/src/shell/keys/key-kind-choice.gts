@@ -1,8 +1,10 @@
 // What kind of key is being entered, as a row of a card's edit format: a key
 // pasted in as it is (an API key or token), or a Google service account's
 // JSON key file, from which the platform mints the short-lived tokens Google's
-// APIs take. A radio group, so the arrow keys and screen readers work as for
-// any other.
+// APIs take. Each choice says what the user would have in hand for it, since
+// that, not the service, is what tells them apart: Google's own APIs take
+// plain API keys too. A radio group, so the arrow keys and screen readers work
+// as for any other.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
@@ -39,7 +41,8 @@ const KeyKindChoice: TemplateOnlyComponent<Signature> = <template>
         />
         <span class='text'>
           <span class='title'>API key or token</span>
-          <span class='detail'>Sent as it is, in the place the card declares.</span>
+          <span class='detail'>A key or token you copy from the service and
+            paste here, such as a GitHub token or a Google Maps API key.</span>
         </span>
       </label>
       <label class='kind' data-test-key-kind='google-service-account'>
@@ -52,8 +55,10 @@ const KeyKindChoice: TemplateOnlyComponent<Signature> = <template>
         />
         <span class='text'>
           <span class='title'>Google service account</span>
-          <span class='detail'>Its JSON key file. Boxel sends Google only a
-            short-lived token made from it, never the key itself.</span>
+          <span class='detail'>For Google APIs such as Sheets and Drive, when
+            you have a service account’s key file (a .json file from Google
+            Cloud). Boxel sends Google a short-lived token made from it, never
+            the file itself.</span>
         </span>
       </label>
     </fieldset>

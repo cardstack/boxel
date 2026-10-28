@@ -36,6 +36,10 @@ import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { contextRequest, openedFor, returnsToKeyPage } from './opened-for.ts';
 import { ServiceAccountEntry } from './service-account-entry.ts';
+import {
+  isGoogleAPIHost,
+  isServiceAccountKeyFile,
+} from './service-account-key-file.ts';
 import ServiceAccountFields from './service-account-fields.gts';
 
 type State =
@@ -87,6 +91,14 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
               />
             {{/if}}
             <KeyKindChoice @kind={{this.form.kind}} @onKind={{this.setKind}} />
+            {{#if this.suggestsServiceAccount}}
+              <p class='kind-hint' data-test-google-destination-hint>
+                This request goes to a Google API. If you were given a JSON key
+                file for a Google Cloud service account, choose
+                <strong>Google service account</strong>; if you have an API key,
+                paste it as a key.
+              </p>
+            {{/if}}
             {{#if this.isServiceAccount}}
               <KeyFields @name={{this.form.name}} @onName={{this.setName}} />
               <ServiceAccountFields
@@ -100,6 +112,20 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                 @onName={{this.setName}}
                 @onValue={{this.setValue}}
               />
+              {{#if this.pastedKeyFile}}
+                <div class='kind-hint' role='alert' data-test-pasted-key-file>
+                  <p>This is a Google service account’s JSON key file. It can’t
+                    be sent as it is: Boxel makes short-lived tokens from it for
+                    Google instead.</p>
+                  <Button
+                    type='button'
+                    @kind='secondary'
+                    @size='small'
+                    data-test-use-service-account
+                    {{on 'click' this.usePastedKeyFile}}
+                  >Use it as a Google service account</Button>
+                </div>
+              {{/if}}
             {{/if}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
@@ -140,6 +166,20 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       }
       .busy {
         margin-top: var(--boxel-sp-xl);
+      }
+      .kind-hint {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        justify-items: start;
+        margin: 0;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--muted);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+      }
+      .kind-hint p {
+        margin: 0;
       }
       .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
@@ -228,8 +268,35 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
   }
 
   private get submitDisabled() {
-    return this.form.saving || !this.form.name.trim() || !this.entered;
+    return (
+      this.form.saving ||
+      !this.form.name.trim() ||
+      !this.entered ||
+      this.pastedKeyFile
+    );
   }
+
+  // A service account's key file pasted where a key sent as it is goes. It
+  // can't be saved there; the page offers to take it as a service account.
+  private get pastedKeyFile() {
+    return !this.isServiceAccount && isServiceAccountKeyFile(this.form.value);
+  }
+
+  // Opened for an operation that sends to a Google API, the page says when a
+  // service account fits. It doesn't choose one: Google's APIs take plain API
+  // keys too.
+  private get suggestsServiceAccount() {
+    return (
+      !this.isServiceAccount &&
+      isGoogleAPIHost(this.entering?.context?.operation?.destination?.host)
+    );
+  }
+
+  private usePastedKeyFile = () => {
+    let text = this.form.value;
+    this.setKind('google-service-account');
+    this.serviceAccount.readText(text, 'the pasted key file');
+  };
 
   // Switching kinds drops what was entered for the other, so a value typed
   // for one is never sent as the other.

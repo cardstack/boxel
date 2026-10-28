@@ -320,6 +320,28 @@ function checkKindOptions(
   }
 }
 
+// Whether a value is a Google service account's JSON key file, which is only
+// ever added as a google-service-account key: sent as it is, it would hand
+// the private key to the API.
+function isServiceAccountKeyFile(value: string): boolean {
+  if (!value.trimStart().startsWith('{')) {
+    return false;
+  }
+  try {
+    return JSON.parse(value)?.type === 'service_account';
+  } catch {
+    return false;
+  }
+}
+
+function checkNotAKeyFile(kind: string, value: string): void {
+  if (kind !== 'google-service-account' && isServiceAccountKeyFile(value)) {
+    throw new Error(
+      "This is a Google service account's JSON key file. Add it with --kind google-service-account and the --scope its tokens may use",
+    );
+  }
+}
+
 function serviceAccountAttributes(
   kind: string,
   options: ServiceAccountOptions,
@@ -345,6 +367,7 @@ export async function keysAdd(
   checkKeyValueSource(options, ctx.deps.input ?? process.stdin);
   let token = await secureToken(ctx);
   let value = await readValue(ctx, options);
+  checkNotAKeyFile(kind, value);
   let key = await addUserKey(ctx.realmServerUrl, token, {
     name,
     ...(options.kind ? { kind } : {}),
@@ -374,6 +397,7 @@ export async function keysReplace(
   let { id, kind } = await findUserKey(ctx.realmServerUrl, token, name);
   checkKindOptions(kind, options);
   let value = await readValue(ctx, options);
+  checkNotAKeyFile(kind, value);
   let key = await replaceUserKey(ctx.realmServerUrl, token, {
     keyId: id,
     value,

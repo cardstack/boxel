@@ -15,6 +15,7 @@ import {
 import { revokeBindingsIn } from './key-binding-revocation.ts';
 import {
   GoogleServiceAccountKeyError,
+  isGoogleServiceAccountKeyFile,
   parseGoogleServiceAccountKey,
   serializeGoogleServiceAccount,
 } from './outbound/google-service-account.ts';
@@ -355,6 +356,12 @@ export function sealedValueFor(
       throw new UserKeyError(
         400,
         'only a google-service-account key takes a subject or scopes',
+      );
+    }
+    if (isGoogleServiceAccountKeyFile(validValue)) {
+      throw new UserKeyError(
+        400,
+        `this is a Google service account's JSON key file, which is never sent as it is: add it as a google-service-account key, with the scopes its tokens may use`,
       );
     }
     return validValue;

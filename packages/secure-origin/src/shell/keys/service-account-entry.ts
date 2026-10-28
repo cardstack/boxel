@@ -55,6 +55,15 @@ export class ServiceAccountEntry {
       this.state.fileProblem = 'The file couldn’t be read.';
       return;
     }
+    this.readText(text, file.name);
+  }
+
+  // A key file's text, as chosen from disk or pasted where a plain key goes.
+  readText(text: string, source: string): void {
+    this.state.keyFile = undefined;
+    this.state.clientEmail = undefined;
+    this.state.fileProblem = undefined;
+    this.state.fileName = source;
     let parsed: unknown;
     try {
       parsed = JSON.parse(text);
