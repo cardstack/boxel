@@ -159,8 +159,9 @@ refusal also writes a key-use line.
    `meta.slots: [{name, key}]`), `share-suspended` (409),
    `binding-needs-reapproval` (409), `interactive-use-not-approved` (403) or
    `credential-rejected` (424: the vendor rejected the key at the grant's
-   destination, and no probe is due; see the `user-keys` skill, _Rejected
-   grants_).
+   destination, or Google's token endpoint refused the service-account key,
+   and no probe is due; see the `user-keys` skill, _Rejected grants_ and
+   _Rejected keys_).
    Every invocation off the network is interactive, and every binding is
    approved for pipelines only, so a slotted request is sent only from a
    pipeline (`Realm.handlePipeline`). The `binding-not-approved` detail names

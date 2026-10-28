@@ -45,9 +45,13 @@ import {
   ServiceAccountTokenError,
 } from './google-service-account-keys.ts';
 import {
+  claimKeyProbe,
   claimProbe,
+  clearKeyRejected,
   credentialRejected,
   DEFAULT_PROBE_INTERVAL_MS,
+  emitKeyGrantEvent,
+  markKeyRejected,
   probeDue,
 } from './key-grant-rejection.ts';
 
@@ -960,21 +964,19 @@ function refusal(
 // realm, for this operation (and this card, when it is approved per
 // instance), by the caller for a `userKey` slot; its share, if it has one, not
 // suspended; its fingerprint the one the request has now; and approved for
-// how the invocation arrived; and its grant not rejected by the vendor, unless
-// this call is the grant's probe. A binding whose request has changed goes to
+// how the invocation arrived; and neither its grant nor its key rejected,
+// unless this call is the probe. A binding whose request has changed goes to
 // `needs-reapproval` here, and its owner gets one notice. Throws the refusal
 // for the first slot that fails.
 //
-// A call claims a rejected grant's probe when one is due (`claimProbe: true`);
-// an admission only asks whether one is due, so a run that would probe is
-// admitted and one that would be refused is not.
+// A call claims a rejected grant's or key's probe when one is due
+// (`claimProbe: true`); an admission only asks whether one is due, so a run
+// that would probe is admitted and one that would be refused is not.
 async function checkedBindings(
   dbAdapter: DBAdapter,
   lookup: CallApiSlotLookup,
   rejection: { probeIntervalMs: number; claimProbe: boolean },
-): Promise<
-  { slot: CallApiSlot; row: Record<string, unknown>; probe: boolean }[]
-> {
+): Promise<CheckedBinding[]> {
   let { request } = lookup;
   let refuseNotApproved = () =>
     new OperationFailure(
@@ -987,23 +989,24 @@ async function checkedBindings(
     }
     instance = lookup.instance.replace(/\.json$/, '');
   }
-  let checked: {
-    slot: CallApiSlot;
-    row: Record<string, unknown>;
-    probe: boolean;
-  }[] = [];
-  // Two slots can send under one grant; the probe claimed for the first
-  // covers the second.
+  let checked: CheckedBinding[] = [];
+  // Two slots can send under one grant, or two grants of one key; the probe
+  // claimed for the first covers the second.
   let probing = new Set<string>();
+  let probingKeys = new Set<string>();
   for (let slot of request.slots) {
     let [row] = await query(dbAdapter, [
       `SELECT b.id, b.key_id, b.share_id, b.grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state, s.state AS share_state, s.key_id AS share_key_id,
               g.state AS grant_state, g.destination AS grant_destination,
+              k.id AS grant_key_id, k.kind AS key_kind, k.state AS key_state,
               `,
       ...probeDue('g.last_probe_at', rejection.probeIntervalMs),
-      ` AS probe_due
+      ` AS probe_due, `,
+      ...probeDue('k.last_probe_at', rejection.probeIntervalMs),
+      ` AS key_probe_due
          FROM key_bindings b LEFT JOIN key_shares s ON s.id = b.share_id
          LEFT JOIN user_key_grants g ON g.id = b.grant_id
+         LEFT JOIN user_keys k ON k.id = g.key_id
         WHERE b.realm_url = `,
       param(lookup.realmURL),
       ` AND b.definition_url = `,
@@ -1084,9 +1087,40 @@ async function checkedBindings(
       }
       probing.add(grantId);
     }
-    checked.push({ slot, row, probe });
+    let keyProbe = false;
+    if (
+      row.key_kind === 'google-service-account' &&
+      row.key_state === 'rejected'
+    ) {
+      let keyId = row.grant_key_id as string;
+      if (rejection.claimProbe) {
+        keyProbe =
+          probingKeys.has(keyId) ||
+          (await claimKeyProbe(dbAdapter, keyId, rejection.probeIntervalMs));
+      } else {
+        keyProbe = !!row.key_probe_due;
+      }
+      if (!keyProbe) {
+        throw serviceAccountRejected(
+          lookup.operation,
+          slot,
+          row.grant_destination as string,
+        );
+      }
+      probingKeys.add(keyId);
+    }
+    checked.push({ slot, row, probe, keyProbe });
   }
   return checked;
+}
+
+// A binding that passed every check, with whether the call is the probe of
+// its rejected grant (`probe`) or of its rejected key (`keyProbe`).
+interface CheckedBinding {
+  slot: CallApiSlot;
+  row: Record<string, unknown>;
+  probe: boolean;
+  keyProbe: boolean;
 }
 
 // Moves a binding to `needs-reapproval`, recording the notice its owner gets
@@ -1128,10 +1162,14 @@ export async function fillSlots(
   }: { probeIntervalMs?: number } = {},
 ): Promise<CallApiFilledSlot[]> {
   let filled: CallApiFilledSlot[] = [];
-  for (let { slot, row, probe } of await checkedBindings(dbAdapter, lookup, {
-    probeIntervalMs,
-    claimProbe: true,
-  })) {
+  for (let { slot, row, probe, keyProbe } of await checkedBindings(
+    dbAdapter,
+    lookup,
+    {
+      probeIntervalMs,
+      claimProbe: true,
+    },
+  )) {
     let opened: Awaited<ReturnType<typeof openGrantForSending>>;
     let ring = keyring();
     try {
@@ -1165,7 +1203,13 @@ export async function fillSlots(
     // A key that mints its access tokens sends the one it mints now; its
     // grant's marker has only proved the grant real.
     let secret = MINTING_KINDS.has(opened.kind)
-      ? await mintedToken(dbAdapter, ring, opened, slot, lookup.operation)
+      ? await mintedToken(dbAdapter, ring, opened, slot, {
+          operation: lookup.operation,
+          grantId: row.grant_id as string,
+          realmURL: lookup.realmURL,
+          shareId: (row.share_id as string | null) ?? undefined,
+          keyProbe,
+        })
       : opened.value;
     let value =
       slot.transform === 'basic'
@@ -1198,21 +1242,64 @@ const MINTING_REFUSALS: Record<OAuthTokenFailure, string> = {
 };
 
 const SERVICE_ACCOUNT_REJECTED =
-  'Google no longer accepts its service account key, so its owner replaces the key';
+  'Google no longer accepts its service account key, so nothing is sent with it until its owner replaces the key or a periodic retry mints a token';
+
+// The refusal for a slot whose service-account key Google refused. Nothing
+// was sent, not even to Google, unless the call was the key's probe.
+function serviceAccountRejected(
+  operation: string,
+  slot: Pick<CallApiSlot, 'name' | 'key'>,
+  destination: string,
+): OperationFailure {
+  return new OperationFailure({
+    status: 424,
+    code: 'credential-rejected',
+    title: 'Credential rejected',
+    detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${SERVICE_ACCOUNT_REJECTED}`,
+    meta: {
+      slot: { name: slot.name, key: slot.key },
+      destination,
+      reason: 'rejected',
+    },
+  });
+}
 
 // The access token a minting key sends now, or the refusal for why it has
-// none: `credential-rejected`, with the reason.
+// none: `credential-rejected`, with the reason. A service-account key Google
+// refuses becomes `rejected` (see `key-grant-rejection.ts`); the key's probe
+// that mints returns it to `active`.
 async function mintedToken(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
   opened: { keyId: string; kind: string; destination: string },
   slot: CallApiSlot,
-  operation: string,
+  call: {
+    operation: string;
+    grantId: string;
+    realmURL: string;
+    shareId?: string;
+    keyProbe: boolean;
+  },
 ): Promise<string> {
+  let { operation } = call;
+  let serviceAccount = opened.kind === 'google-service-account';
   try {
-    return opened.kind === 'google-service-account'
+    let token = serviceAccount
       ? await serviceAccountAccessToken(dbAdapter, keyring, opened.keyId)
       : await oauthAccessToken(dbAdapter, keyring, opened.keyId);
+    if (call.keyProbe) {
+      emitKeyGrantEvent({
+        event: 'key-probe',
+        key: opened.keyId,
+        minted: true,
+      });
+      await clearKeyRejected(
+        (expression) => query(dbAdapter, expression),
+        opened.keyId,
+        'probe',
+      );
+    }
+    return token;
   } catch (error) {
     if (
       !(error instanceof OAuthTokenError) &&
@@ -1220,10 +1307,26 @@ async function mintedToken(
     ) {
       throw error;
     }
-    let why =
-      error instanceof ServiceAccountTokenError && error.reason === 'rejected'
-        ? SERVICE_ACCOUNT_REJECTED
-        : MINTING_REFUSALS[error.reason];
+    if (call.keyProbe) {
+      emitKeyGrantEvent({
+        event: 'key-probe',
+        key: opened.keyId,
+        minted: false,
+      });
+    }
+    if (
+      error instanceof ServiceAccountTokenError &&
+      error.reason === 'rejected'
+    ) {
+      await markKeyRejected(dbAdapter, {
+        keyId: opened.keyId,
+        grantId: call.grantId,
+        realmURL: call.realmURL,
+        shareId: call.shareId,
+      });
+      throw serviceAccountRejected(operation, slot, opened.destination);
+    }
+    let why = MINTING_REFUSALS[error.reason];
     throw new OperationFailure({
       status: 424,
       code: 'credential-rejected',

@@ -18,7 +18,7 @@ import {
   parseGoogleServiceAccountKey,
   serializeGoogleServiceAccount,
 } from './outbound/google-service-account.ts';
-import { clearKeyRejections } from './key-grant-rejection.ts';
+import { clearKeyRejected, clearKeyRejections } from './key-grant-rejection.ts';
 
 // Keys that belong to people. Every key has one owner, the user who created
 // it, and only that owner lists, shows, replaces or deletes it. A key's value
@@ -70,7 +70,9 @@ export const MINTING_KINDS: ReadonlySet<UserKeyKind> = new Set([
 ]);
 
 // `rejected` is an OAuth connection its vendor refused to refresh
-// (`invalid_grant`); signing in through its client again makes it `active`.
+// (`invalid_grant`), which signing in through its client again makes `active`,
+// or a service-account key Google's token endpoint refused, which a probe that
+// mints or replacing the key makes `active`.
 export type UserKeyState = 'active' | 'rejected';
 
 export const KEY_WRITE_ACTIONS = [
@@ -649,14 +651,17 @@ export async function replaceUserKeyValue(
     ]);
     if (MINTING_KINDS.has(updated.kind as UserKeyKind)) {
       // A minting key's grants hold markers, not its value, so they stay as
-      // they are. A client's new secret is the fix for a token endpoint that
-      // refused the old one, so the client, and every connection through it,
-      // mints again.
+      // they are. A new value is the fix for a token endpoint or a vendor that
+      // refused the old one, so the key and every one of its grants is
+      // accepted again, and a client, with every connection through it, mints
+      // again.
       await txQuery([
         `UPDATE oauth_clients SET state = 'active', broken_at = NULL WHERE key_id = `,
         param(id),
       ]);
-      return toMetadata(updated);
+      await clearKeyRejections(txQuery, id);
+      let cleared = await clearKeyRejected(txQuery, id, 'key-replaced');
+      return toMetadata(cleared ? { ...updated, state: 'active' } : updated);
     }
     let grants = await txQuery([
       `SELECT id, destination, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,

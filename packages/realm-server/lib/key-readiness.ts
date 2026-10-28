@@ -71,7 +71,8 @@ export async function keyReadiness(
 }
 
 // The binding a slot would be filled from, as a call finds it, with whether
-// its grant is still there for its key (or its share's key).
+// its grant is still there for its key (or its share's key), and that key's
+// state.
 async function bindingFor(
   dbAdapter: DBAdapter,
   lookup: CallApiReadinessLookup,
@@ -80,10 +81,11 @@ async function bindingFor(
 ): Promise<Record<string, unknown> | undefined> {
   let [row] = await query(dbAdapter, [
     `SELECT b.approved_by, b.interactive, b.anonymous, b.fingerprint, b.state, s.state AS share_state, s.owner AS share_owner,
-            g.id AS grant_id
+            g.id AS grant_id, k.state AS key_state
        FROM key_bindings b
        LEFT JOIN key_shares s ON s.id = b.share_id
        LEFT JOIN user_key_grants g ON g.id = b.grant_id AND g.key_id = COALESCE(b.key_id, s.key_id)
+       LEFT JOIN user_keys k ON k.id = g.key_id
       WHERE b.realm_url = `,
     param(lookup.realmURL),
     ` AND b.definition_url = `,
@@ -104,6 +106,13 @@ async function bindingFor(
       : [` AND b.share_id IS NOT NULL`]),
   ]);
   return row;
+}
+
+// The vendor refused the key itself, such as Google's token endpoint refusing
+// a service-account key, so every grant of it is refused until its owner
+// replaces it or a periodic retry is accepted.
+function keyRejected(row: Record<string, unknown>): boolean {
+  return row.key_state === 'rejected';
 }
 
 function needsReapproval(
@@ -135,7 +144,10 @@ async function userKeyReadiness(
     if (needsReapproval(row, lookup, slot)) {
       return 'needs-reapproval';
     }
-    return row.interactive ? 'ready' : 'needs-approval';
+    if (!row.interactive) {
+      return 'needs-approval';
+    }
+    return keyRejected(row) ? 'credential-rejected' : 'ready';
   }
   return (await callerHasCoveringGrant(dbAdapter, lookup))
     ? 'needs-approval'
@@ -187,5 +199,5 @@ async function shareReadiness(
   if (lookup.caller === undefined && !row.anonymous) {
     return 'needs-sign-in';
   }
-  return 'ready';
+  return keyRejected(row) ? 'credential-rejected' : 'ready';
 }

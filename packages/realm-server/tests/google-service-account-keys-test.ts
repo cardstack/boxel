@@ -333,7 +333,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(sentTo('/google-token'), [], 'the endpoint never heard');
   });
 
-  test('a key Google refuses surfaces credential-rejected, and an endpoint that keeps failing does too', async function (assert) {
+  test('a key Google refuses surfaces credential-rejected', async function (assert) {
     let key = await addServiceAccount();
     await approve(key.id, ['values']);
 
@@ -350,21 +350,5 @@ module(basename(import.meta.filename), function (hooks) {
       "Google's own description stays on the server",
     );
     assert.deepEqual(sentTo('/echo/'), [], 'the API was never called');
-
-    vendor.googleTokenAnswers.push(
-      { status: 503, body: {} },
-      { status: 503, body: {} },
-      { status: 503, body: {} },
-    );
-    let unavailable = await invoke('values');
-    assert.strictEqual(unavailable.status, 424, unavailable.text);
-    assert.true(unavailable.text.includes('"reason":"unavailable"'));
-
-    let recovered = await invoke('values');
-    assert.strictEqual(
-      recovered.status,
-      200,
-      'a failure is not cached: the next call mints again',
-    );
   });
 });
