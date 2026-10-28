@@ -1,8 +1,10 @@
 // IconButton: a square Button whose face is an icon; the accessible name rides aria-label / title.
 import Component from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { ComponentLike } from '@glint/template';
 import { Button, resolveBusy, resolveDisabled } from './button';
 import type { ButtonSignature } from './button';
+import { Tooltip } from './tooltip';
 
 export type IconButtonIcon = ComponentLike<{ Element: SVGSVGElement }>;
 
@@ -10,6 +12,19 @@ export type IconButtonIcon = ComponentLike<{ Element: SVGSVGElement }>;
 // theme's text scale. Set as width/height attributes rather than CSS so the
 // icon has an intrinsic size before any stylesheet applies.
 export const ICON_SIZE = '1.25em';
+
+// Wraps the button in a Tooltip only when there is tip content, so a button
+// without one keeps its native title and gains no wrapper element.
+const MaybeTooltip: TemplateOnlyComponent<{
+  Args: { content?: string };
+  Blocks: { default: [] };
+}> = <template>
+  {{#if @content}}
+    <Tooltip @content={{@content}}>{{yield}}</Tooltip>
+  {{else}}
+    {{yield}}
+  {{/if}}
+</template>;
 
 // Every Button argument, plus what an icon-only button needs.
 export interface IconButtonSignature {
@@ -26,6 +41,9 @@ export interface IconButtonSignature {
     /** false drops the pressed tint, for a toggle whose icon already shows
      *  its state; aria-pressed and the forced-colors edge stay */
     pressedTint?: boolean;
+    /** shown in a Tooltip in place of the native title, and read as the
+     *  button's description; the name stays @label */
+    tooltip?: string;
   };
   Blocks: { default: [] };
   Element: HTMLButtonElement | HTMLAnchorElement;
@@ -67,37 +85,37 @@ export class IconButton extends Component<IconButtonSignature> {
     return this.args.iconHeight ?? ICON_SIZE;
   }
   <template>
-    <Button
-      @variant={{@variant}}
-      @tone={{this.tone}}
-      @appearance={{this.appearance}}
-      @size={{@size}}
-      @disabled={{this.disabled}}
-      @shape={{@shape}}
-      @href={{@href}}
-      @busy={{this.busy}}
-      @busyLabel={{@busyLabel}}
-      class='pretui-iconbtn'
-      aria-label={{this.accessibleName}}
-      aria-pressed={{this.ariaPressed}}
-      data-pressed-tint={{this.pressedTint}}
-      title={{@label}}
-      data-test-pretui-icon-button
-      ...attributes
-    >
-      {{! hidden because aria-label names the button; an icon with its own
-          <title>, or a text glyph, would otherwise be read a second time }}
-      <span
-        class='pretui-iconbtn-glyph'
-        aria-hidden='true'
-        data-test-pretui-icon-button-glyph
+    <MaybeTooltip @content={{@tooltip}}><Button
+        @variant={{@variant}}
+        @tone={{this.tone}}
+        @appearance={{this.appearance}}
+        @size={{@size}}
+        @disabled={{this.disabled}}
+        @shape={{@shape}}
+        @href={{@href}}
+        @busy={{this.busy}}
+        @busyLabel={{@busyLabel}}
+        class='pretui-iconbtn'
+        aria-label={{this.accessibleName}}
+        aria-pressed={{this.ariaPressed}}
+        data-pressed-tint={{this.pressedTint}}
+        title={{unless @tooltip @label}}
+        data-test-pretui-icon-button
+        ...attributes
       >
-        {{#if @icon}}
-          <@icon width={{this.iconWidth}} height={{this.iconHeight}} />
-        {{/if}}
-        {{yield}}
-      </span>
-    </Button>
+        {{! hidden because aria-label names the button; an icon with its own
+          <title>, or a text glyph, would otherwise be read a second time }}
+        <span
+          class='pretui-iconbtn-glyph'
+          aria-hidden='true'
+          data-test-pretui-icon-button-glyph
+        >
+          {{#if @icon}}
+            <@icon width={{this.iconWidth}} height={{this.iconHeight}} />
+          {{/if}}
+          {{yield}}
+        </span>
+      </Button></MaybeTooltip>
     <style scoped>
       /* above Button's layer, so these win by layer order, not file order */
       @layer PretComponent, PretComposite;

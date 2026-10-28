@@ -164,6 +164,40 @@ module('Pretui | components/icon-button', function (hooks) {
     assert.strictEqual(loading.getAttribute('aria-label'), 'Save');
   });
 
+  test('@tooltip shows in a Tooltip in place of the native title', async function (assert) {
+    await render(
+      <template>
+        <IconButton @label='Favorite' @tooltip='Add to Favorites'>★</IconButton>
+      </template>,
+    );
+    let btn = el();
+    let tip = el('[data-test-pretui-tooltip] [role="tooltip"]');
+    assert.false(btn.hasAttribute('title'), 'no native tooltip over the tip');
+    assert.strictEqual(
+      btn.getAttribute('aria-label'),
+      'Favorite',
+      'the name stays @label',
+    );
+    assert.strictEqual(
+      btn.getAttribute('aria-describedby'),
+      tip.id,
+      'the tip describes the button',
+    );
+    assert.strictEqual(tip.textContent?.trim(), 'Add to Favorites');
+  });
+
+  test('without @tooltip there is no Tooltip wrapper', async function (assert) {
+    await render(
+      <template>
+        <IconButton @label='Favorite'>★</IconButton>
+      </template>,
+    );
+    assert.strictEqual(
+      document.querySelector('[data-test-pretui-tooltip]'),
+      null,
+    );
+  });
+
   test('@tone and @appearance reach Button, over @variant', async function (assert) {
     await render(
       <template>

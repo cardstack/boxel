@@ -596,7 +596,7 @@ module('Acceptance | dashboard', function (hooks) {
       let deskStar =
         '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-workspace-favorite-btn]';
       let tip =
-        '[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-workspace-favorite-tip] [role="tooltip"]';
+        '[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-pretui-tooltip] [role="tooltip"]';
       assert
         .dom(star)
         .hasAttribute('aria-label', 'Favorite')

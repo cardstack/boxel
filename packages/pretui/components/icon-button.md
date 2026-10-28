@@ -47,7 +47,7 @@ Pretui's improvement over both is small and real: **the label cannot be forgotte
 - **boxel-ui's `@kind` becomes `@tone` × `@appearance`.** `primary-dark` and `text-only` have no single equivalent; pick the pair that matches.
 - **`@size` is Pret UI's scale** (`xs`…`xl`, em-scaled), not boxel-ui's fixed `extra-small` / `small` / `base` / `tall` / `touch` heights.
 - **No `--boxel-icon-button-*` knobs.** Size follows `--pretui-button-h`, and color follows Button's tone and appearance tokens.
-- **`title` is set**, so a sighted mouse user gets a native tooltip that boxel-ui's IconButton does not show.
+- **`title` is set**, so a sighted mouse user gets a native tooltip that boxel-ui's IconButton does not show. With `@tooltip`, a styled **Tooltip** shows in its place.
 
 ## Accessibility
 
@@ -62,7 +62,7 @@ What is right:
 
 Gaps and cautions:
 
-- **`title` is set to the same string as `aria-label`.** This is deliberate — it gives sighted mouse users a native tooltip — but it is a known double-announcement risk: some screen reader and browser combinations read the accessible name and then the `title` as a description. It is also a UA-controlled tooltip, which means no styling and, per WCAG 1.4.13's exception, no dismissible/hoverable obligation. If you want a styled hint, wrap in **Tooltip** and be aware you will then have three sources for one string.
+- **`title` is set to the same string as `aria-label`.** This is deliberate — it gives sighted mouse users a native tooltip — but it is a known double-announcement risk: some screen reader and browser combinations read the accessible name and then the `title` as a description. It is also a UA-controlled tooltip, which means no styling and, per WCAG 1.4.13's exception, no dismissible/hoverable obligation. For a styled hint, pass `@tooltip`: the button renders a **Tooltip** with that text, which describes the button, and drops `title`, so the native tooltip doesn't show over it. Wrapping the button in **Tooltip** yourself keeps the `title` and shows both.
 - **Target size**: 28×28 CSS px at the default size clears WCAG 2.5.8's 24×24 minimum, but only just, and adjacent icon buttons in a toolbar with no gap will have touching targets.
 - **Focus-visible ring inherited from Button**: `outline: 2px solid var(--ring)` with a 2px offset, which matters more here because there is no text to underline or shift.
 
