@@ -7,6 +7,7 @@ import {
   rri,
   trimExecutableExtension,
   type DBAdapter,
+  type Expression,
   type LocalPath,
   type Querier,
 } from '@cardstack/runtime-common';
@@ -33,6 +34,7 @@ import {
   openGrantForSending,
   operationGrantDestination,
   type UserKeyGrant,
+  type UserKeyGrantState,
 } from './user-key-grants.ts';
 import { UserKeyError } from './user-keys.ts';
 import {
@@ -947,6 +949,46 @@ function refusal(
   });
 }
 
+// Where a slot's binding is, as conditions on `key_bindings b`: in this realm,
+// for this operation of this type, on this card for an operation approved per
+// instance (`instance`, without `.json`) or on none otherwise, for this slot;
+// approved by the caller with one of their own keys for a `userKey` slot, and
+// to a share for an `apiKey` slot. A call fills a slot from this binding and no
+// other, so whatever names the key a slot is sent with reads it here too.
+function slotBindingConditions({
+  realmURL,
+  type,
+  operation,
+  instance,
+  caller,
+  slot,
+}: {
+  realmURL: string;
+  type: { module: string; name: string };
+  operation: string;
+  instance: string | null;
+  caller: string;
+  slot: Pick<CallApiSlot, 'key' | 'name'>;
+}): Expression {
+  return [
+    `b.realm_url = `,
+    param(realmURL),
+    ` AND b.definition_url = `,
+    param(type.module),
+    ` AND b.export_name = `,
+    param(type.name),
+    ` AND b.operation_name = `,
+    param(operation),
+    ` AND COALESCE(b.instance_url, '') = `,
+    param(instance ?? ''),
+    ` AND b.slot = `,
+    param(slotToken(slot)),
+    ...(slot.key === 'userKey'
+      ? [` AND b.key_id IS NOT NULL AND b.approved_by = `, param(caller)]
+      : [` AND b.share_id IS NOT NULL`]),
+  ];
+}
+
 // The binding for each of the request's slots, checked: approved in this
 // realm, for this operation (and this card, when it is approved per
 // instance), by the caller for a `userKey` slot; its share, if it has one, not
@@ -995,24 +1037,15 @@ async function checkedBindings(
       ` AS probe_due
          FROM key_bindings b LEFT JOIN key_shares s ON s.id = b.share_id
          LEFT JOIN user_key_grants g ON g.id = b.grant_id
-        WHERE b.realm_url = `,
-      param(lookup.realmURL),
-      ` AND b.definition_url = `,
-      param(lookup.type.module),
-      ` AND b.export_name = `,
-      param(lookup.type.name),
-      ` AND b.operation_name = `,
-      param(lookup.operation),
-      ` AND COALESCE(b.instance_url, '') = `,
-      param(instance ?? ''),
-      ` AND b.slot = `,
-      param(slotToken(slot)),
-      ...(slot.key === 'userKey'
-        ? [
-            ` AND b.key_id IS NOT NULL AND b.approved_by = `,
-            param(lookup.caller),
-          ]
-        : [` AND b.share_id IS NOT NULL`]),
+        WHERE `,
+      ...slotBindingConditions({
+        realmURL: lookup.realmURL,
+        type: lookup.type,
+        operation: lookup.operation,
+        instance,
+        caller: lookup.caller,
+        slot,
+      }),
     ]);
     if (!row) {
       throw refuseNotApproved();
@@ -1078,6 +1111,94 @@ async function checkedBindings(
     checked.push({ slot, row, probe });
   }
   return checked;
+}
+
+// What fills one of an operation's slots for `caller`, read from the binding a
+// call would fill it from (`slotBindingConditions`), without checking it or
+// opening anything: the key, for a `userKey` slot, which is always one of the
+// caller's own; for an `apiKey` slot, the share and its owner, and the key
+// only when the caller owns it. `grantState` is the state of the grant the
+// key is sent under, so a rejected key can be told apart. `bound` is null when
+// nothing is bound to the slot.
+export interface SlotBinding {
+  slot: string;
+  key: CallApiSlot['key'];
+  bound: {
+    state: KeyBindingState;
+    grantState: UserKeyGrantState | null;
+    key: { id: string; name: string } | null;
+    share: {
+      id: string;
+      label: string;
+      state: 'active' | 'suspended';
+      owner: string;
+    } | null;
+  } | null;
+}
+
+export async function slotBindings(
+  dbAdapter: DBAdapter,
+  {
+    realmURL,
+    type,
+    operation,
+    instance,
+    caller,
+    slots,
+  }: {
+    realmURL: string;
+    type: { module: string; name: string };
+    operation: string;
+    // The card, without `.json`, for an operation approved per instance.
+    instance: string | null;
+    caller: string;
+    slots: Pick<CallApiSlot, 'key' | 'name'>[];
+  },
+): Promise<SlotBinding[]> {
+  let found: SlotBinding[] = [];
+  for (let slot of slots) {
+    let [row] = await query(dbAdapter, [
+      `SELECT b.state, g.state AS grant_state,
+              s.id AS share_id, s.label AS share_label, s.state AS share_state, s.owner AS share_owner,
+              k.id AS key_id, k.name AS key_name
+         FROM key_bindings b
+         LEFT JOIN key_shares s ON s.id = b.share_id
+         LEFT JOIN user_key_grants g ON g.id = b.grant_id
+         LEFT JOIN user_keys k ON k.id = COALESCE(b.key_id, s.key_id) AND k.owner = `,
+      param(caller),
+      ` WHERE `,
+      ...slotBindingConditions({
+        realmURL,
+        type,
+        operation,
+        instance,
+        caller,
+        slot,
+      }),
+    ]);
+    found.push({
+      slot: slotToken(slot),
+      key: slot.key,
+      bound: row
+        ? {
+            state: row.state as KeyBindingState,
+            grantState: (row.grant_state as UserKeyGrantState | null) ?? null,
+            key: row.key_id
+              ? { id: row.key_id as string, name: row.key_name as string }
+              : null,
+            share: row.share_id
+              ? {
+                  id: row.share_id as string,
+                  label: row.share_label as string,
+                  state: row.share_state as 'active' | 'suspended',
+                  owner: row.share_owner as string,
+                }
+              : null,
+          }
+        : null,
+    });
+  }
+  return found;
 }
 
 // Moves a binding to `needs-reapproval`, recording the notice its owner gets
