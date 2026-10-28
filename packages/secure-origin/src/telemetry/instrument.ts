@@ -20,10 +20,11 @@
 // a request is reduced to its endpoint label, method, status, timing and size
 // (never its URL, query, headers or either body); a page is named by its label
 // (never its address or fragment); a freeze is attributed by script URL,
-// reduced to its origin and path, and function name; and an error's text is scrubbed of anything
-// it quotes, any URL or Matrix ID, and, for a refused request, the server's own
-// message, which the page already shows the user. The test drives each page
-// with known secrets and checks no beacon carries one.
+// reduced to its origin and path, and function name; and an error's text is
+// scrubbed of anything it quotes, any URL or Matrix ID, and, for a refused
+// request, the server's own message, which the page already shows the user.
+// The test drives each page with known secrets and checks no beacon carries
+// one.
 //
 // Nothing here may make a page fail: every hook swallows its own errors, and a
 // beacon that fails is dropped.
@@ -132,9 +133,9 @@ export interface KeepaliveEvent extends BaseEvent {
 }
 
 // The host's `wedge` event, without its JS self-profiler stacks: the secure
-// origin's pages aren't served with `Document-Policy: js-profiling`. A script is named
-// by its URL's origin and path and its function name, never by what invoked it
-// (an element or a URL with its query).
+// origin's pages aren't served with `Document-Policy: js-profiling`. A script
+// is named by its URL's origin and path and its function name, never by what
+// invoked it (an element or a URL with its query).
 export interface WedgeEvent extends BaseEvent {
   event_type: 'wedge';
   duration_ms: number;
@@ -580,13 +581,21 @@ export class SecureTelemetry {
     if (!this.#started) {
       return;
     }
-    let inWindow = (e: { startTime: number }) =>
-      e.startTime >= windowStart && e.startTime <= windowEnd;
-    let loafs = this.#loafHistory.filter(inWindow);
-    let longtasks = this.#longtaskHistory.filter(inWindow);
+    // What of an entry falls inside the gap. A frame can open before the
+    // gap does, with the heartbeat that ran just before the freeze, so an
+    // entry counts by how much of it overlaps the gap, not by where it
+    // starts.
+    let overlap = (e: { startTime: number; duration: number }) =>
+      Math.max(
+        0,
+        Math.min(e.startTime + e.duration, windowEnd) -
+          Math.max(e.startTime, windowStart),
+      );
+    let loafs = this.#loafHistory.filter((e) => overlap(e) > 0);
+    let longtasks = this.#longtaskHistory.filter((e) => overlap(e) > 0);
     let spanned = 0;
     for (let entry of [...loafs, ...longtasks]) {
-      spanned += Math.min(entry.duration, windowEnd - entry.startTime);
+      spanned += overlap(entry);
     }
     // Without an observer the heartbeat is the only signal, so the gap is
     // reported as it is.

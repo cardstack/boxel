@@ -625,6 +625,32 @@ describe('the instrument', () => {
       telemetry.stop();
     });
 
+    test('a freeze in the same frame as the heartbeat before it is a wedge', () => {
+      telemetry.start();
+      freeze();
+      FakeObserver.deliver('long-animation-frame', [
+        {
+          startTime: 95,
+          duration: 12_000,
+          blockingDuration: 11_950,
+          scripts: [
+            {
+              sourceURL: SCRIPT,
+              sourceFunctionName: 'deriveKey',
+              sourceCharPosition: 42,
+              invokerType: 'user-callback',
+              duration: 11_990,
+            },
+          ],
+        },
+      ]);
+      win.runTimeouts();
+      let [wedge] = wedges();
+      assert.equal(wedge?.top_frame_function, 'deriveKey');
+      assert.equal(wedge?.blocked_ms, 11_950);
+      telemetry.stop();
+    });
+
     test('a freeze spread over several frames is a wedge', () => {
       telemetry.start();
       freeze();
