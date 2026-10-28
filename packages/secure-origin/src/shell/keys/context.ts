@@ -114,3 +114,17 @@ export function loadFailure(e: unknown): LoadFailure {
 export function isSignedOut(e: unknown): boolean {
   return (e as { code?: unknown })?.code === 'signed-out';
 }
+
+// What a request with this HTTP method does at its destination, for someone
+// who doesn't read HTTP.
+export function methodPhrase(method: string): string {
+  switch (method.toUpperCase()) {
+    case 'GET':
+    case 'HEAD':
+      return 'Reads from';
+    case 'DELETE':
+      return 'Deletes at';
+    default:
+      return 'Sends data to';
+  }
+}
