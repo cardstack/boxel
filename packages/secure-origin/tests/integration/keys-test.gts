@@ -902,8 +902,8 @@ module('Integration | key pages', function (hooks) {
           'with the bidi override dropped',
         );
       assert
-        .dom('[data-test-opened-for-reason]')
-        .includesText('From the link that opened this window.');
+        .dom('[data-test-opened-for-reason-by]')
+        .hasText('Given by Get the forecast when it opened this window.');
     });
 
     test('opened for a card, says once saved that the card will ask before it uses the key', async function (assert) {
