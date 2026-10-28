@@ -10,6 +10,7 @@ import {
   OperationFailure,
   type CallApiSlot,
 } from '@cardstack/runtime-common/card-operations';
+import type { Expression } from '@cardstack/runtime-common/expression';
 
 // Rejected grants: what happens when a vendor refuses a key.
 //
@@ -263,15 +264,18 @@ export async function claimProbe(
   let [row] = await query(dbAdapter, [
     `UPDATE user_key_grants SET last_probe_at = NOW() WHERE id = `,
     param(grantId),
-    ` AND state = 'rejected' AND (${probeDueSQL('last_probe_at')}`,
-    param(intervalMs / 1000),
-    `)) RETURNING id`,
+    ` AND state = 'rejected' AND `,
+    ...probeDue('last_probe_at', intervalMs),
+    ` RETURNING id`,
   ]);
   return !!row;
 }
 
-// The SQL condition that a rejected grant's next probe is due, completed by
-// the interval in seconds as a parameter and two closing parentheses.
-export function probeDueSQL(column: string): string {
-  return `${column} IS NULL OR ${column} <= NOW() - make_interval(secs => `;
+// The SQL condition that a rejected grant's next probe is due.
+export function probeDue(column: string, intervalMs: number): Expression {
+  return [
+    `(${column} IS NULL OR ${column} <= NOW() - make_interval(secs => `,
+    param(intervalMs / 1000),
+    `))`,
+  ];
 }

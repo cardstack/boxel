@@ -39,7 +39,7 @@ import {
   claimProbe,
   credentialRejected,
   DEFAULT_PROBE_INTERVAL_MS,
-  probeDueSQL,
+  probeDue,
 } from './key-grant-rejection.ts';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
@@ -990,9 +990,9 @@ async function checkedBindings(
     let [row] = await query(dbAdapter, [
       `SELECT b.id, b.key_id, b.share_id, b.grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state, s.state AS share_state, s.key_id AS share_key_id,
               g.state AS grant_state, g.destination AS grant_destination,
-              (${probeDueSQL('g.last_probe_at')}`,
-      param(rejection.probeIntervalMs / 1000),
-      `))) AS probe_due
+              `,
+      ...probeDue('g.last_probe_at', rejection.probeIntervalMs),
+      ` AS probe_due
          FROM key_bindings b LEFT JOIN key_shares s ON s.id = b.share_id
          LEFT JOIN user_key_grants g ON g.id = b.grant_id
         WHERE b.realm_url = `,

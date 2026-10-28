@@ -291,6 +291,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(refused.body.errors[0].meta, {
       slot: { name: 'userKey', key: 'userKey' },
       destination: `${VENDOR}/status/`,
+      entry: 0,
     });
     assert.strictEqual(
       (await grantRow(here.meta.grant.id)).state,
