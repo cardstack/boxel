@@ -47,7 +47,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|mcp__github__create_pull_request|mcp__github__update_pull_request",
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|mcp__github__create_pull_request|mcp__github__update_pull_request|mcp__github__pull_request_review_write|mcp__github__add_comment_to_pending_review",
         "hooks": [
           {
             "type": "command",
