@@ -204,9 +204,14 @@ export function isKeyRoutePath(pathname: string): boolean {
   );
 }
 
+// The operator routes that store a platform secret: system keys, and the
+// platform's own OAuth clients.
 function isSystemKeysPath(pathname: string): boolean {
   let path = pathname.toLowerCase();
-  return path === SYSTEM_KEYS_PATH || path.startsWith(`${SYSTEM_KEYS_PATH}/`);
+  return [SYSTEM_KEYS_PATH, PLATFORM_OAUTH_CLIENTS_PATH].some(
+    (operatorPath) =>
+      path === operatorPath || path.startsWith(`${operatorPath}/`),
+  );
 }
 
 function escapeRegExp(path: string): string {

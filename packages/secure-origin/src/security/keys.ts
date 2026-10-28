@@ -402,11 +402,19 @@ export interface ConnectableClient {
 
 // The clients the user may connect through: the platform's, those shared into
 // `realm` and their own, only those serving `destination` when it is given.
+// With `reconnect`, only the client that connection signs in through.
 export async function connectableClients(
   config: Config,
-  { realm, destination }: { realm?: string; destination?: string },
+  {
+    realm,
+    destination,
+    reconnect,
+  }: { realm?: string; destination?: string; reconnect?: string },
 ): Promise<ConnectableClient[]> {
   let query = new URLSearchParams();
+  if (reconnect) {
+    query.set('reconnect', reconnect);
+  }
   if (realm) {
     query.set('realm', realm);
   }
@@ -442,6 +450,22 @@ export async function startConnect(
     body: {
       data: { type: 'oauth-connect', attributes: request },
       meta: { ticket },
+    },
+  });
+  return json.data.attributes;
+}
+
+// Finishes a sign-in the service sent back, with the `state` and `code` the
+// realm server's callback handed this window in its fragment. The realm
+// server finishes it only for the user who started it. Answers the
+// connection's id, or why it failed.
+export async function completeConnect(
+  config: Config,
+  { state, code }: { state: string; code: string },
+): Promise<{ connected?: string; error?: string }> {
+  let json = await authorizedRequest(config, '_oauth/connections/complete', {
+    body: {
+      data: { type: 'oauth-callback', attributes: { state, code } },
     },
   });
   return json.data.attributes;

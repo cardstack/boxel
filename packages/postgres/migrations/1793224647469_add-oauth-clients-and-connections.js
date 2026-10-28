@@ -23,7 +23,10 @@
 // made through: one of the owner's own clients, a share of a client in a realm,
 // or a platform client. Each reference is cleared when its client goes, and
 // `client_kind` keeps which it was, so the connection reads as needing an
-// administrator rather than as made through nothing.
+// administrator rather than as made through nothing. `generation` moves on
+// with every refresh and `refreshing_until` is the refresh lease, so one
+// process at a time spends a rotating refresh token without holding a
+// database connection while the vendor answers.
 //
 // `oauth_connect_requests` holds a sign-in in progress, from the moment the
 // secure window sends the user to the vendor until the vendor sends them back
@@ -94,6 +97,14 @@ exports.up = (pgm) => {
       -- The scopes the vendor said it granted, which may be fewer than asked.
       scopes varchar NOT NULL DEFAULT '',
       rejected_at timestamptz,
+      -- When an access token stored as the value (no refresh token issued)
+      -- stops serving.
+      access_expires_at timestamptz,
+      -- Moves on with every refresh, so a process holding an access token
+      -- minted at an earlier one knows to mint again.
+      generation integer NOT NULL DEFAULT 0,
+      -- While set and in the future, one process holds the refresh lease.
+      refreshing_until timestamptz,
       CONSTRAINT oauth_connections_client_kind_check CHECK (client_kind IN ('own', 'share', 'platform')),
       CONSTRAINT oauth_connections_client_check CHECK (
         (client_kind = 'own' AND client_share_id IS NULL AND platform_client_id IS NULL)

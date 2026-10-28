@@ -444,6 +444,13 @@ module('Integration | connecting an account', function (hooks) {
         .dom('[data-test-client-choice="GitHub"] input')
         .isChecked('the app it was made through is chosen already');
       assert.dom('[data-test-connect-submit]').hasText('Reconnect');
+      assert.strictEqual(
+        requests
+          .find((r) => r.path === '_oauth/clients')
+          ?.url.searchParams.get('reconnect'),
+        'conn-1',
+        'only the client the connection signs in through is asked for',
+      );
       await click('[data-test-connect-submit]');
       assert.deepEqual(ticketRequests(), [
         { action: 'replace', keyId: 'conn-1' },
@@ -540,6 +547,50 @@ module('Integration | connecting an account', function (hooks) {
         { how: 'close' },
         { how: 'assign', url: '/secure/keys' },
       ]);
+    });
+
+    test('finishes a sign-in from the service’s code with the window’s own session', async function (assert) {
+      serve({
+        'POST _oauth/connections/complete': () =>
+          json(201, {
+            data: {
+              type: 'oauth-connection-result',
+              attributes: { connected: 'conn-1', reconnected: false },
+            },
+          }),
+        'GET _user-keys/conn-1': () =>
+          json(200, { data: connection('active') }),
+      });
+      visitShell('connected#code=one-use-code&state=sign-in-state');
+      await render(ConnectedPage);
+      await waitFor('[data-test-connected="connected"]');
+      let completed = requests.find(
+        (r) => r.path === '_oauth/connections/complete',
+      );
+      assert.deepEqual(completed?.body, {
+        data: {
+          type: 'oauth-callback',
+          attributes: { state: 'sign-in-state', code: 'one-use-code' },
+        },
+      });
+      assert.dom('[data-test-connected-name]').hasText('Work GitHub');
+      assert.strictEqual(window.location.hash, '', 'the code is gone');
+    });
+
+    test('a sign-in the realm server won’t finish for this user says it expired', async function (assert) {
+      serve({
+        'POST _oauth/connections/complete': () =>
+          json(200, {
+            data: {
+              type: 'oauth-connection-result',
+              attributes: { error: 'expired' },
+            },
+          }),
+      });
+      visitShell('connected#code=one-use-code&state=someone-elses');
+      await render(ConnectedPage);
+      await waitFor('[data-test-connected="failed"]');
+      assert.dom('[data-test-keys-heading]').hasText('The sign-in expired');
     });
 
     test('connected, but the connection’s name can’t be read, still says it is connected', async function (assert) {
