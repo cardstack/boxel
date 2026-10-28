@@ -864,10 +864,10 @@ module('command runner', () => {
                             branchName: 'a1b2c3-my-listing',
                           },
                           relationships: {
+                            // The realm-server serializes same-realm links
+                            // relative to the card.
                             listing: {
-                              links: {
-                                self: 'http://localhost:4201/test/Listing/1',
-                              },
+                              links: { self: '../Listing/1' },
                             },
                             prCard: { links: { self: prCardUrl } },
                           },
@@ -988,6 +988,15 @@ module('command runner', () => {
         c.endsWith('/collect-submission-files/default'),
       ),
       'retry re-collects submission files from the source realm',
+    );
+    assert.strictEqual(
+      publishedJobs.find((j) =>
+        (j.args.command as string).endsWith(
+          '/collect-submission-files/default',
+        ),
+      )?.args.commandInput.listingId,
+      'http://localhost:4201/test/Listing/1',
+      'retry resolves the relative listing link against the workflow card id',
     );
     assert.notOk(
       commands.some((c: string) => c.endsWith('/create-pr-card/default')),

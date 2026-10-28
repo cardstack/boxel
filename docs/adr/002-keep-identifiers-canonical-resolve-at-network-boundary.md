@@ -226,11 +226,6 @@ Neither sees card JSON. Elsewhere, reviewers enforce §1.2 and §1.4.
   `packages/software-factory/tests/{catalog-reuse-delivery.test.ts,factory-seed.spec.ts,host-import-manifest.test.ts,instance-discovery.test.ts}`
   break §1.4. Tests and fixtures use the base alias, or env-specific URLs of
   well-known realms, as identifiers without testing alias tolerance.
-- `packages/base/Theme/*.json`, `packages/base/cards/*.json`,
-  `packages/base/types/card.json` and
-  `packages/base/{ai-app-generator,join-the-community,welcome-to-boxel}.json`
-  break §1.4. Card JSON spells base `adoptsFrom` and `ref` modules with the
-  `https://cardstack.com/base/` alias.
 - `packages/base/card-api.gts` (`CardStore`, `CardContext`, `QueryLoadMeta`,
   `SerializedFile`, `SerializedFileDef`) breaks §1.1, §1.2 and §1.3. Types store
   ids as `string`, parses a file id with `new URL()`, and leaves FileDef ids and
@@ -253,9 +248,6 @@ Neither sees card JSON. Elsewhere, reviewers enforce §1.2 and §1.4.
   `packages/software-factory/src/run-log.ts` break §1.3. `codeRef()` builds
   URL-form code refs with `new URL()`; these files define it, call it or teach
   it.
-- `packages/bot-runner/lib/pr-listing/pr-listing-workflow-handler.ts`
-  (`buildRetryContext`) breaks §1.2. Joins `links.self` targets with
-  `new URL()`.
 - `packages/boxel-cli/plugin/skills/search/SKILL.md` breaks §1.1. Says a type
   filter needs the card's full module URL.
 - `packages/boxel-cli/src/commands/capture.ts`,
@@ -349,8 +341,6 @@ Neither sees card JSON. Elsewhere, reviewers enforce §1.2 and §1.4.
   `packages/realm-server/scripts/bench-realm/fixtures/source-realm/realm.json`
   and `packages/realm-server/scripts/setup-submission-realm.sh` break §1.4.
   Seeds realm data with alias code refs.
-- `packages/realm-server/{main,worker-manager,worker}.ts` break §1.1. Tests the
-  `--fromUrl` realm's form with `isUrlLike`.
 - `packages/runtime-common/ai/{compaction,prompt}.ts`,
   `packages/runtime-common/card-operations/{client,coordinator,dispatch,policy}.ts`,
   `packages/runtime-common/index-runner/{dependency-normalization,index-backed-dependency-errors,prewarm-modules}.ts`

@@ -1,6 +1,8 @@
 import {
   logger,
+  resolveRRIReference,
   toBranchName,
+  type RealmResourceIdentifier,
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
@@ -176,7 +178,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     let workflowCardUrl = requireString(
       input.workflowCardUrl,
       'workflowCardUrl',
-    );
+    ) as RealmResourceIdentifier;
     let workflowCardRealm = optionalString(input.workflowCardRealm) ?? realmURL;
 
     // Recover the rest from the workflow card itself — single source of truth.
@@ -192,13 +194,13 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     let rels = (workflowDoc?.data?.relationships ?? {}) as Record<string, any>;
 
     let roomId = requireString(attrs.roomId, 'workflow card roomId');
-    // Resolve relative `links.self` against the workflow card URL — the
+    // Resolve relative `links.self` against the workflow card id — the
     // realm-server serializes them as e.g. "../CardListing/abc".
     let rawListingSelf = requireString(
       rels.listing?.links?.self,
       'workflow card listing.self',
     );
-    let listingId = new URL(rawListingSelf, workflowCardUrl).href;
+    let listingId = resolveRRIReference(rawListingSelf, workflowCardUrl);
     // Reuse the persisted branchName so retry targets the same branch as the
     // original create attempt; recover listingName from `Submit <X>` title
     // for PR title/commit messages.
@@ -210,7 +212,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       toBranchName(listingName ?? 'UntitledListing');
     let rawPrCardSelf = optionalString(rels.prCard?.links?.self);
     let existingPrCardUrl = rawPrCardSelf
-      ? new URL(rawPrCardSelf, workflowCardUrl).href
+      ? resolveRRIReference(rawPrCardSelf, workflowCardUrl)
       : null;
 
     return {

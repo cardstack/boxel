@@ -6,13 +6,13 @@
       "cardDescription": "A documentation card of a curated collection of skills",
       "specType": "card",
       "ref": {
-        "module": "https://cardstack.com/base/skill-set",
+        "module": "@cardstack/base/skill-set",
         "name": "SkillSet"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }
