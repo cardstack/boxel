@@ -1,9 +1,10 @@
 // What a key page was opened for, as the realm server describes it, in rows
 // of a card's edit format: the operation and the card definition and realm it
-// is on, where that request sends a key, and any reason the link that opened
-// the window carries. A realm is named with its address as well as its name,
-// since anyone can give a realm any name. The reason comes from the link, not
-// the server, so it is shown as the link's words and nothing vouches for it.
+// is on, where that request sends a key, and any reason the operation that
+// opened the window gave. A realm is named with its address as well as its
+// name, since anyone can give a realm any name. The reason comes with the
+// window's address, not from the server, so it is shown as what the operation
+// (or the card) gave, not as anything the server describes.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import FieldContainer from '../../components/field-container.gts';
@@ -75,15 +76,13 @@ const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
     </FieldContainer>
   {{/if}}
   {{#if @reason}}
-    <FieldContainer
-      @tag='div'
-      @label='Message in the link'
-      @icon={{MessageSquare}}
-    >
+    <FieldContainer @tag='div' @label='Why it’s needed' @icon={{MessageSquare}}>
       <p class='value reason' data-test-opened-for-reason>
         “{{@reason}}”
-        <span class='reason-label'>From the link that opened this window. Boxel
-          hasn’t checked it.</span>
+        <span class='reason-label' data-test-opened-for-reason-by>Given by
+          {{#if @context.operation}}<strong
+            >{{@context.operation.label}}</strong>
+            when it opened this window{{else}}the card that opened this window{{/if}}.</span>
       </p>
     </FieldContainer>
   {{/if}}
