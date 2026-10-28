@@ -259,7 +259,13 @@ module(basename(import.meta.filename), function (hooks) {
       })),
       {
         waitForIndex: false,
-        recording: { operationId, channel: 'operations' },
+        // A retry is recognized by asking for what its first attempt asked
+        // for, as a request's digest would show.
+        recording: {
+          operationId,
+          channel: 'operations',
+          fingerprint: JSON.stringify(files),
+        },
       },
     );
   }
