@@ -55,6 +55,7 @@ import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
+import type AssistantQuickLookService from '../../services/assistant-quick-look';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentCardsService from '../../services/recent-cards-service';
@@ -144,6 +145,8 @@ export default class SubmodeLayout extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
+  @service('assistant-quick-look')
+  declare private quickLook: AssistantQuickLookService;
   @service declare private recentCardsService: RecentCardsService;
   @service('search-sheet-state')
   declare private searchSheetState: SearchSheetStateService;
@@ -466,9 +469,12 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private isChooseSubscriptionPlanModalOpen = false;
 
   <template>
+    {{! Quick Look covers the whole viewport and is modal: the layout under
+        it is inert, so a screen reader or a shortcut can't reach it }}
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
       class={{cn 'submode-layout' this.aiAssistantVisibilityClass}}
+      inert={{if this.quickLook.current true}}
       data-test-submode-layout
       ...attributes
     >

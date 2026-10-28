@@ -1012,6 +1012,7 @@ interface AiAssistantConversationSignature {
     /** the room's history is in: what renders before then is a load, not a
      * change, and is not animated (ADR 013 §1.19) */
     ready?: boolean;
+    roomId?: string;
   };
   Blocks: {
     default: [];
@@ -1098,8 +1099,8 @@ class AiAssistantConversation extends Component<AiAssistantConversationSignature
       <:default as |scroll|>
         <TranscriptMotion
           class='ai-assistant-conversation-messages'
-          @live={{@isStreaming}}
           @ready={{@ready}}
+          @roomId={{@roomId}}
           {{registerConversation scroll @registerConversationScroller}}
           {{on 'click' this.openLinkOut}}
         >

@@ -80,6 +80,7 @@ import {
   pickableModels,
 } from '@cardstack/host/lib/pickable-models';
 import { STOPPED_BY_USER } from '@cardstack/host/lib/realm-runner/types';
+import { isRunDelivery } from '@cardstack/host/lib/run-delivery';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
 import { plainTitle } from '@cardstack/host/lib/tool-title';
@@ -216,6 +217,7 @@ export default class Room extends Component<Signature> {
           @setScrollPosition={{this.setScrollPosition}}
           @isStreaming={{this.generatingResults}}
           @revision={{this.transcriptRevision}}
+          @roomId={{@roomId}}
           @ready={{and
             (not this.matrixService.isLoadingTimeline)
             (not this.aiAssistantPanelService.isPreparingSession)
@@ -1084,10 +1086,13 @@ export default class Room extends Component<Signature> {
     // on every change inside it (pills loading, a ring turning), and
     // following again each time would drag a reader who scrolled up back
     // to the end.
+    // A finished background run's result is posted as the reader but is
+    // not something they just did, so it does not move them.
     let own = this.messages[index];
     if (
       index === this.messages.length - 1 &&
       own?.author.userId === this.matrixService.profile.userId &&
+      !isRunDelivery(own.clientGeneratedId) &&
       own.eventId !== this.followedOwnMessageId
     ) {
       this.followedOwnMessageId = own.eventId;
@@ -1112,7 +1117,7 @@ export default class Room extends Component<Signature> {
     if (
       !this.isScrolledToBottom &&
       this.hasUnreadMessages &&
-      index === this.lastReadMessageIndex + 1
+      index === this.firstUnreadShownIndex
     ) {
       schedule('afterRender', null, () => {
         if (this.navigateConversation) {
@@ -1138,7 +1143,7 @@ export default class Room extends Component<Signature> {
     ) {
       return;
     }
-    let firstUnreadIndex = this.lastReadMessageIndex + 1;
+    let firstUnreadIndex = this.firstUnreadShownIndex;
     let element = [...scrollState.messageElements].find(
       ([, index]) => index === firstUnreadIndex,
     )?.[0];
@@ -1245,7 +1250,7 @@ export default class Room extends Component<Signature> {
       return;
     }
 
-    let firstUnreadIndex = this.lastReadMessageIndex + 1;
+    let firstUnreadIndex = this.firstUnreadShownIndex;
     let scrollTo =
       this.existingScrollState?.messageScrollers.get(firstUnreadIndex);
     if (!scrollTo) {
@@ -1272,6 +1277,16 @@ export default class Room extends Component<Signature> {
       }
     }
     return max(readReceiptIndicies) ?? -1;
+  }
+
+  // The first unread message that renders: a message folded into a later
+  // one never mounts, so the jump goes to the message that shows its run.
+  private get firstUnreadShownIndex() {
+    let index = this.lastReadMessageIndex + 1;
+    while (index < this.messages.length - 1 && this.isFoldedMessage(index)) {
+      index++;
+    }
+    return index;
   }
 
   @cached private get numberOfUnreadMessages() {
@@ -2555,9 +2570,13 @@ export default class Room extends Component<Signature> {
   // What the assistant waits on, docked above the composer: the calls that
   // run on this tab's click, as one decision, then each call held for
   // approval on its own, with its reason.
-  // Calls running in this tab right now.
+  // Calls running in this tab for this room right now.
+  private get workingCallIds() {
+    return this.toolService.executingToolIdsInRoom(this.args.roomId);
+  }
+
   private get workingCalls() {
-    return this.toolService.currentlyExecutingToolRequestIds.size;
+    return this.workingCallIds.length;
   }
 
   // Decisions the last turn waits on: calls ready for a click, questions,
@@ -2879,9 +2898,10 @@ export default class Room extends Component<Signature> {
   }
 
   // A run of messages that each carry one finished call to the same tool and
-  // nothing else (a correctness check after every save) folds into its
-  // latest message, which reads "×N"; the latest stays, so the end of the
-  // conversation never moves. A failed call never folds: it stays in view.
+  // nothing else folds into its latest message, which reads "×N"; the latest
+  // stays, so the end of the conversation never moves. A failed call never
+  // folds: it stays in view. A correctness check never folds either: one
+  // that found errors still ends applied, and folded it would be hidden.
   @cached
   private get toolRuns(): { counts: Map<number, number>; folded: Set<number> } {
     let counts = new Map<number, number>();
@@ -2897,7 +2917,9 @@ export default class Room extends Component<Signature> {
         return undefined;
       }
       let tool = message.tools[0]!;
-      return tool.status === 'applied' ? tool.name : undefined;
+      return tool.status === 'applied' && tool.name !== 'checkCorrectness'
+        ? tool.name
+        : undefined;
     };
     let previous: string | undefined;
     let run = 0;
@@ -2981,6 +3003,9 @@ export default class Room extends Component<Signature> {
       }
       let turn = messages.slice(start, end);
       let tools = turn.flatMap((message) => message.tools ?? []);
+      let answered = end < messages.length;
+      // a call the reader never ran and has since talked past is left
+      // behind: it no longer holds the turn open
       let finished =
         turn.every((message) => message.isStreamingFinished) &&
         tools.every(
@@ -2988,7 +3013,9 @@ export default class Room extends Component<Signature> {
             (tool.status === 'applied' ||
               tool.status === 'failed' ||
               tool.status === 'invalid' ||
-              tool.status === 'canceled') &&
+              tool.status === 'canceled' ||
+              (answered &&
+                (tool.status === 'ready' || tool.status === undefined))) &&
             !this.toolService.liveRunToolIds.has(tool.id ?? '') &&
             !this.toolService.currentlyExecutingToolRequestIds.has(
               tool.id ?? '',
@@ -2997,6 +3024,13 @@ export default class Room extends Component<Signature> {
         !(end === messages.length && this.awaitsContinuation(turn.at(-1)!));
       let key = turn[0]!.eventId;
       let thinking = turn.some((message) => !!message.reasoningContent);
+      // a message folded into a later one never renders, so the turn's head
+      // sits on its first message that does; a run folds into its latest
+      // message, which is in the same turn, so there always is one
+      let head = start;
+      while (head < end - 1 && this.isFoldedMessage(head)) {
+        head++;
+      }
       for (let index = start; index < end; index++) {
         places.set(index, {
           key,
@@ -3005,7 +3039,7 @@ export default class Room extends Component<Signature> {
         });
       }
       if (!finished) {
-        heads.set(start, { working: true, at: asked.created });
+        heads.set(head, { working: true, at: asked.created });
         continue;
       }
       // the turn ran from the question to its replies' last server event
@@ -3018,11 +3052,10 @@ export default class Room extends Component<Signature> {
         ),
       );
       let seconds = (ended - asked.created.getTime()) / 1000;
-      let answered = end < messages.length;
       // a turn that folds says what it did in its fold line; the others get
       // the assistant's mark and how long they took
       if (!(answered && tools.length > 1)) {
-        heads.set(start, {
+        heads.set(head, {
           working: false,
           seconds,
           at: asked.created,
@@ -3043,19 +3076,31 @@ export default class Room extends Component<Signature> {
           (tool, index) =>
             tool.status === 'failed' &&
             !tool.failureReason?.startsWith(STOPPED_BY_USER) &&
-            !tools.slice(index + 1).some((later) => later.status === 'applied'),
+            !tools
+              .slice(index + 1)
+              .some(
+                (later) =>
+                  later.status === 'applied' && later.name === tool.name,
+              ),
         ).length;
         let summary = turnSummary(
           tools.map((tool) => tool.name ?? 'tool'),
           { seconds, failed, stopped },
         );
-        let firstWithTools = turn.findIndex((m) => m.tools?.length);
+        let firstWithTools = start;
+        while (
+          firstWithTools < end - 1 &&
+          (!messages[firstWithTools]!.tools?.length ||
+            this.isFoldedMessage(firstWithTools))
+        ) {
+          firstWithTools++;
+        }
         for (let k = start; k < end; k++) {
           folds.set(k, {
             key,
             summary,
             expanded,
-            isFirst: k === start + firstWithTools,
+            isFirst: k === firstWithTools,
             toggle: () => this.toggleTurn(key),
           });
         }
@@ -3301,7 +3346,16 @@ export default class Room extends Component<Signature> {
         .replace(/^-|-$/g, '')
         .slice(0, 48) || 'answer';
     let date = new Date().toISOString().slice(0, 10);
+    // a note never replaces another: the same name on the same day takes
+    // the next free number
     let url = new URL(`Assistant Notes/${date}-${slug}.md`, realmURL);
+    for (
+      let n = 2;
+      (await this.cardService.getSource(url)).status === 200;
+      n++
+    ) {
+      url = new URL(`Assistant Notes/${date}-${slug}-${n}.md`, realmURL);
+    }
     let content = heading ? markdown : `# ${title}\n\n${markdown}`;
     await this.cardService.saveSource(url, content, 'create-file');
     return url.href;
@@ -3318,7 +3372,7 @@ export default class Room extends Component<Signature> {
   // The plan a running script is working through, for the turn's checklist
   // above the composer while that script's row is out of view.
   private get livePlan(): { steps: TaskStep[]; activity?: string } | undefined {
-    for (let id of this.toolService.currentlyExecutingToolRequestIds) {
+    for (let id of this.workingCallIds) {
       let progress = this.toolService.toolProgress.get(id)?.progress;
       if (!progress?.plan?.length || this.planRowsInView.has(id)) {
         continue;
@@ -3351,7 +3405,9 @@ export default class Room extends Component<Signature> {
       ['data-gate-open', 'gateOpen', this.openGatesInView],
       ['data-plan-live', 'planLive', this.planRowsInView],
     ];
-    let observed = new Set<Element>();
+    // each watched element with the ids it had when it was observed: an
+    // element that loses its attribute can no longer say which ids were its
+    let observed = new Map<Element, ReturnType<typeof idsOf>>();
     let idsOf = (el: Element) =>
       watched.flatMap(([, key, inView]) => {
         let id = (el as HTMLElement).dataset[key];
@@ -3371,18 +3427,21 @@ export default class Room extends Component<Signature> {
     let selector = watched.map(([attribute]) => `[${attribute}]`).join(',');
     let sync = () => {
       let current = new Set(element.querySelectorAll(selector));
-      for (let el of observed) {
-        if (!current.has(el)) {
+      let same = (a: ReturnType<typeof idsOf>, b: ReturnType<typeof idsOf>) =>
+        a.length === b.length &&
+        a.every(([id, set], i) => b[i]![0] === id && b[i]![1] === set);
+      for (let [el, ids] of [...observed]) {
+        if (!current.has(el) || !same(ids, idsOf(el))) {
           intersections.unobserve(el);
           observed.delete(el);
-          for (let [id, inView] of idsOf(el)) {
+          for (let [id, inView] of ids) {
             inView.delete(id);
           }
         }
       }
       for (let el of current) {
         if (!observed.has(el)) {
-          observed.add(el);
+          observed.set(el, idsOf(el));
           intersections.observe(el);
         }
       }

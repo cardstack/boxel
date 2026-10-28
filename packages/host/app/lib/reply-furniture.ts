@@ -23,6 +23,8 @@ const SEPARATOR = /^[\s·,|/]*$/;
 const isCaret = (node: Node) =>
   (node as HTMLElement).hasAttribute?.('data-markdown-caret') ?? false;
 
+// Every code span must be a figure here too: `relaunch.gts`, `poster.gts`
+// names code, and keeps its monospace face.
 function isChipRow(p: HTMLElement): boolean {
   let codes = 0;
   for (let node of p.childNodes) {
@@ -31,6 +33,9 @@ function isChipRow(p: HTMLElement): boolean {
         return false;
       }
     } else if ((node as HTMLElement).tagName === 'CODE') {
+      if (!FIGURE.test(node.textContent ?? '')) {
+        return false;
+      }
       codes++;
     } else if (!isCaret(node)) {
       return false;

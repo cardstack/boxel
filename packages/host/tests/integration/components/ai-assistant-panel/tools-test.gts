@@ -3179,15 +3179,10 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     });
     await waitFor('[data-test-stop-generating]');
     await stop();
-    // the stop has taken once Stop is gone (the cap glides closed over a
-    // beat) or disabled (a tool already running finishes first)
+    // the stop has taken once Stop is gone: nothing runs yet, so the cap
+    // glides closed over a beat
     await waitUntil(
-      () => {
-        let stopButton = document.querySelector<HTMLButtonElement>(
-          '[data-test-stop-generating]',
-        );
-        return !stopButton || stopButton.disabled;
-      },
+      () => !document.querySelector('[data-test-stop-generating]'),
       { timeout: 5000 },
     );
     simulateRemoteMessage(roomId, '@aibot:localhost', {

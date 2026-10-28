@@ -50,6 +50,16 @@ module('Unit | markReplyFurniture', function () {
     assert.strictEqual(p.querySelectorAll('[data-chip]').length, 0);
   });
 
+  test('a row of code spans with no figures stays code', function (assert) {
+    for (let html of [
+      '<code>relaunch.gts</code>, <code>poster.gts</code>',
+      '<code>pnpm install</code> <code>pnpm start</code>',
+    ]) {
+      let p = paragraph(html);
+      assert.strictEqual(p.dataset.chips, undefined, html);
+    }
+  });
+
   test('a stat row still streaming, with the caret in it, is already chips', function (assert) {
     let p = paragraph(
       '<code>$15</code> race-day benchmark <code>$10</code> Burpee Open<span data-markdown-caret></span>',

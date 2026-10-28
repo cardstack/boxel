@@ -44,6 +44,22 @@ module('Unit | Lib | assistant transcript', function () {
       ['Replace the header', 'Replaced the header'],
       ['The header patch', 'The header patch'],
       ['New card for Lena', 'New card for Lena'],
+      ['Something went wrong', 'Something went wrong'],
+      ['Landing page for Lena', 'Landing page for Lena'],
+      ['Missing images', 'Missing images'],
+      [
+        'Open the brief and draft a reply',
+        'Opened the brief and drafted a reply',
+      ],
+      ['Read the doc then summarize it', 'Read the doc then summarized it'],
+      [
+        'Fetch the rows, pull the totals and report them',
+        'Fetched the rows, pulled the totals and reported them',
+      ],
+      [
+        'Load the card and return its id',
+        'Loaded the card and returned its id',
+      ],
     ]) {
       assert.strictEqual(settledTitle(title!, 'Script'), settled);
     }
@@ -60,6 +76,16 @@ module('Unit | Lib | assistant transcript', function () {
     assert.strictEqual(
       turnSummary(['ResearchTool_3f9a1c'], { failed: 1, stopped: 1 }),
       'Researched 1 question · 1 failed · 1 stopped',
+    );
+    assert.strictEqual(
+      turnSummary(['uploadFile', 'uploadImage']),
+      'Made 2 changes',
+      'an upload is a change, not a read',
+    );
+    assert.strictEqual(
+      turnSummary(['readRealmFile', 'spreadsheetExport', 'targetWidget']),
+      'Read 1 file, used 2 tools',
+      'a rule matches whole words of the name',
     );
   });
 

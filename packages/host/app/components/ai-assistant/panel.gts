@@ -436,7 +436,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         flex-direction: column;
         height: var(--ai-assistant-panel-header-height);
 
-        background-color: var(--top-gradient-hidden);
+        background-image: var(--top-gradient-hidden);
 
         animation: ai-assistant-chat-gradient-scroll-timeline linear forwards;
         animation-timeline: --ai-assistant-chat-scroll-timeline;
@@ -560,15 +560,15 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       @keyframes ai-assistant-chat-gradient-scroll-timeline {
         0% {
-          background-color: var(--top-gradient-hidden);
+          background-image: var(--top-gradient-hidden);
         }
 
         1% {
-          background-color: var(--top-gradient-showing);
+          background-image: var(--top-gradient-showing);
         }
 
         100% {
-          background-color: var(--top-gradient-showing);
+          background-image: var(--top-gradient-showing);
         }
       }
     </style>

@@ -103,6 +103,23 @@ export function holdsCallForApproval(event: {
   );
 }
 
+// Whether the event handler goes on with an event. A 👍 or 👎 answers a held
+// call only on a message that holds one; any other reaction, on an answer
+// say, is only a reaction. A reaction on a message beyond the loaded timeline
+// (`reactedTo` undefined) is let through: the history decides, and releases
+// nothing for a message holding no call. Any other event goes on only if it
+// can produce a response.
+export function handlesRoomEvent(
+  reaction: ApprovalReaction | undefined,
+  reactedTo: Parameters<typeof holdsCallForApproval>[0] | undefined,
+  mayTriggerResponse: () => boolean,
+): boolean {
+  if (reaction) {
+    return !reactedTo || holdsCallForApproval(reactedTo);
+  }
+  return mayTriggerResponse();
+}
+
 export interface DeclinedToolCall extends ReleasedToolCall {
   // the 👎 that declined it
   reaction: ApprovalReaction;

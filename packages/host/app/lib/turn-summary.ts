@@ -10,35 +10,53 @@ interface Phrase {
   many: string;
 }
 
-// The first rule a call's name matches gives its phrase.
+// The first rule a call's name matches gives its phrase. A rule matches
+// whole words of the name, so `upload` is not `load`, and `spreadsheet` is
+// not `read`.
 const PHRASES: [RegExp, Phrase][] = [
   [
-    /realm.?code|realm.?script/,
+    /\brealm (?:code|script)\b/,
     { verb: 'ran', one: 'script', many: 'scripts' },
   ],
-  [/research/, { verb: 'researched', one: 'question', many: 'questions' }],
-  [/check.?correctness/, { verb: 'checked', one: 'file', many: 'files' }],
-  [/ask.?user|^ask/, { verb: 'asked', one: 'question', many: 'questions' }],
-  [/search|find|explore/, { verb: 'searched', one: 'time', many: 'times' }],
-  [/web.?read|fetch|scrape/, { verb: 'read', one: 'page', many: 'pages' }],
-  [/read|get|load|inspect/, { verb: 'read', one: 'file', many: 'files' }],
+  [/\bresearch\b/, { verb: 'researched', one: 'question', many: 'questions' }],
+  [/\bcheck correctness\b/, { verb: 'checked', one: 'file', many: 'files' }],
   [
-    /patch|update|set|write|create|save|delete|apply|copy|replace|upload|generate/,
+    /\bask user\b|^ask\b/,
+    { verb: 'asked', one: 'question', many: 'questions' },
+  ],
+  [
+    /\b(?:search|find|explore)\b/,
+    { verb: 'searched', one: 'time', many: 'times' },
+  ],
+  [
+    /\bweb read\b|\b(?:fetch|scrape)\b/,
+    { verb: 'read', one: 'page', many: 'pages' },
+  ],
+  [
+    /\b(?:read|get|load|inspect)\b/,
+    { verb: 'read', one: 'file', many: 'files' },
+  ],
+  [
+    /\b(?:patch|update|set|write|create|save|delete|apply|copy|replace|upload|generate)\b/,
     { verb: 'made', one: 'change', many: 'changes' },
   ],
   [
-    /show|open|switch|view|preview|navigate/,
+    /\b(?:show|open|switch|view|preview|navigate)\b/,
     { verb: 'opened', one: 'view', many: 'views' },
   ],
 ];
 const OTHER: Phrase = { verb: 'used', one: 'tool', many: 'tools' };
 
 // A skill's tool name carries a runtime hash and often a `Tool` suffix:
-// `ResearchTool_3f9a1c` is `research`.
+// `ResearchTool_3f9a1c` is `research`. The rest is said as its words:
+// `readRealmFile` is `read realm file`, `run-realm-code` is `run realm code`.
 function baseName(name: string): string {
   return name
     .replace(/_[0-9a-f]{6,}$/i, '')
     .replace(/Tool$/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[-_.\s]+/g, ' ')
+    .trim()
     .toLowerCase();
 }
 

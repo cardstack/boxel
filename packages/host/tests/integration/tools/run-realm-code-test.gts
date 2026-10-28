@@ -368,6 +368,77 @@ return 'answered';`,
     await assert.rejects(run, /stopped/i, 'the run ends without an answer');
   });
 
+  // The tool service is what puts a run's question to the reader: the row
+  // shows its picker from `scriptAsks` and answers through it.
+  function askThroughToolService(command: RunRealmCodeTool, callId: string) {
+    let toolService = getService('tool-service') as unknown as {
+      askFromScript: (
+        id: string,
+        request: unknown,
+      ) => ReturnType<NonNullable<RunRealmCodeTool['onAsk']>>;
+    };
+    command.onAsk = (request) => toolService.askFromScript(callId, request);
+  }
+
+  test("a reader's pick reaches the script as its value and its label", async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    askThroughToolService(command, 'ask-call');
+
+    let run = command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return await realm.ask({ question: 'Which one?', options: [{ label: 'Alpha', value: 'a' }, { label: 'Beta', value: 'b' }] });`,
+    });
+    await waitUntil(() => toolService.scriptAsks.has('ask-call'));
+    let ask = toolService.scriptAsks.get('ask-call')!;
+    assert.strictEqual(ask.request.question, 'Which one?');
+    ask.answer('b');
+
+    let result = await run;
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      answer: 'b',
+      label: 'Beta',
+    });
+    assert.false(
+      toolService.scriptAsks.has('ask-call'),
+      'the answered question is gone',
+    );
+  });
+
+  test("Stop through the tool service withdraws the run's question", async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    askThroughToolService(command, 'stopped-ask-call');
+    (
+      toolService as unknown as {
+        stoppableTools: Map<string, { roomId: string; stop: () => void }>;
+      }
+    ).stoppableTools.set('stopped-ask-call', {
+      roomId: '!room:example.com',
+      stop: () => command.stop(),
+    });
+
+    let run = command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.ask({ question: 'Which one?', options: [{ label: 'A' }, { label: 'B' }] });
+return 'answered';`,
+    });
+    await waitUntil(() => toolService.scriptAsks.has('stopped-ask-call'));
+    toolService.stopTool('stopped-ask-call');
+
+    assert.false(
+      toolService.scriptAsks.has('stopped-ask-call'),
+      'the picker is withdrawn at once',
+    );
+    await assert.rejects(
+      run,
+      /stopped|ended/i,
+      'the run ends without an answer',
+    );
+  });
+
   test('the result attaches the files the run saved, then the captures it took', async function (assert) {
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);

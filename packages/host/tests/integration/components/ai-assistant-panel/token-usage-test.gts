@@ -157,6 +157,65 @@ module('Integration | ai-assistant-panel | token usage', function (hooks) {
     assert
       .dom('[data-test-message-idx="3"] [data-test-answer-footer]')
       .containsText('42 credits this session');
-    assert.dom('[data-test-conversation-token-usage]').doesNotExist();
+    let transcript =
+      document.querySelector('[data-test-ai-assistant-conversation]')
+        ?.textContent ?? '';
+    assert.strictEqual(
+      transcript.split('this session').length - 1,
+      1,
+      'the total is said once, in the latest footer',
+    );
+  });
+
+  async function sendTurns(
+    roomId: string,
+    usages: Record<string, number | undefined>[],
+  ) {
+    usages.forEach((usage, index) => {
+      simulateRemoteMessage(roomId, '@testuser:localhost', {
+        body: `Question ${index}`,
+        msgtype: 'm.text',
+      });
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: `Answer ${index}.`,
+        msgtype: 'm.text',
+        isStreamingFinished: true,
+        data: { usage },
+      });
+    });
+    let last = usages.length * 2 - 1;
+    await waitFor(
+      `[data-test-message-idx="${last}"] [data-test-answer-footer]`,
+    );
+    return `[data-test-message-idx="${last}"] [data-test-answer-footer]`;
+  }
+
+  test("the session total falls back to tokens when a turn's cost is missing", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let footer = await sendTurns(roomId, [
+      { promptTokens: 1000, completionTokens: 100, costUsd: 0.012 },
+      { promptTokens: 1000, completionTokens: 100 },
+    ]);
+    assert.dom(footer).containsText('this session');
+    assert
+      .dom(footer)
+      .doesNotIncludeText(
+        'credits this session',
+        'a partial sum is not given as the bill',
+      );
+  });
+
+  test('a usage without token counts does not count as a turn for the session total', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let footer = await sendTurns(roomId, [
+      { costUsd: 0.012 },
+      { promptTokens: 1000, completionTokens: 100, costUsd: 0.0304 },
+    ]);
+    assert
+      .dom(footer)
+      .doesNotIncludeText(
+        'this session',
+        'one counted turn has no total to add up',
+      );
   });
 });

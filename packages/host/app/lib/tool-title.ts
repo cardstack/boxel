@@ -67,6 +67,7 @@ const REGULAR = new Set([
   'create',
   'delete',
   'download',
+  'draft',
   'edit',
   'enable',
   'disable',
@@ -88,13 +89,16 @@ const REGULAR = new Set([
   'parse',
   'patch',
   'publish',
+  'pull',
   'remove',
   'rename',
   'render',
   'reorder',
   'replace',
+  'report',
   'resize',
   'restore',
+  'return',
   'review',
   'save',
   'search',
@@ -120,6 +124,7 @@ const REGULAR = new Set([
   'scan',
   'select',
   'sort',
+  'summarize',
   'test',
   'translate',
 ]);
@@ -139,7 +144,8 @@ function pastOf(word: string): string | undefined {
     return regularPast(lower);
   }
   // a gerund ("Asking the user…") names the same act; its stem may have
-  // lost an e ("making") or doubled its last letter ("running")
+  // lost an e ("making") or doubled its last letter ("running"). Only a
+  // known verb is re-tensed, so "Something" or "Landing page" stays as it is.
   if (!lower.endsWith('ing')) {
     return undefined;
   }
@@ -157,7 +163,7 @@ function pastOf(word: string): string | undefined {
       return regularPast(candidate);
     }
   }
-  return regularPast(stem);
+  return undefined;
 }
 
 // The clauses that say why or how, which a settled title can do without:
@@ -195,7 +201,7 @@ export function settledTitle(text: string, verb?: string): string {
     .replace(
       new RegExp(`(\\band|\\bthen|,) (${SECOND_VERBS.join('|')})\\b`, 'gi'),
       (_m, joiner: string, word: string) =>
-        `${joiner} ${pastOf(word)!.toLowerCase()}`,
+        `${joiner} ${pastOf(word)?.toLowerCase() ?? word}`,
     );
   return tail ? `${past} ${tail}` : past;
 }

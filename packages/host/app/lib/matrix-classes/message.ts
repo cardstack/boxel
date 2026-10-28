@@ -78,6 +78,8 @@ export class Message implements RoomMessageInterface {
   @tracked attachedCardIds?: string[] | null;
   @tracked attachedFiles?: FileDef[];
   @tracked attachedCardsAsFiles?: FileDef[];
+  // the attachments the fields above were read from, as sent
+  attachmentsKey?: string;
   attachedSkillCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;

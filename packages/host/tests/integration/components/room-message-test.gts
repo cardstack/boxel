@@ -210,12 +210,6 @@ module('Integration | Component | RoomMessage', function (hooks) {
     }); // Streaming, created 2 mins ago, updated 1 minute ago
     await renderRoomMessageComponent(testScenario);
 
-    assert
-      .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
-      .doesNotHaveClass(
-        'ai-avatar-animated',
-        'the animated mark belongs to the cap by the message box alone',
-      );
     assert.dom('[data-test-card-error]').doesNotExist();
     assert.dom('[data-test-alert-action-button="Wait longer"]').doesNotExist();
     assert

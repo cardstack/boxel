@@ -198,6 +198,10 @@ export default class MessageBuilder {
       message.reloadBillingData = shouldReloadBillingData(event.content);
       message.attachedCardIds = this.attachedCardIds;
       message.attachedCardsAsFiles = this.attachedCardsAsFiles;
+      message.attachmentsKey = JSON.stringify([
+        (event.content as CardMessageContent).data?.attachedCards,
+        (event.content as CardMessageContent).data?.attachedFiles,
+      ]);
       if (getToolRequests(event.content)) {
         message.setTools(this.buildMessageCommands(message));
       }
@@ -224,7 +228,11 @@ export default class MessageBuilder {
       message.lastEventAt = new Date(at);
     }
     if (isProvisionalTime(message) && isServerCopy(this.event)) {
-      message.created = new Date(this.event.origin_server_ts);
+      // the message keeps its local id, so this runs on every pass: only a
+      // new time is written, or every pass would dirty what reads it
+      if (message.created.getTime() !== this.event.origin_server_ts) {
+        message.created = new Date(this.event.origin_server_ts);
+      }
     } else if (message.created.getTime() > this.event.origin_server_ts) {
       message.created = new Date(this.event.origin_server_ts);
       return;
@@ -270,9 +278,19 @@ export default class MessageBuilder {
       this.event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE ||
       this.event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
     ) {
-      message.attachedCardIds = this.attachedCardIds;
-      message.attachedCardsAsFiles = this.attachedCardsAsFiles;
-      message.attachedFiles = this.attachedFiles;
+      // Only an event whose attachments differ is read again: this runs on
+      // every room pass, and fresh FileDefs would re-render every pill.
+      let data = (this.event.content as CardMessageContent).data;
+      let attachmentsKey = JSON.stringify([
+        data?.attachedCards,
+        data?.attachedFiles,
+      ]);
+      if (message.attachmentsKey !== attachmentsKey) {
+        message.attachmentsKey = attachmentsKey;
+        message.attachedCardIds = this.attachedCardIds;
+        message.attachedCardsAsFiles = this.attachedCardsAsFiles;
+        message.attachedFiles = this.attachedFiles;
+      }
     }
 
     let encodedCommandRequests =

@@ -28,36 +28,18 @@ import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import type { CardEmbedState } from '@cardstack/pretui/components/card-embed';
 
-interface Signature {
-  Args: {
-    /** the room this panel shows: only the panel that holds the pill that
-     * opened Quick Look shows the sheet (the board shows several panels) */
-    roomId?: string;
-  };
-}
-
 /**
  * Quick Look in the assistant panel: the card or file a reader clicked in
  * the transcript, in Pret UI's QuickLook sheet over the transcript. It
  * renders whenever the quick-look service holds a request and stops when
  * it does not; it has no open or closing state of its own.
  */
-export default class AssistantQuickLook extends Component<Signature> {
+export default class AssistantQuickLook extends Component {
   @service('assistant-quick-look')
   declare private quickLook: AssistantQuickLookService;
 
   private get request(): QuickLookRequest | null {
-    let request = this.quickLook.current;
-    if (!request) {
-      return null;
-    }
-    let holder = request.trigger
-      ?.closest('[data-assistant-room]')
-      ?.getAttribute('data-assistant-room');
-    if (holder && this.args.roomId && holder !== this.args.roomId) {
-      return null;
-    }
-    return request;
+    return this.quickLook.current;
   }
 
   <template>

@@ -55,7 +55,7 @@ import {
 import {
   ApprovalClaims,
   declinedToolCalls,
-  holdsCallForApproval,
+  handlesRoomEvent,
   releasedToolCalls,
   unreleasedApproval,
   type DeclinedToolCall,
@@ -432,23 +432,21 @@ Common issues are:
         // timeline event could make a user message stand down, then exit
         // without responding.
         // A 👍 or 👎 on a bot message holding a call for approval answers
-        // it (see runtime-common/ai/approval-reaction.ts); any other
-        // reaction, on an answer say, is only a reaction.
+        // it (see runtime-common/ai/approval-reaction.ts).
         let reaction = approvalReaction({
           type: event.getType(),
           sender: event.getSender() ?? undefined,
           event_id: event.getId(),
           content: event.getContent(),
         });
-        // A message beyond the loaded timeline is let through: the history
-        // decides, and releases nothing for a message holding no call.
         let reactedTo = reaction
           ? room.findEventById(reaction.targetEventId)
           : undefined;
-        if (reactedTo && !holdsCallForApproval(reactedTo)) {
-          return;
-        }
-        if (!reaction && !Responder.eventMayTriggerResponse(event)) {
+        if (
+          !handlesRoomEvent(reaction, reactedTo, () =>
+            Responder.eventMayTriggerResponse(event),
+          )
+        ) {
           return;
         }
 

@@ -76,10 +76,10 @@ const fadeUnlessTravelling: PropSource = (sprite, changeset) =>
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    /** a reply is streaming */
-    live?: boolean;
     /** the room's history is in */
     ready?: boolean;
+    /** the room shown: another room's history is a load, not a change */
+    roomId?: string;
   };
   Blocks: { default: [] };
 }
@@ -100,22 +100,39 @@ interface Signature {
  * Only what can be seen is wired (`@inView`, ADR 013 §1.18): messages in
  * the transcript's view or within a view of it. The rest are left to
  * layout. The region sits out (`@idle`) until the room's history is in and
- * has settled, so the load lands as layout puts it (§1.19).
+ * has settled, so the load lands as layout puts it (§1.19). It sits out
+ * again while a history loads and whenever another room is shown.
  */
 export class TranscriptMotion extends Component<Signature> {
   private enabled = motionEnabled();
-  @tracked private awake = false;
+  // the room whose history has been in for a moment; awake only for it
+  @tracked private settledRoom: string | undefined | null = null;
+
+  private get awake() {
+    return Boolean(this.args.ready) && this.settledRoom === this.args.roomId;
+  }
 
   // wakes the region once the history has been in for a moment: the
   // first render, and the cards and images it loads, are not changes
   private wakeWhenReady = modifier(
-    (_element: HTMLElement, [ready]: [boolean | undefined]) => {
-      if (!ready || this.awake) {
+    (
+      _element: HTMLElement,
+      [ready, roomId]: [boolean | undefined, string | undefined],
+    ) => {
+      let alive = () => !this.isDestroying && !this.isDestroyed;
+      if (!ready) {
+        // a history that loads again settles again
+        if (this.settledRoom !== null) {
+          queueMicrotask(() => alive() && (this.settledRoom = null));
+        }
+        return;
+      }
+      if (this.settledRoom === roomId) {
         return;
       }
       let timer = setTimeout(() => {
-        if (!this.isDestroying && !this.isDestroyed) {
-          this.awake = true;
+        if (alive()) {
+          this.settledRoom = roomId;
         }
       }, SETTLE_AFTER_MS);
       return () => clearTimeout(timer);
@@ -129,7 +146,7 @@ export class TranscriptMotion extends Component<Signature> {
         @idle={{not this.awake}}
         @inView={{true}}
         @maxFrameStep={{MAX_FRAME_STEP}}
-        {{this.wakeWhenReady @ready}}
+        {{this.wakeWhenReady @ready @roomId}}
         ...attributes
         as |c|
       >

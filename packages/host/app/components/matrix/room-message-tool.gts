@@ -1,4 +1,5 @@
 import { isDestroyed } from '@ember/destroyable';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
 import { later, schedule } from '@ember/runloop';
@@ -141,6 +142,8 @@ interface FileDiff {
   before?: string;
   after?: string;
   lines?: DiffLine[];
+  // read from the result, where there is no before or after to tell by
+  status?: ChangedFile['status'];
 }
 
 // The run card's fields the row reads: its state and where it is.
@@ -360,6 +363,12 @@ function plainText(markdown: string): string {
 // how long the assistant's turn must stay settled before a run's result
 // is posted into it
 const DELIVERY_SETTLE_MS = 2500;
+// a link's last path segment with an extension names a file, not a card
+const LINK_FILE_EXTENSION = /\/[^/]+\.[a-z0-9]+$/i;
+// A tab that only watched the run waits this long before it delivers, so
+// the tab that ran it delivers first and its message has synced in by then;
+// the watcher delivers only when that tab closed before it could.
+const WATCHER_DELIVERY_MS = 30 * 1000;
 const DIGITS = new RegExp('^\\d+$');
 const READ_NAME = new RegExp('read', 'i');
 // finished step lines shown before the rest fold behind "N more"
@@ -828,11 +837,6 @@ export default class RoomMessageTool extends Component<Signature> {
     return typeof reason === 'string' && reason.trim() ? reason.trim() : '';
   }
 
-  // Why this call waits for the user's click, shown above the code while
-  // this tab offers the click that runs it (Run, Retry or Try Anyway), so the
-  // user knows what the click allows. A call another agent sent is run from
-  // that agent's tab, not this one.
-  @cached
   // A script that deletes or removes something can't be taken back: its
   // gate says so, in Pret UI's destructive form, with no "always" answer.
   private get isDestructive() {
@@ -841,6 +845,11 @@ export default class RoomMessageTool extends Component<Signature> {
     );
   }
 
+  // Why this call waits for the user's click, shown above the code while
+  // this tab offers the click that runs it (Run, Retry or Try Anyway), so the
+  // user knows what the click allows. A call another agent sent is run from
+  // that agent's tab, not this one.
+  @cached
   private get clickReasons() {
     let { messageTool } = this.args;
     if (messageTool.message.agentId !== this.matrixService.agentId) {
@@ -904,9 +913,7 @@ export default class RoomMessageTool extends Component<Signature> {
         : 'Your pick';
     }
     if (this.args.foldCount && this.args.foldCount > 1) {
-      return this.baseName === 'checkCorrectness'
-        ? `Checked ${this.args.foldCount} files · all pass`
-        : `${humanizeToolName(this.baseName)} ×${this.args.foldCount}`;
+      return `${humanizeToolName(this.baseName)} ×${this.args.foldCount}`;
     }
     // a check names the file it checked, as the board does: "Checked
     // relaunch.gts", not the tool's sentence about a path
@@ -1141,6 +1148,47 @@ export default class RoomMessageTool extends Component<Signature> {
       return () => offs.forEach((off) => off?.());
     },
   );
+
+  // A file or workspace a line names never takes the app's place: a file
+  // in a realm opens in Quick Look, a workspace the run made opens as the
+  // workspace, and anything else opens in a new window. A modified click is
+  // the reader's own choice.
+  private openLineLink = (line: ResultLine, event: MouseEvent) => {
+    let href = line.href;
+    if (
+      !href ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    if (line.hook === 'created-workspace') {
+      this.operatorModeStateService.openWorkspace(href);
+      return;
+    }
+    if (!this.realm.url(href)) {
+      window.open(href, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    let { pathname } = new URL(href);
+    let isCard =
+      !LINK_FILE_EXTENSION.test(pathname) || pathname.endsWith('.json');
+    let id = isCard ? href.replace(/\.json$/, '') : href;
+    this.quickLook.open({
+      kind: isCard ? 'card' : 'file',
+      id,
+      sourceKey: `ql:tool-line:${id}`,
+      trigger:
+        event.currentTarget instanceof HTMLElement
+          ? event.currentTarget
+          : undefined,
+    });
+  };
 
   // A touched card opens on the stack beside the panel.
   // A card the call changed opens in Quick Look first, as every card the
@@ -1870,10 +1918,21 @@ export default class RoomMessageTool extends Component<Signature> {
       let fileCount = lines.filter((line) => line.hook === 'file').length;
       if (fileCount > 5) {
         let files = lines.splice(0, fileCount);
+        // a deleted file is counted as deleted, never as saved
+        let deleted = files.filter((line) => line.struck).length;
+        let saved = files.length - deleted;
+        let fileWord = (n: number) => `${n} ${n === 1 ? 'file' : 'files'}`;
         lines.unshift({
-          glyph: 'done',
-          tone: 'done',
-          text: `Saved ${files.length} files`,
+          glyph: saved ? 'done' : 'skipped',
+          tone: saved ? 'done' : 'muted',
+          text: [
+            saved ? `Saved ${fileWord(saved)}` : undefined,
+            deleted
+              ? `${saved ? 'deleted' : 'Deleted'} ${fileWord(deleted)}`
+              : undefined,
+          ]
+            .filter(Boolean)
+            .join(', '),
           sub: `${files
             .slice(0, 3)
             .map((line) => line.text.split('/').pop())
@@ -2134,17 +2193,22 @@ export default class RoomMessageTool extends Component<Signature> {
           after: edit.after,
         }));
     }
-    return this.resultFiles.flatMap((file) =>
-      file.diff && isDiffable(file.fileUrl)
-        ? [
-            {
-              url: file.fileUrl,
-              path: shortPath(file.fileUrl),
-              lines: parseCompactDiff(file.diff).lines,
-            },
-          ]
-        : [],
-    );
+    return this.resultFiles.flatMap((file) => {
+      if (!file.diff || !isDiffable(file.fileUrl)) {
+        return [];
+      }
+      let { lines, complete } = parseCompactDiff(file.diff);
+      // a whole diff that only adds, with no line kept, is a new file
+      let status: FileDiff['status'] =
+        file.status === 'deleted'
+          ? 'deleted'
+          : complete && lines.every((line) => line.op === 'add')
+            ? 'added'
+            : 'modified';
+      return [
+        { url: file.fileUrl, path: shortPath(file.fileUrl), lines, status },
+      ];
+    });
   }
 
   // ── Stop ───────────────────────────────────────────────────────────────
@@ -2247,7 +2311,7 @@ export default class RoomMessageTool extends Component<Signature> {
       })
       .then(async (response) => {
         if (!response.ok) {
-          return;
+          throw new Error(`run state fetch answered ${response.status}`);
         }
         let doc = (await response.json()) as {
           data?: { attributes?: RunState };
@@ -2257,9 +2321,13 @@ export default class RoomMessageTool extends Component<Signature> {
           this.reconnectSettled = true;
         }
       })
-      .catch(() => {
-        // the store's copy updates as the run saves; it stays reconnecting
-        // until then
+      .catch((e) => {
+        // the row goes on from the store's copy, which updates as the run
+        // saves, rather than saying it is reconnecting for good
+        console.warn(`could not fetch the state of run ${id}`, e);
+        if (!this.isDestroying && !this.isDestroyed) {
+          this.reconnectSettled = true;
+        }
       });
   };
 
@@ -2303,8 +2371,19 @@ export default class RoomMessageTool extends Component<Signature> {
   // A run this page did not start, whose saved state has not moved for a
   // few minutes, has no page working on it: it is paused, not running.
   private get isRunPaused() {
-    if (this.launchedHere || !this.reconnectSettled) {
-      return false;
+    let due = this.pausedAt;
+    return due !== undefined && this.now >= due;
+  }
+
+  // When a run this page did not start counts as paused, if its saved
+  // state does not move before then.
+  private get pausedAt() {
+    if (
+      this.launchedHere ||
+      !this.reconnectSettled ||
+      this.run?.status !== 'running'
+    ) {
+      return undefined;
     }
     let activity = (this.runCard as { activity?: { at?: unknown }[] })
       ?.activity;
@@ -2314,8 +2393,28 @@ export default class RoomMessageTool extends Component<Signature> {
         (entry) => new Date(entry?.at as string).getTime() || 0,
       ),
     );
-    return last > 0 && Date.now() - last > RUN_IDLE_MS;
+    return last > 0 ? last + RUN_IDLE_MS : undefined;
   }
+
+  // The clock isRunPaused reads, moved on when a run is due to pause.
+  @tracked private now = Date.now();
+  private pauseTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // runs inside render, so the clock moves only from the timer
+  private watchPause = (due: unknown) => {
+    clearTimeout(this.pauseTimer);
+    if (typeof due !== 'number') {
+      return;
+    }
+    this.pauseTimer = setTimeout(
+      () => {
+        if (!this.isDestroying && !this.isDestroyed) {
+          this.now = Date.now();
+        }
+      },
+      Math.max(0, due - Date.now()),
+    );
+  };
 
   // What the run's row says beyond its progress: that the page reloaded,
   // that the run's result was posted to the room.
@@ -2503,11 +2602,12 @@ export default class RoomMessageTool extends Component<Signature> {
         added: fileAdded,
         removed: fileRemoved,
         status:
-          diff.before === undefined && !diff.lines
+          diff.status ??
+          (diff.before === undefined && !diff.lines
             ? 'added'
             : diff.after === undefined && !diff.lines
               ? 'deleted'
-              : 'modified',
+              : 'modified'),
         // a reverted call shows no diffs, so a counted file was kept
         state: 'kept',
       });
@@ -2552,6 +2652,7 @@ export default class RoomMessageTool extends Component<Signature> {
 
   willDestroy() {
     super.willDestroy();
+    clearTimeout(this.pauseTimer);
     let id = this.toolCallId;
     if (id && this.toolService.liveRunToolIds.has(id)) {
       schedule('afterRender', () => this.toolService.liveRunToolIds.delete(id));
@@ -2577,7 +2678,7 @@ export default class RoomMessageTool extends Component<Signature> {
           );
         }
       },
-      DELIVERY_SETTLE_MS,
+      this.launchedHere ? DELIVERY_SETTLE_MS : WATCHER_DELIVERY_MS,
     );
   };
 
@@ -2817,6 +2918,7 @@ export default class RoomMessageTool extends Component<Signature> {
       data-tool-name={{@messageTool.name}}
       data-tool-arguments-length={{this.argumentsLength}}
       {{whenChanged this.reconnect this.needsReconnect}}
+      {{whenChanged this.watchPause this.pausedAt}}
       {{whenChanged this.noteRunStatus this.run.status}}
       {{whenChanged this.deliver this.deliveryReady}}
       {{whenChanged this.reportLiveRun this.isLiveRun}}
@@ -2987,6 +3089,7 @@ export default class RoomMessageTool extends Component<Signature> {
                       >{{line.text}}</del>{{else if line.href}}<a
                         class='tool-line-link'
                         href={{line.href}}
+                        {{on 'click' (fn this.openLineLink line)}}
                       >{{line.text}}</a>{{else}}{{line.text}}{{#if line.answer}}
                         <b>{{line.answer}}</b>{{/if}}{{/if}}{{#if
                       line.thumb

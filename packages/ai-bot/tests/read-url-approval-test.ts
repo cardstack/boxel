@@ -28,6 +28,7 @@ import { toCommandRequest } from '../lib/matrix/response-publisher.ts';
 import {
   ApprovalClaims,
   declinedToolCalls,
+  handlesRoomEvent,
   releasedToolCalls,
   unreleasedApproval,
 } from '../lib/bot-tools/approval.ts';
@@ -697,5 +698,54 @@ module('readUrl approval', () => {
       ).inForce,
       'a 👍 after a 👎 already answered the call does not lift the stop',
     );
+  });
+  // The event handler's gate, with events as the matrix SDK hands them.
+  function sdkEvent(event: DiscreteMatrixEvent) {
+    return { getContent: () => event.content as Record<string, any> };
+  }
+
+  test('a 👍 on a message that holds no call starts nothing', () => {
+    let answer = humanMessage('An answer', '$answer');
+    let thumbsUp = approvalReaction(reaction('$answer', '👍', USER) as any);
+    assert.ok(thumbsUp, 'it is an approval reaction');
+    assert.false(
+      handlesRoomEvent(thumbsUp, sdkEvent(answer), () => true),
+      'a reaction on an ordinary answer is only a reaction',
+    );
+  });
+
+  test('a 👍 on a message holding a call, or beyond the loaded timeline, goes on', () => {
+    let held = botMessage([readUrlRequest('held', 'https://a.example/', true)]);
+    let thumbsUp = approvalReaction(reaction('$bot', '👍', USER) as any);
+    assert.true(handlesRoomEvent(thumbsUp, sdkEvent(held), () => false));
+    assert.true(
+      handlesRoomEvent(thumbsUp, undefined, () => false),
+      'the history decides for a message outside the loaded timeline',
+    );
+  });
+
+  test('an event that is not a reaction goes on only if it can produce a response', () => {
+    assert.true(handlesRoomEvent(undefined, undefined, () => true));
+    assert.false(handlesRoomEvent(undefined, undefined, () => false));
+  });
+
+  test("the host's Approve, an approved result and a 👍, runs the call once", () => {
+    let held = readUrlRequest('held', 'https://a.example/', true);
+    let history = [
+      humanMessage('Find their docs'),
+      streamedBotMessage([held]),
+      result('held', 'approved', USER),
+      reaction('$bot', '👍', USER),
+    ];
+    let released = readUrlCallsReleasedByApprovals(history, BOT);
+    let claims = new ApprovalClaims();
+    // one handler for the result event, one for the reaction
+    let first = claims.claim(history, released);
+    let second = claims.claim(history, released);
+    assert.deepEqual(
+      first.map((entry) => entry.call.id),
+      ['held'],
+    );
+    assert.deepEqual(second, [], 'the second answer finds the call taken');
   });
 });

@@ -288,6 +288,8 @@ export default class ToolService extends Service {
   @service declare private session: SessionService;
   @service declare private store: StoreService;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
+  // The room each running call runs for, by tool call id.
+  private executingToolRooms = new TrackedMap<string, string>();
   // What a running call has said about itself so far, by tool call id: the
   // step it is on and the lines it recorded. Filled by tools that report
   // progress (the Realm Runner), read by the transcript while the call runs.
@@ -438,6 +440,7 @@ export default class ToolService extends Service {
 
   resetState() {
     this.currentlyExecutingToolRequestIds.clear();
+    this.executingToolRooms.clear();
     this.executedToolRequestIds.clear();
     this.claimedToolRequestIds.clear();
     this.acceptingAllRoomIds.clear();
@@ -1059,6 +1062,13 @@ export default class ToolService extends Service {
     tool.stop();
   }
 
+  // The calls running in this tab for one room.
+  executingToolIdsInRoom(roomId: string): string[] {
+    return [...this.executingToolRooms]
+      .filter(([, room]) => room === roomId)
+      .map(([id]) => id);
+  }
+
   // Stops every running call of one room: Stop in a room ends its own work
   // only.
   stopToolsInRoom(roomId: string) {
@@ -1273,6 +1283,7 @@ export default class ToolService extends Service {
       try {
         this.matrixService.failedToolState.delete(commandRequestId!);
         this.currentlyExecutingToolRequestIds.add(commandRequestId!);
+        this.executingToolRooms.set(commandRequestId!, command.message.roomId);
 
         // The timeout brackets everything between claiming the request and
         // having a result in hand: module resolution and input construction
@@ -1558,6 +1569,7 @@ export default class ToolService extends Service {
           this.store.dropReference(pinnedInputId);
         }
         this.currentlyExecutingToolRequestIds.delete(commandRequestId!);
+        this.executingToolRooms.delete(commandRequestId!);
         this.stoppableTools.delete(commandRequestId!);
         // A question the run left open has no one waiting for its answer.
         this.scriptAsks.get(commandRequestId!)?.cancel();

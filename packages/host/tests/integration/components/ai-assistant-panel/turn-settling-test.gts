@@ -175,6 +175,45 @@ module('Integration | ai-assistant-panel | turn settling', function (hooks) {
       .exists({ count: 1 }, 'the footer is under the reply that ends it');
   });
 
+  test('a turn whose call the reader never ran settles once they talk past it', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: 'Make me a card',
+      msgtype: 'm.text',
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'I can write the card.',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'unrun-call',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Card/1`,
+              patch: { attributes: { title: 'Card' } },
+            },
+          }),
+        },
+      ],
+    });
+    await waitFor('[data-test-message-idx="1"] [data-test-tool-call-id]');
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: 'Never mind, something else',
+      msgtype: 'm.text',
+    });
+
+    await waitFor('[data-test-message-idx="1"] [data-test-answer-footer]');
+    assert
+      .dom(
+        '[data-test-message-idx="1"] [data-test-pretui-agent-mark="working"]',
+      )
+      .doesNotExist('the turn no longer reads as working');
+  });
+
   test('a turn whose result is already past the wait settles at once', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
@@ -188,8 +227,9 @@ module('Integration | ai-assistant-panel | turn settling', function (hooks) {
   test('a turn whose reply never comes settles when its wait runs out', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    // the result is 29.7 s older than the room's newest event: 0.3 s is left
-    simulateAnsweredCall(roomId, Date.now() - 29_700);
+    // the result is 27 s older than the room's newest event: 3 s are left,
+    // time enough to see the turn still waiting on a loaded runner
+    simulateAnsweredCall(roomId, Date.now() - 27_000);
     await waitFor(
       '[data-test-message-idx="1"] [data-test-tool-call-apply="applied"]',
     );
@@ -197,7 +237,7 @@ module('Integration | ai-assistant-panel | turn settling', function (hooks) {
       .dom('[data-test-answer-footer]')
       .doesNotExist('the turn waits for the rest of its wait');
     await waitFor('[data-test-message-idx="1"] [data-test-answer-footer]', {
-      timeout: 3000,
+      timeout: 6000,
     });
     assert
       .dom('[data-test-message-idx="1"] [data-test-answer-footer]')

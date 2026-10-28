@@ -34,7 +34,7 @@ function confidenceOf(value: string | number | undefined, best: boolean) {
     typeof value === 'number'
       ? (['low', 'low', 'medium', 'high'][Math.max(0, Math.min(3, value))] ??
         'medium')
-      : (value ?? (best ? 'high' : 'medium')).toString().toLowerCase();
+      : (value?.trim() || (best ? 'high' : 'medium')).toLowerCase();
   let level = word === 'high' ? 3 : word === 'low' ? 1 : 2;
   return {
     level,

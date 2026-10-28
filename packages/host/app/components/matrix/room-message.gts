@@ -284,10 +284,12 @@ export default class RoomMessage extends Component<Signature> {
             name: tool.name ?? 'tool',
             state: tool.status === 'applied' ? 'completed' : 'running',
           })),
+          // a check that found errors still ends applied, so the group
+          // counts checks and leaves their outcome to the rows inside it
           summary: isCheck
             ? pending
-              ? `Checking ${count} files · ${done} done`
-              : `Checked ${count} files · all pass`
+              ? `Running ${count} checks · ${done} done`
+              : `Ran ${count} checks`
             : pending
               ? `${name} ×${count} · ${done} done`
               : `${name} ×${count}`,
@@ -302,14 +304,17 @@ export default class RoomMessage extends Component<Signature> {
     return runs;
   }
 
-  // Whether a later call in the same stretch of assistant work (this message
-  // and the ones after it, up to the user's next message) succeeded. A
-  // failure the assistant recovered from then reads as retried, not as an
-  // error waiting on the reader.
+  // Whether a later call to the same tool in the same stretch of assistant
+  // work (this message and the ones after it, up to the user's next message)
+  // succeeded. A failure the assistant recovered from then reads as retried,
+  // not as an error waiting on the reader; a different tool that worked
+  // afterwards is not a retry.
   private isRetriedLater = (tool: MessageTool) => {
+    let retried = (t: MessageTool) =>
+      t.status === 'applied' && t.name === tool.name;
     let tools = this.message.tools ?? [];
     let laterHere = tools.slice(tools.indexOf(tool) + 1);
-    if (laterHere.some((t) => t.status === 'applied')) {
+    if (laterHere.some(retried)) {
       return true;
     }
     let messages = this.args.roomResource.messages;
@@ -318,7 +323,7 @@ export default class RoomMessage extends Component<Signature> {
       if (next.author.userId !== aiBotUserId) {
         return false;
       }
-      if (next.tools?.some((t) => t.status === 'applied')) {
+      if (next.tools?.some(retried)) {
         return true;
       }
     }

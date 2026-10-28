@@ -7,7 +7,13 @@ import { modifier } from 'ember-modifier';
 
 import type AssistantQuickLookService from '@cardstack/host/services/assistant-quick-look';
 
-import { DURATION, EASE, EASE_IN, motionEnabled } from './tokens';
+import {
+  DURATION,
+  EASE,
+  EASE_IN,
+  MAX_FRAME_STEP,
+  motionEnabled,
+} from './tokens';
 
 // Quick Look's motion, as one Choreo region around the assistant panel's
 // content (ADR 007 §1.2: one engine reacts to rendered changes; nothing
@@ -83,6 +89,7 @@ export default class QuickLookMotion extends Component<Signature> {
       <Choreo
         @id='assistant-quick-look'
         class='quick-look-region'
+        @maxFrameStep={{MAX_FRAME_STEP}}
         ...attributes
         {{this.remember this.quickLook.current.sourceKey}}
         as |c|
