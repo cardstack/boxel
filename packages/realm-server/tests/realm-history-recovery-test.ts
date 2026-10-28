@@ -315,7 +315,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function journal() {
     return (await dbAdapter.execute(
-      `SELECT operation_id, revision, state, kind, paths,
+      `SELECT operation_id, revision, parent, state, kind, paths,
               materialized_at IS NOT NULL AS materialized,
               post_committed_at IS NOT NULL AS post_committed
        FROM realm_history_revisions WHERE realm_url = $1 ORDER BY seq`,
@@ -323,6 +323,7 @@ module(basename(import.meta.filename), function (hooks) {
     )) as {
       operation_id: string;
       revision: string | null;
+      parent: string | null;
       state: string;
       kind: string;
       paths: string[];
@@ -718,6 +719,47 @@ module(basename(import.meta.filename), function (hooks) {
           late.code,
           'operation-fenced',
           'and so is a commit that arrives late',
+        );
+      },
+    );
+
+    recordingTest(
+      'that a retry completes is journaled on its own parent',
+      async function (assert) {
+        let { realm, history } = await mount();
+        let root = await backend().head();
+        history!.loseCommitResponses = true;
+        history!.failOutcomes = true;
+        await failure(write(realm, { 'c.txt': 'charlie' }, 'lost-retried'));
+        let lost = await backend().head();
+        history!.loseCommitResponses = false;
+        history!.failOutcomes = false;
+
+        // A write to another file lands on top of the lost one before the
+        // retry comes.
+        await write(realm, { 'd.txt': 'delta' }, 'lands-between');
+        let newest = await backend().head();
+        await write(realm, { 'c.txt': 'charlie' }, 'lost-retried');
+
+        assert.strictEqual(await backend().head(), newest, 'nothing new');
+        assert.strictEqual(onDisk('c.txt'), 'charlie');
+        let rows = await journal();
+        let row = (operationId: string) =>
+          rows.find((r) => r.operation_id === operationId);
+        assert.deepEqual(
+          {
+            state: row('lost-retried')?.state,
+            revision: row('lost-retried')?.revision,
+            parent: row('lost-retried')?.parent,
+          },
+          { state: 'committed', revision: lost, parent: root },
+          'the retried revision has the parent history gave it',
+        );
+        assert.strictEqual(row('lands-between')?.parent, lost);
+        assert.strictEqual(
+          await realm.history!.materializedRevision(),
+          newest,
+          'the newest revision is the one on top, though it was journaled first',
         );
       },
     );

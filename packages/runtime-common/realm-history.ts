@@ -234,7 +234,11 @@ export interface HistoryCommitRequest {
 
 export interface HistoryCommitResult {
   revision: string;
+  // `revision`'s own parent, absent only for the root revision. On a replay
+  // it can be older than the parent the retry asked against.
+  parent?: string;
   // False when the changes left HEAD's tree as it was, and `revision` is HEAD.
+  // On a replay, whether the operation's first commit wrote `revision`.
   created: boolean;
   // True when the operation id had already committed, and `revision` is the
   // revision it committed then.
@@ -248,7 +252,8 @@ export interface PreparedCommit {
 }
 
 export type HistoryOutcome =
-  | { state: 'committed'; revision: string }
+  // `created` and `parent` as in `HistoryCommitResult`.
+  | { state: 'committed'; revision: string; parent?: string; created: boolean }
   // Reporting `absent` fences the id: it can never commit afterwards.
   | { state: 'absent' };
 
@@ -412,19 +417,53 @@ export class RealmHistoryRecorder {
   // The newest revision whose bytes, and every earlier revision's, have
   // reached disk. Behind HEAD while a write is between Record and the end of
   // Materialize, or after one died there; recovery brings disk up to HEAD.
+  //
+  // History order is read from each row's parent, not from the order rows
+  // were journaled: a retry that finds its revision already committed, or
+  // recovery settling a write whose answer was lost, journals a revision
+  // after others that history put on top of it. The walk starts at the
+  // newest revision, the one no other revision has as its parent, and goes
+  // back only until it has passed every revision not yet on disk. The
+  // answer is the parent of the oldest of those, or the newest revision when
+  // there are none.
   async materializedRevision(): Promise<string | undefined> {
+    let realm = () => param(this.#realmURL);
     let [row] = await query(this.#dbAdapter, [
-      `SELECT revision FROM realm_history_revisions WHERE realm_url =`,
-      param(this.#realmURL),
-      `AND state = 'committed'
-       AND seq < COALESCE((SELECT min(seq) FROM realm_history_revisions
-         WHERE realm_url =`,
-      param(this.#realmURL),
-      `AND state = 'committed' AND materialized_at IS NULL),
-         9223372036854775807)
-       ORDER BY seq DESC LIMIT 1`,
+      `WITH RECURSIVE behind AS (
+         SELECT count(*) AS n FROM realm_history_revisions
+         WHERE state = 'committed' AND materialized_at IS NULL
+           AND realm_url =`,
+      realm(),
+      `), tip AS (
+         SELECT revision, parent, materialized_at IS NOT NULL AS materialized
+         FROM realm_history_revisions r
+         WHERE state = 'committed' AND realm_url =`,
+      realm(),
+      `AND NOT EXISTS (
+           SELECT 1 FROM realm_history_revisions child
+           WHERE child.realm_url = r.realm_url AND child.state = 'committed'
+             AND child.parent = r.revision)
+         ORDER BY seq DESC LIMIT 1
+       ), chain AS (
+         SELECT revision, parent, materialized,
+                CASE WHEN materialized THEN 0 ELSE 1 END AS passed
+         FROM tip
+         UNION ALL
+         SELECT r.revision, r.parent, r.materialized_at IS NOT NULL,
+                chain.passed
+                  + CASE WHEN r.materialized_at IS NULL THEN 1 ELSE 0 END
+         FROM chain JOIN realm_history_revisions r
+           ON r.revision = chain.parent AND r.state = 'committed'
+             AND r.realm_url =`,
+      realm(),
+      `WHERE chain.passed < (SELECT n FROM behind)
+       )
+       SELECT (SELECT revision FROM tip) AS tip,
+              (SELECT parent FROM chain WHERE NOT materialized
+               ORDER BY passed DESC LIMIT 1) AS before_behind`,
     ]);
-    return row ? String(row.revision) : undefined;
+    let answer = row?.before_behind ?? row?.tip;
+    return answer == null ? undefined : String(answer);
   }
 
   async head(recording?: WriteRecording): Promise<string> {
@@ -655,13 +694,19 @@ export class RealmHistoryRecorder {
       await this.#markAborted(operationId);
       return undefined;
     }
-    // Its commit stood. It is journaled after every revision this realm has
-    // already journaled, which is where it belongs among those still to reach
-    // disk: none of them can have committed after it and reached disk first,
-    // because its paths' locks were held until its writer was gone.
+    if (!outcome.created) {
+      // It found the tree as staged and wrote nothing, so there is no
+      // revision to journal. A retry is answered by history as unchanged.
+      await this.#forgetPending(operationId);
+      return undefined;
+    }
+    // Its commit stood, on its own parent, which is where it sits in history
+    // however many revisions were journaled after it.
     await query(this.#dbAdapter, [
       `UPDATE realm_history_revisions SET state = 'committed', revision =`,
       param(outcome.revision),
+      `, parent =`,
+      param(outcome.parent ?? null),
       `, seq = nextval(pg_get_serial_sequence('realm_history_revisions',
           'seq'))
        WHERE state = 'pending' AND realm_url =`,
@@ -766,8 +811,7 @@ export class RealmHistoryRecorder {
         param(operationId),
       ]);
     } catch (err: unknown) {
-      // Left pending, recovery asks for its outcome, finds it absent, and
-      // marks it aborted.
+      // Left pending, recovery asks for its outcome and settles it.
       this.#log.warn(
         `could not remove the pending row of ${operationId} in ${this.#realmURL}: ${describe(err)}`,
       );
@@ -802,14 +846,19 @@ export class RealmHistoryRecorder {
         return await this.#resolveFailedCommit(recording, err, parent);
       }
       if (result.replayed) {
-        // The revision this id committed earlier. HEAD may have moved on
-        // since, so it is asked for again next time.
+        // The revision this id committed earlier, journaled with its own
+        // parent: HEAD may have moved on since, so it is asked for again
+        // next time.
         this.#head = undefined;
-        return { revision: result.revision, parent };
+        if (!result.created) {
+          // Its first attempt found the tree as staged and wrote nothing.
+          throw new UnchangedTreeSignal(result.revision);
+        }
+        return { revision: result.revision, parent: result.parent ?? parent };
       }
       this.#head = result.revision;
       if (result.created) {
-        return { revision: result.revision, parent };
+        return { revision: result.revision, parent: result.parent ?? parent };
       }
       // The changes left HEAD's tree as it was, which the realm's own
       // unchanged check rules out unless disk had drifted from HEAD. Nothing
@@ -887,7 +936,10 @@ export class RealmHistoryRecorder {
     }
     this.#head = undefined;
     if (outcome.state === 'committed') {
-      return { revision: outcome.revision, parent };
+      if (!outcome.created) {
+        throw new UnchangedTreeSignal(outcome.revision);
+      }
+      return { revision: outcome.revision, parent: outcome.parent ?? parent };
     }
     // Asking fenced the id, so it can never commit late, and a retry under it
     // is told to send the write under a new one.

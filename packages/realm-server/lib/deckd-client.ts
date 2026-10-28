@@ -73,6 +73,7 @@ export class DeckdHistoryBackend implements HistoryBackend {
         );
         return {
           revision: String(body.revision),
+          parent: parentOf(body, '/commit'),
           created: Boolean(body.created),
           replayed: Boolean(body.replayed),
         };
@@ -83,7 +84,12 @@ export class DeckdHistoryBackend implements HistoryBackend {
   async outcome(operationId: string): Promise<HistoryOutcome> {
     let body = await this.#post('/outcome', { repo: this.repo, operationId });
     if (body.state === 'committed') {
-      return { state: 'committed', revision: String(body.revision) };
+      return {
+        state: 'committed',
+        revision: String(body.revision),
+        parent: parentOf(body, '/outcome'),
+        created: Boolean(body.created),
+      };
     }
     if (body.state === 'absent') {
       return { state: 'absent' };
@@ -171,4 +177,19 @@ export class DeckdHistoryBackend implements HistoryBackend {
       `deckd ${endpoint} answered ${response.status}: ${text.slice(0, 200)}`,
     );
   }
+}
+
+// A revision's parent as deckd answered it: null only for the root commit. A
+// deckd that leaves it out predates reporting it, and the journal can't be
+// kept in history order without it.
+function parentOf(
+  body: Record<string, unknown>,
+  endpoint: string,
+): string | undefined {
+  if (!('parent' in body)) {
+    throw new Error(
+      `deckd answered ${endpoint} without the revision's parent; it is older than this realm server needs`,
+    );
+  }
+  return body.parent == null ? undefined : String(body.parent);
 }

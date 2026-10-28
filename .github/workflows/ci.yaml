@@ -1139,7 +1139,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      DECKD_REF: 751fa568808489801e5f274fb8907280f33c227c
+      DECKD_REF: eb116367aa9b29d3be8c781b20fd05aabb12afcb
     steps:
       # This repository too, for its upload action.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

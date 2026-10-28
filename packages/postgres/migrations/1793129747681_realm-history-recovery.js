@@ -53,6 +53,12 @@ exports.up = (pgm) => {
       ON realm_history_revisions (realm_url, seq)
       WHERE post_committed_at IS NULL
   `);
+  // History order is read from each revision's parent, and the newest
+  // revision is the one no other names as its parent.
+  pgm.sql(`
+    CREATE INDEX IF NOT EXISTS realm_history_revisions_parent
+      ON realm_history_revisions (realm_url, parent)
+  `);
   pgm.sql(`
     CREATE TABLE IF NOT EXISTS realm_history_state (
       realm_url varchar PRIMARY KEY,
@@ -71,6 +77,7 @@ exports.up = (pgm) => {
 
 exports.down = (pgm) => {
   pgm.sql(`DROP TABLE IF EXISTS realm_history_state`);
+  pgm.sql(`DROP INDEX IF EXISTS realm_history_revisions_parent`);
   pgm.sql(`DROP INDEX IF EXISTS realm_history_revisions_not_post_committed`);
   pgm.sql(`DROP INDEX IF EXISTS realm_history_revisions_pending`);
   pgm.sql(`
