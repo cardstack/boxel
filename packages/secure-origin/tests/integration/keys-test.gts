@@ -17,6 +17,10 @@ import KeyPage from '../../src/shell/keys/key-page.gts';
 import { openedFor } from '../../src/shell/keys/opened-for.ts';
 import SharePage from '../../src/shell/keys/share-key-page.gts';
 import SwapKeyPage from '../../src/shell/keys/swap-key-page.gts';
+import {
+  setupTelemetrySecretsCheck,
+  stringsIn,
+} from '../helpers/telemetry-secrets.ts';
 
 // The key pages, against a realm server that answers the requests they make.
 // Every change to a key is made with a key write ticket the page mints with
@@ -188,6 +192,28 @@ module('Integration | key pages', function (hooks) {
     sessionStorage.clear();
   });
 
+  // No beacon carries what a key page sent or showed: a key's value, name or
+  // id, a share's label or id, a workspace's name or address, a ticket, the
+  // session's token.
+  setupTelemetrySecretsCheck(hooks, () => [
+    ...stringsIn(requests.map((r) => r.body)),
+    SESSION.token,
+    REALM,
+    REALM_PREFIX,
+    'someone/workspace',
+    'someone/dashboard',
+    'Weather service',
+    'Team Workspace',
+    'Team weather',
+    'Team maps',
+    'Get the forecast',
+    '"key-1"',
+    '"key-2"',
+    '"share-1"',
+    '"share-4"',
+    '"share-9"',
+  ]);
+
   module('what a page was opened for', function () {
     test('reads its realm, card, operation and reason from the fragment', function (assert) {
       assert.deepEqual(
@@ -288,6 +314,116 @@ module('Integration | key pages', function (hooks) {
       await click('[data-test-key-replace-save]');
       await waitFor('[data-test-keys-signed-out]');
       assert.dom('[data-test-keys-heading]').hasText('You’re signed out');
+    });
+
+    test('a session past its end is renewed, while the app session it handed over lasts, and opens signed in', async function (assert) {
+      let lapsed = { ...SESSION, expiresAt: '2000-01-01T00:00:00.000Z' };
+      let renewed = {
+        token: 'renewed-session-token',
+        user: SESSION.user,
+        expiresAt: '2099-01-08T00:00:00.000Z',
+      };
+      storeSession(lapsed);
+      serve({
+        'POST _secure-session/renewal': () =>
+          json(201, { data: { type: 'secure-session', attributes: renewed } }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      assert.deepEqual(
+        JSON.parse(localStorage.getItem('boxel-secure-session') ?? 'null'),
+        renewed,
+        'the renewed session is kept',
+      );
+      assert.false(
+        requests.some(
+          (r) => r.path === '_secure-session' && r.method === 'GET',
+        ),
+        'renewing is the check',
+      );
+    });
+
+    test('a session past its end that isn’t renewed says to sign in to Boxel', async function (assert) {
+      storeSession({ ...SESSION, expiresAt: '2000-01-01T00:00:00.000Z' });
+      serve({
+        'POST _secure-session/renewal': () =>
+          json(401, {
+            errors: [
+              { status: '401', code: 'signed-out', detail: 'signed out' },
+            ],
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-keys-signed-out]');
+      assert.strictEqual(
+        localStorage.getItem('boxel-secure-session'),
+        null,
+        'the ended session is forgotten',
+      );
+    });
+
+    test('a request refused as signed out is made again under a renewed session', async function (assert) {
+      let renewed = {
+        token: 'renewed-session-token',
+        user: SESSION.user,
+        expiresAt: '2099-01-08T00:00:00.000Z',
+      };
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      let refusedOnce = false;
+      serve({
+        'POST _key-write-tickets': () => {
+          if (!refusedOnce) {
+            refusedOnce = true;
+            return refusal(401, 'the token has expired');
+          }
+          return json(201, {
+            data: {
+              attributes: {
+                ticket: 'ticket-after-renewal',
+                expiresAt: '2099-01-01T00:00:00.000Z',
+              },
+            },
+          });
+        },
+        'POST _secure-session/renewal': () =>
+          json(201, { data: { type: 'secure-session', attributes: renewed } }),
+        'PATCH _user-keys/key-2': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-2',
+              attributes: attributesOf(KEYS[1]),
+            },
+          }),
+      });
+      await click('[data-test-key-row="Maps"] [data-test-key-replace]');
+      await fillIn('[data-test-key-value]', 'new-value');
+      await click('[data-test-key-replace-save]');
+      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
+      assert.dom('[data-test-keys-signed-out]').doesNotExist();
+      assert.strictEqual(
+        requests.filter((r) => r.path === '_key-write-tickets').length,
+        2,
+        'the ticket is asked for again',
+      );
+      assert.deepEqual(
+        JSON.parse(localStorage.getItem('boxel-secure-session') ?? 'null'),
+        renewed,
+      );
+    });
+
+    test('a session far from its end is checked, not renewed', async function (assert) {
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      assert.false(
+        requests.some((r) => r.path === '_secure-session/renewal'),
+        'no renewal',
+      );
     });
 
     test('the Close button closes the window', async function (assert) {

@@ -123,6 +123,7 @@ import {
   handleGoogleSignIn,
   handleGoogleSignInStart,
   handleMintLoginToken,
+  handleRenewSecureSession,
   handlePasswordChange,
   handlePasswordSignIn,
   handleSecureOriginInfo,
@@ -317,13 +318,26 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.delete(
     SECURE_SESSION_PATH,
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    // Signing out only ends a session, and a window's session bound to an
+    // app device outlives its token, so any expired token is taken here too.
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter, {
+      expiredWithinSeconds: Number.POSITIVE_INFINITY,
+    }),
     handleEndSecureSession(args),
   );
   router.post(
     `${SECURE_SESSION_PATH}/login-token`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleMintLoginToken(args),
+  );
+  router.post(
+    `${SECURE_SESSION_PATH}/renewal`,
+    // A window's session outlives its token while the app device it is bound
+    // to exists, so any expired token is taken here; the row it names decides.
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter, {
+      expiredWithinSeconds: Number.POSITIVE_INFINITY,
+    }),
+    handleRenewSecureSession(args),
   );
   router.delete(
     SECURE_SESSIONS_PATH,

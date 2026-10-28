@@ -31,6 +31,7 @@ describe('endpoint labels', () => {
       ['_secure-session', '_secure-session'],
       ['_secure-session/google', '_secure-session/google'],
       ['_secure-session/login-token', '_secure-session/login-token'],
+      ['_secure-session/renewal', '_secure-session/renewal'],
       ['_secure-sessions/password-change', '_secure-sessions/password-change'],
     ]) {
       assert.equal(endpointLabel(`${REALM_SERVER}${path}`), label, path);
