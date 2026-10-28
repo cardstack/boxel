@@ -2319,6 +2319,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
       systemPrompt.includes('call the `open-secure-window` tool'),
       'the prompt sends a missing key to the secure window',
     );
+    assert.true(
+      systemPrompt.includes('mode `replace-key` with the card and operation'),
+      'the prompt sends a rejected key to the secure window to be replaced',
+    );
   });
 
   test('should support skill cards without ids', async () => {
