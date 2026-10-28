@@ -71,7 +71,7 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 // before any response arrived is a refusal of the operation.
 export function createCallApiSender(dbAdapter: DBAdapter): CallApiSender {
   return {
-    fill: (lookup) => fillSlots(dbAdapter, secretsKeyring(), lookup),
+    fill: (lookup) => fillSlots(dbAdapter, secretsKeyring, lookup),
     send: sendCallApiRequest,
   };
 }

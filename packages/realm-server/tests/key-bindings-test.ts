@@ -397,13 +397,13 @@ module(basename(import.meta.filename), function (hooks) {
       mode: 'pipeline' as const,
       request: definition.callApi!,
     };
-    let filled = await fillSlots(dbAdapter, keyring, {
+    let filled = await fillSlots(dbAdapter, () => keyring, {
       ...lookup,
       realmURL: realmURL.href,
     });
     assert.strictEqual(filled[0].value, VALUE);
     await assert.rejects(
-      fillSlots(dbAdapter, keyring, {
+      fillSlots(dbAdapter, () => keyring, {
         ...lookup,
         realmURL: 'http://127.0.0.1:4444/another-realm/',
       }),

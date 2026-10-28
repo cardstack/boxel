@@ -928,14 +928,17 @@ async function markNeedsReapproval(
 // nothing: the binding is refused as not approved.
 export async function fillSlots(
   dbAdapter: DBAdapter,
-  keyring: SecretsKeyring,
+  // Read only once a binding's grant is opened, so a slot nobody approved is
+  // refused without the keyring.
+  keyring: () => SecretsKeyring,
   lookup: CallApiSlotLookup,
 ): Promise<CallApiFilledSlot[]> {
   let filled: CallApiFilledSlot[] = [];
   for (let { slot, row } of await checkedBindings(dbAdapter, lookup)) {
     let opened: { keyId: string; destination: string; value: string };
+    let ring = keyring();
     try {
-      opened = await openGrantForSending(dbAdapter, keyring, {
+      opened = await openGrantForSending(dbAdapter, ring, {
         owner: row.approved_by as string,
         grantId: row.grant_id as string,
       });
