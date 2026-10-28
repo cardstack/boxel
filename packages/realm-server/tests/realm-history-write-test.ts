@@ -29,6 +29,7 @@ import {
   type HistoryCommitRequest,
   type HistoryCommitResult,
   type HistoryOutcome,
+  type PreparedCommit,
 } from '@cardstack/runtime-common/realm-history';
 import type { PgAdapter } from '@cardstack/postgres';
 import { DeckdHistoryBackend } from '../lib/deckd-client.ts';
@@ -152,14 +153,24 @@ class FaultyHistory implements HistoryBackend {
     this.inner = inner;
   }
 
-  async commit(request: HistoryCommitRequest): Promise<HistoryCommitResult> {
-    let result = await this.inner.commit(request);
-    this.onCommitted?.(result.revision);
-    if (this.loseNextCommitResponse) {
-      this.loseNextCommitResponse = false;
-      throw new Error('socket hang up');
-    }
-    return result;
+  // Called as a commit is prepared and as it is sent.
+  onCommitStep?: (step: 'prepare' | 'send') => void;
+
+  prepareCommit(request: Omit<HistoryCommitRequest, 'parent'>): PreparedCommit {
+    this.onCommitStep?.('prepare');
+    let prepared = this.inner.prepareCommit(request);
+    return {
+      commit: async (parent: string): Promise<HistoryCommitResult> => {
+        this.onCommitStep?.('send');
+        let result = await prepared.commit(parent);
+        this.onCommitted?.(result.revision);
+        if (this.loseNextCommitResponse) {
+          this.loseNextCommitResponse = false;
+          throw new Error('socket hang up');
+        }
+        return result;
+      },
+    };
   }
 
   async outcome(operationId: string): Promise<HistoryOutcome> {
@@ -923,6 +934,32 @@ module(basename(import.meta.filename), function (hooks) {
         );
         assert.strictEqual(await history.head(), revision, 'nothing recorded');
         assert.strictEqual(events.at(-1)?.outcome, 'replayed');
+      },
+    );
+
+    recordingTest(
+      'a commit is encoded before the history commit lock is taken',
+      async function (assert) {
+        let steps: string[] = [];
+        let withHistoryCommitLock =
+          dbAdapter.withHistoryCommitLock.bind(dbAdapter);
+        dbAdapter.withHistoryCommitLock = (realmUrl, fn) => {
+          steps.push('lock');
+          return withHistoryCommitLock(realmUrl, fn);
+        };
+        history.onCommitStep = (step) => steps.push(step);
+        try {
+          let response = await patchPerson('/person-1', 'Encoded First');
+          assert.strictEqual(
+            response.status,
+            200,
+            JSON.stringify(response.body),
+          );
+        } finally {
+          dbAdapter.withHistoryCommitLock = withHistoryCommitLock;
+          history.onCommitStep = undefined;
+        }
+        assert.deepEqual(steps, ['prepare', 'lock', 'send']);
       },
     );
 

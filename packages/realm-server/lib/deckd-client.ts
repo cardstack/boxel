@@ -6,6 +6,7 @@ import {
   type HistoryCommitRequest,
   type HistoryCommitResult,
   type HistoryOutcome,
+  type PreparedCommit,
 } from '@cardstack/runtime-common/realm-history';
 
 // How long a call to deckd may take before its outcome is treated as unknown.
@@ -41,10 +42,12 @@ export class DeckdHistoryBackend implements HistoryBackend {
     this.#timeoutMs = timeoutMs;
   }
 
-  async commit(request: HistoryCommitRequest): Promise<HistoryCommitResult> {
-    let body = await this.#post('/commit', {
+  // The body is encoded once, here, with every field but `parent`. Sending it
+  // writes `parent` in front of the encoded rest, so a resend under a new
+  // parent encodes nothing again.
+  prepareCommit(request: Omit<HistoryCommitRequest, 'parent'>): PreparedCommit {
+    let rest = JSON.stringify({
       repo: this.repo,
-      parent: request.parent,
       operationId: request.operationId,
       author: request.author,
       message: request.message,
@@ -61,9 +64,17 @@ export class DeckdHistoryBackend implements HistoryBackend {
       ),
     });
     return {
-      revision: String(body.revision),
-      created: Boolean(body.created),
-      replayed: Boolean(body.replayed),
+      commit: async (parent: string): Promise<HistoryCommitResult> => {
+        let body = await this.#send(
+          '/commit',
+          `{"parent":${JSON.stringify(parent)},${rest.slice(1)}`,
+        );
+        return {
+          revision: String(body.revision),
+          created: Boolean(body.created),
+          replayed: Boolean(body.replayed),
+        };
+      },
     };
   }
 
@@ -87,10 +98,14 @@ export class DeckdHistoryBackend implements HistoryBackend {
     endpoint: string,
     payload: Record<string, unknown>,
   ): Promise<Record<string, any>> {
+    return await this.#send(endpoint, JSON.stringify(payload));
+  }
+
+  async #send(endpoint: string, json: string): Promise<Record<string, any>> {
     let response = await fetch(`${this.#url}${endpoint}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: json,
       signal: AbortSignal.timeout(this.#timeoutMs),
     });
     let text = await response.text();

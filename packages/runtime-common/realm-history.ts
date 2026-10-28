@@ -232,13 +232,22 @@ export interface HistoryCommitResult {
   replayed: boolean;
 }
 
+export interface PreparedCommit {
+  // Send the commit as a child of `parent`. Sent again under a new parent
+  // after a `parent-mismatch`.
+  commit(parent: string): Promise<HistoryCommitResult>;
+}
+
 export type HistoryOutcome =
   | { state: 'committed'; revision: string }
   // Reporting `absent` fences the id: it can never commit afterwards.
   | { state: 'absent' };
 
 export interface HistoryBackend {
-  commit(request: HistoryCommitRequest): Promise<HistoryCommitResult>;
+  // Encode a commit for sending before its parent is known. The recorder
+  // prepares a commit before it takes the history commit lock, so the writer
+  // holding the lock spends it on the call to the backend, not on encoding.
+  prepareCommit(request: Omit<HistoryCommitRequest, 'parent'>): PreparedCommit;
   outcome(operationId: string): Promise<HistoryOutcome>;
   head(): Promise<string>;
 }
@@ -406,14 +415,17 @@ export class RealmHistoryRecorder {
       ],
       changes: changes.map(({ change }) => change),
     };
-    let requestedAt = Date.now();
     let started = Date.now();
     try {
+      // Encoded before the lock is taken: every other writer in the realm
+      // waits for whoever holds it.
+      let prepared = this.#backend.prepareCommit(request);
+      let requestedAt = Date.now();
       return await this.#dbAdapter.withHistoryCommitLock(
         this.#realmURL,
         async (txQuerier) => {
           recording.historyLockWaitMs = Date.now() - requestedAt;
-          let result = await this.#commitWithReparent(recording, request);
+          let result = await this.#commitWithReparent(recording, prepared);
           // In the same transaction as the lock, so rows are journaled in the
           // order revisions were committed. A retry of an operation that had
           // already committed finds its row already there.
@@ -465,14 +477,14 @@ export class RealmHistoryRecorder {
 
   async #commitWithReparent(
     recording: WriteRecording,
-    request: Omit<HistoryCommitRequest, 'parent'>,
+    prepared: PreparedCommit,
   ): Promise<{ revision: string; parent: string }> {
     let parent = this.#head ?? (await this.head(recording));
     for (let attempt = 1; ; attempt++) {
       let result: HistoryCommitResult;
       try {
         result = await this.#timed(recording, 'commit', () =>
-          this.#backend.commit({ ...request, parent }),
+          prepared.commit(parent),
         );
       } catch (err: unknown) {
         if (
