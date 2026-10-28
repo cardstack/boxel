@@ -63,6 +63,8 @@ exports.up = (pgm) => {
       name varchar NOT NULL UNIQUE,
       label varchar NOT NULL,
       client_id varchar NOT NULL,
+      -- Always 'authorization_code': people connect through a platform client.
+      grant_type varchar NOT NULL DEFAULT 'authorization_code',
       authorize_url varchar NOT NULL,
       token_url varchar NOT NULL,
       scopes varchar NOT NULL DEFAULT '',
@@ -76,6 +78,7 @@ exports.up = (pgm) => {
       secret_key_id varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT NOW(),
       updated_at timestamptz NOT NULL DEFAULT NOW(),
+      CONSTRAINT platform_oauth_clients_grant_type_check CHECK (grant_type = 'authorization_code'),
       CONSTRAINT platform_oauth_clients_token_auth_check CHECK (token_auth IN ('client_secret_post', 'client_secret_basic')),
       CONSTRAINT platform_oauth_clients_state_check CHECK (state IN ('active', 'broken'))
     )

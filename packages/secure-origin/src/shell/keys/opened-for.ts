@@ -14,6 +14,7 @@
 //   #module=<module URL>&name=<export>&realm=<realm URL>&operation=<name>
 //   …&reason=<text>
 //   #key=<key id>, for a share of one of the user's keys
+//   #reconnect=<key id>, for signing one of the user's connections in again
 //
 // A realm, card or module is a URL or a prefix-form id (`@cardstack/…`);
 // which it names is the realm server's to decide.
@@ -29,6 +30,7 @@ export interface OpenedFor {
   realm?: string;
   key?: string;
   share?: string;
+  reconnect?: string;
   target?: OpenedForTarget;
   operation?: string;
   reason?: string;
@@ -115,6 +117,10 @@ export function openedFor(hash: string = window.location.hash): OpenedFor {
   let key = params.get('key');
   if (key) {
     result.key = key;
+  }
+  let reconnect = params.get('reconnect');
+  if (reconnect) {
+    result.reconnect = reconnect;
   }
   if (target) {
     result.target = target;

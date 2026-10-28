@@ -135,6 +135,21 @@ export function parseGoogleServiceAccountKey({
   };
 }
 
+// Whether `value` is a Google service account's JSON key file. Such a file
+// mints tokens; sent as it is, it would hand the private key to the API, so
+// it is only ever entered as a `google-service-account` key.
+export function isGoogleServiceAccountKeyFile(value: string): boolean {
+  if (!value.trimStart().startsWith('{')) {
+    return false;
+  }
+  try {
+    let parsed = JSON.parse(value);
+    return Boolean(parsed) && parsed.type === 'service_account';
+  } catch {
+    return false;
+  }
+}
+
 function validSubject(subject: unknown): string | null {
   if (subject === undefined || subject === null) {
     return null;

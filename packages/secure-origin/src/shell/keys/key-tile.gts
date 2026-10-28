@@ -2,13 +2,12 @@
 // bordered tile with the key's icon, its name and when it was added. What the
 // tile is given to hold (a key page's actions) goes on a line of its own under
 // the name, so neither crowds the other however long the name. Nothing about
-// its value is shown. A key pasted in as it is goes unlabelled; a Google
-// service account says so, since it is replaced with a key file rather than
-// a pasted value.
+// its value is shown. A secret pasted in is what a key is unless the tile
+// says otherwise: a Google service account, an OAuth app, or an account
+// connected through one.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import KeyRound from '../../components/icons/key-round.gts';
-import { eq } from '../../helpers/truth-helpers.ts';
 
 import type { UserKey } from './context.ts';
 
@@ -21,6 +20,20 @@ export function addedOn(iso: string): string {
         month: 'short',
         day: 'numeric',
       });
+}
+
+// What a key is, when it isn't a secret pasted in.
+export function kindLabel(kind: string): string | undefined {
+  switch (kind) {
+    case 'google-service-account':
+      return 'Google service account';
+    case 'oauth-client':
+      return 'OAuth app';
+    case 'oauth-connection':
+      return 'Connected account';
+    default:
+      return undefined;
+  }
 }
 
 interface Signature {
@@ -39,8 +52,9 @@ const KeyTile: TemplateOnlyComponent<Signature> = <template>
         data-test-key-row-name
       >{{@key.name}}</div>
       <div class='key-meta'>
-        {{#if (eq @key.kind 'google-service-account')}}
-          <span data-test-key-kind-label>Google service account ·</span>
+        {{#if (kindLabel @key.kind)}}
+          <span data-test-key-kind>{{kindLabel @key.kind}}</span>
+          ·
         {{/if}}
         Added
         {{addedOn @key.createdAt}}

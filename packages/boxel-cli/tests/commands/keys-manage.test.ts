@@ -580,6 +580,16 @@ describe('boxel keys: Google service accounts', () => {
     expect(requests).toEqual([]);
   });
 
+  it('points a key file added without --kind to the service account kind, and sends nothing', async () => {
+    let requests = serveKeys();
+    await expect(
+      keysAdd('sheets', { profileManager: manager, keyFile }),
+    ).rejects.toThrow(
+      /a Google service account's JSON key file. Add it with --kind google-service-account/,
+    );
+    expect(requests.filter((r) => r.path === '/_user-keys')).toEqual([]);
+  });
+
   it('replaces one with a new key file and scopes, as its own kind', async () => {
     let requests = serveKeys();
     let stdout = captureStdout();
