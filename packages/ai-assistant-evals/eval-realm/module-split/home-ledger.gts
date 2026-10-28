@@ -575,7 +575,9 @@ export class Transaction extends CardDef {
 
     get recurrenceText() {
       let value = this.args.model.recurrence;
-      return RECURRENCE_OPTIONS.find((o) => o.value === value)?.label ?? 'One-off';
+      return (
+        RECURRENCE_OPTIONS.find((o) => o.value === value)?.label ?? 'One-off'
+      );
     }
 
     <template>
@@ -591,7 +593,8 @@ export class Transaction extends CardDef {
           </p>
           <p class='date'>
             {{formatDateTime @model.date preset='long' fallback='No date'}}
-            · {{this.recurrenceText}}
+            ·
+            {{this.recurrenceText}}
           </p>
         </header>
 
@@ -1160,7 +1163,11 @@ class HomeLedgerIsolated extends Component<typeof HomeLedger> {
               <h2>Month by month</h2>
             </div>
             {{#if this.months.length}}
-              <div class='chart' role='img' aria-label='Income and spending by month'>
+              <div
+                class='chart'
+                role='img'
+                aria-label='Income and spending by month'
+              >
                 {{#each this.months as |month|}}
                   <div class='chart-col'>
                     <div class='chart-bars'>
@@ -1232,9 +1239,7 @@ class HomeLedgerIsolated extends Component<typeof HomeLedger> {
                       <span class='recent-category'>
                         {{this.categoryName txn.category}}
                       </span>
-                      <span
-                        class='recent-amount {{if txn.isIncome "income"}}'
-                      >
+                      <span class='recent-amount {{if txn.isIncome "income"}}'>
                         {{if txn.isIncome '+' '−'}}{{formatCurrency
                           txn.amount
                           currency='USD'
@@ -1281,7 +1286,11 @@ class HomeLedgerIsolated extends Component<typeof HomeLedger> {
                   <span class='recent-category'>
                     {{this.categoryName txn.category}}
                     ·
-                    {{formatDateTime txn.date preset='short' fallback='No date'}}
+                    {{formatDateTime
+                      txn.date
+                      preset='short'
+                      fallback='No date'
+                    }}
                   </span>
                   <span class='recent-amount {{if txn.isIncome "income"}}'>
                     {{if txn.isIncome '+' '−'}}{{formatCurrency
