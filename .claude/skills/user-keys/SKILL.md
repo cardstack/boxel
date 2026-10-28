@@ -1,6 +1,6 @@
 ---
 name: user-keys
-description: Operate and diagnose the keys that belong to people — the `user_keys` table, the signed-in user's write-only management API (`/_user-keys`), and the key write tickets (`/_key-write-tickets`) that adding, replacing or deleting a key must present. Covers what the table holds and how its values are sealed and bound (field, owner, id), that a key records no destination, why no API, log line, Sentry event or read-only database role can ever read a value back, who may mint a ticket (a session signed in on the secure origin, from the secure window or the CLI — never the app's session) and how that is decided, ticket lifetime, single use and the one change each ticket is minted for, and every refusal the API answers with. Also covers grants — where a key may be sent, one `user_key_grants` row per destination its owner approved, each holding its own sealed copy of the key — the master and grant copies and which code opens each, how a grant is created or reused from an operation's lowered destination, why a grant row added by hand sends nothing, and the `/_user-key-grants` routes. Use when a user reports a key they can't add, replace or delete, when a key change or a grant is refused with 403, when reading or querying `user_keys` / `key_write_tickets` / `user_key_grants` as an operator, when a key's value or a grant's copy fails to open with SecretDecryptionError, or when changing `lib/user-keys.ts`, `lib/user-key-grants.ts`, `handlers/handle-user-keys.ts` or `handlers/handle-user-key-grants.ts`.
+description: Operate and diagnose the keys that belong to people — the `user_keys` table, the signed-in user's write-only management API (`/_user-keys`), and the key write tickets (`/_key-write-tickets`) that adding, replacing or deleting a key must present. Covers what the table holds and how its values are sealed and bound (field, owner, id), that a key records no destination, why no API, log line, Sentry event or read-only database role can ever read a value back, who may mint a ticket (a session signed in on the secure origin, from the secure window or the CLI — never the app's session) and how that is decided, ticket lifetime, single use and the one change each ticket is minted for, and every refusal the API answers with. Also covers Google service-account keys — the key file, subject and scopes they are entered with, what is sealed, and how `lib/outbound/google-service-account.ts` mints, caches and classifies failures of their access tokens. Also covers grants — where a key may be sent, one `user_key_grants` row per destination its owner approved, each holding its own sealed copy of the key — the master and grant copies and which code opens each, how a grant is created or reused from an operation's lowered destination, why a grant row added by hand sends nothing, and the `/_user-key-grants` routes. Use when a user reports a key they can't add, replace or delete, when a key change or a grant is refused with 403, when reading or querying `user_keys` / `key_write_tickets` / `user_key_grants` as an operator, when a key's value or a grant's copy fails to open with SecretDecryptionError, or when changing `lib/user-keys.ts`, `lib/user-key-grants.ts`, `handlers/handle-user-keys.ts` or `handlers/handle-user-key-grants.ts`.
 ---
 
 # User keys (operators)
@@ -28,7 +28,7 @@ has lost track of a value replaces it.
 | `id`                                                           | UUID, minted by the realm server before sealing (the value is bound to it)                                  |
 | `owner`                                                        | The owner's Matrix user id                                                                                  |
 | `name`                                                         | A label for people, unique among the owner's keys (`user_keys_owner_name_key`); two owners may share a name |
-| `kind`                                                         | `static`                                                                                                    |
+| `kind`                                                         | `static`, or `google-service-account` (see [Google service accounts](#google-service-accounts))             |
 | `state`                                                        | `active`                                                                                                    |
 | `value_ciphertext`, `value_nonce`, `value_tag`, `value_key_id` | The sealed value                                                                                            |
 | `created_at`, `updated_at`                                     | `timestamptz`                                                                                               |
@@ -109,8 +109,8 @@ request log line and Sentry breadcrumbs.
 | `POST /_key-write-tickets` | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}`                                      |
 | `GET /_user-keys`          | List the user's keys' metadata, by name, each with its `grants`, `usedWith` and `sharedInto`                                                                                          |
 | `GET /_user-keys/:id`      | One key's metadata, with its `grants`, `usedWith` and `sharedInto`                                                                                                                    |
-| `POST /_user-keys`         | Add: `attributes.{name, kind?, value}`, `meta.{ticket}` (a ticket to `add`)                                                                                                           |
-| `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value}`, `meta.{ticket}` (a ticket to `replace` this key); re-seals every grant's copy                                                                |
+| `POST /_user-keys`         | Add: `attributes.{name, kind?, value, subject?, scopes?}`, `meta.{ticket}` (a ticket to `add`); `subject` and `scopes` only for a `google-service-account`                            |
+| `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value, subject?, scopes?}`, `meta.{ticket}` (a ticket to `replace` this key), as the key's own kind; re-seals every grant's copy                      |
 | `DELETE /_user-keys/:id`   | Delete: `meta.{ticket}` (a ticket to `delete` this key); revokes its own bindings, deletes its grants, suspends every share holding it (`GET /_key-shares?key=<id>` lists them first) |
 
 An attribute other than these, such as a `destination`, is refused with 400.
@@ -153,6 +153,46 @@ unchanged, so a user's report carries the server's own words.
 
 A failure that isn't one of these is a 500 logged on `realm:user-keys` with
 the error's name and message only, never the request.
+
+## Google service accounts
+
+A `google-service-account` key is a Google service account's JSON key file.
+What reaches a Google API is an access token the realm server mints from it,
+never the key file. The code is `lib/outbound/google-service-account.ts`.
+
+- **What the owner enters.** `value` is the JSON key file, as Google issues
+  it; `subject` is the user to act as, for domain-wide delegation (optional,
+  an email address); `scopes` is a list of scope names or URLs, at least one.
+  The secure window's add-a-key page takes the file from disk, and
+  `boxel keys add <name> --kind google-service-account --key-file <path>
+--scope <scope> [--subject <email>]` takes it from a file or `--stdin`.
+- **Checked when entered.** The file must be `"type": "service_account"`
+  with a `client_email` and an RSA private key in PEM form, or it is refused
+  with 400. The refusal names what is wrong and never quotes the file (the
+  JSON parser's own message does, so it is never passed on). A `static` key
+  given a `subject` or `scopes` is refused 400. A replace takes the key's own
+  kind and needs the whole set again: file, scopes and subject.
+- **What is sealed.** The key file's `client_email`, `private_key_id` and
+  `private_key`, with the subject and scopes, as one JSON value in a fixed
+  member order (`serializeGoogleServiceAccount`). The file's own `token_uri`
+  is dropped: the token endpoint is the platform's to choose.
+- **Minting.** `googleAccessToken(keyId, credential)` signs an RS256 JWT
+  (issuer the service account, `sub` the subject when there is one, `scope`
+  the scopes, `aud` the token endpoint, one hour) and exchanges it at
+  `https://oauth2.googleapis.com/token` through the guarded outbound client,
+  with the private key and the assertion registered with the scrubber.
+  The access token is kept in memory only, keyed by the key and a hash of its
+  sealed value (so a replaced key never serves the old one's token), until
+  five minutes before Google's `expires_in` (half the life of a token shorter
+  than ten minutes). Concurrent calls for one key share one exchange.
+- **Failures.** An `invalid_grant`, `invalid_client`, `unauthorized_client`,
+  `access_denied` or `invalid_scope` answer, or any other 4xx but 429, is
+  `GoogleServiceAccountRejectedError`: not retried, and logged on
+  `google-service-account` with Google's error code and the service account's
+  email, never Google's description, which can quote the request. A 5xx, a
+  429, `temporarily_unavailable`, a timeout or a broken connection is retried
+  after 250 ms and 1 s, then `GoogleTokenEndpointUnavailableError`. Neither
+  is cached, so the next call asks Google again.
 
 ## Grants
 
