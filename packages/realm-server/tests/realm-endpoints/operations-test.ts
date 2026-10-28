@@ -556,6 +556,49 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       return rows.map((row) => Number(row.id));
     }
 
+    // Asserts that one index job carries every card in `cards` and that no
+    // other job carries any of them — the shape of a batch that commits
+    // together. The realm is shared by every test in the file, so its lane
+    // family also holds passes other tests started, some still landing while
+    // a later test runs; a batch's own jobs are the ones carrying the cards it
+    // wrote, which is what this counts rather than the realm's jobs overall.
+    //
+    // On a mismatch the message lists every job of the realm's that `before`
+    // does not, with what each indexes and who asked for it, so the failure
+    // names the job it did not expect.
+    async function assertIndexedUnderOneJob(
+      assert: Assert,
+      cards: string[],
+      before: number[],
+      message: string,
+    ) {
+      let urls = cards.map((card) => `${testRealmHref}${card}.json`);
+      let rows = (await testDbAdapter.execute(
+        `select id, status, priority, concurrency_group, lane_family,
+                initiated_by, created_at, finished_at,
+                args->'changes' as changes,
+                args->'coalescedCallers' as callers
+         from jobs where job_type = 'incremental-index'
+         and (concurrency_group = $1 or lane_family = $1) order by id`,
+        { bind: [`indexing:${realm.url}`] },
+      )) as {
+        id: number | string;
+        changes: { url: string }[] | null;
+      }[];
+      let carrying = rows
+        .map((row) => ({
+          id: Number(row.id),
+          urls: (row.changes ?? []).map((change) => change.url),
+        }))
+        .filter((job) => job.urls.some((url) => urls.includes(url)));
+      let since = rows.filter((row) => !before.includes(Number(row.id)));
+      assert.deepEqual(
+        carrying.map((job) => urls.every((url) => job.urls.includes(url))),
+        [true],
+        `${message}; the realm's index jobs since the batch started: ${JSON.stringify(since, null, 2)}`,
+      );
+    }
+
     async function incrementalIndexEventsSince(
       since: number,
     ): Promise<IncrementalIndexEventContent[]> {
@@ -1862,9 +1905,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             `${card} was written`,
           );
         }
-        assert.strictEqual(
-          (await indexJobIds()).length - jobsBefore.length,
-          1,
+        await assertIndexedUnderOneJob(
+          assert,
+          ['report-parallel-1', 'report-parallel-2', 'report-parallel-3'],
+          jobsBefore,
           'the whole group indexed under one job',
         );
         // The realm broadcasts out of band from the commit, so the event is
@@ -2147,9 +2191,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           [{ body: 'after the inner group', postedBy: TESTER }],
           'the entry after the innermost group composed over what it staged',
         );
-        assert.strictEqual(
-          (await indexJobIds()).length - jobsBefore.length,
-          1,
+        await assertIndexedUnderOneJob(
+          assert,
+          ['report-nested-1', 'report-nested-2', 'report-nested-3'],
+          jobsBefore,
           'and the whole tree indexed under one job',
         );
       });
@@ -2258,9 +2303,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         ]);
         // And the expansion is still one batch — the found targets commit
         // together, under one job, the way the caller's own entries do.
-        assert.strictEqual(
-          (await indexJobIds()).length - jobsBefore.length,
-          1,
+        await assertIndexedUnderOneJob(
+          assert,
+          ['find-many-a', 'find-many-b'],
+          jobsBefore,
           'the whole expansion indexed under one job',
         );
       });
