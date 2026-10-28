@@ -33,7 +33,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/join-the-community",
+        "module": "@cardstack/base/join-the-community",
         "name": "JoinTheCommunity"
       }
     }
