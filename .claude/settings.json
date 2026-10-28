@@ -32,7 +32,17 @@
         "source": "github",
         "repo": "jakubkrehel/skills"
       }
+    },
+    "cardstack-boxel": {
+      "source": {
+        "source": "github",
+        "repo": "cardstack/boxel"
+      }
     }
+  },
+  "enabledPlugins": {
+    "interfaces@interfaces": true,
+    "boxel-skills@cardstack-boxel": true
   },
   "hooks": {
     "SessionStart": [
