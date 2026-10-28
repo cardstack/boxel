@@ -198,16 +198,18 @@ export class SwitchSubmodeResult extends CardDef {
 }
 
 // What the secure window is opened for. Every field names something; none
-// carries a value. `mode` is `enter-key` or `share-key`. A key is entered for
-// an operation on a card instance (`cardId`) or on a card type (`module`,
-// `name` and `realm`); a key is shared into `realm`. `reason` is one line the
-// window shows as written by whoever opened it.
+// carries a value. `mode` is `enter-key`, `share-key` or `swap-key`. A key is
+// entered for an operation on a card instance (`cardId`) or on a card type
+// (`module`, `name` and `realm`); a key is shared into `realm`; and one of the
+// user's keys is swapped into the suspended share `share` of `realm`.
+// `reason` is one line the window shows as written by whoever opened it.
 export class OpenSecureWindowInput extends CardDef {
   @field mode = contains(StringField);
   @field cardId = contains(StringField);
   @field module = contains(StringField);
   @field name = contains(StringField);
   @field realm = contains(StringField);
+  @field share = contains(StringField);
   @field operation = contains(StringField);
   @field reason = contains(StringField);
 }
@@ -217,6 +219,38 @@ export class OpenSecureWindowInput extends CardDef {
 // the window.
 export class OpenSecureWindowResult extends CardDef {
   @field status = contains(StringField);
+}
+
+export class RealmKeySharesInput extends CardDef {
+  @field realm = contains(StringField);
+}
+
+// One of a realm's shares, as the realm's direct writers see it: no key and no
+// value, only what the share is called, whose key it holds and whether it is
+// in use. `state` is `active` or `suspended`; a suspended share carries its
+// `suspensionReason` (`owner-lost-write`, `suspended-by-writer` or
+// `key-deleted`), and `suspendedBy` names the writer who suspended it. `own`
+// says the share holds the signed-in user's key, so they may unshare it.
+export class RealmKeyShareField extends FieldDef {
+  @field shareId = contains(StringField);
+  @field label = contains(StringField);
+  @field owner = contains(StringField);
+  @field own = contains(BooleanField);
+  @field state = contains(StringField);
+  @field suspensionReason = contains(StringField);
+  @field suspendedBy = contains(StringField);
+  @field suspendedAt = contains(StringField);
+}
+
+// A realm's shares, by label. `visible` is false when the signed-in user is not
+// one of the realm's direct writers, who alone see its shares.
+export class RealmKeySharesResult extends CardDef {
+  @field visible = contains(BooleanField);
+  @field shares = containsMany(RealmKeyShareField);
+}
+
+export class KeyShareInput extends CardDef {
+  @field shareId = contains(StringField);
 }
 
 export class WriteTextFileInput extends CardDef {
