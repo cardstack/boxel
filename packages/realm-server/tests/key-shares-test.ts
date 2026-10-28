@@ -37,6 +37,7 @@ const KEY_SHARES_MIGRATION = join(
 
 const OWNER = '@share-owner:localhost';
 const WRITER = '@other-writer:localhost';
+const SUSPENDER = '@suspending-writer:localhost';
 const READER = '@realm-reader:localhost';
 const STRANGER = '@stranger:localhost';
 const REALM = 'http://127.0.0.1:4444/shared-realm/';
@@ -542,10 +543,10 @@ module(basename(import.meta.filename), function () {
           n.attributes.reason,
         ]),
         [
-          [shareId, 'Weather', OWNER, 'owner-lost-write'],
-          [shareId, 'Weather', OWNER, 'owner-lost-write'],
+          [shareId, 'Weather', null, 'owner-lost-write'],
+          [shareId, 'Weather', null, 'owner-lost-write'],
         ],
-        `the realm's direct writers get a notice of each suspension`,
+        `the realm's direct writers get a notice of each suspension, without the id of an owner who left`,
       );
 
       let formerWriter = await realmShares(OWNER);
@@ -566,6 +567,123 @@ module(basename(import.meta.filename), function () {
         ),
         [[shareId, 'suspended']],
         'the owner still sees where their key is shared',
+      );
+    });
+
+    test('a writer sees the owner and suspender of a share only while a permission row in the realm names them', async function (assert) {
+      await insertPermissions(dbAdapter, new URL(REALM), {
+        [SUSPENDER]: ['read', 'write'],
+      });
+      let shareId = await sharedId();
+      await sharedId(WRITER, 'Maps');
+
+      let suspended = await act(SUSPENDER, shareId, 'suspend');
+      assert.strictEqual(suspended.status, 200, suspended.text);
+      assert.deepEqual(
+        [
+          suspended.body.data.attributes.owner,
+          suspended.body.data.attributes.suspendedBy,
+        ],
+        [OWNER, SUSPENDER],
+      );
+
+      async function named(user = WRITER) {
+        let listed = await realmShares(user);
+        assert.strictEqual(listed.status, 200, listed.text);
+        return listed.body.data.map(
+          (s: { attributes: Record<string, unknown> }) => [
+            s.attributes.label,
+            s.attributes.owner,
+            s.attributes.suspendedBy,
+          ],
+        );
+      }
+      async function noticed() {
+        let listed = await notices(WRITER);
+        assert.strictEqual(listed.status, 200, listed.text);
+        return listed.body.data.map(
+          (n: { attributes: Record<string, unknown> }) => [
+            n.attributes.reason,
+            n.attributes.owner,
+            n.attributes.suspendedBy,
+          ],
+        );
+      }
+
+      await insertPermissions(dbAdapter, new URL(REALM), {
+        [OWNER]: ['read'],
+      });
+      assert.deepEqual(
+        await named(),
+        [
+          ['Maps', WRITER, null],
+          ['Weather', OWNER, SUSPENDER],
+        ],
+        'an owner whose row grants only read is still named',
+      );
+
+      await insertPermissions(dbAdapter, new URL(REALM), { [SUSPENDER]: [] });
+      assert.deepEqual(
+        await named(),
+        [
+          ['Maps', WRITER, null],
+          ['Weather', OWNER, null],
+        ],
+        'the suspender is withheld once their row is deleted',
+      );
+
+      await insertPermissions(dbAdapter, new URL(REALM), {
+        [OWNER]: [],
+        '*': ['read'],
+        users: ['read'],
+      });
+      assert.deepEqual(
+        await named(),
+        [
+          ['Maps', WRITER, null],
+          ['Weather', null, null],
+        ],
+        `the owner is withheld once their row is deleted, and a '*' or users row names no one`,
+      );
+      assert.deepEqual(
+        await noticed(),
+        [['suspended-by-writer', null, null]],
+        'the notice withholds them too',
+      );
+
+      let resumed = await resume(WRITER, shareId);
+      assert.strictEqual(resumed.status, 200, resumed.text);
+      assert.deepEqual(
+        [
+          resumed.body.data.attributes.suspensionReason,
+          resumed.body.data.attributes.owner,
+        ],
+        ['owner-lost-write', null],
+        'the share a resume answers with withholds the owner',
+      );
+
+      let own = await request
+        .get('/_key-shares')
+        .set('Authorization', auth(OWNER));
+      assert.deepEqual(
+        own.body.data.map((s: { attributes: Record<string, unknown> }) => [
+          s.attributes.label,
+          s.attributes.owner,
+        ]),
+        [['Weather', OWNER]],
+        'the owner still sees their own id on their own shares',
+      );
+
+      await insertPermissions(dbAdapter, new URL(REALM), {
+        [OWNER]: ['read'],
+      });
+      assert.deepEqual(
+        (await named()).map(([label, owner]: unknown[]) => [label, owner]),
+        [
+          ['Maps', WRITER],
+          ['Weather', OWNER],
+        ],
+        'a row naming the owner again shows them again',
       );
     });
 

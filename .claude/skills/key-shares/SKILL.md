@@ -93,6 +93,12 @@ no route sets it.
   notices, newest first, at most 100 (`GET /_key-share-notices?realm=<url>`).
   An owner who loses write stops seeing the realm's shares and notices, and
   still sees their own.
+- A writer sees a share's or notice's `owner` and `suspendedBy` only while a
+  permission row in the realm names that person (ADR 011 §1.2); once their
+  row is deleted, both read `null`, in the listings and in the share a
+  suspend or resume answers with. A `*` or `users` row, or a policy grant,
+  names no one. The `key_shares` and `key_share_notices` rows keep the ids.
+  The owner's own listing always carries their id.
 - Anyone else, readers included, sees nothing of a realm's shares: the
   listings answer 403 and a share by id answers 404.
 

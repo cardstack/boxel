@@ -32,7 +32,9 @@ import type { SecureSessionClient } from './secure-session.ts';
 //   user's key.
 // - A share's owner sees all of their shares, in every realm. A realm's direct
 //   writers see its shares, with owner and state, and the notices recorded
-//   when one is suspended. Nobody else sees anything of a realm's shares.
+//   when one is suspended, with the owner and suspender named only while a
+//   permission row in the realm names them. Nobody else sees anything of a
+//   realm's shares.
 //
 // Suspensions that follow from other changes are made by triggers on the
 // tables those changes write (see the migration that adds `key_shares`), so
@@ -58,12 +60,16 @@ export interface KeyShare {
   id: string;
   realm: string;
   label: string;
-  owner: string;
+  // Null in a writer's view once no permission row in the realm names the
+  // owner (see `withholdUnnamed`); a share's owner always sees their own id.
+  owner: string | null;
   // The key the share holds; given only to the share's owner, and null once
   // the key is deleted.
   keyId?: string | null;
   state: KeyShareState;
   suspensionReason: KeyShareSuspensionReason | null;
+  // Null when no writer suspended the share, or once no permission row in the
+  // realm names the one who did.
   suspendedBy: string | null;
   suspendedAt: string | null;
   createdAt: string;
@@ -87,7 +93,8 @@ export interface KeyShareNotice {
   shareId: string;
   realm: string;
   label: string;
-  owner: string;
+  // Null, as is `suspendedBy`, once no permission row in the realm names them.
+  owner: string | null;
   reason: KeyShareSuspensionReason;
   suspendedBy: string | null;
   createdAt: string;
@@ -110,7 +117,7 @@ function toShare(
     id: row.id as string,
     realm: row.realm_url as string,
     label: row.label as string,
-    owner: row.owner as string,
+    owner: (row.owner as string | null) ?? null,
     ...(withKey ? { keyId: (row.key_id as string | null) ?? null } : {}),
     state: row.state as KeyShareState,
     suspensionReason:
@@ -120,6 +127,49 @@ function toShare(
     createdAt: iso(row.created_at)!,
     updatedAt: iso(row.updated_at)!,
   };
+}
+
+// `realm`'s share or notice rows with `owner` and `suspended_by` set to null
+// for anyone no permission row in the realm names, for a writer's view of
+// them: a person's Matrix id is shown only to people who share a realm with
+// them (ADR 011 §1.1, §1.2), and a share and its notices outlive their owner's
+// and their suspender's rows. A `*` or `users` row, or a policy grant, names
+// no one; a row granting nothing is deleted, so any row names its user.
+async function withholdUnnamed(
+  txQuery: Querier,
+  realm: string,
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  let ids = [
+    ...new Set(
+      rows.flatMap((row) =>
+        [row.owner, row.suspended_by].filter(
+          (id): id is string => typeof id === 'string',
+        ),
+      ),
+    ),
+  ];
+  if (ids.length === 0) {
+    return rows;
+  }
+  let named = new Set(
+    (
+      await txQuery([
+        `SELECT username FROM realm_user_permissions WHERE realm_url = `,
+        param(realm),
+        ` AND username IN (`,
+        ...ids.flatMap((id, i) => [...(i > 0 ? [', '] : []), param(id)]),
+        `)`,
+      ])
+    ).map((row) => row.username as string),
+  );
+  let shown = (id: unknown) =>
+    typeof id === 'string' && named.has(id) ? id : null;
+  return rows.map((row) => ({
+    ...row,
+    owner: shown(row.owner),
+    suspended_by: shown(row.suspended_by),
+  }));
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -372,7 +422,10 @@ export async function suspendShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    return toShare(updated, { withKey: updated.owner === user });
+    let [shown] = await withholdUnnamed(txQuery, updated.realm_url as string, [
+      updated,
+    ]);
+    return toShare(shown, { withKey: shown.owner === user });
   });
 }
 
@@ -420,7 +473,10 @@ export async function resumeShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    return toShare(updated, { withKey: updated.owner === user });
+    let [shown] = await withholdUnnamed(txQuery, updated.realm_url as string, [
+      updated,
+    ]);
+    return toShare(shown, { withKey: shown.owner === user });
   });
 }
 
@@ -613,11 +669,15 @@ export async function listRealmShares(
     user,
     realm,
     async (txQuery, realmURL) =>
-      await txQuery([
-        `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE realm_url = `,
-        param(realmURL.href),
-        ` ORDER BY label`,
-      ]),
+      await withholdUnnamed(
+        txQuery,
+        realmURL.href,
+        await txQuery([
+          `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE realm_url = `,
+          param(realmURL.href),
+          ` ORDER BY label`,
+        ]),
+      ),
   );
   let operations = new Map<string, KeyShareOperation[]>();
   if (rows.length > 0) {
@@ -665,18 +725,22 @@ export async function listRealmShareNotices(
     user,
     realm,
     async (txQuery, realmURL) =>
-      await txQuery([
-        `SELECT id, share_id, realm_url, label, owner, reason, suspended_by, created_at FROM key_share_notices WHERE realm_url = `,
-        param(realmURL.href),
-        ` ORDER BY created_at DESC, id DESC LIMIT ${MAX_KEY_SHARE_NOTICES}`,
-      ]),
+      await withholdUnnamed(
+        txQuery,
+        realmURL.href,
+        await txQuery([
+          `SELECT id, share_id, realm_url, label, owner, reason, suspended_by, created_at FROM key_share_notices WHERE realm_url = `,
+          param(realmURL.href),
+          ` ORDER BY created_at DESC, id DESC LIMIT ${MAX_KEY_SHARE_NOTICES}`,
+        ]),
+      ),
   );
   return rows.map((row) => ({
     id: String(row.id),
     shareId: row.share_id as string,
     realm: row.realm_url as string,
     label: row.label as string,
-    owner: row.owner as string,
+    owner: (row.owner as string | null) ?? null,
     reason: row.reason as KeyShareSuspensionReason,
     suspendedBy: (row.suspended_by as string | null) ?? null,
     createdAt: iso(row.created_at)!,
