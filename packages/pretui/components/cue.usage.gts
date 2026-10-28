@@ -19,11 +19,13 @@ export class CueUsage extends GlimmerComponent {
   @tracked position = 'block-end';
   @tracked tone = 'info';
   @tracked text = '12 matching lots';
+  @tracked glyph = true;
 
   setKind = (value: string) => (this.kind = value);
   setPosition = (value: string) => (this.position = value);
   setTone = (value: string) => (this.tone = value);
   setText = (value: string) => (this.text = value);
+  setGlyph = (value: boolean) => (this.glyph = value);
 
   get kindValue() {
     return this.kind as CueKind;
@@ -38,7 +40,7 @@ export class CueUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='Cue'
-      @description='A semantic accessory for a control: label, description, live status or error. Tone always carries a second glyph channel, so meaning survives greyscale.'
+      @description='A semantic accessory for a control: label, description, live status or error.'
       @source='<Cue @kind="status" @tone="info" @text="12 matching lots" />'
       @viewportMode='inline'
     >
@@ -48,6 +50,7 @@ export class CueUsage extends GlimmerComponent {
           @position={{this.positionValue}}
           @tone={{this.toneValue}}
           @text={{this.text}}
+          @glyph={{this.glyph}}
         />
       </:example>
       <:api as |Args|>
@@ -69,6 +72,7 @@ export class CueUsage extends GlimmerComponent {
           @name='tone'
           @options={{CUE_TONES}}
           @value={{this.tone}}
+          @description='Every tone but neutral adds a glyph, unless glyph is false.'
           @defaultValue='neutral'
           @onInput={{this.setTone}}
         />
@@ -77,11 +81,17 @@ export class CueUsage extends GlimmerComponent {
           @value={{this.text}}
           @onInput={{this.setText}}
         />
+        <Args.Bool
+          @name='glyph'
+          @description='False drops the tone glyph, for a control that already shows the tone.'
+          @defaultValue={{true}}
+          @value={{this.glyph}}
+          @onInput={{this.setGlyph}}
+        />
       </:api>
     </FreestyleUsage>
   </template>
 }
-
 
 export const DEMOS_CUE: Record<string, unknown> = {
   Cue: CueUsage,
