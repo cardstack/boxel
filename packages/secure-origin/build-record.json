@@ -92,12 +92,12 @@
       ]
     },
     "session.js": {
-      "bytes": 6138,
+      "bytes": 6814,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/session.js",
-          "size": 9261
+          "size": 10729
         }
       ]
     },
@@ -832,7 +832,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 170473,
+      "bytes": 170533,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -977,7 +977,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/app-handoff.js",
-          "size": 1795
+          "size": 1843
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1212,7 +1212,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/signed-in.gts",
-          "size": 5008
+          "size": 5025
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1237,7 +1237,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/telemetry/labels.ts",
-          "size": 2029
+          "size": 2057
         },
         {
           "package": "@cardstack/secure-origin",

@@ -1053,6 +1053,32 @@ module('Integration | sign-in', function (hooks) {
       );
     });
 
+    test('a window session hands over the device the app signs in as, beside the token', async function (assert) {
+      serve(NO_GOOGLE, signsIn(SIGNED_IN), {
+        'POST _secure-session/login-token': () =>
+          json(201, {
+            data: {
+              type: 'login-token',
+              attributes: {
+                loginToken: 'a-login-token',
+                expiresInMs: 120000,
+                deviceId: 'WINDOWBOUND',
+              },
+            },
+          }),
+      });
+      visitShell(`sign-in${returnFragment(`${APP}/`)}`);
+      await render(SignInPage);
+      await signInWithPassword();
+      await waitUntil(() => navigations.length > 0);
+      assert.deepEqual(navigations, [
+        {
+          how: 'replace',
+          url: `${APP}/#loginToken=a-login-token&deviceId=WINDOWBOUND`,
+        },
+      ]);
+    });
+
     test('a window already signed in hands over at once, with no form', async function (assert) {
       storeSession(SESSION);
       serve(NO_GOOGLE, MINTS, {
@@ -1270,6 +1296,23 @@ module('Integration | sign-in', function (hooks) {
       );
       assert.strictEqual(localStorage.getItem('boxel-secure-session'), null);
       assert.strictEqual(sessionStorage.getItem('boxel-secure-return'), null);
+    });
+
+    test('signing out ends a window session past its stored end too', async function (assert) {
+      storeSession({ ...SESSION, expiresAt: '2000-01-01T00:00:00.000Z' });
+      let server = serve({
+        'DELETE _secure-session': () => ({ status: 200, body: {} }),
+      });
+      visitShell(`sign-out${returnFragment(`${APP}/`)}`);
+      await render(SignOutPage);
+      await waitUntil(() => navigations.length > 0);
+      assert.true(
+        server.requests.some(
+          (r) => r.method === 'DELETE' && r.path === '_secure-session',
+        ),
+        'a session bound to the app’s can outlive its stored end, so it is ended on the server',
+      );
+      assert.strictEqual(localStorage.getItem('boxel-secure-session'), null);
     });
 
     test('signing out never goes to an origin the realm server does not list', async function (assert) {

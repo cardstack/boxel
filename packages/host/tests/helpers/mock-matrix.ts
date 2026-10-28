@@ -45,8 +45,10 @@ export interface Config {
   heldDashboardEchoes?: (() => void)[];
   loginFlowsResponse?: { flows: import('matrix-js-sdk').LoginFlow[] };
   ssoLoginUrl?: string;
+  // `deviceId` is the device a hand-off from the secure origin names.
   loginWithTokenInterceptor?: (
     token: string,
+    deviceId?: string,
   ) => Promise<import('matrix-js-sdk').LoginResponse>;
 }
 

@@ -20,6 +20,7 @@ const REALM_SERVER_ENDPOINTS = [
   '_secure-session',
   '_secure-session/google',
   '_secure-session/login-token',
+  '_secure-session/renewal',
   '_secure-sessions/password-change',
 ];
 

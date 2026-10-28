@@ -243,7 +243,9 @@ export class MockUtils {
     this.testState.opts!.ssoLoginUrl = url;
   };
   setLoginWithTokenInterceptor = (
-    fn: ((token: string) => Promise<MatrixSDK.LoginResponse>) | undefined,
+    fn:
+      | ((token: string, deviceId?: string) => Promise<MatrixSDK.LoginResponse>)
+      | undefined,
   ) => {
     this.testState.opts!.loginWithTokenInterceptor = fn;
   };

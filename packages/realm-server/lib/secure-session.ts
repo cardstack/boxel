@@ -77,14 +77,28 @@ import type { SignInLimiter } from './sign-in-limiter.ts';
 const log = logger('realm:secure-session');
 
 // How long a secure session lasts: a week, as long as the CLI's extended
-// session.
+// session. A window's session bound to an app device is renewed for as long
+// again while that device exists (`renewSecureSession`).
 export const SECURE_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+// How close to its end a bound window session has to be before renewing it
+// asks the Matrix server about its device: a day, so a window opened often
+// asks about once a day.
+export const RENEWAL_WINDOW_SECONDS = 24 * 60 * 60;
+// How far a window's current token's expiry may sit from its row's: a token
+// is minted with the row's lifetime in whole seconds, a moment after the row
+// is written.
+const CURRENT_TOKEN_SLACK_MS = 5 * 1000;
 // How long a row outlives its session, so the proof it records can't sign in
 // again while the Matrix server would still accept it: a completed UIA session
 // stays usable for a while after completion.
 const PROOF_RETENTION = `interval '2 days'`;
 
 export type SecureSessionClient = 'window' | 'cli';
+
+// A row that hasn't ended: unexpired, or bound to an app device, which renews
+// it while the device exists (`renewSecureSession`). Ending a row expires it
+// and clears its binding.
+const UNENDED = `(expires_at > NOW() OR app_device_id IS NOT NULL)`;
 
 export class SecureSessionError extends Error {
   readonly status: 400 | 401 | 403 | 409 | 429 | 503;
@@ -504,8 +518,9 @@ export async function changePassword(
     }
     if (user) {
       await deps.dbAdapter.execute(
-        `UPDATE secure_sessions SET expires_at = NOW()
-          WHERE user_id = $1 AND expires_at > NOW()`,
+        `UPDATE secure_sessions
+            SET expires_at = LEAST(expires_at, NOW()), app_device_id = NULL
+          WHERE user_id = $1 AND ${UNENDED}`,
         { bind: [user] },
       );
       // Only once the rows are expired, so no secure session can mint a
@@ -1380,9 +1395,13 @@ async function createSecureSession(
   }
   let id = randomUUID();
   let expiresAt = new Date(Date.now() + SECURE_SESSION_TTL_SECONDS * 1000);
-  // Rows are swept once nothing could sign in with their proof again.
+  // Rows are swept once nothing could sign in with their proof again, and
+  // nothing could renew them: a row bound to an app device is renewed while
+  // that device exists (`renewSecureSession`), which clears the binding once
+  // it finds the device gone.
   await deps.dbAdapter.execute(
-    `DELETE FROM secure_sessions WHERE expires_at < NOW() - ${PROOF_RETENTION}`,
+    `DELETE FROM secure_sessions
+      WHERE expires_at < NOW() - ${PROOF_RETENTION} AND app_device_id IS NULL`,
   );
   let inserted = await deps.dbAdapter.execute(
     `INSERT INTO secure_sessions (id, user_id, client, sign_in_proof, expires_at)
@@ -1428,6 +1447,9 @@ export async function isSecureSession(
 export interface LoginToken {
   loginToken: string;
   expiresInMs?: number;
+  // For a window's session, the Matrix device the app signs in as when it
+  // redeems the token (see `bindAppDevice`).
+  deviceId?: string;
 }
 
 // A single-use Matrix login token for the user a live secure session belongs
@@ -1509,7 +1531,169 @@ export async function mintLoginToken(
       'this session is signed out',
     );
   }
-  return minted;
+  let deviceId = await bindAppDevice(deps.dbAdapter, token);
+  return deviceId ? { ...minted, deviceId } : minted;
+}
+
+// A window's session lasts as long as the app session it hands a sign-in to.
+// Each hand-off names a fresh Matrix device id, which the window's row
+// records and the app signs in as when it redeems the login token, so the
+// row is bound to the app's device and renewed while that device exists
+// (`renewSecureSession`). The device id is the realm server's choice, made
+// here, under the window's own session: nothing the app page holds can bind
+// a row to a device, or extend one. A later hand-off from the same window
+// binds its row to the later device. A token the app never redeems leaves the
+// row bound to a device that doesn't exist, which renews nothing.
+//
+// The CLI's sessions are never bound: the CLI keeps its own secure session
+// beside the device its login token makes, for as long as that session lasts.
+async function bindAppDevice(
+  dbAdapter: DBAdapter,
+  token: RealmServerTokenClaim,
+): Promise<string | undefined> {
+  let deviceId = newDeviceId();
+  let rows = await dbAdapter.execute(
+    `UPDATE secure_sessions SET app_device_id = $3
+      WHERE id = $1 AND user_id = $2 AND client = 'window'
+        AND expires_at > NOW()
+      RETURNING id`,
+    { bind: [token.secureSession!, token.user, deviceId] },
+  );
+  return rows.length > 0 ? deviceId : undefined;
+}
+
+// Ten random capital letters, the shape of a device id the Matrix server
+// makes itself.
+function newDeviceId(): string {
+  return Array.from(randomBytes(10), (byte) =>
+    String.fromCharCode(65 + (byte % 26)),
+  ).join('');
+}
+
+// Renews a window's secure session for another `SECURE_SESSION_TTL_SECONDS`
+// while the app device its row is bound to still exists (`bindAppDevice`), on
+// or after the day its row expires. That is how a window's session lasts as
+// long as the app session it handed a sign-in to: the app's sign-out, an
+// account switch and a password change each sign that device out, and also
+// end the row, clearing its binding.
+//
+// Answers a fresh token for the session, whose lifetime is the row's: renewed
+// when the device is found, and as it was otherwise. The token presented may
+// have expired, since a row bound to a device outlives its token; its
+// signature and the row it names are what count. Only the row's current token
+// renews it: one whose expiry is the row's, within `CURRENT_TOKEN_SLACK_MS`.
+// A renewal that moves the row's end leaves every earlier token behind, so a
+// token that leaked from the window renews nothing once the window has
+// renewed past it. A row the device check
+// finds signed out is unbound, and then ends at its `expires_at`, as one
+// never bound does. When the Matrix server can't be asked, a row that hasn't
+// expired is answered unrenewed, and one that has is `unavailable`, since
+// nothing says it has ended.
+export async function renewSecureSession(
+  deps: SecureSessionDeps,
+  token: (RealmServerTokenClaim & { exp?: number }) | undefined,
+): Promise<SignedInSession> {
+  let id = token?.secureSession;
+  if (!token?.user || typeof id !== 'string' || !isUUID(id)) {
+    throw signedOutError();
+  }
+  let [row] = (await deps.dbAdapter.execute(
+    `SELECT app_device_id, expires_at, expires_at > NOW() AS live
+       FROM secure_sessions
+      WHERE id = $1 AND user_id = $2 AND client = 'window' AND ${UNENDED}`,
+    { bind: [id, token.user] },
+  )) as {
+    app_device_id: string | null;
+    expires_at: string | Date;
+    live: boolean;
+  }[];
+  if (!row) {
+    throw signedOutError();
+  }
+  let expiresAt = new Date(row.expires_at);
+  if (
+    typeof token.exp !== 'number' ||
+    Math.abs(token.exp * 1000 - expiresAt.getTime()) > CURRENT_TOKEN_SLACK_MS
+  ) {
+    throw signedOutError();
+  }
+  if (
+    row.app_device_id &&
+    expiresAt.getTime() - Date.now() < RENEWAL_WINDOW_SECONDS * 1000
+  ) {
+    let exists: boolean | undefined;
+    try {
+      exists = await deviceExists(deps, token.user, row.app_device_id);
+    } catch (e: any) {
+      log.warn(
+        `could not check a secure session's app device: ${e?.name ?? 'Error'}: ${e?.message ?? e}`,
+      );
+    }
+    if (exists) {
+      let renewed = new Date(Date.now() + SECURE_SESSION_TTL_SECONDS * 1000);
+      let updated = await deps.dbAdapter.execute(
+        `UPDATE secure_sessions SET expires_at = $4
+          WHERE id = $1 AND user_id = $2 AND app_device_id = $3
+          RETURNING id`,
+        { bind: [id, token.user, row.app_device_id, renewed.toISOString()] },
+      );
+      if (updated.length > 0) {
+        expiresAt = renewed;
+      }
+    } else if (exists === false) {
+      await deps.dbAdapter.execute(
+        `UPDATE secure_sessions SET app_device_id = NULL
+          WHERE id = $1 AND user_id = $2 AND app_device_id = $3`,
+        { bind: [id, token.user, row.app_device_id] },
+      );
+    } else if (!row.live) {
+      throw unavailable();
+    }
+  }
+  let remainingSeconds = Math.floor((expiresAt.getTime() - Date.now()) / 1000);
+  if (remainingSeconds <= 0) {
+    throw signedOutError();
+  }
+  let sessionRoom = await fetchSessionRoom(deps.dbAdapter, token.user);
+  if (!sessionRoom) {
+    throw signedOutError();
+  }
+  return {
+    token: createSecureSessionJWT(
+      { user: token.user, sessionRoom, secureSession: id },
+      deps.realmSecretSeed,
+      remainingSeconds,
+    ),
+    user: token.user,
+    expiresAt: expiresAt.toISOString(),
+  };
+}
+
+// Whether the Matrix server still has the account's device, by its admin API.
+async function deviceExists(
+  deps: SecureSessionDeps,
+  user: string,
+  deviceId: string,
+): Promise<boolean> {
+  let { status } = await adminRequest(
+    deps,
+    `${userPath(user)}/devices/${encodeURIComponent(deviceId)}`,
+  );
+  if (status === 200) {
+    return true;
+  }
+  if (status === 404) {
+    return false;
+  }
+  throw new Error(`looking up the device got HTTP ${status}`);
+}
+
+function signedOutError() {
+  return new SecureSessionError(
+    401,
+    'signed-out',
+    'this session is signed out',
+  );
 }
 
 // Signs a secure session out by expiring its row. The row stays until it is
@@ -1523,8 +1707,9 @@ export async function endSecureSession(
     return false;
   }
   let rows = await dbAdapter.execute(
-    `UPDATE secure_sessions SET expires_at = NOW()
-      WHERE id = $1 AND user_id = $2 AND expires_at > NOW()
+    `UPDATE secure_sessions
+        SET expires_at = LEAST(expires_at, NOW()), app_device_id = NULL
+      WHERE id = $1 AND user_id = $2 AND ${UNENDED}
       RETURNING id`,
     { bind: [id, token.user] },
   );
@@ -1541,8 +1726,9 @@ export async function endWindowSessions(
   user: string,
 ): Promise<void> {
   await dbAdapter.execute(
-    `UPDATE secure_sessions SET expires_at = NOW()
-      WHERE user_id = $1 AND client = 'window' AND expires_at > NOW()`,
+    `UPDATE secure_sessions
+        SET expires_at = LEAST(expires_at, NOW()), app_device_id = NULL
+      WHERE user_id = $1 AND client = 'window' AND ${UNENDED}`,
     { bind: [user] },
   );
 }

@@ -6,7 +6,6 @@ import { forgetSession, storeSession } from '../../src/security/session.js';
 import EnterKeyPage from '../../src/shell/keys/enter-key-page.gts';
 import KeyPage from '../../src/shell/keys/key-page.gts';
 import SharePage from '../../src/shell/keys/share-key-page.gts';
-import SwapKeyPage from '../../src/shell/keys/swap-key-page.gts';
 import { navigation } from '../../src/shell/navigation.js';
 import {
   pageOpened,
@@ -15,10 +14,12 @@ import {
 } from '../../src/shell/telemetry.ts';
 import { SecureTelemetry } from '../../src/telemetry/instrument.ts';
 
-// The secure origin's telemetry, driven through the key pages with known
-// secret values: every value a person types, every name, label and id a page
-// reads, the realm's URL and name, the session's token and the server's own
-// error messages. No beacon may carry any of them.
+// The secure origin's telemetry, driven through the key page and sharing a
+// key with known secret values: every value a person types, every name, label
+// and id a page reads, the realm's URL and name, the session's token and the
+// server's own error messages. No beacon may carry any of them. The key-page
+// tests run the same check through every key page's flows, swapping a key
+// in place of a suspended share among them.
 
 const REALM_SERVER = 'https://realm-server.test/';
 const REALM = 'https://realm-server.test/secret-owner/classified-workspace/';
@@ -71,15 +72,6 @@ function key(id: string, name: string) {
 const KEYS = {
   data: [key(KEY_ID, SECRETS.keyName), key(OTHER_KEY_ID, SECRETS.otherKeyName)],
 };
-
-const CONTEXT = json(200, {
-  data: {
-    type: 'secure-window-context',
-    attributes: {
-      realm: { url: REALM, name: SECRETS.realmName, directWriter: true },
-    },
-  },
-});
 
 const SHARE = {
   type: 'key-share',
@@ -192,7 +184,6 @@ module('Integration | telemetry', function (hooks) {
   test('entering a key sends none of what was typed', async function (assert) {
     routes['POST _user-keys'] = () =>
       json(201, { data: key('key-id-new', SECRETS.newKeyName) });
-    history.replaceState(null, '', '/secure/enter-key');
     pageOpened('enter-key');
     await render(EnterKeyPage);
     await waitFor('[data-test-enter-key-form]');
@@ -217,7 +208,7 @@ module('Integration | telemetry', function (hooks) {
     );
   });
 
-  test('the key page, sharing a key and swapping one send no name, label, realm or id', async function (assert) {
+  test('the key page and sharing a key send no name, label, realm or id', async function (assert) {
     routes['GET _secure-window/realms'] = () =>
       json(200, {
         data: [
@@ -229,34 +220,16 @@ module('Integration | telemetry', function (hooks) {
         ],
       });
     routes['POST _key-shares'] = () => json(201, { data: SHARE });
-    routes['POST _secure-window/context'] = () => CONTEXT;
-    routes['GET _key-shares'] = () => json(200, { data: [SHARE] });
-    routes[`POST _key-shares/${SHARE_ID}/swap`] = () =>
-      json(200, { data: SHARE });
 
-    history.replaceState(null, '', '/secure/keys');
     pageOpened('keys.index');
     await render(KeyPage);
     await waitFor(`[data-test-key-row="${SECRETS.keyName}"]`);
 
-    history.replaceState(null, '', `/secure/keys/${KEY_ID}/share`);
     pageOpened('keys.share');
-    await render(SharePage);
+    await render(<template><SharePage @keyId={{KEY_ID}} /></template>);
     await waitFor('[data-test-share-key-form]');
     await fillIn('[data-test-share-label]', SECRETS.shareLabel);
     await click('[data-test-share-key-save]');
-    await waitFor('[data-test-keys-done]');
-
-    history.replaceState(
-      null,
-      '',
-      `/secure/swap-key#realm=${encodeURIComponent(REALM)}&share=${SHARE_ID}`,
-    );
-    pageOpened('swap-key');
-    await render(SwapKeyPage);
-    await waitFor('[data-test-swap-key-form]');
-    await click(`[data-test-key-choice="${SECRETS.keyName}"] input`);
-    await click('[data-test-swap-key-save]');
     await waitFor('[data-test-keys-done]');
 
     let events = assertNothingSecret(assert);
@@ -268,8 +241,7 @@ module('Integration | telemetry', function (hooks) {
     for (let endpoint of [
       '_user-keys',
       '_key-shares',
-      '_key-shares/:id/swap',
-      '_secure-window/context',
+      '_secure-window/realms',
       '_key-write-tickets',
     ]) {
       assert.true(endpoints.has(endpoint), `${endpoint} is recorded`);
@@ -281,7 +253,6 @@ module('Integration | telemetry', function (hooks) {
       [
         ['keys', 'loaded'],
         ['keys/share', 'loaded'],
-        ['swap-key', 'loaded'],
       ],
     );
     assert.true(
@@ -295,7 +266,6 @@ module('Integration | telemetry', function (hooks) {
   test("a load that fails sends its endpoint and status, never the server's message", async function (assert) {
     routes['GET _user-keys'] = () =>
       json(404, { errors: [{ status: 404, detail: SECRETS.serverMessage }] });
-    history.replaceState(null, '', '/secure/keys');
     pageOpened('keys.index');
     await render(KeyPage);
     await waitFor('[data-test-keys-load-failed]');
@@ -310,7 +280,6 @@ module('Integration | telemetry', function (hooks) {
 
   test('a window with no session sends its outcome without a session', async function (assert) {
     forgetSession();
-    history.replaceState(null, '', '/secure/keys');
     pageOpened('keys.index');
     await render(KeyPage);
     await waitFor('[data-test-keys-signed-out]');
