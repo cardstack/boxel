@@ -1432,16 +1432,25 @@ export async function isSecureSession(
   dbAdapter: DBAdapter,
   token: RealmServerTokenClaim | undefined,
 ): Promise<boolean> {
+  return (await secureSessionClient(dbAdapter, token)) !== undefined;
+}
+
+// The client a live secure session was signed in for, the secure window or the
+// CLI, or undefined when the session isn't one (see `isSecureSession`).
+export async function secureSessionClient(
+  dbAdapter: DBAdapter,
+  token: RealmServerTokenClaim | undefined,
+): Promise<SecureSessionClient | undefined> {
   let id = token?.secureSession;
   if (!token?.user || typeof id !== 'string' || !isUUID(id)) {
-    return false;
+    return undefined;
   }
   let rows = await dbAdapter.execute(
-    `SELECT 1 FROM secure_sessions
+    `SELECT client FROM secure_sessions
       WHERE id = $1 AND user_id = $2 AND expires_at > NOW()`,
     { bind: [id, token.user] },
   );
-  return rows.length > 0;
+  return rows.length > 0 ? (rows[0].client as SecureSessionClient) : undefined;
 }
 
 export interface LoginToken {

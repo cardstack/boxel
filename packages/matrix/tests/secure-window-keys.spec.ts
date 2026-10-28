@@ -59,15 +59,27 @@ function keysURL(page: string, fragment: Record<string, string> = {}) {
   return `${secureOriginURL}/${page}${hash ? `#${hash}` : ''}`;
 }
 
+// The secure window's size, as the command that opens it must give it (the
+// `secure-origin` skill): wide enough that the share page's key names and
+// fields sit on one line.
+const WINDOW = { width: 640, height: 720 };
+
 // Opens the secure window from the app page, as the command that opens it
 // will: a popup, with no handle back to the page.
 async function openFromApp(page: Page, url: string): Promise<Page> {
   let opened = page.context().waitForEvent('page');
-  await page.evaluate((url) => {
-    window.open(url, '_blank', 'noopener,popup,width=520,height=720');
-  }, url);
+  await page.evaluate(
+    ({ url, width, height }) => {
+      window.open(
+        url,
+        '_blank',
+        `noopener,popup,width=${width},height=${height}`,
+      );
+    },
+    { url, ...WINDOW },
+  );
   let secure = await opened;
-  await secure.setViewportSize({ width: 520, height: 720 });
+  await secure.setViewportSize(WINDOW);
   return secure;
 }
 
@@ -78,7 +90,7 @@ async function openDirectly(
   url: string,
 ): Promise<Page> {
   let secure = await context.newPage();
-  await secure.setViewportSize({ width: 520, height: 720 });
+  await secure.setViewportSize(WINDOW);
   await secure.goto(url);
   return secure;
 }
@@ -427,7 +439,7 @@ test.describe('the secure window’s key pages', () => {
     ).toBe(204);
   });
 
-  test('shares a key from the key page into a realm the user writes; a reader opened for that realm is told an administrator must set it up', async ({
+  test('shares a key from the key page into a realm the user writes; a reader opened for that realm is told someone with direct write access must set it up', async ({
     page,
     browser,
   }, testInfo) => {
@@ -501,9 +513,8 @@ test.describe('the secure window’s key pages', () => {
       realmName,
       { timeout: 60_000 },
     );
-    await forRealm
-      .locator('[data-test-key-choice="Team weather"] input')
-      .click();
+    // The tile is the choice; its radio button is hidden.
+    await forRealm.locator('[data-test-key-choice="Team weather"]').click();
     await forRealm.locator('[data-test-share-label]').fill('Second weather');
     await snapshot(testInfo, forRealm, 'share a key, opened for a workspace');
 
@@ -520,9 +531,12 @@ test.describe('the secure window’s key pages', () => {
     );
     await expect(
       readerWindow.locator('[data-test-keys-needs-admin] h1'),
-    ).toHaveText('An administrator of this realm needs to set this up', {
-      timeout: 60_000,
-    });
+    ).toHaveText(
+      'Someone with direct write access to this workspace needs to set this up',
+      {
+        timeout: 60_000,
+      },
+    );
     await expect(readerWindow.locator('input')).toHaveCount(0);
     await snapshot(
       testInfo,
@@ -599,7 +613,7 @@ test.describe('the secure window’s key pages', () => {
       'Weather',
     );
     await expect(swap.locator('[data-test-swap-share]')).toContainText(
-      'can no longer edit this workspace',
+      'no longer has direct write access to this workspace',
     );
     await expect(swap.locator('[data-test-key-value]')).toHaveCount(0);
     await snapshot(

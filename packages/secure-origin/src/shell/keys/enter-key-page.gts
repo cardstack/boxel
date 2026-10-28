@@ -59,12 +59,21 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     {{else if this.done}}
       <DonePage @heading='Key saved' @onClose={{@api.close}}>Your key
         <strong data-test-keys-done-name>{{this.done.key.name}}</strong>
-        is saved. Nothing can read it back, here or anywhere in Boxel.</DonePage>
+        is saved. Nothing can read it back, here or anywhere in Boxel.
+        {{#if this.done.context.card}}
+          <span class='next' data-test-keys-done-next>Saving it doesn’t give
+            <strong>{{this.done.context.card.name}}</strong>
+            the key.
+            <strong>{{this.done.context.card.name}}</strong>
+            will ask you to approve where it sends the key before it can use it.</span>
+        {{/if}}
+      </DonePage>
     {{else if this.entering}}
       <form novalidate {{on 'submit' this.save}} data-test-enter-key-form>
         <EditPage @heading='Enter a key' data-test-enter-key>
           <:intro>The key is encrypted as soon as it is saved, and nothing can
-            read it back. Cards use it only through requests you approve.</:intro>
+            read it back. Cards can send it only to the places you approve for
+            it.</:intro>
           <:default>
             {{#if this.entering.context}}
               <OpenedForSummary
@@ -106,6 +115,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     {{/if}}
 
     <style scoped>
+      .next {
+        display: block;
+        margin-top: var(--boxel-sp-xs);
+      }
       form {
         display: flex;
         flex-direction: column;

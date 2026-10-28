@@ -1,6 +1,8 @@
 // One of the user's keys, drawn as a linked card is in a linksToMany field: a
-// bordered tile with the key's icon, its name and when it was added. Nothing
-// about its value is shown. Every key is the one kind there is, a secret
+// bordered tile with the key's icon, its name and when it was added. What the
+// tile is given to hold (a key page's actions) goes on a line of its own under
+// the name, so neither crowds the other however long the name. Nothing about
+// its value is shown. Every key is the one kind there is, a secret
 // pasted in, so the tile doesn't name its kind.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
@@ -29,17 +31,25 @@ const KeyTile: TemplateOnlyComponent<Signature> = <template>
   <div class='key-tile' ...attributes>
     <span class='key-icon' aria-hidden='true'><KeyRound /></span>
     <div class='key-text'>
-      <div class='key-name' data-test-key-row-name>{{@key.name}}</div>
+      <div
+        id='key-name-{{@key.id}}'
+        class='key-name'
+        data-test-key-row-name
+      >{{@key.name}}</div>
       <div class='key-meta'>Added {{addedOn @key.createdAt}}</div>
     </div>
-    {{yield}}
+    {{#if (has-block)}}
+      <div class='key-extra'>{{yield}}</div>
+    {{/if}}
   </div>
 
   <style scoped>
     .key-tile {
-      display: flex;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
       align-items: center;
-      gap: var(--boxel-sp-sm);
+      column-gap: var(--boxel-sp-sm);
+      row-gap: var(--boxel-sp-xs);
       min-height: 4rem;
       padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       background-color: var(--card, var(--background));
@@ -63,8 +73,10 @@ const KeyTile: TemplateOnlyComponent<Signature> = <template>
       height: 1.25rem;
     }
     .key-text {
-      flex: 1;
       min-width: 0;
+    }
+    .key-extra {
+      grid-column: 1 / -1;
     }
     .key-name {
       font-size: var(--boxel-font-size-sm);
