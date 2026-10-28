@@ -51,6 +51,7 @@ import type {
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
 import KeyTile from './key-tile.gts';
+import ServiceAccountDetails from './service-account-details.gts';
 import { ServiceAccountEntry } from './service-account-entry.ts';
 import ServiceAccountFields from './service-account-fields.gts';
 import KeyUse from './key-use.gts';
@@ -95,6 +96,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           @key={{key}}
                           @onReconnect={{this.reconnect}}
                         />
+                        <ServiceAccountDetails @key={{key}} />
                         <KeyUse @key={{key}} @onUnshare={{this.unshare}} />
                         <div class='tile-actions'>
                           {{#unless (eq key.kind 'oauth-connection')}}
@@ -150,15 +152,27 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                             {{/if}}
                           </p>
                           {{#if (this.isServiceAccount key)}}
-                            <p
-                              class='confirm'
-                              data-test-service-account-replace-note
-                            >A replacement sets the key file, the scopes and who
-                              it acts as all anew. Enter the scopes again, and
-                              leave
-                              <strong>Act as</strong>
-                              empty only if it should act as the service account
-                              itself.</p>
+                            {{#if key.serviceAccount}}
+                              <p
+                                class='confirm'
+                                data-test-service-account-replace-note
+                              >Choose the new key file.
+                                <strong>Act as</strong>
+                                and
+                                <strong>Scopes</strong>
+                                start as the key has them now: the replacement
+                                keeps them as you leave them here.</p>
+                            {{else}}
+                              <p
+                                class='confirm'
+                                data-test-service-account-replace-note
+                              >A replacement sets the key file, the scopes and
+                                who it acts as all anew. Enter the scopes again,
+                                and leave
+                                <strong>Act as</strong>
+                                empty only if it should act as the service
+                                account itself.</p>
+                            {{/if}}
                             <ServiceAccountFields
                               @entry={{this.serviceAccount}}
                             />
@@ -513,10 +527,16 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
 
   // Replacing changes the key that every workspace it's shared with uses, so
   // the panel says how many. If the shares can't be listed, it says so in
-  // general terms instead, and the replace is still offered.
+  // general terms instead, and the replace is still offered. A service
+  // account's form starts from the user it acts as and the scopes it asks for
+  // now; its key file is always chosen anew.
   private startReplace = async (key: UserKey) => {
     this.form.value = '';
-    this.serviceAccount.clear();
+    if (key.serviceAccount) {
+      this.serviceAccount.prefill(key.serviceAccount);
+    } else {
+      this.serviceAccount.clear();
+    }
     this.state.action = { name: 'replacing', key, shares: undefined };
     let shares: KeyShare[] | undefined;
     try {

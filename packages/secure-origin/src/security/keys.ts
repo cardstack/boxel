@@ -90,9 +90,18 @@ export interface OAuthKeyDescription {
   };
 }
 
+// What a Google service account acts as, none of it secret: the service
+// account's email, the user it acts as (null for the service account itself)
+// and the scopes its tokens ask for. Never its key file.
+export interface ServiceAccountDetails {
+  email: string;
+  subject: string | null;
+  scopes: string[];
+}
+
 // One of the user's keys: its metadata, never its value. `kind` is `static`
 // for a secret pasted in, `google-service-account`, `oauth-client` or
-// `oauth-connection`.
+// `oauth-connection`. Only a service account has `serviceAccount`.
 export interface UserKey {
   id: string;
   name: string;
@@ -101,6 +110,7 @@ export interface UserKey {
   createdAt: string;
   updatedAt: string;
   oauth?: OAuthKeyDescription;
+  serviceAccount?: ServiceAccountDetails;
 }
 
 // A realm that one of the user's keys is shared with, along with the key's
