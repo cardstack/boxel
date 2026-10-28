@@ -752,10 +752,10 @@ function uiLensRule(load, { gtsOnly = false } = {}) {
       }
       return {
         refusal:
-          `This session can't load \`${named}\`, so the review's body has to say \`${named}\` wasn't reviewed, and this one doesn't. ` +
+          `This session can't load \`${named}\`` +
           (plugin
-            ? `Install it with \`/plugin install ${plugin}\` and run the lens, or say so in the review's opening sentence, then retry.`
-            : `Say so in the review's opening sentence, then retry.`),
+            ? `: the \`${plugin}\` plugin isn't installed here, or wasn't when this session started. Ask the user to run \`claude plugin install ${plugin} --scope local\` and /reload-plugins, then load the skill and run the lens. Only when it can't be installed here, say in the review's opening sentence that \`${named}\` wasn't reviewed, then retry.`
+            : `, so the review's opening sentence has to say \`${named}\` wasn't reviewed, and this one doesn't. Say so, then retry.`),
       };
     },
   };

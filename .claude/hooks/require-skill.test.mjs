@@ -369,9 +369,10 @@ test('the refusal says which skill is missing and how to install it', () => {
     transcript: CANT_LOAD,
   });
   assert.match(reason, /can't load `boxel-ui-guidelines`/);
-  assert.match(reason, /\/plugin install boxel-skills@cardstack-boxel/);
+  assert.match(reason, /claude plugin install boxel-skills@cardstack-boxel/);
   assert.match(reason, /can't load `better-interface`/);
-  assert.match(reason, /\/plugin install interfaces@interfaces/);
+  assert.match(reason, /claude plugin install interfaces@interfaces/);
+  assert.match(reason, /Only when it can't be installed here/);
   assert.doesNotMatch(reason, /better-layout/);
 });
 
