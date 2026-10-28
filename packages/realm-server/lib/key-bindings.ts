@@ -1025,9 +1025,10 @@ async function checkedBindings(
     row: Record<string, unknown>;
     probe: boolean;
   }[] = [];
-  // Two slots can send under one grant; the probe claimed for the first
-  // covers the second.
-  let probing = new Set<string>();
+  // The rejected grants this call would probe, claimed only once every slot
+  // has passed its other checks, so a call refused for another reason uses up
+  // no grant's probe.
+  let rejected = new Map<string, { slot: CallApiSlot; destination: string }>();
   for (let slot of request.slots) {
     let [row] = await query(dbAdapter, [
       `SELECT b.id, b.key_id, b.share_id, b.grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state, s.state AS share_state, s.key_id AS share_key_id,
@@ -1089,26 +1090,25 @@ async function checkedBindings(
     if (!row.grant_id) {
       throw refuseNotApproved();
     }
-    let probe = false;
-    if (row.grant_state === 'rejected') {
-      let grantId = row.grant_id as string;
-      if (rejection.claimProbe) {
-        probe =
-          probing.has(grantId) ||
-          (await claimProbe(dbAdapter, grantId, rejection.probeIntervalMs));
-      } else {
-        probe = !!row.probe_due;
+    let probe = row.grant_state === 'rejected';
+    if (probe) {
+      let destination = row.grant_destination as string;
+      if (!row.probe_due) {
+        throw credentialRejected(lookup.operation, slot, destination);
       }
-      if (!probe) {
-        throw credentialRejected(
-          lookup.operation,
-          slot,
-          row.grant_destination as string,
-        );
-      }
-      probing.add(grantId);
+      rejected.set(row.grant_id as string, { slot, destination });
     }
     checked.push({ slot, row, probe });
+  }
+  if (rejection.claimProbe) {
+    // Two slots can send under one grant; one claim covers both. The claim
+    // is the check again, in one statement, so of calls arriving together
+    // only one probes.
+    for (let [grantId, { slot, destination }] of rejected) {
+      if (!(await claimProbe(dbAdapter, grantId, rejection.probeIntervalMs))) {
+        throw credentialRejected(lookup.operation, slot, destination);
+      }
+    }
   }
   return checked;
 }
@@ -1244,7 +1244,7 @@ export async function fillSlots(
     probeIntervalMs,
     claimProbe: true,
   })) {
-    let opened: { keyId: string; destination: string; value: string };
+    let opened: Awaited<ReturnType<typeof openGrantForSending>>;
     let ring = keyring();
     try {
       opened = await openGrantForSending(dbAdapter, ring, {
@@ -1289,6 +1289,7 @@ export async function fillSlots(
         slot: { name: slot.name, key: slot.key },
         realmURL: lookup.realmURL,
         ...(row.share_id ? { shareId: row.share_id as string } : {}),
+        copy: opened.copy,
         probe,
       },
     });
