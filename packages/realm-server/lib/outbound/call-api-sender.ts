@@ -147,12 +147,22 @@ async function actOnVendorAnswer(
     return;
   }
   if (status === 401) {
-    for (let grant of grants) {
-      await markGrantRejected(dbAdapter, {
-        grantId: grant.id,
-        realmURL: grant.realmURL,
-        ...(grant.shareId ? { shareId: grant.shareId } : {}),
-      });
+    // The card is told the key was rejected whether or not recording it
+    // succeeds; a failure to record only means the next call reaches the
+    // vendor and is refused again.
+    try {
+      for (let grant of grants) {
+        await markGrantRejected(dbAdapter, {
+          grantId: grant.id,
+          realmURL: grant.realmURL,
+          ...(grant.shareId ? { shareId: grant.shareId } : {}),
+          copy: grant.copy,
+        });
+      }
+    } catch (error) {
+      log.error(
+        `could not record the vendor's 401 for grants ${grants.map(({ id }) => id).join(', ')}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
     throw credentialRejected(undefined, grants[0].slot, grants[0].destination);
   }

@@ -29,6 +29,8 @@ import { shareKey } from '../lib/key-shares.ts';
 import { pipelineAdmission } from '../lib/key-bindings.ts';
 import { listKeyGrants } from '../lib/user-key-grants.ts';
 import {
+  claimProbe,
+  markGrantRejected,
   probeIntervalFromEnv,
   setKeyGrantSink,
   type KeyGrantEvent,
@@ -81,6 +83,25 @@ const inboxModule = `
       url: '${OTHER_HOST}/status/{code}',
       path: { code: params('code') },
       headers: { authorization: 'Bearer {{userKey}}' },
+    };
+
+    @operation static recheck = {
+      base: 'callApi',
+      params: { code: StringField },
+      url: '${VENDOR}/status/{code}',
+      path: { code: params('code') },
+      headers: { authorization: 'Bearer {{userKey}}' },
+    };
+
+    @operation static pair = {
+      base: 'callApi',
+      params: { code: StringField },
+      url: '${VENDOR}/status/{code}',
+      path: { code: params('code') },
+      headers: {
+        authorization: 'Bearer {{userKey:first}}',
+        'x-second-key': '{{userKey:second}}',
+      },
     };
 
     @operation static shared = {
@@ -560,6 +581,97 @@ module(basename(import.meta.filename), function (hooks) {
       ),
       'a reader gets none',
     );
+  });
+
+  test('a 401 to a request carrying two keys rejects the grant of each', async function (assert) {
+    let first = await addKey(OWNER, 'first');
+    let second = await addKey(OWNER, 'second');
+    let approved = await request
+      .get('/_key-bindings/preview')
+      .query({
+        realm: realmURL.href,
+        module: INBOX.module,
+        name: INBOX.name,
+        operation: 'pair',
+      })
+      .set('Authorization', await secureSessionAuth(dbAdapter, OWNER));
+    assert.strictEqual(approved.status, 200, JSON.stringify(approved.body));
+    await approve(OWNER, 'pair', {
+      'userKey:first': { keyId: first.id },
+      'userKey:second': { keyId: second.id },
+    });
+    let refused = await call('pair', 401);
+    assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
+    let states = await dbAdapter.execute(
+      `SELECT key_id, state FROM user_key_grants WHERE key_id = ANY($1::uuid[]) ORDER BY key_id`,
+      { bind: [[first.id, second.id]] },
+    );
+    assert.deepEqual(
+      states.map((r: Record<string, unknown>) => r.state),
+      ['rejected', 'rejected'],
+      'the vendor does not say which key it refused, so both are held back',
+    );
+  });
+
+  test('a 401 to the value a key held before it was replaced leaves the replaced key alone', async function (assert) {
+    let key = await addKey();
+    let approved = await approve(OWNER, 'check', {
+      userKey: { keyId: key.id },
+    });
+    let grantId = approved.meta.grant.id;
+    let [{ copy }] = await dbAdapter.execute(
+      `SELECT encode(value_nonce, 'base64') AS copy FROM user_key_grants WHERE id = $1`,
+      { bind: [grantId] },
+    );
+    await replaceUserKeyValue(dbAdapter, keyring, {
+      owner: OWNER,
+      id: key.id,
+      value: NEW_VALUE,
+      ticket: await ticket(OWNER, 'replace', { keyId: key.id }),
+    });
+    assert.false(
+      await markGrantRejected(dbAdapter, {
+        grantId,
+        realmURL: realmURL.href,
+        copy: copy as string,
+      }),
+      'a refusal of the old value',
+    );
+    assert.strictEqual((await grantRow(grantId)).state, 'active');
+    assert.deepEqual(await notices(), [], 'and nobody is told');
+  });
+
+  test('of probes claimed at once, exactly one wins', async function (assert) {
+    let key = await addKey();
+    let approved = await approve(OWNER, 'check', {
+      userKey: { keyId: key.id },
+    });
+    let grantId = approved.meta.grant.id;
+    await call('check', 401);
+    await probeIsDue(grantId);
+    let claims = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        claimProbe(dbAdapter, grantId, 15 * 60 * 1000),
+      ),
+    );
+    assert.strictEqual(claims.filter(Boolean).length, 1);
+  });
+
+  test("approving another operation at a rejected grant's destination reuses the grant, still rejected", async function (assert) {
+    let key = await addKey();
+    let first = await approve(OWNER, 'check', { userKey: { keyId: key.id } });
+    await call('check', 401);
+    let again = await approve(OWNER, 'recheck', {
+      userKey: { keyId: key.id },
+    });
+    assert.strictEqual(again.meta.grant.id, first.meta.grant.id);
+    let refused = await call('recheck', 200);
+    assert.strictEqual(
+      refused.body.errors?.[0]?.code,
+      'credential-rejected',
+      'the refused key is not sent there again through a new approval',
+    );
+    assert.strictEqual(vendor.requests.length, 1);
   });
 
   test('the probe interval is a platform setting', function (assert) {
