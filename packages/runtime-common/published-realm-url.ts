@@ -95,7 +95,7 @@ function normalizeProtocol(protocol: string): string {
 }
 
 // Character set for the machine-generated path segment of an "unlisted link"
-// publish target (`<username>.<spaceDomain>/<slug>/`). Lowercase letters and
+// publish target (`<publishedSpaceHost>/<slug>/`). Lowercase letters and
 // digits only — safe as a URL path segment with no escaping — with the visually
 // ambiguous characters removed (i, l, o, 0, 1) so a link read aloud or copied by
 // hand is less error-prone.
@@ -155,10 +155,22 @@ export function generateObscureSlug(): string {
 // (`first-last`). Usernames without dots map to themselves.
 //
 // The mapping is not injective: `first.last` and `first-last` share a space
-// host. Every consumer that decides whether a host is a user's own space
-// derives it through this function so the host side and the server side agree.
+// host. The realm server refuses to republish a URL from a realm other than
+// the one it was first published from, so a shared host never lets one user
+// replace the other's site. Every consumer that decides whether a host is a
+// user's own space derives it through this function so the host side and the
+// server side agree.
 export function publishedSpaceSubdomain(matrixUsername: string): string {
   return matrixUsername.replace(/\./g, '-');
+}
+
+// The host of a user's Boxel Space, `<publishedSpaceSubdomain>.<spaceDomain>`
+// (the space domain may carry a port, e.g. "localhost:4201").
+export function publishedSpaceHost(
+  matrixUsername: string,
+  spaceDomain: string,
+): string {
+  return `${publishedSpaceSubdomain(matrixUsername)}.${spaceDomain}`;
 }
 
 export function resolvePublishedRealmUrl(
@@ -192,7 +204,7 @@ export function resolvePublishedRealmUrl(
       if (!ctx.spaceDomain) {
         throw new Error('A subdirectory publish target requires `spaceDomain`');
       }
-      return `${protocol}://${publishedSpaceSubdomain(ctx.matrixUsername)}.${ctx.spaceDomain}/${realmName}/`;
+      return `${protocol}://${publishedSpaceHost(ctx.matrixUsername, ctx.spaceDomain)}/${realmName}/`;
     }
     default: {
       throw new Error(

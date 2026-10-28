@@ -5,6 +5,7 @@ import {
   deriveRealmName,
   generateObscureSlug,
   OBSCURE_SLUG_LENGTH,
+  publishedSpaceHost,
   publishedSpaceSubdomain,
   resolvePublishedRealmUrl,
 } from '@cardstack/runtime-common';
@@ -105,6 +106,17 @@ module(basename(import.meta.filename), function () {
     test('publishedSpaceSubdomain replaces every dot with a hyphen', async function (assert) {
       assert.strictEqual(publishedSpaceSubdomain('first.last'), 'first-last');
       assert.strictEqual(publishedSpaceSubdomain('a.b.c'), 'a-b-c');
+    });
+
+    test('publishedSpaceHost joins the space subdomain and the space domain', async function (assert) {
+      assert.strictEqual(
+        publishedSpaceHost('first.last', 'boxel.space'),
+        'first-last.boxel.space',
+      );
+      assert.strictEqual(
+        publishedSpaceHost('mike', 'localhost:4201'),
+        'mike.localhost:4201',
+      );
     });
 
     test('subdirectory throws when name is blank and no sourceRealmURL is given', async function (assert) {

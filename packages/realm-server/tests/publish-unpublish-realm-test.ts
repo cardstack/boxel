@@ -268,6 +268,74 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('POST /_publish-realm refuses a URL already published from another source realm', async function (assert) {
+        let otherSourceResponse = await request
+          .post('/_create-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'realm',
+                attributes: {
+                  name: 'Other Realm',
+                  endpoint: `other-realm-${uuidv4()}`,
+                },
+              },
+            }),
+          );
+        let otherSourceRealmURL = otherSourceResponse.body.data.id;
+        await dbAdapter.execute(`
+          INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+          VALUES ('${otherSourceRealmURL}', '*', true, true, true)
+        `);
+
+        let publish = (sourceRealmURL: string) =>
+          request
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL,
+                publishedRealmURL: 'http://shared-site.localhost:4445/',
+              }),
+            );
+
+        let first = await publish(sourceRealmUrlString);
+        assert.strictEqual(first.status, 202, 'first publish is accepted');
+
+        let second = await publish(otherSourceRealmURL);
+        assert.strictEqual(second.status, 409, 'HTTP 409 status');
+        assert.ok(
+          second.text.includes('is already published from another realm'),
+          'error explains the URL is taken',
+        );
+
+        let rows = (await dbAdapter.execute(
+          `SELECT source_url FROM realm_registry WHERE kind = 'published' AND url = 'http://shared-site.localhost:4445/'`,
+        )) as { source_url: string }[];
+        assert.deepEqual(
+          rows.map((row) => row.source_url),
+          [sourceRealmUrlString],
+          'the publication still belongs to the first source realm',
+        );
+      });
+
       test('POST /_publish-realm can publish realm successfully', async function (assert) {
         let response = await request
           .post('/_publish-realm')

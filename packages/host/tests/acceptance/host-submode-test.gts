@@ -1081,6 +1081,53 @@ module('Acceptance | host submode', function (hooks) {
         }
       });
 
+      test('an existing publication at a dotted two-label host preselects the single-label target', async function (assert) {
+        let matrixService = getService('matrix-service');
+        Object.defineProperty(matrixService, 'userName', {
+          configurable: true,
+          get: () => 'first.last',
+        });
+        let publishedURLs: string[] = [];
+        let realmServer = getService('realm-server');
+        let publishRealm = realmServer.publishRealm;
+        realmServer.publishRealm = async (
+          sourceRealmURL: string,
+          publishedRealmURL: string,
+        ) => {
+          publishedURLs.push(publishedRealmURL);
+          return publishRealm(sourceRealmURL, publishedRealmURL);
+        };
+        publishDeferred.fulfill();
+        let restoreRealmInfo = withUpdatedTestRealmInfo({
+          lastPublishedAt: {
+            [`https://first.last.${publishedSpaceHost}/test/`]: String(
+              Date.now(),
+            ),
+          },
+        });
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+          assert.dom('[data-test-default-domain-checkbox]').isChecked();
+
+          await click('[data-test-publish-button]');
+          await waitUntil(() => publishedURLs.length > 0);
+
+          assert.deepEqual(publishedURLs, [
+            `https://first-last.${publishedSpaceHost}/test/`,
+          ]);
+        } finally {
+          restoreRealmInfo();
+          delete (matrixService as unknown as Record<string, unknown>).userName;
+        }
+      });
+
       // Indexing and prerendering a realm take minutes, and a bare spinner
       // can't tell slow progress from a hang. The popover is where a publish in
       // flight is inspected, so it has to name the pass and count through it.

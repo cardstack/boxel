@@ -30,7 +30,7 @@ import {
   ensureTrailingSlash,
   isCardErrorJSONAPI,
   isCardInstance,
-  publishedSpaceSubdomain,
+  publishedSpaceHost,
   resolvePublishedRealmUrl,
 } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
@@ -109,7 +109,7 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private isCheckingCustomSubdomain = false;
   @tracked private claimedDomain: ClaimedDomain | null = null;
   // Server-issued random path segment for the "Unlisted Link" target
-  // (`<username>.<spaceDomain>/<unlistedPathSegment>/`). Loaded from the
+  // (`<publishedSpaceHost>/<unlistedPathSegment>/`). Loaded from the
   // realm-server on open (`loadUnlistedPathTask`) — the server owns the slug so
   // it can't be hand-picked — and replaced via "New link"
   // (`regenerateUnlistedLinkTask`). Null while loading.
@@ -287,10 +287,10 @@ export default class PublishRealmModal extends Component<Signature> {
     return this.selectedPublishedRealmURLs.includes(this.subdirectoryRealmUrl);
   }
 
-  // The "Unlisted Link" target: the user's own space subdomain with a random
-  // path segment instead of the realm name, e.g.
-  // `https://<spaceSubdomain>.<spaceDomain>/<random>/`. Like the Boxel Space target
-  // it is namespaced to the owner, so it needs no claim/availability check.
+  // The "Unlisted Link" target: the user's own space host with a random path
+  // segment instead of the realm name, e.g.
+  // `https://<publishedSpaceHost>/<random>/`. Like the Boxel Space target it is
+  // namespaced to the owner, so it needs no claim/availability check.
   get unlistedRealmUrl(): string | null {
     if (!this.unlistedPathSegment) {
       return null;
@@ -307,7 +307,7 @@ export default class PublishRealmModal extends Component<Signature> {
 
   get unlistedRealmParts() {
     return {
-      baseUrl: `${this.getProtocol()}://${publishedSpaceSubdomain(this.getMatrixUsername())}.${this.getDefaultPublishedRealmDomain()}/`,
+      baseUrl: this.spaceBaseUrl,
       pathSegment: this.unlistedPathSegment ?? '',
     };
   }
@@ -475,15 +475,33 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get subdirectoryRealmParts() {
-    const protocol = this.getProtocol();
-    const spaceSubdomain = publishedSpaceSubdomain(this.getMatrixUsername());
-    const domain = this.getDefaultPublishedRealmDomain();
-    const realmName = this.getRealmName();
-
     return {
-      baseUrl: `${protocol}://${spaceSubdomain}.${domain}/`,
-      realmName: realmName,
+      baseUrl: this.spaceBaseUrl,
+      realmName: this.getRealmName(),
     };
+  }
+
+  // The origin of the user's Boxel Space, taken from the resolved target URL
+  // so the base URL the modal shows is the one it publishes to.
+  private get spaceBaseUrl() {
+    return `${new URL(this.subdirectoryRealmUrl).origin}/`;
+  }
+
+  // For a username with dots, `<username>.<spaceDomain>` is two labels deep
+  // and outside the space domain's certificate. A publication at that host
+  // maps to the same path on the user's `publishedSpaceHost`, so it
+  // preselects the target the modal shows rather than a URL it has no row
+  // for.
+  private canonicalSpaceUrl(publishedRealmURL: string): string {
+    let matrixUsername = this.getMatrixUsername();
+    let spaceDomain = this.getDefaultPublishedRealmDomain();
+    let legacyHost = `${matrixUsername}.${spaceDomain}`;
+    let spaceHost = publishedSpaceHost(matrixUsername, spaceDomain);
+    let url = new URL(publishedRealmURL);
+    if (legacyHost === spaceHost || url.host !== legacyHost) {
+      return publishedRealmURL;
+    }
+    return `${url.protocol}//${spaceHost}${url.pathname}`;
   }
 
   private getProtocol(): string {
@@ -979,7 +997,13 @@ export default class PublishRealmModal extends Component<Signature> {
   private applyInitialSelections(claim: ClaimedDomain | null = null) {
     let selections = this.initialSelectionsSet
       ? this.selectedPublishedRealmURLs
-      : [...this.hostModeService.publishedRealmURLs];
+      : [
+          ...new Set(
+            this.hostModeService.publishedRealmURLs.map((url) =>
+              this.canonicalSpaceUrl(url),
+            ),
+          ),
+        ];
 
     if (claim) {
       let claimedUrl = this.buildPublishedRealmUrl(claim.hostname);
