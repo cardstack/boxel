@@ -4,19 +4,22 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import type {
-  RenderableSearchEntryLike,
-  SearchEntryWireQuery,
+import {
+  trimJsonExtension,
+  type RealmResourceIdentifier,
+  type RenderableSearchEntryLike,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
 import SearchResults from '@cardstack/host/components/search/search-results';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 
 import fitPage from './fit-page';
 
 // A desk has room for this many pins; the rest stay on the workspace's Home.
-export const MAX_DESK_PINS = 4;
+const MAX_DESK_PINS = 4;
 
 // The collage is laid out on a page this many design pixels wide and zoomed
 // to the desk, so each card lays itself out the way it really looks and the
@@ -26,8 +29,8 @@ const COLLAGE_PAGE_WIDTH_PX = 900;
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    // The pinned cards' URLs, in the workspace's order.
-    cardIds: string[];
+    // The pinned cards' ids, in the workspace's order.
+    cardIds: RealmResourceIdentifier[];
     // The workspace's own realm, searched for pins whose realm isn't known.
     realm: string;
     workspaceName: string;
@@ -38,6 +41,7 @@ interface Signature {
 // fitted HTML. Only rows that carry HTML are drawn, so no card code loads on
 // the dashboard. Each card is its own control and opens that card.
 export default class PinnedCards extends Component<Signature> {
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
 
@@ -48,18 +52,19 @@ export default class PinnedCards extends Component<Signature> {
   // One search for all the pins. `html` alone would leave a pin unnamed, so
   // the title rides along as a field-limited item, which never loads code.
   private get query(): SearchEntryWireQuery {
+    let { virtualNetwork } = this.network;
     let realms = new Set(
-      this.cardIds.map((id) => {
-        try {
-          return this.realm.realmOf(new URL(id)) ?? this.args.realm;
-        } catch {
-          return this.args.realm;
-        }
-      }),
+      this.cardIds.map((id) => this.realm.realmOf(id) ?? this.args.realm),
     );
     return {
       realms: [...realms],
-      cardUrls: this.cardIds.map((id) => `${id}.json`),
+      cardUrls: this.cardIds.flatMap((id) => {
+        try {
+          return [`${virtualNetwork.toURL(id).href}.json`];
+        } catch {
+          return [];
+        }
+      }),
       scope: 'cards',
       filter: { eq: { htmlQuery: { eq: { format: 'fitted' } } } },
       fields: { entry: ['html', 'item.cardTitle'] },
@@ -68,14 +73,20 @@ export default class PinnedCards extends Component<Signature> {
 
   // Search answers in its own order; the desk keeps the workspace's. A pin
   // with no prerendered HTML yet is left out rather than rendered live.
+  // Entries are named by URL and pins by either form, so both are folded
+  // to one before they're matched.
   private inPinOrder = (entries: RenderableSearchEntryLike[]) => {
+    let { virtualNetwork } = this.network;
     let byId = new Map(
       entries
         .filter((entry) => entry.html?.html != null)
-        .map((entry) => [entry.id.replace(/\.json$/, ''), entry]),
+        .map((entry) => [
+          virtualNetwork.unresolveURL(trimJsonExtension(entry.id)),
+          entry,
+        ]),
     );
     return this.cardIds
-      .map((id) => byId.get(id))
+      .map((id) => byId.get(virtualNetwork.unresolveURL(id)))
       .filter((entry): entry is RenderableSearchEntryLike => Boolean(entry));
   };
 
@@ -104,6 +115,7 @@ export default class PinnedCards extends Component<Signature> {
             <ul
               class='collage pins-{{pins.length}}'
               aria-label='Pinned cards in {{@workspaceName}}'
+              data-pinned-collage
               data-test-pinned-cards={{@realm}}
             >
               {{#each pins key='id' as |entry|}}
@@ -214,7 +226,6 @@ export default class PinnedCards extends Component<Signature> {
         inset: 0;
         container-name: fitted-card;
         container-type: size;
-        pointer-events: none;
       }
       .pin-card {
         width: 100%;

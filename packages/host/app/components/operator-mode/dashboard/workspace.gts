@@ -169,7 +169,7 @@ export default class Workspace extends Component<Signature> {
               and the menu are separate controls, and the bare wallpaper
               opens the workspace for a pointer. The pill carries the
               keyboard cursor. }}
-          <div class={{cn 'desk-surface' has-pins=this.hasPins}}>
+          <div class='desk-surface'>
             <div
               {{! template-lint-disable no-invalid-interactive }}
               class='desk-hit'
@@ -807,16 +807,19 @@ export default class Workspace extends Component<Signature> {
         backdrop-filter: var(--_workspace-glass-blur);
       }
       /* Behind pins the wallpaper is dimmed, not blurred: it keeps the
-         workspace's colors while the cards carry the content. A hover
-         brings a little of it back. */
-      .desk-surface.has-pins::before {
+         workspace's colors while the cards carry the content. It follows
+         the drawn collage, not the link count, so a desk whose pins have
+         no rendering yet keeps its wallpaper. A hover brings a little of
+         it back. */
+      .desk-surface:has([data-pinned-collage])::before {
         content: '';
         position: absolute;
         inset: 0;
         background-color: var(--boxel-dark-50);
         transition: background-color var(--boxel-transition);
       }
-      .workspace.is-desk:hover .desk-surface.has-pins::before {
+      .workspace.is-desk:hover
+        .desk-surface:has([data-pinned-collage])::before {
         background-color: var(--boxel-dark-40);
       }
       .desk-pins {

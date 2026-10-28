@@ -1073,6 +1073,8 @@ module('Acceptance | dashboard', function (hooks) {
 
     module('pinned cards', function (hooks) {
       const pinnedRealmURL = 'http://test-realm/testuser/pinned/';
+      const unpinnedRealmURL = 'http://test-realm/testuser/unpinned/';
+      const libraryRealmURL = 'http://test-realm/testuser/library/';
 
       function cardJSON(name: string) {
         return {
@@ -1082,6 +1084,20 @@ module('Acceptance | dashboard', function (hooks) {
               adoptsFrom: {
                 module: '@cardstack/base/card-api',
                 name: 'CardDef',
+              },
+            },
+          },
+        };
+      }
+
+      function workspaceIndexJSON(relationships: Record<string, unknown>) {
+        return {
+          data: {
+            relationships,
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/workspace',
+                name: 'Workspace',
               },
             },
           },
@@ -1099,23 +1115,43 @@ module('Acceptance | dashboard', function (hooks) {
             'realm.json': realmConfigCardJSON({ name: 'Pinned Workspace' }),
             'roadmap.json': cardJSON('Roadmap'),
             'launch-notes.json': cardJSON('Launch Notes'),
-            'index.json': {
-              data: {
-                relationships: {
-                  'entryPoints.0': { links: { self: './roadmap' } },
-                  'entryPoints.1': { links: { self: './launch-notes' } },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '@cardstack/base/workspace',
-                    name: 'Workspace',
-                  },
-                },
+            'index.json': workspaceIndexJSON({
+              'entryPoints.0': { links: { self: './roadmap' } },
+              'entryPoints.1': { links: { self: './launch-notes' } },
+              'entryPoints.2': {
+                links: { self: `${libraryRealmURL}style-guide` },
               },
-            },
+            }),
           },
         });
-        mockMatrixUtils.setActiveRealms([realmURL, pinnedRealmURL]);
+        await setupAcceptanceTestRealm({
+          realmURL: unpinnedRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Unpinned Workspace' }),
+            'index.json': workspaceIndexJSON({}),
+          },
+        });
+        await setupAcceptanceTestRealm({
+          realmURL: libraryRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Library Workspace' }),
+            'style-guide.json': cardJSON('Style Guide'),
+          },
+        });
+        mockMatrixUtils.setActiveRealms([
+          realmURL,
+          pinnedRealmURL,
+          unpinnedRealmURL,
+          libraryRealmURL,
+        ]);
       });
 
       async function visitWithFavorites(favorites: string[]) {
@@ -1130,13 +1166,18 @@ module('Acceptance | dashboard', function (hooks) {
 
       test("a desk shows its Workspace card's pins in the workspace's order and counts them", async function (assert) {
         await visitWithFavorites([pinnedRealmURL]);
-        await waitUntil(() => findAll(DESK_PINS).length === 2);
+        await waitUntil(() => findAll(DESK_PINS).length === 3);
 
         assert.deepEqual(
           findAll(DESK_PINS).map((el) =>
             el.getAttribute('data-test-pinned-card'),
           ),
-          [`${pinnedRealmURL}roadmap`, `${pinnedRealmURL}launch-notes`],
+          [
+            `${pinnedRealmURL}roadmap`,
+            `${pinnedRealmURL}launch-notes`,
+            `${libraryRealmURL}style-guide`,
+          ],
+          'a pin in another realm is read from that realm',
         );
         assert
           .dom(DESK_PINS)
@@ -1145,7 +1186,7 @@ module('Acceptance | dashboard', function (hooks) {
           .dom(
             '[data-test-favorites-list] [data-test-workspace="Pinned Workspace"] [data-test-workspace-stat="Pinned"]',
           )
-          .hasText('Pinned 2');
+          .hasText('Pinned 3');
         assert
           .dom('[data-test-workspace="Pinned Workspace"]')
           .exists({ count: 2 }, 'it is listed as a desk and again below');
@@ -1156,7 +1197,7 @@ module('Acceptance | dashboard', function (hooks) {
 
       test('a pinned card opens that card', async function (assert) {
         await visitWithFavorites([pinnedRealmURL]);
-        await waitUntil(() => findAll(DESK_PINS).length === 2);
+        await waitUntil(() => findAll(DESK_PINS).length === 3);
 
         await click(`[data-test-pinned-card="${pinnedRealmURL}roadmap"]`);
 
@@ -1172,10 +1213,13 @@ module('Acceptance | dashboard', function (hooks) {
       });
 
       test('a desk with no pins shows no collage and no pin count', async function (assert) {
-        await visitWithFavorites([realmURL]);
+        await visitWithFavorites([pinnedRealmURL, unpinnedRealmURL]);
+        // `settled()` in `visitWithFavorites` waits for both desks' pin
+        // searches, so the unpinned desk has had its answer.
+        await waitUntil(() => findAll(DESK_PINS).length === 3);
 
         let desk =
-          '[data-test-favorites-list] [data-test-workspace="Workspace A"]';
+          '[data-test-favorites-list] [data-test-workspace="Unpinned Workspace"]';
         assert.dom(desk).exists();
         assert.dom(`${desk} [data-test-pinned-cards]`).doesNotExist();
         assert

@@ -1,14 +1,20 @@
-import type {
-  CardResource,
-  FileMetaResource,
-  Relationship,
-  SearchEntryWireQuery,
+import { cached } from '@glimmer/tracking';
+
+import {
+  relationshipEntries,
+  resolveRRIReference,
+  rri,
+  trimJsonExtension,
+  type CardResource,
+  type FileMetaResource,
+  type RealmResourceIdentifier,
+  type Relationship,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
 import { getSearchEntriesResource } from '@cardstack/host/resources/search-entries';
 
 const PIN_FIELD = 'entryPoints';
-const PIN_KEY = /^entryPoints\.(\d+)$/;
 
 // A workspace's pins are the `entryPoints` links of its Workspace card, the
 // realm's index card, which its Home shows and lets editors change. They're
@@ -29,14 +35,11 @@ export class WorkspacePins {
     });
   }
 
-  // The pinned cards' URLs, in the order the workspace lists them. A realm
+  // The pinned cards' ids, in the order the workspace lists them. A realm
   // whose index card isn't a Workspace has none.
-  get cardIds(): string[] {
+  @cached
+  get cardIds(): RealmResourceIdentifier[] {
     return pinnedCardIds(this.#resource.entries[0]?.item);
-  }
-
-  get isLoading(): boolean {
-    return this.#resource.isLoading;
   }
 }
 
@@ -51,39 +54,41 @@ function indexCardQuery(realm: string, realmURL: string): SearchEntryWireQuery {
   };
 }
 
-export function pinnedCardIds(
+function pinnedCardIds(
   item: CardResource | FileMetaResource | undefined,
-): string[] {
-  let relationships = item?.relationships;
-  if (!relationships) {
+): RealmResourceIdentifier[] {
+  let base = item?.id ?? item?.links?.self;
+  if (!base) {
     return [];
   }
-  let base = item?.id ?? item?.links?.self;
-  return Object.entries(relationships)
-    .map(([key, relationship]) => ({
-      position: Number(PIN_KEY.exec(key)?.[1]),
-      id: linkedId(relationship, base),
-    }))
+  return relationshipEntries(item?.relationships)
     .filter(
-      (pin): pin is { position: number; id: string } =>
-        !Number.isNaN(pin.position) && pin.id !== undefined,
+      (entry): entry is typeof entry & { index: number } =>
+        entry.fieldName === PIN_FIELD && entry.index !== undefined,
     )
-    .sort((a, b) => a.position - b.position)
-    .map((pin) => pin.id);
+    .sort((a, b) => a.index - b.index)
+    .flatMap(({ relationship }) => {
+      let id = linkedId(relationship, rri(base));
+      return id ? [id] : [];
+    });
 }
 
+// A relative link joins the index card's id; a link naming another realm,
+// by URL or registered prefix, is kept in its own form.
 function linkedId(
-  relationship: Relationship | Relationship[],
-  base: string | undefined,
-): string | undefined {
-  let link = Array.isArray(relationship) ? relationship[0] : relationship;
-  let data = Array.isArray(link?.data) ? link.data[0] : link?.data;
-  let ref = (data && 'id' in data ? data.id : undefined) ?? link?.links?.self;
+  relationship: Relationship,
+  base: RealmResourceIdentifier,
+): RealmResourceIdentifier | undefined {
+  let data = Array.isArray(relationship.data)
+    ? relationship.data[0]
+    : relationship.data;
+  let ref =
+    (data && 'id' in data ? data.id : undefined) ?? relationship.links?.self;
   if (!ref) {
     return undefined;
   }
   try {
-    return new URL(ref, base).href.replace(/\.json$/, '');
+    return rri(trimJsonExtension(resolveRRIReference(ref, base)));
   } catch {
     return undefined;
   }
