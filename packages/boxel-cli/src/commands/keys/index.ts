@@ -251,11 +251,11 @@ function serviceAccountOptions(command: Command): Command {
   return command
     .option(
       '--subject <email>',
-      'A Google service account: the user to act as, with domain-wide delegation',
+      'A Google service account: the user to act as, with domain-wide delegation. A replace sets it anew: leave it out only to act as the service account itself',
     )
     .option(
       '--scope <scope>',
-      'A Google service account: a scope its tokens ask for (repeat for more)',
+      'A Google service account: a scope its tokens ask for (repeat for more). A replace sets them anew',
       collect,
     );
 }
