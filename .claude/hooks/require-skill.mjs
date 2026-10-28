@@ -106,7 +106,7 @@ const GH_VALUE_FLAGS = new Set([
   '--repo',
 ]);
 const GH_API_REVIEW =
-  /\bgh\s+api\b.*?\brepos\/([^/\s'"]+\/[^/\s'"]+)\/pulls\/(\d+)\/(reviews|comments)\b(\/\d+\/replies)?/;
+  /\bgh\s+api\b.*?\brepos\/([^/\s'"]+\/[^/\s'"]+)\/pulls\/(\d+)\/(reviews|comments)\b(?:\/(\d+)(\/replies|\/events)?)?/;
 // A field flag makes gh api POST unless the method says otherwise. PUT and
 // PATCH rewrite a review or comment that is already posted.
 const GH_API_METHOD = /(?:^|\s)(?:-X|--method)(?:=|\s*)['"]?(\w+)/i;
@@ -295,11 +295,16 @@ function reviewTarget(input) {
     if (!pullNumber || method === 'delete_pending') {
       return undefined;
     }
+    let review = tool_name === 'mcp__github__pull_request_review_write';
     return {
-      kind:
-        tool_name === 'mcp__github__pull_request_review_write'
-          ? 'review'
-          : 'comment',
+      kind: review ? 'review' : 'comment',
+      // A pending review, and a comment added to one, are seen by no one
+      // until the review is submitted.
+      publishes:
+        review &&
+        (method === 'submit_pending'
+          ? 'pending'
+          : method !== 'create' || Boolean(tool_input.event)),
       cwd,
       selector: String(pullNumber),
       repo: owner && repo ? `${owner}/${repo}` : undefined,
@@ -317,12 +322,17 @@ function reviewTarget(input) {
     let apiCommand = command.slice(ghApi.index, end);
     let api = GH_API_REVIEW.exec(apiCommand);
     if (api && isWrite(apiCommand)) {
-      if (api[4] || /\bin_reply_to\b/.test(apiCommand)) {
+      if (api[5] === '/replies' || /\bin_reply_to\b/.test(apiCommand)) {
         continue;
       }
       let context = shellContext(command, ghApi.index, cwd);
       return {
         kind: api[3] === 'reviews' ? 'review' : 'comment',
+        // A new review without an event stays pending; submitting one, editing
+        // a review and posting a comment outside a review all publish.
+        publishes:
+          api[3] === 'reviews' && !api[4] ? 'event' : api[5] ? 'pending' : true,
+        reviewId: api[4],
         cwd: context.cwd,
         selector: api[2],
         repo: literalRepo(api[1]) ?? context.repo,
@@ -337,6 +347,11 @@ function reviewTarget(input) {
       if (nodeId) {
         return {
           kind: GRAPHQL_REVIEW_BODY.test(query) ? 'review' : 'comment',
+          // Comments and threads go into a pending review.
+          publishes: /\bsubmitPullRequestReview\b/.test(query)
+            ? 'pending'
+            : /\baddPullRequestReview\b/.test(query) &&
+              /\bevent\s*:/.test(query),
           cwd: shellContext(command, ghApi.index, cwd).cwd,
           nodeId,
         };
@@ -372,6 +387,7 @@ function reviewTarget(input) {
     }
     return {
       kind: 'review',
+      publishes: true,
       cwd: context.cwd,
       selector,
       repo: repo ?? context.repo,
@@ -530,23 +546,85 @@ function heredocBody(command) {
   )?.[3];
 }
 
-// The review body the call writes, or undefined when it writes none: an
-// inline comment, or a pending review created or submitted without one. The
-// body is where pr-review says which lenses didn't run.
+// What a call that publishes a review or comment shows: the body it writes,
+// and when it submits a pending review, that review's body as well. undefined
+// for a call nobody sees yet: a pending review, or a comment added to one.
+// The review body is where pr-review says which lenses didn't run.
 let body;
-function reviewBody(input) {
+let event = false;
+function publishedBody(input) {
   if (body !== undefined) {
-    return body || undefined;
+    return body;
   }
   body = '';
   let target = reviewTarget(input);
-  if (target?.kind !== 'review') {
-    return undefined;
+  if (!target?.publishes) {
+    body = undefined;
+    return body;
   }
+  readBody(input, target);
+  if (target.publishes === 'event' && !event) {
+    body = undefined;
+    return body;
+  }
+  if (target.publishes === 'pending') {
+    body += '\n' + pendingBody(input, target);
+  }
+  return body;
+}
+
+// The body of the pending review a call submits, from GitHub. One that can't
+// be read adds nothing, so the submitting call has to carry the statement.
+function pendingBody(input, target) {
+  let repo = target.repo ?? '{owner}/{repo}';
+  try {
+    if (target.nodeId) {
+      return gh(
+        [
+          'api',
+          'graphql',
+          '-f',
+          'query=query($id: ID!) { node(id: $id) { ... on PullRequestReview { body } } }',
+          '-f',
+          `id=${target.nodeId}`,
+          '--jq',
+          '.data.node.body // ""',
+        ],
+        target.cwd,
+      );
+    }
+    if (target.reviewId) {
+      return gh(
+        [
+          'api',
+          `repos/${repo}/pulls/${target.selector}/reviews/${target.reviewId}`,
+          '--jq',
+          '.body // ""',
+        ],
+        target.cwd,
+      );
+    }
+    return gh(
+      [
+        'api',
+        '--paginate',
+        `repos/${repo}/pulls/${target.selector}/reviews`,
+        '--jq',
+        '.[] | select(.state == "PENDING") | .body',
+      ],
+      target.cwd,
+    );
+  } catch {
+    return '';
+  }
+}
+
+// The body, and whether an event is set, as the call writes them.
+function readBody(input, target) {
   let { tool_name, tool_input } = input;
   if (tool_name !== 'Bash') {
     body = typeof tool_input?.body === 'string' ? tool_input.body : '';
-    return body || undefined;
+    return;
   }
   let command = commandText(input);
   let code = unquoted(command);
@@ -565,7 +643,7 @@ function reviewBody(input) {
             : fileText(value, target.cwd);
       }
     }
-    return body || undefined;
+    return;
   }
   // gh api: a `body` field, or a JSON payload with a top-level body. An
   // inline comment's `comments[][body]` isn't the review's body.
@@ -578,6 +656,7 @@ function reviewBody(input) {
       ? (heredocBody(command) ?? '')
       : fileText(field.slice(1), target.cwd)
     : field;
+  event = Boolean(fieldValue(words, 'event'));
   let inputAt = words.findIndex((word) => /^--input(=|$)/.test(word));
   if (inputAt >= 0) {
     let file = words[inputAt].includes('=')
@@ -587,6 +666,7 @@ function reviewBody(input) {
     try {
       let payload = JSON.parse(json ?? '');
       body += typeof payload?.body === 'string' ? payload.body : '';
+      event ||= Boolean(payload?.event);
     } catch {
       // Not JSON: no body to read.
     }
@@ -595,7 +675,6 @@ function reviewBody(input) {
     // A GraphQL review mutation: the body argument of its input.
     body += /\bbody\s*:\s*\\?"((?:[^"\\]|\\.)*?)\\?"/.exec(command)?.[1] ?? '';
   }
-  return body || undefined;
 }
 
 // A sentence of the body that names the skill and says it didn't run.
@@ -653,13 +732,9 @@ function uiLensRule(load, { gtsOnly = false } = {}) {
         !canLoad(input, 'interfaces:better-interface')
           ? 'better-interface'
           : skill;
-      let text = reviewBody(input);
-      // Without a listing, a call with no body has nothing to say the skill
-      // wasn't reviewed in, so only loading it satisfies the rule.
-      if (
-        (text === undefined && available === false) ||
-        (text !== undefined && namesAsNotReviewed(text, named))
-      ) {
+      // Only the call that publishes has to carry the statement.
+      let text = publishedBody(input);
+      if (text === undefined || namesAsNotReviewed(text, named)) {
         return false;
       }
       let plugin = LENS_PLUGINS[prefix];
