@@ -89,7 +89,11 @@ export function secureWindowURL(request: SecureWindowRequest): string {
   } else if (request.mode === 'connect' && request.realm) {
     fragment.realm = request.realm;
   }
-  if (request.mode !== 'share-key' && request.target?.operation) {
+  if (
+    request.mode !== 'share-key' &&
+    request.mode !== 'swap-key' &&
+    request.target?.operation
+  ) {
     fragment.operation = request.target.operation;
   }
   if (request.reason) {
