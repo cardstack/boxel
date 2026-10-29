@@ -23,7 +23,7 @@ import {
   replaceUserKeyValue,
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
-import { shareKey, suspendShare } from '../lib/key-shares.ts';
+import { shareKey, suspendShare, swapKeyIntoShare } from '../lib/key-shares.ts';
 import {
   addOAuthClient,
   addPlatformClient,
@@ -914,5 +914,58 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.notStrictEqual(await nonce(), before, 'a reconnect reseals');
     assert.strictEqual((await call(OWNER)).status, 200, 'and still sends');
+  });
+  test('a client swapped into a share never receives the refresh tokens another client was issued', async function (assert) {
+    let client = await addClient(OWNER);
+    let share = await shareKey(dbAdapter, {
+      owner: OWNER,
+      realm: realmURL.href,
+      keyId: client.id,
+      label: 'Team app',
+      ticket: await ticket(OWNER, 'share', {
+        keyId: client.id,
+        realm: realmURL,
+      }),
+    });
+    let { keyId } = await connect(OWNER, { kind: 'share', shareId: share.id });
+    await approve(OWNER, keyId!);
+    assert.strictEqual((await call(OWNER)).status, 200);
+
+    // Another writer suspends the share and swaps their own app into it,
+    // one whose token endpoint they could read.
+    provider.clients.push({ clientId: 'their-app', clientSecret: 'theirs' });
+    let theirs = await addOAuthClient(dbAdapter, keyring, {
+      owner: TEAMMATE,
+      name: 'their app',
+      value: 'theirs',
+      oauth: clientSettings({ clientId: 'their-app' }),
+      ticket: await ticket(TEAMMATE, 'add'),
+    });
+    await suspendShare(dbAdapter, { user: TEAMMATE, shareId: share.id });
+    await swapKeyIntoShare(dbAdapter, keyring, {
+      user: TEAMMATE,
+      shareId: share.id,
+      keyId: theirs.id,
+      ticket: (
+        await mintKeyWriteTicket(dbAdapter, TEAMMATE, {
+          action: 'swap',
+          keyId: theirs.id,
+          realmURL: null,
+          shareId: share.id,
+        })
+      ).ticket,
+      via: 'window',
+    });
+
+    clock += 3600 * 1000;
+    let before = provider.tokenRequests.length;
+    let refused = await call(OWNER);
+    assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
+    assert.strictEqual(refused.body.errors[0].meta.reason, 'needs-admin');
+    assert.strictEqual(
+      provider.tokenRequests.length,
+      before,
+      'no refresh token went to the swapped-in app',
+    );
   });
 });

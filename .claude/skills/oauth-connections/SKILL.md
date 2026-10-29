@@ -98,6 +98,15 @@ whose holder died lapses on its own.
 A restart forgets every access token; each connection refreshes once on its
 next call.
 
+**A connection is pinned to the client its tokens were issued to.** It
+records that client's id and token endpoint when the person signs in, and
+mints only through a client that still has both. A share a writer swaps
+another app into keeps serving connections only when the new key is the
+same app (a rotated secret, or the same app stored by another writer); for
+another app, the connections need an administrator and their refresh tokens
+are never sent, so a client swapped into a share can't collect the refresh
+tokens another app was issued.
+
 **Grants of a minting key hold a marker, not a secret.** A refresh token
 rotates on every refresh and only ever goes to a token endpoint, so a grant of
 a connection (or a `client_credentials` client) seals a random marker bound to
@@ -125,7 +134,7 @@ and every call through the key is refused **`credential-rejected`, 424**, with
 | ------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `rejected`    | `invalid_grant` (revoked, expired, or a refresh token spent elsewhere)                                 | `user_keys.state = 'rejected'`, `oauth_connections.rejected_at`; later calls are refused without asking       | The connection's owner: Reconnect in the secure window (signs in through the client again; same key, grants, bindings) |
 | `needs-admin` | `invalid_client` / `unauthorized_client`, or a bare 401                                                | `oauth_clients.state` (or `platform_oauth_clients.state`) = `broken`; every connection through it is affected | The client's owner replaces its secret (`PATCH /_user-keys/:id`), or an operator replaces a platform client's          |
-| `needs-admin` | — (not asked: the client is gone, its share is suspended or unshared, or its share's key was deleted)  | nothing; the connection's client reference is null, or its share isn't active                                 | A direct writer resumes the share or swaps another client key into it                                                  |
+| `needs-admin` | — (not asked: the client is gone, its share is suspended or unshared, or its share's key was deleted)  | nothing; the connection's client reference is null, or its share isn't active                                 | A direct writer resumes the share, or swaps in a key for the same app (the same client id and token endpoint)          |
 | `unavailable` | 5xx, a timeout, a dropped connection or `temporarily_unavailable`, after the retries (0.5 s, then 2 s) | nothing                                                                                                       | Nobody: the next call tries again                                                                                      |
 
 GitHub answers a refused grant with **200** and an `error` in the body; that is
