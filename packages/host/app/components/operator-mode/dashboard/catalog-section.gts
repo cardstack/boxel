@@ -22,6 +22,8 @@ interface Signature {
     realmIdentifiers: RealmIdentifier[];
     emptyMessage: string | null;
     showShelf: boolean;
+    // Placed ahead of Workspaces, for someone with few workspaces of their own.
+    leads?: boolean;
     // Where the catalog tiles start in the keyboard cursor's walk.
     navBase: number;
     cursor: KeyboardCursor;
@@ -37,6 +39,12 @@ export default class CatalogSection extends Component<Signature> {
 
   private get shelfRealmURL() {
     return this.args.showShelf ? catalogRealmURL : null;
+  }
+
+  // Ahead of Workspaces, the shelf welcomes someone new; without it the
+  // section is only the catalog workspaces.
+  private get welcomes() {
+    return Boolean(this.args.leads && this.shelfRealmURL);
   }
 
   private get count() {
@@ -58,14 +66,21 @@ export default class CatalogSection extends Component<Signature> {
             height='20'
             aria-hidden='true'
           />
-          <span id={{this.headingId}}>Catalogs</span>
+          <span id={{this.headingId}}>
+            {{if this.welcomes 'Start from the catalog' 'Catalogs'}}
+          </span>
           {{#if this.count}}
             <span class='group-count'>{{this.count}}</span>
           {{/if}}
         </h2>
         <ManageCatalogs />
-        <p class='section-hint'>Apps, fields and themes to use in your
-          workspaces.</p>
+        <p class='section-hint'>
+          {{#if this.welcomes}}
+            New here? Pick something ready-made and make it yours.
+          {{else}}
+            Apps, fields and themes to use in your workspaces.
+          {{/if}}
+        </p>
       </div>
       {{#if this.shelfRealmURL}}
         <CatalogShelf @realmURL={{this.shelfRealmURL}} />

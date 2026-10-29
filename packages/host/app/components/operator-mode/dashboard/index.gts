@@ -492,16 +492,14 @@ export default class Dashboard extends Component<Signature> {
     }
   }
 
-  // The workspace the dashboard opened over, otherwise the first item in page
-  // order. The cursor takes focus on open, so it never starts on New Workspace
-  // while anything else is shown: the first Enter would create a workspace.
+  // The workspace the dashboard opened over, otherwise the first favorite or
+  // workspace, even when the catalogs lead the page. The cursor takes focus on
+  // open, so it never starts on New Workspace while anything else is shown:
+  // the first Enter would create a workspace.
   private get defaultSelectedIndex() {
     let returnIndex = this.returnNavIndex;
     if (returnIndex !== undefined) {
       return returnIndex;
-    }
-    if (this.catalogLeads && this.renderedCatalogCount > 0) {
-      return this.catalogNavBase;
     }
     if (this.favoritesCount > 0) {
       return this.favoritesNavBase;
@@ -603,6 +601,7 @@ export default class Dashboard extends Component<Signature> {
               @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
               @emptyMessage={{this.catalogEmptyMessage}}
               @showShelf={{this.isCatalogShelfShown}}
+              @leads={{true}}
               @navBase={{this.catalogNavBase}}
               @cursor={{this.cursor}}
               {{@sections.register this.catalogsSection}}
