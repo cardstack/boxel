@@ -22,6 +22,9 @@ scope:
   - packages/host/app/utils/login-token.ts
   - packages/postgres/migrations/1793069013762_add-secure-sessions-app-device.js
   - packages/host/app/components/matrix/secure-sign-in.gts
+  - packages/host/app/routes/cli-auth.ts
+  - packages/host/app/lib/reset-password-link.ts
+  - packages/matrix/support/synapse/**
 ---
 
 # 005. Authorize changes to a user's keys only with a session that card code can't reach
@@ -458,6 +461,10 @@ beside a device of its own, and `boxel keys sign-in` signs it in again.
 
 ## 5. Remediation
 
+- The staging and production homeserver configurations are kept outside this
+  repository, so no entry here can name their files. They break §1.7 while
+  they configure Google single sign-on (`oidc_providers`, with an
+  `sso.client_whitelist` that returns to the app).
 - `packages/realm-server/lib/key-shares.ts` (`unshareKey`, `suspendShare`)
   breaks §1.1. Each changes what a key may be used for without a key write
   ticket.

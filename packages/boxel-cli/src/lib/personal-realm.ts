@@ -59,10 +59,10 @@ export async function ensurePersonalRealm(
       body: JSON.stringify({
         data: {
           type: 'realm',
-          // These attributes mirror the web app's signup flow (see
-          // MatrixService.initializeNewUser in the host) so an account
-          // bootstrapped from the CLI is indistinguishable from one
-          // bootstrapped from the web.
+          // These attributes mirror a first sign-in on the secure origin (see
+          // `setUpFirstSignIn` in the realm server's `lib/secure-session.ts`)
+          // so an account bootstrapped from the CLI is indistinguishable from
+          // one bootstrapped there.
           attributes: {
             endpoint: PERSONAL_REALM_ENDPOINT,
             name,
@@ -109,8 +109,8 @@ function localpart(userId: string): string {
 }
 
 // The account's Matrix display name, which for a Google-provisioned account
-// Synapse set from the Google profile's name — the closest thing such an
-// account has to the display name the web signup form would have collected.
+// is the Google profile's name — the closest thing such an account has to the
+// display name a registration form would have collected.
 async function fetchMatrixDisplayName(
   auth: MatrixAuth,
 ): Promise<string | undefined> {

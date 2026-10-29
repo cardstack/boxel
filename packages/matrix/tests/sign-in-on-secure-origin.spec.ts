@@ -135,6 +135,11 @@ test.describe('Sign in on the secure origin', () => {
     await page.waitForURL((url) => url.pathname.endsWith('/reset-password'));
     expect(onSecureOrigin(page, 'reset-password')).toBe(true);
     await expect(page.locator('[data-test-reset-password-form]')).toBeVisible();
+    // The form shows an error when the link it was handed lacks the client
+    // secret or the validation session.
+    await expect(page.locator('[data-test-reset-password-error]')).toHaveCount(
+      0,
+    );
     expect(
       new URL(page.url()).hash,
       'the reset link’s secrets are taken out of the address',

@@ -125,8 +125,8 @@ another machine.
 Every page that sets a password sets it through `POST
 /_secure-sessions/password-change` (a `password-change` resource), in place of
 the Matrix request: the secure origin's `reset-password` page, and the
-credential fields' `set-password`, which the app's own reset and its
-change-password use. The realm server makes the Matrix `account/password`
+credential fields' `set-password`, which the profile modal's change password
+uses. The realm server makes the Matrix `account/password`
 request itself (`changePassword` in `lib/secure-session.ts`), with
 `logout_devices: true`, and answers with the Matrix server's status and body,
 which the page reads as it would the Matrix server's own. Once the Matrix

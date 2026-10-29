@@ -16,11 +16,7 @@ scope:
   - mise-tasks/services/realm-server
   - mise-tasks/test-services/**
   - packages/host/app/components/matrix/account-switch-failed.gts
-  - packages/host/app/components/matrix/auth.gts
-  - packages/host/app/components/matrix/cli-auth.gts
-  - packages/host/app/components/matrix/login.gts
-  - packages/host/app/components/matrix/register-user.gts
-  - packages/host/app/components/matrix/forgot-password.gts
+  - packages/host/app/components/matrix/secure-sign-in.gts
   - packages/boxel-ui/src/styles/variables.css
   - packages/boxel-ui/src/styles/theme.css
 ---
