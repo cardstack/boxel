@@ -646,7 +646,12 @@ export async function keysShares(
       console.log(`${canonicalRealmUrl(options.realm)} has no shares.`);
     }
     for (let share of shares) {
-      let owner = share.owner === ctx.matrixUserId ? 'you' : share.owner;
+      let owner =
+        share.owner === null
+          ? 'a former member of the realm'
+          : share.owner === ctx.matrixUserId
+            ? 'you'
+            : share.owner;
       console.log(`${describeShare(share, keyNames)}, owner ${owner}`);
     }
   });

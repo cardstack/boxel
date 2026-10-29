@@ -46,7 +46,9 @@ export interface KeyShare {
   id: string;
   realm: string;
   label: string;
-  owner: string;
+  // Null in a realm's listing once no permission row in the realm names the
+  // owner; the owner's own shares always carry their id.
+  owner: string | null;
   // The key the share holds: given only to the share's owner, and null once
   // the key is deleted.
   keyId?: string | null;
