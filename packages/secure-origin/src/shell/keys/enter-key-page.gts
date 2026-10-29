@@ -554,6 +554,11 @@ function approvalPageAfter(keyId: string): string | undefined {
     return undefined;
   }
   fragment.delete('then');
+  // The approve page goes back to the key page it was reached from.
+  if (fragment.get('after') === 'keys') {
+    fragment.set('then', 'keys');
+  }
+  fragment.delete('after');
   fragment.set('key', keyId);
   return `${pageURL(then)}#${fragment}`;
 }

@@ -12,9 +12,10 @@
 // expanding to the full request. One choice per slot covers the whole batch,
 // listing the keys (or, for a slot a realm's share fills, the user's shares
 // there) whose grants already cover the batch first. A chosen key with no
-// grant where a group sends makes that a new grant, confirmed by its full
-// host; an operation's label never stands in for it. Unticking an operation
-// leaves it unapproved.
+// grant where a group sends makes that a new grant: the group says so by its
+// full host, and the Approve button, the one confirmation, says which hosts
+// each key is sent to for the first time. An operation's label never stands
+// in for a host. Unticking an operation leaves it unapproved.
 //
 // Opened from a key's "Use with a card" (`#key=<id>&then=keys`), that key
 // starts chosen, and the page goes back to the key page when done.
@@ -30,9 +31,12 @@ import {
   windowContext,
   type ApprovalBatch,
   type BatchOperation,
+  type BatchSlot,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
+import Checkbox from '../../components/checkbox.gts';
+import Warning from '../../components/icons/warning.gts';
 import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
@@ -83,10 +87,6 @@ function slotLabel(choice: SlotChoice): string {
   }
   let [, name] = choice.slot.split(':');
   return name ? `Shared key: ${name}` : 'Shared key';
-}
-
-function grantKey(grant: NewGrant): string {
-  return `${grant.slot} ${grant.destination}`;
 }
 
 class Approve extends Component<{ Args: ApproveArgs }> {
@@ -158,6 +158,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                       />
                       <span class='option'>
                         <span class='option-name'>{{option.name}}</span>
+                        {{#if option.rejected}}
+                          <span
+                            class='option-detail'
+                            data-test-approve-key-rejected
+                          >The service rejected this key. Replace it on your key
+                            page first.</span>
+                        {{/if}}
                         {{#if option.detail}}
                           <span class='option-detail'>holds
                             {{option.detail}}</span>
@@ -197,11 +204,16 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             {{#each this.choosing.batch.groups as |group|}}
               <section
                 class='group'
+                aria-labelledby='group-{{group.destination.href}}'
                 data-test-approve-group={{group.destination.host}}
               >
-                <div class='domain' data-test-approve-domain>
+                <h2
+                  id='group-{{group.destination.href}}'
+                  class='domain'
+                  data-test-approve-domain
+                >
                   {{group.destination.registrableDomain}}
-                </div>
+                </h2>
                 <div class='where' data-test-approve-where>
                   {{group.destination.host}}{{group.destination.path}}
                 </div>
@@ -209,6 +221,21 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   <p class='note' data-test-approve-whole-host>Any request to
                     this host can be sent with the key.</p>
                 {{/if}}
+                {{#each (this.newGrantsAt group.destination.href) as |grant|}}
+                  <p
+                    class='new-grant'
+                    data-test-approve-new-grant={{grant.host}}
+                  >
+                    <Warning class='new-grant-icon' aria-hidden='true' />
+                    <span><strong>{{grant.keyName}}</strong>
+                      hasn’t been sent to
+                      <strong
+                        data-test-approve-new-grant-host
+                      >{{grant.host}}</strong>
+                      before. Approving lets Boxel send it there, and only
+                      there.</span>
+                  </p>
+                {{/each}}
                 <ul class='operations'>
                   {{#each group.operations as |operation|}}
                     <li
@@ -216,10 +243,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                       data-test-approve-operation={{operation.name}}
                     >
                       <label class='tick'>
-                        <input
-                          type='checkbox'
-                          checked={{this.isTicked operation}}
-                          {{on 'change' (fn this.toggle operation)}}
+                        <Checkbox
+                          @checked={{this.isTicked operation}}
+                          @onChange={{fn this.toggle operation}}
                           data-test-approve-tick={{operation.name}}
                         />
                         <span class='label' data-test-approve-label>
@@ -242,7 +268,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                           {{/each}}
                         </summary>
                         {{#each operation.slots as |slot|}}
-                          {{#if (eq slot.status 'changed')}}
+                          {{#if (this.showsDiff slot)}}
                             <table class='diff' data-test-approve-diff>
                               <thead>
                                 <tr><th>Changed</th><th>Approved</th><th
@@ -276,33 +302,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               </section>
             {{/each}}
 
-            {{#each this.newGrants as |grant|}}
-              <label
-                class='new-grant'
-                data-test-approve-new-grant={{grant.host}}
-              >
-                <input
-                  type='checkbox'
-                  checked={{this.isConfirmed grant}}
-                  {{on 'change' (fn this.confirmGrant grant)}}
-                  data-test-approve-new-grant-confirm={{grant.host}}
-                />
-                <span>
-                  <span class='new-grant-heading'>New place for
-                    <strong>{{grant.keyName}}</strong></span>
-                  Only ever sent to
-                  <strong
-                    data-test-approve-new-grant-host
-                  >{{grant.host}}</strong>{{#if
-                    (eq grant.path '/')
-                  }}{{else}}<span class='path'>{{grant.path}}</span>{{/if}},
-                  part of
-                  <strong>{{grant.registrableDomain}}</strong>. Is that where
-                  this key belongs?
-                </span>
-              </label>
-            {{/each}}
-
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
@@ -310,13 +309,26 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             {{/if}}
           </:default>
           <:actions>
-            <Button
-              type='submit'
-              @kind='primary'
-              @disabled={{this.submitDisabled}}
-              @loading={{this.form.saving}}
-              data-test-approve-save
-            >{{this.saveLabel}}</Button>
+            <div class='confirm'>
+              {{#if this.newGrants.length}}
+                <p class='confirm-note' data-test-approve-also-sends>
+                  This approves the requests shown above, including sending
+                  {{#each this.newGrantNotes as |note index|}}{{#if index}}
+                      and
+                    {{/if}}<strong>{{note.keyName}}</strong>
+                    to
+                    {{note.hosts}}{{/each}}
+                  for the first time.
+                </p>
+              {{/if}}
+              <Button
+                type='submit'
+                @kind='primary'
+                @disabled={{this.submitDisabled}}
+                @loading={{this.form.saving}}
+                data-test-approve-save
+              >{{this.saveLabel}}</Button>
+            </div>
           </:actions>
         </EditPage>
       </form>
@@ -398,6 +410,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         overflow-wrap: anywhere;
       }
       .domain {
+        margin: 0;
         font-size: var(--boxel-font-size-xl);
         line-height: var(--boxel-line-height-xl);
         font-weight: 600;
@@ -429,9 +442,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       .changed {
         padding: 0 var(--boxel-sp-4xs);
-        border-radius: var(--boxel-border-radius-xs, 4px);
-        background-color: var(--boxel-warning-100, #fff4d6);
-        color: var(--foreground);
+        border-radius: var(--boxel-border-radius-xs);
+        background-color: var(--warning);
+        color: var(--warning-foreground);
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }
@@ -490,18 +503,43 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       .new-grant {
         display: flex;
         gap: var(--boxel-sp-xs);
-        align-items: baseline;
-        padding: var(--boxel-sp-sm);
+        align-items: flex-start;
+        margin: var(--boxel-sp-xs) 0 0;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         border-radius: var(--boxel-border-radius);
         background-color: var(--muted);
         font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
         overflow-wrap: anywhere;
-        cursor: pointer;
       }
-      .new-grant-heading {
-        display: block;
-        font-weight: 600;
+      .new-grant-icon {
+        flex-shrink: 0;
+        width: var(--boxel-icon-xs);
+        height: var(--boxel-icon-xs);
+        margin-top: var(--boxel-sp-5xs);
+      }
+      .confirm {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--boxel-sp);
+        width: 100%;
+        padding-top: var(--boxel-sp);
+        border-top: 1px solid var(--border);
+      }
+      .confirm-note {
+        flex: 1;
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        color: var(--muted-foreground);
+        overflow-wrap: anywhere;
+      }
+      .confirm-note strong {
+        color: var(--foreground);
+      }
+      .confirm :deep(button) {
+        flex-shrink: 0;
       }
       .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
@@ -523,7 +561,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private form = trackedObject({
     chosen: {} as Record<string, string | undefined>,
     ticked: new Set<string>(),
-    confirmed: new Set<string>(),
     saving: false,
     error: undefined as string | undefined,
   });
@@ -575,6 +612,25 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       : [];
   }
 
+  private newGrantsAt = (destination: string) =>
+    this.newGrants.filter((g) => g.destination === destination);
+
+  // What approving also allows, by key: the hosts each chosen key goes to for
+  // the first time.
+  private get newGrantNotes(): { keyName: string; hosts: string }[] {
+    let byKey = new Map<string, string[]>();
+    for (let grant of this.newGrants) {
+      byKey.set(grant.keyName, [
+        ...(byKey.get(grant.keyName) ?? []),
+        grant.host,
+      ]);
+    }
+    return [...byKey].map(([keyName, hosts]) => ({
+      keyName,
+      hosts: hosts.join(', '),
+    }));
+  }
+
   private get tickedOperations(): BatchOperation[] {
     return (this.choosing?.batch.groups ?? []).flatMap((g) =>
       g.operations.filter((o) => this.form.ticked.has(operationKey(o))),
@@ -591,10 +647,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     return (
       this.form.saving ||
       ticked.length === 0 ||
-      ticked.some((o) => o.slots.some((s) => !this.form.chosen[s.slot])) ||
-      this.newGrants.some((g) => !this.form.confirmed.has(grantKey(g)))
+      ticked.some((o) => o.slots.some((s) => !this.form.chosen[s.slot]))
     );
   }
+
+  // A slot whose request matches what was approved again (an edit undone)
+  // still needs approving, and shows its request in full.
+  private showsDiff = (slot: BatchSlot) =>
+    slot.status === 'changed' && requestChanges(slot).length > 0;
 
   private hostsOf = (destinations: string[]) =>
     destinations.map((d) => new URL(d).host).join(', ');
@@ -603,8 +663,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     this.form.chosen[slot] === id;
   private isTicked = (operation: BatchOperation) =>
     this.form.ticked.has(operationKey(operation));
-  private isConfirmed = (grant: NewGrant) =>
-    this.form.confirmed.has(grantKey(grant));
 
   private choose = (slot: string, id: string) => {
     this.form.chosen = { ...this.form.chosen, [slot]: id };
@@ -622,18 +680,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     this.form.ticked = ticked;
   };
 
-  private confirmGrant = (grant: NewGrant) => {
-    let confirmed = new Set(this.form.confirmed);
-    let key = grantKey(grant);
-    if (confirmed.has(key)) {
-      confirmed.delete(key);
-    } else {
-      confirmed.add(key);
-    }
-    this.form.confirmed = confirmed;
-  };
-
-  private load = async () => {
+  // Read again after a request changed while it was shown, the batch keeps
+  // what the user chose for what is still in it: an operation they unticked
+  // stays unticked, and a key they chose stays chosen.
+  private load = async (keep?: {
+    chosen: Record<string, string | undefined>;
+    ticked: Set<string>;
+  }) => {
     this.page.state = { name: 'loading' };
     let { config } = this.args.api;
     try {
@@ -664,10 +717,20 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       let choices = slotChoices(batch);
       this.form.chosen = Object.fromEntries(
-        choices.map((c) => [c.slot, initialChoice(batch, c, this.opened.key)]),
+        choices.map((c) => {
+          let kept = keep?.chosen[c.slot];
+          return [
+            c.slot,
+            kept && c.options.some((o) => o.id === kept)
+              ? kept
+              : initialChoice(batch, c, this.opened.key),
+          ];
+        }),
       );
-      this.form.ticked = new Set(operations.map(operationKey));
-      this.form.confirmed = new Set();
+      let keys = operations.map(operationKey);
+      this.form.ticked = keep
+        ? new Set(keys.filter((k) => keep.ticked.has(k)))
+        : new Set(keys);
       this.page.state = { name: 'choosing', batch, context };
       this.args.api.visit.loaded();
     } catch (e) {
@@ -684,6 +747,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   // batch, with the new key chosen.
   private addKey = () => {
     let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    if (this.fromKeyPage) {
+      fragment.set('after', 'keys');
+    }
     fragment.set('then', this.args.review ? 'review-changes' : 'approve');
     navigation.assign(`${pageURL('enter-key')}#${fragment}`);
   };
@@ -731,7 +797,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       // A request that changed since it was shown is shown again.
       if ((e as { status?: unknown })?.status === 409) {
-        await this.load();
+        await this.load({
+          chosen: { ...this.form.chosen },
+          ticked: new Set(this.form.ticked),
+        });
         this.form.error = `${failureMessage(e)} The requests below are as the card sends them now.`;
         return;
       }

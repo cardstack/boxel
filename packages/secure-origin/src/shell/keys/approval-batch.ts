@@ -22,6 +22,9 @@ export interface SlotChoice {
 export interface SlotOption {
   id: string;
   name: string;
+  // Whether the service rejected the key: offered and marked, never chosen
+  // for the user.
+  rejected?: boolean;
   // For a share, the key it holds.
   detail?: string;
   // The batch's destinations this key's (or share's key's) grants cover.
@@ -38,7 +41,12 @@ export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
     let kind = slot.key;
     let options: SlotOption[] =
       kind === 'userKey'
-        ? batch.keys.map(({ id, name, covers }) => ({ id, name, covers }))
+        ? batch.keys.map(({ id, name, covers, state }) => ({
+            id,
+            name,
+            covers,
+            ...(state === 'rejected' ? { rejected: true } : {}),
+          }))
         : batch.shares.map(({ id, label, keyName, covers }) => ({
             id,
             name: label,
@@ -69,7 +77,8 @@ export function initialChoice(
   choice: SlotChoice,
   preferred?: string,
 ): string | undefined {
-  let ids = choice.options.map((o) => o.id);
+  let usable = choice.options.filter((o) => !o.rejected);
+  let ids = usable.map((o) => o.id);
   if (preferred && ids.includes(preferred)) {
     return preferred;
   }
@@ -90,7 +99,7 @@ export function initialChoice(
     (o: SlotOption) => destinations.every((d) => o.covers.includes(d)),
     (o: SlotOption) => destinations.some((d) => o.covers.includes(d)),
   ]) {
-    let covering = choice.options.filter(covers);
+    let covering = usable.filter(covers);
     if (covering.length === 1) {
       return covering[0]!.id;
     }
@@ -98,7 +107,7 @@ export function initialChoice(
       return undefined;
     }
   }
-  return choice.options.length === 1 ? choice.options[0]!.id : undefined;
+  return usable.length === 1 ? usable[0]!.id : undefined;
 }
 
 function destinationsOfSlot(batch: ApprovalBatch, slot: string): string[] {
@@ -118,6 +127,8 @@ export interface NewGrant {
   // What the chosen key is called, for a slot, and the slot.
   keyName: string;
   slot: string;
+  // The key (or share) chosen for the slot.
+  optionId: string;
 }
 
 // The grants confirming would create: for each group with a ticked operation,
@@ -147,6 +158,7 @@ export function newGrants(
           registrableDomain: group.destination.registrableDomain,
           keyName: option.detail ?? option.name,
           slot,
+          optionId: option.id,
         });
       }
     }

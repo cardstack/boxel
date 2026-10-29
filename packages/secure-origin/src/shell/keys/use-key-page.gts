@@ -287,9 +287,14 @@ class UseKey extends Component<{
         this.args.api.signedOut();
         return;
       }
-      this.form.error = failureMessage(e);
+      // A workspace the user has moved on from says nothing about this one.
+      if (this.form.realm === url) {
+        this.form.error = failureMessage(e);
+      }
     } finally {
-      this.form.loadingCards = false;
+      if (this.form.realm === url) {
+        this.form.loadingCards = false;
+      }
     }
   };
 

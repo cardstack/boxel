@@ -35,9 +35,9 @@ import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 // An operation needs the caller's approval for a slot when the caller is the
 // one who approves it — their own key for a `{{userKey}}` slot, a share of
 // theirs in the realm for an `{{apiKey}}` slot — and the slot has no binding,
-// has one whose grant is gone, has one whose request has changed since it was
-// approved, or has one approved for pipelines only when interactive use is
-// what is being asked for. A slot approved and unchanged is left out, and so
+// has one whose grant is gone, or has one whose request has changed since it
+// was approved. Approvals are for pipelines only, so a binding approved for
+// them is approved. A slot approved and unchanged is left out, and so
 // is an operation with nothing left. Review asks only for the changed ones.
 //
 // A batch never spans card definitions or realms: it is one type's
@@ -120,7 +120,6 @@ export interface ApprovalBatch {
 export interface ApprovalBatchRequest {
   target: SecureWindowTarget;
   review?: boolean;
-  interactive?: boolean;
 }
 
 // What a binding is read as here, with the snapshot of its last approval.
@@ -129,7 +128,6 @@ interface BindingRow {
   key_id: string | null;
   share_id: string | null;
   approved_by: string;
-  interactive: boolean;
   fingerprint: string;
   state: string;
   // Whether its grant is still there for its key, or its share's key.
@@ -182,7 +180,7 @@ function approvable(
 export async function approvalBatch(
   deps: Deps,
   user: string,
-  { target, review = false, interactive = false }: ApprovalBatchRequest,
+  { target, review = false }: ApprovalBatchRequest,
 ): Promise<ApprovalBatch> {
   let { dbAdapter } = deps;
   let resolved = await resolveWindowRequest(deps, user, { target });
@@ -232,7 +230,6 @@ export async function approvalBatch(
       );
       let status = slotStatus(row, slot, fingerprint, {
         user,
-        interactive,
         ownsShareHere: ownShares.length > 0,
       });
       if (!status || (review && status !== 'changed')) {
@@ -324,11 +321,7 @@ function slotStatus(
   row: BindingRow | undefined,
   slot: CallApiSlot,
   fingerprint: string,
-  {
-    user,
-    interactive,
-    ownsShareHere,
-  }: { user: string; interactive: boolean; ownsShareHere: boolean },
+  { user, ownsShareHere }: { user: string; ownsShareHere: boolean },
 ): BatchSlotStatus | undefined {
   // A share slot is approved by the owner of the share's key. Its binding
   // serves every caller, so one someone else approved is theirs to keep up,
@@ -348,9 +341,6 @@ function slotStatus(
   if (row.state === 'needs-reapproval' || row.fingerprint !== fingerprint) {
     return 'changed';
   }
-  if (interactive && !row.interactive) {
-    return 'new';
-  }
   return undefined;
 }
 
@@ -363,7 +353,7 @@ async function bindingRows(
   (BindingRow & { operation_name: string; instance_url: string | null })[]
 > {
   return (await query(dbAdapter, [
-    `SELECT b.operation_name, b.instance_url, b.slot, b.key_id, b.share_id, b.approved_by, b.interactive, b.fingerprint, b.state,
+    `SELECT b.operation_name, b.instance_url, b.slot, b.key_id, b.share_id, b.approved_by, b.fingerprint, b.state,
             (g.id IS NOT NULL) AS has_grant, s.owner AS share_owner, s.state AS share_state,
             a.destination, a.method, a.path_template, a.headers_template, a.placement, a.placement_name, a.transform, a.body_template
        FROM key_bindings b

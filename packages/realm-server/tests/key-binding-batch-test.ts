@@ -46,6 +46,8 @@ const REALM_USER = '@node-test_realm:localhost';
 const VALUE = 'sk-batch-owner-key-7c20d1';
 const INBOX = { module: rri(`${realmURL.href}inbox`), name: 'Inbox' };
 const DIGEST = { module: rri(`${realmURL.href}digest`), name: 'Digest' };
+const PR_INBOX = { module: rri(`${realmURL.href}pr-inbox`), name: 'PRInbox' };
+const CHANNEL = { module: rri(`${realmURL.href}channel`), name: 'Channel' };
 const GRAPHQL_OPERATIONS = [
   'listPRs',
   'listIssues',
@@ -117,10 +119,80 @@ const digestModule = `
   }
 `;
 
-function card(adoptsFrom: {
-  module: string;
-  name: string;
-}): LooseSingleCardDocument {
+// The PR Inbox exactly as the `api-integrations` card-author skill writes it,
+// but for GitHub's address, which is the stub's here.
+const prInboxModule = `import { CardDef, contains, field, linksToMany } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import {
+  bxl,
+  instance,
+  operation,
+  type OperationDeclaration,
+} from '@cardstack/base/operations';
+
+export class PullRequest extends CardDef {
+  static displayName = 'Pull Request';
+  @field title = contains(StringField);
+  @field url = contains(StringField);
+  @field updatedAt = contains(StringField);
+}
+
+const GITHUB = '${VENDOR}/graphql';
+const AUTH = { authorization: 'Bearer {{userKey}}' };
+
+export class PRInbox extends CardDef {
+  static displayName = 'PR Inbox';
+  @field login = contains(StringField);
+  // Written by the pipeline, read by everyone who opens the inbox.
+  @field pullRequests = linksToMany(PullRequest);
+
+  @operation static listPRs = {
+    base: 'callApi',
+    label: 'List your open pull requests',
+    url: GITHUB,
+    headers: AUTH,
+    graphql: {
+      document:
+        'query($login: String!) { user(login: $login) { pullRequests(states: OPEN, first: 50) { nodes { title url updatedAt } } } }',
+      variables: { login: instance('login') },
+    },
+    output: bxl\`{status: .status, nodes: .body.data.user.pullRequests.nodes}\`,
+  } satisfies OperationDeclaration;
+
+  @operation static listReviewRequests = {
+    base: 'callApi',
+    label: 'List pull requests waiting for your review',
+    url: GITHUB,
+    headers: AUTH,
+    graphql: {
+      document:
+        'query($q: String!) { search(type: ISSUE, query: $q, first: 50) { nodes { ... on PullRequest { title url updatedAt } } } }',
+      variables: { q: 'is:pr is:open review-requested:@me' },
+    },
+    output: bxl\`{status: .status, nodes: .body.data.search.nodes}\`,
+  } satisfies OperationDeclaration;
+}
+`;
+
+// A card whose one keyed request is approved for each card on its own.
+const channelModule = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import { operation } from "@cardstack/base/operations";
+
+  export class Channel extends CardDef {
+    @field name = contains(StringField);
+
+    @operation static post = {
+      base: 'callApi',
+      perInstance: true,
+      url: '${VENDOR}/post',
+      headers: { authorization: 'Bearer {{userKey}}' },
+    };
+  }
+`;
+
+function card(adoptsFrom: typeof INBOX): LooseSingleCardDocument {
   return {
     data: { type: 'card', attributes: {}, meta: { adoptsFrom } },
   };
@@ -154,8 +226,11 @@ module(basename(import.meta.filename), function (hooks) {
     fileSystem: {
       'inbox.gts': inboxModule(),
       'digest.gts': digestModule,
+      'pr-inbox.gts': prInboxModule,
+      'channel.gts': channelModule,
       'general.json': card(INBOX),
       'weekly.json': card(DIGEST),
+      'team-channel.json': card(CHANNEL),
     },
     onRealmSetup(args) {
       realm = args.testRealm;
@@ -568,6 +643,51 @@ module(basename(import.meta.filename), function (hooks) {
         (o) => o.name === 'shared',
       ),
       "another user's batch never asks about the realm's share",
+    );
+  });
+
+  test("the card-author skill's PR Inbox is one batch, approved once and admitted as a pipeline", async function (assert) {
+    let key = await addKey();
+    let found = await batchOf(OWNER, onType(PR_INBOX));
+    assert.deepEqual(
+      found.groups.map((g) => g.destination.href),
+      [`${VENDOR}/`],
+      'every request goes to one destination',
+    );
+    assert.deepEqual(
+      operationsIn(found).map((o) => [o.name, o.label]),
+      [
+        ['listReviewRequests', 'List pull requests waiting for your review'],
+        ['listPRs', 'List your open pull requests'],
+      ],
+    );
+    let approved = await approveFrom(
+      OWNER,
+      found,
+      ['listPRs', 'listReviewRequests'],
+      () => ({ keyId: key.id }),
+      PR_INBOX,
+    );
+    assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    for (let name of ['listPRs', 'listReviewRequests']) {
+      assert.strictEqual(await admission(name, OWNER, PR_INBOX), undefined);
+    }
+  });
+
+  test('an operation approved per instance is in the batch of a window opened for its card, for that card', async function (assert) {
+    let forCard = await batchOf(OWNER, {
+      kind: 'instance',
+      url: `${realmURL.href}team-channel`,
+    });
+    assert.deepEqual(
+      operationsIn(forCard).map((o) => [o.name, o.instance]),
+      [['post', `${realmURL.href}team-channel`]],
+    );
+    let forType = await batchOf(OWNER, onType(CHANNEL));
+    assert.deepEqual(
+      operationsIn(forType),
+      [],
+      'a window opened for the type has no card to approve it for',
     );
   });
 

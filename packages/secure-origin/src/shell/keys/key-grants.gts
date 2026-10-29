@@ -62,6 +62,7 @@ export default class KeyGrants extends Component<Signature> {
                 <Button
                   @kind='text-only'
                   @size='extra-small'
+                  aria-label='Remove {{hostAndPath grant.destination}}'
                   data-test-key-grant-remove
                   {{on 'click' (fn this.startRemove grant)}}
                 >Remove</Button>
@@ -148,7 +149,7 @@ export default class KeyGrants extends Component<Signature> {
         color: var(--muted-foreground);
       }
       .bindings {
-        margin: var(--boxel-sp-5xs, 2px) 0 0;
+        margin: var(--boxel-sp-5xs) 0 0;
         padding-inline-start: var(--boxel-sp-lg);
         color: var(--muted-foreground);
         overflow-wrap: anywhere;

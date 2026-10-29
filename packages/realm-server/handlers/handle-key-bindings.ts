@@ -276,10 +276,10 @@ export function handlePreviewKeyBindings(args: CreateRoutesArgs): Handler {
   });
 }
 
-const BATCH_ATTRIBUTES = new Set(['target', 'review', 'interactive']);
+const BATCH_ATTRIBUTES = new Set(['target', 'review']);
 
 // The batch the secure window approves in one confirmation
-// (`lib/key-binding-batch.ts`): `attributes.{target, review?, interactive?}`,
+// (`lib/key-binding-batch.ts`): `attributes.{target, review?}`,
 // where `target` names a card or a card type in its realm as the window's
 // context does. Answers every operation on the card's definition that needs
 // the caller's approval, grouped by destination, with the caller's keys and
@@ -321,11 +321,9 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
         throw new UserKeyError(400, `'${name}' can't be asked about here`);
       }
     }
-    let { review, interactive } = attributes;
-    for (let [name, value] of Object.entries({ review, interactive })) {
-      if (value !== undefined && typeof value !== 'boolean') {
-        throw new UserKeyError(400, `${name} is true or false`);
-      }
+    let { review } = attributes;
+    if (review !== undefined && typeof review !== 'boolean') {
+      throw new UserKeyError(400, 'review is true or false');
     }
     let { target } = validateContextRequest({ target: attributes.target });
     if (!target) {
@@ -342,7 +340,6 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
       {
         target,
         review: review === true,
-        interactive: interactive === true,
       },
     );
     await sendJSON(ctxt, 200, {

@@ -328,13 +328,19 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-approve-new-grant-host]')
       .hasText('uploads.github.com', 'named by its full host');
     assert
-      .dom('[data-test-approve-new-grant="uploads.github.com"]')
-      .includesText('part of github.com. Is that where this key belongs?');
+      .dom(
+        '[data-test-approve-group="uploads.github.com"] [data-test-approve-new-grant]',
+      )
+      .includesText(
+        'GitHub token hasn’t been sent to uploads.github.com before',
+        'said in the group it is about',
+      );
     assert
-      .dom('[data-test-approve-save]')
-      .isDisabled('a new grant takes its own confirmation');
-
-    await click('[data-test-approve-new-grant-confirm="uploads.github.com"]');
+      .dom('[data-test-approve-also-sends]')
+      .hasText(
+        'This approves the requests shown above, including sending GitHub token to uploads.github.com for the first time.',
+        'the one confirmation sums up what it approves',
+      );
     assert.dom('[data-test-approve-save]').hasText('Approve 4 requests');
     await click('[data-test-approve-save]');
     await settled();
@@ -390,6 +396,7 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-new-grant]')
       .doesNotExist('nothing is sent to uploads.github.com, so no grant');
+    assert.dom('[data-test-approve-also-sends]').doesNotExist();
     assert.dom('[data-test-approve-save]').hasText('Approve 2 requests');
     await click('[data-test-approve-save]');
     await settled();
@@ -415,6 +422,11 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-new-grant="api.github.com"]')
       .includesText('Another token');
+    assert
+      .dom('[data-test-approve-also-sends]')
+      .includesText(
+        'sending Another token to api.github.com, uploads.github.com for the first time',
+      );
   });
 
   test('a changed operation is marked, and its review shows what changed field by field', async function (assert) {
@@ -507,12 +519,67 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-approve-new-grant-confirm="uploads.github.com"]');
+    await click('[data-test-approve-tick="listReviews"]');
+    await click('[data-test-approve-key="Another token"] input');
     await click('[data-test-approve-save]');
     await waitFor('[data-test-keys-error]');
+    assert
+      .dom('[data-test-approve-tick="listReviews"]')
+      .isNotChecked('an operation the user unticked stays unticked');
+    assert
+      .dom('[data-test-approve-key="Another token"] input')
+      .isChecked('the key the user chose stays chosen');
     assert.strictEqual(answered, 2, 'the batch is read again');
     assert.dom('[data-test-keys-error]').includesText('show it again');
     assert.deepEqual(navigations, [], 'the window stays open');
+  });
+
+  test('adding a new key from a batch reached from the key page keeps going back to it', async function (assert) {
+    visitShell(
+      `approve#${new URLSearchParams({ module: MODULE, name: 'Inbox', realm: REALM, key: 'key-gh', then: 'keys' })}`,
+    );
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-approve-add-key]');
+    let fragment = new URLSearchParams(
+      new URL(navigations[0]!.url!, window.location.href).hash.slice(1),
+    );
+    assert.strictEqual(fragment.get('then'), 'approve');
+    assert.strictEqual(
+      fragment.get('after'),
+      'keys',
+      'the key entry page hands the approve page back its way home',
+    );
+  });
+
+  test('a key the service rejected is offered, marked, and never chosen for the user', async function (assert) {
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: batch({
+              keys: [
+                {
+                  id: 'key-gh',
+                  name: 'GitHub token',
+                  kind: 'oauth-connection',
+                  state: 'rejected',
+                  covers: [GRAPHQL, UPLOADS],
+                },
+              ],
+            }),
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.dom('[data-test-approve-key-rejected]').exists();
+    assert
+      .dom('[data-test-approve-key="GitHub token"] input')
+      .isNotChecked('the user chooses it themselves, if at all');
+    assert.dom('[data-test-approve-save]').isDisabled();
   });
 
   test('adding a new key goes to the key entry page, which comes back to the batch', async function (assert) {
@@ -704,9 +771,6 @@ module('Integration | approve pages', function (hooks) {
       { kind: 'type', module: MODULE, name: 'Inbox', realm: REALM },
     );
     assert.dom('[data-test-approve-key="Another token"] input').isChecked();
-    for (let host of ['api.github.com', 'uploads.github.com']) {
-      await click(`[data-test-approve-new-grant-confirm="${host}"]`);
-    }
     await click('[data-test-approve-save]');
     await waitFor('[data-test-keys-done]');
     await click('[data-test-keys-done-close]');

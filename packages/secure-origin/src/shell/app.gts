@@ -22,6 +22,7 @@ import ConnectPage from './keys/connect-page.gts';
 import ConnectedPage from './keys/connected-page.gts';
 import EnterKeyPage from './keys/enter-key-page.gts';
 import KeyPage from './keys/key-page.gts';
+import ReplaceKeyPage from './keys/replace-key-page.gts';
 import ShareKeyPage from './keys/share-key-page.gts';
 import SwapKeyPage from './keys/swap-key-page.gts';
 import UseKeyPage from './keys/use-key-page.gts';
@@ -66,6 +67,7 @@ Router.map(function () {
   this.route('enter-key');
   this.route('share-key');
   this.route('swap-key');
+  this.route('replace-key');
   this.route('connect');
   this.route('connected');
   this.route('approve');
@@ -131,6 +133,7 @@ const registry: Record<string, unknown> = {
   'template:enter-key': EnterKeyPage,
   'template:share-key': ShareKeyPage,
   'template:swap-key': SwapKeyPage,
+  'template:replace-key': ReplaceKeyPage,
   'template:connect': ConnectPage,
   'template:connected': ConnectedPage,
   'template:keys/use': KeyUseTemplate,

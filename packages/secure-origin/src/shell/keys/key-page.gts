@@ -136,7 +136,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                                 aria-hidden='true'
                               />Replace</Button>
                           {{/unless}}
-                          {{#unless (eq key.kind 'oauth-client')}}
+                          {{#if (this.usableWithCard key)}}
                             <Button
                               class='action'
                               @kind='secondary'
@@ -145,7 +145,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                               data-test-key-use
                               {{on 'click' (fn this.useWithCard key)}}
                             >Use with a card…</Button>
-                          {{/unless}}
+                          {{/if}}
                         </div>
                       </KeyTile>
                       {{#if (this.isActing 'replacing' key)}}
@@ -454,9 +454,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
 
   private async load() {
     try {
-      let bindings = this.readBindings();
       this.state.keys = await listKeys(this.args.api.config);
-      this.state.bindings = await bindings;
+      this.state.bindings = await this.readBindings();
       this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
@@ -530,6 +529,12 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   private share = (key: UserKey) =>
     navigation.assign(pageURL(keySharePath(key.id)));
 
+  // A key a card's request can send: any but an OAuth app people sign in
+  // through, which only connects accounts.
+  private usableWithCard = (key: ListedKey) =>
+    key.kind !== 'oauth-client' ||
+    key.oauth?.client?.grantType === 'client_credentials';
+
   // Setting a key up for a card's requests is made on its own page, which
   // asks which workspace and card, then approves them.
   private useWithCard = (key: UserKey) =>
@@ -540,9 +545,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   private removeGrant = async (grant: KeyGrant) =>
     await this.guard(async () => {
       await removeGrant(this.args.api.config, grant.id);
-      let bindings = this.readBindings();
       this.state.keys = await listKeys(this.args.api.config);
-      this.state.bindings = await bindings;
+      this.state.bindings = await this.readBindings();
     });
 
   // The approvals each grant is used by. The keys are the page; when these
