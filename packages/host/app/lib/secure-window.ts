@@ -16,6 +16,7 @@ import { pageURL, withFragment } from './secure-sign-in';
 
 export const SECURE_WINDOW_MODES = [
   'enter-key',
+  'replace-key',
   'share-key',
   'swap-key',
   'connect',
@@ -39,10 +40,17 @@ export type SecureWindowTarget =
       operation?: string;
     };
 
-// An account is connected for a target, or for a realm whose shared apps
-// the window offers, or for nothing in particular.
+// `replace-key` is for an operation, whose key the window finds from the
+// user's binding for it, so its target always names one. An account is
+// connected for a target, or for a realm whose shared apps the window offers,
+// or for nothing in particular.
 export type SecureWindowRequest =
   | { mode: 'enter-key'; target?: SecureWindowTarget; reason?: string }
+  | {
+      mode: 'replace-key';
+      target: SecureWindowTarget & { operation: string };
+      reason?: string;
+    }
   | { mode: 'share-key'; realm: string; reason?: string }
   | { mode: 'swap-key'; realm: string; share: string; reason?: string }
   | {
