@@ -61,9 +61,16 @@ export default class GetStarted extends Component<Signature> {
   @service declare private recentCardsService: RecentCardsService;
 
   @tracked private isExpanded = false;
+  // Set by the user's own dismissal, so it can be undone until they leave
+  // the dashboard. Finishing every step dismisses it with no undo.
+  @tracked private isJustDismissed = false;
+  // The control that replaced the one just pressed, which takes focus once
+  // it renders, since the pressed one is gone.
+  private focusAfterToggle: 'undo' | 'dismiss' | undefined;
 
   private titleId = `${guidFor(this)}-title`;
   private stepsId = `${guidFor(this)}-steps`;
+  private dismissedNoteId = `${guidFor(this)}-dismissed`;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -179,8 +186,33 @@ export default class GetStarted extends Component<Signature> {
   });
 
   private dismissTask = dropTask(async () => {
-    await this.saveDismissal();
+    if (await this.saveDismissal()) {
+      this.focusAfterToggle = 'undo';
+      this.isJustDismissed = true;
+    }
   });
+
+  private undoDismissTask = dropTask(async () => {
+    try {
+      await this.matrixService.updateDashboardState({
+        onboardingDismissed: false,
+      });
+    } catch (error) {
+      log.warn(`undoing the dismissal of Get started failed: ${error}`);
+      return;
+    }
+    this.focusAfterToggle = 'dismiss';
+    this.isJustDismissed = false;
+  });
+
+  private focusIfToggled = modifier(
+    (element: HTMLElement, [control]: ['undo' | 'dismiss']) => {
+      if (this.focusAfterToggle === control) {
+        this.focusAfterToggle = undefined;
+        element.focus();
+      }
+    },
+  );
 
   private async saveDismissal() {
     try {
@@ -252,6 +284,7 @@ export default class GetStarted extends Component<Signature> {
               @size='s'
               @busy={{this.dismissTask.isRunning}}
               {{on 'click' this.dismissTask.perform}}
+              {{this.focusIfToggled 'dismiss'}}
               data-test-get-started-dismiss
             >
               Dismiss
@@ -315,6 +348,21 @@ export default class GetStarted extends Component<Signature> {
           </ol>
         {{/if}}
       </section>
+    {{else if this.isJustDismissed}}
+      <div class='get-started-dismissed' data-test-get-started-dismissed>
+        <p class='dismissed-note' id={{this.dismissedNoteId}}>Get started hidden</p>
+        <Button
+          @appearance='link'
+          @size='s'
+          @busy={{this.undoDismissTask.isRunning}}
+          aria-describedby={{this.dismissedNoteId}}
+          {{on 'click' this.undoDismissTask.perform}}
+          {{this.focusIfToggled 'undo'}}
+          data-test-get-started-undo-dismiss
+        >
+          Undo
+        </Button>
+      </div>
     {{else if this.isFinished}}
       <span hidden {{this.dismissWhenFinished}}></span>
     {{/if}}
@@ -403,6 +451,17 @@ export default class GetStarted extends Component<Signature> {
       .step-hint {
         font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
+      }
+      .get-started-dismissed {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        color: var(--muted-foreground);
+      }
+      .dismissed-note {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
       }
       @container get-started (max-width: 30rem) {
         .get-started-actions {

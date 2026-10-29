@@ -18,6 +18,7 @@ import { module, test } from 'qunit';
 
 import { TrackedObject } from 'tracked-built-ins';
 
+import { Deferred } from '@cardstack/runtime-common';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -1877,6 +1878,16 @@ module('Acceptance | dashboard', function (hooks) {
       test('copying a step puts its text on the clipboard and counts it', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
 
+        assert
+          .dom('[data-test-agent-copy="3"]')
+          .doesNotHaveAttribute('aria-label', 'its visible label names it')
+          .hasAttribute(
+            'aria-describedby',
+            find('[data-test-agent-step="3"] [data-test-agent-step-text]')
+              ?.id ?? '',
+            'the text it copies describes it',
+          );
+
         await click('[data-test-agent-copy="3"]');
 
         assert.deepEqual(clipboard.copied, ['/plugins']);
@@ -1975,6 +1986,44 @@ module('Acceptance | dashboard', function (hooks) {
           .dom('[data-test-agent-panel]')
           .hasAttribute('data-test-agent-panel', 'claude');
         assert.dom(ENTRY).hasAttribute('aria-current', 'location');
+      });
+
+      test('a pick from the flyout shows in the Agents section before its save lands', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        let matrixService = getService('matrix-service') as MatrixService;
+        let update = matrixService.updateDashboardState;
+        let save = new Deferred<void>();
+        matrixService.updateDashboardState = async (change) => {
+          await save.promise;
+          return update.call(matrixService, change);
+        };
+        try {
+          await triggerEvent(
+            '[data-test-section-rail-item="agents"]',
+            'pointerenter',
+            { pointerType: 'mouse' },
+          );
+          await click(`${FLYOUT} [data-test-section-rail-agent="claude"]`);
+
+          assert.strictEqual(
+            matrixService.dashboardState.agent,
+            'codex',
+            'the save has not landed',
+          );
+          assert
+            .dom('[data-test-agent-panel]')
+            .hasAttribute('data-test-agent-panel', 'claude');
+        } finally {
+          matrixService.updateDashboardState = update;
+          save.fulfill();
+        }
+        await settled();
+
+        assert.strictEqual(matrixService.dashboardState.agent, 'claude');
+        assert
+          .dom('[data-test-agent-panel]')
+          .hasAttribute('data-test-agent-panel', 'claude');
       });
 
       test('New session in the flyout opens Boxel AI', async function (assert) {
@@ -2120,6 +2169,9 @@ module('Acceptance | dashboard', function (hooks) {
         let matrixService = getService('matrix-service') as MatrixService;
         await waitUntil(() => matrixService.dashboardState.onboardingDismissed);
         assert.dom(GET_STARTED).doesNotExist();
+        assert
+          .dom('[data-test-get-started-dismissed]')
+          .doesNotExist('finishing offers no undo');
         assert.true(
           (mockMatrixUtils.getDashboardState() as any).onboardingDismissed,
           'the dismissal is stored',
@@ -2152,6 +2204,24 @@ module('Acceptance | dashboard', function (hooks) {
         assert.dom(GET_STARTED).doesNotExist();
         let matrixService = getService('matrix-service') as MatrixService;
         assert.true(matrixService.dashboardState.onboardingDismissed);
+        assert
+          .dom('[data-test-get-started-undo-dismiss]')
+          .isFocused('focus moves to Undo, since Dismiss is gone');
+      });
+
+      test('Undo brings back a dismissal made here, and saves that', async function (assert) {
+        await visitAsNewUser();
+
+        await click('[data-test-get-started-dismiss]');
+        await click('[data-test-get-started-undo-dismiss]');
+
+        assert.dom(GET_STARTED).exists();
+        assert.dom('[data-test-get-started-dismissed]').doesNotExist();
+        let matrixService = getService('matrix-service') as MatrixService;
+        assert.false(matrixService.dashboardState.onboardingDismissed);
+        assert
+          .dom('[data-test-get-started-dismiss]')
+          .isFocused('focus goes back to Dismiss');
       });
 
       test('a dismissal made on another device hides it', async function (assert) {

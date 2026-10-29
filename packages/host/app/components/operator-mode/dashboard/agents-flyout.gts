@@ -40,7 +40,7 @@ export default class AgentsFlyout extends Component<SectionFlyoutSignature> {
   private sessionsHeadId = `${guidFor(this)}-sessions`;
 
   private get pickedId() {
-    return agentKindFor(this.matrixService.dashboardState.agent).id;
+    return agentKindFor(this.matrixService.dashboardAgent).id;
   }
 
   private get recentSessions() {
@@ -54,9 +54,9 @@ export default class AgentsFlyout extends Component<SectionFlyoutSignature> {
     this.args.close();
     this.args.showSection();
     try {
-      await this.matrixService.updateDashboardState({ agent: kind.id });
+      await this.matrixService.pickDashboardAgent(kind.id);
     } catch (error) {
-      // The section still shows; it keeps its previous pick.
+      // The section still shows; it goes back to its previous pick.
       log.warn(`saving the picked agent failed: ${error}`);
     }
   }
