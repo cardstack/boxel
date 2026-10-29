@@ -4,7 +4,7 @@ import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import Check from '@cardstack/boxel-icons/check';
 import { Button } from '@cardstack/pretui/components/button';
@@ -86,6 +86,8 @@ export default class GetStarted extends Component<Signature> {
     return Boolean(this.loadTask.lastSuccessful);
   }
 
+  // Read many times a render; aiSessionRooms walks and sorts every room.
+  @cached
   private get steps(): Step[] {
     let { agentSetup } = this.matrixService.dashboardState;
     return [
@@ -176,8 +178,7 @@ export default class GetStarted extends Component<Signature> {
   }
 
   @action private async askBoxelAi() {
-    await this.aiAssistantPanelService.openPanel();
-    await this.aiAssistantPanelService.createNewSession();
+    await this.aiAssistantPanelService.openNewSession();
   }
 
   <template>
@@ -215,7 +216,7 @@ export default class GetStarted extends Component<Signature> {
                 @appearance={{if this.isExpanded 'outlined' 'accent'}}
                 @size='s'
                 aria-expanded={{if this.showSteps 'true' 'false'}}
-                aria-controls={{this.stepsId}}
+                aria-controls={{if this.showSteps this.stepsId}}
                 {{on 'click' this.toggleExpanded}}
                 data-test-get-started-toggle
               >
