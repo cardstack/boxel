@@ -27,7 +27,25 @@ export interface WindowContext {
     base: string;
     method?: string;
     destination?: DestinationDisplay;
-    slots: { name: string; key: string }[];
+    slots: { name: string; key: string; bound?: SlotBound | null }[];
+  };
+}
+
+// What fills one of an operation's slots for the user, as the realm server
+// says when asked with `bindings`: the key, and whether the service it is
+// sent to rejected it. For a key a workspace shares, the key is named only to
+// its owner, the share's label only to its owner and the workspace's direct
+// writers, and its owner only to those writers while the share is active.
+export interface SlotBound {
+  rejected: boolean;
+  // `kind` is the key's (`static`, `google-service-account`, `oauth-client`
+  // or `oauth-connection`).
+  key: { id: string; name: string; kind: string } | null;
+  share?: {
+    label?: string;
+    suspended: boolean;
+    ownedByYou: boolean;
+    owner?: string;
   };
 }
 
@@ -165,6 +183,8 @@ export interface WindowContextRequest {
     | { kind: 'instance'; url: string }
     | { kind: 'type'; module: string; name: string; realm: string };
   operation?: string;
+  // Whether to say what is bound to each of the operation's slots.
+  bindings?: boolean;
 }
 
 // The user's own keys' metadata, by name, with where each is used. No value
@@ -172,6 +192,18 @@ export interface WindowContextRequest {
 export async function listKeys(config: Config): Promise<ListedKey[]> {
   return resources<ListedKey>(
     await authorizedRequest(config, '_user-keys', { method: 'GET' }),
+  );
+}
+
+// One of the user's own keys, with where it is used, as the listing gives it.
+export async function getKey(
+  config: Config,
+  keyId: string,
+): Promise<ListedKey> {
+  return resource<ListedKey>(
+    await authorizedRequest(config, `_user-keys/${encodeURIComponent(keyId)}`, {
+      method: 'GET',
+    }),
   );
 }
 
@@ -364,7 +396,9 @@ export async function swapKey(
 // What the window was opened for, as the realm server describes it: the
 // realm (its name, and whether the user is one of its direct writers), and
 // for a target, the card definition and the operation, with where that
-// operation sends a key. `request` is `{ realm?, target?, operation? }`.
+// operation sends a key. `request` is `{ realm?, target?, operation?,
+// bindings? }`; with `bindings`, each of the operation's slots says what is
+// bound to it.
 export async function windowContext(
   config: Config,
   request: WindowContextRequest,

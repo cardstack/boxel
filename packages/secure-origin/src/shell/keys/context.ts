@@ -11,6 +11,7 @@ export type {
   OAuthKeyDescription,
   ServiceAccountDetails,
   SharedWorkspace,
+  SlotBound,
   UserKey,
   WindowContext,
 } from '../../security/keys.ts';
