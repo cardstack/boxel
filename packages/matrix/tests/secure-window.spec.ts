@@ -307,12 +307,18 @@ test.describe('the secure window signs in on its own', () => {
       name: 'Secure Google User',
     };
 
-    // Signed in to the app through Google first, as a Google user is, which
-    // links the Google account to theirs.
+    // Signed in to Boxel through Google first, as a Google user is, which
+    // links the Google account to theirs by its subject.
     await page.goto(appURL);
     await page.locator('[data-test-google-login-btn]').click();
     await signInAtGoogle(page, identity);
     await expectAppSignedIn(page);
+
+    // That sign-in left the secure origin a session. Forget it, so the window
+    // signs in with Google again and finds the account by the linked subject.
+    let forget = await openSecureWindow(page, '?mode=none');
+    await forget.evaluate((key) => localStorage.removeItem(key), STORAGE_KEY);
+    await forget.close();
 
     let secure = await openSecureWindow(page, 'sign-in');
     await secure.locator('[data-test-secure-google]').click();
