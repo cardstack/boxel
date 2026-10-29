@@ -26,7 +26,6 @@ import {
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
-import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -44,7 +43,6 @@ import {
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import ENV from '@cardstack/host/config/environment';
-import { loadSkillSource } from '@cardstack/host/lib/skill-tools';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -2551,21 +2549,16 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   // Holds every store load of the discovered skill until released, so every
   // resolution of its tool stays in flight.
   //
-  // The skill, the tool's module and the field modules behind the tool's
-  // input schema are loaded once before the hold. The drain's validation
-  // timeout runs while the hold is in place, so whatever the resolution still
-  // has to load after the release has to fit in the rest of that budget.
-  // Loaded beforehand, that work is a cache hit; loaded for the first time
-  // after the release, it can overrun the budget on a busy runner, and the
-  // tool fails with a validation timeout instead of running.
-  async function holdDiscoveredSkillLoads() {
+  // The drain's validation timeout runs while the hold is in place, so the
+  // hold also raises that timeout. Otherwise the time the test holds the load
+  // is taken from the time the validation has for the loads after the
+  // release, and on a busy runner the tool fails with a validation timeout
+  // instead of running.
+  function holdDiscoveredSkillLoads() {
     let store = getService('store');
-    await loadSkillSource(store, discoveredSkillUrl);
-    let loader = getService('loader-service').loader;
-    await loader.import(
-      '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
-    );
-    await basicMappings(loader);
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    toolService.validateTimeoutMs = 60_000;
     let release = new Deferred<void>();
     let heldLoads = 0;
     let originalGet = store.get;
@@ -2590,6 +2583,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       release() {
         release.fulfill();
         (store as any).get = originalGet;
+        toolService.validateTimeoutMs = originalValidateTimeoutMs;
       },
     };
   }
@@ -2654,7 +2648,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     let roomId = await renderAiAssistantPanel();
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
 
-    let hold = await holdDiscoveredSkillLoads();
+    let hold = holdDiscoveredSkillLoads();
     try {
       // The finished message carries a bot-run tool followed by the host
       // tool, whose resolution now waits on the held skill load.
@@ -2732,7 +2726,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
     let matrixService = getService('matrix-service');
 
-    let hold = await holdDiscoveredSkillLoads();
+    let hold = holdDiscoveredSkillLoads();
     try {
       simulateRemoteMessage(
         roomId,
@@ -2845,7 +2839,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     });
     await settled();
 
-    let hold = await holdDiscoveredSkillLoads();
+    let hold = holdDiscoveredSkillLoads();
     try {
       // The final edit renames it to the discovered host tool, whose
       // resolution is held.
