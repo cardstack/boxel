@@ -35,7 +35,6 @@ import {
 } from '@cardstack/host/lib/workspace-actions';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
 import type NetworkService from '@cardstack/host/services/network';
-import type RealmService from '@cardstack/host/services/realm';
 
 import {
   ArchiveWorkspaceModal,
@@ -158,7 +157,7 @@ export default class Workspace extends Component<Signature> {
             name. Hidden, so it's read only as that description, which
             aria-describedby still reaches. }}
         <span
-          id={{this.realmURLDescriptionId}}
+          id={{this.workspace.realmURLDescriptionId}}
           class='boxel-sr-only'
           aria-hidden='true'
         >{{this.workspace.realmURLText}}</span>
@@ -1253,7 +1252,6 @@ export default class Workspace extends Component<Signature> {
   </template>
 
   @service declare private network: NetworkService;
-  @service declare private realm: RealmService;
 
   @tracked private isHostDropdownOpen = false;
 
@@ -1272,10 +1270,6 @@ export default class Workspace extends Component<Signature> {
         }
       : undefined,
   );
-
-  private get realmURLDescriptionId() {
-    return `${guidFor(this)}-realm-url`;
-  }
 
   private get visibilityDescriptionId() {
     return `${guidFor(this)}-visibility`;
@@ -1296,7 +1290,7 @@ export default class Workspace extends Component<Signature> {
     if (this.showsUpdatedTime) {
       ids.push(this.updatedDescriptionId);
     }
-    ids.push(this.realmURLDescriptionId);
+    ids.push(this.workspace.realmURLDescriptionId);
     return ids.join(' ');
   }
 
@@ -1366,22 +1360,11 @@ export default class Workspace extends Component<Signature> {
     return this.workspace.updatedAtLabel?.replace(UPDATED_PREFIX, '');
   }
 
-  // A desk's Cards / Files / Definitions / Pinned counts. A stat with no
-  // count is dropped rather than shown as 0. The counts are requested for
-  // favorites alone, after the desk renders, so the caption reserves their
-  // line. The pin count waits for the index counts, so the line fills at once
-  // instead of shifting as they arrive.
-  private get tileStats(): { label: string; count: number }[] {
-    let counts = this.realm.indexCounts(this.args.realmIdentifier);
-    if (!counts) {
-      return [];
-    }
-    return [
-      { label: 'Cards', count: counts.cardCount },
-      { label: 'Files', count: counts.fileCount },
-      { label: 'Definitions', count: counts.definitionCount },
+  // A desk counts its pins as well.
+  private get tileStats() {
+    return this.workspace.tileStatsWith([
       { label: 'Pinned', count: this.pins.cardIds.length },
-    ].filter((stat): stat is { label: string; count: number } => !!stat.count);
+    ]);
   }
 
   private get hasPins() {

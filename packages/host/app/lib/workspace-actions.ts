@@ -1,5 +1,6 @@
 import { associateDestroyableChild } from '@ember/destroyable';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import { getOwner, setOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
@@ -45,6 +46,8 @@ import type WorkspaceDuplicationService from '@cardstack/host/services/workspace
 
 const log = logger('workspace-actions');
 const SKILLS_REALM = '@cardstack/skills/';
+
+export type TileStat = { label: string; count: number };
 
 export const WORKSPACE_TILE_TARGET = '[data-workspace-tile] [data-nav-index]';
 
@@ -207,6 +210,10 @@ export class WorkspaceActions {
     return this.realmInfo.name;
   }
 
+  get realmURLDescriptionId() {
+    return `${guidFor(this)}-realm-url`;
+  }
+
   get realmURLText() {
     return realmURLDisplayText(
       this.network.virtualNetwork,
@@ -343,6 +350,28 @@ export class WorkspaceActions {
     }
   }
 
+  // Cards / Files / Definitions counts, then any `extra` the caller counts
+  // itself. A stat with no count is dropped rather than shown as 0. The
+  // counts are requested for favorites alone, after the workspace renders, so
+  // the line that shows them is reserved. The extras wait for the index
+  // counts, so the line fills at once instead of shifting as they arrive.
+  tileStatsWith(extra: TileStat[]): TileStat[] {
+    let counts = this.realm.indexCounts(this.realmIdentifier);
+    if (!counts) {
+      return [];
+    }
+    return [
+      { label: 'Cards', count: counts.cardCount },
+      { label: 'Files', count: counts.fileCount },
+      { label: 'Definitions', count: counts.definitionCount },
+      ...extra,
+    ].filter((stat): stat is TileStat => !!stat.count);
+  }
+
+  get tileStats(): TileStat[] {
+    return this.tileStatsWith([]);
+  }
+
   private get isRealmOwner() {
     return this.realm.isRealmOwner(this.realmIdentifier);
   }
@@ -442,10 +471,10 @@ export class WorkspaceActions {
   }
 
   // Whether the workspace, or anything open from it, is on screen behind the
-  // dashboard or the chooser; removing it then clears the stacks. A stack's base card counts
-  // as well as its top one: a stack based on the workspace's index card makes
-  // it the current realm, and once it has left the available realms the
-  // current realm no longer says so.
+  // dashboard or the chooser; removing it then clears the stacks. A stack's
+  // base card counts as well as its top one: a stack based on the
+  // workspace's index card makes it the current realm, and once it has left
+  // the available realms the current realm no longer says so.
   private isOnScreen(realmIdentifier: RealmIdentifier) {
     let realmPath = new RealmPaths(
       realmIdentifier,

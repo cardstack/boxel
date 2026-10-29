@@ -1,8 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { guidFor } from '@ember/object/internals';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -32,7 +30,6 @@ import type { RealmIdentifier } from '@cardstack/runtime-common';
 import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import { WorkspaceActions } from '@cardstack/host/lib/workspace-actions';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
-import type RealmService from '@cardstack/host/services/realm';
 
 import ItemContainer from './item-container';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
@@ -100,11 +97,11 @@ export default class Workspace extends Component<Signature> {
             outside the button: text inside a button joins its accessible
             name, and the tile's name is the workspace's. }}
         <span
-          id={{this.realmURLDescriptionId}}
+          id={{this.workspace.realmURLDescriptionId}}
           class='boxel-sr-only'
         >{{this.workspace.realmURLText}}</span>
         <ItemContainer
-          aria-describedby={{this.realmURLDescriptionId}}
+          aria-describedby={{this.workspace.realmURLDescriptionId}}
           data-test-workspace-button={{this.workspace.name}}
           data-nav-index={{@navIndex}}
           {{on 'click' this.workspace.openWorkspace}}
@@ -139,7 +136,7 @@ export default class Workspace extends Component<Signature> {
                     class='tile-metadata-row'
                     data-test-workspace-stats={{@realmIdentifier}}
                   >
-                    {{#each this.tileStats as |stat|}}
+                    {{#each this.workspace.tileStats as |stat|}}
                       <Tooltip @placement='top'>
                         <:trigger>
                           <span
@@ -1016,8 +1013,6 @@ export default class Workspace extends Component<Signature> {
     </style>
   </template>
 
-  @service declare private realm: RealmService;
-
   @tracked private isHostDropdownOpen = false;
 
   private workspace = new WorkspaceActions(
@@ -1031,10 +1026,6 @@ export default class Workspace extends Component<Signature> {
     return this.workspace.isFavorited
       ? 'Remove from Favorites'
       : 'Add to Favorites';
-  }
-
-  private get realmURLDescriptionId() {
-    return `${guidFor(this)}-realm-url`;
   }
 
   // The selection ring is shown only once the user has actively engaged the
@@ -1071,28 +1062,5 @@ export default class Workspace extends Component<Signature> {
       default:
         throw new Error('unknown realm visibility');
     }
-  }
-
-  // Compact metadata for the enlarged favorite tile's in-tile content (see
-  // .tile-metadata-row below). Label and count stay separate fields so the
-  // template can emphasize the count with larger type than its unit label.
-  // A stat with no count is dropped rather than rendered as "0" — that's
-  // what gives each favorite tile its own mix of metadata instead of always
-  // showing all three.
-  //
-  // Counts arrive on their own schedule: the chooser requests them for
-  // favorited realms only, after first render (see `trackFavoriteCounts` in
-  // ../workspace-chooser/index.gts). Empty until then, which is why the row
-  // reserves its height rather than being conditionally rendered.
-  private get tileStats(): { label: string; count: number }[] {
-    let counts = this.realm.indexCounts(this.args.realmIdentifier);
-    if (!counts) {
-      return [];
-    }
-    return [
-      { label: 'Cards', count: counts.cardCount },
-      { label: 'Files', count: counts.fileCount },
-      { label: 'Definitions', count: counts.definitionCount },
-    ].filter((stat): stat is { label: string; count: number } => !!stat.count);
   }
 }
