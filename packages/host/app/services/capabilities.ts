@@ -14,11 +14,13 @@ import {
   SupportedMimeType,
   type CapabilityAnswer,
   type CapabilityCheck,
+  type KeyReadiness,
 } from '@cardstack/runtime-common';
 
 import type MessageService from './message-service';
 import type NetworkService from './network';
 import type RealmService from './realm';
+import type SecureWindowService from './secure-window';
 import type SessionService from './session';
 import type { SessionParticipant } from './session';
 
@@ -65,6 +67,14 @@ import type { RealmEventContent } from '@cardstack/base/matrix-event';
 // could be matched against, so neither reaches here as an event. For those, an
 // answer older than `ANSWER_MAX_AGE_MS` is asked again by the next read of it,
 // which is served the held answer meanwhile, so the control does not flicker.
+//
+// `@context.keyReadiness(operation, target)` rides on the same request, as a
+// pair that also asks for readiness: whether a `callApi` would have the
+// credentials it sends, and if not, what would fix it (`KeyReadiness`). It is
+// coalesced, held and asked again exactly as `canInvoke` is. What changes it
+// most often happens in the secure window — a key added, an operation
+// approved — which the app learns about only by asking, so every readiness
+// answer is asked again when the user comes back from that window.
 // ============================================================================
 
 const waiter = buildWaiter('capabilities:check');
@@ -99,6 +109,7 @@ export default class CapabilitiesService
   @service declare private messageService: MessageService;
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
+  @service declare private secureWindow: SecureWindowService;
   @service declare private session: SessionService;
 
   // The answers, keyed by realm, operation and target together, because the
@@ -106,7 +117,7 @@ export default class CapabilitiesService
   // invalidates the templates that read that pair and no others. Written only
   // when an answer lands, never while a template is reading it: a read that
   // wrote here would dirty a value the same render had just consumed.
-  #held: TrackedMap<string, boolean> = new TrackedMap();
+  #held: TrackedMap<string, boolean | KeyReadiness> = new TrackedMap();
   // When each held answer was given. Untracked: its age decides only whether
   // the next read asks again, never what a template shows.
   #answeredAt: Map<string, number> = new Map();
@@ -131,7 +142,13 @@ export default class CapabilitiesService
   constructor(owner: Owner) {
     super(owner);
     this.session.register(this);
-    registerDestructor(this, () => this.#unsubscribe());
+    let stopWatching = this.secureWindow.onReturn(() =>
+      this.#askReadinessAgain(),
+    );
+    registerDestructor(this, () => {
+      this.#unsubscribe();
+      stopWatching();
+    });
   }
 
   // May this session invoke `operation` on `target`?
@@ -146,7 +163,28 @@ export default class CapabilitiesService
     operation: string,
     target: Target,
     opts?: { realm?: string },
-  ): Held => {
+  ): Held => this.#read(operation, target, opts, false) as Held;
+
+  // Would the `callApi` named by `operation` on `target` have the credentials
+  // it sends, if this session invoked it from a card, and if not, what would
+  // fix it? Answers as `canInvoke` does — synchronously, `undefined` while
+  // the realm is being asked and in any render — on the same request.
+  // `undefined` also where the realm has no readiness to give: a caller it
+  // won't let invoke the operation, or a realm that sends no request to an
+  // outside service.
+  keyReadiness = (
+    operation: string,
+    target: Target,
+    opts?: { realm?: string },
+  ): KeyReadiness | undefined =>
+    this.#read(operation, target, opts, true) as KeyReadiness | undefined;
+
+  #read(
+    operation: string,
+    target: Target,
+    opts: { realm?: string } | undefined,
+    readiness: boolean,
+  ): boolean | KeyReadiness | undefined {
     if (!operation) {
       return undefined;
     }
@@ -163,15 +201,24 @@ export default class CapabilitiesService
     if (!asked) {
       return undefined;
     }
+    if (readiness) {
+      asked.check.readiness = true;
+    }
     let key = keyFor(asked);
     // Read first, so a template that reads a pair before it is answered is
     // subscribed to the answer when it lands.
     let held = this.#held.get(key);
-    if (held === undefined || this.#isStale(key)) {
+    // A pair the realm answered with nothing to hold — a readiness it has no
+    // answer for — is asked again only once its answer is stale, like any
+    // other.
+    if (
+      (held === undefined && !this.#answeredAt.has(key)) ||
+      this.#isStale(key)
+    ) {
       this.#ask(key, asked);
     }
     return held;
-  };
+  }
 
   // Every answer is session-scoped: who is asking is half the question, and a
   // pair says nothing about who asked it. So the session's end drops them all,
@@ -280,7 +327,7 @@ export default class CapabilitiesService
         return;
       }
       let now = Date.now();
-      chunk.forEach(([key], index) => {
+      chunk.forEach(([key, asked], index) => {
         this.#asking.delete(key);
         // A request that failed leaves the pair unanswered rather than denied,
         // and free to be asked again by the next read of it. A denial would
@@ -291,8 +338,13 @@ export default class CapabilitiesService
         let answer = answers?.[index];
         if (answer) {
           this.#answeredAt.set(key, now);
-          if (this.#held.get(key) !== answer.allowed) {
-            this.#held.set(key, answer.allowed);
+          let value = asked.readiness ? answer.readiness : answer.allowed;
+          if (value === undefined) {
+            if (this.#held.has(key)) {
+              this.#held.delete(key);
+            }
+          } else if (this.#held.get(key) !== value) {
+            this.#held.set(key, value);
           }
         }
       });
@@ -345,6 +397,18 @@ export default class CapabilitiesService
     this.#subscriptions.clear();
   }
 
+  // Ask again about every readiness pair, once the user is back from the
+  // secure window. Whatever happened there reaches this page as no event, so
+  // every answer it could have moved is asked again; the held ones stay in
+  // place meanwhile.
+  #askReadinessAgain(): void {
+    for (let [key, asked] of this.#asked) {
+      if (asked.check.readiness) {
+        this.#ask(key, asked);
+      }
+    }
+  }
+
   // Ask again about every pair an index event may have changed the answer to.
   //
   // A stored card's answer rests on its own stored values, so an event naming
@@ -390,10 +454,11 @@ export default class CapabilitiesService
 }
 
 function keyFor({ realmURL, check }: Asked): string {
-  let { target, operation } = check;
+  let { target, operation, readiness } = check;
   let named =
     typeof target === 'string'
       ? target
       : `type:${target.module}#${target.name}`;
-  return `${realmURL}|${operation}|${named}`;
+  // Readiness is its own answer about the same pair.
+  return `${realmURL}|${operation}|${named}${readiness ? '|readiness' : ''}`;
 }
