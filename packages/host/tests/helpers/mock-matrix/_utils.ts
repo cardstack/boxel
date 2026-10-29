@@ -236,12 +236,6 @@ export class MockUtils {
   setActiveRealms = (realmURLs: string[]) => {
     this.testState.opts!.activeRealms = realmURLs;
   };
-  setLoginFlows = (response: { flows: MatrixSDK.LoginFlow[] }) => {
-    this.testState.opts!.loginFlowsResponse = response;
-  };
-  setSsoLoginUrl = (url: string) => {
-    this.testState.opts!.ssoLoginUrl = url;
-  };
   setLoginWithTokenInterceptor = (
     fn:
       | ((token: string, deviceId?: string) => Promise<MatrixSDK.LoginResponse>)

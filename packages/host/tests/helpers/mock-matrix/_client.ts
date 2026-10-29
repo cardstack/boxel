@@ -359,20 +359,7 @@ export class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
-  isUsernameAvailable(_username: string): Promise<boolean> {
-    throw new Error('Method not implemented.');
-  }
-
   leave(_roomId: string): Promise<{}> {
-    throw new Error('Method not implemented.');
-  }
-
-  requestPasswordEmailToken(
-    _email: string,
-    _clientSecret: string,
-    _sendAttempt: number,
-    _nextLink?: string | undefined,
-  ): Promise<MatrixSDK.IRequestTokenResponse> {
     throw new Error('Method not implemented.');
   }
 
@@ -471,22 +458,6 @@ export class MockClient implements ExtendedClient {
     } as unknown as MatrixSDK.Room);
   }
 
-  loginFlows(): Promise<{ flows: MatrixSDK.LoginFlow[] }> {
-    return Promise.resolve(
-      this.sdkOpts.loginFlowsResponse ?? {
-        flows: [{ type: 'm.login.password' }],
-      },
-    );
-  }
-
-  getSsoLoginUrl(
-    _redirectUrl: string,
-    _loginType?: string,
-    _idpId?: string,
-  ): string {
-    return this.sdkOpts.ssoLoginUrl ?? 'http://example.invalid/sso';
-  }
-
   loginWithToken(token: string): Promise<MatrixSDK.LoginResponse> {
     if (this.sdkOpts.loginWithTokenInterceptor) {
       return this.sdkOpts.loginWithTokenInterceptor(token);
@@ -526,7 +497,6 @@ export class MockClient implements ExtendedClient {
   }
 
   requestEmailToken(
-    _type: 'registration' | 'threepid',
     _email: string,
     _clientSecret: string,
     _sendAttempt: number,

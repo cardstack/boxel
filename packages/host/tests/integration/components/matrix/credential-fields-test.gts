@@ -8,7 +8,6 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import CredentialFieldsFrame, {
   FRAME_WAIT_LIMITS,
 } from '@cardstack/host/components/matrix/credential-fields';
-import Login from '@cardstack/host/components/matrix/login';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import {
   CredentialFields,
@@ -168,43 +167,27 @@ module('Integration | credential fields', function (hooks) {
     );
   }
 
-  test('a card on the page cannot read the sign-in fields', async function (assert) {
-    let CardComponent = await snoopingCard();
-    await render(
-      <template>
-        <Login @setMode={{noop}} />
-        <CardComponent @format='isolated' />
-      </template>,
-    );
-
-    assertFrameShown(assert, 'login');
-    assert
-      .dom('#boxel-login-password')
-      .doesNotExist('the password input is not in the app page');
-    assert
-      .dom('[data-test-login-btn]')
-      .isDisabled('signing in waits on fields the app cannot read');
-
-    await click('[data-test-snoop]');
-    assertNothingToRead(assert, 'login', snooped());
-  });
-
   // A filter in front of a deployed secure origin refuses a query string
   // naming a loopback origin, so a host app on this machine gets the frame
   // only when what the frame is told rides in the fragment, which is never
   // sent. The test page is on this machine.
   test('the frame is told its form and the page origin in the fragment, not the query', async function (assert) {
-    await render(<template><Login @setMode={{noop}} /></template>);
+    let fields = new CredentialFields();
+    await render(
+      <template>
+        <CredentialFieldsFrame @form='confirm-password' @fields={{fields}} />
+      </template>,
+    );
 
-    assertFrameShown(assert, 'login');
+    assertFrameShown(assert, 'confirm-password');
     let src = new URL(
       document.querySelector<HTMLIFrameElement>(
-        '[data-test-credential-fields-frame="login"]',
+        '[data-test-credential-fields-frame="confirm-password"]',
       )!.src,
     );
     assert.strictEqual(src.search, '', 'the frame URL has no query');
     let params = new URLSearchParams(src.hash.slice(1));
-    assert.strictEqual(params.get('form'), 'login', 'the form');
+    assert.strictEqual(params.get('form'), 'confirm-password', 'the form');
     assert.strictEqual(
       params.get('origin'),
       window.location.origin,
@@ -213,10 +196,15 @@ module('Integration | credential fields', function (hooks) {
   });
 
   test('a stylesheet the page loads after the fields were styled restyles them', async function (assert) {
-    await render(<template><Login @setMode={{noop}} /></template>);
-    assertFrameShown(assert, 'login');
+    let fields = new CredentialFields();
+    await render(
+      <template>
+        <CredentialFieldsFrame @form='confirm-password' @fields={{fields}} />
+      </template>,
+    );
+    assertFrameShown(assert, 'confirm-password');
     let element = document.querySelector<HTMLElement>(
-      '[data-test-credential-fields="login"]',
+      '[data-test-credential-fields="confirm-password"]',
     )!;
     let before = parseFloat(element.style.height);
 

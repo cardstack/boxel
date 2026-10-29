@@ -52,13 +52,9 @@ module('Acceptance | open the secure window', function (hooks) {
     activeRealms: [testRealmURL],
   });
 
-  let originalFlag: boolean;
   let secureOrigin = new URL(ENV.secureOriginURL);
 
   hooks.beforeEach(async function () {
-    originalFlag = ENV.signInOnSecureOrigin;
-    ENV.signInOnSecureOrigin = true;
-
     // A card that asks for a key the way any card does: through the tool
     // its context hands it, naming itself, the operation and a reason.
     class WeatherStation extends CardDef {
@@ -111,10 +107,6 @@ module('Acceptance | open the secure window', function (hooks) {
         },
       },
     });
-  });
-
-  hooks.afterEach(function () {
-    ENV.signInOnSecureOrigin = originalFlag;
   });
 
   async function visitWeatherStation() {
@@ -256,22 +248,6 @@ module('Acceptance | open the secure window', function (hooks) {
       realm: testRealmURL,
       operation: OPERATION,
     });
-  });
-
-  test('the window is not opened on a deployment that does not sign in on the secure origin', async function (assert) {
-    let { calls } = stubWindowOpen();
-    await visitWeatherStation();
-    ENV.signInOnSecureOrigin = false;
-    let { toolContext } = getService('tool-service');
-    await assert.rejects(
-      new OpenSecureWindowTool(toolContext).execute({
-        mode: 'enter-key',
-        cardId: `${testRealmURL}WeatherStation/home`,
-        operation: OPERATION,
-      }),
-      /does not offer/,
-    );
-    assert.strictEqual(calls.length, 0, 'no window opened');
   });
 
   test('what the window is opened for must name things it can read', async function (assert) {
