@@ -1,7 +1,8 @@
 // The `connect` page: connects one of the user's accounts at a service, by
 // signing in there through an OAuth app. It lists the apps the realm server
-// offers the user — Boxel's own, those shared into the workspace the window
-// was opened for, and the user's own — each with the permissions it asks for.
+// offers the user — those shared into the workspace the window was opened
+// for, else Boxel's own, then the user's own — each with the permissions it
+// asks for. The workspace's shared app, or else Boxel's, starts out chosen.
 // The user picks one and names the connection, and the window goes to the
 // service's sign-in page. The service sends the user back to the realm
 // server, which finishes the sign-in and sends the window on to `connected`.
@@ -48,6 +49,27 @@ import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { contextRequest, openedFor } from './opened-for.ts';
 import { addressOf } from './workspace-dropdown.gts';
+
+// The app that starts out chosen: the only one offered, or the first when it
+// is the workspace's one shared app or Boxel's one app for the site, which
+// the realm server lists ahead of the user's own. Among several shared apps
+// the user picks.
+export function defaultClient(
+  clients: ConnectableClient[],
+): number | undefined {
+  if (clients.length === 1) {
+    return 0;
+  }
+  let first = clients[0];
+  if (
+    first &&
+    first.kind !== 'own' &&
+    clients.filter((client) => client.kind === first.kind).length === 1
+  ) {
+    return 0;
+  }
+  return undefined;
+}
 
 type State =
   | { name: 'loading' }
@@ -267,8 +289,11 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
         : -1;
       if (same !== -1) {
         this.selectClient(same);
-      } else if (clients.length === 1) {
-        this.selectClient(0);
+      } else {
+        let preferred = defaultClient(clients);
+        if (preferred !== undefined) {
+          this.selectClient(preferred);
+        }
       }
       this.args.api.visit.loaded();
     } catch (e) {

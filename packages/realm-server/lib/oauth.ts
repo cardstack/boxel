@@ -573,11 +573,14 @@ export async function deletePlatformClient(
 
 // --- Which clients connect mode offers --------------------------------
 
-// The clients a person may connect through: the platform's, the
-// authorization-code clients shared into `realmURL` (whose shares are
-// active), and their own. With a destination, only clients that name an API
-// host covering it, so connect mode offers what serves the operation. A
-// client's secret and its owner are never part of the answer.
+// The clients a person may connect through, in the order connect mode
+// offers them: the authorization-code clients shared into `realmURL` (whose
+// shares are active), else the platform's, then their own. A realm that
+// shares a client for a destination has chosen the app its people use there,
+// so the platform's client for the same destination isn't offered beside it.
+// With a destination, only clients that name an API host covering it, so
+// connect mode offers what serves the operation. A client's secret and its
+// owner are never part of the answer.
 export async function listConnectableClients(
   dbAdapter: DBAdapter,
   {
@@ -597,7 +600,9 @@ export async function listConnectableClients(
   let serves = (apiHosts: string[]) =>
     destination === undefined ||
     apiHosts.some((host) => destinationCovers(host, destination));
-  let offered: ConnectableClient[] = [];
+  let platform: ConnectableClient[] = [];
+  let shared: ConnectableClient[] = [];
+  let own: ConnectableClient[] = [];
   let describe = (
     row: Record<string, unknown>,
     ref: ClientRef,
@@ -652,7 +657,7 @@ export async function listConnectableClients(
     `SELECT id, label, ${CLIENT_COLUMNS} FROM platform_oauth_clients WHERE state = 'active' ORDER BY label`,
   ])) {
     if (serves(row.api_hosts as string[])) {
-      offered.push(
+      platform.push(
         describe(
           row,
           { kind: 'platform', clientId: row.id as string },
@@ -673,7 +678,7 @@ export async function listConnectableClients(
       ` AND s.state = 'active' AND c.state = 'active' AND c.grant_type = 'authorization_code' ORDER BY s.label`,
     ])) {
       if (serves(row.api_hosts as string[])) {
-        offered.push(
+        shared.push(
           describe(
             row,
             { kind: 'share', shareId: row.share_id as string },
@@ -694,7 +699,7 @@ export async function listConnectableClients(
     ` AND c.state = 'active' AND c.grant_type = 'authorization_code' ORDER BY k.name`,
   ])) {
     if (serves(row.api_hosts as string[])) {
-      offered.push(
+      own.push(
         describe(
           row,
           { kind: 'own', keyId: row.id as string },
@@ -704,7 +709,7 @@ export async function listConnectableClients(
       );
     }
   }
-  return offered;
+  return [...(shared.length > 0 ? shared : platform), ...own];
 }
 
 export function validateClientRef(raw: unknown): ClientRef {

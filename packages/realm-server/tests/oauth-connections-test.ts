@@ -758,6 +758,70 @@ module(basename(import.meta.filename), function (hooks) {
     let served = await call(TEAMMATE);
     assert.strictEqual(served.status, 200, JSON.stringify(served.body));
   });
+
+  test("a client shared into the realm is offered in place of the platform's, ahead of the person's own", async function (assert) {
+    await addPlatformClient(dbAdapter, keyring, {
+      name: 'stub',
+      label: 'Boxel (read-only)',
+      secret: CLIENT_SECRET,
+      oauth: clientSettings(),
+    });
+    await addClient(TEAMMATE, {}, 'my app');
+    let offered = async () =>
+      (
+        await request
+          .get('/_oauth/clients')
+          .query({ realm: realmURL.href, destination: `${PROVIDER}/api/` })
+          .set('Authorization', `Bearer ${createJWT(realm, TEAMMATE, [])}`)
+      ).body.data.map((c: any) => [c.attributes.kind, c.attributes.label]);
+
+    assert.deepEqual(
+      await offered(),
+      [
+        ['platform', 'Boxel (read-only)'],
+        ['own', 'my app'],
+      ],
+      "with no client shared into the realm, the platform's comes first",
+    );
+
+    let client = await addClient(OWNER);
+    let share = await shareKey(dbAdapter, {
+      owner: OWNER,
+      realm: realmURL.href,
+      keyId: client.id,
+      label: 'Team GitHub app',
+      ticket: await ticket(OWNER, 'share', {
+        keyId: client.id,
+        realm: realmURL,
+      }),
+    });
+    assert.deepEqual(
+      await offered(),
+      [
+        ['share', 'Team GitHub app'],
+        ['own', 'my app'],
+      ],
+      "the realm's shared client takes the platform's place",
+    );
+
+    let elsewhere = await request
+      .get('/_oauth/clients')
+      .query({ destination: `${PROVIDER}/api/` })
+      .set('Authorization', `Bearer ${createJWT(realm, TEAMMATE, [])}`);
+    assert.deepEqual(
+      elsewhere.body.data.map((c: any) => c.attributes.kind),
+      ['platform', 'own'],
+      "outside the realm, the platform's client is offered",
+    );
+
+    await suspendShare(dbAdapter, { user: OWNER, shareId: share.id });
+    assert.deepEqual(
+      (await offered()).map(([kind]: [string]) => kind),
+      ['platform', 'own'],
+      "a suspended share gives the platform's client back its place",
+    );
+  });
+
   test('a sign-in finishes only for the person who started it', async function (assert) {
     // Someone starts a sign-in and gets another person to approve it at the
     // vendor: the code comes back to the other person's window.

@@ -6,9 +6,13 @@ import { join } from 'path';
 import jwt from 'jsonwebtoken';
 
 import {
+  addPlatformClient,
   addSystemKey,
+  deletePlatformClient,
   deleteSystemKey,
+  listPlatformClients,
   listSystemKeys,
+  replacePlatformClientSecret,
   readKeyValue,
   replaceSystemKey,
   resolveSystemKeyId,
@@ -243,6 +247,98 @@ describe('boxel realm-server keys', () => {
     ).rejects.toThrow(
       /HTTP 409: a system key for https:\/\/vendor.test\/ already exists/,
     );
+  });
+
+  describe('platform clients (--kind oauth-client)', () => {
+    const GITHUB = {
+      name: 'github',
+      label: 'Boxel (read-only)',
+      secret: 'github-client-secret-0123456789',
+      oauth: {
+        clientId: 'Iv23.boxel',
+        authorizeUrl: 'https://github.com/login/oauth/authorize',
+        tokenUrl: 'https://github.com/login/oauth/access_token',
+        apiHosts: ['https://api.github.com/'],
+      },
+    };
+    const client = {
+      id: '0a4b5c6d-7e8f-4a0b-9c1d-2e3f4a5b6c7d',
+      name: 'github',
+      label: 'Boxel (read-only)',
+      clientId: 'Iv23.boxel',
+      grantType: 'authorization_code',
+      authorizeURL: 'https://github.com/login/oauth/authorize',
+      tokenURL: 'https://github.com/login/oauth/access_token',
+      scopes: '',
+      tokenAuth: 'client_secret_post',
+      apiHosts: ['https://api.github.com/'],
+      state: 'active',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('lists, adds, replaces the secret of and deletes a platform client with a system-keys operator token, the secret only in a body', async () => {
+      let { fetch, requests } = fakeServer([
+        { body: { clients: [client] } },
+        { status: 201, body: { client } },
+        { body: { client } },
+        { body: { deleted: 'github' } },
+      ]);
+      expect(await listPlatformClients(options(fetch))).toEqual([client]);
+      expect(await addPlatformClient(options(fetch), GITHUB)).toEqual(client);
+      await replacePlatformClientSecret(
+        options(fetch),
+        'github',
+        'github-client-secret-rotated',
+      );
+      await deletePlatformClient(options(fetch), 'github');
+
+      expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
+        'GET https://realms.example.test/_platform-oauth-clients',
+        'POST https://realms.example.test/_platform-oauth-clients',
+        'PATCH https://realms.example.test/_platform-oauth-clients/github',
+        'DELETE https://realms.example.test/_platform-oauth-clients/github',
+      ]);
+      expect(JSON.parse(requests[1].body!)).toEqual(GITHUB);
+      expect(JSON.parse(requests[2].body!)).toEqual({
+        secret: 'github-client-secret-rotated',
+      });
+      for (let { url, authorization, redirect } of requests) {
+        expect(url).not.toContain('secret');
+        expect(redirect).toBe('error');
+        let claims = jwt.verify(
+          authorization.replace(/^Bearer /, ''),
+          SEED,
+        ) as Record<string, unknown>;
+        expect(claims.operator).toBe('system-keys');
+      }
+    });
+
+    it('takes a platform client by --name, its settings as flags, and refuses what belongs to a system key', async () => {
+      let keys = buildBoxelProgram('0.0.0')
+        .commands.find((command) => command.name() === 'realm-server')!
+        .commands.find((command) => command.name() === 'keys')!;
+      let add = keys.commands.find((command) => command.name() === 'add')!;
+      expect(add.options.map((option) => option.long)).toEqual(
+        expect.arrayContaining([
+          '--kind',
+          '--name',
+          '--label',
+          '--client-id',
+          '--authorize-url',
+          '--token-url',
+          '--scopes',
+          '--token-auth',
+          '--api-host',
+        ]),
+      );
+      for (let name of ['show', 'replace', 'delete']) {
+        let command = keys.commands.find((c) => c.name() === name)!;
+        expect(command.options.map((option) => option.long)).toEqual(
+          expect.arrayContaining(['--kind', '--name']),
+        );
+      }
+    });
   });
 
   describe('reading the value', () => {

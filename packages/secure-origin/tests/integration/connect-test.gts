@@ -373,7 +373,9 @@ module('Integration | connecting an account', function (hooks) {
         )
         .hasText('Your app');
 
-      assert.dom('[data-test-connect-submit]').isDisabled('no app chosen yet');
+      assert
+        .dom(`${platform} input`)
+        .isChecked('the first app, listed ahead of the user’s own, is chosen');
       assert.dom('[data-test-connect-back]').doesNotExist();
       await click(`${shared} input`);
       assert
@@ -403,6 +405,39 @@ module('Integration | connecting an account', function (hooks) {
         [{ how: 'assign', url: AUTHORIZE_URL }],
         'the window goes to the service’s sign-in page',
       );
+    });
+
+    test('the workspace’s one shared app, or else Boxel’s, starts out chosen; among several shared apps or only the user’s own, none is', async function (assert) {
+      let [platform, share, own] = CLIENTS;
+      let otherShare = {
+        ...share!,
+        ref: { kind: 'share', shareId: '44444444-4444-4444-8444-444444444444' },
+        label: 'Other Team App',
+      };
+      let otherOwn = {
+        ...own!,
+        ref: { kind: 'own', keyId: '55555555-5555-4555-8555-555555555555' },
+        label: 'My Other App',
+      };
+      let chosen = async (clients: unknown[]) => {
+        serve({
+          'GET _oauth/clients': () =>
+            json(200, clientResources(clients as typeof CLIENTS)),
+        });
+        visitShell('connect');
+        await render(ConnectPage);
+        await waitFor('[data-test-connect-form]');
+        return [...document.querySelectorAll('[data-test-client-choice]')]
+          .filter((choice) => choice.querySelector('input')?.checked)
+          .map((choice) => choice.getAttribute('data-test-client-choice'));
+      };
+      assert.deepEqual(await chosen([share!, own!]), ['Team GitHub App']);
+      assert.deepEqual(await chosen([platform!, own!]), ['GitHub']);
+      assert.deepEqual(await chosen([share!, otherShare, own!]), []);
+      assert.deepEqual(await chosen([own!, otherOwn]), []);
+      assert
+        .dom('[data-test-connect-submit]')
+        .isDisabled('nothing to connect through until the user picks');
     });
 
     test('opened bare from the key page, asks for every app the user may use, and goes back', async function (assert) {

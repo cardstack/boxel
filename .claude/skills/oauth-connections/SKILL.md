@@ -1,6 +1,6 @@
 ---
 name: oauth-connections
-description: Operate and diagnose OAuth clients and connections — the `oauth-client` and `oauth-connection` key kinds, the `oauth_clients`, `platform_oauth_clients`, `oauth_connections` and `oauth_connect_requests` tables, connecting through a client from the secure window (`/_oauth/connections`, the vendor's redirect back to `/_oauth/callback`), how access tokens are minted and refreshed in memory, and what each refresh error means — `credential-rejected` with `meta.reason` `rejected` (`invalid_grant`), `needs-admin` (`invalid_client`, or a client deleted, unshared or suspended) and `unavailable` (5xx, timeouts, `temporarily_unavailable` after retries). Also the platform's own clients (`/_platform-oauth-clients`, operator token for `system-keys`) and why a token endpoint is never a grant's destination. Use when a user reports a connection that stopped working, a Reconnect they're asked for, a client every teammate's connection broke on, a sign-in that comes back with an error, when adding or rotating a platform client, or when changing `lib/oauth.ts`, `handlers/handle-oauth.ts` or `lib/outbound/token-endpoints.ts`.
+description: Operate and diagnose OAuth clients and connections — the `oauth-client` and `oauth-connection` key kinds, the `oauth_clients`, `platform_oauth_clients`, `oauth_connections` and `oauth_connect_requests` tables, connecting through a client from the secure window (`/_oauth/connections`, the vendor's redirect back to `/_oauth/callback`), how access tokens are minted and refreshed in memory, and what each refresh error means — `credential-rejected` with `meta.reason` `rejected` (`invalid_grant`), `needs-admin` (`invalid_client`, or a client deleted, unshared or suspended) and `unavailable` (5xx, timeouts, `temporarily_unavailable` after retries). Also the platform's own clients (`boxel realm-server keys --kind oauth-client`, `/_platform-oauth-clients`), the Boxel (read-only) GitHub App among them — its GitHub settings, who administers it, rotating its secret and installing it in an organization — and why a token endpoint is never a grant's destination. Use when a user reports a connection that stopped working, a Reconnect they're asked for, a client every teammate's connection broke on, a sign-in that comes back with an error, when adding or rotating a platform client, or when changing `lib/oauth.ts`, `handlers/handle-oauth.ts` or `lib/outbound/token-endpoints.ts`.
 ---
 
 # OAuth clients and connections (operators)
@@ -168,8 +168,26 @@ the application role, and select metadata columns only.
 
 ## Platform clients
 
-Managed with an operator token for `system-keys` (see the `system-keys`
-skill for minting one):
+Managed with `boxel realm-server keys --kind oauth-client`, which signs an
+operator token for `system-keys` with the realm secret seed (see the
+`system-keys` skill for the seed, the token and the `--realm-server` URL rules).
+The secret is typed at a masked prompt, or read with `--stdin` or
+`--key-file`, never taken as an argument:
+
+```sh
+boxel realm-server keys list    --realm-server <url> --kind oauth-client
+boxel realm-server keys show    --realm-server <url> --kind oauth-client --name <name>
+boxel realm-server keys add     --realm-server <url> --kind oauth-client --name <name> \
+                                --label <label> --client-id <id> \
+                                --authorize-url <url> --token-url <url> \
+                                --api-host <url> [--api-host <url> …] \
+                                [--scopes <scopes>] [--token-auth client_secret_post|client_secret_basic] \
+                                [--stdin | --key-file <path>]
+boxel realm-server keys replace --realm-server <url> --kind oauth-client --name <name> [--stdin | --key-file <path>]
+boxel realm-server keys delete  --realm-server <url> --kind oauth-client --name <name>
+```
+
+The command calls these routes:
 
 | Route                                   | Does                                                                                                                |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -178,10 +196,106 @@ skill for minting one):
 | `PATCH /_platform-oauth-clients/:name`  | Replace the secret (`{secret}`), which also clears `broken`                                                         |
 | `DELETE /_platform-oauth-clients/:name` | Delete; its connections stay and need an administrator, and a client re-added under the name doesn't take them back |
 
+Unlike a system key, a platform client keeps no history and takes no operator
+note; the command refuses `--note` with `--kind oauth-client`.
+
 A platform client is always `authorization_code`. Its `apiHosts` decide where
 connect mode offers it (`https://api.github.com/` for the GitHub App). A
 client's endpoints never change once stored; register a new client to move
 them.
+
+**A realm's shared client takes the platform client's place.** For a realm
+that has an active share of an authorization-code client serving the
+destination, connect mode offers the shared clients and not the platform's;
+everywhere else it offers the platform's. Either way it lists the person's
+own clients after them. The page starts with the first one chosen when it is
+the only shared client, or the only platform client.
+
+### Boxel (read-only), the GitHub App
+
+The platform's client for GitHub is a **GitHub App** named **Boxel
+(read-only)**, owned by the Cardstack GitHub organization
+(`https://github.com/organizations/cardstack/settings/apps/boxel-read-only`).
+The organization's owners administer it. Each environment stores it as the
+platform client named **`github`**, which is the name `boxel keys connect
+--client platform:github` uses.
+
+Its settings on GitHub:
+
+- **Permissions**, repository only, all **read-only**: Contents, Pull
+  requests, Checks, Issues, and Metadata (which GitHub requires). No
+  organization or account permissions, and no write access of any kind. A
+  card that needs to write registers its own app.
+- **Callback URLs**, one per realm server (the `redirect_uri` is always
+  `<realm server>/_oauth/callback`): `https://app.boxel.ai/_oauth/callback`,
+  `https://realms-staging.stack.cards/_oauth/callback` and
+  `https://localhost:4201/_oauth/callback`. A realm server whose URL isn't
+  listed (an environment-mode `realm-server.<slug>.localhost`) can't use it;
+  use a GitHub App of your own there.
+- **Expire user authorization tokens: on**, so a sign-in returns a refresh
+  token and an access token that lasts eight hours, which the realm server
+  refreshes.
+- **Request user authorization (OAuth) during installation: off.** GitHub
+  would then send an installer to the callback without a sign-in the realm
+  server started, which the callback answers `expired`.
+- **Webhook: inactive.** Nothing listens for the app's events.
+- **Where it can be installed: any account**, so any organization's owner can
+  install it.
+- **The listing says** that it reads pull requests, code, checks and issues
+  and never writes, that it is used by Boxel cards a person connects their
+  GitHub account to, and that **an organization owner's install covers every
+  Boxel use of the app**: each person still signs in with their own account
+  and sees only what that account can see.
+
+Only the **client id** and **client secret** are stored. A person's sign-in
+needs nothing else: their tokens are user-to-server tokens, limited to what
+both the person and the app's installations can read. The app's private key
+signs installation tokens, which Boxel never mints, so none is generated or
+stored; one would be a secret with no use.
+
+GitHub ignores `scope` for a GitHub App (its permissions are the app's), so
+the client is stored with no scopes, and connect mode says it asks for no
+extra permissions.
+
+To store it in an environment, as one of the organization's owners or a
+developer they gave the secret to:
+
+```sh
+export BOXEL_REALM_SECRET_SEED=…   # the environment's; or let the command prompt
+boxel realm-server keys add --realm-server https://realms-staging.stack.cards \
+  --kind oauth-client --name github --label 'Boxel (read-only)' \
+  --client-id <the app's client id, Iv23…> \
+  --authorize-url https://github.com/login/oauth/authorize \
+  --token-url https://github.com/login/oauth/access_token \
+  --api-host https://api.github.com/
+```
+
+**Rotating its secret.** Generate a new client secret on the app's settings
+page (GitHub keeps both working until the old one is deleted), run
+`boxel realm-server keys replace --kind oauth-client --name github` in each
+environment, check a connection still works (a `callApi` through one, or `keys
+show`'s `state: active`), and then delete the old secret on GitHub. Replacing
+it also clears a client marked `broken`, which is what an `invalid_client`
+from GitHub leaves behind (see [Refresh errors](#refresh-errors)): every
+connection through it resumes at once, with no one signing in again.
+
+### Installing the app in an organization
+
+A GitHub App's user token reaches an organization's repositories only where
+the app is installed. So a person whose organization hasn't installed Boxel
+(read-only) can connect, and their own public data comes back, but that
+organization's private repositories don't: GitHub answers as if they didn't
+exist.
+
+- A member asks for it at `https://github.com/apps/boxel-read-only/installations/new`,
+  picking the organization. A member who isn't an owner sees **Request**
+  instead of **Install**, and GitHub sends the request to the owners.
+- An owner approves it once, choosing all repositories or some. That install
+  covers every Boxel use of the app in the organization: every member who
+  connects reads what both they and the install can read, with no further
+  approval.
+- Uninstalling it, or removing a repository from it, takes effect at once for
+  every connection; nothing in Boxel changes.
 
 ## Tests
 
