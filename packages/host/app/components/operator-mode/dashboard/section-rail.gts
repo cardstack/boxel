@@ -349,6 +349,7 @@ export default class SectionRail extends Component<Signature> {
         --_rail-shadow: color-mix(in oklch, var(--boxel-dark) 45%, transparent);
         --_rail-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
         /* Read by the flyout too, which must fit between them. */
+        --_rail-gap: var(--boxel-sp-4xs);
         --_rail-top: calc(
           var(--operator-mode-top-bar-item-height) + 2 *
             var(--operator-mode-spacing)
@@ -367,7 +368,7 @@ export default class SectionRail extends Component<Signature> {
         z-index: var(--host-dashboard-rail-z-index);
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-4xs);
+        gap: var(--_rail-gap);
         box-sizing: border-box;
         width: var(--_rail-closed-width);
         padding: var(--_rail-pad);
@@ -458,7 +459,7 @@ export default class SectionRail extends Component<Signature> {
           26rem,
           100dvh - var(--_rail-top) - var(--_rail-bottom) -
             var(--_rail-item-index) *
-            (var(--container-button-size) + var(--boxel-sp-4xs))
+            (var(--container-button-size) + var(--_rail-gap))
         );
         position: absolute;
         top: calc(-1 * var(--_rail-pad));
