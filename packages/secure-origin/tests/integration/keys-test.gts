@@ -1581,8 +1581,6 @@ module('Integration | key pages', function (hooks) {
           'a key file for the same service account changes nothing',
         );
       await click('[data-test-key-replace-save]');
-      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
-      await settled();
       assert.deepEqual(
         requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
         {
