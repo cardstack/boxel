@@ -82,14 +82,11 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
   let provider: StubOAuthProvider;
   let testRealm: Realm;
   let serviceModule: string;
-  // The browser's own sign-in on the secure origin, which finishes a
-  // connection in the `connected` page.
-  let windowSession: string | undefined;
   // What the browser did after the CLI opened the vendor's page, awaited by
   // the test that opened it.
   let browsing: Promise<void> | undefined;
 
-  async function signInOnSecureOrigin(client: 'cli' | 'window') {
+  async function signInOnSecureOrigin(client: 'cli') {
     let response = await fetch(`${realmServerUrl}_secure-session`, {
       method: 'POST',
       headers: {
@@ -111,12 +108,12 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
     return ((await response.json()) as any).data.attributes;
   }
 
-  // Stands in for the browser. Given the CLI's sign-in link, it signs in on
-  // the secure origin and hands the session to the CLI's loopback listener,
-  // as the window's form does. Given a vendor's sign-in page, it approves
-  // there, follows the vendor back through the realm server's callback to
-  // the secure window's `connected` page, and finishes the sign-in as that
-  // page does, with the window's own session.
+  // Stands in for the browser, which holds no session on the secure origin.
+  // Given the CLI's sign-in link, it signs in on the secure origin and hands
+  // the session to the CLI's loopback listener, as the window's form does.
+  // Given a vendor's sign-in page, it approves there, follows the vendor back
+  // through the realm server's callback to the secure window's `connected`
+  // page, and hands the code to the CLI as that page does.
   async function browser(link: string): Promise<boolean> {
     let url = new URL(link);
     if (url.origin === secureOriginURL.origin) {
@@ -149,29 +146,22 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
       expect(`${landing.origin}${landing.pathname}`).toBe(
         `${secureOriginURL.href}/connected`,
       );
+      // The `connected` page, with no session of its own, hands the code to
+      // the CLI's listener the sign-in named, as its form does.
       let fragment = new URLSearchParams(landing.hash.slice(1));
-      windowSession ??= (await signInOnSecureOrigin('window')).token;
-      let finished = await fetch(
-        `${realmServerUrl}_oauth/connections/complete`,
+      let handedBack = await fetch(
+        `http://127.0.0.1:${fragment.get('cli_port')}/callback`,
         {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${windowSession}`,
-            Origin: secureOriginURL.origin,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            data: {
-              type: 'oauth-callback',
-              attributes: {
-                state: fragment.get('state'),
-                code: fragment.get('code'),
-              },
-            },
-          }),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            state: fragment.get('cli_state')!,
+            oauth_code: fragment.get('code')!,
+            oauth_state: fragment.get('state')!,
+          }).toString(),
         },
       );
-      expect(finished.status).toBe(201);
+      expect(handedBack.status).toBe(200);
     })();
     return true;
   }
@@ -291,7 +281,7 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
       realmServerUrl,
     );
     await pm.getOrRefreshServerToken();
-    deps = { profileManager: pm, openBrowserFn: browser, pollIntervalMs: 50 };
+    deps = { profileManager: pm, openBrowserFn: browser };
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
   }, 600_000);
@@ -321,7 +311,7 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
       authorizeUrl: `${provider.url}/authorize`,
       tokenUrl: `${provider.url}/token`,
       scopes: ['read:user'],
-      apiHost: [`${provider.url}/api/`],
+      apiHost: [`${provider.alternateUrl}/api/`],
     });
     expect(added).toMatchObject({ name: 'team app', kind: 'oauth-client' });
     let shown = await keysShow('team app', deps);
@@ -329,7 +319,7 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
       clientId: TEAM_CLIENT.clientId,
       tokenURL: `${provider.url}/token`,
       scopes: 'read:user',
-      apiHosts: [`${provider.url}/api/`],
+      apiHosts: [`${provider.alternateUrl}/api/`],
       state: 'active',
     });
     expect(JSON.stringify(shown)).not.toContain(TEAM_CLIENT.clientSecret);

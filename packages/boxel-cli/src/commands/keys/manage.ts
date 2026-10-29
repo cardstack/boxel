@@ -19,7 +19,11 @@ import {
   secureSignOut,
   SecureSessionRequestError,
 } from '../../lib/secure-session.ts';
-import type { PostedSecureSession } from '../../lib/sso-login.ts';
+import {
+  SsoTimeoutError,
+  startLoopbackCallback,
+  type PostedSecureSession,
+} from '../../lib/sso-login.ts';
 import {
   addUserKey,
   canonicalRealmUrl,
@@ -31,12 +35,14 @@ import {
   listUserKeys,
   replaceUserKey,
   shareUserKey,
+  completeOAuthConnect,
   startOAuthConnect,
   swapKeyIntoShare,
   unshareUserKey,
   type ConnectableClient,
   type KeyShare,
   type OAuthClientSettings,
+  type OAuthConnectOutcome,
   type UserKeyMetadata,
 } from '../../lib/user-keys.ts';
 
@@ -74,9 +80,6 @@ export interface KeysCommandDeps {
   input?: NodeJS.ReadStream;
   output?: NodeJS.WritableStream;
   confirmFn?: (question: string) => Promise<boolean>;
-  // Injected by tests: how often `connect` asks whether the sign-in has
-  // finished.
-  pollIntervalMs?: number;
 }
 
 interface Context {
@@ -743,7 +746,10 @@ export async function keysClients(
   return clients;
 }
 
-// The client `--client` names, among those the user may connect through.
+// The client `--client` names, among those the user may connect through:
+// `platform:<name>` for one of Boxel's own; otherwise a client shared into
+// the `--realm` under that label, or, failing that, one of the user's own
+// client keys of that name, which `clients --realm` lists too.
 function findClient(
   clients: ConnectableClient[],
   argument: string,
@@ -754,27 +760,47 @@ function findClient(
     let name = argument.slice('platform:'.length);
     found = clients.find((c) => c.kind === 'platform' && c.name === name);
   } else {
-    let kind = realm ? 'share' : 'own';
-    found = clients.find((c) => c.kind === kind && c.label === argument);
+    found =
+      (realm
+        ? clients.find((c) => c.kind === 'share' && c.label === argument)
+        : undefined) ??
+      clients.find((c) => c.kind === 'own' && c.label === argument);
   }
   if (!found) {
     throw new Error(
       realm
-        ? `${canonicalRealmUrl(realm)} has no client shared as ${argument} that you can connect through. \`boxel keys clients --realm ${realm}\` lists them`
+        ? `${canonicalRealmUrl(realm)} has no client shared as ${argument}, and you have no client of that name, to connect through. \`boxel keys clients --realm ${realm}\` lists them`
         : `You have no client named ${argument} to connect through. A client shared into a realm takes --realm; \`boxel keys clients\` lists them`,
     );
   }
   return found;
 }
 
-const DEFAULT_CONNECT_POLL_MS = 2000;
+// How long a sign-in at a service lasts on the realm server.
+const CONNECT_WINDOW_MS = 10 * 60 * 1000;
 
-// Signs in to a vendor through a client, in the browser, and keeps what the
-// sign-in yields as the user's connection `name`. The vendor sends the
-// browser back through the realm server's callback to the secure window,
-// which finishes the sign-in with its own session, so no token passes
-// through the CLI; it waits for the connection to appear among the user's
-// keys.
+// Why a sign-in ended without a connection, as the realm server or the
+// service names it, in the words `connect` says it.
+const CONNECT_FAILURES: Record<string, string> = {
+  expired:
+    'The sign-in took too long, or was already used, so nothing was connected. Run it again to start a new one',
+  denied:
+    "The service didn't give Boxel access: the sign-in was cancelled there, or the service refused it. Nothing was connected",
+  failed:
+    "The service didn't complete the sign-in, so nothing was connected. Try again; if it keeps happening, the client's settings may need checking",
+  'name-taken':
+    'A key of that name was added while you were signing in, so nothing was connected. Connect again under another name',
+};
+
+// Signs in to a service through a client, in the browser, and keeps what the
+// sign-in yields as the user's connection `name`. The CLI waits on a
+// loopback port it names when it starts the sign-in. The service sends the
+// browser back through the realm server's callback to the secure window's
+// `connected` page, which hands the service's one-use code to that port once
+// the user confirms; the CLI then finishes the sign-in with its own secure
+// session, so the browser needs no Boxel session of its own. The code is
+// useless without the PKCE verifier and client secret, which only the realm
+// server holds, and no token the service issues reaches the CLI.
 export async function keysConnect(
   name: string,
   options: {
@@ -793,63 +819,87 @@ export async function keysConnect(
   ) {
     throw new Error('--timeout is a number of seconds');
   }
-  let token = await secureToken(ctx);
+  // Found with the ordinary session, so a client that isn't there never costs
+  // a sign-in in the browser.
   let client = findClient(
-    await listConnectableClients(ctx.realmServerUrl, token, {
+    await listConnectableClients(ctx.realmServerUrl, await ordinaryToken(ctx), {
       realm: options.realm,
     }),
     options.client,
     options.realm,
   );
-  let started = await startOAuthConnect(ctx.realmServerUrl, token, {
-    name,
-    client: client.ref,
+  let token = await secureToken(ctx);
+  let listener = await startLoopbackCallback({
+    timeoutMs: Math.min(
+      CONNECT_WINDOW_MS,
+      timeoutSeconds === undefined ? Infinity : timeoutSeconds * 1000,
+    ),
   });
-  let open = ctx.deps.openBrowserFn ?? openBrowser;
-  if (await open(started.authorizeUrl)) {
-    say(ctx, `Opening your browser to sign in at ${client.authorizeHost}...`);
-    say(ctx, `If it didn't open, visit:\n  ${started.authorizeUrl}`);
-  } else {
+  let outcome: OAuthConnectOutcome;
+  try {
+    let started = await startOAuthConnect(ctx.realmServerUrl, token, {
+      name,
+      client: client.ref,
+      cli: { port: listener.port, state: listener.state },
+    });
+    let open = ctx.deps.openBrowserFn ?? openBrowser;
+    if (await open(started.authorizeUrl)) {
+      say(ctx, `Opening your browser to sign in at ${client.authorizeHost}...`);
+      say(ctx, `If it didn't open, visit:\n  ${started.authorizeUrl}`);
+    } else {
+      say(
+        ctx,
+        `Open this URL in your browser to sign in at ${client.authorizeHost}:\n  ${started.authorizeUrl}`,
+      );
+    }
     say(
       ctx,
-      `Open this URL in your browser to sign in at ${client.authorizeHost}:\n  ${started.authorizeUrl}`,
+      'Waiting for you to sign in, then to continue in the Boxel page the browser comes back to...',
+    );
+    let result;
+    try {
+      result = await listener.waitForResult();
+    } catch (e) {
+      if (e instanceof SsoTimeoutError) {
+        throw new Error(
+          "The sign-in wasn't finished in the browser in time, so nothing was connected. Run it again to start a new one",
+        );
+      }
+      throw e;
+    }
+    if (result.kind !== 'oauth') {
+      throw new Error('The browser returned a different kind of sign-in.');
+    }
+    outcome =
+      'error' in result.outcome
+        ? { error: result.outcome.error }
+        : await completeOAuthConnect(ctx.realmServerUrl, token, result.outcome);
+  } finally {
+    listener.close();
+  }
+  if ('error' in outcome) {
+    throw new Error(
+      CONNECT_FAILURES[outcome.error] ?? CONNECT_FAILURES.failed!,
     );
   }
-  // The sign-in lapses on the realm server at `expiresAt`; waiting longer
-  // can't help.
-  let deadline = Date.parse(started.expiresAt);
-  if (timeoutSeconds !== undefined) {
-    deadline = Math.min(deadline, Date.now() + timeoutSeconds * 1000);
-  }
-  say(ctx, 'Waiting for you to finish signing in in the browser...');
-  let interval = ctx.deps.pollIntervalMs ?? DEFAULT_CONNECT_POLL_MS;
-  for (;;) {
-    let key = (await listUserKeys(ctx.realmServerUrl, token)).find(
-      (candidate) => candidate.name === name,
+  let connectedId = outcome.connected;
+  let key = (await listUserKeys(ctx.realmServerUrl, token)).find(
+    (candidate) => candidate.id === connectedId,
+  );
+  if (!key) {
+    throw new Error(
+      `The connection was made, but ${name} isn't among your keys; \`boxel keys list\` shows what you have`,
     );
-    if (key && key.kind !== 'oauth-connection') {
-      throw new Error(
-        `A key named ${name} was added while you were signing in, so nothing was connected. Connect again under another name`,
-      );
-    }
-    if (key) {
-      emit(ctx, key, () => {
-        console.log(
-          `${FG_GREEN}Connected ${key.name} through ${client.kind === 'platform' ? client.label : clientArgument(client)}.${RESET}`,
-        );
-        console.log(
-          `${DIM}Cards can use it only for the requests you approve.${RESET}`,
-        );
-      });
-      return key;
-    }
-    if (Date.now() + interval > deadline) {
-      throw new Error(
-        "The sign-in wasn't finished in the browser in time, so nothing was connected. If the browser said why, that is the reason; run it again to start a new sign-in",
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, interval));
   }
+  emit(ctx, key, () => {
+    console.log(
+      `${FG_GREEN}Connected ${key.name} through ${client.kind === 'platform' ? client.label : clientArgument(client)}.${RESET}`,
+    );
+    console.log(
+      `${DIM}Nothing can use it until an operation is approved for it.${RESET}`,
+    );
+  });
+  return key;
 }
 
 // Runs a command, printing a refusal with the server's status and reason.

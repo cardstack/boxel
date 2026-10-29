@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import http from 'http';
 import * as os from 'os';
 import { join } from 'path';
 import { PassThrough, Writable } from 'stream';
@@ -891,16 +892,15 @@ describe('boxel keys: OAuth clients and connections', () => {
     expect(lines[2]).toMatch(/^forge app .*yours, signs in at forge\.example/);
   });
 
+  // A realm server for `connect`. `complete` answers the CLI finishing the
+  // sign-in.
   function serveConnect({
     clients = [PLATFORM, SHARED, OWN],
-    appearsAfter = 1,
-    appearing = CONNECTION,
-  }: {
-    clients?: unknown[];
-    appearsAfter?: number;
-    appearing?: unknown;
-  } = {}) {
-    let listings = 0;
+    complete = { connected: CONNECTION.id, reconnected: false } as Record<
+      string,
+      unknown
+    >,
+  }: { clients?: unknown[]; complete?: Record<string, unknown> } = {}) {
     return stubServer(({ method, path }) => {
       if (path === '/_secure-session') return { status: 204 };
       if (path.startsWith('/_oauth/clients')) {
@@ -934,84 +934,178 @@ describe('boxel keys: OAuth clients and connections', () => {
           },
         };
       }
+      if (method === 'POST' && path === '/_oauth/connections/complete') {
+        return {
+          status: 'connected' in complete ? 201 : 200,
+          body: {
+            data: { type: 'oauth-connection-result', attributes: complete },
+          },
+        };
+      }
       if (method === 'GET' && path === '/_user-keys') {
-        listings++;
-        let data =
-          listings > appearsAfter
-            ? [
-                {
-                  type: 'user-key',
-                  id: (appearing as any).id,
-                  attributes: appearing,
-                },
-              ]
-            : [];
-        return { body: { data } };
+        return {
+          body: {
+            data: [
+              { type: 'user-key', id: CONNECTION.id, attributes: CONNECTION },
+            ],
+          },
+        };
       }
       throw new Error(`unexpected ${method} ${path}`);
     });
   }
 
-  it('connects through a platform client: opens the vendor in the browser and waits for the connection, printing no token', async () => {
-    let requests = serveConnect();
+  // Posts to the CLI's loopback listener as the secure window's `connected`
+  // page does, with node's own HTTP client: `fetch` is the stubbed realm
+  // server here.
+  function postToListener(
+    cli: { port: number; state: string },
+    fields: Record<string, string>,
+  ): Promise<number> {
+    let body = new URLSearchParams({ state: cli.state, ...fields }).toString();
+    return new Promise((resolve, reject) => {
+      let req = http.request(
+        {
+          host: '127.0.0.1',
+          port: cli.port,
+          path: '/callback',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        },
+      );
+      req.on('error', reject);
+      req.end(body);
+    });
+  }
+
+  // Stands in for the browser: once the CLI opens the service's page, the
+  // service sends it back and the `connected` page hands `fields` to the
+  // listener the sign-in named.
+  function browserHandingBack(
+    requests: { method: string; path: string; body: any }[],
+    fields: Record<string, string>,
+  ) {
     let opened: string[] = [];
+    return {
+      opened,
+      openBrowserFn: async (url: string) => {
+        opened.push(url);
+        let started = requests
+          .filter(
+            (r) => r.method === 'POST' && r.path === '/_oauth/connections',
+          )
+          .at(-1)!;
+        setTimeout(
+          () => void postToListener(started.body.data.attributes.cli, fields),
+          0,
+        );
+        return true;
+      },
+    };
+  }
+
+  it('connects through a platform client: the browser hands the code back to the CLI, which finishes the sign-in with its own session', async () => {
+    let requests = serveConnect();
+    let browser = browserHandingBack(requests, {
+      oauth_code: 'one-use-code',
+      oauth_state: 'sign-in-state',
+    });
     let stdout = captureStdout();
     let key;
     try {
       key = await keysConnect('my forge', {
         profileManager: manager,
         client: 'platform:github',
-        openBrowserFn: async (url) => {
-          opened.push(url);
-          return true;
-        },
-        pollIntervalMs: 1,
+        openBrowserFn: browser.openBrowserFn,
       });
     } finally {
       stdout.restore();
     }
     expect(key.id).toBe(CONNECTION.id);
-    expect(opened).toEqual([
+    expect(browser.opened).toEqual([
       'https://github.com/login/oauth/authorize?state=s',
     ]);
     expect(requests.map((r) => `${r.method} ${r.path}`)).toEqual([
-      'GET /_secure-session',
       'GET /_oauth/clients',
+      'GET /_secure-session',
       'POST /_key-write-tickets',
       'POST /_oauth/connections',
-      'GET /_user-keys',
+      'POST /_oauth/connections/complete',
       'GET /_user-keys',
     ]);
     expect(requests[2].body.data.attributes).toEqual({ action: 'add' });
-    expect(requests[3].body).toEqual({
+    let { cli, ...attributes } = requests[3].body.data.attributes;
+    expect(attributes).toEqual({ name: 'my forge', client: PLATFORM.ref });
+    expect(cli).toEqual({
+      port: expect.any(Number),
+      state: expect.stringMatching(/^[0-9a-f]{32}$/),
+    });
+    expect(requests[3].body.meta).toEqual({ ticket: 'ticket-1' });
+    expect(requests[4].body).toEqual({
       data: {
-        type: 'oauth-connect',
-        attributes: { name: 'my forge', client: PLATFORM.ref },
+        type: 'oauth-callback',
+        attributes: { code: 'one-use-code', state: 'sign-in-state' },
       },
-      meta: { ticket: 'ticket-1' },
     });
     expect(stdout.text()).toContain(
       'Connected my forge through Boxel (read-only).',
     );
+    expect(stdout.text()).not.toContain('one-use-code');
   });
 
-  it('names a shared client by its label in the --realm, and one of your own by its name', async () => {
-    let requests = serveConnect({ appearsAfter: 0 });
+  it("ends the wait on a hand-off that doesn't carry the listener's state, finishing nothing", async () => {
+    let requests = serveConnect();
+    let refused: Promise<number> | undefined;
     let quiet = captureStdout();
     try {
-      await keysConnect('my forge', {
-        profileManager: manager,
-        client: 'team forge',
-        realm: REALM,
-        openBrowserFn: async () => true,
-        pollIntervalMs: 1,
-      });
-      await keysConnect('my forge', {
-        profileManager: manager,
-        client: 'forge app',
-        openBrowserFn: async () => true,
-        pollIntervalMs: 1,
-      });
+      await expect(
+        keysConnect('my forge', {
+          profileManager: manager,
+          client: 'platform:github',
+          openBrowserFn: async () => {
+            let { cli } = requests.find(
+              (r) => r.path === '/_oauth/connections',
+            )!.body.data.attributes;
+            refused = postToListener(
+              { ...cli, state: 'f'.repeat(32) },
+              { oauth_code: 'someone-elses', oauth_state: 'theirs' },
+            );
+            return true;
+          },
+        }),
+      ).rejects.toThrow(/did not carry the expected state/);
+    } finally {
+      quiet.restore();
+    }
+    expect(await refused).toBe(400);
+    expect(
+      requests.filter((r) => r.path === '/_oauth/connections/complete'),
+    ).toEqual([]);
+  });
+
+  it('names a shared client by its label in the --realm, and one of your own by its name, with or without --realm', async () => {
+    let requests = serveConnect();
+    let quiet = captureStdout();
+    try {
+      for (let [client, realm] of [
+        ['team forge', REALM],
+        ['forge app', undefined],
+        ['forge app', REALM],
+      ] as const) {
+        await keysConnect('my forge', {
+          profileManager: manager,
+          client,
+          realm,
+          openBrowserFn: browserHandingBack(requests, {
+            oauth_code: 'one-use-code',
+            oauth_state: 'sign-in-state',
+          }).openBrowserFn,
+        });
+      }
     } finally {
       quiet.restore();
     }
@@ -1019,24 +1113,18 @@ describe('boxel keys: OAuth clients and connections', () => {
     expect(started.map((r) => r.body.data.attributes.client)).toEqual([
       SHARED.ref,
       OWN.ref,
-    ]);
-    expect(
-      requests
-        .filter((r) => r.path.startsWith('/_oauth/clients'))
-        .map((r) => r.path),
-    ).toEqual([
-      `/_oauth/clients?realm=${encodeURIComponent(REALM)}`,
-      '/_oauth/clients',
+      OWN.ref,
     ]);
   });
 
-  it("refuses a client it can't find before starting a sign-in", async () => {
+  it("refuses a client it can't find, or a bad --timeout, before signing in or starting anything", async () => {
+    manager.clearSecureSession();
     let requests = serveConnect();
     let openBrowserFn = vi.fn(async () => true);
     for (let [client, realm] of [
       ['platform:gitlab', undefined],
       ['team forge', undefined],
-      ['forge app', REALM],
+      ['nobody', REALM],
     ] as const) {
       await expect(
         keysConnect('my forge', {
@@ -1056,40 +1144,58 @@ describe('boxel keys: OAuth clients and connections', () => {
       }),
     ).rejects.toThrow(/--timeout is a number of seconds/);
     expect(openBrowserFn).not.toHaveBeenCalled();
-    expect(requests.some((r) => r.path === '/_oauth/connections')).toBe(false);
+    expect(
+      requests.filter((r) => !r.path.startsWith('/_oauth/clients')),
+    ).toEqual([]);
   });
 
-  it('gives up when the sign-in is not finished in time, and says when the name was taken meanwhile', async () => {
-    serveConnect({ appearsAfter: Infinity });
+  it('says why a sign-in ended without a connection, from the browser or the realm server', async () => {
     let quiet = captureStdout();
-    let errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      let requests = serveConnect();
+      await expect(
+        keysConnect('my forge', {
+          profileManager: manager,
+          client: 'platform:github',
+          openBrowserFn: browserHandingBack(requests, { oauth_error: 'denied' })
+            .openBrowserFn,
+        }),
+      ).rejects.toThrow(/didn't give Boxel access/);
+      expect(
+        requests.some((r) => r.path === '/_oauth/connections/complete'),
+      ).toBe(false);
+
+      vi.unstubAllGlobals();
+      requests = serveConnect({ complete: { error: 'name-taken' } });
+      await expect(
+        keysConnect('my forge', {
+          profileManager: manager,
+          client: 'platform:github',
+          openBrowserFn: browserHandingBack(requests, {
+            oauth_code: 'one-use-code',
+            oauth_state: 'sign-in-state',
+          }).openBrowserFn,
+        }),
+      ).rejects.toThrow(/was added while you were signing in/);
+    } finally {
+      quiet.restore();
+    }
+  });
+
+  it('gives up when nothing comes back in time', async () => {
+    serveConnect();
+    let quiet = captureStdout();
     try {
       await expect(
         keysConnect('my forge', {
           profileManager: manager,
           client: 'platform:github',
-          timeout: '0',
+          timeout: '0.05',
           openBrowserFn: async () => true,
-          pollIntervalMs: 1,
         }),
       ).rejects.toThrow(/wasn't finished in the browser in time/);
-
-      vi.unstubAllGlobals();
-      serveConnect({
-        appearsAfter: 0,
-        appearing: { ...KEY, name: 'my forge' },
-      });
-      await expect(
-        keysConnect('my forge', {
-          profileManager: manager,
-          client: 'platform:github',
-          openBrowserFn: async () => true,
-          pollIntervalMs: 1,
-        }),
-      ).rejects.toThrow(/was added while you were signing in/);
     } finally {
       quiet.restore();
-      errors.mockRestore();
     }
   });
 });

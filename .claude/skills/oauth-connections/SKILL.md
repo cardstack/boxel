@@ -65,12 +65,20 @@ only scope that reaches private repositories, `repo`, can also write.
 From the terminal, `boxel keys add <name> --kind oauth-client …` adds a
 client, `boxel keys clients [--realm]` lists the same connectable clients
 (a platform client by its `name`, as `platform:<name>`), and
-`boxel keys connect <name> --client …` starts the sign-in with the CLI's
-secure session (step 2), opens the authorization URL in the system browser,
-and polls `GET /_user-keys` until a connection of that name appears or the
-connect request expires. The sign-in still finishes in the browser's secure
-window (step 3), so the CLI never sees a code or a token; a sign-in that
-fails says why only on the `connected` page, and the CLI times out.
+`boxel keys connect <name> --client …` signs in through one without the
+browser holding a session of its own. The CLI listens on a loopback port and
+starts the sign-in (step 2) with its own secure session, naming that listener
+as `cli: {port, state}` (only a CLI session may name one, 400 otherwise); the
+sign-in in progress records it (`oauth_connect_requests.cli_port`,
+`cli_state`). In step 3 the callback reads it back by the `state` and adds
+`cli_port` and `cli_state` to the `connected` page's fragment. The page then
+finishes nothing and needs no session: once the user presses **Continue in
+the terminal** it posts the code and `state` (or `oauth_error`) to the
+listener, and the CLI finishes the sign-in with
+`POST /_oauth/connections/complete` under its own secure session, which the
+realm server accepts only for the user who started it. The CLI sees the
+one-use code, which is useless without the PKCE verifier and client secret,
+and never a token.
 
 The callback's query string carries the authorization code. `/_oauth` is a key
 route, so the request log and telemetry keep only its method and path; the load

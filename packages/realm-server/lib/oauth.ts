@@ -60,6 +60,11 @@ import {
 // SHA-256, and the PKCE verifier is derived from it with the server's secret,
 // so a sign-in in progress stores nothing that could complete it.
 //
+// The CLI connects without a browser session: it names its loopback listener
+// when it starts the sign-in, the callback passes that on to the secure
+// window's `connected` page, and the page hands the code to the CLI, which
+// finishes the sign-in with its own secure session (`CliHandoff`).
+//
 // **Minting.** Access tokens live only in this process's memory
 // (`OAuthTokens`), keyed by the connection (or by the `client_credentials`
 // client), and are refreshed ahead of expiry. One refresh runs per key at a
@@ -1222,6 +1227,7 @@ export async function startConnect(
     serverURL,
     serverSecret,
     mayUseShare,
+    cli,
   }: {
     owner: string;
     name?: unknown;
@@ -1232,6 +1238,10 @@ export async function startConnect(
     serverSecret: string;
     // Whether the owner may connect through a share in its realm: they read it.
     mayUseShare: (realmURL: string) => Promise<boolean>;
+    // The CLI's loopback listener, for a sign-in the CLI started: the
+    // `connected` page hands the code to it, and the CLI finishes the
+    // sign-in with its own secure session.
+    cli?: CliHandoff;
   },
 ): Promise<{ authorizeURL: string; expiresAt: string }> {
   let reconnects: string | null = null;
@@ -1337,7 +1347,7 @@ export async function startConnect(
       `DELETE FROM oauth_connect_requests WHERE expires_at <= NOW()`,
     ]);
     await txQuery([
-      `INSERT INTO oauth_connect_requests (state_sha256, owner, name, client_kind, client_key_id, client_share_id, platform_client_id, client_id, token_url, reconnects_key_id, expires_at) VALUES (`,
+      `INSERT INTO oauth_connect_requests (state_sha256, owner, name, client_kind, client_key_id, client_share_id, platform_client_id, client_id, token_url, reconnects_key_id, cli_port, cli_state, expires_at) VALUES (`,
       param(sha256(state)),
       `, `,
       param(owner),
@@ -1357,6 +1367,10 @@ export async function startConnect(
       param(opened.tokenURL),
       `, `,
       param(reconnects),
+      `, `,
+      param(cli?.port ?? null),
+      `, `,
+      param(cli?.state ?? null),
       `, `,
       param(expiresAt.toISOString()),
       `)`,
@@ -1402,6 +1416,52 @@ async function clientScopes(
             param(client.shareId),
           ]);
   return (rows[0]?.scopes as string) ?? '';
+}
+
+// Where the CLI waits for a sign-in it started: a port on 127.0.0.1, and the
+// value its listener expects back, which tells the sign-in apart from
+// anything else on this machine that posts to the port.
+export interface CliHandoff {
+  port: number;
+  state: string;
+}
+
+const CLI_STATE = /^[A-Za-z0-9_-]{16,128}$/;
+
+export function validateCliHandoff(raw: unknown): CliHandoff {
+  let handoff = raw as Record<string, unknown> | null;
+  if (
+    !handoff ||
+    typeof handoff !== 'object' ||
+    !Number.isInteger(handoff.port) ||
+    (handoff.port as number) < 1 ||
+    (handoff.port as number) > 65535 ||
+    typeof handoff.state !== 'string' ||
+    !CLI_STATE.test(handoff.state)
+  ) {
+    throw new UserKeyError(
+      400,
+      `the CLI names its listener as {port, state}: a port and 16 to 128 URL-safe characters`,
+    );
+  }
+  return { port: handoff.port as number, state: handoff.state };
+}
+
+// The CLI listener a sign-in in progress hands its code to, when the CLI
+// started it and it hasn't expired. Read by the callback, which finishes
+// nothing: it only decides where the `connected` page sends the code.
+export async function cliHandoffFor(
+  dbAdapter: DBAdapter,
+  state: string,
+): Promise<CliHandoff | undefined> {
+  let [row] = await query(dbAdapter, [
+    `SELECT cli_port, cli_state FROM oauth_connect_requests WHERE state_sha256 = `,
+    param(sha256(state)),
+    ` AND expires_at > NOW() AND cli_port IS NOT NULL`,
+  ]);
+  return row
+    ? { port: Number(row.cli_port), state: row.cli_state as string }
+    : undefined;
 }
 
 export type ConnectOutcome =

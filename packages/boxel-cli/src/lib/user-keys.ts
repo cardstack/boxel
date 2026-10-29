@@ -458,18 +458,26 @@ export async function listConnectableClients(
   );
 }
 
-// Starts a sign-in through a client that stores a connection named `name`
-// once the user finishes it in the browser. With no ticket given, mints one
-// for the add with `token`, which must be a secure session. Answers with the
-// vendor's page to send the user to, and when the sign-in lapses.
+// Starts a sign-in through a client that stores a connection named `name`.
+// With no ticket given, mints one for the add with `token`, which must be a
+// secure session. `cli` names the loopback listener the secure window's
+// `connected` page hands the service's code to once the user has signed in
+// at the service. Answers with the service's page to send the user to, and
+// when the sign-in lapses.
 export async function startOAuthConnect(
   realmServerUrl: string,
   token: string,
   {
     name,
     client,
+    cli,
     ticket,
-  }: { name: string; client: OAuthClientRef; ticket?: string },
+  }: {
+    name: string;
+    client: OAuthClientRef;
+    cli: { port: number; state: string };
+    ticket?: string;
+  },
   fetchFn: FetchFn = fetch,
 ): Promise<{ authorizeUrl: string; expiresAt: string }> {
   ticket ??= await mintKeyWriteTicket(
@@ -483,9 +491,42 @@ export async function startOAuthConnect(
     token,
     fetchFn,
     body: {
-      data: { type: 'oauth-connect', attributes: { name, client } },
+      data: { type: 'oauth-connect', attributes: { name, client, cli } },
       meta: { ticket },
     },
   });
+  return json.data.attributes;
+}
+
+// How a sign-in ended: the connection made, or why none was. `expired`: no
+// such sign-in in progress for this user (unknown, used, or too old).
+// `denied`: the user or the service declined. `failed`: the code couldn't be
+// exchanged. `name-taken`: a key of the connection's name was added
+// meanwhile.
+export type OAuthConnectOutcome =
+  | { connected: string; reconnected: boolean }
+  | { error: string };
+
+// Finishes a sign-in with the code and state the service sent back, under
+// the secure session that started it; the realm server finishes it only for
+// that user. No token the service issues is in the answer.
+export async function completeOAuthConnect(
+  realmServerUrl: string,
+  token: string,
+  { code, state }: { code: string; state: string },
+  fetchFn: FetchFn = fetch,
+): Promise<OAuthConnectOutcome> {
+  let json = await realmServerRequest(
+    realmServerUrl,
+    '_oauth/connections/complete',
+    {
+      method: 'POST',
+      token,
+      fetchFn,
+      body: {
+        data: { type: 'oauth-callback', attributes: { code, state } },
+      },
+    },
+  );
   return json.data.attributes;
 }
