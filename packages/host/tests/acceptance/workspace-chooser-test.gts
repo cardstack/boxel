@@ -239,16 +239,20 @@ module('Acceptance | workspace-chooser', function (hooks) {
         );
     });
 
-    test('the star button is labelled for assistive tech', async function (assert) {
+    test('the star button is a pressed toggle with a fixed name', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       let starButton = `[data-test-workspace-favorite-btn="${realmAURL}"]`;
-      assert.dom(starButton).hasAttribute('aria-label', 'Add to Favorites');
+      assert
+        .dom(starButton)
+        .hasAttribute('aria-label', 'Favorite')
+        .hasAttribute('aria-pressed', 'false');
 
       await click(starButton);
       assert
         .dom(starButton)
-        .hasAttribute('aria-label', 'Remove from Favorites');
+        .hasAttribute('aria-label', 'Favorite', 'the name stays put')
+        .hasAttribute('aria-pressed', 'true');
     });
   });
 

@@ -1,3 +1,5 @@
+import { ri, type RealmIdentifier } from '@cardstack/runtime-common';
+
 import config from '@cardstack/host/config/environment';
 
 // Shared by the workspace chooser and the dashboard, which list the same
@@ -14,6 +16,14 @@ export function isHostedRealm(info: RealmDates): boolean {
     typeof info.lastPublishedAt === 'object' &&
     Object.keys(info.lastPublishedAt).length > 0
   );
+}
+
+// A workspace's wallpaper as a CSS background image, for the dashboard's tiles
+// and the rail's favorites alike.
+export function wallpaperImage(
+  backgroundURL: string | null | undefined,
+): string | undefined {
+  return backgroundURL ? `url("${backgroundURL}")` : undefined;
 }
 
 // Newest first. Realms without a valid createdAt (e.g. a broken/orphaned realm
@@ -51,6 +61,20 @@ export function listedCatalogRealmURLs<T extends string>(urls: T[]): T[] {
     return urls;
   }
   return urls.filter((url) => !url.includes('/boxel-homepage/'));
+}
+
+// The favorites among the listed workspaces and catalogs, so a favorite
+// whose realm was archived or removed isn't shown.
+export function listedFavoriteRealmIdentifiers(
+  favorites: string[],
+  workspaces: RealmIdentifier[],
+  catalogs: RealmIdentifier[],
+): RealmIdentifier[] {
+  let listed = new Set<string>([
+    ...workspaces,
+    ...listedCatalogRealmURLs(catalogs),
+  ]);
+  return favorites.filter((url) => listed.has(url)).map(ri);
 }
 
 // Names every unreachable server: trusted servers are few in practice, so a

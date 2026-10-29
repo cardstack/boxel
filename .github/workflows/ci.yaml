@@ -39,6 +39,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
+      claude-hooks: ${{ steps.filter.outputs.claude-hooks }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
       bot-runner: ${{ steps.filter.outputs.bot-runner }}
       eslint-plugin-boxel: ${{ steps.filter.outputs.eslint-plugin-boxel }}
@@ -84,6 +85,8 @@ jobs:
               - '.github/actions/**'
               - 'mise-tasks/**'
               - 'packages/observability/scripts/**'
+            claude-hooks:
+              - '.claude/hooks/**'
             boxel:
               - *shared
               # The host compiles this package's source as a workspace dependency,
@@ -359,6 +362,25 @@ jobs:
       - name: Host deploy cache-control suite
         run: pnpm test:deploy-cache-control
         working-directory: packages/host
+
+  claude-hooks-test:
+    name: Claude Hooks Tests
+    needs: change-check
+    if: needs.change-check.outputs.claude-hooks == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: claude-hooks-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          install: true
+      # The PreToolUse hook that gates skill-bound tool calls. It is shell
+      # parsing with no dependencies, so Node alone runs it.
+      - name: Hook suite
+        run: node --test .claude/hooks/require-skill.test.mjs
 
   eslint-plugin-boxel-test:
     name: ESLint Plugin Boxel Tests
