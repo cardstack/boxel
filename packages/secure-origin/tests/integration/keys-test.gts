@@ -1672,6 +1672,43 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(navigations, []);
     });
 
+    test('an OAuth connection is signed in again on the connect page, not replaced', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'userKey',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: {
+                  id: 'key-1',
+                  name: 'Weather sign-in',
+                  kind: 'oauth-connection',
+                },
+              },
+            },
+          ]),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-reconnect]');
+      assert.dom('[data-test-replace-key-name]').hasText('Weather sign-in');
+      assert
+        .dom('[data-test-replace-key-rejected]')
+        .hasText(
+          'weather.co.uk rejected this sign-in. It will not be used until you sign in again.',
+        );
+      assert
+        .dom('[data-test-replace-key-form]')
+        .doesNotExist('a connection takes no value');
+      await click('[data-test-replace-key-reconnect]');
+      assert.deepEqual(navigations, [
+        { how: 'assign', url: '/secure/connect#reconnect=key-1' },
+      ]);
+      assert.deepEqual(ticketRequests(), [], 'nothing is changed here');
+    });
+
     test('a key the user shares into the workspace is theirs to replace', async function (assert) {
       serve({
         'POST _secure-window/context': () =>

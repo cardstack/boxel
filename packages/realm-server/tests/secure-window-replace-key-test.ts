@@ -295,7 +295,10 @@ module(basename(import.meta.filename), function (hooks) {
       {
         name: 'userKey',
         key: 'userKey',
-        bound: { rejected: false, key: { id: key.id, name: 'mail' } },
+        bound: {
+          rejected: false,
+          key: { id: key.id, name: 'mail', kind: 'static' },
+        },
       },
     ]);
 
@@ -306,7 +309,10 @@ module(basename(import.meta.filename), function (hooks) {
         {
           name: 'userKey',
           key: 'userKey',
-          bound: { rejected: true, key: { id: key.id, name: 'mail' } },
+          bound: {
+            rejected: true,
+            key: { id: key.id, name: 'mail', kind: 'static' },
+          },
         },
       ],
       'on the card as on its type',
@@ -320,6 +326,27 @@ module(basename(import.meta.filename), function (hooks) {
       [{ name: 'userKey', key: 'userKey', bound: null }],
       'another user’s binding fills nothing for this one',
     );
+  });
+
+  test('names an OAuth connection by its kind, and its own rejection', async function (assert) {
+    let key = await addKey();
+    await approve(OWNER, 'check', { userKey: { keyId: key.id } });
+    // A connection is made by signing in through a client; only its kind and
+    // state matter to the window, so the key is turned into one in place.
+    await dbAdapter.execute(
+      `UPDATE user_keys SET kind = 'oauth-connection', state = 'rejected' WHERE id = $1`,
+      { bind: [key.id] },
+    );
+    assert.deepEqual(await bound(OWNER, 'check'), [
+      {
+        name: 'userKey',
+        key: 'userKey',
+        bound: {
+          rejected: true,
+          key: { id: key.id, name: 'mail', kind: 'oauth-connection' },
+        },
+      },
+    ]);
   });
 
   test('replacing the key the window names returns its rejected grant to use', async function (assert) {
@@ -354,7 +381,7 @@ module(basename(import.meta.filename), function (hooks) {
     let slot = (user: string) => bound(user, 'shared').then(([s]) => s.bound);
     assert.deepEqual(await slot(OWNER), {
       rejected: true,
-      key: { id: key.id, name: 'mail' },
+      key: { id: key.id, name: 'mail', kind: 'static' },
       share: {
         label: 'Team mail',
         suspended: false,
@@ -421,7 +448,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(
       (await bound(OWNER, 'send', 'instance', letter))[0].bound,
-      { rejected: false, key: { id: key.id, name: 'mail' } },
+      { rejected: false, key: { id: key.id, name: 'mail', kind: 'static' } },
     );
     assert.strictEqual(
       (await bound(OWNER, 'send', 'type', letter))[0].bound,

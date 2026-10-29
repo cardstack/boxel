@@ -34,6 +34,8 @@ import {
   type LoadFailure,
 } from './context.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
+import { navigation } from '../navigation.js';
+import { pageURL } from '../urls.js';
 
 import type { SlotBound, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
@@ -55,6 +57,14 @@ type SlotView =
       // The share's label, when the key is one the user shares into the
       // workspace.
       shareLabel?: string;
+    }
+  // One of the user's OAuth connections, which is signed in again on the
+  // connect page rather than replaced with a value.
+  | {
+      kind: 'reconnect';
+      slot: string;
+      key: { id: string; name: string };
+      rejected: boolean;
     }
   // One of the user's keys the service still accepts, beside one it rejected.
   | { kind: 'accepted'; slot: string; key: { id: string; name: string } }
@@ -78,6 +88,14 @@ function slotView(
   }
   if (bound.key && anyRejected && !bound.rejected) {
     return { kind: 'accepted', slot: slot.name, key: bound.key };
+  }
+  if (bound.key?.kind === 'oauth-connection') {
+    return {
+      kind: 'reconnect',
+      slot: slot.name,
+      key: bound.key,
+      rejected: bound.rejected,
+    };
   }
   if (bound.key) {
     return {
@@ -195,6 +213,31 @@ class SlotPanel extends Component<{
             >Replace key</Button>
           </div>
         </form>
+      {{else if this.reconnecting}}
+        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+          <p class='value'>
+            <strong
+              data-test-replace-key-name
+            >{{this.reconnecting.key.name}}</strong>
+            <span class='note'>This is a sign-in at
+              {{this.serviceName}}, so it is signed in again rather than
+              replaced.</span>
+            {{#if this.reconnecting.rejected}}
+              <span class='rejected' data-test-replace-key-rejected>
+                {{this.serviceName}}
+                rejected this sign-in. It will not be used until you sign in
+                again.
+              </span>
+            {{/if}}
+          </p>
+        </FieldContainer>
+        <div class='slot-actions'>
+          <Button
+            @kind='primary'
+            {{on 'click' this.reconnect}}
+            data-test-replace-key-reconnect
+          >Reconnect</Button>
+        </div>
       {{else if this.accepted}}
         <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
           <p class='message' data-test-replace-key-accepted>
@@ -334,6 +377,21 @@ class SlotPanel extends Component<{
   private get accepted() {
     return this.args.view.kind === 'accepted' ? this.args.view : undefined;
   }
+
+  private get reconnecting() {
+    return this.args.view.kind === 'reconnect' ? this.args.view : undefined;
+  }
+
+  // Signing a connection in again is made on the connect page, which keeps
+  // its approvals, as the key page's Reconnect does.
+  private reconnect = () => {
+    let view = this.reconnecting;
+    if (view) {
+      navigation.assign(
+        `${pageURL('connect')}#${new URLSearchParams({ reconnect: view.key.id })}`,
+      );
+    }
+  };
 
   private get keyName() {
     let { view } = this.args;

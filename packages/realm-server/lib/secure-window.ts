@@ -20,7 +20,7 @@ import {
 } from '@cardstack/runtime-common';
 import { operationDisplayLabel } from '@cardstack/runtime-common/card-operations/label';
 import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
-import { UserKeyError } from './user-keys.ts';
+import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 import {
   bindingType,
   canonicalInstance,
@@ -70,8 +70,10 @@ export interface SecureWindowOperation {
 }
 
 // What fills a slot for the user asking, from the binding a call fills it
-// from: the key, and whether the service it is sent to rejected it. For a
-// share, what the user may see of a realm's shares (the `key-shares` rules):
+// from: the key, and whether the service it is sent to rejected it (its
+// grant there, or, for an OAuth connection, the connection itself). A key
+// says its kind, since a connection is signed in again rather than replaced
+// with a value. For a share, what the user may see of a realm's shares (the `key-shares` rules):
 // the key only to its owner; the label to its owner and the realm's direct
 // writers; and who owns it to the direct writers only while the share is
 // active, since an active share's owner always holds a write row there and a
@@ -79,7 +81,7 @@ export interface SecureWindowOperation {
 // key fills the slot.
 export interface SlotBound {
   rejected: boolean;
-  key: { id: string; name: string } | null;
+  key: { id: string; name: string; kind: UserKeyKind } | null;
   share?: {
     label?: string;
     suspended: boolean;
@@ -421,14 +423,18 @@ function slotBound(
   if (!bound) {
     return null;
   }
-  let rejected = bound.grantState === 'rejected';
+  let rejected =
+    bound.grantState === 'rejected' || bound.key?.state === 'rejected';
+  let key = bound.key
+    ? { id: bound.key.id, name: bound.key.name, kind: bound.key.kind }
+    : null;
   if (!bound.share) {
-    return { rejected, key: bound.key };
+    return { rejected, key };
   }
-  let ownedByYou = bound.key !== null;
+  let ownedByYou = key !== null;
   return {
     rejected,
-    key: bound.key,
+    key,
     share: {
       ...(directWriter || ownedByYou ? { label: bound.share.label } : {}),
       suspended: bound.share.state !== 'active' || bound.state === 'suspended',

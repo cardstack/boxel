@@ -38,7 +38,8 @@ export interface WindowContext {
 // writers, and its owner only to those writers while the share is active.
 export interface SlotBound {
   rejected: boolean;
-  key: { id: string; name: string } | null;
+  // `kind` is the key's (`static`, `oauth-client` or `oauth-connection`).
+  key: { id: string; name: string; kind: string } | null;
   share?: {
     label?: string;
     suspended: boolean;

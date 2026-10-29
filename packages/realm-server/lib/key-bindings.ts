@@ -36,7 +36,12 @@ import {
   type UserKeyGrant,
   type UserKeyGrantState,
 } from './user-key-grants.ts';
-import { MINTING_KINDS, UserKeyError } from './user-keys.ts';
+import {
+  MINTING_KINDS,
+  UserKeyError,
+  type UserKeyKind,
+  type UserKeyState,
+} from './user-keys.ts';
 import {
   oauthAccessToken,
   OAuthTokenError,
@@ -1122,16 +1127,22 @@ async function checkedBindings(
 // call would fill it from (`slotBindingConditions`), without checking it or
 // opening anything: the key, for a `userKey` slot, which is always one of the
 // caller's own; for an `apiKey` slot, the share and its owner, and the key
-// only when the caller owns it. `grantState` is the state of the grant the
-// key is sent under, so a rejected key can be told apart. `bound` is null when
-// nothing is bound to the slot.
+// only when the caller owns it, with its kind and state (an OAuth connection
+// its service refused to refresh is `rejected`). `grantState` is the state of
+// the grant the key is sent under, so a rejected key can be told apart.
+// `bound` is null when nothing is bound to the slot.
 export interface SlotBinding {
   slot: string;
   key: CallApiSlot['key'];
   bound: {
     state: KeyBindingState;
     grantState: UserKeyGrantState | null;
-    key: { id: string; name: string } | null;
+    key: {
+      id: string;
+      name: string;
+      kind: UserKeyKind;
+      state: UserKeyState;
+    } | null;
     share: {
       id: string;
       label: string;
@@ -1165,7 +1176,7 @@ export async function slotBindings(
     let [row] = await query(dbAdapter, [
       `SELECT b.state, g.state AS grant_state,
               s.id AS share_id, s.label AS share_label, s.state AS share_state, s.owner AS share_owner,
-              k.id AS key_id, k.name AS key_name
+              k.id AS key_id, k.name AS key_name, k.kind AS key_kind, k.state AS key_state
          FROM key_bindings b
          LEFT JOIN key_shares s ON s.id = b.share_id
          LEFT JOIN user_key_grants g ON g.id = b.grant_id
@@ -1189,7 +1200,12 @@ export async function slotBindings(
             state: row.state as KeyBindingState,
             grantState: (row.grant_state as UserKeyGrantState | null) ?? null,
             key: row.key_id
-              ? { id: row.key_id as string, name: row.key_name as string }
+              ? {
+                  id: row.key_id as string,
+                  name: row.key_name as string,
+                  kind: row.key_kind as UserKeyKind,
+                  state: row.key_state as UserKeyState,
+                }
               : null,
             share: row.share_id
               ? {
