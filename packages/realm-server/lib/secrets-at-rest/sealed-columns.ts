@@ -13,12 +13,15 @@ import * as Sentry from '@sentry/node';
 type SealedColumnsRow = Record<string, unknown>;
 
 // The sealed columns as a read selects them, with the binary parts as base64.
-export function sealedColumnsSelect(column: string): string {
+// `table` qualifies them, for a read that joins another table holding columns
+// of the same names.
+export function sealedColumnsSelect(column: string, table?: string): string {
+  let from = table ? `${table}.` : '';
   return [
-    `encode(${column}_ciphertext, 'base64') AS ${column}_ciphertext`,
-    `encode(${column}_nonce, 'base64') AS ${column}_nonce`,
-    `encode(${column}_tag, 'base64') AS ${column}_tag`,
-    `${column}_key_id`,
+    `encode(${from}${column}_ciphertext, 'base64') AS ${column}_ciphertext`,
+    `encode(${from}${column}_nonce, 'base64') AS ${column}_nonce`,
+    `encode(${from}${column}_tag, 'base64') AS ${column}_tag`,
+    `${from}${column}_key_id AS ${column}_key_id`,
   ].join(', ');
 }
 

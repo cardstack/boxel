@@ -14,13 +14,14 @@ import {
 import type SecureWindowService from '../services/secure-window';
 import type * as BaseToolModule from '@cardstack/base/command';
 
-// Opens the secure window, where the user enters, shares or swaps in a key.
-// This is the one way the app, a card and the AI assistant start that, so a
-// user learns one flow and nothing builds a form of its own for a credential.
-// The caller names what the key is for; it passes no destination and gets no
-// value back, only whether the window opened. When the browser blocks the
-// popup, the app shows a button that opens it on the user's click, and the
-// result says so.
+// Opens the secure window, where the user enters, shares or swaps in a key,
+// or connects an account at a service by signing in there through an OAuth
+// app. This is the one way the app, a card and the AI assistant start that,
+// so a user learns one flow and nothing builds a form of its own for a
+// credential. The caller names what the key is for; it passes no destination
+// and gets no value back, only whether the window opened. When the browser
+// blocks the popup, the app shows a button that opens it on the user's click,
+// and the result says so.
 export default class OpenSecureWindowTool extends HostBaseTool<
   typeof BaseToolModule.OpenSecureWindowInput,
   typeof BaseToolModule.OpenSecureWindowResult
@@ -29,7 +30,7 @@ export default class OpenSecureWindowTool extends HostBaseTool<
 
   static actionVerb = 'Open';
 
-  description = `Open Boxel's secure window, the only place a user enters or shares an API key. Call it once when an operation is refused "Binding not approved" and the refusal names a credential slot "for the invoking user's own key", or a card says it needs the user's own key, and tell the user in the chat what you are opening and why. A stored key does not by itself fill the slot, so never reopen the window when the same refusal comes back. Never ask the user for a key, token, password or other credential in the chat. mode "enter-key": add a key, for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation). mode "share-key": share one of the user's keys into a workspace (realm). mode "swap-key": put one of the user's keys into a workspace's (realm) suspended share (share, the share's id). reason: one short line the window shows as the opener's words. The result says only whether the window opened ("opened") or the browser blocked it and the app shows the user a button that opens it ("blocked"); it never says what the user did there.`;
+  description = `Open Boxel's secure window, the only place a user enters or shares an API key or connects an account at a service. Call it once when an operation is refused "Binding not approved" and the refusal names a credential slot "for the invoking user's own key", or a card says it needs the user's own key, and tell the user in the chat what you are opening and why. A stored key does not by itself fill the slot, so never reopen the window when the same refusal comes back. Never ask the user for a key, token, password or other credential in the chat. mode "enter-key": add a key, for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation). mode "share-key": share one of the user's keys into a workspace (realm). mode "connect": connect the user's account at a service that signs in with OAuth (such as GitHub), where the user signs in at the service itself instead of pasting a key; pass the same cardId and operation, or module, name, realm and operation, as for "enter-key", or a realm alone to offer the apps shared into that workspace. mode "swap-key": put one of the user's keys into a workspace's (realm) suspended share (share, the share's id). reason: one short line the window shows as the opener's words. The result says only whether the window opened ("opened") or the browser blocked it and the app shows the user a button that opens it ("blocked"); it never says what the user did there.`;
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -77,6 +78,15 @@ function secureWindowRequest(
       throw new Error('share is required');
     }
     return { mode, realm: name('realm', input.realm), share, reason };
+  }
+  if (mode === 'connect') {
+    let target = targetOf(input);
+    // A type target names its realm; otherwise a realm alone is what the
+    // account is connected for.
+    if (!target && input.realm?.trim()) {
+      return { mode, realm: name('realm', input.realm), reason };
+    }
+    return { mode, target, reason };
   }
   return { mode, target: targetOf(input), reason };
 }

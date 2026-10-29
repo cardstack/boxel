@@ -2,7 +2,10 @@
 // card's edit format: each key a tile saying which services it is used with
 // and listing the workspaces it is shared with, each of which it can be
 // unshared from, with Share and Replace on it and a delete button beside it,
-// and a button under them to add another.
+// and buttons under them to add another or connect an account. An OAuth key
+// says what it is and when it has stopped working; a connection is signed in
+// again (Reconnect) rather than replaced, as its value is the service's to
+// issue.
 // It is what the secure origin shows at its own address and at `keys`.
 // No key's value is ever shown, here or anywhere: a key is replaced, never
 // read back. Removing a key first lists the shares it would suspend, and
@@ -50,6 +53,7 @@ import KeyTile from './key-tile.gts';
 import KeyUse from './key-use.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
+import OAuthKeyStatus from './oauth-key-status.gts';
 
 type Action =
   | { name: 'none' }
@@ -84,30 +88,37 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                   <li class='item' data-test-key-row={{key.name}}>
                     <div class='entry'>
                       <KeyTile @key={{key}}>
-                        <KeyUse @key={{key}} @onUnshare={{this.unshare}} />
+                        <KeyUse @key={{key}} @onUnshare={{this.unshare}}>
+                          <OAuthKeyStatus
+                            @key={{key}}
+                            @onReconnect={{this.reconnect}}
+                          />
+                        </KeyUse>
                         <div class='tile-actions'>
-                          <Button
-                            class='action'
-                            @kind='secondary'
-                            @size='extra-small'
-                            aria-describedby='key-name-{{key.id}}'
-                            data-test-key-share
-                            {{on 'click' (fn this.share key)}}
-                          ><ShareIcon
-                              class='action-icon'
-                              aria-hidden='true'
-                            />Share with Workspace</Button>
-                          <Button
-                            class='action'
-                            @kind='secondary'
-                            @size='extra-small'
-                            aria-describedby='key-name-{{key.id}}'
-                            data-test-key-replace
-                            {{on 'click' (fn this.startReplace key)}}
-                          ><RefreshCw
-                              class='action-icon'
-                              aria-hidden='true'
-                            />Replace</Button>
+                          {{#unless (eq key.kind 'oauth-connection')}}
+                            <Button
+                              class='action'
+                              @kind='secondary'
+                              @size='extra-small'
+                              aria-describedby='key-name-{{key.id}}'
+                              data-test-key-share
+                              {{on 'click' (fn this.share key)}}
+                            ><ShareIcon
+                                class='action-icon'
+                                aria-hidden='true'
+                              />Share with Workspace</Button>
+                            <Button
+                              class='action'
+                              @kind='secondary'
+                              @size='extra-small'
+                              aria-describedby='key-name-{{key.id}}'
+                              data-test-key-replace
+                              {{on 'click' (fn this.startReplace key)}}
+                            ><RefreshCw
+                                class='action-icon'
+                                aria-hidden='true'
+                              />Replace</Button>
+                          {{/unless}}
                         </div>
                       </KeyTile>
                       {{#if (this.isActing 'replacing' key)}}
@@ -224,19 +235,34 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
               <p class='empty' data-test-key-list-empty>You haven’t added any
                 keys.</p>
             {{/if}}
-            <Button
-              class='add-new'
-              @kind='secondary'
-              @size='tall'
-              @rectangular={{true}}
-              data-test-key-page-add
-              {{on 'click' this.add}}
-            ><IconPlus
-                class='plus'
-                width='12px'
-                height='12px'
-                role='presentation'
-              />Add a key</Button>
+            <div class='add-actions'>
+              <Button
+                class='add-new'
+                @kind='secondary'
+                @size='tall'
+                @rectangular={{true}}
+                data-test-key-page-add
+                {{on 'click' this.add}}
+              ><IconPlus
+                  class='plus'
+                  width='12px'
+                  height='12px'
+                  role='presentation'
+                />Add a key</Button>
+              <Button
+                class='add-new'
+                @kind='secondary'
+                @size='tall'
+                @rectangular={{true}}
+                data-test-key-page-connect
+                {{on 'click' this.connect}}
+              ><IconPlus
+                  class='plus'
+                  width='12px'
+                  height='12px'
+                  role='presentation'
+                />Connect an account</Button>
+            </div>
           {{/if}}
         </:default>
       </EditPage>
@@ -335,6 +361,11 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
         line-height: var(--boxel-line-height-sm);
         color: var(--muted-foreground);
       }
+      .add-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs);
+      }
       .add-new {
         gap: var(--boxel-sp-3xs);
         width: fit-content;
@@ -418,6 +449,15 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   }
 
   private add = () => navigation.assign(pageURL('keys/add'));
+
+  private connect = () => navigation.assign(pageURL('connect'));
+
+  // Signing a connection in again is made on the connect page, which names
+  // it in its fragment.
+  private reconnect = (key: UserKey) =>
+    navigation.assign(
+      `${pageURL('connect')}#${new URLSearchParams({ reconnect: key.id })}`,
+    );
 
   // Sharing a key into a realm is a change of its own, made on the share
   // page, which asks which realm.
