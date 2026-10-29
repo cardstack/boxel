@@ -1122,11 +1122,13 @@ module('Acceptance | dashboard', function (hooks) {
             'launch-notes.json': cardJSON('Launch Notes'),
             'index.json': workspaceIndexJSON({
               'entryPoints.0': { links: { self: './roadmap' } },
-              'entryPoints.1': { links: { self: './launch-notes' } },
-              'entryPoints.2': {
+              // No such card, so nothing to draw: the next pin takes its place.
+              'entryPoints.1': { links: { self: './missing' } },
+              'entryPoints.2': { links: { self: './launch-notes' } },
+              'entryPoints.3': {
                 links: { self: `${catalogRealmURL}style-guide` },
               },
-              'entryPoints.3': {
+              'entryPoints.4': {
                 links: { self: '@cardstack/catalog/glossary' },
               },
             }),
@@ -1185,7 +1187,7 @@ module('Acceptance | dashboard', function (hooks) {
             'Open Style Guide',
             'Open Glossary',
           ],
-          'pins in another realm, linked by URL or by its prefix, are read from that realm',
+          'a pin with nothing to draw gives its place to the next, and pins in another realm, linked by URL or by its prefix, are read from that realm',
         );
         assert
           .dom(DESK_PINS)
@@ -1194,11 +1196,12 @@ module('Acceptance | dashboard', function (hooks) {
             `${pinnedRealmURL}roadmap`,
             'each pin is keyed by its card URL',
           );
+        let pinnedStat =
+          '[data-test-favorites-list] [data-test-workspace="Pinned Workspace"] [data-test-workspace-stat="Pinned"]';
+        await waitFor(pinnedStat);
         assert
-          .dom(
-            '[data-test-favorites-list] [data-test-workspace="Pinned Workspace"] [data-test-workspace-stat="Pinned"]',
-          )
-          .hasText('Pinned 4');
+          .dom(pinnedStat)
+          .hasText('Pinned 5', 'every pin is counted, drawn or not');
         assert
           .dom('[data-test-workspace="Pinned Workspace"]')
           .exists({ count: 2 }, 'it is listed as a desk and again below');

@@ -1553,13 +1553,17 @@ export default class Workspace extends Component<Signature> {
   // A desk's Cards / Files / Definitions / Pinned counts. A stat with no
   // count is dropped rather than shown as 0. The counts are requested for
   // favorites alone, after the desk renders, so the caption reserves their
-  // line.
+  // line. The pin count waits for the index counts, so the line fills at once
+  // instead of shifting as they arrive.
   private get tileStats(): { label: string; count: number }[] {
     let counts = this.realm.indexCounts(this.args.realmIdentifier);
+    if (!counts) {
+      return [];
+    }
     return [
-      { label: 'Cards', count: counts?.cardCount },
-      { label: 'Files', count: counts?.fileCount },
-      { label: 'Definitions', count: counts?.definitionCount },
+      { label: 'Cards', count: counts.cardCount },
+      { label: 'Files', count: counts.fileCount },
+      { label: 'Definitions', count: counts.definitionCount },
       { label: 'Pinned', count: this.pins.cardIds.length },
     ].filter((stat): stat is { label: string; count: number } => !!stat.count);
   }

@@ -45,20 +45,18 @@ export default class PinnedCards extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
 
-  private get cardIds() {
-    return this.args.cardIds.slice(0, MAX_DESK_PINS);
-  }
-
-  // One search for all the pins. `html` alone would leave a pin unnamed, so
-  // the title rides along as a field-limited item, which never loads code.
+  // One search for all the pins, not just the first few, so a pin with no
+  // rendering yet gives its place to the next one. `html` alone would leave
+  // a pin unnamed, so the title rides along as a field-limited item, which
+  // never loads code.
   private get query(): SearchEntryWireQuery {
     let { virtualNetwork } = this.network;
     let realms = new Set(
-      this.cardIds.map((id) => this.realm.realmOf(id) ?? this.args.realm),
+      this.args.cardIds.map((id) => this.realm.realmOf(id) ?? this.args.realm),
     );
     return {
       realms: [...realms],
-      cardUrls: this.cardIds.flatMap((id) => {
+      cardUrls: this.args.cardIds.flatMap((id) => {
         try {
           return [`${virtualNetwork.toURL(id).href}.json`];
         } catch {
@@ -72,7 +70,8 @@ export default class PinnedCards extends Component<Signature> {
   }
 
   // Search answers in its own order; the desk keeps the workspace's. A pin
-  // with no prerendered HTML yet is left out rather than rendered live.
+  // with no prerendered HTML yet is left out rather than rendered live, and
+  // the desk draws the first pins that have it.
   // Entries are named by URL and pins by either form, so both are folded
   // to one before they're matched.
   private inPinOrder = (entries: RenderableSearchEntryLike[]) => {
@@ -85,9 +84,10 @@ export default class PinnedCards extends Component<Signature> {
           entry,
         ]),
     );
-    return this.cardIds
+    return this.args.cardIds
       .map((id) => byId.get(virtualNetwork.unresolveURL(id)))
-      .filter((entry): entry is RenderableSearchEntryLike => Boolean(entry));
+      .filter((entry): entry is RenderableSearchEntryLike => Boolean(entry))
+      .slice(0, MAX_DESK_PINS);
   };
 
   private pinLabel = (entry: RenderableSearchEntryLike) => {
@@ -127,8 +127,10 @@ export default class PinnedCards extends Component<Signature> {
                     {{on 'click' (fn this.openPin entry.id)}}
                     data-test-pinned-card={{entry.id}}
                   >
-                    {{! A preview, not the card: nothing in it takes focus. }}
-                    <span class='pin-render' inert>
+                    {{! A preview, not the card: nothing in it takes focus.
+                        The dashboard is dark; a card shows in its own theme,
+                        which defaults to light. }}
+                    <span class='pin-render' data-theme='light' inert>
                       <entry.component class='pin-card' />
                     </span>
                   </button>
