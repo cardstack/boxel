@@ -555,7 +555,7 @@ module('Unit | runtime dependency tracker', function (hooks) {
     };
 
     assert.false(
-      shouldTrackRuntimeModuleGraph(moduleURL, queryContext),
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, queryContext),
       'inactive tracker permits no walk (nothing would record)',
     );
 
@@ -566,21 +566,21 @@ module('Unit | runtime dependency tracker', function (hooks) {
     });
 
     assert.true(
-      shouldTrackRuntimeModuleGraph(moduleURL, queryContext),
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, queryContext),
       'first probe under an active session permits the walk',
     );
     assert.false(
-      shouldTrackRuntimeModuleGraph(moduleURL, queryContext),
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, queryContext),
       'repeat probe with an equivalent context is collapsed',
     );
     assert.false(
-      shouldTrackRuntimeModuleGraph(moduleURL, {
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, {
         ...queryContext,
       }),
       'equivalence is by value, not object identity',
     );
     assert.false(
-      shouldTrackRuntimeModuleGraph(moduleURL, {
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, {
         ...queryContext,
         consumerKind: undefined,
       }),
@@ -588,14 +588,18 @@ module('Unit | runtime dependency tracker', function (hooks) {
     );
 
     assert.true(
-      shouldTrackRuntimeModuleGraph(moduleURL, {
+      shouldTrackRuntimeModuleGraph('import', moduleURL, queryContext),
+      'a different scope walks again (sites record different node sets)',
+    );
+    assert.true(
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, {
         ...queryContext,
         mode: 'non-query',
       }),
       'a different mode walks again (query-only classification must not stick)',
     );
     assert.true(
-      shouldTrackRuntimeModuleGraph(moduleURL, {
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, {
         ...queryContext,
         consumer: 'https://example.com/other-consumer.json',
       }),
@@ -603,6 +607,7 @@ module('Unit | runtime dependency tracker', function (hooks) {
     );
     assert.true(
       shouldTrackRuntimeModuleGraph(
+        'relationship',
         'https://example.com/cards/other-type.gts',
         queryContext,
       ),
@@ -616,7 +621,7 @@ module('Unit | runtime dependency tracker', function (hooks) {
       rootKind: 'instance',
     });
     assert.true(
-      shouldTrackRuntimeModuleGraph(moduleURL, queryContext),
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, queryContext),
       'reset clears walk markers so a fresh session re-walks',
     );
   });
@@ -713,11 +718,11 @@ module('Unit | runtime dependency tracker', function (hooks) {
       },
       async () => {
         assert.true(
-          shouldTrackRuntimeModuleGraph(moduleURL),
+          shouldTrackRuntimeModuleGraph('relationship', moduleURL),
           'first probe inside a context scope permits the walk',
         );
         assert.false(
-          shouldTrackRuntimeModuleGraph(moduleURL),
+          shouldTrackRuntimeModuleGraph('relationship', moduleURL),
           'repeat probe inside the same scope is collapsed',
         );
       },
@@ -734,7 +739,7 @@ module('Unit | runtime dependency tracker', function (hooks) {
       },
       async () => {
         assert.false(
-          shouldTrackRuntimeModuleGraph(moduleURL),
+          shouldTrackRuntimeModuleGraph('relationship', moduleURL),
           'an equivalent later scope is still collapsed (value equivalence)',
         );
       },
