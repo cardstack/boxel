@@ -134,6 +134,12 @@ function sectionOrder() {
   );
 }
 
+function railOrder() {
+  return findAll('[data-test-section-rail-entry]').map((entry) =>
+    entry.getAttribute('data-test-section-rail-entry'),
+  );
+}
+
 function operatorModeState() {
   return getService('operator-mode-state-service') as OperatorModeStateService;
 }
@@ -416,6 +422,11 @@ module('Acceptance | dashboard', function (hooks) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       assert.deepEqual(sectionOrder(), ['catalogs', 'workspaces', 'agents']);
+      assert
+        .dom(
+          '[data-test-dashboard-section="catalogs"] [data-test-catalog-list]',
+        )
+        .exists('the catalog tiles lead with their section');
       assert
         .dom('[data-test-dashboard-section="workspaces"] h2')
         .hasText('Workspaces');
@@ -897,6 +908,43 @@ module('Acceptance | dashboard', function (hooks) {
             .exists('the dashboard stays open');
         }
 
+        test('the section order stays as the dashboard opened while it is open', async function (assert) {
+          await visitOperatorMode({
+            workspaceChooserOpened: true,
+            stacks: [[{ id: `${keptRealmURL}index`, format: 'isolated' }]],
+          });
+          assert.deepEqual(sectionOrder(), [
+            'workspaces',
+            'catalogs',
+            'agents',
+          ]);
+
+          await archiveRemovedWorkspace();
+
+          assert.strictEqual(
+            getService('realm-server').userRealmIdentifiers.length,
+            2,
+            'fewer than three workspaces are left',
+          );
+          assert.deepEqual(
+            sectionOrder(),
+            ['workspaces', 'catalogs', 'agents'],
+            'the sections stay where they were',
+          );
+          assert.deepEqual(railOrder(), ['workspaces', 'catalogs']);
+
+          await click('[data-test-workspace-chooser-toggle]');
+          assert.dom('[data-test-dashboard]').doesNotExist();
+          await click('[data-test-workspace-chooser-toggle]');
+
+          assert.deepEqual(
+            sectionOrder(),
+            ['catalogs', 'workspaces', 'agents'],
+            'reopened, the catalog leads',
+          );
+          assert.deepEqual(railOrder(), ['catalogs', 'workspaces']);
+        });
+
         test('archiving it clears the stacks when one of its cards is open', async function (assert) {
           await visitOperatorMode({
             workspaceChooserOpened: true,
@@ -1253,6 +1301,30 @@ module('Acceptance | dashboard', function (hooks) {
           assert.dom(ROWS).exists({ count: 13 });
           assert.dom(TOGGLE).hasText('Show fewer');
           assert.strictEqual(selectedName(), hiddenName);
+          assert
+            .dom(`[data-test-workspace-button="${hiddenName}"]`)
+            .isFocused();
+          let scroller = find('[data-test-dashboard-scroller]') as HTMLElement;
+          let row = find(
+            `[data-test-workspace-button="${hiddenName}"]`,
+          ) as HTMLElement;
+          assert.true(
+            row.getBoundingClientRect().top >
+              scroller.getBoundingClientRect().bottom,
+            'the row is below the fold',
+          );
+          assert.strictEqual(
+            scroller.scrollTop,
+            0,
+            'the page opens at its top, not scrolled to the cursor',
+          );
+
+          await pressKey('ArrowRight');
+
+          assert.true(
+            scroller.scrollTop > 0,
+            'the first arrow key brings the cursor into view',
+          );
         });
 
         test('Right from the last row shown moves past the hidden rows', async function (assert) {
@@ -1281,6 +1353,11 @@ module('Acceptance | dashboard', function (hooks) {
             'catalogs',
             'agents',
           ]);
+          assert.deepEqual(
+            railOrder(),
+            ['workspaces', 'catalogs'],
+            'the rail follows the page',
+          );
         });
       });
 
@@ -1583,9 +1660,7 @@ module('Acceptance | dashboard', function (hooks) {
         await visitOperatorMode({ workspaceChooserOpened: true });
 
         assert.deepEqual(
-          findAll('[data-test-section-rail-entry]').map((el) =>
-            el.getAttribute('data-test-section-rail-entry'),
-          ),
+          railOrder(),
           ['catalogs', 'workspaces'],
           'in page order, with Catalogs first for a user with one workspace',
         );

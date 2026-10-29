@@ -25,6 +25,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import {
   LISTING_FIELDS,
+  STORY_COUNT,
   linkedIds,
   storiesFrom,
   type ListingEntry,
@@ -40,14 +41,18 @@ const ART_PAGE_WIDTH_PX = 1000;
 // any without a thumbnail drop out.
 const OTHER_LISTINGS_FETCHED = 12;
 
+// One stand-in per story the shelf holds a place for.
+const PENDING_STORIES = Array.from({ length: STORY_COUNT }, (_, i) => i);
+
 const LISTING_TYPE = {
   module: rri('@cardstack/catalog/catalog-app/listing/listing'),
   name: 'Listing',
 };
 
-// Each shelf's last answered stories, kept while a changed query is out so
-// the shelf doesn't blink. Untracked: it only remembers.
-const lastAnswers = new WeakMap<object, Story[]>();
+// Each catalog's last answered stories, kept while a changed query is out and
+// across shelves, so the shelf doesn't blink, and a shelf shown again (as when
+// Hosted is switched off) starts from them. Untracked: it only remembers.
+const lastAnswers = new Map<string, Story[]>();
 
 interface Signature {
   Element: HTMLElement;
@@ -159,7 +164,7 @@ export default class CatalogShelf extends Component<Signature> {
   @cached
   private get stories(): Story[] {
     if (!this.isAnswered) {
-      return lastAnswers.get(this) ?? [];
+      return lastAnswers.get(this.args.realmURL) ?? [];
     }
     let stories = storiesFrom({
       featuredIds: this.featuredIds,
@@ -167,8 +172,14 @@ export default class CatalogShelf extends Component<Signature> {
       others: this.others.entries.map(this.toListingEntry),
       resolve: this.resolve,
     });
-    lastAnswers.set(this, stories);
+    lastAnswers.set(this.args.realmURL, stories);
     return stories;
+  }
+
+  // Until the first answer, the shelf holds its place, so Workspaces below
+  // it doesn't move down when the stories arrive.
+  private get isPending() {
+    return !this.isAnswered && this.stories.length === 0;
   }
 
   // One search for every story's art: the examples' prerendered isolated
@@ -301,6 +312,34 @@ export default class CatalogShelf extends Component<Signature> {
           data-test-catalog-see-all
         >See the whole catalog <span aria-hidden='true'>→</span></Button>
       </div>
+    {{else if this.isPending}}
+      {{! The stories' metrics with nothing in them. }}
+      <div
+        class='catalog-shelf'
+        aria-hidden='true'
+        inert
+        data-test-catalog-shelf-pending
+        ...attributes
+      >
+        <ul class='stories'>
+          {{#each PENDING_STORIES}}
+            <li class='story is-pending'>
+              <p class='eyebrow'>&nbsp;</p>
+              <p class='headline'>&nbsp;</p>
+              <div class='art'></div>
+              <p class='copy'></p>
+              <div class='actions'>
+                <span class='pending-action'></span>
+              </div>
+            </li>
+          {{/each}}
+        </ul>
+        <Button
+          class='see-all is-pending'
+          @tone='neutral'
+          @appearance='link'
+        >See the whole catalog</Button>
+      </div>
     {{/if}}
 
     <style scoped>
@@ -308,6 +347,8 @@ export default class CatalogShelf extends Component<Signature> {
         --_catalog-shelf-story-min-width: 13rem;
         --_catalog-shelf-art-height: 9.5rem;
         --_catalog-shelf-action-height: 1.875rem;
+        --_catalog-shelf-copy-lines: 3;
+        --_catalog-shelf-copy-leading: 1.45em;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
@@ -478,9 +519,14 @@ export default class CatalogShelf extends Component<Signature> {
         margin: 0;
         overflow: hidden;
         -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
+        -webkit-line-clamp: var(--_catalog-shelf-copy-lines);
+        /* Always three lines tall, so a story's height never depends on its
+           copy and the stand-ins match it. */
+        min-height: calc(
+          var(--_catalog-shelf-copy-lines) * var(--_catalog-shelf-copy-leading)
+        );
         font-size: var(--boxel-font-size-sm);
-        line-height: 1.45;
+        line-height: var(--_catalog-shelf-copy-leading);
         color: var(--muted-foreground);
       }
       .actions {
@@ -500,6 +546,22 @@ export default class CatalogShelf extends Component<Signature> {
       }
       .see-all {
         align-self: flex-start;
+      }
+      .story.is-pending {
+        --_story-edge: transparent;
+        background-color: var(--boxel-dark-50);
+        box-shadow: none;
+      }
+      .is-pending .art {
+        background-color: var(--boxel-dark-50);
+        box-shadow: none;
+      }
+      .pending-action {
+        display: block;
+        height: var(--_catalog-shelf-action-height);
+      }
+      .see-all.is-pending {
+        visibility: hidden;
       }
       @media (prefers-reduced-motion: reduce) {
         .story {

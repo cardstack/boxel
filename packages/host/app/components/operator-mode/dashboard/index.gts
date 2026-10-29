@@ -409,10 +409,21 @@ export default class Dashboard extends Component<Signature> {
       : this.filteredCatalogRealmIdentifiers.length;
   }
 
-  // Counted before the scope filter, so switching to Hosted doesn't reorder
-  // the page.
-  private get catalogLeads() {
+  // Decided once, as the dashboard opens, and kept until it closes, so
+  // archiving a workspace or realms that arrive late never swap the sections
+  // under the user. The list has loaded by then: the dashboard renders only
+  // once the session is authenticated, which sign-in sets after assembling
+  // the user's realm list. Counted before the scope filter, so switching to
+  // Hosted doesn't reorder the page.
+  private catalogLeads = this.readCatalogLeads();
+
+  private readCatalogLeads() {
     return this.realmServer.userRealmIdentifiers.length < CATALOG_LEADS_BELOW;
+  }
+
+  // Listings aren't hosted workspaces, so Hosted hides the shelf.
+  private get isCatalogShelfShown() {
+    return this.scope !== 'hosted';
   }
 
   // Where each part of the keyboard cursor's walk starts, in page order:
@@ -481,12 +492,16 @@ export default class Dashboard extends Component<Signature> {
     }
   }
 
-  // The cursor takes focus on open, so it never starts on New Workspace while
-  // anything else is shown: the first Enter would create a workspace.
+  // The workspace the dashboard opened over, otherwise the first item in page
+  // order. The cursor takes focus on open, so it never starts on New Workspace
+  // while anything else is shown: the first Enter would create a workspace.
   private get defaultSelectedIndex() {
     let returnIndex = this.returnNavIndex;
     if (returnIndex !== undefined) {
       return returnIndex;
+    }
+    if (this.catalogLeads && this.renderedCatalogCount > 0) {
+      return this.catalogNavBase;
     }
     if (this.favoritesCount > 0) {
       return this.favoritesNavBase;
@@ -587,6 +602,7 @@ export default class Dashboard extends Component<Signature> {
             <CatalogSection
               @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
               @emptyMessage={{this.catalogEmptyMessage}}
+              @showShelf={{this.isCatalogShelfShown}}
               @navBase={{this.catalogNavBase}}
               @cursor={{this.cursor}}
               {{@sections.register this.catalogsSection}}
@@ -832,6 +848,7 @@ export default class Dashboard extends Component<Signature> {
             <CatalogSection
               @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
               @emptyMessage={{this.catalogEmptyMessage}}
+              @showShelf={{this.isCatalogShelfShown}}
               @navBase={{this.catalogNavBase}}
               @cursor={{this.cursor}}
               {{@sections.register this.catalogsSection}}

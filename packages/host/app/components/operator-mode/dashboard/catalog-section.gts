@@ -21,6 +21,7 @@ interface Signature {
   Args: {
     realmIdentifiers: RealmIdentifier[];
     emptyMessage: string | null;
+    showShelf: boolean;
     // Where the catalog tiles start in the keyboard cursor's walk.
     navBase: number;
     cursor: KeyboardCursor;
@@ -34,7 +35,9 @@ export default class CatalogSection extends Component<Signature> {
   // name.
   private headingId = `${guidFor(this)}-catalogs`;
 
-  private catalogRealmURL = catalogRealmURL;
+  private get shelfRealmURL() {
+    return this.args.showShelf ? catalogRealmURL : null;
+  }
 
   private get count() {
     return this.args.emptyMessage ? 0 : this.args.realmIdentifiers.length;
@@ -64,8 +67,8 @@ export default class CatalogSection extends Component<Signature> {
         <p class='section-hint'>Apps, fields and themes to use in your
           workspaces.</p>
       </div>
-      {{#if this.catalogRealmURL}}
-        <CatalogShelf @realmURL={{this.catalogRealmURL}} />
+      {{#if this.shelfRealmURL}}
+        <CatalogShelf @realmURL={{this.shelfRealmURL}} />
       {{/if}}
       {{#if @emptyMessage}}
         <p class='group-empty' data-test-catalog-empty>{{@emptyMessage}}</p>
