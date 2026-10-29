@@ -2,26 +2,28 @@ import { param, query, type DBAdapter } from '@cardstack/runtime-common';
 import {
   destinationCovers,
   type CallApiReadinessLookup,
-  type CallApiSlot,
   type KeyReadiness,
 } from '@cardstack/runtime-common/card-operations';
-import { bindingSnapshot, fingerprintOf, slotToken } from './key-bindings.ts';
-import { DEFAULT_PROBE_INTERVAL_MS, probeDue } from './key-grant-rejection.ts';
+import { bindingInstance, checkSlots, type SlotCheck } from './key-bindings.ts';
+import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 
 // Readiness: what a card can learn before it invokes a `callApi`, so it can
 // show "Connect", "Allow" or "Review" instead of a refusal after the click.
 //
-// It asks of each slot what filling it at call time asks (`checkedBindings`
-// and `fillSlots` in `key-bindings.ts`), in the same order, for a caller
-// invoking from a card, and answers with what would fix the slot furthest
-// from filling. Those two read the same rows, so a check added to one belongs
-// in the other. It reads rows and opens no key, so a grant whose copy
-// wouldn't open reads as a grant here and is refused at the call. Like the
-// capability check it rides on, the answer is advisory: the call checks again.
+// Each slot is checked by `checkSlots` in `key-bindings.ts`, the check a call
+// makes, for a caller invoking from a card, and the answer is what would fix
+// the slot furthest from filling. A check the call gains is a check readiness
+// answers. It opens no key, so a grant whose copy wouldn't open reads as a
+// grant here and is refused at the call. Like the capability check it rides
+// on, the answer is advisory: the call checks again.
 //
 // Nothing here is written. A binding whose fingerprint no longer matches reads
 // as `needs-reapproval` without being moved there; the call that is refused
-// for it moves it and notifies its owner.
+// for it moves it and notifies its owner. A grant the vendor rejected reads as
+// `credential-rejected` until its next probe is due, and then as the call
+// would treat it: sent, as that probe. A rejected key, such as a
+// service-account key Google refused, reads as `credential-rejected` whether
+// or not its probe is due: what brings it back is its owner replacing it.
 //
 // A reader is told only an answer from the `KeyReadiness` list. A share's
 // owner, its name and its limits never appear in one, and every way a share
@@ -53,24 +55,6 @@ const PRECEDENCE: KeyReadiness[] = [
   'ready',
 ];
 
-// What a binding is read as here: the row a call would fill a slot from.
-interface BindingRow {
-  slot: string;
-  approved_by: string;
-  key_id: string | null;
-  share_id: string | null;
-  interactive: boolean;
-  fingerprint: string;
-  state: string;
-  share_state: string | null;
-  share_owner: string | null;
-  grant_id: string | null;
-  // Whether the vendor rejected the grant and no probe of it is due, so a
-  // call would be refused `credential-rejected` without being sent.
-  grant_held_back: boolean | null;
-  key_state: string | null;
-}
-
 // Answers `undefined` where no answer can be given: a per-instance operation
 // asked about on its type, which no approval names.
 export async function keyReadiness(
@@ -80,48 +64,35 @@ export async function keyReadiness(
     probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
   }: { probeIntervalMs?: number } = {},
 ): Promise<KeyReadiness | undefined> {
-  let { request } = lookup;
+  let { request, caller } = lookup;
   if (request.slots.length === 0) {
     return 'ready';
   }
   // A call that sends a credential and authenticated nobody is refused before
   // any binding is looked at, so signing in is what fixes it whatever the
   // slot is.
-  if (!lookup.caller) {
+  if (!caller) {
     return 'needs-sign-in';
   }
-  if (request.perInstance && !lookup.instance) {
+  let instance = bindingInstance(request, lookup.instance);
+  if (instance === undefined) {
     return undefined;
   }
-  let instance = request.perInstance
-    ? lookup.instance!.replace(/\.json$/, '')
-    : null;
-  let rows = await bindingsFor(dbAdapter, lookup, instance, probeIntervalMs);
+  let checks = await checkSlots(
+    dbAdapter,
+    { ...lookup, caller, instance, mode: 'interactive' },
+    { probeIntervalMs },
+  );
   // Read once, and only where a `{{userKey}}` slot has no binding to fill it.
   let covering: Promise<boolean> | undefined;
   let callerCovers = () =>
-    (covering ??= callerHasCoveringGrant(dbAdapter, lookup));
+    (covering ??= callerHasCoveringGrant(dbAdapter, lookup, caller));
   let answers: KeyReadiness[] = [];
-  for (let slot of request.slots) {
-    let token = slotToken(slot);
+  for (let check of checks) {
     answers.push(
-      slot.key === 'userKey'
-        ? await userKeyReadiness(
-            rows.find(
-              (row) =>
-                row.slot === token &&
-                row.key_id !== null &&
-                row.approved_by === lookup.caller,
-            ),
-            lookup,
-            slot,
-            callerCovers,
-          )
-        : shareReadiness(
-            rows.find((row) => row.slot === token && row.share_id !== null),
-            lookup,
-            slot,
-          ),
+      check.slot.key === 'userKey'
+        ? await userKeyReadiness(check, callerCovers)
+        : shareReadiness(check, caller),
     );
   }
   return answers.reduce<KeyReadiness>(
@@ -131,85 +102,36 @@ export async function keyReadiness(
   );
 }
 
-// Every binding of this operation in this realm (and for this card, when it is
-// approved per instance) that could fill one of its slots for this caller: the
-// realm's share bindings, and the caller's own `{{userKey}}` ones. Each comes
-// with whether its grant is still there for its key (or its share's key), and
-// whether the vendor's rejection of that grant holds a call back. A rejected
-// grant whose probe is due reads as ready, since the call would be sent.
-// Each also comes with its key's state.
-async function bindingsFor(
-  dbAdapter: DBAdapter,
-  lookup: CallApiReadinessLookup,
-  instance: string | null,
-  probeIntervalMs: number,
-): Promise<BindingRow[]> {
-  return (await query(dbAdapter, [
-    `SELECT b.slot, b.approved_by, b.key_id, b.share_id, b.interactive, b.fingerprint, b.state,
-            s.state AS share_state, s.owner AS share_owner, g.id AS grant_id,
-            (g.state = 'rejected' AND NOT `,
-    ...probeDue('g.last_probe_at', probeIntervalMs),
-    `) AS grant_held_back, k.state AS key_state
-       FROM key_bindings b
-       LEFT JOIN key_shares s ON s.id = b.share_id
-       LEFT JOIN user_key_grants g ON g.id = b.grant_id AND g.key_id = COALESCE(b.key_id, s.key_id)
-       LEFT JOIN user_keys k ON k.id = g.key_id
-      WHERE b.realm_url = `,
-    param(lookup.realmURL),
-    ` AND b.definition_url = `,
-    param(lookup.type.module),
-    ` AND b.export_name = `,
-    param(lookup.type.name),
-    ` AND b.operation_name = `,
-    param(lookup.operation),
-    ` AND COALESCE(b.instance_url, '') = `,
-    param(instance ?? ''),
-    ` AND (b.share_id IS NOT NULL OR b.approved_by = `,
-    param(lookup.caller!),
-    `)`,
-  ])) as unknown as BindingRow[];
-}
-
 // The vendor refused the key itself, such as Google's token endpoint refusing
-// a service-account key, so every grant of it is refused until its owner
-// replaces it or a periodic retry is accepted.
-function keyRejected(row: BindingRow): boolean {
-  return row.key_state === 'rejected';
+// a service-account key or an OAuth connection its service won't refresh, so
+// every grant of it is refused until its owner replaces or reconnects it, or a
+// periodic retry is accepted.
+function keyRejected(check: SlotCheck): boolean {
+  return check.binding?.key_state === 'rejected';
 }
 
-function needsReapproval(
-  row: BindingRow,
-  lookup: CallApiReadinessLookup,
-  slot: CallApiSlot,
-): boolean {
-  return (
-    row.state === 'needs-reapproval' ||
-    row.fingerprint !== fingerprintOf(bindingSnapshot(lookup.request, slot))
-  );
-}
-
-// A `{{userKey}}` slot is filled only from the caller's own binding.
+// A `{{userKey}}` slot is filled only from the caller's own binding, so every
+// way it falls short is the caller's to fix.
 async function userKeyReadiness(
-  row: BindingRow | undefined,
-  lookup: CallApiReadinessLookup,
-  slot: CallApiSlot,
+  check: SlotCheck,
   callerCovers: () => Promise<boolean>,
 ): Promise<KeyReadiness> {
-  if (row) {
-    if (needsReapproval(row, lookup, slot)) {
+  switch (check.refused) {
+    case undefined:
+      return keyRejected(check) ? 'credential-rejected' : 'ready';
+    case 'binding-needs-reapproval':
       return 'needs-reapproval';
-    }
-    if (!row.interactive) {
+    case 'interactive-use-not-approved':
       return 'needs-approval';
-    }
-    // A binding whose grant is gone fills nothing, so it is as good as none.
-    if (row.grant_id) {
-      return row.grant_held_back || keyRejected(row)
-        ? 'credential-rejected'
-        : 'ready';
-    }
+    case 'credential-rejected':
+    case 'key-rejected':
+      return 'credential-rejected';
+    case 'share-suspended':
+    case 'binding-not-approved':
+      // No binding, or one whose grant is gone: approving one is what fixes
+      // it, once a key may be sent where the operation sends.
+      return (await callerCovers()) ? 'needs-approval' : 'needs-connect';
   }
-  return (await callerCovers()) ? 'needs-approval' : 'needs-connect';
 }
 
 // Whether any of the caller's keys may already be sent where the operation
@@ -217,10 +139,11 @@ async function userKeyReadiness(
 async function callerHasCoveringGrant(
   dbAdapter: DBAdapter,
   lookup: CallApiReadinessLookup,
+  caller: string,
 ): Promise<boolean> {
   let rows = await query(dbAdapter, [
     `SELECT destination FROM user_key_grants WHERE owner = `,
-    param(lookup.caller!),
+    param(caller),
   ]);
   return rows.some(({ destination }) =>
     destinationCovers(destination as string, lookup.request.destination),
@@ -230,27 +153,23 @@ async function callerHasCoveringGrant(
 // An `{{apiKey}}` slot is filled from the realm's share, for every caller. Only
 // the owner of the share's key can approve it, so anyone else is told an
 // administrator needs to set it up, however it falls short.
-function shareReadiness(
-  row: BindingRow | undefined,
-  lookup: CallApiReadinessLookup,
-  slot: CallApiSlot,
-): KeyReadiness {
-  if (!row || row.share_state !== 'active' || row.state === 'suspended') {
-    return 'needs-admin';
+function shareReadiness(check: SlotCheck, caller: string): KeyReadiness {
+  if (check.refused === undefined) {
+    return keyRejected(check) ? 'credential-rejected' : 'ready';
   }
-  let theirs = row.share_owner === lookup.caller;
-  if (needsReapproval(row, lookup, slot)) {
-    return theirs ? 'needs-reapproval' : 'needs-admin';
+  let theirs = check.binding?.share_owner === caller;
+  switch (check.refused) {
+    case 'binding-needs-reapproval':
+      return theirs ? 'needs-reapproval' : 'needs-admin';
+    case 'interactive-use-not-approved':
+      return theirs ? 'needs-approval' : 'needs-admin';
+    case 'credential-rejected':
+    case 'key-rejected':
+      // Every caller is refused `credential-rejected` at the call, so telling
+      // them here gives away nothing more about the share.
+      return 'credential-rejected';
+    case 'share-suspended':
+    case 'binding-not-approved':
+      return 'needs-admin';
   }
-  if (!row.interactive) {
-    return theirs ? 'needs-approval' : 'needs-admin';
-  }
-  if (!row.grant_id) {
-    return 'needs-admin';
-  }
-  // Every caller is refused `credential-rejected` at the call, so telling them
-  // here gives away nothing more about the share.
-  return row.grant_held_back || keyRejected(row)
-    ? 'credential-rejected'
-    : 'ready';
 }
