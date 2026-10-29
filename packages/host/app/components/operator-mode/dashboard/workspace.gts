@@ -248,7 +248,9 @@ export default class Workspace extends Component<Signature> {
                 data-test-workspace-visibility
               >
                 <this.visibilityIcon width='12' height='12' />
-                <span>{{this.visibility}}</span>
+                <span
+                  data-test-workspace-visibility-word
+                >{{this.visibility}}</span>
                 <span
                   id={{this.visibilityDescriptionId}}
                   class='boxel-sr-only'
@@ -484,7 +486,9 @@ export default class Workspace extends Component<Signature> {
               data-test-workspace-visibility
             >
               <this.visibilityIcon width='12' height='12' />
-              <span>{{this.visibility}}</span>
+              <span
+                data-test-workspace-visibility-word
+              >{{this.visibility}}</span>
               <span
                 id={{this.visibilityDescriptionId}}
                 class='boxel-sr-only'
