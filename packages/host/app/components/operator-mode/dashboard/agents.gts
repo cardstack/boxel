@@ -16,7 +16,7 @@ import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 import { didCancel, restartableTask, timeout } from 'ember-concurrency';
 
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { add, cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import { logger } from '@cardstack/runtime-common';
 
@@ -254,8 +254,7 @@ export default class Agents extends Component<Signature> {
   }
 
   @action private async describeIt() {
-    await this.aiAssistantPanelService.openPanel();
-    await this.aiAssistantPanelService.createNewSession();
+    await this.aiAssistantPanelService.openNewSession();
   }
 
   <template>
@@ -307,8 +306,9 @@ export default class Agents extends Component<Signature> {
               {{#each HOW_BOXEL_AI_WORKS as |step index|}}
                 <li class='step is-later'>
                   <span class='step-row'>
-                    <span class='step-number' aria-hidden='true'>{{add1
+                    <span class='step-number' aria-hidden='true'>{{add
                         index
+                        1
                       }}</span>
                     <span class='step-words'>
                       <span class='step-title'>{{step.title}}</span>
@@ -346,7 +346,7 @@ export default class Agents extends Component<Signature> {
                 {{#let (eq this.openIndex index) as |isOpen|}}
                   <li
                     class={{cn 'step' (this.stepState index)}}
-                    data-test-agent-step={{add1 index}}
+                    data-test-agent-step={{add index 1}}
                     data-test-agent-step-copied={{if
                       (this.isCopied index)
                       'true'
@@ -368,7 +368,7 @@ export default class Agents extends Component<Signature> {
                         {{#if (this.isCopied index)}}
                           <Check width='14' height='14' />
                         {{else}}
-                          {{add1 index}}
+                          {{add index 1}}
                         {{/if}}
                       </span>
                       <span class='step-words'>
@@ -415,7 +415,7 @@ export default class Agents extends Component<Signature> {
                               'click'
                               (fn this.copyTask.perform index step.text)
                             }}
-                            data-test-agent-copy={{add1 index}}
+                            data-test-agent-copy={{add index 1}}
                           >
                             {{#if (eq this.copiedStep index)}}
                               <Check
@@ -608,8 +608,6 @@ export default class Agents extends Component<Signature> {
     </style>
   </template>
 }
-
-const add1 = (index: number) => index + 1;
 
 interface AgentStep {
   agent: DashboardAgent;

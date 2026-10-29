@@ -68,8 +68,7 @@ export default class AgentsFlyout extends Component<SectionFlyoutSignature> {
 
   @action private async newSession() {
     this.args.close();
-    await this.aiAssistantPanelService.openPanel();
-    await this.aiAssistantPanelService.createNewSession();
+    await this.aiAssistantPanelService.openNewSession();
   }
 
   <template>
