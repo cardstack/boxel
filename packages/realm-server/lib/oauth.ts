@@ -740,6 +740,7 @@ export function validateClientRef(raw: unknown): ClientRef {
 // swaps into it serves the connections made through it.
 const CLIENT_RESOLUTION_COLUMNS = `
   n.client_key_id, n.client_share_id, n.platform_client_id,
+  n.client_id AS pinned_client_id, n.token_url AS pinned_token_url,
   s.state AS share_state, s.label AS share_label,
   own.key_id AS own_key_id, own.state AS own_state, own.grant_type AS own_grant_type,
   own.client_id AS own_client_id, own.token_url AS own_token_url, own.token_auth AS own_token_auth, own.authorize_url AS own_authorize_url,
@@ -785,6 +786,21 @@ function clientRefOf(row: Record<string, unknown>): ClientRef | null {
 }
 
 function resolvedClientOf(row: Record<string, unknown>): ResolvedClient {
+  let resolved = resolvedClientOfRef(row);
+  // A connection is pinned to the client its tokens were issued to: one
+  // whose share now holds another client (another id, another token
+  // endpoint) can't mint through it, and needs an administrator.
+  if (
+    row.pinned_client_id != null &&
+    (resolved.clientId !== row.pinned_client_id ||
+      resolved.tokenURL !== row.pinned_token_url)
+  ) {
+    return { ...resolved, usable: false };
+  }
+  return resolved;
+}
+
+function resolvedClientOfRef(row: Record<string, unknown>): ResolvedClient {
   if (row.client_key_id) {
     return {
       usable: row.own_state === 'active',
@@ -847,6 +863,9 @@ async function openClientIn(
     client_key_id?: unknown;
     client_share_id?: unknown;
     platform_client_id?: unknown;
+    // For a connection: the client its tokens were issued to.
+    client_id?: unknown;
+    token_url?: unknown;
   },
 ): Promise<MintingClient> {
   let [row] = await txQuery([
@@ -856,7 +875,11 @@ async function openClientIn(
     param((ref.client_share_id as string | null) ?? null),
     `::uuid AS client_share_id, `,
     param((ref.platform_client_id as string | null) ?? null),
-    `::uuid AS platform_client_id) n ${CLIENT_RESOLUTION_JOINS}`,
+    `::uuid AS platform_client_id, `,
+    param((ref.client_id as string | null) ?? null),
+    `::varchar AS client_id, `,
+    param((ref.token_url as string | null) ?? null),
+    `::varchar AS token_url) n ${CLIENT_RESOLUTION_JOINS}`,
   ]);
   let resolved = row ? resolvedClientOf(row) : { usable: false, label: null };
   if (!resolved.usable || !resolved.secretFrom) {
@@ -1495,7 +1518,11 @@ export async function completeConnect(
         }
         await resealGrantMarkersIn(txQuery, keyring, owner, reconnects);
         await txQuery([
-          `UPDATE oauth_connections SET (token_kind, scopes, access_expires_at, rejected_at, refreshing_until, generation) = (`,
+          `UPDATE oauth_connections SET (client_id, token_url, token_kind, scopes, access_expires_at, rejected_at, refreshing_until, generation) = (`,
+          param(client.clientId),
+          `, `,
+          param(client.tokenURL),
+          `, `,
           param(tokenKind),
           `, `,
           param(tokens.scope ?? ''),
@@ -1517,7 +1544,7 @@ export async function completeConnect(
         value,
       });
       await txQuery([
-        `INSERT INTO oauth_connections (key_id, client_kind, client_key_id, client_share_id, platform_client_id, token_kind, scopes, access_expires_at) VALUES (`,
+        `INSERT INTO oauth_connections (key_id, client_kind, client_key_id, client_share_id, platform_client_id, client_id, token_url, token_kind, scopes, access_expires_at) VALUES (`,
         param(key.id),
         `, `,
         param(clientColumns.client_kind),
@@ -1527,6 +1554,10 @@ export async function completeConnect(
         param(clientColumns.client_share_id),
         `, `,
         param(clientColumns.platform_client_id),
+        `, `,
+        param(client.clientId),
+        `, `,
+        param(client.tokenURL),
         `, `,
         param(tokenKind),
         `, `,
@@ -1704,7 +1735,7 @@ class OAuthTokens {
     let lease = await this.#takeRefreshLease(dbAdapter, keyId);
     try {
       let [key] = await run([
-        `SELECT k.owner, n.token_kind, n.client_key_id, n.client_share_id, n.platform_client_id, ${sealedColumnsSelect('value', 'k')}
+        `SELECT k.owner, n.token_kind, n.client_key_id, n.client_share_id, n.platform_client_id, n.client_id, n.token_url, ${sealedColumnsSelect('value', 'k')}
            FROM user_keys k JOIN oauth_connections n ON n.key_id = k.id
           WHERE k.id = `,
         param(keyId),
