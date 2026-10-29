@@ -58,7 +58,7 @@ export interface TooltipSignature {
  * - **Keyboard focus only.** Focus from a mouse press doesn't open it, so a
  *   clicked trigger doesn't keep its tip up after the pointer leaves.
  * - **Hoverable.** `pointer-events` are live and a transparent bridge spans
- *   the 6px gap, so the pointer can travel from trigger to bubble.
+ *   the gap, so the pointer can travel from trigger to bubble.
  *
  * The reveal is state-driven rather than pure CSS because Escape needs a
  * dismissed flag; the state is only ever written from event handlers, never
@@ -179,18 +179,20 @@ export class Tooltip extends Component<TooltipSignature> {
           display: none;
         }
         .pretui-tooltip {
+          /* the space between trigger and bubble, which the bridge spans */
+          --_tip-gap: 0.375rem;
           position: absolute;
           /* kit stacking scale (pretui-css.gts): a tooltip describes whatever
              is under the pointer, which may be an item inside a dropdown or a
              popover, so it is the highest non-modal tier. */
           z-index: var(--pretui-z-tooltip, 80);
-          background: var(--tooltip, var(--boxel-dark));
-          color: var(--tooltip-foreground, var(--boxel-light));
-          font-size: var(--text-ui-sm, 11.5px);
+          background-color: var(--tooltip);
+          color: var(--tooltip-foreground);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
-          padding: 4px 8px;
-          border-radius: 6px;
-          box-shadow: 0 4px 14px var(--shadow-ink-strong, rgb(0 0 0 / 0.16));
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          border-radius: var(--boxel-border-radius-sm);
+          box-shadow: var(--shadow-lg);
           white-space: nowrap;
           width: max-content;
           opacity: 0;
@@ -212,25 +214,25 @@ export class Tooltip extends Component<TooltipSignature> {
         .pretui-tooltip::before {
           content: '';
           position: absolute;
-          inset: -6px;
+          inset: calc(-1 * var(--_tip-gap));
         }
         .pretui-tooltip[data-side='top'] {
-          bottom: calc(100% + 6px);
+          bottom: calc(100% + var(--_tip-gap));
           left: 50%;
           transform: translateX(-50%);
         }
         .pretui-tooltip[data-side='bottom'] {
-          top: calc(100% + 6px);
+          top: calc(100% + var(--_tip-gap));
           left: 50%;
           transform: translateX(-50%);
         }
         .pretui-tooltip[data-side='left'] {
-          right: calc(100% + 6px);
+          right: calc(100% + var(--_tip-gap));
           top: 50%;
           transform: translateY(-50%);
         }
         .pretui-tooltip[data-side='right'] {
-          left: calc(100% + 6px);
+          left: calc(100% + var(--_tip-gap));
           top: 50%;
           transform: translateY(-50%);
         }
