@@ -64,9 +64,11 @@ const RadioTile: TemplateOnlyComponent<Signature> = <template>
       outline: 2px solid transparent;
       outline-offset: -2px;
     }
+    /* Clear of the chosen ring, with a gap, so a focused chosen tile shows
+       both rings rather than one thick one. */
     .radio-tile:has(input:focus-visible) {
       outline: 2px solid var(--ring, var(--boxel-highlight));
-      outline-offset: 2px;
+      outline-offset: 4px;
     }
   </style>
 </template>;
