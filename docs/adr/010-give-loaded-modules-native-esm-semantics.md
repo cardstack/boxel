@@ -147,14 +147,15 @@ This is the closed list of ways the Loader departs from native ESM.
    the host's build compiles its `import.meta.loader` (§1.4.1) to a global
    that holds the host's current Loader
    (`packages/runtime-common/bundled-module-loader.ts`).
-3. **Observation APIs.** `getLoaderFor`, the module-map queries
+3. **Observation APIs.** The module-map queries
    (`isModuleLoaded`, `moduleKey`, `loadedModuleKeys`, `canonicalURLFor`),
    `getConsumedModules`, `getKnownConsumedModules`, runtime dependency
    tracking, and evaluation timing read the module graph. They MUST NOT change
    what any module observes, and MUST NOT load or evaluate a module. They
    report each module by the URL `resolveImport` gave it. A caller that needs
-   the RRI form (ADR 002) converts the URL itself. We intend to phase out
-   `getLoaderFor`. New code SHOULD NOT add callers of it.
+   the RRI form (ADR 002) converts the URL itself. A Loader MUST NOT record
+   which Loader a value came from: code that needs a Loader reads
+   `import.meta.loader`.
 4. **Discarding modules.** The host MAY replace a Loader to pick up changed
    modules, or tell a Loader to clear its module map, for example when a realm
    mapping changes. No other path removes a module from a Loader.
@@ -315,10 +316,6 @@ Elsewhere:
   `packages/host/app/tools/capture.ts` and
   `packages/host/app/lib/visual-capture.ts` break §1.3: they reach the
   `VirtualNetwork` through `getVirtualNetwork`.
-- `packages/runtime-common/index.ts`, `packages/base/card-api.gts`,
-  `packages/host/app/services/operations.ts` and
-  `packages/host/app/tools/patch-fields.ts` call `Loader.getLoaderFor`. They
-  must move off it before §1.4.3's phase-out can remove it.
 - `packages/experiments-realm/poster-board/poster-board.test.gts`,
   `packages/host/tests/live-test.js`, `packages/host/tests/helpers/adapter.ts`,
   and the host tests listed in `scope` break §1.4.2: they call

@@ -262,11 +262,6 @@ export class Loader {
   private knownDepsCache = new Map<string, Set<string>>();
   // Module identifier → the key it is tracked under (see trackingKey).
   private trackingKeyCache = new Map<string, string>();
-  // The functions this loader has found among the exports of the modules it
-  // loads, each of which names it as its loader unless a later loader finds
-  // the function too (see `getLoaderFor`).
-  private exportedFunctions = new WeakSet<Function>();
-  private static loaders = new WeakMap<Function, Loader>();
 
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
@@ -406,7 +401,6 @@ export class Loader {
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
-    this.recordLoaderOfModuleExports(module);
     this.setCanonicalModuleURL(moduleIdentifier, moduleIdentifier);
 
     this.moduleShims.set(moduleIdentifier, module);
@@ -520,13 +514,6 @@ export class Loader {
       visited,
       this.canonicalIdentifier(initialHref),
     );
-  }
-
-  static getLoaderFor(value: unknown): Loader | undefined {
-    if (typeof value === 'function') {
-      return Loader.loaders.get(value);
-    }
-    return undefined;
   }
 
   async import<T extends object>(
@@ -1291,19 +1278,6 @@ export class Loader {
   // (`https://localhost:4201/base/X`) for the same module. Returns the
   // input unchanged when no virtual alias is registered.
 
-  private recordLoaderOfModuleExports(module: any) {
-    for (let propName of Object.keys(module)) {
-      let exportedEntity = module[propName];
-      if (
-        typeof exportedEntity === 'function' &&
-        !this.exportedFunctions.has(exportedEntity)
-      ) {
-        this.exportedFunctions.add(exportedEntity);
-        Loader.loaders.set(exportedEntity, this);
-      }
-    }
-  }
-
   private readOnlyProxy(module: any) {
     return new Proxy(module, {
       set(_target, prop) {
@@ -1387,8 +1361,6 @@ export class Loader {
     this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
 
     if (loaded.type === 'shimmed') {
-      this.recordLoaderOfModuleExports(loaded.module);
-
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: loaded.module,
@@ -1565,7 +1537,6 @@ export class Loader {
         );
         this.#currentlyEvaluatingModule = previouslyEvaluating;
       }
-      this.recordLoaderOfModuleExports(moduleProxy);
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: moduleProxy,

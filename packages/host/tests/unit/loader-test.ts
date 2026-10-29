@@ -269,13 +269,6 @@ module('Unit | loader', function (hooks) {
     assert.strictEqual(module.counter, 1);
   });
 
-  test('can get a loader used to import a specific card', async function (assert) {
-    let module = await loader.import<any>(`${testRealmURL}person`);
-    let card = module.Person;
-    let testingLoader = Loader.getLoaderFor(card);
-    assert.strictEqual(testingLoader, loader, 'the loaders are the same');
-  });
-
   test('supports import.meta', async function (assert) {
     let { checkImportMeta, myLoader } = await loader.import<{
       checkImportMeta: () => string;

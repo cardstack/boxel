@@ -53,7 +53,6 @@ import {
   isRelationship,
   loadCardDef,
   loadCardDocument,
-  Loader,
   localId,
   meta,
   primitive,
@@ -5234,7 +5233,8 @@ function trackRuntimeRelationshipModuleDependencies(
   // which is what the tracker records — so they are passed through as they are.
   trackRuntimeModuleDependency(identity.module, dependencyTrackingContext);
 
-  let loader = Loader.getLoaderFor(ctor);
+  // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+  let loader = import.meta.loader;
   if (!loader) {
     return;
   }
