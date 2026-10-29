@@ -118,8 +118,8 @@ export default class DashboardSections {
     });
     schedule('afterRender', () => this.readCompact());
     resizeObserver.observe(scroller);
-    if (scroller.firstElementChild) {
-      resizeObserver.observe(scroller.firstElementChild);
+    for (let child of scroller.children) {
+      resizeObserver.observe(child);
     }
     return () => {
       scroller.removeEventListener('scroll', onScroll);
@@ -127,6 +127,11 @@ export default class DashboardSections {
         scroller.removeEventListener(type, release);
       }
       resizeObserver.disconnect();
+      // A scroller that replaces this one can install before this teardown
+      // runs, and is left as it is.
+      if (this.scroller !== scroller) {
+        return;
+      }
       this.scroller = null;
       this.heldId = undefined;
       schedule('afterRender', () => {

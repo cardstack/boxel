@@ -46,6 +46,7 @@ import {
   publishedRealmURLsFromInfo,
   skillsRealmURL,
 } from '@cardstack/host/lib/utils';
+import { wallpaperImage } from '@cardstack/host/lib/workspace-list';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -1466,8 +1467,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   private get backgroundImageURL() {
-    let { backgroundURL } = this.realmInfo;
-    return backgroundURL ? `url(${backgroundURL})` : '';
+    return wallpaperImage(this.realmInfo.backgroundURL);
   }
 
   private get visibility() {

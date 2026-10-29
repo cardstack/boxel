@@ -1234,10 +1234,15 @@ export default class Dashboard extends Component<Signature> {
       /* Compact, where the section rail stays as icons, the page tightens
          too: less room above and between its parts, and a smaller, lighter
          greeting. */
-      .is-compact .dashboard-page {
+      /* The frosted band shrinks with the page's top, so it never covers the
+         greeting. */
+      .dashboard.is-compact {
         --dashboard-page-padding-top: calc(
           var(--dashboard-top-bar-clearance) + var(--boxel-sp-xs)
         );
+        --dashboard-band-height: var(--dashboard-page-padding-top);
+      }
+      .is-compact .dashboard-page {
         gap: var(--boxel-sp-2xl);
       }
       .is-compact .page-head {

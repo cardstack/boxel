@@ -13,6 +13,7 @@ import { cssVar } from '@cardstack/boxel-ui/helpers';
 import {
   isHostedRealm,
   listedFavoriteRealmIdentifiers,
+  wallpaperImage,
 } from '@cardstack/host/lib/workspace-list';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -43,9 +44,7 @@ export default class FavoritesFlyout extends Component<SectionFlyoutSignature> {
         url,
         info,
         isHosted: isHostedRealm(info),
-        wallpaper: info.backgroundURL
-          ? `url("${info.backgroundURL}")`
-          : undefined,
+        wallpaper: wallpaperImage(info.backgroundURL),
       };
     });
   }

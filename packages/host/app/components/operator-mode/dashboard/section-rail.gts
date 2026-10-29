@@ -30,10 +30,10 @@ interface Signature {
   };
 }
 
-// Pointer handlers ignore touch: a tap is a click, and a hover opened by one
-// would close as soon as the finger lifts.
-function isTouch(event: Event) {
-  return (event as PointerEvent).pointerType === 'touch';
+// Only a mouse hovers. A finger or a pen enters an entry as it touches down,
+// so a hover would open the flyout the same press's click then closes.
+function isMouse(event: Event) {
+  return (event as PointerEvent).pointerType === 'mouse';
 }
 
 // The dashboard's section rail: one entry per registered section, in page
@@ -70,16 +70,16 @@ export default class SectionRail extends Component<Signature> {
 
   // A flyout opened by hover or a tap leaves focus on the page, so Escape is
   // heard from anywhere, and a press outside the rail closes an open flyout.
-  // Inside the rail, the rail's own handler has already taken Escape. These
-  // live on the rail, not the flyout: switching flyouts installs the next
-  // one before the last one's teardown runs, which would remove the shared
-  // listeners.
+  // Escape is heard in the capture phase, ahead of the page's other Escape
+  // handlers, so the one press it takes reaches none of them. These live on
+  // the rail, not the flyout: switching flyouts installs the next one before
+  // the last one's teardown runs, which would remove the shared listeners.
   private captureRail = modifier((element: HTMLElement) => {
     this.railElement = element;
-    document.addEventListener('keydown', this.onKeydown);
+    document.addEventListener('keydown', this.onKeydown, true);
     document.addEventListener('pointerdown', this.onPointerDownOutside);
     return () => {
-      document.removeEventListener('keydown', this.onKeydown);
+      document.removeEventListener('keydown', this.onKeydown, true);
       document.removeEventListener('pointerdown', this.onPointerDownOutside);
       this.railElement = null;
     };
@@ -100,6 +100,9 @@ export default class SectionRail extends Component<Signature> {
 
   @action private trackPointer(event: Event) {
     let { clientX, clientY } = event as PointerEvent;
+    if (this.currentPoint?.x === clientX && this.currentPoint?.y === clientY) {
+      return;
+    }
     this.previousPoint = this.currentPoint;
     this.currentPoint = { x: clientX, y: clientY };
   }
@@ -130,9 +133,12 @@ export default class SectionRail extends Component<Signature> {
   // open and the pointer is on its way into it; then the switch waits, and
   // happens only if the pointer stops short.
   @action private hoverEntry(section: DashboardSection, event: Event) {
-    if (isTouch(event)) {
+    if (!isMouse(event)) {
       return;
     }
+    // The browser fires pointerenter ahead of the pointermove to the same
+    // point, so the aim test reads the point from here.
+    this.trackPointer(event);
     if (this.openId === section.id) {
       this.flyoutIntentTask.cancelAll();
       return;
@@ -151,7 +157,7 @@ export default class SectionRail extends Component<Signature> {
   // Leaving an entry closes its flyout after a grace period; entering the
   // flyout (part of the entry) or another entry cancels it.
   @action private leaveEntry(event: Event) {
-    if (!isTouch(event) && this.openId) {
+    if (isMouse(event) && this.openId) {
       this.flyoutIntentTask.perform(null, FLYOUT_CLOSE_DELAY_MS, null);
     }
   }
@@ -197,8 +203,7 @@ export default class SectionRail extends Component<Signature> {
     });
   }
 
-  // Escape closes an open flyout, then folds the rail, and goes no further
-  // than the rail.
+  // Escape closes an open flyout, then folds the rail, and goes no further.
   @action private onKeydown(event: Event) {
     if ((event as KeyboardEvent).key !== 'Escape') {
       return;
@@ -241,8 +246,6 @@ export default class SectionRail extends Component<Signature> {
   }
 
   <template>
-    {{! Escape closes the flyout from any control inside the rail. }}
-    {{! template-lint-disable no-invalid-interactive }}
     <nav
       class={{cn
         'section-rail'
@@ -256,7 +259,6 @@ export default class SectionRail extends Component<Signature> {
       {{on 'pointerenter' this.unfold}}
       {{on 'focusin' this.unfold}}
       {{on 'focusout' this.onFocusOut}}
-      {{on 'keydown' this.onKeydown}}
       data-test-section-rail
       data-test-section-rail-folded={{if this.isFolded 'true' 'false'}}
       ...attributes

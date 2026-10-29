@@ -18,6 +18,14 @@ export function isHostedRealm(info: RealmDates): boolean {
   );
 }
 
+// A workspace's wallpaper as a CSS background image, for the dashboard's tiles
+// and the rail's favorites alike.
+export function wallpaperImage(
+  backgroundURL: string | null | undefined,
+): string | undefined {
+  return backgroundURL ? `url("${backgroundURL}")` : undefined;
+}
+
 // Newest first. Realms without a valid createdAt (e.g. a broken/orphaned realm
 // reference) sort to the end rather than clumping at the front.
 export function sortByCreatedAtDesc<T extends string>(

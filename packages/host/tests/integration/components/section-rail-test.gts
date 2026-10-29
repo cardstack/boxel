@@ -162,6 +162,20 @@ module('Integration | section-rail', function (hooks) {
       .dom('[data-test-section-rail-flyout]')
       .doesNotExist('pressing again closes it');
 
+    // A pen that can't hover enters the entry as it touches down.
+    await triggerEvent(
+      '[data-test-section-rail-item="shelf"]',
+      'pointerenter',
+      {
+        pointerType: 'pen',
+      },
+    );
+    await click('[data-test-section-rail-entry="shelf"]');
+    assert
+      .dom('[data-test-section-rail-flyout="shelf"]')
+      .exists('a pen tap opens it');
+    await click('[data-test-section-rail-entry="shelf"]');
+
     await triggerEvent(
       '[data-test-section-rail-item="shelf"]',
       'pointerenter',
@@ -222,6 +236,48 @@ module('Integration | section-rail', function (hooks) {
     assert.dom('[data-test-section-rail-flyout]').doesNotExist();
   });
 
+  test('Escape that closes a flyout reaches no other listener on the page', async function (assert) {
+    let sections = new DashboardSections();
+    let shelf: DashboardSection = {
+      id: 'shelf',
+      label: 'Shelf',
+      icon: IconPlus,
+      flyout: ShelfFlyout,
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <section {{sections.register shelf}}></section>
+          <SectionRail @sections={{sections}} />
+        </template>
+      },
+    );
+
+    let heard = 0;
+    let listener = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        heard++;
+      }
+    };
+    document.addEventListener('keydown', listener);
+    try {
+      await triggerEvent(
+        '[data-test-section-rail-item="shelf"]',
+        'pointerenter',
+        { pointerType: 'mouse' },
+      );
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+      assert.dom('[data-test-section-rail-flyout]').doesNotExist();
+      assert.strictEqual(heard, 0, 'the page never hears it');
+
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+      assert.strictEqual(heard, 1, 'with no flyout open, Escape goes on');
+    } finally {
+      document.removeEventListener('keydown', listener);
+    }
+  });
+
   test('marks the section being read as the page scrolls, and holds a jumped-to section until the user scrolls', async function (assert) {
     let sections = new DashboardSections();
     let intro: DashboardSection = {
@@ -244,8 +300,14 @@ module('Integration | section-rail', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <div class='scroller' {{sections.trackScroller}} data-test-scroller>
+            {{! Ahead of the page, as the dashboard's frosted band is. }}
+            <div></div>
             <div>
-              <section class='tall' {{sections.register intro}}></section>
+              <section
+                class='tall'
+                {{sections.register intro}}
+                data-test-intro
+              ></section>
               <section
                 class='tall'
                 {{sections.register shelf}}
@@ -318,5 +380,14 @@ module('Integration | section-rail', function (hooks) {
       'intro',
       'a scroll by hand hands the section back to the scroll-spy',
     );
+
+    // The reading line sits in the intro, short of the shelf.
+    await scrollTo((find('[data-test-shelf]') as HTMLElement).offsetTop / 2);
+    assert.strictEqual(current(), 'intro');
+    // The intro shrinks and pulls the shelf up past the reading line, with
+    // no scroll.
+    (find('[data-test-intro]') as HTMLElement).style.height = '5rem';
+    await waitUntil(() => current() === 'shelf', { timeout: 2000 });
+    assert.strictEqual(current(), 'shelf', 'a section resizing moves the mark');
   });
 });
