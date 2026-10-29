@@ -128,6 +128,12 @@ async function pressKey(key: string) {
   await triggerKeyEvent(target, 'keydown', key);
 }
 
+function sectionOrder() {
+  return findAll('[data-test-dashboard-section]').map((section) =>
+    section.getAttribute('data-test-dashboard-section'),
+  );
+}
+
 function operatorModeState() {
   return getService('operator-mode-state-service') as OperatorModeStateService;
 }
@@ -406,13 +412,10 @@ module('Acceptance | dashboard', function (hooks) {
         .hasText(/^Good (morning|afternoon|evening), Ada$/);
     });
 
-    test('shows the Workspaces, Catalogs and Agents sections in order', async function (assert) {
+    test('with fewer than three workspaces of their own, a user sees Catalogs first', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
-      let sections = [
-        ...document.querySelectorAll('[data-test-dashboard-section]'),
-      ].map((section) => section.getAttribute('data-test-dashboard-section'));
-      assert.deepEqual(sections, ['workspaces', 'catalogs', 'agents']);
+      assert.deepEqual(sectionOrder(), ['catalogs', 'workspaces', 'agents']);
       assert
         .dom('[data-test-dashboard-section="workspaces"] h2')
         .hasText('Workspaces');
@@ -420,6 +423,26 @@ module('Acceptance | dashboard', function (hooks) {
         .dom('[data-test-dashboard-section="catalogs"] h2')
         .includesText('Catalogs');
       assert.dom('[data-test-dashboard-section="agents"] h2').hasText('Agents');
+    });
+
+    test('the keyboard walks the catalogs first when they lead', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      assert
+        .dom('[data-test-workspace-selected="Workspace A"]')
+        .exists('the cursor still starts on the workspace, not a catalog');
+      assert
+        .dom('[data-test-catalog-list] [data-test-workspace]')
+        .exists('the fixture lists a catalog');
+
+      await focus('[data-test-workspace-button="Workspace A"]');
+      await pressKey('ArrowLeft');
+      await pressKey('ArrowLeft');
+      assert.dom('[data-test-add-workspace-selected]').exists();
+
+      await pressKey('ArrowLeft');
+      assert
+        .dom('[data-test-catalog-list] [data-test-workspace-selected]')
+        .exists('before New Workspace come the catalogs');
     });
 
     test('the Workspaces section holds favorites, your workspaces and archived', async function (assert) {
@@ -1247,6 +1270,20 @@ module('Acceptance | dashboard', function (hooks) {
         });
       });
 
+      module('three workspaces of their own', function (hooks) {
+        setupWorkspaces(hooks, 2, '40rem');
+
+        test('Workspaces leads, and Catalogs follows them', async function (assert) {
+          await visitOperatorMode({ workspaceChooserOpened: true });
+
+          assert.deepEqual(sectionOrder(), [
+            'workspaces',
+            'catalogs',
+            'agents',
+          ]);
+        });
+      });
+
       // Two columns: New Workspace and 5 tiles, then 2 grid rows of rows. The
       // width leaves room for two rows beside the section rail's column.
       module('a few rows', function (hooks) {
@@ -1520,6 +1557,8 @@ module('Acceptance | dashboard', function (hooks) {
       const RAIL = '[data-test-section-rail]';
       const ENTRY = '[data-test-section-rail-entry="workspaces"]';
       const FLYOUT = '[data-test-section-rail-flyout="workspaces"]';
+      const CATALOGS_ENTRY = '[data-test-section-rail-entry="catalogs"]';
+      const CATALOGS_FLYOUT = '[data-test-section-rail-flyout="catalogs"]';
 
       function favoriteWorkspaceA() {
         let matrixService = getService('matrix-service') as MatrixService;
@@ -1547,7 +1586,8 @@ module('Acceptance | dashboard', function (hooks) {
           findAll('[data-test-section-rail-entry]').map((el) =>
             el.getAttribute('data-test-section-rail-entry'),
           ),
-          ['workspaces'],
+          ['catalogs', 'workspaces'],
+          'in page order, with Catalogs first for a user with one workspace',
         );
         assert.dom(RAIL).isVisible();
         assert.dom(ENTRY).containsText('Workspaces');
@@ -1556,7 +1596,43 @@ module('Acceptance | dashboard', function (hooks) {
           .doesNotExist(
             'the Workspaces heading has no count, so neither does its entry',
           );
-        assert.dom(ENTRY).hasAttribute('aria-current', 'location');
+        assert
+          .dom(`${CATALOGS_ENTRY} [data-test-section-rail-count]`)
+          .hasText(
+            String(
+              findAll('[data-test-catalog-list] [data-test-workspace]').length,
+            ),
+            'the Catalogs entry counts as its heading does',
+          );
+        assert
+          .dom(CATALOGS_ENTRY)
+          .hasAttribute('aria-current', 'location', 'the top section is read');
+        assert.dom(ENTRY).doesNotHaveAttribute('aria-current');
+      });
+
+      test('the Catalogs entry opens its flyout of catalogs, and a catalog opens its workspace', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        let tileNames = findAll(
+          '[data-test-catalog-list] [data-test-workspace]',
+        ).map((el) => el.getAttribute('data-test-workspace'));
+        assert.true(tileNames.length > 0, 'the fixture lists a catalog');
+
+        await click(CATALOGS_ENTRY);
+
+        assert.dom(`${CATALOGS_FLYOUT} header`).hasText('Catalogs');
+        assert.deepEqual(
+          findAll(`${CATALOGS_FLYOUT} [data-test-section-rail-catalog]`).map(
+            (el) => el.getAttribute('data-test-section-rail-catalog'),
+          ),
+          tileNames,
+          'the catalogs the page lists, in its order',
+        );
+
+        await click(
+          `${CATALOGS_FLYOUT} [data-test-section-rail-catalog="${tileNames[0]}"]`,
+        );
+
+        assert.dom('[data-test-dashboard]').doesNotExist();
       });
 
       test('pressing Enter on the Workspaces entry opens its flyout of favorites, and a favorite opens its workspace', async function (assert) {
