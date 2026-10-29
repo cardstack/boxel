@@ -22,7 +22,7 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
-import { waitedFetch } from '../helpers/waiters.ts';
+import { setupWaitedBrowserWork, waitedFetch } from '../helpers/waiters.ts';
 
 // The realm server the pages talk to, named by the page's meta tag as the
 // shell's document names it.
@@ -102,6 +102,7 @@ const SIGNED_IN = json(201, { data: { attributes: SESSION } });
 
 module('Integration | sign-in', function (hooks) {
   setupRenderingTest(hooks);
+  setupWaitedBrowserWork(hooks);
 
   let server: ReturnType<typeof realmServer> | undefined;
   // What the pages sent, still readable once the module's afterEach has let

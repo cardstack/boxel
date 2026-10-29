@@ -23,10 +23,11 @@ const macros = buildMacros();
 //
 // The component tests are built in development mode (`pnpm test:components`),
 // into dist-tests, with tests/index.html as one more entry, served from the
-// root. The script also sets NODE_ENV=development: `buildMacros` reads it
-// when this file loads, before Vite sets it from `--mode`, and without it
-// `isDevelopingApp()` is false, so `@ember/test-waiters` does nothing and
-// `settled()` can't see the work a test waits on. That build is never served on the origin, so the import allowlist and
+// root. The script also sets NODE_ENV=development, since `vite build` sets
+// NODE_ENV=production before this file loads, whatever `--mode` is. With it,
+// `buildMacros` makes `isDevelopingApp()` true, which `@ember/test-waiters`
+// needs for `settled()` to see the work a test waits on, and the bundle takes
+// Ember's debug build, with its development-only assertions. That build is never served on the origin, so the import allowlist and
 // the build record, which describe what the origin serves, see only a
 // production build of the pages.
 export default defineConfig(({ mode }) => ({

@@ -21,7 +21,7 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
-import { setupWaitedFileReads, waitedFetch } from '../helpers/waiters.ts';
+import { setupWaitedBrowserWork, waitedFetch } from '../helpers/waiters.ts';
 
 // The key pages, against a realm server that answers the requests they make.
 // Every change to a key is made with a key write ticket the page mints with
@@ -142,8 +142,8 @@ const SERVICE_ACCOUNT_FILE = JSON.stringify(
   2,
 );
 
-// Chooses a key file. The module waits on file reads, so this returns once
-// the page has read it.
+// Chooses a key file. The module waits on file reads
+// (`setupWaitedBrowserWork`), so this returns once the page has read it.
 async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
   await triggerEvent('[data-test-service-account-file]', 'change', {
     files: [new File([contents], name, { type: 'application/json' })],
@@ -152,7 +152,7 @@ async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
 
 module('Integration | key pages', function (hooks) {
   setupRenderingTest(hooks);
-  setupWaitedFileReads(hooks);
+  setupWaitedBrowserWork(hooks);
 
   let requests: { method: string; path: string; url: URL; body: any }[];
   let routes: Record<string, Route>;

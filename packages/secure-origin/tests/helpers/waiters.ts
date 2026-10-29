@@ -3,8 +3,8 @@ import { waitForPromise } from '@ember/test-waiters';
 // Test waiters for the browser work a page awaits, so `settled()` — and with
 // it `render`, `click`, `fillIn` and the rest — returns only once the page has
 // finished with it. The pages ship no test waiters of their own, so the tests
-// put them where the work enters: the stubbed `fetch` and the file a test
-// hands the page.
+// put them where the work enters: the stubbed `fetch`, and the browser APIs
+// the pages await (reading a file, hashing).
 
 type Fetch = (
   input: Parameters<typeof fetch>[0],
@@ -43,15 +43,24 @@ export function nextResize(element: Element): Promise<void> {
   );
 }
 
-// `settled()` waits for the page to read a file a test hands it.
-export function setupWaitedFileReads(hooks: NestedHooks) {
-  let original = Blob.prototype.text;
+// `settled()` waits for the browser APIs the pages await: reading a file a
+// test hands the page, and hashing (a Google sign-in's PKCE challenge).
+export function setupWaitedBrowserWork(hooks: NestedHooks) {
+  let text = Blob.prototype.text;
+  let digest = SubtleCrypto.prototype.digest;
   hooks.beforeEach(function () {
     Blob.prototype.text = function (this: Blob) {
-      return waitForPromise(original.call(this));
+      return waitForPromise(text.call(this));
+    };
+    SubtleCrypto.prototype.digest = function (
+      this: SubtleCrypto,
+      ...args: Parameters<SubtleCrypto['digest']>
+    ) {
+      return waitForPromise(digest.apply(this, args));
     };
   });
   hooks.afterEach(function () {
-    Blob.prototype.text = original;
+    Blob.prototype.text = text;
+    SubtleCrypto.prototype.digest = digest;
   });
 }
