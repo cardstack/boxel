@@ -132,10 +132,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             Approved requests run only in scheduled pipelines.
           </:intro>
           <:default>
-            <OpenedForSummary
-              @context={{this.choosing.context}}
-              @reason={{this.opened.reason}}
-            />
+            {{#if this.summaryContext}}
+              <OpenedForSummary
+                @context={{this.summaryContext}}
+                @reason={{this.opened.reason}}
+              />
+            {{/if}}
             {{#each this.choices as |choice|}}
               <FieldContainer
                 @tag='div'
@@ -346,6 +348,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         white-space: nowrap;
       }
       .choice {
+        position: relative;
         display: flex;
         gap: var(--boxel-sp-xs);
         align-items: baseline;
@@ -353,6 +356,17 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         border-radius: var(--boxel-border-radius);
         box-shadow: 0 0 0 1px var(--border);
         cursor: pointer;
+      }
+      .choice input {
+        position: absolute;
+        opacity: 0;
+        width: 1px;
+        height: 1px;
+        margin: 0;
+      }
+      .choice:has(input:focus-visible) {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline-offset: 2px;
       }
       .choice:has(input:checked) {
         box-shadow: 0 0 0 2px var(--primary, var(--boxel-highlight));
@@ -533,6 +547,17 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   }
   private get done() {
     return this.page.state.name === 'done' ? this.page.state : undefined;
+  }
+
+  // What the window was opened for, without the one operation's destination:
+  // the groups below show where every operation in the batch sends.
+  private get summaryContext(): WindowContext | undefined {
+    let context = this.choosing?.context;
+    if (!context?.operation) {
+      return context;
+    }
+    let { destination: _destination, ...operation } = context.operation;
+    return { ...context, operation };
   }
 
   private get choices(): SlotChoice[] {

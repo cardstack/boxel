@@ -165,6 +165,7 @@ class UseKey extends Component<{
         white-space: nowrap;
       }
       .card {
+        position: relative;
         display: flex;
         gap: var(--boxel-sp-xs);
         align-items: baseline;
@@ -172,6 +173,17 @@ class UseKey extends Component<{
         border-radius: var(--boxel-border-radius);
         box-shadow: 0 0 0 1px var(--border);
         cursor: pointer;
+      }
+      .card input {
+        position: absolute;
+        opacity: 0;
+        width: 1px;
+        height: 1px;
+        margin: 0;
+      }
+      .card:has(input:focus-visible) {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline-offset: 2px;
       }
       .card:has(input:checked) {
         box-shadow: 0 0 0 2px var(--primary, var(--boxel-highlight));
