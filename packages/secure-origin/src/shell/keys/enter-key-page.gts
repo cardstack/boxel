@@ -4,9 +4,18 @@
 // key is for and where that operation sends it, as the realm server describes
 // them; where the key may be sent is granted when the operation is approved.
 //
-// A key is a secret pasted in, or an OAuth app the user registered with a
-// service, whose client secret is its value and whose settings go beside it.
-// Accounts are then connected through the app on the `connect` page.
+// A key is a secret pasted in; a Google service account's JSON key file,
+// chosen from disk with the user to act as and its scopes; or an OAuth app the
+// user registered with a service, whose client secret is its value and whose
+// settings go beside it. Accounts are then connected through the app on the
+// `connect` page.
+//
+// What tells a secret and a service account apart is what the user has in
+// hand, not the service: Google's own APIs take plain API keys too. So each
+// kind says what it is for; a service account's key file pasted as a secret
+// is caught and offered as a service account; and a window opened for an
+// operation that sends to a Google API says when a service account fits,
+// without choosing one.
 //
 // This is the one page a new key's value is typed into. Reached from the key
 // page, at `keys/add`, it goes back there once the key is added, rather than
@@ -20,6 +29,7 @@ import {
   addKey,
   addOAuthClient,
   windowContext,
+  type KeyValue,
   type OAuthClientSettings,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
@@ -53,14 +63,25 @@ import OAuthClientFields, {
 import OpenedForSummary from './opened-for-summary.gts';
 import { contextRequest, openedFor, returnsToKeyPage } from './opened-for.ts';
 import RadioChoices from './radio-choices.gts';
+import { ServiceAccountEntry } from './service-account-entry.ts';
+import ServiceAccountFields from './service-account-fields.gts';
+import {
+  isGoogleAPIHost,
+  isServiceAccountKeyFile,
+} from './service-account-key-file.ts';
 
-type Kind = 'static' | 'oauth-client';
+type Kind = 'static' | 'google-service-account' | 'oauth-client';
 
 const KINDS = [
   {
     value: 'static',
-    label: 'Secret',
-    hint: 'An API key or token you paste in.',
+    label: 'API key or token',
+    hint: 'A key or token you copy from the service and paste here, such as a GitHub token or a Google Maps API key.',
+  },
+  {
+    value: 'google-service-account',
+    label: 'Google service account',
+    hint: 'For Google APIs such as Sheets and Drive, when you have a service account’s key file (a .json file from Google Cloud). Boxel sends Google a short-lived token made from it, never the file itself.',
   },
   {
     value: 'oauth-client',
@@ -133,41 +154,71 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
               @selected={{this.form.kind}}
               @onSelect={{this.setKind}}
             />
+            {{#if this.suggestsServiceAccount}}
+              <p class='kind-hint' data-test-google-destination-hint>
+                This request goes to a Google API. If you were given a JSON key
+                file for a Google Cloud service account, choose
+                <strong>Google service account</strong>; if you have an API key,
+                paste it as a key.
+              </p>
+            {{/if}}
             {{#if this.isOAuthClient}}
               <OAuthProviderChoice
                 @form={{this.form.oauth}}
                 @onProvider={{this.setProvider}}
               />
             {{/if}}
-            <KeyFields
-              @name={{this.form.name}}
-              @value={{this.form.value}}
-              @onName={{this.setName}}
-              @onValue={{this.setValue}}
-              @valueLabel={{if this.isOAuthClient 'Client secret'}}
-            >
-              <:beforeValue>
-                {{#if this.isOAuthClient}}
-                  <FieldContainer
-                    @tag='label'
-                    @label='Client ID'
-                    @icon={{RectangleEllipsis}}
-                    data-test-key-field='client-id'
-                  >
-                    <BoxelInput
-                      @type='text'
-                      @autocomplete='off'
-                      @placeholder='The app’s Client ID, shown on the site'
-                      @value={{this.form.clientId}}
-                      @onInput={{this.setClientId}}
-                      name='client-id'
-                      spellcheck='false'
-                      data-test-oauth-client-id-input
-                    />
-                  </FieldContainer>
-                {{/if}}
-              </:beforeValue>
-            </KeyFields>
+            {{#if this.isServiceAccount}}
+              <KeyFields @name={{this.form.name}} @onName={{this.setName}} />
+              <ServiceAccountFields
+                @entry={{this.serviceAccount}}
+                @onChange={{this.clearError}}
+              />
+            {{else}}
+              <KeyFields
+                @name={{this.form.name}}
+                @value={{this.form.value}}
+                @onName={{this.setName}}
+                @onValue={{this.setValue}}
+                @valueLabel={{if this.isOAuthClient 'Client secret'}}
+              >
+                <:beforeValue>
+                  {{#if this.isOAuthClient}}
+                    <FieldContainer
+                      @tag='label'
+                      @label='Client ID'
+                      @icon={{RectangleEllipsis}}
+                      data-test-key-field='client-id'
+                    >
+                      <BoxelInput
+                        @type='text'
+                        @autocomplete='off'
+                        @placeholder='The app’s Client ID, shown on the site'
+                        @value={{this.form.clientId}}
+                        @onInput={{this.setClientId}}
+                        name='client-id'
+                        spellcheck='false'
+                        data-test-oauth-client-id-input
+                      />
+                    </FieldContainer>
+                  {{/if}}
+                </:beforeValue>
+              </KeyFields>
+              {{#if this.pastedKeyFile}}
+                <div class='kind-hint' role='alert' data-test-pasted-key-file>
+                  <p>This is a Google service account’s JSON key file. It can’t
+                    be sent as it is: Boxel makes short-lived tokens from it for
+                    Google instead.</p>
+                  <Button
+                    type='button'
+                    @kind='secondary'
+                    @size='small'
+                    data-test-use-service-account
+                    {{on 'click' this.usePastedKeyFile}}
+                  >Use it as a Google service account</Button>
+                </div>
+              {{/if}}
+            {{/if}}
             {{#if this.otherProvider}}
               <OAuthClientFields
                 @form={{this.form.oauth}}
@@ -219,6 +270,20 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
         color: var(--muted-foreground);
+      }
+      .kind-hint {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        justify-items: start;
+        margin: 0;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--muted);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+      }
+      .kind-hint p {
+        margin: 0;
       }
       .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
@@ -304,9 +369,49 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     return this.form.kind === 'oauth-client';
   }
 
+  private serviceAccount = new ServiceAccountEntry();
+
+  private get isServiceAccount() {
+    return this.form.kind === 'google-service-account';
+  }
+
+  // A service account's key file pasted as a secret. It can't be saved
+  // there; the page offers to take it as a service account.
+  private get pastedKeyFile() {
+    return (
+      this.form.kind === 'static' && isServiceAccountKeyFile(this.form.value)
+    );
+  }
+
+  // Opened for an operation that sends to a Google API, the page says when a
+  // service account fits. It doesn't choose one: Google's APIs take plain API
+  // keys too.
+  private get suggestsServiceAccount() {
+    return (
+      this.form.kind === 'static' &&
+      isGoogleAPIHost(this.entering?.context?.operation?.destination?.host)
+    );
+  }
+
+  private usePastedKeyFile = () => {
+    let text = this.form.value;
+    this.setKind('google-service-account');
+    this.serviceAccount.readText(text, 'the pasted key file');
+  };
+
+  private clearError = () => {
+    this.form.error = undefined;
+  };
+
   private get submitDisabled() {
     let { saving, name, value, clientId, oauth } = this.form;
-    if (saving || !name.trim() || !value) {
+    if (saving || !name.trim()) {
+      return true;
+    }
+    if (this.isServiceAccount) {
+      return !this.serviceAccount.value;
+    }
+    if (!value || this.pastedKeyFile) {
       return true;
     }
     return (
@@ -350,8 +455,12 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     };
   }
 
+  // Switching kinds drops a value or key file entered for another kind, so
+  // nothing entered for one is sent as another.
   private setKind = (value: string) => {
     this.form.kind = value as Kind;
+    this.form.value = '';
+    this.serviceAccount.clear();
     this.form.error = undefined;
   };
 
@@ -389,6 +498,9 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     this.form.error = undefined;
     try {
       let kind = this.form.kind;
+      let entered: KeyValue | undefined = this.isServiceAccount
+        ? this.serviceAccount.value
+        : { kind: 'static', value: this.form.value };
       let key =
         kind === 'oauth-client'
           ? await addOAuthClient(this.args.api.config, {
@@ -398,10 +510,11 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
             })
           : await addKey(this.args.api.config, {
               name: this.form.name.trim(),
-              value: this.form.value,
+              entered: entered!,
             });
       // The value is gone from the page the moment the server has it.
       this.form.value = '';
+      this.serviceAccount.clear();
       if (this.returnsToKeyPage) {
         navigation.back(pageURL('keys'));
         return;

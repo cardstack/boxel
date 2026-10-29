@@ -31,6 +31,13 @@ import zlib from 'node:zlib';
 //                           `releaseHeld()`. With `truncate`, the connection
 //                           is dropped where the usage would start
 //   /not-json               502 with an HTML body
+//   /google-token           a stand-in for Google's OAuth token endpoint: a
+//                           JWT-bearer exchange answers the next of
+//                           `googleTokenAnswers` (each used once), or, with
+//                           none queued, 200 with a fresh access token
+//                           `stub-access-<n>` that lives `googleTokenLifetime`
+//                           seconds. A request that isn't a JWT-bearer grant
+//                           answers 400 `invalid_request`
 
 export interface StubVendorRequest {
   method: string;
@@ -48,6 +55,13 @@ export interface StubVendor {
   releaseHeld(): void;
   // How many responses the receiving side closed before they were finished.
   abandonedResponses(): number;
+  // What `/google-token` answers next, in order, before it goes back to
+  // minting tokens.
+  googleTokenAnswers: { status: number; body: Record<string, unknown> }[];
+  // The `expires_in` of each token `/google-token` mints.
+  googleTokenLifetime: number;
+  // The access tokens `/google-token` has minted, in order.
+  googleTokensMinted: string[];
   close(): Promise<void>;
 }
 
@@ -118,6 +132,13 @@ export async function startStubVendor({
   port = 0,
 }: { port?: number } = {}): Promise<StubVendor> {
   let requests: StubVendorRequest[] = [];
+  // Filled in once the server is listening; the request handler reads the
+  // token endpoint's settings from it.
+  let vendor = {
+    googleTokenAnswers: [],
+    googleTokenLifetime: 3600,
+    googleTokensMinted: [],
+  } as unknown as StubVendor;
   let held: (() => void)[] = [];
   let abandoned = 0;
   let server = http.createServer((req, res) => {
@@ -225,6 +246,29 @@ export async function startStubVendor({
         } else {
           finish();
         }
+      } else if (url.pathname === '/google-token') {
+        let form = new URLSearchParams(received.body);
+        let queued = vendor.googleTokenAnswers.shift();
+        let answer =
+          form.get('grant_type') !==
+            'urn:ietf:params:oauth:grant-type:jwt-bearer' ||
+          !form.get('assertion')
+            ? { status: 400, body: { error: 'invalid_request' } }
+            : queued;
+        if (!answer) {
+          let token = `stub-access-${vendor.googleTokensMinted.length + 1}`;
+          vendor.googleTokensMinted.push(token);
+          answer = {
+            status: 200,
+            body: {
+              access_token: token,
+              expires_in: vendor.googleTokenLifetime,
+              token_type: 'Bearer',
+            },
+          };
+        }
+        res.writeHead(answer.status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(answer.body));
       } else if (url.pathname === '/not-json') {
         res.writeHead(502, { 'content-type': 'text/html' });
         res.end('<html><body>Bad gateway</body></html>');
@@ -238,7 +282,7 @@ export async function startStubVendor({
     server.listen(port, '127.0.0.1', () => resolve()),
   );
   let { port: bound } = server.address() as AddressInfo;
-  return {
+  Object.assign(vendor, {
     url: `http://127.0.0.1:${bound}`,
     alternateUrl: `http://localhost:${bound}`,
     requests,
@@ -253,5 +297,6 @@ export async function startStubVendor({
         server.closeAllConnections();
         server.close(() => resolve());
       }),
-  };
+  });
+  return vendor;
 }

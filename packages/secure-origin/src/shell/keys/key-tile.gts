@@ -3,7 +3,8 @@
 // tile is given to hold (a key page's actions) goes on a line of its own under
 // the name, so neither crowds the other however long the name. Nothing about
 // its value is shown. A secret pasted in is what a key is unless the tile
-// says otherwise: an OAuth app, or an account connected through one.
+// says otherwise: a Google service account, an OAuth app, or an account
+// connected through one.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import KeyRound from '../../components/icons/key-round.gts';
@@ -24,6 +25,8 @@ export function addedOn(iso: string): string {
 // What a key is, when it isn't a secret pasted in.
 export function kindLabel(kind: string): string | undefined {
   switch (kind) {
+    case 'google-service-account':
+      return 'Google service account';
     case 'oauth-client':
       return 'Sign-in app';
     case 'oauth-connection':

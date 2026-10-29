@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   keysAdd,
+  keysReplace,
   keysDelete,
   keysList,
   keysShow,
@@ -409,7 +410,10 @@ describe('boxel keys: managing keys', () => {
         'shares',
       ]),
     );
-    for (let name of ['add', 'replace']) {
+    for (let [name, kindOption] of [
+      ['add', ['--kind']],
+      ['replace', []],
+    ] as const) {
       let command = keys!.commands.find((c) => c.name() === name)!;
       expect(command.registeredArguments.map((a) => a.name())).toEqual([
         'name',
@@ -418,7 +422,246 @@ describe('boxel keys: managing keys', () => {
         '--stdin',
         '--key-file',
         '--json',
+        ...kindOption,
+        '--subject',
+        '--scope',
       ]);
     }
+  });
+});
+
+describe('boxel keys: Google service accounts', () => {
+  let configDir: string;
+  let manager: ProfileManager;
+  let keyFile: string;
+  const KEY_FILE = JSON.stringify({
+    type: 'service_account',
+    client_email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+    private_key:
+      '-----BEGIN PRIVATE KEY-----\nplaceholder\n-----END PRIVATE KEY-----\n',
+  });
+  const SERVICE_ACCOUNT = {
+    ...KEY,
+    name: 'sheets',
+    kind: 'google-service-account',
+  };
+
+  beforeEach(async () => {
+    configDir = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-keys-gsa-'));
+    keyFile = join(configDir, 'service-account.json');
+    fs.writeFileSync(keyFile, `${KEY_FILE}\n`);
+    manager = new ProfileManager(configDir);
+    await manager.addProfileWithAuth(USER, {
+      accessToken: 'matrix-token',
+      deviceId: 'DEVICE',
+      userId: USER,
+      matrixUrl: 'https://matrix-staging.stack.cards',
+      realmServerUrl: REALM_SERVER,
+    } as any);
+    manager.setRealmServerToken(
+      jwt.sign({ user: USER }, 'a secret', { expiresIn: '1h' }),
+    );
+    manager.setSecureSession({
+      token: 'secure-session',
+      userId: USER,
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  function serveKeys() {
+    return stubServer(({ method, path }) => {
+      if (path === '/_secure-session') {
+        return { status: 204 };
+      }
+      if (path === '/_key-write-tickets') {
+        return {
+          status: 201,
+          body: { data: { attributes: { ticket: 'ticket-1' } } },
+        };
+      }
+      if (method === 'GET' && path === '/_user-keys') {
+        return {
+          body: {
+            data: [
+              {
+                type: 'user-key',
+                id: SERVICE_ACCOUNT.id,
+                attributes: SERVICE_ACCOUNT,
+              },
+            ],
+          },
+        };
+      }
+      return {
+        status: method === 'POST' ? 201 : 200,
+        body: {
+          data: {
+            type: 'user-key',
+            id: SERVICE_ACCOUNT.id,
+            attributes: SERVICE_ACCOUNT,
+          },
+        },
+      };
+    });
+  }
+
+  it('adds one from its key file, with its scopes and the user to act as', async () => {
+    let requests = serveKeys();
+    let stdout = captureStdout();
+    try {
+      await keysAdd('sheets', {
+        profileManager: manager,
+        kind: 'google-service-account',
+        keyFile,
+        subject: 'owner@example.com',
+        scope: [
+          'https://www.googleapis.com/auth/spreadsheets',
+          'https://www.googleapis.com/auth/drive.readonly',
+        ],
+      });
+    } finally {
+      stdout.restore();
+    }
+    let post = requests.find(
+      (r) => r.method === 'POST' && r.path === '/_user-keys',
+    )!;
+    expect(post.body).toEqual({
+      data: {
+        type: 'user-key',
+        attributes: {
+          name: 'sheets',
+          kind: 'google-service-account',
+          value: KEY_FILE,
+          subject: 'owner@example.com',
+          scopes: [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive.readonly',
+          ],
+        },
+      },
+      meta: { ticket: 'ticket-1' },
+    });
+    expect(stdout.text()).not.toContain('placeholder');
+  });
+
+  it('refuses a service account without a key file or a scope, before asking the server anything', async () => {
+    let requests = stubServer(() => ({ status: 500 }));
+    await expect(
+      keysAdd('sheets', {
+        profileManager: manager,
+        kind: 'google-service-account',
+        scope: ['openid'],
+        input: fakeTerminal().input,
+      }),
+    ).rejects.toThrow(/read with --key-file or --stdin/);
+    await expect(
+      keysAdd('sheets', {
+        profileManager: manager,
+        kind: 'google-service-account',
+        keyFile,
+      }),
+    ).rejects.toThrow(/at least one --scope/);
+    await expect(
+      keysAdd('weather', {
+        profileManager: manager,
+        keyFile,
+        scope: ['openid'],
+      }),
+    ).rejects.toThrow(/only for a google-service-account key/);
+    await expect(
+      keysAdd('weather', { profileManager: manager, kind: 'oauth', keyFile }),
+    ).rejects.toThrow(/--kind is one of: static, google-service-account/);
+    expect(requests).toEqual([]);
+  });
+
+  it('points a key file added without --kind to the service account kind, and sends nothing', async () => {
+    let requests = serveKeys();
+    await expect(
+      keysAdd('sheets', { profileManager: manager, keyFile }),
+    ).rejects.toThrow(
+      /a Google service account's JSON key file. Add it with --kind google-service-account/,
+    );
+    expect(requests.filter((r) => r.path === '/_user-keys')).toEqual([]);
+  });
+
+  it('replaces one with a new key file and scopes, as its own kind', async () => {
+    let requests = serveKeys();
+    let stdout = captureStdout();
+    try {
+      await keysReplace('sheets', {
+        profileManager: manager,
+        keyFile,
+        scope: ['https://www.googleapis.com/auth/spreadsheets'],
+      });
+    } finally {
+      stdout.restore();
+    }
+    let patch = requests.find((r) => r.method === 'PATCH')!;
+    expect(patch.body).toEqual({
+      data: {
+        type: 'user-key',
+        attributes: {
+          value: KEY_FILE,
+          scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+        },
+      },
+      meta: { ticket: 'ticket-1' },
+    });
+  });
+
+  it('replaces an OAuth app’s secret, a kind add doesn’t take', async () => {
+    let oauthApp = {
+      ...SERVICE_ACCOUNT,
+      name: 'github-app',
+      kind: 'oauth-client',
+    };
+    let requests = stubServer(({ method, path }) => {
+      if (path === '/_secure-session') return { status: 204 };
+      if (path === '/_key-write-tickets')
+        return { status: 201, body: { data: { attributes: { ticket: 't' } } } };
+      if (method === 'GET')
+        return {
+          body: {
+            data: [{ type: 'user-key', id: oauthApp.id, attributes: oauthApp }],
+          },
+        };
+      return {
+        body: {
+          data: { type: 'user-key', id: oauthApp.id, attributes: oauthApp },
+        },
+      };
+    });
+    let secretFile = join(configDir, 'secret.txt');
+    fs.writeFileSync(secretFile, 'new-client-secret\n');
+    let stdout = captureStdout();
+    try {
+      await keysReplace('github-app', {
+        profileManager: manager,
+        keyFile: secretFile,
+      });
+    } finally {
+      stdout.restore();
+    }
+    expect(
+      requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+    ).toEqual({
+      value: 'new-client-secret',
+    });
+  });
+
+  it('refuses to replace a service account without its scopes, before minting a ticket', async () => {
+    let requests = serveKeys();
+    await expect(
+      keysReplace('sheets', { profileManager: manager, keyFile }),
+    ).rejects.toThrow(/at least one --scope/);
+    expect(requests.filter((r) => r.path === '/_key-write-tickets')).toEqual(
+      [],
+    );
   });
 });

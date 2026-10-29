@@ -3,6 +3,7 @@ import {
   fillIn,
   render,
   settled,
+  triggerEvent,
   triggerKeyEvent,
   waitFor,
   waitUntil,
@@ -125,6 +126,41 @@ function context(attributes: Record<string, unknown>) {
 }
 
 const WORKSPACE = { url: REALM, name: 'Team Workspace', directWriter: true };
+
+// A Google service account's JSON key file, as Google issues it. The page
+// only reads its type and email; the key itself is a placeholder.
+const SERVICE_ACCOUNT_FILE = JSON.stringify(
+  {
+    type: 'service_account',
+    project_id: 'boxel-test',
+    private_key_id: 'kid-1',
+    private_key:
+      '-----BEGIN PRIVATE KEY-----\nplaceholder\n-----END PRIVATE KEY-----\n',
+    client_email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+  },
+  null,
+  2,
+);
+
+// Chooses a key file and waits until the page has read this one. The read is
+// a browser promise `settled()` doesn't track, so the wait is for what the
+// page says of this file by name: the service account it holds, or why it
+// can't be used.
+async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
+  await triggerEvent('[data-test-service-account-file]', 'change', {
+    files: [new File([contents], name, { type: 'application/json' })],
+  });
+  await waitUntil(
+    () =>
+      document
+        .querySelector('[data-test-service-account-email]')
+        ?.textContent?.includes(name) ||
+      document
+        .querySelector('[data-test-service-account-problem]')
+        ?.getAttribute('data-test-service-account-problem-file') === name,
+  );
+  await settled();
+}
 
 module('Integration | key pages', function (hooks) {
   setupRenderingTest(hooks);
@@ -1172,6 +1208,316 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-keys-error]')
         .hasText('The owner already has a key of that name.');
       assert.deepEqual(navigations, []);
+    });
+  });
+
+  module('entering a Google service account', function () {
+    test('adds one from its key file, with the user to act as and its scopes', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                name: 'Sheets',
+                kind: 'google-service-account',
+              },
+            },
+          }),
+      });
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      assert
+        .dom('[data-test-radio-choice="static"] input')
+        .isChecked('a key pasted in as it is is the default');
+      await fillIn('[data-test-key-value]', 'typed before switching');
+      await click('[data-test-radio-choice="google-service-account"] input');
+      assert
+        .dom('[data-test-key-value]')
+        .doesNotExist('a service account has no value to paste');
+      await fillIn('[data-test-key-name]', 'Sheets');
+      assert.dom('[data-test-enter-key-save]').isDisabled('no key file yet');
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-email]')
+        .includesText(
+          'sheets-bot@boxel-test.iam.gserviceaccount.com',
+          'names the service account the file holds',
+        );
+      assert
+        .dom('[data-test-service-account-email]')
+        .doesNotIncludeText('placeholder', 'shows nothing else of the file');
+      assert.dom('[data-test-enter-key-save]').isDisabled('no scopes yet');
+      await fillIn(
+        '[data-test-service-account-subject]',
+        ' owner@example.com ',
+      );
+      await fillIn(
+        '[data-test-service-account-scopes]',
+        'https://www.googleapis.com/auth/spreadsheets  https://www.googleapis.com/auth/drive.readonly',
+      );
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(ticketRequests(), [{ action: 'add' }]);
+      assert.deepEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_user-keys')!
+          .body,
+        {
+          data: {
+            type: 'user-key',
+            attributes: {
+              name: 'Sheets',
+              kind: 'google-service-account',
+              value: SERVICE_ACCOUNT_FILE,
+              subject: 'owner@example.com',
+              scopes: [
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive.readonly',
+              ],
+            },
+          },
+          meta: { ticket: 'ticket-1' },
+        },
+        'the file is sent as chosen, and nothing typed for the other kind goes with it',
+      );
+    });
+
+    test('acting as the service account itself sends no subject', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                kind: 'google-service-account',
+              },
+            },
+          }),
+      });
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await click('[data-test-radio-choice="google-service-account"] input');
+      await fillIn('[data-test-key-name]', 'Sheets');
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      await fillIn('[data-test-service-account-scopes]', 'openid');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      let attributes = (
+        requests.find((r) => r.method === 'POST' && r.path === '_user-keys')!
+          .body as { data: { attributes: Record<string, unknown> } }
+      ).data.attributes;
+      assert.false('subject' in attributes);
+      assert.deepEqual(attributes.scopes, ['openid']);
+    });
+
+    test('a file that isn’t a service account key says so and can’t be saved', async function (assert) {
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await click('[data-test-radio-choice="google-service-account"] input');
+      await fillIn('[data-test-key-name]', 'Sheets');
+      await fillIn('[data-test-service-account-scopes]', 'openid');
+      await chooseKeyFile('{"type": "authorized_user"}', 'credentials.json');
+      assert
+        .dom('[data-test-service-account-problem]')
+        .hasText(
+          'This isn’t a service account key file. Choose the JSON key file Google gave you for the service account.',
+        );
+      assert.dom('[data-test-enter-key-save]').isDisabled();
+      await chooseKeyFile('not json at all', 'notes.txt');
+      assert
+        .dom('[data-test-service-account-problem]')
+        .includesText('This isn’t a JSON key file.');
+      assert.dom('[data-test-enter-key-save]').isDisabled();
+      assert.deepEqual(
+        requests.filter((r) => r.method === 'POST'),
+        [],
+        'nothing is sent',
+      );
+    });
+
+    test('a key file pasted as a key is caught, and taken as a service account in one click', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                kind: 'google-service-account',
+              },
+            },
+          }),
+      });
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await fillIn('[data-test-key-name]', 'Sheets');
+      await fillIn('[data-test-key-value]', SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-pasted-key-file]')
+        .includesText('This is a Google service account’s JSON key file.');
+      assert
+        .dom('[data-test-enter-key-save]')
+        .isDisabled('a key file is never saved as a key sent as it is');
+      await click('[data-test-use-service-account]');
+      assert
+        .dom('[data-test-radio-choice="google-service-account"] input')
+        .isChecked();
+      assert
+        .dom('[data-test-service-account-email]')
+        .includesText('sheets-bot@boxel-test.iam.gserviceaccount.com');
+      assert.dom('[data-test-pasted-key-file]').doesNotExist();
+      await fillIn('[data-test-service-account-scopes]', 'openid');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      let attributes = (
+        requests.find((r) => r.method === 'POST' && r.path === '_user-keys')!
+          .body as { data: { attributes: Record<string, unknown> } }
+      ).data.attributes;
+      assert.strictEqual(attributes.kind, 'google-service-account');
+      assert.deepEqual(
+        JSON.parse(attributes.value as string),
+        JSON.parse(SERVICE_ACCOUNT_FILE),
+        'the pasted file is sent, its line breaks dropped by the input',
+      );
+    });
+
+    test('opened for an operation that sends to a Google API, says when a service account fits, without choosing one', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          context({
+            realm: WORKSPACE,
+            card: {
+              name: 'Budget',
+              module: `${REALM}budget`,
+              exportName: 'Budget',
+            },
+            operation: {
+              name: 'values',
+              label: 'Read the budget',
+              base: 'callApi',
+              method: 'GET',
+              destination: {
+                href: 'https://sheets.googleapis.com/v4/spreadsheets/',
+                host: 'sheets.googleapis.com',
+                path: '/v4/spreadsheets/',
+                registrableDomain: 'googleapis.com',
+              },
+              slots: [{ name: 'userKey', key: 'userKey' }],
+            },
+          }),
+      });
+      visitShell(`enter-key#card=${encodeURIComponent(CARD)}&operation=values`);
+      await render(EnterKeyPage);
+      await waitFor('[data-test-opened-for]');
+      assert
+        .dom('[data-test-google-destination-hint]')
+        .includesText('This request goes to a Google API.');
+      assert
+        .dom('[data-test-radio-choice="static"] input')
+        .isChecked('the page doesn’t choose for the user');
+      await click('[data-test-radio-choice="google-service-account"] input');
+      assert.dom('[data-test-google-destination-hint]').doesNotExist();
+    });
+
+    test('opened for an operation elsewhere, says nothing about service accounts', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          context({
+            realm: WORKSPACE,
+            operation: {
+              name: 'forecast',
+              label: 'Get the forecast',
+              base: 'callApi',
+              method: 'GET',
+              destination: {
+                href: 'https://api.weather.co.uk/v2/',
+                host: 'api.weather.co.uk',
+                path: '/v2/',
+                registrableDomain: 'weather.co.uk',
+              },
+              slots: [{ name: 'userKey', key: 'userKey' }],
+            },
+          }),
+      });
+      visitShell(
+        `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast`,
+      );
+      await render(EnterKeyPage);
+      await waitFor('[data-test-opened-for]');
+      assert.dom('[data-test-google-destination-hint]').doesNotExist();
+    });
+
+    test('the key page names a service account, and replaces it with a new key file', async function (assert) {
+      let serviceAccount = {
+        ...KEYS[1],
+        id: 'key-sa',
+        name: 'Sheets',
+        kind: 'google-service-account',
+      };
+      serve({
+        'GET _user-keys': () =>
+          json(200, keyResources([KEYS[1], serviceAccount])),
+        'GET _key-shares': () => json(200, { data: [] }),
+        'PATCH _user-keys/key-sa': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-sa',
+              attributes: attributesOf(serviceAccount),
+            },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Sheets"]');
+      assert
+        .dom('[data-test-key-row="Sheets"] [data-test-key-kind]')
+        .hasText('Google service account');
+      assert
+        .dom('[data-test-key-row="Maps"] [data-test-key-kind]')
+        .doesNotExist('a key pasted in as it is goes unlabelled');
+      await click('[data-test-key-row="Sheets"] [data-test-key-replace]');
+      await settled();
+      assert
+        .dom('[data-test-key-replace-form] [data-test-key-value]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText(
+          'sets the key file, the scopes and who it acts as all anew',
+        );
+      assert.dom('[data-test-key-replace-save]').isDisabled();
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      await fillIn(
+        '[data-test-service-account-scopes]',
+        'https://www.googleapis.com/auth/spreadsheets',
+      );
+      await click('[data-test-key-replace-save]');
+      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
+      await settled();
+      assert.deepEqual(ticketRequests(), [
+        { action: 'replace', keyId: 'key-sa' },
+      ]);
+      assert.deepEqual(requests.find((r) => r.method === 'PATCH')!.body, {
+        data: {
+          type: 'user-key',
+          id: 'key-sa',
+          attributes: {
+            value: SERVICE_ACCOUNT_FILE,
+            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+          },
+        },
+        meta: { ticket: 'ticket-1' },
+      });
     });
   });
 
