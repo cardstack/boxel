@@ -32,6 +32,7 @@ import {
   swapKeyIntoShare,
   unshareUserKey,
   type KeyShare,
+  type ServiceAccountDetails,
   type UserKeyMetadata,
 } from '../../lib/user-keys.ts';
 
@@ -219,6 +220,12 @@ function printKey(key: UserKeyMetadata): void {
   console.log(`  kind: ${key.kind}`);
   console.log(`  state: ${key.state}`);
   console.log(`  updated: ${key.updatedAt}`);
+  if (key.serviceAccount) {
+    let { email, subject, scopes } = key.serviceAccount;
+    console.log(`  service account: ${email}`);
+    console.log(`  acts as: ${subject ?? 'the service account itself'}`);
+    console.log(`  scopes: ${scopes.join(' ')}`);
+  }
   if (key.grants) {
     if (key.grants.length === 0) {
       console.log('  grants: none');
@@ -288,7 +295,8 @@ export const KEY_KINDS = ['static', 'google-service-account'] as const;
 
 export interface ServiceAccountOptions {
   kind?: string;
-  subject?: string;
+  // `false` is `replace --no-subject`: act as the service account itself.
+  subject?: string | false;
   scope?: string[];
 }
 
@@ -302,21 +310,32 @@ function checkAddKind(kind: string): void {
 
 // Refuses options that don't fit the key's kind. A service account's key file
 // is JSON, so it is read from a file or stdin, never typed at the masked
-// prompt. Any other kind, an OAuth app's included, takes neither --subject
-// nor --scope, and what its replacement may be is the realm server's to say.
+// prompt, and it needs scopes: given with --scope, or for a replace, the ones
+// the key has. A replace of a key whose details the server doesn't report has
+// nothing to keep, so it needs the subject chosen too (--subject or
+// --no-subject). Any other kind, an OAuth app's included, takes neither
+// --subject nor --scope, and what its replacement may be is the realm
+// server's to say.
 function checkKindOptions(
   kind: string,
   options: ServiceAccountOptions & KeyValueSource,
+  replacing?: { current: ServiceAccountDetails | undefined },
 ): void {
+  let current = replacing?.current;
   if (kind === 'google-service-account') {
     if (!options.keyFile && !options.stdin) {
       throw new Error(
         "A Google service account's JSON key file is read with --key-file or --stdin",
       );
     }
-    if (!options.scope?.length) {
+    if (!options.scope?.length && !current?.scopes.length) {
       throw new Error(
         'A Google service account needs at least one --scope, such as https://www.googleapis.com/auth/spreadsheets',
+      );
+    }
+    if (replacing && !current && options.subject === undefined) {
+      throw new Error(
+        "This key's details aren't known: give --subject <email>, or --no-subject to act as the service account itself",
       );
     }
   } else if (options.subject !== undefined || options.scope !== undefined) {
@@ -348,17 +367,82 @@ function checkNotAKeyFile(kind: string, value: string): void {
   }
 }
 
+// A service account's subject and scopes as entered. For a replace, `current`
+// is what the key has now, and whatever isn't given is kept: its scopes
+// without --scope, and the user it acts as without --subject or --no-subject.
 function serviceAccountAttributes(
   kind: string,
   options: ServiceAccountOptions,
+  current?: ServiceAccountDetails,
 ): { subject?: string; scopes?: string[] } {
   if (kind !== 'google-service-account') {
     return {};
   }
+  let subject =
+    options.subject === false
+      ? undefined
+      : (options.subject ?? current?.subject ?? undefined);
   return {
-    ...(options.subject ? { subject: options.subject } : {}),
-    scopes: options.scope ?? [],
+    ...(subject ? { subject } : {}),
+    scopes: options.scope?.length ? options.scope : (current?.scopes ?? []),
   };
+}
+
+// The key's current scopes and subject, if a replace with this key file may
+// keep them. Domain-wide delegation and the scopes it allows are granted per
+// service account, so a key file for another service account keeps neither:
+// its replace needs --scope and --subject or --no-subject, like a key whose
+// details aren't known. Checked before a ticket is minted.
+function keepableDetails(
+  keyFile: string,
+  options: ServiceAccountOptions,
+  current: ServiceAccountDetails | undefined,
+): ServiceAccountDetails | undefined {
+  if (!current) {
+    return undefined;
+  }
+  let email = keyFileEmail(keyFile);
+  if (email === current.email) {
+    return current;
+  }
+  if (!options.scope?.length || options.subject === undefined) {
+    throw new Error(
+      `This key file is for ${email ?? 'another service account'}, not ${current.email}. ` +
+        'Delegation and scopes are granted per service account, so give --scope, and --subject <email> or --no-subject',
+    );
+  }
+  return undefined;
+}
+
+function keyFileEmail(keyFile: string): string | undefined {
+  try {
+    let email = JSON.parse(keyFile)?.client_email;
+    return typeof email === 'string' ? email : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// What a service account's replace kept of the key as it was, to say so.
+function keptByReplace(
+  options: ServiceAccountOptions,
+  current: ServiceAccountDetails | undefined,
+): string[] {
+  if (!current) {
+    return [];
+  }
+  let kept: string[] = [];
+  if (!options.scope?.length) {
+    kept.push(`Kept its scopes: ${current.scopes.join(' ')}`);
+  }
+  if (options.subject === undefined) {
+    kept.push(
+      current.subject
+        ? `Kept acting as ${current.subject} (--no-subject acts as the service account itself)`
+        : 'Kept acting as the service account itself (--subject acts as a user)',
+    );
+  }
+  return kept;
 }
 
 export async function keysAdd(
@@ -391,7 +475,8 @@ export async function keysAdd(
 }
 
 // A key is replaced with a value of its own kind: a service account with a
-// new key file and its scopes.
+// new key file, keeping its scopes and the user it acts as unless new ones
+// are given.
 export async function keysReplace(
   name: string,
   options: { json?: boolean } & KeyValueSource &
@@ -401,18 +486,31 @@ export async function keysReplace(
   let ctx = context(options.json, options);
   checkKeyValueSource(options, ctx.deps.input ?? process.stdin);
   let token = await secureToken(ctx);
-  let { id, kind } = await findUserKey(ctx.realmServerUrl, token, name);
-  checkKindOptions(kind, options);
+  let {
+    id,
+    kind,
+    serviceAccount: current,
+  } = await findUserKey(ctx.realmServerUrl, token, name);
+  checkKindOptions(kind, options, { current });
   let value = await readValue(ctx, options);
   checkNotAKeyFile(kind, value);
+  let keep =
+    kind === 'google-service-account'
+      ? keepableDetails(value, options, current)
+      : undefined;
   let key = await replaceUserKey(ctx.realmServerUrl, token, {
     keyId: id,
     value,
-    ...serviceAccountAttributes(kind, options),
+    ...serviceAccountAttributes(kind, options, keep),
   });
   emit(ctx, key, () => {
     console.log(`${FG_GREEN}Replaced the value of ${key.name}.${RESET}`);
   });
+  if (kind === 'google-service-account') {
+    for (let line of keptByReplace(options, keep)) {
+      say(ctx, line);
+    }
+  }
   return key;
 }
 

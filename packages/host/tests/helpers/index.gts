@@ -105,6 +105,7 @@ export {
   setupAuthEndpoints,
   setupPublicReadableRealms,
   setCatalogRealmURL,
+  withholdRealmSession,
 } from './realm-server-mock';
 export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
