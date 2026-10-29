@@ -146,10 +146,7 @@ export default class Workspace extends Component<Signature> {
       >
         {{#if this.reindexError}}
           <div class='reindex-error' role='alert' data-test-reindex-error>
-            <span
-              class='reindex-error-message'
-              title={{this.reindexError}}
-            >{{this.reindexError}}</span>
+            <span class='reindex-error-message'>{{this.reindexError}}</span>
             <IconButton
               class='reindex-error-dismiss'
               @label='Dismiss error'
@@ -1156,6 +1153,9 @@ export default class Workspace extends Component<Signature> {
         align-items: flex-start;
         gap: var(--boxel-sp-5xs);
         width: 100%;
+        /* The whole error shows; a long one scrolls inside the tile. */
+        max-height: 100%;
+        overflow-y: auto;
         padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
         border-radius: var(--dashboard-tile-radius) var(--dashboard-tile-radius)
           0 0;
@@ -1166,14 +1166,7 @@ export default class Workspace extends Component<Signature> {
       .reindex-error-message {
         flex: 1;
         min-width: 0;
-        overflow: hidden;
         overflow-wrap: break-word;
-        /* A long server error is capped at a few lines; the title has it
-           whole. */
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
-        line-clamp: 3;
       }
       .reindex-error-dismiss {
         flex-shrink: 0;
