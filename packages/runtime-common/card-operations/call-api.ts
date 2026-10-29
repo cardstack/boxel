@@ -858,10 +858,11 @@ export interface CallApiFilledSlot {
 //
 // `readiness` answers, without opening any key, whether `fill` would fill
 // every slot for this caller invoking from a card, and what would fix it if
-// not. A sender that can't tell leaves it out.
+// not, or `undefined` where no approval could make it fill. A sender that
+// can't tell leaves it out.
 export interface CallApiSender {
   fill(lookup: CallApiSlotLookup): Promise<CallApiFilledSlot[]>;
-  readiness?(lookup: CallApiReadinessLookup): Promise<KeyReadiness>;
+  readiness?(lookup: CallApiReadinessLookup): Promise<KeyReadiness | undefined>;
   send(
     request: CallApiRequest,
     credentials: CallApiCredential[],

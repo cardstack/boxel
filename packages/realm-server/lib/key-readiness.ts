@@ -31,10 +31,9 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // The order slot answers are reported in: the first slot to need something
 // further up the list decides the operation's answer. A slot only an
 // administrator can fix stops the call whatever the caller does, so it comes
-// first after signing in, which every other answer presupposes. Connecting a
-// key comes before approving one, since the approval names the key.
+// first. Connecting a key comes before approving one, since the approval
+// names the key.
 const PRECEDENCE: KeyReadiness[] = [
-  'needs-sign-in',
   'needs-admin',
   'credential-rejected',
   'over-budget',
@@ -45,13 +44,15 @@ const PRECEDENCE: KeyReadiness[] = [
   'ready',
 ];
 
+// Answers `undefined` where no answer can be given: a per-instance operation
+// asked about on its type, which no approval names.
 export async function keyReadiness(
   dbAdapter: DBAdapter,
   lookup: CallApiReadinessLookup,
   {
     probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
   }: { probeIntervalMs?: number } = {},
-): Promise<KeyReadiness> {
+): Promise<KeyReadiness | undefined> {
   let { request, caller } = lookup;
   if (request.slots.length === 0) {
     return 'ready';
@@ -63,20 +64,14 @@ export async function keyReadiness(
     return 'needs-sign-in';
   }
   let instance = bindingInstance(request, lookup.instance);
-  // A per-instance operation asked about on its type has no binding to find,
-  // as a call on the type has none.
-  let checks: SlotCheck[] =
-    instance === undefined
-      ? request.slots.map((slot) => ({
-          slot,
-          binding: undefined,
-          refused: 'binding-not-approved',
-        }))
-      : await checkSlots(
-          dbAdapter,
-          { ...lookup, caller, instance, mode: 'interactive' },
-          { probeIntervalMs },
-        );
+  if (instance === undefined) {
+    return undefined;
+  }
+  let checks = await checkSlots(
+    dbAdapter,
+    { ...lookup, caller, instance, mode: 'interactive' },
+    { probeIntervalMs },
+  );
   // Read once, and only where a `{{userKey}}` slot has no binding to fill it.
   let covering: Promise<boolean> | undefined;
   let callerCovers = () =>
