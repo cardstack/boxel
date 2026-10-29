@@ -1303,10 +1303,12 @@ module('Acceptance | dashboard', function (hooks) {
         ]);
 
         await visitWithFavorites([elsewhereRealmURL], () => {
+          // Indexing its cards can already have taught the app the realm, so
+          // it's forgotten here, and only the desk's lookup can find it again.
+          let realmService = getService('realm') as RealmService;
+          realmService.removeRealm(unlistedRealmURL);
           assert.strictEqual(
-            (getService('realm') as RealmService).realmOf(
-              rri(`${unlistedRealmURL}notes`),
-            ),
+            realmService.realmOf(rri(`${unlistedRealmURL}notes`)),
             undefined,
             "the pin's realm isn't known when the desk first searches",
           );
