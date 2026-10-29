@@ -10,7 +10,7 @@ import Check from '@cardstack/boxel-icons/check';
 import { Button } from '@cardstack/pretui/components/button';
 import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
-import { didCancel, dropTask, task } from 'ember-concurrency';
+import { didCancel, dropTask, task, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
 import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
@@ -28,6 +28,8 @@ import type RecentCardsService from '@cardstack/host/services/recent-cards-servi
 import { AGENT_KINDS } from './agent-kinds';
 
 const log = logger('component:dashboard/get-started');
+
+const AUTO_DISMISS_RETRY_DELAYS = [5_000, 30_000];
 
 type StepId = 'open-card' | 'ask-ai' | 'publish' | 'agent';
 
@@ -82,8 +84,10 @@ export default class GetStarted extends Component<Signature> {
     await this.aiAssistantPanelService.waitForSessionRooms();
   });
 
+  // A failed wait still shows the list, with whatever ticks can be read,
+  // rather than hiding it for the rest of the session.
   private get isLoaded() {
-    return Boolean(this.loadTask.lastSuccessful);
+    return Boolean(this.loadTask.lastSuccessful || this.loadTask.lastErrored);
   }
 
   // Read many times a render; aiSessionRooms walks and sorts every room.
@@ -101,7 +105,11 @@ export default class GetStarted extends Component<Signature> {
         id: 'ask-ai',
         title: 'Ask Boxel AI to build something',
         hint: 'It can make your first cards from a sentence.',
-        done: this.aiAssistantPanelService.aiSessionRooms.length > 0,
+        // Opening the panel makes an empty session, so only one with a
+        // message has been asked.
+        done: this.aiAssistantPanelService.aiSessionRooms.some((session) =>
+          Boolean(session.lastMessage),
+        ),
       },
       {
         id: 'publish',
@@ -155,20 +163,36 @@ export default class GetStarted extends Component<Signature> {
   }
 
   // Runs when the finished state renders, not on every render: its element
-  // is inserted once, and goes when the dismissal lands.
+  // is inserted once, and goes when the dismissal lands. Nothing runs it
+  // again while it stays, so a failed write is retried here.
   private dismissWhenFinished = modifier(() => {
-    this.dismissTask.perform();
+    this.autoDismissTask.perform();
+  });
+
+  private autoDismissTask = dropTask(async () => {
+    for (let delay of [0, ...AUTO_DISMISS_RETRY_DELAYS]) {
+      await timeout(delay);
+      if (await this.saveDismissal()) {
+        return;
+      }
+    }
   });
 
   private dismissTask = dropTask(async () => {
+    await this.saveDismissal();
+  });
+
+  private async saveDismissal() {
     try {
       await this.matrixService.updateDashboardState({
         onboardingDismissed: true,
       });
+      return true;
     } catch (error) {
       log.warn(`dismissing Get started failed: ${error}`);
+      return false;
     }
-  });
+  }
 
   @action private async openFirstWorkspace() {
     let [first] = this.realmServer.userRealmIdentifiers;
