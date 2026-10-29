@@ -60,6 +60,9 @@ export const KEY_SHARE_NOTICES_PATH = '/_key-share-notices';
 export const SECURE_SESSION_PATH = '/_secure-session';
 export const SECURE_SESSIONS_PATH = '/_secure-sessions';
 export const SECURE_WINDOW_PATH = '/_secure-window';
+// Connecting through an OAuth client, and the callback the vendor sends the
+// person back to, whose query string carries the authorization code.
+export const OAUTH_PATH = '/_oauth';
 
 const keyRoutePaths = [
   USER_KEYS_PATH,
@@ -71,10 +74,13 @@ const keyRoutePaths = [
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
   SECURE_WINDOW_PATH,
+  OAUTH_PATH,
 ];
 
 // The operator routes that store a system key, and everything beneath them.
 export const SYSTEM_KEYS_PATH = '/_system-keys';
+// The operator routes that store the platform's own OAuth clients.
+export const PLATFORM_OAUTH_CLIENTS_PATH = '/_platform-oauth-clients';
 
 // The headers whose value is a credential: the caller's session token, its
 // cookies, the HMAC signatures that authenticate a worker request
@@ -198,9 +204,14 @@ export function isKeyRoutePath(pathname: string): boolean {
   );
 }
 
+// The operator routes that store a platform secret: system keys, and the
+// platform's own OAuth clients.
 function isSystemKeysPath(pathname: string): boolean {
   let path = pathname.toLowerCase();
-  return path === SYSTEM_KEYS_PATH || path.startsWith(`${SYSTEM_KEYS_PATH}/`);
+  return [SYSTEM_KEYS_PATH, PLATFORM_OAUTH_CLIENTS_PATH].some(
+    (operatorPath) =>
+      path === operatorPath || path.startsWith(`${operatorPath}/`),
+  );
 }
 
 function escapeRegExp(path: string): string {

@@ -206,7 +206,7 @@ async function lockOwnKey(
   keyId: string,
 ): Promise<void> {
   let rows = await txQuery([
-    `SELECT id FROM user_keys WHERE id = `,
+    `SELECT kind FROM user_keys WHERE id = `,
     param(keyId),
     ` AND owner = `,
     param(owner),
@@ -214,6 +214,15 @@ async function lockOwnKey(
   ]);
   if (rows.length === 0) {
     throw noSuchKey();
+  }
+  // An OAuth connection is one person's sign-in at the vendor, so it serves
+  // only its owner's own calls. Teammates share the client and each connect
+  // their own account through it.
+  if (rows[0].kind === 'oauth-connection') {
+    throw new UserKeyError(
+      400,
+      "a connection is its owner's own sign-in and is never shared: share the OAuth client, and each teammate connects through it",
+    );
   }
 }
 

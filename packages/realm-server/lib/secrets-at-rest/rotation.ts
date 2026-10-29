@@ -110,6 +110,25 @@ export const SEALED_COLUMNS: SealedColumn[] = [
       destination: String(row.destination),
     }),
   },
+  // The secrets of the OAuth clients Boxel registers itself, bound to their
+  // row and the token endpoint they are sent to (`platformClientBinding` in
+  // `lib/oauth.ts`).
+  {
+    field: 'platform_oauth_clients.secret',
+    table: 'platform_oauth_clients',
+    idColumn: 'id',
+    keyIdColumn: 'secret_key_id',
+    nonceColumn: 'secret_nonce',
+    ciphertextColumn: 'secret_ciphertext',
+    tagColumn: 'secret_tag',
+    bindingColumns: ['token_url'],
+    binding: (row) => ({
+      field: 'platform_oauth_clients.secret',
+      owner: PLATFORM_SECRET_OWNER,
+      id: String(row.id),
+      destination: String(row.token_url),
+    }),
+  },
 ];
 
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;

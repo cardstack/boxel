@@ -1,9 +1,12 @@
 // What the key pages read from the realm server, and how they word its
 // refusals. The shapes themselves are `security/keys.ts`'s.
 export type {
+  ConnectableClient,
   DestinationDisplay,
   KeyShare,
   ListedKey,
+  OAuthClientRef,
+  OAuthKeyDescription,
   SharedWorkspace,
   UserKey,
   WindowContext,
@@ -127,4 +130,10 @@ export function methodPhrase(method: string): string {
     default:
       return 'Sends data to';
   }
+}
+
+// The permissions an OAuth client asks for, one per scope. Scopes are
+// separated by spaces, and by commas for a service that writes them so.
+export function scopesOf(scopes: string | null | undefined): string[] {
+  return (scopes ?? '').split(/[\s,]+/).filter(Boolean);
 }
