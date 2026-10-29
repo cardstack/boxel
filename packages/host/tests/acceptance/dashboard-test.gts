@@ -1165,9 +1165,19 @@ module('Acceptance | dashboard', function (hooks) {
         ]);
       });
 
+      // The Pinned stat waits for the desk's index counts, which fixture
+      // realms don't serve, so they're seeded on the realm service.
       async function visitWithFavorites(favorites: string[]) {
         let matrixService = getService('matrix-service') as MatrixService;
         await visitOperatorMode({ workspaceChooserOpened: true });
+        let realmService = getService('realm') as any;
+        for (let favorite of favorites) {
+          realmService.indexCountsByRealm.set(favorite, {
+            cardCount: 1,
+            fileCount: 1,
+            definitionCount: null,
+          });
+        }
         matrixService.workspaceFavorites = favorites;
         await settled();
       }
