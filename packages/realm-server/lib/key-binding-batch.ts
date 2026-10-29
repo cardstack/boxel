@@ -1,8 +1,10 @@
 import {
   param,
   query,
+  rri,
   trimExecutableExtension,
   type DBAdapter,
+  type Definition,
 } from '@cardstack/runtime-common';
 import {
   destinationCovers,
@@ -17,6 +19,7 @@ import {
   fingerprintOf,
   slotToken,
   type BindingSnapshot,
+  type KeyBinding,
 } from './key-bindings.ts';
 import {
   describeDestination,
@@ -313,6 +316,65 @@ export async function approvalBatch(
         }))
       : [],
   };
+}
+
+// What the key page names each of the owner's bindings by, as the approval
+// batch names them: its operation's label and its card definition's display
+// name. Each type is read from the definition cache once, under the read
+// checks a batch is read under, so a realm or module the owner can't read
+// says nothing here. A type that can't be read is named by its export name,
+// and its operations by their names split into words.
+export interface BindingNames {
+  operationLabel: string;
+  cardName: string;
+}
+
+export async function bindingNames(
+  deps: Deps,
+  owner: string,
+  bindings: KeyBinding[],
+): Promise<BindingNames[]> {
+  let definitions = new Map<string, Promise<Definition | undefined>>();
+  let definitionOf = (binding: KeyBinding) => {
+    let { realm, type } = binding;
+    let cacheKey = JSON.stringify([realm, type.module, type.name]);
+    let definition = definitions.get(cacheKey);
+    if (!definition) {
+      definition = resolveWindowRequest(deps, owner, {
+        target: {
+          kind: 'type',
+          realm: rri(realm),
+          module: rri(type.module),
+          name: type.name,
+        },
+      }).then(
+        ({ target }) => target?.definition,
+        (error) => {
+          if (error instanceof UserKeyError) {
+            return undefined;
+          }
+          throw error;
+        },
+      );
+      definitions.set(cacheKey, definition);
+    }
+    return definition;
+  };
+  return await Promise.all(
+    bindings.map(async (binding) => {
+      let definition = await definitionOf(binding);
+      let operations = definition?.operations ?? {};
+      return {
+        operationLabel: operationDisplayLabel(
+          binding.operation,
+          Object.hasOwn(operations, binding.operation)
+            ? operations[binding.operation]
+            : undefined,
+        ),
+        cardName: definition?.displayName ?? binding.type.name,
+      };
+    }),
+  );
 }
 
 // Whether a slot needs the caller's approval, and why; undefined when it

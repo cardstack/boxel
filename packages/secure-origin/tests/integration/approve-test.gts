@@ -636,13 +636,18 @@ module('Integration | approve pages', function (hooks) {
           data:
             removed.length > 0
               ? []
-              : ['listPRs', 'listReviews'].map((operation, i) => ({
+              : [
+                  ['listPRs', 'List your open pull requests'],
+                  ['listReviews', 'List reviews waiting on you'],
+                ].map(([operation, operationLabel], i) => ({
                   type: 'key-binding',
                   id: `binding-${i}`,
                   attributes: {
                     realm: REALM,
                     type: { module: MODULE, name: 'Inbox' },
                     operation,
+                    operationLabel,
+                    cardName: 'Pull request inbox',
                     instance: null,
                     slot: 'userKey',
                     keyId: 'key-gh',
@@ -671,7 +676,9 @@ module('Integration | approve pages', function (hooks) {
       .hasText('2 approvals');
     assert
       .dom('[data-test-key-grant-binding="listPRs"]')
-      .hasText('List PRs on Inbox in realm-server.test/someone/workspace/');
+      .hasText(
+        'List your open pull requests on Pull request inbox in realm-server.test/someone/workspace/',
+      );
     await click('[data-test-key-grant-remove]');
     assert
       .dom('[data-test-key-grant-remove-panel]')

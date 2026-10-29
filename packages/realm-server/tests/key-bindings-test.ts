@@ -79,6 +79,7 @@ function inboxModule({
     import { operation, params, bxl } from "@cardstack/base/operations";
 
     export class Inbox extends CardDef {
+      static displayName = 'Team inbox';
       @field channel = contains(StringField);
 
       @operation static list = {
@@ -824,6 +825,52 @@ module(basename(import.meta.filename), function (hooks) {
     } finally {
       virtualNetwork.removeRealmMapping(prefix);
     }
+  });
+
+  test('the bindings listing names each by its operation label and card display name, and by names alone once the owner can no longer read the card', async function (assert) {
+    let key = await addKey();
+    let approved = await approve(OWNER, [
+      approval('list', { userKey: { keyId: key.id } }),
+      approval('note', { userKey: { keyId: key.id } }),
+    ]);
+    assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    async function listed() {
+      let response = await request
+        .get('/_key-bindings')
+        .set('Authorization', await secureSessionAuth(dbAdapter, OWNER));
+      assert.strictEqual(response.status, 200);
+      return response.body.data.map(
+        ({
+          attributes: { operation, operationLabel, cardName },
+        }: {
+          attributes: Record<string, string>;
+        }) => [operation, operationLabel, cardName],
+      );
+    }
+
+    assert.deepEqual(
+      await listed(),
+      [
+        ['list', 'List your items', 'Team inbox'],
+        ['note', 'Note', 'Team inbox'],
+      ],
+      'a declared label and the display name; an operation with no label by its name in words',
+    );
+
+    // The card's module is in this realm, so taking the owner's read on the
+    // realm takes it on the module too.
+    await dbAdapter.execute(
+      `UPDATE realm_user_permissions SET read = false, write = false WHERE realm_url = $1 AND username = $2`,
+      { bind: [realmURL.href, OWNER] },
+    );
+    assert.deepEqual(
+      await listed(),
+      [
+        ['list', 'List', 'Inbox'],
+        ['note', 'Note', 'Inbox'],
+      ],
+      "a card the owner can't read is named by its export name, and its operations by their names in words",
+    );
   });
 
   test('an operation approved per instance serves only the card it was approved for', async function (assert) {
