@@ -5,6 +5,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import Plus from '@cardstack/boxel-icons/plus';
+import { Tooltip } from '@cardstack/pretui/components/tooltip';
 import { task } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
@@ -16,6 +17,7 @@ import {
   iconURLFor,
   toWorkspaceEndpoint,
 } from '@cardstack/host/lib/utils';
+
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -83,22 +85,23 @@ export default class AddWorkspace extends Component<Signature> {
   };
 
   <template>
-    <ItemContainer
-      class={{cn 'add-workspace' is-selected=this.showSelectionRing}}
-      title='Create a New Workspace'
-      data-nav-index={{@navIndex}}
-      {{on 'click' (fn this.setIsModalOpen true)}}
-      {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
-      data-test-add-workspace
-      data-test-add-workspace-selected={{if @isSelected 'selected'}}
-      data-test-workspace-ring={{if this.showSelectionRing 'New Workspace'}}
-      ...attributes
-    >
-      <span class='content'>
-        <Plus class='icon' width='20' height='20' aria-hidden='true' />
-        New Workspace
-      </span>
-    </ItemContainer>
+    <Tooltip class='add-workspace-tooltip' @content='Create a New Workspace'>
+      <ItemContainer
+        class={{cn 'add-workspace' is-selected=this.showSelectionRing}}
+        data-nav-index={{@navIndex}}
+        {{on 'click' (fn this.setIsModalOpen true)}}
+        {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
+        data-test-add-workspace
+        data-test-add-workspace-selected={{if @isSelected 'selected'}}
+        data-test-workspace-ring={{if this.showSelectionRing 'New Workspace'}}
+        ...attributes
+      >
+        <span class='content'>
+          <Plus class='icon' width='20' height='20' aria-hidden='true' />
+          New Workspace
+        </span>
+      </ItemContainer>
+    </Tooltip>
     {{#if this.isModalOpen}}
       <ToElsewhere
         @named='modal-elsewhere'
@@ -115,6 +118,10 @@ export default class AddWorkspace extends Component<Signature> {
       />
     {{/if}}
     <style scoped>
+      /* The tooltip's wrapper is the grid item, so it fills the cell. */
+      .add-workspace-tooltip {
+        display: flex;
+      }
       .add-workspace {
         justify-content: center;
         align-items: center;

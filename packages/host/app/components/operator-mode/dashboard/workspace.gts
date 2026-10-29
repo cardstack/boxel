@@ -19,6 +19,7 @@ import IconX from '@cardstack/boxel-icons/x';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Menu as PretMenu } from '@cardstack/pretui/components/menu';
 import { Spinner } from '@cardstack/pretui/components/spinner';
+import { Tooltip } from '@cardstack/pretui/components/tooltip';
 
 import { didCancel, dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -98,6 +99,13 @@ const log = logger('component:dashboard/workspace');
 
 // A row's trailing time drops the "Updated" its position already says.
 const UPDATED_PREFIX = /^Updated /;
+const ABBREVIATED_TIME_UNIT = /(\d+) (sec|min|hrs?)\b/;
+const SPOKEN_TIME_UNITS = {
+  sec: 'second',
+  min: 'minute',
+  hr: 'hour',
+  hrs: 'hour',
+};
 
 export default class Workspace extends Component<Signature> {
   <template>
@@ -217,7 +225,6 @@ export default class Workspace extends Component<Signature> {
             <div class='desk-caption-line'>
               <span
                 class={{cn 'visibility-chip' (concat 'is-' this.visibility)}}
-                title={{this.visibilityLabel}}
                 data-test-workspace-visibility
               >
                 <this.visibilityIcon
@@ -252,23 +259,35 @@ export default class Workspace extends Component<Signature> {
                 <span>Hosted at</span>
                 {{! A link in running text, so a native one rather than a Pret
                     UI Button, which is for standalone actions. }}
-                <a
-                  class='desk-host-link'
-                  href={{this.primaryPublishedURL}}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  title={{this.primaryPublishedURL}}
-                  data-test-desk-host-link={{@realmIdentifier}}
-                ><span class='desk-host-url'>{{this.displayPublishedURL}}</span>
-                  <span aria-hidden='true'>↗</span><span class='boxel-sr-only'>
-                    (opens in a new tab)</span></a>
+                <Tooltip
+                  class='desk-host-link-tooltip'
+                  @content={{this.primaryPublishedURL}}
+                >
+                  <a
+                    class='desk-host-link'
+                    href={{this.primaryPublishedURL}}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    data-test-desk-host-link={{@realmIdentifier}}
+                  ><span
+                      class='desk-host-url'
+                    >{{this.displayPublishedURL}}</span>
+                    <span aria-hidden='true'>↗</span><span
+                      class='boxel-sr-only'
+                    >
+                      (opens in a new tab)</span></a>
+                </Tooltip>
                 {{#if (gt this.publishedRealmURLs.length 1)}}
-                  <span
+                  <Tooltip
                     class='desk-host-more'
-                    title={{this.extraPublishedTitle}}
-                  >+{{this.extraPublishedCount}}<span class='boxel-sr-only'>
-                      more:
-                      {{this.extraPublishedTitle}}</span></span>
+                    @content={{this.extraPublishedTitle}}
+                  >
+                    <span>+{{this.extraPublishedCount}}<span
+                        class='boxel-sr-only'
+                      >
+                        more:
+                        {{this.extraPublishedTitle}}</span></span>
+                  </Tooltip>
                 {{/if}}
               </div>
             {{/if}}
@@ -441,13 +460,8 @@ export default class Workspace extends Component<Signature> {
             {{else}}
               <span class='name' data-test-workspace-name>{{this.name}}</span>
             {{/if}}
-            {{! On a row the chip sits above its hit area so its title shows; a
-                click on it still opens the workspace. }}
             <span
-              {{! template-lint-disable no-invalid-interactive }}
               class={{cn 'visibility-chip' (concat 'is-' this.visibility)}}
-              title={{this.visibilityLabel}}
-              {{on 'click' this.openFromRow}}
               data-test-workspace-visibility
             >
               <this.visibilityIcon width='12' height='12' aria-hidden='true' />
@@ -463,7 +477,7 @@ export default class Workspace extends Component<Signature> {
                 <span
                   id={{this.updatedDescriptionId}}
                   class='boxel-sr-only'
-                >{{this.updatedAtLabel}}</span>
+                >{{this.spokenUpdatedAtLabel}}</span>
               </span>
             {{/if}}
           </div>
@@ -876,8 +890,12 @@ export default class Workspace extends Component<Signature> {
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      /* The tooltip's wrapper is the flex item, so it carries the
+         truncation the link inside it needs. */
+      .desk-host-link-tooltip {
+        min-width: 0;
+      }
       .desk-host-more {
-        position: relative;
         flex: none;
       }
 
@@ -1059,12 +1077,6 @@ export default class Workspace extends Component<Signature> {
       .is-row .name {
         font-weight: 600;
         text-align: left;
-      }
-      /* Above the row's hit area, so its title shows. */
-      .is-row .visibility-chip {
-        position: relative;
-        z-index: 2;
-        cursor: pointer;
       }
       /* A button ignores line-clamp, so the name truncates on one line. Its
          hit area covers the row; the controls sit above it. */
@@ -1545,6 +1557,16 @@ export default class Workspace extends Component<Signature> {
     return updatedAt ? formatUpdatedTime(new Date(updatedAt)) : undefined;
   }
 
+  // The visible time abbreviates its unit, which a screen reader may misread
+  // ("min" as minimum), so the description spells it out.
+  private get spokenUpdatedAtLabel() {
+    return this.updatedAtLabel?.replace(
+      ABBREVIATED_TIME_UNIT,
+      (_, count: string, unit: keyof typeof SPOKEN_TIME_UNITS) =>
+        `${count} ${SPOKEN_TIME_UNITS[unit]}${count === '1' ? '' : 's'}`,
+    );
+  }
+
   private get updatedAgoLabel() {
     return this.updatedAtLabel?.replace(UPDATED_PREFIX, '');
   }
@@ -1596,13 +1618,6 @@ export default class Workspace extends Component<Signature> {
     await this.operatorModeStateService.openWorkspace(
       this.args.realmIdentifier,
     );
-  }
-
-  // A tile opens from its face alone; a row opens from anywhere on it.
-  @action private async openFromRow() {
-    if (this.args.variant === 'row') {
-      await this.openWorkspace();
-    }
   }
 
   @action private openDeleteModal() {

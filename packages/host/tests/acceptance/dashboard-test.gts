@@ -1387,17 +1387,22 @@ module('Acceptance | dashboard', function (hooks) {
 
         test("a row's button is described by its full visibility, its update time and its address", async function (assert) {
           await visitDashboard(assert, 2);
-          let day = 24 * 60 * 60 * 1000;
+          let hour = 60 * 60 * 1000;
           for (let [i, url] of [realmURL, ...moreRealmURLs].entries()) {
-            markUpdated(url, new Date(Date.now() - (i + 1) * day));
+            markUpdated(url, new Date(Date.now() - (i + 1) * hour));
           }
           await settled();
           let rowName = workspaceNames(ROWS).at(-1)!;
           assert.strictEqual(
             rowName,
             'Workspace 08',
-            'the last row is the workspace updated 9 days ago',
+            'the last row is the workspace updated 9 hours ago',
           );
+          assert
+            .dom(
+              `[data-test-workspace-rows] [data-test-workspace="${rowName}"] [data-test-workspace-updated]`,
+            )
+            .includesText('9 hrs ago', 'the row shows the short form');
 
           let description = descriptionOf(
             `[data-test-workspace-button="${rowName}"]`,
@@ -1406,10 +1411,10 @@ module('Acceptance | dashboard', function (hooks) {
             description,
             [
               'Private workspace',
-              'Updated 9 days ago',
+              'Updated 9 hours ago',
               'test-realm/testuser/workspace-8',
             ],
-            'the full visibility and time, not only the chip and the short time',
+            'the full visibility and the time in words, not only the chip and the short time',
           );
         });
 
