@@ -4,6 +4,7 @@ import {
   click,
   fillIn,
   triggerEvent,
+  rerender,
 } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
@@ -653,6 +654,61 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     assert
       .dom('[data-test-ai-assistant-message]')
       .exists({ count: 1 }, 'a single bubble renders for the cgi');
+  });
+
+  test('a message still sending sorts after a confirmed message whose server time is ahead of the client clock', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let roomId = await openAiAssistant();
+
+    // A day ahead of the mock clock: the local echo of the next send is
+    // stamped with this client's clock, which is earlier.
+    mockMatrixUtils.simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'Earlier reply',
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      { origin_server_ts: new Date(2024, 8, 20).getTime() },
+    );
+    await waitFor('[data-test-message-idx="0"]');
+
+    await fillIn('[data-test-message-field]', 'Sent while the reply exists');
+    let sendGate = new Deferred<void>();
+    mockMatrixUtils.setSendEventInterceptor(() => sendGate.promise);
+    click('[data-test-send-message-btn]');
+    await waitFor('[data-test-ai-assistant-message-pending]');
+    // the SDK's local echo, which carries the client's clock, has replaced
+    // the optimistic event
+    let matrixService = getService('matrix-service');
+    await waitUntil(() =>
+      matrixService
+        .getRoomData(roomId)
+        ?.events.some((e) => e.event_id?.startsWith('~')),
+    );
+    // not settled(): it would wait on the gated send
+    await rerender();
+
+    assert
+      .dom(
+        '[data-test-message-idx="1"][data-test-ai-assistant-message-pending]',
+      )
+      .exists('the message still sending is last');
+    assert
+      .dom('[data-test-message-idx="0"]')
+      .containsText('Earlier reply', 'the confirmed message stays first');
+
+    mockMatrixUtils.setSendEventInterceptor(undefined);
+    sendGate.fulfill();
+    await waitFor('[data-test-user-message]:not(.is-pending)');
+    await settled();
   });
 
   test('inverse delivery race — bubble stays sending when sendEvent succeeded', async function (assert) {

@@ -509,7 +509,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     let applying = q('[data-test-apply-state="applying"]');
     let preparing = q('[data-test-apply-state="preparing"]');
     let loading = q('[data-test-session-preparation]');
-    let pending = q('[data-test-ai-assistant-message-pending="true"]');
+    let pending = q('[data-test-ai-assistant-message-pending]');
     let generating = q('[data-test-stop-generating]') > 0;
     let awaitingApproval = q('[data-test-tool-call-approval]');
     let irregularities: string[] = [];

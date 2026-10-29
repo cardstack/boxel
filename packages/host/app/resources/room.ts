@@ -317,10 +317,22 @@ export class RoomResource extends Resource<Args> {
     if (this.roomId == undefined) {
       return [];
     }
+    // A message this client is still sending comes after every message the
+    // server has confirmed, as in `events`: until its server copy arrives its
+    // time is provisional, and can be earlier than a confirmed message's.
+    let inFlight = (message: Message) =>
+      message.status != null && IN_FLIGHT_EVENT_STATUSES.has(message.status);
     return [...this._messageCache.values()]
       .filter((m) => m.roomId === this.roomId)
       .filter((m) => !m.continuationOf)
-      .sort((a, b) => a.created.getTime() - b.created.getTime());
+      .sort((a, b) => {
+        let aInFlight = inFlight(a);
+        let bInFlight = inFlight(b);
+        if (aInFlight !== bInFlight) {
+          return aInFlight ? 1 : -1;
+        }
+        return a.created.getTime() - b.created.getTime();
+      });
   }
 
   /**

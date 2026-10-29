@@ -12,6 +12,7 @@ import {
   openAiAssistant,
   openRoom,
   assertMessages,
+  describeMessages,
   writeMessage,
   sendMessage,
   reloadAndOpenAiAssistant,
@@ -175,7 +176,7 @@ test.describe('Room messages', () => {
     let innerHTML = await page
       .locator('[data-test-message-idx="1"] .content')
       .evaluate((el) => el.innerHTML);
-    expect(innerHTML).toContain(
+    expect(innerHTML, await describeMessages(page)).toContain(
       '&lt;h1&gt;Hello&lt;/h1&gt; &lt;template&gt;Hello&lt;/template&gt;',
     );
   });
