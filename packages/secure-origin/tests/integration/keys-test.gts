@@ -1595,6 +1595,11 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-key-replace-save]')
         .isDisabled('the key file is still chosen anew');
       await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .doesNotExist(
+          'a key file for the same service account changes nothing',
+        );
       await click('[data-test-key-replace-save]');
       await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
       await settled();
@@ -1607,6 +1612,36 @@ module('Integration | key pages', function (hooks) {
         },
         'leaving the fields as they are keeps them',
       );
+    });
+
+    test('a key file for another service account says the prefilled fields were granted to the old one', async function (assert) {
+      let serviceAccount = {
+        ...KEYS[1],
+        id: 'key-sa',
+        name: 'Sheets',
+        kind: 'google-service-account',
+        serviceAccount: {
+          email: 'reports-bot@boxel-test.iam.gserviceaccount.com',
+          subject: 'owner@example.com',
+          scopes: ['openid'],
+        },
+      };
+      serve({
+        'GET _user-keys': () => json(200, keyResources([serviceAccount])),
+        'GET _key-shares': () => json(200, { data: [] }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Sheets"]');
+      await click('[data-test-key-row="Sheets"] [data-test-key-replace]');
+      await settled();
+      assert.dom('[data-test-service-account-changed]').doesNotExist();
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .includesText(
+          'This key file is for sheets-bot@boxel-test.iam.gserviceaccount.com, not reports-bot@boxel-test.iam.gserviceaccount.com',
+        );
     });
 
     test('a replace cancelled after editing the prefilled fields starts from the key again', async function (assert) {

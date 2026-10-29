@@ -876,7 +876,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 231320,
+      "bytes": 232497,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1101,7 +1101,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 18758
+          "size": 20083
         },
         {
           "package": "@cardstack/secure-origin",

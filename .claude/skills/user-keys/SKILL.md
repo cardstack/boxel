@@ -175,7 +175,7 @@ never the key file. The code is `lib/outbound/google-service-account.ts`.
   kind and needs the whole set again: file, scopes and subject. The routes
   default none of it; the key page and `boxel keys replace` start from the
   key's current scopes and subject, so leaving them as they are keeps them
-  (`replace --no-subject` acts as the service account itself).
+  (`replace --no-subject` acts as the service account itself). A key file for another service account keeps neither: the CLI then needs `--scope` and `--subject` or `--no-subject`, and the key page says the account changed.
 - **What is sealed.** The key file's `client_email`, `private_key_id` and
   `private_key`, with the subject and scopes, as one JSON value in a fixed
   member order (`serializeGoogleServiceAccount`). The file's own `token_uri`

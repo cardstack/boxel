@@ -388,6 +388,41 @@ function serviceAccountAttributes(
   };
 }
 
+// The key's current scopes and subject, if a replace with this key file may
+// keep them. Domain-wide delegation and the scopes it allows are granted per
+// service account, so a key file for another service account keeps neither:
+// its replace needs --scope and --subject or --no-subject, like a key whose
+// details aren't known. Checked before a ticket is minted.
+function keepableDetails(
+  keyFile: string,
+  options: ServiceAccountOptions,
+  current: ServiceAccountDetails | undefined,
+): ServiceAccountDetails | undefined {
+  if (!current) {
+    return undefined;
+  }
+  let email = keyFileEmail(keyFile);
+  if (email === current.email) {
+    return current;
+  }
+  if (!options.scope?.length || options.subject === undefined) {
+    throw new Error(
+      `This key file is for ${email ?? 'another service account'}, not ${current.email}. ` +
+        'Delegation and scopes are granted per service account, so give --scope, and --subject <email> or --no-subject',
+    );
+  }
+  return undefined;
+}
+
+function keyFileEmail(keyFile: string): string | undefined {
+  try {
+    let email = JSON.parse(keyFile)?.client_email;
+    return typeof email === 'string' ? email : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // What a service account's replace kept of the key as it was, to say so.
 function keptByReplace(
   options: ServiceAccountOptions,
@@ -459,16 +494,20 @@ export async function keysReplace(
   checkKindOptions(kind, options, { current });
   let value = await readValue(ctx, options);
   checkNotAKeyFile(kind, value);
+  let keep =
+    kind === 'google-service-account'
+      ? keepableDetails(value, options, current)
+      : undefined;
   let key = await replaceUserKey(ctx.realmServerUrl, token, {
     keyId: id,
     value,
-    ...serviceAccountAttributes(kind, options, current),
+    ...serviceAccountAttributes(kind, options, keep),
   });
   emit(ctx, key, () => {
     console.log(`${FG_GREEN}Replaced the value of ${key.name}.${RESET}`);
   });
   if (kind === 'google-service-account') {
-    for (let line of keptByReplace(options, current)) {
+    for (let line of keptByReplace(options, keep)) {
       say(ctx, line);
     }
   }

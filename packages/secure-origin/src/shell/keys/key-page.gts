@@ -177,6 +177,21 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                             <ServiceAccountFields
                               @entry={{this.serviceAccount}}
                             />
+                            {{#if this.accountChange}}
+                              <p
+                                class='confirm'
+                                role='status'
+                                data-test-service-account-changed
+                              >This key file is for
+                                <strong>{{this.accountChange.to}}</strong>, not
+                                <strong>{{this.accountChange.from}}</strong>.
+                                Delegation and scopes are granted per service
+                                account, so check
+                                <strong>Act as</strong>
+                                and
+                                <strong>Scopes</strong>
+                                for the new one.</p>
+                            {{/if}}
                           {{else}}
                             <KeyFields
                               @value={{this.form.value}}
@@ -494,6 +509,19 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     return this.form.value
       ? { kind: 'static', value: this.form.value }
       : undefined;
+  }
+
+  // The service account a chosen key file is for, when it isn't the one the
+  // key is now: the prefilled Act as and Scopes were granted to the old one,
+  // so the panel says so.
+  private get accountChange(): { from: string; to: string } | undefined {
+    let action = this.state.action;
+    let from =
+      action.name === 'replacing'
+        ? action.key.serviceAccount?.email
+        : undefined;
+    let to = this.serviceAccount.clientEmail;
+    return from && to && from !== to ? { from, to } : undefined;
   }
 
   private get replaceDisabled() {
