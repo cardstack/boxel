@@ -42,6 +42,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -4463,6 +4464,53 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         'done',
         "the script's own result stays out of the chat",
       );
+  });
+
+  test("a file in a turn's changed files opens in code mode", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let changedFile = `${testRealmURL}hello-world.gts`;
+
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: 'Change the greeting',
+      msgtype: 'm.text',
+    });
+    simulateToolResult(roomId, {
+      requestId: 'run-realm-code-edit',
+      toolName: 'run-realm-code',
+      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
+        files: [
+          {
+            fileUrl: changedFile,
+            status: 'saved',
+            diff: "-  greeting = 'Hello';\n+  greeting = 'Hi';",
+          },
+        ],
+      }),
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changed the greeting.',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitFor('[data-test-pretui-turn-changes-file$="hello-world.gts"]');
+    assert.strictEqual(
+      operatorModeStateService.state.submode,
+      Submodes.Interact,
+      'the app starts in interact mode',
+    );
+
+    await click('[data-test-pretui-turn-changes-file$="hello-world.gts"]');
+
+    await waitUntil(
+      () => operatorModeStateService.state.submode === Submodes.Code,
+    );
+    assert.strictEqual(
+      operatorModeStateService.state.codePath,
+      rri(changedFile),
+      'code mode opens on the changed file, not on the previous one',
+    );
   });
 
   test('a run-realm-code result says why it could not show a card', async function (assert) {

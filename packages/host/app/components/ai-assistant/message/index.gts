@@ -28,7 +28,6 @@ import {
   MINIMUM_AI_CREDITS_TO_CONTINUE,
   type CardErrorJSONAPI,
   type getCardCollection,
-  rri,
 } from '@cardstack/runtime-common';
 
 import {
@@ -44,6 +43,7 @@ import type {
   TurnHead,
   ChangedFile,
 } from '@cardstack/host/lib/turn-summary';
+import type AssistantQuickLookService from '@cardstack/host/services/assistant-quick-look';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -326,20 +326,27 @@ export default class AiAssistantMessage extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private billingService: BillingService;
+  @service declare private assistantQuickLook: AssistantQuickLookService;
 
   // The files this turn changed, for TurnChanges.
   private get changedFiles(): ChangedFile[] {
     return this.args.answerFooter?.diff?.perFile ?? [];
   }
 
-  // A changed file opens in the code editor.
-  private openChangedFile = (file: { path: string }) => {
-    let changed = this.changedFiles.find(
-      (candidate) => candidate.path === file.path,
-    );
-    if (changed) {
-      this.operatorModeStateService.updateCodePath(rri(changed.url));
+  // A changed file opens in code mode, over an open Quick Look. A deleted
+  // file has nothing to open, and a realm the reader may no longer read has
+  // no code mode.
+  private openChangedFile = (row: { path: string }) => {
+    // TurnChanges hands back the object it got from @files
+    let file = row as ChangedFile;
+    if (
+      file.status === 'deleted' ||
+      !this.operatorModeStateService.codeSubmodeOffered(file.url)
+    ) {
+      return;
     }
+    this.assistantQuickLook.close();
+    this.operatorModeStateService.openFileInCodeMode(file.url);
   };
 
   // The reasoning trace is shown, but closed by default: a transcript reads

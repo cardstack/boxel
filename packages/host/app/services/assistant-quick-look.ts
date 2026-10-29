@@ -4,7 +4,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { Submodes } from '../components/submode-switcher';
 
-import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
 
 export interface QuickLookRequest {
@@ -32,7 +31,6 @@ export interface QuickLookRequest {
  */
 export default class AssistantQuickLookService extends Service {
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private network: NetworkService;
 
   @tracked current: QuickLookRequest | null = null;
 
@@ -75,18 +73,7 @@ export default class AssistantQuickLookService extends Service {
     this.operatorModeStateService.codeSubmodeOffered(request.id);
 
   private openFileInCode(url: string) {
-    let om = this.operatorModeStateService;
-    if (om.workspaceChooserOpened) {
-      om.closeWorkspaceChooser();
-    }
-    if (
-      om.state.submode === Submodes.Code &&
-      this.network.virtualNetwork.unresolveURL(url) === om.state.codePath
-    ) {
-      return;
-    }
-    om.updateSubmode(Submodes.Code);
-    om.updateCodePath(new URL(url));
+    this.operatorModeStateService.openFileInCodeMode(url);
   }
 }
 
