@@ -8,7 +8,7 @@
 
 import { createPrivateKey, sign, type KeyObject } from 'node:crypto';
 
-const API = 'https://api.github.com';
+import { API, githubError, githubRequest } from './github-api.ts';
 
 export interface GithubAppConfig {
   appId: string;
@@ -40,40 +40,20 @@ export function appJwt(
   return `${header}.${payload}.${base64url(signature)}`;
 }
 
+// Throws for any status except success and, when `allow404`, a 404.
 async function request(
   method: string,
   path: string,
   token: string,
   body?: unknown,
+  allow404 = false,
 ): Promise<Response> {
-  return fetch(`${API}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: 'application/vnd.github+json',
-      'x-github-api-version': '2022-11-28',
-      'user-agent': 'boxel-actions-queue-collector',
-      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
-
-async function fail(
-  method: string,
-  path: string,
-  res: Response,
-): Promise<never> {
-  let detail = '';
-  try {
-    detail = (await res.text()).slice(0, 300).replace(/\s+/g, ' ').trim();
-  } catch {
-    // The status alone still says most of what went wrong.
+  const url = `${API}${path}`;
+  const res = await githubRequest(method, url, token, body);
+  if (!res.ok && !(allow404 && res.status === 404)) {
+    throw await githubError(method, url, res);
   }
-  throw new Error(
-    `${method} ${path} → ${res.status} ${res.statusText}` +
-      (detail ? ` — ${detail}` : ''),
-  );
+  return res;
 }
 
 export class RepoVariable {
@@ -112,7 +92,6 @@ export class RepoVariable {
       path,
       appJwt(this.#config.appId, this.#key),
     );
-    if (!res.ok) await fail('POST', path, res);
     const body = (await res.json()) as { token: string; expires_at: string };
     this.#token = { value: body.token, expiresAt: Date.parse(body.expires_at) };
     return body.token;
@@ -121,9 +100,14 @@ export class RepoVariable {
   // The variable's value, or null when it does not exist.
   async read(): Promise<string | null> {
     const path = `/repos/${this.#repo}/actions/variables/${this.#name}`;
-    const res = await request('GET', path, await this.#installationToken());
+    const res = await request(
+      'GET',
+      path,
+      await this.#installationToken(),
+      undefined,
+      true,
+    );
     if (res.status === 404) return null;
-    if (!res.ok) await fail('GET', path, res);
     return ((await res.json()) as { value: string }).value;
   }
 
@@ -135,11 +119,7 @@ export class RepoVariable {
       ? `/repos/${this.#repo}/actions/variables/${this.#name}`
       : `/repos/${this.#repo}/actions/variables`;
     const method = exists ? 'PATCH' : 'POST';
-    const res = await request(method, path, token, {
-      name: this.#name,
-      value,
-    });
-    if (!res.ok) await fail(method, path, res);
+    await request(method, path, token, { name: this.#name, value });
   }
 }
 

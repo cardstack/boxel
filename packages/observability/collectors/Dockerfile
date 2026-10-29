@@ -8,6 +8,7 @@ WORKDIR /app
 COPY packages/observability/collectors/actions-queue.ts \
      packages/observability/collectors/spill.ts \
      packages/observability/collectors/github-app.ts \
+     packages/observability/collectors/github-api.ts \
      ./
 
 # Runs in its default looping mode. Repository, sample interval and token come

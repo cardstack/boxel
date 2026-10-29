@@ -17,14 +17,17 @@
 // credentials for it are configured (see github-app.ts).
 
 import {
+  countJob,
   decideSpill,
-  isGithubHosted,
+  stateAfterFailedWrite,
   thresholdsFromEnv,
+  type PoolJob,
   type PoolSample,
   type SpillState,
   type SpillThresholds,
 } from './spill.ts';
 import { RepoVariable, githubAppFromEnv } from './github-app.ts';
+import { API, githubError, githubRequest } from './github-api.ts';
 
 const CHANNEL = 'boxel:actions-queue';
 
@@ -190,39 +193,12 @@ function emit(record: Record<string, unknown>): void {
 let rateLimitRemaining: number | null = null;
 
 async function gh<T>(url: string, token: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: 'application/vnd.github+json',
-      'x-github-api-version': '2022-11-28',
-      'user-agent': 'boxel-actions-queue-collector',
-    },
-  });
+  const res = await githubRequest('GET', url, token);
   const remaining = res.headers.get('x-ratelimit-remaining');
   if (remaining !== null) {
     rateLimitRemaining = Number(remaining);
   }
-  if (!res.ok) {
-    // GitHub distinguishes its refusals only in the response body: a rejected
-    // credential, a token whose repository access omits this one, and an
-    // exhausted rate limit are all 403. Carrying the body and the remaining
-    // budget into the error means the emitted collector-error line says which,
-    // rather than leaving it to be inferred.
-    let detail = '';
-    try {
-      detail = (await res.text()).slice(0, 300).replace(/\s+/g, ' ').trim();
-    } catch {
-      // A body that cannot be read is not worth failing over; the status still
-      // carries most of the signal.
-    }
-    const err = new Error(
-      `GET ${url} → ${res.status} ${res.statusText}` +
-        (detail ? ` — ${detail}` : '') +
-        ` (rate limit remaining: ${res.headers.get('x-ratelimit-remaining') ?? 'unknown'})`,
-    ) as Error & { status?: number };
-    err.status = res.status;
-    throw err;
-  }
+  if (!res.ok) throw await githubError('GET', url, res);
   return (await res.json()) as T;
 }
 
@@ -255,21 +231,67 @@ function seconds(from: string | null | undefined, to: number): number | null {
 }
 
 function emptyPool(): PoolSample {
-  return { running: 0, queued: 0, oldestQueuedSeconds: null };
+  return {
+    running: 0,
+    queued: 0,
+    oldestQueuedSeconds: null,
+    diverted: 0,
+    partial: false,
+  };
 }
 
-// Adds one job to the GitHub-hosted pool count. Only `queued` jobs wait for a
-// runner: a `pending` job is held by a concurrency group, which says nothing
-// about the pool.
-function countInPool(pool: PoolSample, job: Job, observedAt: number): void {
-  if (!isGithubHosted(job.labels ?? [])) return;
-  if (job.status === 'in_progress') {
-    pool.running++;
-  } else if (job.status === 'queued') {
-    pool.queued++;
-    const waited = seconds(job.created_at, observedAt) ?? 0;
-    pool.oldestQueuedSeconds = Math.max(pool.oldestQueuedSeconds ?? 0, waited);
+// Only queued, pending and in_progress runs can hold or want a runner, so
+// completed history is deliberately not fetched — it would dominate the
+// request budget without informing the queue. A run that changes status
+// between two of these listings is returned by both, so the runs are keyed by
+// id, or its jobs would be counted twice.
+async function activeRuns(repo: string, token: string): Promise<Run[]> {
+  const runs = new Map<number, Run>();
+  for (const status of ['queued', 'in_progress', 'pending']) {
+    const page = await paginate<Run>(
+      `${API}/repos/${repo}/actions/runs?status=${status}`,
+      token,
+      (b) => b.workflow_runs ?? [],
+    );
+    for (const run of page) runs.set(run.id, run);
   }
+  return [...runs.values()];
+}
+
+// Fetching one job list per run is the expensive half of a sample, so it
+// starts only if the budget still holds the reserve after those requests.
+function withinBudget(requests: number): boolean {
+  return (
+    rateLimitRemaining === null ||
+    rateLimitRemaining - requests >= RATE_LIMIT_RESERVE
+  );
+}
+
+function runJobs(repo: string, runId: number, token: string): Promise<Job[]> {
+  return paginate<Job>(
+    `${API}/repos/${repo}/actions/runs/${runId}/jobs`,
+    token,
+    (b) => b.jobs ?? [],
+  );
+}
+
+// A run that completed and was reaped between the listing and the job fetch
+// answers 404, and has no jobs left to count.
+function isReaped(e: unknown): boolean {
+  return (e as { status?: number }).status === 404;
+}
+
+function poolJob(job: Job, run: Run | undefined, observedAt: number): PoolJob {
+  return {
+    status: job.status,
+    labels: job.labels ?? [],
+    waitedSeconds: seconds(job.created_at, observedAt),
+    // ci-host.yaml sends the jobs of a push to `main` to RunsOn whatever the
+    // spill says, so the spill did not move them.
+    divertible: !(
+      run?.event === 'push' && (job.head_branch ?? run?.head_branch) === 'main'
+    ),
+  };
 }
 
 // The pool count for a repository that is not sampled for the dashboard. Any
@@ -279,28 +301,25 @@ async function samplePool(
   repo: string,
   token: string,
   observedAt: number,
+  thresholds: SpillThresholds,
 ): Promise<PoolSample> {
-  const base = `https://api.github.com/repos/${repo}/actions`;
   const pool = emptyPool();
-  for (const status of ['queued', 'in_progress']) {
-    const runs = await paginate<Run>(
-      `${base}/runs?status=${status}`,
-      token,
-      (b) => b.workflow_runs ?? [],
+  const runs = await activeRuns(repo, token);
+  if (!withinBudget(runs.length)) {
+    throw new Error(
+      `${runs.length} job listings would take the rate limit (${rateLimitRemaining} remaining) below the reserve`,
     );
-    for (const run of runs) {
-      let jobs: Job[];
-      try {
-        jobs = await paginate<Job>(
-          `${base}/runs/${run.id}/jobs`,
-          token,
-          (b) => b.jobs ?? [],
-        );
-      } catch (e) {
-        if ((e as { status?: number }).status === 404) continue;
-        throw e;
-      }
-      for (const job of jobs) countInPool(pool, job, observedAt);
+  }
+  for (const run of runs) {
+    let jobs: Job[];
+    try {
+      jobs = await runJobs(repo, run.id, token);
+    } catch (e) {
+      if (isReaped(e)) continue;
+      throw e;
+    }
+    for (const job of jobs) {
+      countJob(pool, poolJob(job, run, observedAt), thresholds);
     }
   }
   return pool;
@@ -308,34 +327,19 @@ async function samplePool(
 
 // Returns the GitHub-hosted pool count for `opts.repo`, or null when the
 // sample was abandoned and the count is unknown.
-async function sample(opts: Options): Promise<PoolSample | null> {
-  const base = `https://api.github.com/repos/${opts.repo}/actions`;
-  const observedAt = Date.now();
+async function sample(
+  opts: Options,
+  thresholds: SpillThresholds,
+  observedAt: number,
+): Promise<PoolSample | null> {
   const observed_at = new Date(observedAt).toISOString();
 
-  // Only queued, pending and in_progress runs can hold or want a runner, so
-  // completed history is deliberately not fetched — it would dominate the
-  // request budget without informing the queue.
-  const runs: Run[] = [];
-  for (const status of ['queued', 'in_progress', 'pending']) {
-    runs.push(
-      ...(await paginate<Run>(
-        `${base}/runs?status=${status}`,
-        opts.token,
-        (b) => b.workflow_runs ?? [],
-      )),
-    );
-  }
-
+  const runs = await activeRuns(opts.repo, opts.token);
   const runById = new Map<number, Run>(runs.map((r) => [r.id, r]));
 
-  // Fetching one job list per run is the expensive half of a sample. Skipping
-  // the whole sample keeps the series honest: a partial sample would understate
-  // queue depth, which is worse than a visible gap.
-  if (
-    rateLimitRemaining !== null &&
-    rateLimitRemaining - runs.length < RATE_LIMIT_RESERVE
-  ) {
+  // Skipping the whole sample keeps the series honest: a partial sample would
+  // understate queue depth, which is worse than a visible gap.
+  if (!withinBudget(runs.length)) {
     emit({
       event_type: 'collector-throttled',
       observed_at,
@@ -369,11 +373,7 @@ async function sample(opts: Options): Promise<PoolSample | null> {
   for (const run of runs) {
     let jobs: Job[];
     try {
-      jobs = await paginate<Job>(
-        `${base}/runs/${run.id}/jobs`,
-        opts.token,
-        (b) => b.jobs ?? [],
-      );
+      jobs = await runJobs(opts.repo, run.id, opts.token);
     } catch (e) {
       const status = (e as { status?: number }).status;
       emit({
@@ -383,10 +383,8 @@ async function sample(opts: Options): Promise<PoolSample | null> {
         run_id: run.id,
         message: e instanceof Error ? e.message : String(e),
       });
-      // A run that completed and was reaped between the listing and this fetch
-      // answers 404, and has no jobs left to count — omitting it understates
-      // nothing, so the sample continues.
-      if (status === 404) continue;
+      // Omitting a reaped run understates nothing, so the sample continues.
+      if (isReaped(e)) continue;
       // Anything else means this run's jobs are unknown rather than absent.
       // Publishing the totals anyway would put a confidently low queue depth
       // on the dashboard at precisely the moment the API is failing, which is
@@ -436,7 +434,7 @@ async function sample(opts: Options): Promise<PoolSample | null> {
       if (job.status === 'queued') queuedJobs++;
       else if (job.status === 'pending') pendingJobs++;
       else runningJobs++;
-      countInPool(pool, job, observedAt);
+      countJob(pool, poolJob(job, meta, observedAt), thresholds);
 
       const bump = (dimension: string, key: string | null) => {
         if (!key) return;
@@ -522,44 +520,54 @@ interface Spill {
 }
 
 // Combines `repoPool` with the pool repositories' counts, decides, and writes
-// the variable when the decision changes it. Any failure skips this sample's
-// decision: a later sample decides again from a full count.
+// the variable when the decision changes it. Returns false when any part
+// failed, after emitting a collector-error line for it.
 async function steerSpill(
   opts: Options,
   spill: Spill,
   repoPool: PoolSample,
   observedAt: number,
-): Promise<void> {
+): Promise<boolean> {
   const observed_at = new Date(observedAt).toISOString();
   const pool = { ...repoPool };
-  try {
-    for (const repo of opts.poolRepos) {
-      if (
-        rateLimitRemaining !== null &&
-        rateLimitRemaining < RATE_LIMIT_RESERVE
-      ) {
-        throw new Error(
-          `rate limit remaining ${rateLimitRemaining} is below the reserve`,
-        );
-      }
-      const other = await samplePool(repo, opts.token, observedAt);
+  let ok = true;
+  const fail = (message: string) => {
+    ok = false;
+    emit({
+      event_type: 'collector-error',
+      observed_at,
+      repo: opts.repo,
+      message,
+    });
+  };
+
+  // A repository that cannot be counted does not stop the decision: the
+  // partial count can still turn the spill on, but not off. Thus a repository
+  // that fails on every sample cannot leave the pool queueing with the spill
+  // off.
+  for (const repo of opts.poolRepos) {
+    try {
+      const other = await samplePool(
+        repo,
+        opts.token,
+        observedAt,
+        spill.thresholds,
+      );
       pool.running += other.running;
       pool.queued += other.queued;
+      pool.diverted += other.diverted;
       if (other.oldestQueuedSeconds !== null) {
         pool.oldestQueuedSeconds = Math.max(
           pool.oldestQueuedSeconds ?? 0,
           other.oldestQueuedSeconds,
         );
       }
+    } catch (e) {
+      pool.partial = true;
+      fail(
+        `pool count for ${repo} failed, so the spill cannot turn off: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
-  } catch (e) {
-    emit({
-      event_type: 'collector-error',
-      observed_at,
-      repo: opts.repo,
-      message: `spill decision skipped, pool count failed: ${e instanceof Error ? e.message : String(e)}`,
-    });
-    return;
   }
 
   let current = spill.state.spill;
@@ -568,15 +576,13 @@ async function steerSpill(
     try {
       const value = await spill.variable.read();
       exists = value !== null;
-      current = value === 'true';
+      // The workflow's `==` ignores case, so this must too.
+      current = value?.toLowerCase() === 'true';
     } catch (e) {
-      emit({
-        event_type: 'collector-error',
-        observed_at,
-        repo: opts.repo,
-        message: `spill decision skipped, reading ${spill.variable.name} failed: ${e instanceof Error ? e.message : String(e)}`,
-      });
-      return;
+      fail(
+        `spill decision skipped, reading ${spill.variable.name} failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return false;
     }
   }
 
@@ -585,6 +591,7 @@ async function steerSpill(
     pool,
     spill.thresholds,
   );
+  spill.state = { spill: decision.spill, quietSamples: decision.quietSamples };
 
   let written = false;
   if (spill.variable && decision.spill !== current) {
@@ -592,36 +599,32 @@ async function steerSpill(
       await spill.variable.write(String(decision.spill), exists);
       written = true;
     } catch (e) {
-      emit({
-        event_type: 'collector-error',
-        observed_at,
-        repo: opts.repo,
-        message: `writing ${spill.variable.name}=${decision.spill} failed: ${e instanceof Error ? e.message : String(e)}`,
-      });
-      // The variable still holds `current`. Keep the quiet count, so the next
-      // sample can retry the same decision.
-      spill.state = { spill: current, quietSamples: decision.quietSamples };
-      return;
+      fail(
+        `writing ${spill.variable.name}=${decision.spill} failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      spill.state = stateAfterFailedWrite(current, spill.thresholds);
     }
   }
-  spill.state = { spill: decision.spill, quietSamples: decision.quietSamples };
 
   emit({
     event_type: 'spill',
     observed_at,
     repo: opts.repo,
     pool_repos: [opts.repo, ...opts.poolRepos],
+    pool_complete: !pool.partial,
     github_hosted_running_jobs: pool.running,
     github_hosted_queued_jobs: pool.queued,
     oldest_queued_seconds: pool.oldestQueuedSeconds,
+    diverted_jobs: pool.diverted,
     spill_before: current,
     spill: decision.spill,
     changed: decision.spill !== current,
     reason: decision.reason,
-    quiet_samples: decision.quietSamples,
+    quiet_samples: spill.state.quietSamples,
     mode: spill.variable ? 'active' : 'dry-run',
     written,
   });
+  return ok;
 }
 
 async function main(): Promise<void> {
@@ -647,8 +650,10 @@ async function main(): Promise<void> {
   for (;;) {
     const startedAt = Date.now();
     try {
-      const pool = await sample(opts);
-      if (pool) await steerSpill(opts, spill, pool, startedAt);
+      const pool = await sample(opts, spill.thresholds, startedAt);
+      if (pool && !(await steerSpill(opts, spill, pool, startedAt))) {
+        if (opts.once) process.exitCode = 1;
+      }
     } catch (e) {
       // One failed sample should not end a long-running collector; the next tick
       // re-reads the whole state anyway.
