@@ -532,13 +532,13 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
     // realm event is dispatched on a later macrotask, debounced into the
     // matrix timeline, and coalesced into a live-search refresh; that refresh
     // re-runs the page-2 query, finds it empty, moves the Library back to
-    // page 1, and runs the query again. The searches are held by test waiters
-    // and the debounce by the run loop, so wait for them to settle instead of
-    // polling against a fixed clock. Two hops are not held by a waiter: the
-    // timeline drain that the debounce starts, and the card list's move back
-    // to the last page (`followLastPage`). Here both continue only on
-    // microtasks, which settle before `settled()` checks again. If a later
-    // change makes either wait on a macrotask, the warning below fires.
+    // page 1, and runs the query again. The timeline drain and the searches
+    // are held by test waiters and the debounce by the run loop, so wait for
+    // them to settle instead of polling against a fixed clock. One hop is not
+    // held by a waiter: the card list's move back to the last page
+    // (`followLastPage`). Here it continues only on microtasks, which settle
+    // before `settled()` checks again. If a later change makes it wait on a
+    // macrotask, the warning below fires.
     let deletedAt = Date.now();
     await settled();
     let settledAfterMs = Date.now() - deletedAt;
