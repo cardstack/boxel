@@ -64,7 +64,8 @@ user's Matrix id to the reader, except as §1.2 and §1.4 allow.
 
 A realm's URL MAY contain the Matrix username of the user who owns it. This
 covers the realm-server path `/<username>/<realm>/` and the published-space
-host `<username>.<domain>`.
+host `<username>.<domain>`, where each dot in the username is written as a
+hyphen so the host stays one label under the domain.
 
 Boxel MUST NOT offer a public or queryable list of realm URLs, except as this
 section allows. An endpoint MAY list the realms a user holds a grant on that

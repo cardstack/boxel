@@ -729,6 +729,7 @@ export class MockClient implements ExtendedClient {
       case BOT_TRIGGER_EVENT_TYPE:
       case 'm.room.create':
       case 'm.room.message':
+      case 'm.reaction':
       case 'm.room.name':
       case 'm.room.member':
       case APP_BOXEL_LLM_MODE:

@@ -33,6 +33,7 @@ import {
 } from '@cardstack/host/lib/client-telemetry-labels';
 
 import type MatrixService from './matrix-service';
+import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
 import type { SessionParticipant } from './session';
@@ -1365,6 +1366,84 @@ function isMatrixRequest(req: Request): boolean {
   }
 }
 
+// Only the realm server reads the correlation id back out, and a browser
+// sends a custom header to another origin only after a CORS preflight that
+// origin must allow. Synapse does not, and neither does a third-party host a
+// card or a script fetches from (an image on Wikimedia, a raw GitHub file):
+// stamping those makes the preflight fail and the request never leaves. So
+// the id goes only on requests to the realm server and to realms it knows.
+function readsCorrelationId(owner: Owner, req: Request): boolean {
+  if (isMatrixRequest(req)) {
+    return false;
+  }
+  let url: URL;
+  try {
+    url = new URL(req.url);
+  } catch {
+    return false;
+  }
+  if (typeof window !== 'undefined' && url.origin === window.location.origin) {
+    return true;
+  }
+  let network = owner.lookup('service:network') as NetworkService | undefined;
+  // a virtual URL as the request carries it: the real URL it maps to
+  let real = (virtual: URL) => {
+    try {
+      return network?.virtualNetwork.mapURL(virtual, 'virtual-to-real');
+    } catch {
+      return undefined;
+    }
+  };
+  let servesThis = (candidate: URL | undefined) =>
+    Boolean(
+      candidate &&
+      (candidate.origin === url.origin ||
+        real(candidate)?.origin === url.origin),
+    );
+  let realmServer = owner.lookup('service:realm-server') as
+    | RealmServerService
+    | undefined;
+  if (servesThis(realmServer?.url)) {
+    return true;
+  }
+  // the realm server the base realm lives on is the host's own
+  if (
+    URL.canParse(config.resolvedBaseRealmURL) &&
+    new URL(config.resolvedBaseRealmURL).origin === url.origin
+  ) {
+    return true;
+  }
+  let realm = owner.lookup('service:realm') as
+    | {
+        realmOf(input: URL): unknown;
+        realms: ReadonlyMap<string, unknown>;
+      }
+    | undefined;
+  try {
+    if (realm?.realmOf(url)) {
+      return true;
+    }
+  } catch {
+    // not a realm URL
+  }
+  // a realm server's own endpoints (its search, its auth) sit at the root
+  // of an origin that serves realms the host knows
+  for (let key of realm?.realms.keys() ?? []) {
+    let realmURL: URL | undefined;
+    try {
+      realmURL = URL.canParse(key)
+        ? new URL(key)
+        : network?.virtualNetwork.toURL(key);
+    } catch {
+      continue;
+    }
+    if (servesThis(realmURL)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function createServerRequestTimingMiddleware(
   owner: Owner,
 ): FetcherMiddlewareHandler {
@@ -1392,12 +1471,9 @@ export function createServerRequestTimingMiddleware(
     // the server is the same one recorded on the event below.
     let attempt = (requestAttemptCounts.get(req) ?? 0) + 1;
     requestAttemptCounts.set(req, attempt);
-    // Only the realm server reads this id back out. Synapse ignores it, and its
-    // CORS allow-list is a fixed set that a custom header is not in — so
-    // stamping a Matrix request makes the browser reject the preflight and the
-    // request never leaves.
+    // Only for hosts that read it back; see readsCorrelationId.
     if (
-      !isMatrixRequest(req) &&
+      readsCorrelationId(owner, req) &&
       !req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER)
     ) {
       try {

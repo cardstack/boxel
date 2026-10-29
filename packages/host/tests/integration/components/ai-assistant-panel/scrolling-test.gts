@@ -146,26 +146,32 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
 
   async function scrollAiAssistantToBottom() {
     let conversationElement = document.querySelector(
-      '[data-test-ai-assistant-conversation]',
+      '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
     )!;
     conversationElement.scrollTop =
       conversationElement.scrollHeight - conversationElement.clientHeight;
-    await triggerEvent('[data-test-ai-assistant-conversation]', 'scroll');
+    await triggerEvent(
+      '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
+      'scroll',
+    );
     await new Promise((r) => setTimeout(r, 500)); // wait for the 500ms throttle on the scroll event handler
   }
 
   async function scrollAiAssistantToTop() {
     let conversationElement = document.querySelector(
-      '[data-test-ai-assistant-conversation]',
+      '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
     )!;
     conversationElement.scrollTop = 0;
-    await triggerEvent('[data-test-ai-assistant-conversation]', 'scroll');
+    await triggerEvent(
+      '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
+      'scroll',
+    );
     await new Promise((r) => setTimeout(r, 500)); // wait for the 500ms throttle on the scroll event handler
   }
 
   function isAiAssistantScrolledToBottom() {
     let conversationElement = document.querySelector(
-      '[data-test-ai-assistant-conversation]',
+      '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
     )!;
 
     return (
@@ -180,7 +186,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
   }
   function isAiAssistantScrolledToTop() {
     let conversationElement = document.querySelector(
-      '[data-test-ai-assistant-conversation]',
+      '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
     )!;
 
     return conversationElement.scrollTop < 20;
@@ -212,7 +218,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
         return;
       }
       let conversationElement = document.querySelector(
-        '[data-test-ai-assistant-conversation]',
+        '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
       );
       if (conversationElement) {
         let { scrollHeight, clientHeight } = conversationElement;
@@ -252,7 +258,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
         )}`
       : '';
     let conversationElement = document.querySelector(
-      '[data-test-ai-assistant-conversation]',
+      '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
     );
     if (!conversationElement) {
       return `no [data-test-ai-assistant-conversation] element${history}`;
@@ -340,6 +346,8 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       isStreamingFinished: true,
     });
     await waitFor('[data-test-message-idx="40"]');
+    // the chip shows once the reader has been left behind for a moment
+    await waitFor('[data-test-unread-messages-button]');
 
     assert
       .dom('[data-test-unread-messages-button]')
@@ -368,7 +376,8 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       isStreamingFinished: true,
     });
     await waitFor('[data-test-message-idx="40"]');
-    await click('[data-test-unread-messages-button]');
+    await waitFor('[data-test-unread-messages-button] button');
+    await click('[data-test-unread-messages-button] button');
     // poll until the animated scroll completes and settles at the bottom
     await assertScrolledToBottom(assert);
   });
@@ -438,7 +447,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     await waitFor('[data-test-message-idx="1"]');
 
     let conversationElement = document.querySelector(
-      '[data-test-ai-assistant-conversation]',
+      '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
     )!;
     // A conversation whose messages all fit reports `scrollHeight` clamped to
     // the padding box, so its distance from the bottom reads as zero rather
@@ -488,10 +497,28 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     await settled();
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-message-idx="39"]');
-    await assertScrolledToTop(
-      assert,
-      'AI assistant is scrolled to top (where the first unread message is)',
-    );
+    // The room opens on the start of its unread history, not at the end.
+    // The "New messages" chip shows a moment later and takes height from
+    // the transcript, which can move the view by about one message.
+    let conversation = () =>
+      document.querySelector(
+        '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
+      ) as HTMLElement | null;
+    try {
+      await waitUntil(
+        () => {
+          let el = conversation();
+          return Boolean(el && el.scrollTop < 120);
+        },
+        { timeout: 2000 },
+      );
+      assert.ok(true, 'the room opens on the start of its unread history');
+    } catch {
+      assert.ok(
+        false,
+        `the room opens on the start of its unread history — ${describeScrollPosition()}`,
+      );
+    }
   });
 
   test('it scrolls to last message when opening a room with no unread messages', async function (assert) {
