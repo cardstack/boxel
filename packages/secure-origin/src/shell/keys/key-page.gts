@@ -43,6 +43,7 @@ import {
 } from './context.ts';
 import type {
   KeyShare,
+  KeyValue,
   ListedKey,
   SharedWorkspace,
   UserKey,
@@ -50,6 +51,8 @@ import type {
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
 import KeyTile from './key-tile.gts';
+import { ServiceAccountEntry } from './service-account-entry.ts';
+import ServiceAccountFields from './service-account-fields.gts';
 import KeyUse from './key-use.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
@@ -147,10 +150,25 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                               all of them use the same key.
                             {{/if}}
                           </p>
-                          <KeyFields
-                            @value={{this.form.value}}
-                            @onValue={{this.setValue}}
-                          />
+                          {{#if (this.isServiceAccount key)}}
+                            <p
+                              class='confirm'
+                              data-test-service-account-replace-note
+                            >A replacement sets the key file, the scopes and who
+                              it acts as all anew. Enter the scopes again, and
+                              leave
+                              <strong>Act as</strong>
+                              empty only if it should act as the service account
+                              itself.</p>
+                            <ServiceAccountFields
+                              @entry={{this.serviceAccount}}
+                            />
+                          {{else}}
+                            <KeyFields
+                              @value={{this.form.value}}
+                              @onValue={{this.setValue}}
+                            />
+                          {{/if}}
                           <div class='panel-actions'>
                             <Button
                               type='button'
@@ -444,8 +462,28 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     return action.name === 'deleting' ? action.shares : undefined;
   }
 
+  // A service account is replaced with a whole new key file, subject and
+  // scopes; any other key with a new value.
+  private serviceAccount = new ServiceAccountEntry();
+
+  private isServiceAccount = (key: UserKey) =>
+    key.kind === 'google-service-account';
+
+  private get replacement(): KeyValue | undefined {
+    let action = this.state.action;
+    if (action.name !== 'replacing') {
+      return undefined;
+    }
+    if (this.isServiceAccount(action.key)) {
+      return this.serviceAccount.value;
+    }
+    return this.form.value
+      ? { kind: 'static', value: this.form.value }
+      : undefined;
+  }
+
   private get replaceDisabled() {
-    return this.form.saving || !this.form.value;
+    return this.form.saving || !this.replacement;
   }
 
   private add = () => navigation.assign(pageURL('keys/add'));
@@ -470,6 +508,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
 
   private cancel = () => {
     this.form.value = '';
+    this.serviceAccount.clear();
     this.state.action = { name: 'none' };
   };
 
@@ -478,6 +517,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   // general terms instead, and the replace is still offered.
   private startReplace = async (key: UserKey) => {
     this.form.value = '';
+    this.serviceAccount.clear();
     this.state.action = { name: 'replacing', key, shares: undefined };
     let shares: KeyShare[] | undefined;
     try {
@@ -549,19 +589,21 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   private replace = async (event: Event) => {
     event.preventDefault();
     let action = this.state.action;
-    if (this.replaceDisabled || action.name !== 'replacing') {
+    let entered = this.replacement;
+    if (this.replaceDisabled || action.name !== 'replacing' || !entered) {
       return;
     }
     this.form.saving = true;
     let replaced = await this.guard(async () => {
       await replaceKey(this.args.api.config, {
         keyId: action.key.id,
-        value: this.form.value,
+        entered,
       });
     });
     this.form.saving = false;
     if (replaced) {
       this.form.value = '';
+      this.serviceAccount.clear();
       this.state.action = { name: 'none' };
       await this.load();
     }

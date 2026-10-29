@@ -7,6 +7,7 @@ import {
   rri,
   trimExecutableExtension,
   type DBAdapter,
+  type Expression,
   type LocalPath,
   type Querier,
 } from '@cardstack/runtime-common';
@@ -33,13 +34,23 @@ import {
   openGrantForSending,
   operationGrantDestination,
   type UserKeyGrant,
+  type UserKeyGrantState,
 } from './user-key-grants.ts';
-import { MINTING_KINDS, UserKeyError } from './user-keys.ts';
+import {
+  MINTING_KINDS,
+  UserKeyError,
+  type UserKeyKind,
+  type UserKeyState,
+} from './user-keys.ts';
 import {
   oauthAccessToken,
   OAuthTokenError,
   type OAuthTokenFailure,
 } from './oauth.ts';
+import {
+  serviceAccountAccessToken,
+  ServiceAccountTokenError,
+} from './google-service-account-keys.ts';
 import {
   claimProbe,
   credentialRejected,
@@ -952,6 +963,46 @@ function refusal(
   });
 }
 
+// Where a slot's binding is, as conditions on `key_bindings b`: in this realm,
+// for this operation of this type, on this card for an operation approved per
+// instance (`instance`, without `.json`) or on none otherwise, for this slot;
+// approved by the caller with one of their own keys for a `userKey` slot, and
+// to a share for an `apiKey` slot. A call fills a slot from this binding and no
+// other, so whatever names the key a slot is sent with reads it here too.
+function slotBindingConditions({
+  realmURL,
+  type,
+  operation,
+  instance,
+  caller,
+  slot,
+}: {
+  realmURL: string;
+  type: { module: string; name: string };
+  operation: string;
+  instance: string | null;
+  caller: string;
+  slot: Pick<CallApiSlot, 'key' | 'name'>;
+}): Expression {
+  return [
+    `b.realm_url = `,
+    param(realmURL),
+    ` AND b.definition_url = `,
+    param(type.module),
+    ` AND b.export_name = `,
+    param(type.name),
+    ` AND b.operation_name = `,
+    param(operation),
+    ` AND COALESCE(b.instance_url, '') = `,
+    param(instance ?? ''),
+    ` AND b.slot = `,
+    param(slotToken(slot)),
+    ...(slot.key === 'userKey'
+      ? [` AND b.key_id IS NOT NULL AND b.approved_by = `, param(caller)]
+      : [` AND b.share_id IS NOT NULL`]),
+  ];
+}
+
 // What names the bindings that could fill an operation's slots: the realm,
 // the type the operation was resolved on, the operation, the card (for an
 // operation approved per instance), the caller whose own `{{userKey}}`
@@ -978,7 +1029,7 @@ export function bindingInstance(
 // (or its share's key): a grant that is gone or belongs to another key fills
 // nothing, so it reads as none. `bound_grant_id` is the grant the binding
 // names, whatever became of it.
-export interface SlotBinding {
+export interface CheckedSlotBinding {
   id: string;
   slot: string;
   key_id: string | null;
@@ -1003,18 +1054,18 @@ export interface SlotBinding {
 export type SlotCheck =
   | {
       slot: CallApiSlot;
-      binding: SlotBinding;
+      binding: CheckedSlotBinding;
       refused?: undefined;
       probe: boolean;
     }
   | {
       slot: CallApiSlot;
-      binding: SlotBinding | undefined;
+      binding: CheckedSlotBinding | undefined;
       refused: 'binding-not-approved';
     }
   | {
       slot: CallApiSlot;
-      binding: SlotBinding;
+      binding: CheckedSlotBinding;
       refused:
         | 'share-suspended'
         | 'binding-needs-reapproval'
@@ -1041,64 +1092,59 @@ export async function checkSlots(
   { probeIntervalMs }: { probeIntervalMs: number },
 ): Promise<SlotCheck[]> {
   let { request } = lookup;
-  let rows = (await query(dbAdapter, [
-    `SELECT b.id, b.slot, b.key_id, b.share_id, g.id AS grant_id, b.grant_id AS bound_grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state,
-            s.state AS share_state, s.key_id AS share_key_id, s.owner AS share_owner,
-            g.state AS grant_state, g.destination AS grant_destination,
-            `,
-    ...probeDue('g.last_probe_at', probeIntervalMs),
-    ` AS probe_due
-       FROM key_bindings b
-       LEFT JOIN key_shares s ON s.id = b.share_id
-       LEFT JOIN user_key_grants g ON g.id = b.grant_id AND g.key_id = COALESCE(b.key_id, s.key_id)
-      WHERE b.realm_url = `,
-    param(lookup.realmURL),
-    ` AND b.definition_url = `,
-    param(lookup.type.module),
-    ` AND b.export_name = `,
-    param(lookup.type.name),
-    ` AND b.operation_name = `,
-    param(lookup.operation),
-    ` AND COALESCE(b.instance_url, '') = `,
-    param(lookup.instance ?? ''),
-    ` AND (b.share_id IS NOT NULL OR (b.key_id IS NOT NULL AND b.approved_by = `,
-    param(lookup.caller),
-    `))`,
-  ])) as unknown as SlotBinding[];
-  return request.slots.map((slot): SlotCheck => {
-    let token = slotToken(slot);
-    let binding = rows.find(
-      (row) =>
-        row.slot === token &&
-        (slot.key === 'userKey' ? row.key_id !== null : row.share_id !== null),
-    );
-    if (!binding) {
-      return { slot, binding, refused: 'binding-not-approved' };
-    }
-    if (
-      binding.share_id &&
-      (binding.share_state !== 'active' || binding.state === 'suspended')
-    ) {
-      return { slot, binding, refused: 'share-suspended' };
-    }
-    if (
-      binding.state === 'needs-reapproval' ||
-      binding.fingerprint !== fingerprintOf(bindingSnapshot(request, slot))
-    ) {
-      return { slot, binding, refused: 'binding-needs-reapproval' };
-    }
-    if (lookup.mode === 'interactive' && !binding.interactive) {
-      return { slot, binding, refused: 'interactive-use-not-approved' };
-    }
-    if (!binding.grant_id) {
-      return { slot, binding, refused: 'binding-not-approved' };
-    }
-    let probe = binding.grant_state === 'rejected';
-    if (probe && !binding.probe_due) {
-      return { slot, binding, refused: 'credential-rejected' };
-    }
-    return { slot, binding, probe };
-  });
+  let checks: SlotCheck[] = [];
+  for (let slot of request.slots) {
+    let [binding] = (await query(dbAdapter, [
+      `SELECT b.id, b.slot, b.key_id, b.share_id, g.id AS grant_id, b.grant_id AS bound_grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state,
+              s.state AS share_state, s.key_id AS share_key_id, s.owner AS share_owner,
+              g.state AS grant_state, g.destination AS grant_destination,
+              `,
+      ...probeDue('g.last_probe_at', probeIntervalMs),
+      ` AS probe_due
+         FROM key_bindings b
+         LEFT JOIN key_shares s ON s.id = b.share_id
+         LEFT JOIN user_key_grants g ON g.id = b.grant_id AND g.key_id = COALESCE(b.key_id, s.key_id)
+        WHERE `,
+      ...slotBindingConditions({ ...lookup, slot }),
+    ])) as unknown as (CheckedSlotBinding | undefined)[];
+    checks.push(checkSlot(lookup, slot, binding));
+  }
+  return checks;
+}
+
+// The first check `slot` fails against the binding that would fill it, or
+// that it would be filled.
+function checkSlot(
+  lookup: BindingLookup,
+  slot: CallApiSlot,
+  binding: CheckedSlotBinding | undefined,
+): SlotCheck {
+  if (!binding) {
+    return { slot, binding, refused: 'binding-not-approved' };
+  }
+  if (
+    binding.share_id &&
+    (binding.share_state !== 'active' || binding.state === 'suspended')
+  ) {
+    return { slot, binding, refused: 'share-suspended' };
+  }
+  if (
+    binding.state === 'needs-reapproval' ||
+    binding.fingerprint !== fingerprintOf(bindingSnapshot(lookup.request, slot))
+  ) {
+    return { slot, binding, refused: 'binding-needs-reapproval' };
+  }
+  if (lookup.mode === 'interactive' && !binding.interactive) {
+    return { slot, binding, refused: 'interactive-use-not-approved' };
+  }
+  if (!binding.grant_id) {
+    return { slot, binding, refused: 'binding-not-approved' };
+  }
+  let probe = binding.grant_state === 'rejected';
+  if (probe && !binding.probe_due) {
+    return { slot, binding, refused: 'credential-rejected' };
+  }
+  return { slot, binding, probe };
 }
 
 // The binding for each of the request's slots, checked (`checkSlots`). A
@@ -1112,7 +1158,9 @@ async function checkedBindings(
   dbAdapter: DBAdapter,
   lookup: CallApiSlotLookup,
   rejection: { probeIntervalMs: number; claimProbe: boolean },
-): Promise<{ slot: CallApiSlot; binding: SlotBinding; probe: boolean }[]> {
+): Promise<
+  { slot: CallApiSlot; binding: CheckedSlotBinding; probe: boolean }[]
+> {
   let { request } = lookup;
   let refuseNotApproved = () =>
     new OperationFailure(
@@ -1122,8 +1170,11 @@ async function checkedBindings(
   if (instance === undefined) {
     throw refuseNotApproved();
   }
-  let checked: { slot: CallApiSlot; binding: SlotBinding; probe: boolean }[] =
-    [];
+  let checked: {
+    slot: CallApiSlot;
+    binding: CheckedSlotBinding;
+    probe: boolean;
+  }[] = [];
   // The rejected grants this call would probe, claimed only once every slot
   // has passed its other checks, so a call refused for another reason uses up
   // no grant's probe.
@@ -1200,6 +1251,105 @@ async function checkedBindings(
     }
   }
   return checked;
+}
+
+// What fills one of an operation's slots for `caller`, read from the binding a
+// call would fill it from (`slotBindingConditions`), without checking it or
+// opening anything: the key, for a `userKey` slot, which is always one of the
+// caller's own; for an `apiKey` slot, the share and its owner, and the key
+// only when the caller owns it, with its kind and state (an OAuth connection
+// its service refused to refresh is `rejected`). `grantState` is the state of
+// the grant the key is sent under, so a rejected key can be told apart.
+// `bound` is null when nothing is bound to the slot.
+export interface SlotBinding {
+  slot: string;
+  key: CallApiSlot['key'];
+  bound: {
+    state: KeyBindingState;
+    grantState: UserKeyGrantState | null;
+    key: {
+      id: string;
+      name: string;
+      kind: UserKeyKind;
+      state: UserKeyState;
+    } | null;
+    share: {
+      id: string;
+      label: string;
+      state: 'active' | 'suspended';
+      owner: string;
+    } | null;
+  } | null;
+}
+
+export async function slotBindings(
+  dbAdapter: DBAdapter,
+  {
+    realmURL,
+    type,
+    operation,
+    instance,
+    caller,
+    slots,
+  }: {
+    realmURL: string;
+    type: { module: string; name: string };
+    operation: string;
+    // The card, without `.json`, for an operation approved per instance.
+    instance: string | null;
+    caller: string;
+    slots: Pick<CallApiSlot, 'key' | 'name'>[];
+  },
+): Promise<SlotBinding[]> {
+  let found: SlotBinding[] = [];
+  for (let slot of slots) {
+    let [row] = await query(dbAdapter, [
+      `SELECT b.state, g.state AS grant_state,
+              s.id AS share_id, s.label AS share_label, s.state AS share_state, s.owner AS share_owner,
+              k.id AS key_id, k.name AS key_name, k.kind AS key_kind, k.state AS key_state
+         FROM key_bindings b
+         LEFT JOIN key_shares s ON s.id = b.share_id
+         LEFT JOIN user_key_grants g ON g.id = b.grant_id
+         LEFT JOIN user_keys k ON k.id = COALESCE(b.key_id, s.key_id) AND k.owner = `,
+      param(caller),
+      ` WHERE `,
+      ...slotBindingConditions({
+        realmURL,
+        type,
+        operation,
+        instance,
+        caller,
+        slot,
+      }),
+    ]);
+    found.push({
+      slot: slotToken(slot),
+      key: slot.key,
+      bound: row
+        ? {
+            state: row.state as KeyBindingState,
+            grantState: (row.grant_state as UserKeyGrantState | null) ?? null,
+            key: row.key_id
+              ? {
+                  id: row.key_id as string,
+                  name: row.key_name as string,
+                  kind: row.key_kind as UserKeyKind,
+                  state: row.key_state as UserKeyState,
+                }
+              : null,
+            share: row.share_id
+              ? {
+                  id: row.share_id as string,
+                  label: row.share_label as string,
+                  state: row.share_state as 'active' | 'suspended',
+                  owner: row.share_owner as string,
+                }
+              : null,
+          }
+        : null,
+    });
+  }
+  return found;
 }
 
 // Moves a binding to `needs-reapproval`, recording the notice its owner gets
@@ -1323,26 +1473,38 @@ const MINTING_REFUSALS: Record<OAuthTokenFailure, string> = {
     'its token endpoint kept failing, so asking again later may succeed',
 };
 
+const SERVICE_ACCOUNT_REJECTED =
+  'Google no longer accepts its service account key, so its owner replaces the key';
+
 // The access token a minting key sends now, or the refusal for why it has
 // none: `credential-rejected`, with the reason.
 async function mintedToken(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
-  opened: { keyId: string; destination: string },
+  opened: { keyId: string; kind: string; destination: string },
   slot: CallApiSlot,
   operation: string,
 ): Promise<string> {
   try {
-    return await oauthAccessToken(dbAdapter, keyring, opened.keyId);
+    return opened.kind === 'google-service-account'
+      ? await serviceAccountAccessToken(dbAdapter, keyring, opened.keyId)
+      : await oauthAccessToken(dbAdapter, keyring, opened.keyId);
   } catch (error) {
-    if (!(error instanceof OAuthTokenError)) {
+    if (
+      !(error instanceof OAuthTokenError) &&
+      !(error instanceof ServiceAccountTokenError)
+    ) {
       throw error;
     }
+    let why =
+      error instanceof ServiceAccountTokenError && error.reason === 'rejected'
+        ? SERVICE_ACCOUNT_REJECTED
+        : MINTING_REFUSALS[error.reason];
     throw new OperationFailure({
       status: 424,
       code: 'credential-rejected',
       title: 'Credential rejected',
-      detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${MINTING_REFUSALS[error.reason]}`,
+      detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${why}`,
       meta: {
         slot: { name: slot.name, key: slot.key },
         destination: opened.destination,

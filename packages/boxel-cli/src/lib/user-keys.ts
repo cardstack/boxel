@@ -35,7 +35,9 @@ export interface KeyShare {
   id: string;
   realm: string;
   label: string;
-  owner: string;
+  // Null in a realm's listing once no permission row in the realm names the
+  // owner; the owner's own shares always carry their id.
+  owner: string | null;
   // The key the share holds: given only to the share's owner, and null once
   // the key is deleted.
   keyId?: string | null;
@@ -128,11 +130,33 @@ export async function findUserKey(
   return key;
 }
 
+// A key's value as entered. A Google service account's value is its JSON key
+// file, with the user to act as (optional) and the scopes its tokens ask for;
+// any other key's is the value alone.
+export interface EnteredValue {
+  value: string;
+  subject?: string;
+  scopes?: string[];
+}
+
+function valueAttributes({ value, subject, scopes }: EnteredValue) {
+  return {
+    value,
+    ...(subject ? { subject } : {}),
+    ...(scopes ? { scopes } : {}),
+  };
+}
+
 // Adds a key. With no ticket given, mints one for the add with `token`.
 export async function addUserKey(
   realmServerUrl: string,
   token: string,
-  { name, value, ticket }: { name: string; value: string; ticket?: string },
+  {
+    name,
+    kind,
+    ticket,
+    ...entered
+  }: { name: string; kind?: string; ticket?: string } & EnteredValue,
   fetchFn: FetchFn = fetch,
 ): Promise<UserKeyMetadata> {
   ticket ??= await mintKeyWriteTicket(
@@ -146,7 +170,14 @@ export async function addUserKey(
     token,
     fetchFn,
     body: {
-      data: { type: 'user-key', attributes: { name, value } },
+      data: {
+        type: 'user-key',
+        attributes: {
+          name,
+          ...(kind ? { kind } : {}),
+          ...valueAttributes(entered),
+        },
+      },
       meta: { ticket },
     },
   });
@@ -156,7 +187,11 @@ export async function addUserKey(
 export async function replaceUserKey(
   realmServerUrl: string,
   token: string,
-  { keyId, value, ticket }: { keyId: string; value: string; ticket?: string },
+  {
+    keyId,
+    ticket,
+    ...entered
+  }: { keyId: string; ticket?: string } & EnteredValue,
   fetchFn: FetchFn = fetch,
 ): Promise<UserKeyMetadata> {
   ticket ??= await mintKeyWriteTicket(
@@ -173,7 +208,7 @@ export async function replaceUserKey(
       token,
       fetchFn,
       body: {
-        data: { type: 'user-key', attributes: { value } },
+        data: { type: 'user-key', attributes: valueAttributes(entered) },
         meta: { ticket },
       },
     },

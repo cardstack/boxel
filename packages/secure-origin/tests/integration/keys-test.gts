@@ -3,6 +3,7 @@ import {
   fillIn,
   render,
   settled,
+  triggerEvent,
   triggerKeyEvent,
   waitFor,
   waitUntil,
@@ -17,6 +18,7 @@ import KeyPage from '../../src/shell/keys/key-page.gts';
 import { openedFor } from '../../src/shell/keys/opened-for.ts';
 import SharePage from '../../src/shell/keys/share-key-page.gts';
 import SwapKeyPage from '../../src/shell/keys/swap-key-page.gts';
+import ReplaceKeyPage from '../../src/shell/keys/replace-key-page.gts';
 import {
   setupTelemetrySecretsCheck,
   stringsIn,
@@ -125,6 +127,41 @@ function context(attributes: Record<string, unknown>) {
 }
 
 const WORKSPACE = { url: REALM, name: 'Team Workspace', directWriter: true };
+
+// A Google service account's JSON key file, as Google issues it. The page
+// only reads its type and email; the key itself is a placeholder.
+const SERVICE_ACCOUNT_FILE = JSON.stringify(
+  {
+    type: 'service_account',
+    project_id: 'boxel-test',
+    private_key_id: 'kid-1',
+    private_key:
+      '-----BEGIN PRIVATE KEY-----\nplaceholder\n-----END PRIVATE KEY-----\n',
+    client_email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+  },
+  null,
+  2,
+);
+
+// Chooses a key file and waits until the page has read this one. The read is
+// a browser promise `settled()` doesn't track, so the wait is for what the
+// page says of this file by name: the service account it holds, or why it
+// can't be used.
+async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
+  await triggerEvent('[data-test-service-account-file]', 'change', {
+    files: [new File([contents], name, { type: 'application/json' })],
+  });
+  await waitUntil(
+    () =>
+      document
+        .querySelector('[data-test-service-account-email]')
+        ?.textContent?.includes(name) ||
+      document
+        .querySelector('[data-test-service-account-problem]')
+        ?.getAttribute('data-test-service-account-problem-file') === name,
+  );
+  await settled();
+}
 
 module('Integration | key pages', function (hooks) {
   setupRenderingTest(hooks);
@@ -1175,6 +1212,316 @@ module('Integration | key pages', function (hooks) {
     });
   });
 
+  module('entering a Google service account', function () {
+    test('adds one from its key file, with the user to act as and its scopes', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                name: 'Sheets',
+                kind: 'google-service-account',
+              },
+            },
+          }),
+      });
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      assert
+        .dom('[data-test-radio-choice="static"] input')
+        .isChecked('a key pasted in as it is is the default');
+      await fillIn('[data-test-key-value]', 'typed before switching');
+      await click('[data-test-radio-choice="google-service-account"] input');
+      assert
+        .dom('[data-test-key-value]')
+        .doesNotExist('a service account has no value to paste');
+      await fillIn('[data-test-key-name]', 'Sheets');
+      assert.dom('[data-test-enter-key-save]').isDisabled('no key file yet');
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-email]')
+        .includesText(
+          'sheets-bot@boxel-test.iam.gserviceaccount.com',
+          'names the service account the file holds',
+        );
+      assert
+        .dom('[data-test-service-account-email]')
+        .doesNotIncludeText('placeholder', 'shows nothing else of the file');
+      assert.dom('[data-test-enter-key-save]').isDisabled('no scopes yet');
+      await fillIn(
+        '[data-test-service-account-subject]',
+        ' owner@example.com ',
+      );
+      await fillIn(
+        '[data-test-service-account-scopes]',
+        'https://www.googleapis.com/auth/spreadsheets  https://www.googleapis.com/auth/drive.readonly',
+      );
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(ticketRequests(), [{ action: 'add' }]);
+      assert.deepEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_user-keys')!
+          .body,
+        {
+          data: {
+            type: 'user-key',
+            attributes: {
+              name: 'Sheets',
+              kind: 'google-service-account',
+              value: SERVICE_ACCOUNT_FILE,
+              subject: 'owner@example.com',
+              scopes: [
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive.readonly',
+              ],
+            },
+          },
+          meta: { ticket: 'ticket-1' },
+        },
+        'the file is sent as chosen, and nothing typed for the other kind goes with it',
+      );
+    });
+
+    test('acting as the service account itself sends no subject', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                kind: 'google-service-account',
+              },
+            },
+          }),
+      });
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await click('[data-test-radio-choice="google-service-account"] input');
+      await fillIn('[data-test-key-name]', 'Sheets');
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      await fillIn('[data-test-service-account-scopes]', 'openid');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      let attributes = (
+        requests.find((r) => r.method === 'POST' && r.path === '_user-keys')!
+          .body as { data: { attributes: Record<string, unknown> } }
+      ).data.attributes;
+      assert.false('subject' in attributes);
+      assert.deepEqual(attributes.scopes, ['openid']);
+    });
+
+    test('a file that isn’t a service account key says so and can’t be saved', async function (assert) {
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await click('[data-test-radio-choice="google-service-account"] input');
+      await fillIn('[data-test-key-name]', 'Sheets');
+      await fillIn('[data-test-service-account-scopes]', 'openid');
+      await chooseKeyFile('{"type": "authorized_user"}', 'credentials.json');
+      assert
+        .dom('[data-test-service-account-problem]')
+        .hasText(
+          'This isn’t a service account key file. Choose the JSON key file Google gave you for the service account.',
+        );
+      assert.dom('[data-test-enter-key-save]').isDisabled();
+      await chooseKeyFile('not json at all', 'notes.txt');
+      assert
+        .dom('[data-test-service-account-problem]')
+        .includesText('This isn’t a JSON key file.');
+      assert.dom('[data-test-enter-key-save]').isDisabled();
+      assert.deepEqual(
+        requests.filter((r) => r.method === 'POST'),
+        [],
+        'nothing is sent',
+      );
+    });
+
+    test('a key file pasted as a key is caught, and taken as a service account in one click', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                kind: 'google-service-account',
+              },
+            },
+          }),
+      });
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await fillIn('[data-test-key-name]', 'Sheets');
+      await fillIn('[data-test-key-value]', SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-pasted-key-file]')
+        .includesText('This is a Google service account’s JSON key file.');
+      assert
+        .dom('[data-test-enter-key-save]')
+        .isDisabled('a key file is never saved as a key sent as it is');
+      await click('[data-test-use-service-account]');
+      assert
+        .dom('[data-test-radio-choice="google-service-account"] input')
+        .isChecked();
+      assert
+        .dom('[data-test-service-account-email]')
+        .includesText('sheets-bot@boxel-test.iam.gserviceaccount.com');
+      assert.dom('[data-test-pasted-key-file]').doesNotExist();
+      await fillIn('[data-test-service-account-scopes]', 'openid');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      let attributes = (
+        requests.find((r) => r.method === 'POST' && r.path === '_user-keys')!
+          .body as { data: { attributes: Record<string, unknown> } }
+      ).data.attributes;
+      assert.strictEqual(attributes.kind, 'google-service-account');
+      assert.deepEqual(
+        JSON.parse(attributes.value as string),
+        JSON.parse(SERVICE_ACCOUNT_FILE),
+        'the pasted file is sent, its line breaks dropped by the input',
+      );
+    });
+
+    test('opened for an operation that sends to a Google API, says when a service account fits, without choosing one', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          context({
+            realm: WORKSPACE,
+            card: {
+              name: 'Budget',
+              module: `${REALM}budget`,
+              exportName: 'Budget',
+            },
+            operation: {
+              name: 'values',
+              label: 'Read the budget',
+              base: 'callApi',
+              method: 'GET',
+              destination: {
+                href: 'https://sheets.googleapis.com/v4/spreadsheets/',
+                host: 'sheets.googleapis.com',
+                path: '/v4/spreadsheets/',
+                registrableDomain: 'googleapis.com',
+              },
+              slots: [{ name: 'userKey', key: 'userKey' }],
+            },
+          }),
+      });
+      visitShell(`enter-key#card=${encodeURIComponent(CARD)}&operation=values`);
+      await render(EnterKeyPage);
+      await waitFor('[data-test-opened-for]');
+      assert
+        .dom('[data-test-google-destination-hint]')
+        .includesText('This request goes to a Google API.');
+      assert
+        .dom('[data-test-radio-choice="static"] input')
+        .isChecked('the page doesn’t choose for the user');
+      await click('[data-test-radio-choice="google-service-account"] input');
+      assert.dom('[data-test-google-destination-hint]').doesNotExist();
+    });
+
+    test('opened for an operation elsewhere, says nothing about service accounts', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          context({
+            realm: WORKSPACE,
+            operation: {
+              name: 'forecast',
+              label: 'Get the forecast',
+              base: 'callApi',
+              method: 'GET',
+              destination: {
+                href: 'https://api.weather.co.uk/v2/',
+                host: 'api.weather.co.uk',
+                path: '/v2/',
+                registrableDomain: 'weather.co.uk',
+              },
+              slots: [{ name: 'userKey', key: 'userKey' }],
+            },
+          }),
+      });
+      visitShell(
+        `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast`,
+      );
+      await render(EnterKeyPage);
+      await waitFor('[data-test-opened-for]');
+      assert.dom('[data-test-google-destination-hint]').doesNotExist();
+    });
+
+    test('the key page names a service account, and replaces it with a new key file', async function (assert) {
+      let serviceAccount = {
+        ...KEYS[1],
+        id: 'key-sa',
+        name: 'Sheets',
+        kind: 'google-service-account',
+      };
+      serve({
+        'GET _user-keys': () =>
+          json(200, keyResources([KEYS[1], serviceAccount])),
+        'GET _key-shares': () => json(200, { data: [] }),
+        'PATCH _user-keys/key-sa': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-sa',
+              attributes: attributesOf(serviceAccount),
+            },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Sheets"]');
+      assert
+        .dom('[data-test-key-row="Sheets"] [data-test-key-kind]')
+        .hasText('Google service account');
+      assert
+        .dom('[data-test-key-row="Maps"] [data-test-key-kind]')
+        .doesNotExist('a key pasted in as it is goes unlabelled');
+      await click('[data-test-key-row="Sheets"] [data-test-key-replace]');
+      await settled();
+      assert
+        .dom('[data-test-key-replace-form] [data-test-key-value]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText(
+          'sets the key file, the scopes and who it acts as all anew',
+        );
+      assert.dom('[data-test-key-replace-save]').isDisabled();
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      await fillIn(
+        '[data-test-service-account-scopes]',
+        'https://www.googleapis.com/auth/spreadsheets',
+      );
+      await click('[data-test-key-replace-save]');
+      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
+      await settled();
+      assert.deepEqual(ticketRequests(), [
+        { action: 'replace', keyId: 'key-sa' },
+      ]);
+      assert.deepEqual(requests.find((r) => r.method === 'PATCH')!.body, {
+        data: {
+          type: 'user-key',
+          id: 'key-sa',
+          attributes: {
+            value: SERVICE_ACCOUNT_FILE,
+            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+          },
+        },
+        meta: { ticket: 'ticket-1' },
+      });
+    });
+  });
+
   module('sharing a key', function () {
     const OTHER_REALM = 'https://realm-server.test/someone/dashboard/';
 
@@ -1542,6 +1889,548 @@ module('Integration | key pages', function (hooks) {
       await render(SwapKeyPage);
       await waitFor('[data-test-keys-needs-admin]');
       assert.dom('input').doesNotExist();
+    });
+  });
+
+  module('replacing the key an operation sends', function () {
+    const FORECAST = {
+      realm: WORKSPACE,
+      card: {
+        name: 'Weather',
+        module: `${REALM}weather`,
+        exportName: 'Weather',
+      },
+      operation: {
+        name: 'forecast',
+        label: 'Get the forecast',
+        base: 'callApi',
+        method: 'GET',
+        destination: {
+          href: 'https://api.weather.co.uk/v2/',
+          host: 'api.weather.co.uk',
+          path: '/v2/',
+          registrableDomain: 'weather.co.uk',
+        },
+      },
+    };
+
+    function forecastWith(
+      slots: { name: string; key: string; bound: unknown }[],
+      realm: Record<string, unknown> = WORKSPACE,
+    ) {
+      return context({
+        ...FORECAST,
+        realm,
+        operation: { ...FORECAST.operation, slots },
+      });
+    }
+
+    const OPENED = `replace-key#card=${encodeURIComponent(CARD)}&operation=forecast`;
+
+    test('replaces the key the user’s binding sends, which the server names, then closes', async function (assert) {
+      serve({
+        'POST _secure-window/context': ({ body }) => {
+          assert.deepEqual(
+            body.data.attributes,
+            {
+              target: { kind: 'instance', url: CARD },
+              operation: 'forecast',
+              bindings: true,
+            },
+            'asks what is bound to the operation’s slots',
+          );
+          return forecastWith([
+            {
+              name: 'userKey',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+          ]);
+        },
+        'PATCH _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: attributesOf(KEYS[0]),
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-form]');
+      assert
+        .dom('[data-test-opened-for-operation]')
+        .hasText('Get the forecast');
+      assert.dom('[data-test-replace-key-name]').hasText('Weather service');
+      assert
+        .dom('[data-test-replace-key-rejected]')
+        .hasText(
+          'weather.co.uk rejected this key. It will not be used until you replace it.',
+        );
+      assert.dom('[data-test-key-name]').doesNotExist('a replace has no name');
+      assert.dom('[data-test-replace-key-save]').isDisabled();
+      await fillIn('[data-test-key-value]', 'sk-new-forecast');
+      await click('[data-test-replace-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(ticketRequests(), [
+        { action: 'replace', keyId: 'key-1' },
+      ]);
+      assert.deepEqual(requests.find((r) => r.method === 'PATCH')!.body, {
+        data: {
+          type: 'user-key',
+          id: 'key-1',
+          attributes: { value: 'sk-new-forecast' },
+        },
+        meta: { ticket: 'ticket-1' },
+      });
+      assert.dom('[data-test-keys-done-name]').hasText('Weather service');
+      assert.dom('[data-test-keys-done-next]').includesText('Weather');
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('a refused replace says why and keeps the form', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'userKey',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+          ]),
+        'PATCH _user-keys/key-1': () => refusal(404, 'no such key'),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-form]');
+      await fillIn('[data-test-key-value]', 'sk-new-forecast');
+      await click('[data-test-replace-key-save]');
+      await waitFor('[data-test-keys-error]');
+      assert.dom('[data-test-keys-error]').hasText('No such key.');
+      assert.dom('[data-test-replace-key-form]').exists();
+      assert.deepEqual(navigations, []);
+    });
+
+    test('a service account is replaced with a new key file, subject and scopes', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'userKey',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: {
+                  id: 'key-1',
+                  name: 'Sheets',
+                  kind: 'google-service-account',
+                },
+              },
+            },
+          ]),
+        'PATCH _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                kind: 'google-service-account',
+              },
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-form]');
+      assert.dom('[data-test-service-account-replace-note]').exists();
+      assert
+        .dom('[data-test-key-value]')
+        .doesNotExist('a service account has no value to paste');
+      assert.dom('[data-test-replace-key-save]').isDisabled('no key file yet');
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      await fillIn(
+        '[data-test-service-account-scopes]',
+        'https://www.googleapis.com/auth/spreadsheets',
+      );
+      await click('[data-test-replace-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(requests.find((r) => r.method === 'PATCH')!.body, {
+        data: {
+          type: 'user-key',
+          id: 'key-1',
+          attributes: {
+            value: SERVICE_ACCOUNT_FILE,
+            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+          },
+        },
+        meta: { ticket: 'ticket-1' },
+      });
+    });
+
+    test('an OAuth connection is signed in again on the connect page, not replaced', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'userKey',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: {
+                  id: 'key-1',
+                  name: 'Weather sign-in',
+                  kind: 'oauth-connection',
+                },
+              },
+            },
+          ]),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-reconnect]');
+      assert.dom('[data-test-replace-key-name]').hasText('Weather sign-in');
+      assert
+        .dom('[data-test-replace-key-rejected]')
+        .hasText(
+          'weather.co.uk rejected this sign-in. It will not be used until you sign in again.',
+        );
+      assert
+        .dom('[data-test-replace-key-form]')
+        .doesNotExist('a connection takes no value');
+      await click('[data-test-replace-key-reconnect]');
+      assert.deepEqual(navigations, [
+        { how: 'assign', url: '/secure/connect#reconnect=key-1' },
+      ]);
+      assert.deepEqual(ticketRequests(), [], 'nothing is changed here');
+    });
+
+    test('a key the user shares into the workspace is theirs to replace', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'apiKey',
+              key: 'apiKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+                share: {
+                  label: 'Team weather',
+                  suspended: false,
+                  ownedByYou: true,
+                  owner: SESSION.user,
+                },
+              },
+            },
+          ]),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-form]');
+      assert
+        .dom('[data-test-replace-key-slot="apiKey"]')
+        .includesText('as “Team weather”');
+    });
+
+    test('someone else’s shared key: says who can replace it, to a direct writer by name', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'apiKey',
+              key: 'apiKey',
+              bound: {
+                rejected: true,
+                key: null,
+                share: {
+                  label: 'Team weather',
+                  suspended: false,
+                  ownedByYou: false,
+                  owner: '@sharer:example.test',
+                },
+              },
+            },
+          ]),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-not-yours]');
+      assert.dom('[data-test-replace-key-form]').doesNotExist();
+      assert
+        .dom('[data-test-replace-key-not-yours]')
+        .includesText(
+          'weather.co.uk rejected the workspace’s key “Team weather”. Only the person who shared it can replace it.',
+        );
+      assert
+        .dom('[data-test-replace-key-owner]')
+        .hasText('@sharer:example.test');
+    });
+
+    test('someone else’s shared key: a reader is sent to the workspace’s writers', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith(
+            [
+              {
+                name: 'apiKey',
+                key: 'apiKey',
+                bound: {
+                  rejected: true,
+                  key: null,
+                  share: { suspended: false, ownedByYou: false },
+                },
+              },
+            ],
+            { ...WORKSPACE, directWriter: false },
+          ),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-not-yours]');
+      assert.dom('[data-test-replace-key-owner]').doesNotExist();
+      assert
+        .dom('[data-test-replace-key-not-yours]')
+        .includesText(
+          'weather.co.uk rejected the workspace’s key. Only the person who shared it can replace it.',
+          'names no share the reader can’t see',
+        );
+      assert
+        .dom('[data-test-replace-key-not-yours]')
+        .includesText('Ask someone with direct write access to Team Workspace');
+    });
+
+    test('a slot nothing is bound to has nothing to replace', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([{ name: 'userKey', key: 'userKey', bound: null }]),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-unbound]');
+      assert.dom('[data-test-replace-key-form]').doesNotExist();
+      assert
+        .dom('[data-test-replace-key-unbound]')
+        .hasText(
+          'None of your keys is approved for this request yet, so there is nothing to replace.',
+        );
+    });
+
+    test('two slots: each is named, a replaced one says so, and the window closes once both keys are replaced', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'first',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+            {
+              name: 'second',
+              key: 'userKey',
+              bound: { rejected: true, key: { id: 'key-2', name: 'Maps' } },
+            },
+          ]),
+        'PATCH _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: attributesOf(KEYS[0]),
+            },
+          }),
+        'PATCH _user-keys/key-2': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-2',
+              attributes: attributesOf(KEYS[1]),
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-slot="second"]');
+      assert.dom('[data-test-replace-key-slot="first"] h2').hasText('first');
+      await fillIn(
+        '[data-test-replace-key-slot="first"] [data-test-key-value]',
+        'sk-one',
+      );
+      await click(
+        '[data-test-replace-key-slot="first"] [data-test-replace-key-save]',
+      );
+      await waitFor(
+        '[data-test-replace-key-slot="first"] [data-test-replace-key-replaced]',
+      );
+      assert
+        .dom(
+          '[data-test-replace-key-slot="first"] [data-test-replace-key-replaced]',
+        )
+        .hasText('Weather service is replaced.');
+      assert
+        .dom(
+          '[data-test-replace-key-slot="first"] [data-test-replace-key-form]',
+        )
+        .doesNotExist();
+      assert
+        .dom('[data-test-replace-key-slot="second"] h2')
+        .hasText('second', 'the remaining row keeps its heading');
+      await waitUntil(
+        () =>
+          document.activeElement ===
+          document.querySelector(
+            '[data-test-replace-key-slot="second"] [data-test-key-value]',
+          ),
+      );
+      assert.ok(true, 'focus moves to the next key’s value');
+      assert.deepEqual(navigations, [], 'one key is still to replace');
+      await fillIn(
+        '[data-test-replace-key-slot="second"] [data-test-key-value]',
+        'sk-two',
+      );
+      await click(
+        '[data-test-replace-key-slot="second"] [data-test-replace-key-save]',
+      );
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(ticketRequests(), [
+        { action: 'replace', keyId: 'key-1' },
+        { action: 'replace', keyId: 'key-2' },
+      ]);
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('a key the service still accepts, beside one it rejected, isn’t offered for replacing', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'first',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+            {
+              name: 'second',
+              key: 'userKey',
+              bound: { rejected: false, key: { id: 'key-2', name: 'Maps' } },
+            },
+          ]),
+        'PATCH _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: attributesOf(KEYS[0]),
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-accepted]');
+      assert
+        .dom(
+          '[data-test-replace-key-slot="second"] [data-test-replace-key-form]',
+        )
+        .doesNotExist();
+      assert
+        .dom('[data-test-replace-key-accepted]')
+        .hasText(
+          'Maps still works: weather.co.uk accepts it, so there’s nothing to replace.',
+        );
+      await fillIn('[data-test-key-value]', 'sk-one');
+      await click('[data-test-replace-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(
+        ticketRequests(),
+        [{ action: 'replace', keyId: 'key-1' }],
+        'only the rejected key is replaced',
+      );
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('says how many workspaces the key it offers to replace is shared with', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'userKey',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+          ]),
+        'GET _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: attributesOf(KEYS[0]),
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-replace-key-where]')
+          ?.textContent?.replace(/\s+/g, ' ')
+          .includes('3 workspaces use this key'),
+      );
+      assert
+        .dom('[data-test-replace-key-where]')
+        .includesText(
+          'Replacing it switches them all to the new key right away',
+        );
+    });
+
+    test('a key whose shares can’t be listed is still offered, in general terms', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          forecastWith([
+            {
+              name: 'userKey',
+              key: 'userKey',
+              bound: {
+                rejected: true,
+                key: { id: 'key-1', name: 'Weather service' },
+              },
+            },
+          ]),
+        'GET _user-keys/key-1': () => refusal(500, 'boom'),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-replace-key-form]');
+      await settled();
+      assert
+        .dom('[data-test-replace-key-where]')
+        .includesText(
+          'Replacing this key switches every workspace that uses it',
+        );
+    });
+
+    test('a link that names no operation names nothing it can show', async function (assert) {
+      visitShell(`replace-key#card=${encodeURIComponent(CARD)}`);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-keys-load-failed]');
+      assert.false(
+        requests.some((r) => r.path === '_secure-window/context'),
+        'asks the server nothing',
+      );
     });
   });
 });

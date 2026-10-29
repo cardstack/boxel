@@ -1,6 +1,6 @@
 # The UI lens
 
-Runs in any review of a UI change: a card or field template, a component defined in a realm, a component in `packages/host`, `packages/pretui`, `packages/boxel-ui` or `packages/catalog`, or the scoped styles of any of them. It adds two lenses to the review's own: the `boxel-ui-guidelines` UI review procedure, and better-interface's six domains. Their findings are classified, written and reported like any other finding of the review that loads this file (`pr-review`, `review-branch`, or a code review asked to run it); this file covers only what to load and what to look for.
+Runs in any review of a UI change: a card or field template, a component defined in a realm, a component in `packages/host`, `packages/pretui`, `packages/boxel-ui` or `packages/catalog`, or the scoped styles of any of them. It adds two lenses to the review's own: the `boxel-ui-guidelines` UI review procedure, and better-interface's six domains. Their findings are classified, written and reported like any other finding of the review that loads this file (`pr-review`, `review-branch`, `ui-code-review`, or a code review asked to run it); this file covers only what to load and what to look for.
 
 Host app chrome (`packages/host/app/components/**`) isn't user-themed: no card or user theme reaches it, so the `font:` shorthand and raw palette shades (`--boxel-800`, `--boxel-light`) are its house style and aren't findings. A host component that uses contract tokens under `data-theme='light'` or `'dark'` (the dashboard, the sign-in screens) follows the token rules for those tokens.
 
@@ -33,4 +33,4 @@ Run both lenses over **every touched UI file, whole file, not just the diff**, a
 - **Rendering.** Render only an app that serves the code under review: the working tree, only when the review is of the working tree; for a branch or a PR, an environment running its head (a preview the author or reviewer started). Don't start or switch a dev server for the review. A check that needs rendering and has no such app is not a finding; ask it as a question only when the answer changes what the author does.
 - **Measure, don't assert.** Compute contrast from the values in `theme.css`/`variables.css` against the boxel default theme, light and dark, and give the ratio in the finding.
 
-Where the review states what it covered (pr-review's lens sentence, review-branch's overall assessment), it names the UI lenses that ran, and any domain that didn't.
+Where the review states what it covered (pr-review's lens sentence, review-branch's overall assessment, ui-code-review's scope line), it names the UI lenses that ran, and any domain that didn't.

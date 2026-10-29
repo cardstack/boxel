@@ -48,6 +48,40 @@ export function isPrefixForm(identifier: string): boolean {
 }
 
 /**
+ * The last path segment of an identifier in either form, without its query or
+ * fragment: `photo.jpg` for both `https://example.test/r/photo.jpg` and
+ * `@cardstack/catalog/photo.jpg`. A trailing slash is ignored. A URL's origin
+ * and a prefix's `@scope/name` namespace are not path segments, so a URL with
+ * no path and a bare prefix have none.
+ *
+ * It reads the spelling only, so a prefix-form identifier never goes through
+ * a URL parser. The segment keeps any percent-encoding it was written with.
+ */
+export function lastSegmentOfIdentifier(identifier: string): string {
+  let path = identifier
+    .split(/[?#]/, 1)[0]
+    .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/i, '');
+  let segments = path.split('/').filter(Boolean);
+  if (isPrefixForm(identifier)) {
+    segments = segments.slice(2);
+  }
+  return segments[segments.length - 1] ?? '';
+}
+
+/**
+ * `lastSegmentOfIdentifier`, percent-decoded for display. A segment holding
+ * an escape that is not valid UTF-8 is returned as written.
+ */
+export function decodedLastSegmentOfIdentifier(identifier: string): string {
+  let segment = lastSegmentOfIdentifier(identifier);
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+/**
  * Build a `{ module, name }` code ref by resolving `relativePath` against
  * `baseUrl` (typically `import.meta.url`) and branding the result as a
  * `RealmResourceIdentifier`.

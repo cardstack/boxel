@@ -143,24 +143,31 @@ export function registerKeysCommand(program: Command): void {
       runKeysCommand(options.json, () => keysShow(name, options)),
     );
 
-  valueOptions(
-    keys
-      .command('add')
-      .description(
-        'Add a key. The value is typed at a masked prompt, or read with --stdin or --key-file',
-      )
-      .argument('<name>', 'A name for the key, unique among your keys'),
+  serviceAccountOptions(
+    valueOptions(
+      keys
+        .command('add')
+        .description(
+          'Add a key. The value is typed at a masked prompt, or read with --stdin or --key-file. A Google service account (--kind google-service-account) is its JSON key file, read with --key-file or --stdin, with its --scope and optional --subject',
+        )
+        .argument('<name>', 'A name for the key, unique among your keys'),
+    ).option(
+      '--kind <kind>',
+      'static (the default): the value is sent as it is; google-service-account: a JSON key file Boxel mints access tokens from',
+    ),
   ).action((name: string, options: ValueCommandOptions) =>
     runKeysCommand(options.json, () => keysAdd(name, options)),
   );
 
-  valueOptions(
-    keys
-      .command('replace')
-      .description(
-        "Replace a key's value. The value is typed at a masked prompt, or read with --stdin or --key-file",
-      )
-      .argument('<name>', 'The key'),
+  serviceAccountOptions(
+    valueOptions(
+      keys
+        .command('replace')
+        .description(
+          "Replace a key's value. The value is typed at a masked prompt, or read with --stdin or --key-file. A Google service account takes a new JSON key file with its --scope and optional --subject",
+        )
+        .argument('<name>', 'The key'),
+    ),
   ).action((name: string, options: ValueCommandOptions) =>
     runKeysCommand(options.json, () => keysReplace(name, options)),
   );
@@ -231,6 +238,26 @@ interface ValueCommandOptions {
   stdin?: boolean;
   keyFile?: string;
   json?: boolean;
+  kind?: string;
+  subject?: string;
+  scope?: string[];
+}
+
+function collect(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
+
+function serviceAccountOptions(command: Command): Command {
+  return command
+    .option(
+      '--subject <email>',
+      'A Google service account: the user to act as, with domain-wide delegation. A replace sets it anew: leave it out only to act as the service account itself',
+    )
+    .option(
+      '--scope <scope>',
+      'A Google service account: a scope its tokens ask for (repeat for more). A replace sets them anew',
+      collect,
+    );
 }
 
 function valueOptions(command: Command): Command {
