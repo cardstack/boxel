@@ -14,7 +14,7 @@ import { NativeSelect } from '@cardstack/pretui/components/native-select';
 import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
-import { didCancel, restartableTask, timeout } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 
 import { add, cn, eq } from '@cardstack/boxel-ui/helpers';
 
@@ -73,8 +73,6 @@ export default class Agents extends Component<Signature> {
   @tracked private opened: AgentStep | null = null;
   @tracked private copied: AgentStep | null = null;
   @tracked private pickedWorkspaceURL: string | undefined;
-  // Shown until the save lands, so the picker doesn't snap back meanwhile.
-  @tracked private pendingAgent: DashboardAgent | undefined;
 
   private stepsId = `${guidFor(this)}-steps`;
 
@@ -85,9 +83,7 @@ export default class Agents extends Component<Signature> {
   }));
 
   private get kind() {
-    return agentKindFor(
-      this.pendingAgent ?? this.matrixService.dashboardState.agent,
-    );
+    return agentKindFor(this.matrixService.dashboardAgent);
   }
 
   private get openedStep() {
@@ -167,29 +163,16 @@ export default class Agents extends Component<Signature> {
 
   private isCopied = (index: number) => index < this.copiedCount;
 
-  private pickAgentTask = restartableTask(async (agent: DashboardAgent) => {
-    this.pendingAgent = agent;
-    try {
-      await this.matrixService.updateDashboardState({ agent });
-    } finally {
-      if (this.pendingAgent === agent) {
-        this.pendingAgent = undefined;
-      }
-    }
-  });
-
-  // Nothing awaits the perform, and an unconsumed task error is reported
-  // globally.
-  @action private pickAgent(value: string) {
+  @action private async pickAgent(value: string) {
     let kind = AGENT_KINDS.find(({ id }) => id === value);
     if (!kind) {
       return;
     }
-    this.pickAgentTask.perform(kind.id).catch((error: unknown) => {
-      if (!didCancel(error)) {
-        log.warn(`saving the picked agent failed: ${error}`);
-      }
-    });
+    try {
+      await this.matrixService.pickDashboardAgent(kind.id);
+    } catch (error) {
+      log.warn(`saving the picked agent failed: ${error}`);
+    }
   }
 
   @action private pickWorkspace(url: string) {
@@ -402,6 +385,7 @@ export default class Agents extends Component<Signature> {
                         <div class='step-text'>
                           <code
                             class='step-code'
+                            id={{concat this.stepsId '-' index '-text'}}
                             data-test-agent-step-text
                           >{{step.text}}</code>
                           <Button
@@ -410,7 +394,12 @@ export default class Agents extends Component<Signature> {
                             @appearance='accent'
                             @size='s'
                             @shape='pill'
-                            aria-label={{concat 'Copy: ' step.text}}
+                            aria-describedby={{concat
+                              this.stepsId
+                              '-'
+                              index
+                              '-text'
+                            }}
                             {{on
                               'click'
                               (fn this.copyTask.perform index step.text)
