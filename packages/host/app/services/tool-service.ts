@@ -157,6 +157,34 @@ async function withExtendableTimeout<T>(
   }
 }
 
+// A step of a tool validation, and when the validation entered it.
+interface ValidationStep {
+  step: string;
+  at: number;
+}
+
+// e.g. "resolve tool foo at +0ms (2950ms); load tool module bar at +2950ms
+// (still running at +3000ms)"
+function describeValidationSteps(
+  steps: ValidationStep[],
+  lastStep: 'threw' | 'still running',
+): string {
+  if (!steps.length) {
+    return 'none started';
+  }
+  let start = steps[0].at;
+  let now = performance.now();
+  return steps
+    .map(({ step, at }, i) => {
+      let next = steps[i + 1];
+      let span = next
+        ? `${Math.round(next.at - at)}ms`
+        : `${lastStep} at +${Math.round(now - start)}ms`;
+      return `${step} at +${Math.round(at - start)}ms (${span})`;
+    })
+    .join('; ');
+}
+
 // Every tool module the host provides is registered under this specifier.
 const HOST_TOOL_MODULE_PREFIX = '@cardstack/boxel-host/';
 
@@ -631,23 +659,37 @@ export default class ToolService extends Service {
           // tool in the tab stops. Bound it like execute, and log what it is
           // waiting on if it is slow, so the stuck step can be named.
           let isValid = false;
+          // This run's own timeline. A validation that times out keeps
+          // running, so it writes only to this array and never to the map
+          // entry of a later validation of the same request.
+          let steps: ValidationStep[] = [];
+          if (messageTool.id) {
+            this.validationSteps.set(messageTool.id, steps);
+          }
+          let validationSettled = false;
           let watchdog = setTimeout(
-            () => this.logSlowValidation(messageTool),
+            () => this.logSlowValidation(messageTool, steps),
             VALIDATE_WATCHDOG_MS,
           );
           try {
             isValid = await withTimeout(
-              this.validate(messageTool),
-              VALIDATE_TIMEOUT_MS,
+              this.validate(messageTool, steps).finally(() => {
+                validationSettled = true;
+              }),
+              this.validateTimeoutMs,
               `Validating tool "${messageTool.name}"`,
             );
           } catch (e) {
             let error = e instanceof Error ? e : new Error(String(e));
             // The message and step timeline go in the text itself: a test
             // runner's console capture can render an Error argument as
-            // "[object Object]".
+            // "[object Object]". The error argument is still passed for its
+            // stack.
             console.error(
-              `Tool processing failed for "${messageTool.name}" (${messageTool.id}): ${error.message}. Validation steps: ${this.describeValidationSteps(messageTool)}`,
+              `Tool processing failed for "${messageTool.name}" (${messageTool.id}): ${error.message} [validation steps: ${describeValidationSteps(
+                steps,
+                validationSettled ? 'threw' : 'still running',
+              )}]`,
               e,
             );
             try {
@@ -679,9 +721,11 @@ export default class ToolService extends Service {
             continue;
           } finally {
             clearTimeout(watchdog);
-            if (messageTool.id) {
+            if (
+              messageTool.id &&
+              this.validationSteps.get(messageTool.id) === steps
+            ) {
               this.validationSteps.delete(messageTool.id);
-              this.validationStepTimelines.delete(messageTool.id);
             }
           }
           if (!isValid) {
@@ -1285,51 +1329,15 @@ export default class ToolService extends Service {
       .map((file) => this.matrixService.fileAPI.createFileDef(file));
   }
 
-  // Which step each in-flight validation is on, for the slow-validation log.
-  private validationSteps = new Map<string, string>();
-  // When each in-flight validation entered each of its steps, so a validation
-  // that fails or times out can say which step took the time.
-  private validationStepTimelines = new Map<
-    string,
-    { step: string; at: number }[]
-  >();
+  // The validation timeout. Tests that deliberately hold a validation raise
+  // it, so the hold does not use up the time the rest of the validation has.
+  validateTimeoutMs = VALIDATE_TIMEOUT_MS;
 
-  private markValidationStep(command: MessageTool, step: string) {
-    if (command.id) {
-      this.validationSteps.set(command.id, step);
-      let timeline = this.validationStepTimelines.get(command.id);
-      if (!timeline) {
-        timeline = [];
-        this.validationStepTimelines.set(command.id, timeline);
-      }
-      timeline.push({ step, at: performance.now() });
-    }
-  }
+  // The step timeline of each in-flight validation, by tool call id.
+  private validationSteps = new Map<string, ValidationStep[]>();
 
-  // e.g. "resolve tool foo at +0ms (2950ms); load tool module bar at
-  // +2950ms (still running at +3000ms)"
-  private describeValidationSteps(command: MessageTool): string {
-    let timeline = command.id
-      ? this.validationStepTimelines.get(command.id)
-      : undefined;
-    if (!timeline?.length) {
-      return 'none started';
-    }
-    let start = timeline[0].at;
-    let now = performance.now();
-    return timeline
-      .map(({ step, at }, i) => {
-        let next = timeline![i + 1];
-        let span = next
-          ? `${Math.round(next.at - at)}ms`
-          : `still running at +${Math.round(now - start)}ms`;
-        return `${step} at +${Math.round(at - start)}ms (${span})`;
-      })
-      .join('; ');
-  }
-
-  private logSlowValidation(command: MessageTool) {
-    let step = command.id ? this.validationSteps.get(command.id) : undefined;
+  private logSlowValidation(command: MessageTool, steps: ValidationStep[]) {
+    let step = steps.at(-1)?.step;
     let moduleImports = this.loaderService.loader.inFlightModuleImports;
     let queryLoads = this.store.queryLoadsInFlight();
     console.warn(
@@ -1341,7 +1349,12 @@ export default class ToolService extends Service {
     );
   }
 
-  async validate(command: MessageTool): Promise<boolean> {
+  async validate(
+    command: MessageTool,
+    steps: ValidationStep[] = [],
+  ): Promise<boolean> {
+    let markStep = (step: string) =>
+      steps.push({ step, at: performance.now() });
     let error: string | undefined;
     // ai-bot ran this one itself (e.g. readRealmFile): the host has no command
     // class to resolve, and never runs it, so there is nothing to validate.
@@ -1368,7 +1381,7 @@ export default class ToolService extends Service {
     // inside validation's own timeout. A name that resolved to no command is
     // tried again: the skill declaring it may have loaded since.
     if (!error && command.name !== CHECK_CORRECTNESS_COMMAND_NAME) {
-      this.markValidationStep(command, `resolve tool ${command.name}`);
+      markStep(`resolve tool ${command.name}`);
       try {
         await command.resolve({ retryUnresolved: true });
       } catch (e) {
@@ -1388,10 +1401,7 @@ export default class ToolService extends Service {
     } else if (!toolCodeRef) {
       error = `No command for the name "${command.name}" was found`;
     } else {
-      this.markValidationStep(
-        command,
-        `load tool module ${toolCodeRef.module}`,
-      );
+      markStep(`load tool module ${toolCodeRef.module}`);
       let ToolConstructor = (await getClass(
         toolCodeRef,
         this.loaderService.loader,
@@ -1409,9 +1419,9 @@ export default class ToolService extends Service {
           'service:loader-service',
         ) as LoaderService
       ).loader;
-      this.markValidationStep(command, 'load basic field mappings');
+      markStep('load basic field mappings');
       let mappings = await basicMappings(loader);
-      this.markValidationStep(command, 'build input JSON schema');
+      markStep('build input JSON schema');
       // `description` is the UI label only (see TOOL_CALL_DESCRIPTION_SCHEMA),
       // so it is not required here even though the tool definition given to
       // the model lists it as required.
