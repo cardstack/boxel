@@ -146,7 +146,11 @@ export default class Workspace extends Component<Signature> {
       >
         {{#if this.reindexError}}
           <div class='reindex-error' role='alert' data-test-reindex-error>
-            <span class='reindex-error-message'>{{this.reindexError}}</span>
+            {{! Focusable, so a long error can be scrolled from the keyboard. }}
+            <span
+              class='reindex-error-message'
+              tabindex='0'
+            >{{this.reindexError}}</span>
             <IconButton
               class='reindex-error-dismiss'
               @label='Dismiss error'
@@ -277,13 +281,13 @@ export default class Workspace extends Component<Signature> {
                 {{#if (gt this.publishedRealmURLs.length 1)}}
                   <Tooltip
                     class='desk-host-more'
-                    @content={{this.extraPublishedTitle}}
+                    @content={{this.extraPublishedList}}
                   >
                     <span>+{{this.extraPublishedCount}}<span
                         class='boxel-sr-only'
                       >
                         more:
-                        {{this.extraPublishedTitle}}</span></span>
+                        {{this.extraPublishedList}}</span></span>
                   </Tooltip>
                 {{/if}}
               </div>
@@ -1153,9 +1157,7 @@ export default class Workspace extends Component<Signature> {
         align-items: flex-start;
         gap: var(--boxel-sp-5xs);
         width: 100%;
-        /* The whole error shows; a long one scrolls inside the tile. */
         max-height: 100%;
-        overflow-y: auto;
         padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
         border-radius: var(--dashboard-tile-radius) var(--dashboard-tile-radius)
           0 0;
@@ -1163,10 +1165,18 @@ export default class Workspace extends Component<Signature> {
         color: var(--boxel-light);
         font: 600 var(--boxel-font-xs);
       }
+      /* The whole error shows; a long one scrolls inside the tile, under a
+         dismiss button that stays put. Stretched, it takes the alert's
+         clamped height. */
       .reindex-error-message {
         flex: 1;
+        align-self: stretch;
         min-width: 0;
+        overflow-y: auto;
         overflow-wrap: break-word;
+      }
+      .reindex-error-message:focus-visible {
+        outline: 2px solid var(--ring);
       }
       .reindex-error-dismiss {
         flex-shrink: 0;
@@ -1481,8 +1491,9 @@ export default class Workspace extends Component<Signature> {
     return Math.max(this.publishedRealmURLs.length - 1, 0);
   }
 
-  private get extraPublishedTitle() {
-    return this.publishedRealmURLs.slice(1).join('\n');
+  // One line: the tooltip doesn't wrap.
+  private get extraPublishedList() {
+    return this.publishedRealmURLs.slice(1).join(', ');
   }
 
   private get hostTriggerLabel() {
