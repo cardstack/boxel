@@ -63,6 +63,50 @@ module('Unit | secure-window', function () {
     assert.deepEqual(fragmentOf(url), { realm: REALM });
   });
 
+  test('connecting an account for an operation on a card names the card and the operation', function (assert) {
+    let url = secureWindowURL({
+      mode: 'connect',
+      target: { kind: 'instance', card: CARD, operation: 'listRepos' },
+      reason: 'Lists your repositories',
+    });
+    assert.strictEqual(url.split('#')[0], secureOriginPage('connect'));
+    assert.strictEqual(new URL(url).search, '', 'nothing in the query string');
+    assert.deepEqual(fragmentOf(url), {
+      card: CARD,
+      operation: 'listRepos',
+      reason: 'Lists your repositories',
+    });
+  });
+
+  test('connecting an account for an operation on a card type names its module, export and realm', function (assert) {
+    let url = secureWindowURL({
+      mode: 'connect',
+      target: {
+        kind: 'type',
+        module: `${REALM}repo-list`,
+        name: 'RepoList',
+        realm: REALM,
+        operation: 'listRepos',
+      },
+    });
+    assert.deepEqual(fragmentOf(url), {
+      module: `${REALM}repo-list`,
+      name: 'RepoList',
+      realm: REALM,
+      operation: 'listRepos',
+    });
+  });
+
+  test('connecting an account for a workspace names the realm, and for nothing carries no fragment', function (assert) {
+    let url = secureWindowURL({ mode: 'connect', realm: REALM });
+    assert.strictEqual(url.split('#')[0], secureOriginPage('connect'));
+    assert.deepEqual(fragmentOf(url), { realm: REALM });
+    assert.strictEqual(
+      secureWindowURL({ mode: 'connect' }),
+      secureOriginPage('connect'),
+    );
+  });
+
   test('the window reads http(s) URLs and prefix-form ids, and nothing else', function (assert) {
     assert.true(isSecureWindowName(CARD));
     assert.true(isSecureWindowName('https://app.boxel.ai/someone/realm/'));

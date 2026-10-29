@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import {
   param,
   query,
@@ -19,8 +19,11 @@ import {
 import { isOutboundDevAllowlisted } from './outbound/client.ts';
 import type { SecureSessionClient } from './secure-session.ts';
 import { revokeBindingsIn } from './key-binding-revocation.ts';
+import { tokenEndpointCoveredBy } from './outbound/token-endpoints.ts';
 import {
   grantCopyBinding,
+  MINTING_KINDS,
+  type UserKeyKind,
   opensUnder,
   SEALED_COLUMN_VALUES,
   UserKeyError,
@@ -301,7 +304,7 @@ export async function createOrReuseGrantIn(
     throw new UserKeyError(404, 'no such key');
   }
   let [key] = await txQuery([
-    `SELECT ${sealedColumnsSelect('value')} FROM user_keys WHERE id = `,
+    `SELECT kind, ${sealedColumnsSelect('value')} FROM user_keys WHERE id = `,
     param(keyId),
     ` AND owner = `,
     param(owner),
@@ -309,6 +312,33 @@ export async function createOrReuseGrantIn(
   ]);
   if (!key) {
     throw new UserKeyError(404, 'no such key');
+  }
+  let mints = MINTING_KINDS.has(key.kind as UserKeyKind);
+  if (mints) {
+    let [client] =
+      key.kind === 'oauth-client'
+        ? await txQuery([
+            `SELECT grant_type FROM oauth_clients WHERE key_id = `,
+            param(keyId),
+          ])
+        : [];
+    if (
+      key.kind === 'oauth-client' &&
+      client?.grant_type !== 'client_credentials'
+    ) {
+      throw new UserKeyError(
+        400,
+        'an OAuth client that people sign in through is never sent anywhere: connect through it, and use the connection',
+      );
+    }
+  }
+  // No key, of any kind, is granted a token endpoint.
+  let endpoint = await tokenEndpointCoveredBy(txQuery, normalized, { keyId });
+  if (endpoint) {
+    throw new UserKeyError(
+      400,
+      `a token endpoint is called only by the platform, so no key is granted ${normalized}`,
+    );
   }
   let rows = await txQuery([
     `SELECT ${GRANT_COLUMNS}, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,
@@ -338,12 +368,22 @@ export async function createOrReuseGrantIn(
   if (covering) {
     return { grant: covering.grant, created: false };
   }
-  let master = sealedFromColumns(key, 'value');
-  if (!master) {
-    throw new Error(`key ${keyId} holds no sealed value`);
-  }
-  let value = keyring.open(master, userKeyBinding(owner, keyId));
   let grantId = randomUUID();
+  // A key that mints its access tokens holds a secret that only ever goes to
+  // a token endpoint, so its grant seals a marker in place of a copy: opening
+  // it under the grant's own binding is what proves, at send time, that the
+  // realm server made the grant, before a minted token is attached. The
+  // master copy isn't opened for one.
+  let value: string;
+  if (mints) {
+    value = randomBytes(32).toString('base64url');
+  } else {
+    let master = sealedFromColumns(key, 'value');
+    if (!master) {
+      throw new Error(`key ${keyId} holds no sealed value`);
+    }
+    value = keyring.open(master, userKeyBinding(owner, keyId));
+  }
   let copy = keyring.seal(
     value,
     grantCopyBinding({ owner, keyId, grantId, destination: normalized }),
@@ -426,6 +466,7 @@ export async function openGrantForSending(
   { owner, grantId }: { owner: string; grantId: string },
 ): Promise<{
   keyId: string;
+  kind: UserKeyKind;
   destination: string;
   value: string;
   // Identifies the sealed copy that was opened, which changes whenever the
@@ -436,11 +477,11 @@ export async function openGrantForSending(
     throw new UserKeyError(404, 'no such grant');
   }
   let [row] = await query(dbAdapter, [
-    `SELECT key_id, owner, destination, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE id = `,
+    `SELECT g.key_id, g.owner, g.destination, k.kind, ${sealedColumnsSelect('value', 'g')} FROM user_key_grants g JOIN user_keys k ON k.id = g.key_id WHERE g.id = `,
     param(grantId),
-    ` AND owner = `,
+    ` AND g.owner = `,
     param(owner),
-    ` AND state IN ('active', 'rejected')`,
+    ` AND g.state IN ('active', 'rejected')`,
   ]);
   if (!row) {
     throw new UserKeyError(404, 'no such grant');
@@ -460,7 +501,13 @@ export async function openGrantForSending(
       destination,
     }),
   );
-  return { keyId, destination, value, copy: copy.nonce.toString('base64') };
+  return {
+    keyId,
+    kind: row.kind as UserKeyKind,
+    destination,
+    value,
+    copy: copy.nonce.toString('base64'),
+  };
 }
 
 // Removes one of the owner's grants, and answers with the bindings that sent

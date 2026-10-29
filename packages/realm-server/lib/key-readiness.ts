@@ -6,6 +6,7 @@ import {
   type KeyReadiness,
 } from '@cardstack/runtime-common/card-operations';
 import { bindingSnapshot, fingerprintOf, slotToken } from './key-bindings.ts';
+import { DEFAULT_PROBE_INTERVAL_MS, probeDue } from './key-grant-rejection.ts';
 
 // Readiness: what a card can learn before it invokes a `callApi`, so it can
 // show "Connect", "Allow" or "Review" instead of a refusal after the click.
@@ -25,7 +26,9 @@ import { bindingSnapshot, fingerprintOf, slotToken } from './key-bindings.ts';
 // A reader is told only an answer from the `KeyReadiness` list. A share's
 // owner, its name and its limits never appear in one, and every way a share
 // slot falls short reads the same, `needs-admin`, to anyone but the owner of
-// the share's key, who is told what they could fix themselves.
+// the share's key, who is told what they could fix themselves. The one
+// exception is a key the vendor rejected, which the call itself refuses
+// `credential-rejected` to everyone.
 //
 // `needs-connect` and `needs-approval` differ only in whether one of the
 // caller's grants covers the destination, so any card can learn that about
@@ -62,6 +65,9 @@ interface BindingRow {
   share_state: string | null;
   share_owner: string | null;
   grant_id: string | null;
+  // Whether the vendor rejected the grant and no probe of it is due, so a
+  // call would be refused `credential-rejected` without being sent.
+  grant_held_back: boolean | null;
 }
 
 // Answers `undefined` where no answer can be given: a per-instance operation
@@ -69,6 +75,9 @@ interface BindingRow {
 export async function keyReadiness(
   dbAdapter: DBAdapter,
   lookup: CallApiReadinessLookup,
+  {
+    probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
+  }: { probeIntervalMs?: number } = {},
 ): Promise<KeyReadiness | undefined> {
   let { request } = lookup;
   if (request.slots.length === 0) {
@@ -86,7 +95,7 @@ export async function keyReadiness(
   let instance = request.perInstance
     ? lookup.instance!.replace(/\.json$/, '')
     : null;
-  let rows = await bindingsFor(dbAdapter, lookup, instance);
+  let rows = await bindingsFor(dbAdapter, lookup, instance, probeIntervalMs);
   // Read once, and only where a `{{userKey}}` slot has no binding to fill it.
   let covering: Promise<boolean> | undefined;
   let callerCovers = () =>
@@ -124,15 +133,21 @@ export async function keyReadiness(
 // Every binding of this operation in this realm (and for this card, when it is
 // approved per instance) that could fill one of its slots for this caller: the
 // realm's share bindings, and the caller's own `{{userKey}}` ones. Each comes
-// with whether its grant is still there for its key (or its share's key).
+// with whether its grant is still there for its key (or its share's key), and
+// whether the vendor's rejection of that grant holds a call back. A rejected
+// grant whose probe is due reads as ready, since the call would be sent.
 async function bindingsFor(
   dbAdapter: DBAdapter,
   lookup: CallApiReadinessLookup,
   instance: string | null,
+  probeIntervalMs: number,
 ): Promise<BindingRow[]> {
   return (await query(dbAdapter, [
     `SELECT b.slot, b.approved_by, b.key_id, b.share_id, b.interactive, b.fingerprint, b.state,
-            s.state AS share_state, s.owner AS share_owner, g.id AS grant_id
+            s.state AS share_state, s.owner AS share_owner, g.id AS grant_id,
+            (g.state = 'rejected' AND NOT `,
+    ...probeDue('g.last_probe_at', probeIntervalMs),
+    `) AS grant_held_back
        FROM key_bindings b
        LEFT JOIN key_shares s ON s.id = b.share_id
        LEFT JOIN user_key_grants g ON g.id = b.grant_id AND g.key_id = COALESCE(b.key_id, s.key_id)
@@ -178,10 +193,8 @@ async function userKeyReadiness(
       return 'needs-approval';
     }
     // A binding whose grant is gone fills nothing, so it is as good as none.
-    // Readiness for a grant the vendor rejected is answered here, from the
-    // grant's own state, once grants carry one.
     if (row.grant_id) {
-      return 'ready';
+      return row.grant_held_back ? 'credential-rejected' : 'ready';
     }
   }
   return (await callerCovers()) ? 'needs-approval' : 'needs-connect';
@@ -220,5 +233,10 @@ function shareReadiness(
   if (!row.interactive) {
     return theirs ? 'needs-approval' : 'needs-admin';
   }
-  return row.grant_id ? 'ready' : 'needs-admin';
+  if (!row.grant_id) {
+    return 'needs-admin';
+  }
+  // Every caller is refused `credential-rejected` at the call, so telling them
+  // here gives away nothing more about the share.
+  return row.grant_held_back ? 'credential-rejected' : 'ready';
 }

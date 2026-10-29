@@ -28,8 +28,8 @@ has lost track of a value replaces it.
 | `id`                                                           | UUID, minted by the realm server before sealing (the value is bound to it)                                  |
 | `owner`                                                        | The owner's Matrix user id                                                                                  |
 | `name`                                                         | A label for people, unique among the owner's keys (`user_keys_owner_name_key`); two owners may share a name |
-| `kind`                                                         | `static`                                                                                                    |
-| `state`                                                        | `active`                                                                                                    |
+| `kind`                                                         | `static`, `oauth-client` or `oauth-connection` (see the `oauth-connections` skill)                          |
+| `state`                                                        | `active`, or `rejected` for a connection its vendor refused to refresh                                      |
 | `value_ciphertext`, `value_nonce`, `value_tag`, `value_key_id` | The sealed value                                                                                            |
 | `created_at`, `updated_at`                                     | `timestamptz`                                                                                               |
 
@@ -219,6 +219,21 @@ reuses a row whose copy doesn't open, and replacing the key leaves it as it is
 instead of sealing the new value to it, the same as the data-key re-seal pass
 does. To give a key a destination, the owner approves an operation that
 sends there; to move a grant, remove it and approve again.
+
+### Grants of a key that mints tokens
+
+An OAuth connection or a `client_credentials` client (`MINTING_KINDS` in
+`lib/user-keys.ts`) never sends its stored value: it mints an access token at a
+token endpoint, which only the platform calls. Its grant's copy is a random
+marker, sealed under the same binding, never the value: opening it under the
+grant's destination is what proves at send time that the realm server made the
+grant, and the minted token is attached after. Creating such a grant doesn't
+open the master copy, replacing the key doesn't re-seal its grants, and a
+refresh that rotates a connection's refresh token leaves them alone. Such a
+key is never granted a destination that covers a token endpoint
+(`tokenEndpointCoveredBy` in `lib/outbound/token-endpoints.ts`), and an
+authorization-code client, which only signs people in, is never granted one
+at all (400). See the `oauth-connections` skill.
 
 ### Creating or reusing a grant
 

@@ -157,7 +157,10 @@ the request. `fillSlots` checks, per slot, in this order:
 | The grant isn't `rejected`, unless this call claims its probe                        | `credential-rejected`          | 424    |
 
 The value is the grant's copy (`openGrantForSending`), never the key's master
-copy, with `|basic` applied (the raw value is registered with the scrubber
+copy — or, for a key that mints its access tokens (an OAuth connection, a
+`client_credentials` client), the access token minted now, once the grant's
+marker has opened; a key that can't mint one is refused `credential-rejected`
+(424) with `meta.reason` (see the `oauth-connections` skill) — with `|basic` applied (the raw value is registered with the scrubber
 too). Back in the executor, after building, the request — every slot still a
 token — must be under the **grant's stored destination**
 (`destinationCovers`), not the declaration's, or it is refused
@@ -188,7 +191,9 @@ order, and maps each way a slot falls short to an answer: no binding →
 `needs-connect`, or `needs-approval` where one of the caller's grants already
 covers the destination; a changed fingerprint → `needs-reapproval`; not
 `interactive` → `needs-approval`; a share slot short in any way → `needs-admin`
-to anyone but the share key's owner; nobody signed in → `needs-sign-in`. It
+to anyone but the share key's owner; a grant the vendor rejected, with no
+probe due → `credential-rejected` (to everyone, since the call says the
+same); nobody signed in → `needs-sign-in`. It
 opens no key and writes nothing: a changed fingerprint is reported, not moved
 to `needs-reapproval`, and no notice is recorded. **A check added to
 `checkedBindings` or `fillSlots` belongs in `key-readiness.ts` too**, or

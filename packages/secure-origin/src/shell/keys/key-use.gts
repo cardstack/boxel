@@ -28,6 +28,8 @@ interface Signature {
     key: ListedKey;
     onUnshare: (key: ListedKey, workspace: SharedWorkspace) => Promise<boolean>;
   };
+  // Rows of the key's own, such as an OAuth key's details, listed first.
+  Blocks: { default: [] };
 }
 
 // What a workspace is called on the page: its name, or its address when it
@@ -48,6 +50,7 @@ function labelsOf(workspace: SharedWorkspace): string {
 export default class KeyUse extends Component<Signature> {
   <template>
     <div class='key-use'>
+      {{yield}}
       <div class='use-row' data-test-key-used-with>
         <Globe class='use-icon' aria-hidden='true' />
         {{#if @key.usedWith.length}}
@@ -58,7 +61,7 @@ export default class KeyUse extends Component<Signature> {
                 data-test-key-used-with-domain
               >{{domain}}</span>{{/each}}</p>
         {{else}}
-          <p class='use-text none'>Not used with any service yet</p>
+          <p class='use-text none'>Not used with any site yet</p>
         {{/if}}
       </div>
       <div class='use-row' data-test-key-shared-into>
@@ -150,8 +153,8 @@ export default class KeyUse extends Component<Signature> {
     <style scoped>
       .key-use {
         display: grid;
-        gap: var(--boxel-sp-4xs);
-        padding-top: var(--boxel-sp-4xs);
+        gap: var(--boxel-sp-xs);
+        padding-top: var(--boxel-sp-xs);
         border-top: 1px solid var(--border);
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);

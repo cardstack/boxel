@@ -110,7 +110,9 @@ import {
   KEY_SHARE_NOTICES_PATH,
   KEY_SHARES_PATH,
   KEY_WRITE_TICKETS_PATH,
+  OAUTH_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
+  PLATFORM_OAUTH_CLIENTS_PATH,
   REQUEST_FORWARD_PATH,
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
@@ -165,6 +167,16 @@ import {
   handleSecureWindowContext,
   handleSecureWindowRealms,
 } from './handlers/handle-secure-window.ts';
+import {
+  handleAddPlatformClient,
+  handleCompleteConnect,
+  handleDeletePlatformClient,
+  handleListConnectableClients,
+  handleListPlatformClients,
+  handleOAuthCallback,
+  handleReplacePlatformClient,
+  handleStartConnect,
+} from './handlers/handle-oauth.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -462,6 +474,24 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListKeyShareNotices(args),
   );
+  router.get(
+    `${OAUTH_PATH}/clients`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListConnectableClients(args),
+  );
+  router.post(
+    `${OAUTH_PATH}/connections`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleStartConnect(args),
+  );
+  router.post(
+    `${OAUTH_PATH}/connections/complete`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleCompleteConnect(args),
+  );
+  // The vendor sends the person here with no Boxel session; it only hands
+  // the code on to the secure window, which finishes under its own session.
+  router.get(`${OAUTH_PATH}/callback`, handleOAuthCallback(args));
   router.post(
     `${SECURE_WINDOW_PATH}/context`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -657,6 +687,28 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_system-keys/:id',
     systemKeysAuthorization,
     handleDeleteSystemKey(args),
+  );
+  // The OAuth clients Boxel registers itself, which connect mode offers
+  // everyone. The same operator token as system keys reaches these.
+  router.get(
+    PLATFORM_OAUTH_CLIENTS_PATH,
+    systemKeysAuthorization,
+    handleListPlatformClients(args),
+  );
+  router.post(
+    PLATFORM_OAUTH_CLIENTS_PATH,
+    systemKeysAuthorization,
+    handleAddPlatformClient(args),
+  );
+  router.patch(
+    `${PLATFORM_OAUTH_CLIENTS_PATH}/:name`,
+    systemKeysAuthorization,
+    handleReplacePlatformClient(args),
+  );
+  router.delete(
+    `${PLATFORM_OAUTH_CLIENTS_PATH}/:name`,
+    systemKeysAuthorization,
+    handleDeletePlatformClient(args),
   );
 
   // Diagnostic sessions: what an operator renders a live card under to see it

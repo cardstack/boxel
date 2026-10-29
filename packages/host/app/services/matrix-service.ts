@@ -696,6 +696,12 @@ export default class MatrixService extends Service {
     return this.client.getUserId();
   }
 
+  // The signed-in user's id, or nothing before the Matrix SDK has loaded:
+  // for a template that asks "is this mine?" before there is a client.
+  get loadedUserId(): string | undefined {
+    return this._client?.getUserId() ?? undefined;
+  }
+
   // Handed to the frame on the secure origin that changes this account's
   // password or email, which makes those requests itself.
   get accessToken(): string | undefined {
@@ -2269,6 +2275,24 @@ export default class MatrixService extends Service {
       roomId,
       APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
       {},
+    );
+  }
+
+  // A reaction on an event: an `m.annotation` keyed by the emoji
+  async sendReactionEvent(roomId: string, eventId: string, key: string) {
+    let roomData = this.ensureRoomData(roomId);
+    return roomData.mutex.dispatch(async () =>
+      this.client.sendEvent(
+        roomId,
+        'm.reaction' as any,
+        {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: eventId,
+            key,
+          },
+        } as any,
+      ),
     );
   }
 
