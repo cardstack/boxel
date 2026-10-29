@@ -135,6 +135,10 @@ exports.up = (pgm) => {
       client_key_id uuid REFERENCES oauth_clients (key_id) ON DELETE CASCADE,
       client_share_id uuid REFERENCES key_shares (id) ON DELETE CASCADE,
       platform_client_id uuid REFERENCES platform_oauth_clients (id) ON DELETE CASCADE,
+      -- The client the sign-in was started with, which alone may finish it:
+      -- a share swapped to another client meanwhile can't receive the code.
+      client_id varchar NOT NULL,
+      token_url varchar NOT NULL,
       -- The connection a reconnect replaces the token of; null for a new one.
       reconnects_key_id uuid REFERENCES user_keys (id) ON DELETE CASCADE,
       expires_at timestamptz NOT NULL,
