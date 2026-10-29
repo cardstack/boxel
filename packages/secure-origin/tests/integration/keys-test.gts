@@ -2370,6 +2370,50 @@ module('Integration | key pages', function (hooks) {
         );
     });
 
+    test('a key file chosen before the key’s details arrive stays, and the fields still start from them', async function (assert) {
+      let answer!: () => void;
+      let arrived = new Promise<void>((resolve) => (answer = resolve));
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': async () => {
+          await arrived;
+          return serviceAccountKey({
+            email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+            subject: 'owner@example.com',
+            scopes: ['openid'],
+          });
+        },
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-service-account-file]');
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .doesNotExist(
+          'nothing is said about the replace until the key is read',
+        );
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      answer();
+      await waitUntil(
+        () =>
+          (
+            document.querySelector(
+              '[data-test-service-account-scopes]',
+            ) as HTMLInputElement | null
+          )?.value === 'openid',
+      );
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('owner@example.com');
+      assert
+        .dom('[data-test-service-account-email]')
+        .includesText('sheets-bot@boxel-test.iam.gserviceaccount.com');
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText('start as the key has them now');
+      assert.dom('[data-test-replace-key-save]').isEnabled();
+    });
+
     test('what the owner enters before the key’s details arrive is kept', async function (assert) {
       let answer!: () => void;
       let arrived = new Promise<void>((resolve) => (answer = resolve));

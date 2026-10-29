@@ -56,7 +56,9 @@ import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { contextRequest, openedFor } from './opened-for.ts';
 import { ServiceAccountEntry } from './service-account-entry.ts';
-import ServiceAccountFields from './service-account-fields.gts';
+import ServiceAccountFields, {
+  type ServiceAccountReplacing,
+} from './service-account-fields.gts';
 import { addressOf } from './workspace-dropdown.gts';
 
 // What the page does for one slot.
@@ -214,36 +216,10 @@ class SlotPanel extends Component<{
           data-test-replace-key-form
         >
           {{#if this.replacing.serviceAccount}}
-            {{#if this.current.prefilled}}
-              <p class='note' data-test-service-account-replace-note>Choose the
-                new key file.
-                <strong>Act as</strong>
-                and
-                <strong>Scopes</strong>
-                start as the key has them now: the replacement keeps them as you
-                leave them here.</p>
-            {{else}}
-              <p class='note' data-test-service-account-replace-note>A
-                replacement sets the key file, the scopes and who it acts as all
-                anew. Enter the scopes again, and leave
-                <strong>Act as</strong>
-                empty only if it should act as the service account itself.</p>
-            {{/if}}
-            <ServiceAccountFields @entry={{this.serviceAccount}} />
-            {{#if this.accountChange}}
-              <p
-                class='note'
-                role='status'
-                data-test-service-account-changed
-              >This key file is for
-                <strong>{{this.accountChange.to}}</strong>, not
-                <strong>{{this.accountChange.from}}</strong>. Delegation and
-                scopes are granted per service account, so check
-                <strong>Act as</strong>
-                and
-                <strong>Scopes</strong>
-                for the new one.</p>
-            {{/if}}
+            <ServiceAccountFields
+              @entry={{this.serviceAccount}}
+              @replacing={{this.serviceAccountReplacing}}
+            />
           {{else}}
             <KeyFields @value={{this.form.value}} @onValue={{this.setValue}} />
           {{/if}}
@@ -400,8 +376,10 @@ class SlotPanel extends Component<{
   // How many workspaces the key is shared with, once the server has said.
   private use = trackedObject({ known: false, workspaces: 0 });
   // A service account's details as the key has them now, once the server has
-  // said, and whether the form started from them.
+  // said, and whether the form started from them. `read` is set once the key
+  // read settles, either way.
   private current = trackedObject({
+    read: false,
     serviceAccount: undefined as ServiceAccountDetails | undefined,
     prefilled: false,
   });
@@ -413,9 +391,9 @@ class SlotPanel extends Component<{
 
   // If the key can't be read, the row says how many workspaces use it in
   // general terms instead, a service account's form starts empty, and the
-  // replace is still offered. The form starts from the key's details only
-  // while nothing has been entered in it, so what the owner types first is
-  // never overwritten.
+  // replace is still offered. Act as and Scopes start from the key's details
+  // only while neither has been typed in, so what the owner types first is
+  // never overwritten; a key file already chosen stays.
   private async loadKey() {
     let view = this.replacing;
     if (!view) {
@@ -428,7 +406,7 @@ class SlotPanel extends Component<{
       if (view.serviceAccount && key.serviceAccount) {
         this.current.serviceAccount = key.serviceAccount;
         let entry = this.serviceAccount;
-        if (!entry.fileName && !entry.subject && !entry.scopes) {
+        if (!entry.subject && !entry.scopes) {
           entry.prefill(key.serviceAccount);
           this.current.prefilled = true;
         }
@@ -437,7 +415,22 @@ class SlotPanel extends Component<{
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       }
+    } finally {
+      this.current.read = true;
     }
+  }
+
+  // What the service account's fields say about the replace. Nothing until
+  // the key read settles, so the note doesn't change under the owner from
+  // "all anew" to "as the key has them now".
+  private get serviceAccountReplacing(): ServiceAccountReplacing | undefined {
+    if (!this.current.read) {
+      return undefined;
+    }
+    return {
+      current: this.current.serviceAccount,
+      prefilled: this.current.prefilled,
+    };
   }
 
   private get accepted() {
@@ -507,15 +500,6 @@ class SlotPanel extends Component<{
 
   private get submitDisabled() {
     return this.form.saving || !this.replacement;
-  }
-
-  // The service account a chosen key file is for, when it isn't the one the
-  // key is now: delegation and scopes were granted to the old one, so the
-  // form says so.
-  private get accountChange(): { from: string; to: string } | undefined {
-    let from = this.current.serviceAccount?.email;
-    let to = this.serviceAccount.clientEmail;
-    return from && to && from !== to ? { from, to } : undefined;
   }
 
   private setValue = (value: string) => {
