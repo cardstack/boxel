@@ -1,3 +1,5 @@
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
@@ -26,8 +28,37 @@ export interface BlockedSecureWindow {
 // or replace `window.open`, so what protects a key from card code is the
 // secure page's own origin: the user types a key only where the address bar
 // shows it.
+//
+// Since the app holds no handle to the popup, it can't see it close either.
+// What it can see is the user coming back: each time this page takes focus
+// again within `RETURN_WINDOW_MS` of a secure window opening, it tells
+// whoever asked (`onReturn`), so what the window may have changed — a key
+// added, an operation approved — is asked of the realm server again. Past
+// that, a focus is the user switching windows, not coming back from this one.
+// How long after a secure window opens a return to this page counts as coming
+// back from it: long enough to add a key or approve a batch of operations.
+const RETURN_WINDOW_MS = 10 * 60_000;
+
 export default class SecureWindowService extends Service {
   @tracked blocked: BlockedSecureWindow | undefined;
+  #openedAt: number | undefined;
+  #onReturn: Set<() => void> = new Set();
+
+  constructor(owner: Owner) {
+    super(owner);
+    let returned = () => this.#returned();
+    window.addEventListener('focus', returned);
+    registerDestructor(this, () =>
+      window.removeEventListener('focus', returned),
+    );
+  }
+
+  // Calls `callback` each time the user comes back to this page after a
+  // secure window opened. Answers the function that stops it.
+  onReturn(callback: () => void): () => void {
+    this.#onReturn.add(callback);
+    return () => this.#onReturn.delete(callback);
+  }
 
   open(url: string): SecureWindowOpenStatus {
     if (this.openPopup(url)) {
@@ -56,7 +87,20 @@ export default class SecureWindowService extends Service {
       return false;
     }
     popup.opener = null;
+    this.#openedAt = Date.now();
     return true;
+  }
+
+  #returned(): void {
+    if (
+      this.#openedAt === undefined ||
+      Date.now() - this.#openedAt > RETURN_WINDOW_MS
+    ) {
+      return;
+    }
+    for (let callback of [...this.#onReturn]) {
+      callback();
+    }
   }
 }
 
