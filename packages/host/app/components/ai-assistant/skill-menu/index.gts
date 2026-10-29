@@ -5,6 +5,7 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import PuzzleIcon from '@cardstack/boxel-icons/puzzle';
 import { restartableTask } from 'ember-concurrency';
 
 import pluralize from 'pluralize';
@@ -47,11 +48,26 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       class='skill-menu'
       @onExpand={{fn this.setExpanded true}}
       @onCollapse={{fn this.setExpanded false}}
+      title={{if this.isExpanded undefined this.headerText}}
+      data-collapsed={{unless this.isExpanded 'true'}}
       ...attributes
     >
+      <:headerIcon>
+        {{! Skills load as the assistant needs them, so the count is no
+            longer worth a label: closed, the menu is an icon, and the count
+            is its name and tooltip. }}
+        {{#unless this.isExpanded}}
+          <PuzzleIcon class='skills-icon' width='14' height='14' />
+          {{! the count beside the icon; its name is the hidden text below }}
+          <span class='skills-count' aria-hidden='true'>
+            {{this.activeSkills.length}}
+          </span>
+        {{/unless}}
+      </:headerIcon>
       <:headerDetail>
         <span
-          class='skills-length boxel-ellipsize'
+          class='skills-length boxel-ellipsize
+            {{unless this.isExpanded "skills-length--hidden"}}'
           data-test-active-skills-count
         >{{this.headerText}}</span>
       </:headerDetail>
@@ -113,9 +129,30 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       .skills-length {
         min-width: 0;
       }
+      /* closed, the count stays the button's accessible name, unseen */
+      .skills-count {
+        font-size: var(--type-ui, 12.5px);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--boxel-dark);
+      }
+      .skills-length--hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .skills-icon {
+        flex: none;
+      }
+      .skill-menu[data-collapsed] :deep(.minimized-arrow) {
+        display: none;
+      }
       .skill-list {
         display: grid;
-        gap: var(--boxel-sp-3xs);
+        gap: var(--step-4, 4px);
         list-style-type: none;
         padding: 0;
         margin: 0;
@@ -123,10 +160,14 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
 
       .skill-list :deep(.card-content) {
         max-width: initial;
-        font: 600 var(--boxel-font-xs);
+        font-family: var(--boxel-font-family);
+        font-size: var(--type-ui, 12.5px);
+        line-height: var(--leading-ui, 18px);
+        font-weight: 600;
       }
       .attach-button {
-        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-font: 600 var(--type-ui, 12.5px) /
+          var(--leading-ui, 18px) var(--boxel-font-family);
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
         --boxel-button-disabled-background: none;
         --boxel-button-disabled-opacity: 1;
