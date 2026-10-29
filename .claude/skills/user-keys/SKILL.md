@@ -235,15 +235,17 @@ once. The code is `lib/user-key-grants.ts` and
 
 `user_key_grants` — one row per key and destination:
 
-| Column                                                         | Holds                                                    |
-| -------------------------------------------------------------- | -------------------------------------------------------- |
-| `id`                                                           | UUID, minted by the realm server before sealing          |
-| `key_id`                                                       | The key; deleting it deletes its grants                  |
-| `owner`                                                        | The key's owner, who approved the grant                  |
-| `destination`                                                  | The normalized destination; unique per key               |
-| `state`                                                        | `active`                                                 |
-| `approved_at`, `approved_via`                                  | When, and the secure session's client: `window` or `cli` |
-| `value_ciphertext`, `value_nonce`, `value_tag`, `value_key_id` | The grant's own sealed copy of the key's value           |
+| Column                                                         | Holds                                                                                                                          |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `id`                                                           | UUID, minted by the realm server before sealing                                                                                |
+| `key_id`                                                       | The key; deleting it deletes its grants                                                                                        |
+| `owner`                                                        | The key's owner, who approved the grant                                                                                        |
+| `destination`                                                  | The normalized destination; unique per key                                                                                     |
+| `state`                                                        | `active`, or `rejected` (see [Rejected grants](#rejected-grants))                                                              |
+| `approved_at`, `approved_via`                                  | When, and the secure session's client: `window` or `cli`                                                                       |
+| `rejected_at`, `last_probe_at`                                 | When the vendor rejected the key here (set exactly while `rejected`), and when a call under it was last let through as a probe |
+| `last_forbidden_at`, `last_forbidden_host`                     | The latest 403 the vendor answered under the grant, which changes no state                                                     |
+| `value_ciphertext`, `value_nonce`, `value_tag`, `value_key_id` | The grant's own sealed copy of the key's value                                                                                 |
 
 Withheld from `readonly_role` and its members, and excluded from the SQLite
 schema dump, like `user_keys`. Query the metadata only:
@@ -357,3 +359,60 @@ minting a key write ticket does. No ticket is involved.
 | 403    | No secure session, or a request from another `Origin`                                                                                                                                            |
 | 404    | No such key or grant of the user's; a realm the user can't read; no such operation, or one whose module is in a realm the user can't read                                                        |
 | 409    | The operation sends to another destination than `expectedDestination`                                                                                                                            |
+
+### Rejected grants
+
+A vendor that answers a `callApi` with **401** has refused the key at that
+destination, so every grant the request was sent under becomes `rejected`
+(`markGrantRejected` in `lib/key-grant-rejection.ts`, called from the sender in
+`lib/outbound/call-api-sender.ts`), and the call is refused
+`credential-rejected` (424, `meta.slot`, `meta.destination`) instead of
+handing the card the 401. Only those grants: the same key's grant at another
+host keeps sending, since a vendor can refuse a key at one host and accept it
+at another (a data-residency host). When a request carries two credentials
+the vendor doesn't say which it refused, so both grants are rejected.
+
+- **Calls under a rejected grant** are refused `credential-rejected` before
+  the key is opened and without contacting the vendor (`checkedBindings` in
+  `lib/key-bindings.ts`), except **one probe per grant per interval**: the
+  first call after `last_probe_at` plus the interval claims the probe in one
+  `UPDATE` (`claimProbe`), so concurrent calls can't both probe. The interval
+  is `KEY_GRANT_PROBE_INTERVAL_SECONDS` (default 900). A pipeline admission
+  (`pipelineAdmission`) admits a run only while a probe is due, and claims
+  nothing.
+- **A probe the vendor answers below 400 clears the grant**; a 401 leaves it
+  rejected, and anything else (403, 429, 5xx, a timeout) leaves it as it was,
+  since none of those says the key works.
+- **Replacing the key clears every one of its grants** in the transaction that
+  re-seals them (`clearKeyRejections`). Removing a grant, or deleting the key,
+  takes its rejection with it.
+- **A 403 never changes state.** Vendors use it for a missing permission on
+  one resource, an organization's single sign-on approval or a rate limit, so
+  it is recorded on the grant (`last_forbidden_at`, `last_forbidden_host`) and
+  returned to the card as the vendor's answer. The owner sees it in the key's
+  listing as `grants[].vendorForbidden`, beside `state` and `rejectedAt`.
+- **One notice on entering the state**, never on a probe refused again:
+  `user_key_grant_notices`, one row per recipient — the key's owner, and when
+  the call came through a share, each direct writer of the share's realm —
+  with the key's id and name and the destination copied in. Withheld from
+  `readonly_role` and the SQLite dump, like the other key tables.
+
+```sql
+-- A user's rejected grants, and when each was last probed.
+SELECT id, key_id, destination, rejected_at, last_probe_at, last_forbidden_at, last_forbidden_host
+FROM user_key_grants WHERE owner = '@someone:boxel.ai' AND state = 'rejected';
+
+-- The notices entering the state sent.
+SELECT created_at, recipient, key_name, destination, realm_url, share_id
+FROM user_key_grant_notices WHERE grant_id = '<id>' ORDER BY recipient;
+```
+
+The `boxel:key-grant` log channel carries one JSON line per event:
+`grant-rejected` (`grant`, `host`, `realm`, `share`), `grant-cleared`
+(`reason`: `probe` or `key-replaced`), `probe` (`status`, or null when the
+probe got no answer) and `vendor-outcome` (`host`, `status`) for every
+`callApi` the vendor answered. Hosts and ids only, never a path or a value.
+
+A user whose card shows Reconnect has a rejected grant. If the key is good
+(a vendor outage that answered 401), the next probe brings it back on its
+own, within one interval; otherwise the owner replaces the key.

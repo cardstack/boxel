@@ -778,6 +778,26 @@ export interface CallApiCredential {
   // The value as stored, where a transform makes what is sent differ from it.
   // Removed from the response as well, since a vendor can echo either.
   raw?: string;
+  // The grant the value was opened under, as `fill` reported it.
+  grant?: CallApiGrantUse;
+}
+
+// The grant a slot's value was opened under, which the sender's `fill`
+// reports and its `send` reads back to act on the vendor's answer: a 401
+// rejects the grant, a 403 is recorded on it, and a probe the vendor accepts
+// clears it. The executor carries it from one to the other unread.
+export interface CallApiGrantUse {
+  id: string;
+  destination: string;
+  slot: { name: string; key: CallApiSlot['key'] };
+  realmURL: string;
+  // The share the key was used through, for an `apiKey` slot.
+  shareId?: string;
+  // The grant's sealed copy that was opened, so a vendor's answer is held
+  // against the value it was sent, not one that replaced it meanwhile.
+  copy: string;
+  // Whether this call is the probe of a grant the vendor rejected.
+  probe: boolean;
 }
 
 // How an invocation arrived. An interactive one carries a user's session: a
@@ -823,16 +843,18 @@ export interface CallApiFilledSlot {
   // Where the key's owner approved it to be sent: the request, as built and
   // before anything is filled into it, must be under this destination.
   destination: string;
+  grant?: CallApiGrantUse;
 }
 
 // The realm server's side of a `callApi`. `fill` finds the binding for every
 // slot a request carries and opens its key under the grant it names, or
 // refuses with `binding-not-approved`, `share-suspended`,
-// `binding-needs-reapproval` or `interactive-use-not-approved`. `send` sends
-// the request through the guarded outbound client and answers with the
-// vendor's response, its credentials removed; a refusal or a failure to get
-// any response at all is thrown as an `OperationFailure` carrying
-// `guard-refused`, `upstream-timeout` or `response-too-large`.
+// `binding-needs-reapproval`, `interactive-use-not-approved` or
+// `credential-rejected`. `send` sends the request through the guarded
+// outbound client and answers with the vendor's response, its credentials
+// removed; a refusal or a failure to get any response at all is thrown as an
+// `OperationFailure` carrying `guard-refused`, `upstream-timeout` or
+// `response-too-large`, and a 401 to a credential as `credential-rejected`.
 //
 // `readiness` answers, without opening any key, whether `fill` would fill
 // every slot for this caller invoking from a card, and what would fix it if
@@ -1280,6 +1302,7 @@ export async function callApiOperation(
       token: slot.token,
       value: fill.value,
       ...(fill.raw !== undefined ? { raw: fill.raw } : {}),
+      ...(fill.grant ? { grant: fill.grant } : {}),
     });
   }
   let response: CallApiResponse;
