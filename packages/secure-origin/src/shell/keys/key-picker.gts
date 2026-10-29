@@ -1,7 +1,5 @@
 // Picks one of the user's keys, as a row of a card's edit format: each key a
-// tile to click. Each tile is a radio choice whose radio button is hidden, so
-// the arrow keys and screen readers work as for any radio group, and the
-// chosen tile is outlined. A "Select a key" prompt heads the tiles when there
+// radio tile to click. A "Select a key" prompt heads the tiles when there
 // is more than one to choose from; a single key is chosen already. Adding a
 // key is a change of its own, made on the key page, so with no keys this says
 // to add one there first. Nothing names a key but the user: the page that
@@ -13,6 +11,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import Button from '../../components/button.gts';
 import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
+import RadioTile from '../../components/radio-tile.gts';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
 
 import type { UserKey } from './context.ts';
@@ -41,16 +40,16 @@ const KeyPicker: TemplateOnlyComponent<Signature> = <template>
         data-test-key-picker-prompt
       >Select a key</legend>
       {{#each @keys as |key|}}
-        <label class='choice' data-test-key-choice={{key.name}}>
-          <input
-            type='radio'
-            name='key'
-            value={{key.id}}
-            checked={{eq @selected key.id}}
-            {{on 'change' (fn @onSelect key.id)}}
-          />
+        <RadioTile
+          class='choice'
+          @name='key'
+          @value={{key.id}}
+          @checked={{eq @selected key.id}}
+          @onChange={{fn @onSelect key.id}}
+          data-test-key-choice={{key.name}}
+        >
           <KeyTile class='tile' @key={{key}} />
-        </label>
+        </RadioTile>
       {{else}}
         <p class='empty' data-test-key-picker-empty>You haven’t added any keys
           yet. Add one on your key page first, then share it from there.</p>
@@ -89,27 +88,9 @@ const KeyPicker: TemplateOnlyComponent<Signature> = <template>
       clip-path: inset(50%);
       white-space: nowrap;
     }
-    .choice {
-      position: relative;
-      display: block;
-      cursor: pointer;
-    }
-    .choice input {
-      position: absolute;
-      opacity: 0;
-      width: 1px;
-      height: 1px;
-      margin: 0;
-    }
-    .choice:hover .tile {
-      box-shadow: 0 0 0 1px var(--foreground, var(--boxel-dark));
-    }
-    .choice:has(input:checked) .tile {
-      box-shadow: 0 0 0 2px var(--primary, var(--boxel-highlight));
-    }
-    .choice:has(input:focus-visible) .tile {
-      outline: 2px solid var(--ring, var(--boxel-highlight));
-      outline-offset: 2px;
+    /* The radio tile draws the key tile's border. */
+    .choice .tile {
+      box-shadow: none;
     }
     .empty {
       margin: 0;
