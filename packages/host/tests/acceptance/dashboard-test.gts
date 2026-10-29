@@ -18,9 +18,12 @@ import { module, test } from 'qunit';
 
 import { TrackedObject } from 'tracked-built-ins';
 
+import { rri } from '@cardstack/runtime-common';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 import {
   setupAcceptanceTestRealm,
@@ -1167,9 +1170,13 @@ module('Acceptance | dashboard', function (hooks) {
 
       // The Pinned stat waits for the desk's index counts, which fixture
       // realms don't serve, so they're seeded on the realm service.
-      async function visitWithFavorites(favorites: string[]) {
+      async function visitWithFavorites(
+        favorites: string[],
+        beforeFavorites?: () => void,
+      ) {
         let matrixService = getService('matrix-service') as MatrixService;
         await visitOperatorMode({ workspaceChooserOpened: true });
+        beforeFavorites?.();
         let realmService = getService('realm') as any;
         for (let favorite of favorites) {
           realmService.indexCountsByRealm.set(favorite, {
@@ -1251,6 +1258,60 @@ module('Acceptance | dashboard', function (hooks) {
           ).getOpenCardIds(),
           ['@cardstack/catalog/glossary'],
         );
+      });
+
+      test("a pin in a realm the app hasn't loaded is drawn once that realm is found", async function (assert) {
+        const elsewhereRealmURL = 'http://test-realm/testuser/elsewhere/';
+        // Readable by anyone and not one of the user's realms, so the app
+        // learns of it only by looking it up.
+        const unlistedRealmURL = 'http://test-realm/testuser/unlisted/';
+        await setupAcceptanceTestRealm({
+          realmURL: unlistedRealmURL,
+          mockMatrixUtils,
+          permissions: { '*': ['read'] },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Unlisted' }),
+            'notes.json': cardJSON('Notes'),
+          },
+        });
+        await setupAcceptanceTestRealm({
+          realmURL: elsewhereRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Elsewhere Workspace' }),
+            'index.json': workspaceIndexJSON({
+              'entryPoints.0': { links: { self: `${unlistedRealmURL}notes` } },
+            }),
+          },
+        });
+        mockMatrixUtils.setActiveRealms([
+          realmURL,
+          pinnedRealmURL,
+          unpinnedRealmURL,
+          catalogRealmURL,
+          elsewhereRealmURL,
+        ]);
+
+        await visitWithFavorites([elsewhereRealmURL], () => {
+          assert.strictEqual(
+            (getService('realm') as RealmService).realmOf(
+              rri(`${unlistedRealmURL}notes`),
+            ),
+            undefined,
+            "the pin's realm isn't known when the desk first searches",
+          );
+        });
+        let pins =
+          '[data-test-favorites-list] [data-test-workspace="Elsewhere Workspace"] [data-test-pinned-card]';
+        await waitUntil(() => findAll(pins).length === 1);
+
+        assert
+          .dom(pins)
+          .hasAttribute('data-test-pinned-card', `${unlistedRealmURL}notes`);
+        assert.dom(pins).hasAttribute('aria-label', 'Open Notes');
       });
 
       test('a desk with no pins shows no collage and no pin count', async function (assert) {
