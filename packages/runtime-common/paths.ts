@@ -96,12 +96,12 @@ export class RealmPaths {
         }
       }
 
-      // this will always remove a leading slash because our constructor ensures
-      // this.#realm has a trailing slash.
       let local = decodeURI(input.href).slice(this.url.length);
 
-      // this will remove any trailing slashes
-      local = local.replace(/\/+$/, '');
+      // this will remove any leading and trailing slashes. The realm URL ends
+      // in a slash, so a leading one is left only by a pathname with an extra
+      // slash after the realm's, like `//x.json`.
+      local = local.replace(/^\/+|\/+$/g, '');
 
       // the LocalPath has no leading nor trailing slashes
       return local;
@@ -112,7 +112,7 @@ export class RealmPaths {
       throw error;
     }
     let local = decodeURI(input).slice(this.url.length);
-    return local.replace(/\/+$/, '');
+    return local.replace(/^\/+|\/+$/g, '');
   }
 
   fileURL(local: LocalPath): URL {

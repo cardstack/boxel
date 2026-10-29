@@ -43,18 +43,23 @@ module('Unit | RealmPaths', function (hooks) {
     let rootPaths = new RealmPaths(new URL('https://cardstack.com/'));
     assert.strictEqual(
       rootPaths.local(new URL('https://cardstack.com//example.org/a?b=c')),
-      '/example.org/a',
+      'example.org/a',
       'a pathname that starts with // stays on the realm host',
     );
     assert.strictEqual(
       rootPaths.local(new URL('https://cardstack.com//example.org%2f..')),
-      '/example.org%2f..',
+      'example.org%2f..',
       'a pathname that starts with // and names no valid host does not throw',
     );
     assert.strictEqual(
       realmPaths.local(new URL('https://cardstack.com/hümans/a%5Cb')),
       'a/b',
       'a decoded backslash is normalized to a slash, as fileURL does',
+    );
+    assert.strictEqual(
+      realmPaths.local(new URL('https://cardstack.com/hümans//x.json')),
+      'x.json',
+      'an extra slash after the realm path is not kept in the local path',
     );
     assert.throws(
       () =>
