@@ -297,7 +297,6 @@ Neither sees card JSON. Elsewhere, reviewers enforce §1.2 and §1.4.
   `packages/host/app/components/matrix/room.gts`,
   `packages/host/app/components/operator-mode/code-submode/playground/playground-panel.gts`,
   `packages/host/app/components/operator-mode/code-submode/{left-panel-toggle,module-inspector,spec-preview}.gts`,
-  `packages/host/app/components/operator-mode/workspace-chooser/workspace.gts`,
   `packages/host/app/components/operator-mode/{card-schema-editor,code-submode,create-file-modal,create-listing-modal,edit-field-modal,interact-submode,publish-realm-modal}.gts`,
   `packages/host/app/components/realm-picker/index.gts`,
   `packages/host/app/components/search/{panel-content,section-header}.gts` and
@@ -306,7 +305,7 @@ Neither sees card JSON. Elsewhere, reviewers enforce §1.2 and §1.4.
   `new URL()` and test membership by hand.
 - `packages/host/app/components/matrix/room.gts`,
   `packages/host/app/components/operator-mode/create-file-modal.gts`,
-  `packages/host/app/components/operator-mode/workspace-chooser/{index,manage-catalogs,workspace}.gts`,
+  `packages/host/app/components/operator-mode/workspace-chooser/{index,manage-catalogs}.gts`,
   `packages/host/app/lib/utils.ts`,
   `packages/host/app/services/{matrix-service,realm-server,realm}.ts`,
   `packages/host/app/tools/{create-submission-workflow,generate-readme-spec,get-user-system-card,listing-action-build}.ts`
@@ -316,7 +315,7 @@ Neither sees card JSON. Elsewhere, reviewers enforce §1.2 and §1.4.
 - `packages/host/app/lib/matrix-classes/message-builder.ts` and
   `packages/host/app/services/store.ts` break §1.3. Adopts invalidation and
   Matrix ids as card ids without canonicalizing them.
-- `packages/host/app/lib/{card-instance-warnings,client-telemetry-labels,gc-card-store,realm-utils,stack-item,visual-capture,workspaces}.ts`,
+- `packages/host/app/lib/{card-instance-warnings,client-telemetry-labels,gc-card-store,realm-utils,stack-item,visual-capture,workspace-actions,workspaces}.ts`,
   `packages/host/app/resources/{auto-attached-card,card-resource,directory,file-tree-from-index,file,inheritance-chain}.ts`,
   `packages/host/app/routes/{command-runner,render}.ts`,
   `packages/host/app/utils/search/{sections,types,url}.ts` and
