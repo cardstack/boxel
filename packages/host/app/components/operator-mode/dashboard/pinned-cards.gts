@@ -31,7 +31,7 @@ interface Signature {
   Args: {
     // The pinned cards' ids, in the workspace's order.
     cardIds: RealmResourceIdentifier[];
-    // The workspace's own realm, searched for pins whose realm isn't known.
+    // The workspace's own realm.
     realm: string;
     workspaceName: string;
   };
@@ -48,21 +48,32 @@ export default class PinnedCards extends Component<Signature> {
   // One search for all the pins, not just the first few, so a pin with no
   // rendering yet gives its place to the next one. `html` alone would leave
   // a pin unnamed, so the title rides along as a field-limited item, which
-  // never loads code.
-  private get query(): SearchEntryWireQuery {
+  // never loads code. A pin waits for its realm to be known, which `info`
+  // looks up; the query runs again once it is.
+  private get query(): SearchEntryWireQuery | undefined {
     let { virtualNetwork } = this.network;
-    let realms = new Set(
-      this.args.cardIds.map((id) => this.realm.realmOf(id) ?? this.args.realm),
-    );
+    let realms = new Set<string>();
+    let cardUrls: string[] = [];
+    for (let id of this.args.cardIds) {
+      let url: string;
+      try {
+        url = virtualNetwork.toURL(id).href;
+      } catch {
+        continue;
+      }
+      this.realm.info(url);
+      let realmURL = this.realm.realmURLOf(url);
+      if (realmURL) {
+        realms.add(realmURL);
+        cardUrls.push(`${url}.json`);
+      }
+    }
+    if (cardUrls.length === 0) {
+      return undefined;
+    }
     return {
       realms: [...realms],
-      cardUrls: this.args.cardIds.flatMap((id) => {
-        try {
-          return [`${virtualNetwork.toURL(id).href}.json`];
-        } catch {
-          return [];
-        }
-      }),
+      cardUrls,
       scope: 'cards',
       filter: { eq: { htmlQuery: { eq: { format: 'fitted' } } } },
       fields: { entry: ['html', 'item.cardTitle'] },
