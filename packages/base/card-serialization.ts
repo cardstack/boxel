@@ -14,7 +14,6 @@ import type {
   RuntimeDependencyTrackingContext,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
-import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import type { BaseDef, BaseDefConstructor, CardDef } from './card-api';
 import type { FileDef } from './file-api';
 import type { ResourceID } from '@cardstack/runtime-common';
@@ -126,13 +125,6 @@ export const deserialize = Symbol.for('cardstack-deserialize');
 
 // --- Serialization Functions ---
 
-function myLoader(): Loader {
-  // tsc checks this file as CommonJS output when it checks realm-server, and
-  // so rejects the `import.meta` read; the read is all that is suppressed.
-  // @ts-ignore
-  return loaderForModule(import.meta);
-}
-
 export async function cardClassFromResource<CardT extends BaseDefConstructor>(
   resource: LooseCardResource | CardResource | FileMetaResource | undefined,
   fallback: CardT,
@@ -148,7 +140,8 @@ export async function cardClassFromResource<CardT extends BaseDefConstructor>(
     let card: typeof BaseDef | undefined = await loadCardDef(
       resource.meta.adoptsFrom,
       {
-        loader: myLoader(),
+        // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+        loader: import.meta.loader,
         // Every reference in a resource — its `adoptsFrom.module` and its
         // relationship links alike — is transmitted relative to the resource's
         // OWN id, independent of the document that delivered it. So a resource

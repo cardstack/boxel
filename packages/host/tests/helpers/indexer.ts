@@ -1,3 +1,4 @@
+import { getService } from '@universal-ember/test-support';
 import { isEqual } from 'lodash-es';
 
 import type { LooseCardResource, DBAdapter } from '@cardstack/runtime-common';
@@ -5,11 +6,9 @@ import {
   asExpressions,
   addExplicitParens,
   separatedByCommas,
-  loaderFor,
   internalKeyFor,
   Deferred,
   identifyCard,
-  apiFor,
   loadCardDef,
   baseCardRef,
   type CodeRef,
@@ -39,7 +38,7 @@ let typesCache = new WeakMap<typeof CardDef, Promise<string[]>>();
 // this leverages the logic from index-runner.ts to generate the types for a card
 // that are serialized in the same manner as they appear in the index
 export async function getTypes(instance: CardDef): Promise<string[]> {
-  let loader = loaderFor(instance);
+  let loader = getService('loader-service').loader;
   let card = Reflect.getPrototypeOf(instance)!.constructor as typeof CardDef;
   let cached = typesCache.get(card);
   if (cached) {
@@ -77,7 +76,9 @@ export async function getTypes(instance: CardDef): Promise<string[]> {
 }
 
 export async function serializeCard(card: CardDef): Promise<CardResource> {
-  let api = await apiFor(card);
+  let api = await getService('loader-service').loader.import<
+    typeof import('@cardstack/base/card-api')
+  >('@cardstack/base/card-api');
   return api.serializeCard(card, {}).data as CardResource;
 }
 

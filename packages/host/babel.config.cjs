@@ -7,6 +7,10 @@ const { externalName } = require('@embroider/reverse-exports');
 const {
   exportIdentityPlugin,
 } = require('@cardstack/runtime-common/export-identity-plugin');
+const {
+  bundledModuleLoaderGlobal,
+} = require('@cardstack/runtime-common/bundled-module-loader');
+const importMetaLoaderPlugin = require('./lib/import-meta-loader-plugin.cjs');
 
 const baseDir = path.resolve(__dirname, '..', 'base') + path.sep;
 const basePackageJSON = require('../base/package.json');
@@ -94,6 +98,13 @@ module.exports = {
     ],
     ...babelCompatSupport(),
     [exportIdentityPlugin, { moduleIdentifier }],
+    [
+      importMetaLoaderPlugin,
+      {
+        globalName: bundledModuleLoaderGlobal,
+        include: (filename) => filename.split('?')[0].startsWith(baseDir),
+      },
+    ],
   ],
 
   generatorOpts: {

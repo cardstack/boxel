@@ -16,6 +16,8 @@ scope:
   - packages/realm-server/main.ts
   - packages/base/mark-definition.ts
   - packages/host/babel.config.cjs
+  - packages/host/lib/import-meta-loader-plugin.cjs
+  - packages/runtime-common/bundled-module-loader.ts
   - packages/host/app/services/loader-service.ts
   - packages/host/app/services/network.ts
   - packages/host/app/services/operations.ts
@@ -141,8 +143,10 @@ This is the closed list of ways the Loader departs from native ESM.
    imports. The Loader resolves them through `resolveImport` (§1.2), with the
    shim's URL as referrer, and records them as dependencies without loading
    them. These properties are the only way into the module map. A bundled
-   module that a shim serves has no `import.meta`, and MAY reach its Loader
-   through `Loader.forBundledModules`.
+   module that a shim serves is evaluated by the platform, not a Loader, so
+   the host's build compiles its `import.meta.loader` (§1.4.1) to a global
+   that holds the host's current Loader
+   (`packages/runtime-common/bundled-module-loader.ts`).
 3. **Observation APIs.** `getLoaderFor`, the module-map queries
    (`isModuleLoaded`, `moduleKey`, `loadedModuleKeys`, `canonicalURLFor`),
    `getConsumedModules`, `getKnownConsumedModules`, runtime dependency

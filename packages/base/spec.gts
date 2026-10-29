@@ -26,7 +26,6 @@ import {
   BoxelButton,
   BasicFitted,
 } from '@cardstack/boxel-ui/components';
-import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import {
   getMenuItems,
   codeRefWithAbsoluteIdentifier,
@@ -156,7 +155,8 @@ export class SpecHeader extends GlimmerComponent<SpecHeaderSignature> {
       try {
         if (this.args.model.ref && this.args.model.id) {
           let cardDef = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
+            // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+            loader: import.meta.loader,
             relativeTo: this.args.model.id,
           });
           cardDefObj.value = cardDef;
@@ -387,7 +387,8 @@ export class SpecExamplesSection extends GlimmerComponent<SpecExamplesSectionSig
       try {
         if (this.args.model.ref && this.args.model.id) {
           let cardDef = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
+            // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+            loader: import.meta.loader,
             relativeTo: this.args.model.id,
           });
           cardDefObj.value = cardDef;
@@ -740,7 +741,8 @@ class Fitted extends Component<typeof Spec> {
       try {
         if (this.args.model.ref && this.args.model.id) {
           let card = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
+            // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+            loader: import.meta.loader,
             relativeTo: this.args.model.id,
           });
           icon.value = card.icon;
@@ -1139,11 +1141,4 @@ function getIcon(specType: string) {
     default:
       return;
   }
-}
-
-function myLoader(): Loader {
-  // tsc checks this file as CommonJS output when it checks realm-server, and
-  // so rejects the `import.meta` read; the read is all that is suppressed.
-  // @ts-ignore
-  return loaderForModule(import.meta);
 }

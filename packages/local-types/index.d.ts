@@ -1,9 +1,9 @@
 import 'ember-source/types';
 import * as ContentTag from 'content-tag';
 
-import { TemplateFactory } from 'htmlbars-inline-precompile';
+import type { TemplateFactory } from 'htmlbars-inline-precompile';
 import '@glint/ember-tsc/types';
-import { ComponentLike } from '@glint/template';
+import type { ComponentLike } from '@glint/template';
 import type { HelperLike, ModifierLike } from '@glint/template';
 import type { ConcatHelper as GlintConcatHelper } from '@glint/ember-tsc/-private/intrinsics/concat';
 import type { FnHelper as GlintFnHelper } from '@glint/ember-tsc/-private/intrinsics/fn';
@@ -13,8 +13,22 @@ import type {
   EventForName,
   OnModifierArgs,
 } from '@glint/ember-tsc/-private/intrinsics/on';
-import { Invoke, InvokeDirect } from '@glint/template/-private/integration';
+import type {
+  Invoke,
+  InvokeDirect,
+} from '@glint/template/-private/integration';
 import './eslint-js';
+import type { Loader } from '../runtime-common/loader.ts';
+
+declare global {
+  // The Loader that evaluated the module (ADR 010 §1.4.1). A base module
+  // compiled into the host bundle reads the host's current Loader here: the
+  // host's build compiles the read to the global its loader service keeps it
+  // in.
+  interface ImportMeta {
+    loader: Loader;
+  }
+}
 
 // Augment Glint's HTML element attributes with missing properties
 declare global {

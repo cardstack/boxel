@@ -519,32 +519,6 @@ export class Loader {
     return undefined;
   }
 
-  // A module a Loader evaluates discovers its loader through
-  // `import.meta.loader`, which the Loader injects at eval time. A module
-  // compiled into the host bundle is evaluated by the platform instead, so it
-  // has no such injection; the host publishes its active loader here for those
-  // modules to fall back to. Read only when `import.meta.loader` is absent.
-  static #forBundledModules: Loader | undefined;
-
-  static setForBundledModules(loader: Loader) {
-    Loader.#forBundledModules = loader;
-  }
-
-  // Withdraw a published loader as it is disposed, so a bundled module is told
-  // no loader is available rather than handed a disposed one — and with it,
-  // the module graph that loader holds. A loader that has already been
-  // superseded withdraws nothing: the publisher that replaced it is the live
-  // one.
-  static clearForBundledModules(loader: Loader) {
-    if (Loader.#forBundledModules === loader) {
-      Loader.#forBundledModules = undefined;
-    }
-  }
-
-  static forBundledModules(): Loader | undefined {
-    return Loader.#forBundledModules;
-  }
-
   async import<T extends object>(
     moduleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
@@ -1758,24 +1732,4 @@ function isEvaluatable(
     return false;
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
-}
-
-// The Loader a module runs under, for code that has to reach one from inside a
-// module rather than being handed one.
-//
-// A Loader that evaluates a module injects `import.meta.loader` into it. A
-// module compiled into a host bundle is evaluated by the platform instead and
-// carries no injection, so it falls back to the loader the host publishes for
-// bundled modules.
-//
-// The caller passes its own `import.meta` because the injection is per-module:
-// were this to read one of its own, a bundled copy of this module would hand
-// every caller the published loader, including callers that were fetched and
-// have a loader of their own.
-export function loaderForModule(meta: { loader?: Loader }): Loader {
-  let loader = meta.loader ?? Loader.forBundledModules();
-  if (!loader) {
-    throw new Error('no Loader is available to this module');
-  }
-  return loader;
 }

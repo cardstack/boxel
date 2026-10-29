@@ -35,7 +35,6 @@ import {
   Pill,
 } from '@cardstack/boxel-ui/components';
 import { restartableTask } from 'ember-concurrency';
-import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
   chooseCard,
@@ -134,7 +133,8 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     }
     try {
       let constrained = await loadCardDef(this.args.typeConstraint, {
-        loader: myLoader(),
+        // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+        loader: import.meta.loader,
       });
       if (
         isFileDef(constrained) &&
@@ -180,7 +180,12 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         .filter(Boolean) ?? [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     if (this.args.typeConstraint) {
-      type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
+      // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+      type = await getNarrowestType(
+        this.args.typeConstraint,
+        type,
+        import.meta.loader,
+      );
     }
     let filter = {
       every: [{ type }, ...selectedCardsQuery],
@@ -872,11 +877,4 @@ export function getLinksToManyComponent({
 
   componentCache.set(arrayField, stable);
   return stable.component;
-}
-
-function myLoader(): Loader {
-  // tsc checks this file as CommonJS output when it checks realm-server, and
-  // so rejects the `import.meta` read; the read is all that is suppressed.
-  // @ts-ignore
-  return loaderForModule(import.meta);
 }
