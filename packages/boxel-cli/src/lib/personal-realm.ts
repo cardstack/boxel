@@ -23,10 +23,9 @@ export type EnsurePersonalRealmResult =
 
 // Give an account its personal realm if it has none — the account-level
 // bootstrap the web app runs at signup, for accounts that never went through
-// that flow. Synapse mints such accounts itself when a Google sign-in's
-// verified email matches nothing (see boxel_oidc_mapping_provider.py), so a
-// brand-new user can finish `boxel profile add` without any Boxel code having
-// run in their browser.
+// that flow, such as one made on the Matrix server directly, so a brand-new
+// user can finish `boxel profile add` without any Boxel code having run in
+// their browser.
 //
 // "Has none" is judged from the account's realm list in Matrix account data —
 // the same list the web app assembles a session from — so accounts that

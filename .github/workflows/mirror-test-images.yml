@@ -48,7 +48,6 @@ jobs:
           # <ghcr-package-suffix>:<tag>=<source-ref>. These versions must
           # match what runs at test time and the warm-test-images action:
           # packages/matrix/support/synapse/index.ts,
-          # packages/matrix/scripts/test-oidc-mapping-provider.sh,
           # packages/matrix/docker/smtp4dev.ts, packages/matrix/docker/
           # mock-oauth2.ts, scripts/pg-container.sh,
           # .devcontainer/claude-web-setup.sh, and

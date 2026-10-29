@@ -1,5 +1,5 @@
 {
-  "description": "How a Google identity with no linked account resolves to a Matrix account. Run against BoxelOidcMappingProvider (test_boxel_oidc_mapping_provider.py) and the realm server's secure-origin Google sign-in (packages/realm-server/tests/google-account-test.ts), so the two can't diverge. `usersByEmail` lists the accounts holding the email; `existingLocalparts` the localparts already taken, which a candidate matches without case, as Synapse compares localparts. `expected.outcome` is `existing` (the Google identity is linked to that account), `new` (an account is made) or `refused` (with the message the user sees).",
+  "description": "How a Google identity with no linked account resolves to a Matrix account in the realm server's Google sign-in on the secure origin (tests/google-account-test.ts). `usersByEmail` lists the accounts holding the email; `existingLocalparts` the localparts already taken, which a candidate matches without case, as Synapse compares localparts. `expected.outcome` is `existing` (the Google identity is linked to that account), `new` (an account is made) or `refused` (with the message the user sees).",
   "vectors": [
     {
       "name": "a missing email is refused",

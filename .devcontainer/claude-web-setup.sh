@@ -156,7 +156,6 @@ fi
 if docker info >/dev/null 2>&1; then
   # These pins are duplicated in scripts/pg-container.sh,
   # packages/matrix/support/synapse/index.ts,
-  # packages/matrix/scripts/test-oidc-mapping-provider.sh,
   # packages/matrix/docker/smtp4dev.ts, .github/workflows/mirror-test-images.yml
   # and .github/actions/warm-test-images/action.yml; bump them together.
   for image in postgres:16.3 matrixdotorg/synapse:v1.163.0 rnwood/smtp4dev:v3.1; do

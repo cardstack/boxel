@@ -8,6 +8,7 @@ import {
   createSubscribedUser,
   createSubscribedUserAndLogin,
   getExternalIdsForIdp,
+  assertLoggedOut,
   logout,
   oauthErrorResponseURL,
   setupPermissions,
@@ -249,7 +250,7 @@ test.describe('the secure window signs in on its own', () => {
 
     // The secure window stays open while the user signs out of the app.
     await logout(page);
-    await expect(page.locator('[data-test-login-btn]')).toBeVisible();
+    await assertLoggedOut(page);
 
     // The app's sign-out tells the realm server without waiting on it. Asked
     // from the secure origin, where only an ended session is refused.

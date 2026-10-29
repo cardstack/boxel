@@ -6,6 +6,7 @@ import {
   createSubscribedUser,
   getSharedSQLExecutor,
   updateSynapseUser,
+  signInOnSecureOrigin,
 } from '../helpers/index.ts';
 import {
   fillRegistration,
@@ -220,10 +221,7 @@ test.describe('The secure origin’s pages', () => {
 
     // The new account signs in to the app with its password.
     await page.goto(appURL);
-    let fields = page.frameLocator('[data-test-credential-fields-frame]');
-    await fields.locator('[data-test-username-field]').fill(username);
-    await fields.locator('[data-test-password-field]').fill('mypassword1!');
-    await page.locator('[data-test-login-btn]').click();
+    await signInOnSecureOrigin(page, username, 'mypassword1!');
     await expect(
       page.locator('[data-test-operator-mode-stack="0"]'),
     ).toHaveCount(1);

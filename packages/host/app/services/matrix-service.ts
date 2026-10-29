@@ -1691,7 +1691,7 @@ export default class MatrixService extends Service {
         // Symmetric to logout()'s notifySessionEnded(): tell every session
         // participant a session is now established so they can re-arm the
         // session-scoped state their resetState() tore down. All login paths
-        // (boot, SSO, password, /connect, new-user) converge here. Fires after
+        // (boot, token hand-off, /connect) converge here. Fires after
         // loginToRealms so realm auth is established; participants that need
         // rooms (e.g. the AI panel) already tolerate sliding sync not having
         // delivered them yet.
