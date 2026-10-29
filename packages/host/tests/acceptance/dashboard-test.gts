@@ -669,7 +669,7 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert.deepEqual(
           findAll(menuItems).map((item) => item.textContent?.trim()),
-          ['https://newer.example.com/', 'https://older.example.com/'],
+          ['newer.example.com', 'older.example.com'],
           'every published site is listed, most recently published first',
         );
 
@@ -726,7 +726,7 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert.deepEqual(
           findAll(menuItems).map((item) => item.textContent?.trim()),
-          ['https://newer.example.com/', 'https://older.example.com/'],
+          ['newer.example.com', 'older.example.com'],
         );
 
         await click(findAll(menuItems)[1]);
@@ -1426,7 +1426,7 @@ module('Acceptance | dashboard', function (hooks) {
 
             assert.deepEqual(
               findAll(menuItems).map((item) => item.textContent?.trim()),
-              ['https://newer.example.com/', 'https://older.example.com/'],
+              ['newer.example.com', 'older.example.com'],
               'every published site is listed, most recently published first',
             );
 

@@ -107,6 +107,17 @@ const SPOKEN_TIME_UNITS = {
   hrs: 'hour',
 };
 
+// A published site's address without its scheme or trailing slash, which
+// take room and tell sites apart no better.
+function siteLabel(publishedURL: string) {
+  try {
+    let url = new URL(publishedURL);
+    return url.host + url.pathname.replace(/\/$/, '');
+  } catch {
+    return publishedURL;
+  }
+}
+
 export default class Workspace extends Component<Signature> {
   <template>
     {{#if this.loadRealmTask.isRunning}}
@@ -931,6 +942,11 @@ export default class Workspace extends Component<Signature> {
         width: 100%;
         height: var(--_workspace-chin-height);
       }
+      /* The open menu's panel is stacked with the chin, so the chin rises
+         above the tile's frame, which would otherwise draw across it. */
+      .workspace.is-open .host-menu {
+        z-index: 5;
+      }
       /* Pret UI's Menu has no knob to stretch its trigger's box. */
       .host-menu-wrap,
       .host-menu :deep(.pretui-menu-trigger) {
@@ -1473,12 +1489,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   private get displayPublishedURL() {
-    try {
-      let url = new URL(this.primaryPublishedURL);
-      return url.host + url.pathname.replace(/\/$/, '');
-    } catch {
-      return this.primaryPublishedURL;
-    }
+    return siteLabel(this.primaryPublishedURL);
   }
 
   private get extraPublishedCount() {
@@ -1500,7 +1511,7 @@ export default class Workspace extends Component<Signature> {
         kind: 'section',
         label: 'Launch in new window',
         items: this.publishedRealmURLs.map((url) => ({
-          label: url,
+          label: siteLabel(url),
           onSelect: () => this.openPublishedRealm(url),
         })),
       },
