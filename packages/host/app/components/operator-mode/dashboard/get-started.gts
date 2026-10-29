@@ -1,6 +1,7 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -9,7 +10,8 @@ import Check from '@cardstack/boxel-icons/check';
 import { Button } from '@cardstack/pretui/components/button';
 import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
-import { dropTask } from 'ember-concurrency';
+import { didCancel, dropTask, task } from 'ember-concurrency';
+import { modifier } from 'ember-modifier';
 
 import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
 
@@ -22,6 +24,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
+
+import { AGENT_KINDS } from './agent-kinds';
 
 const log = logger('component:dashboard/get-started');
 
@@ -45,7 +49,7 @@ interface Signature {
 // The dashboard's onboarding checklist. Every tick comes from something the
 // user has actually done, read from state the host already keeps, so the list
 // can't drift from what happened. It folds to one line once a step is done,
-// and goes away once every step is done or the user dismisses it.
+// and goes away for good once every step is done or the user dismisses it.
 export default class GetStarted extends Component<Signature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
@@ -58,6 +62,29 @@ export default class GetStarted extends Component<Signature> {
 
   private titleId = `${guidFor(this)}-title`;
   private stepsId = `${guidFor(this)}-steps`;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    this.loadTask.perform().catch((error: unknown) => {
+      if (!didCancel(error)) {
+        log.warn(`waiting for Get started's signals failed: ${error}`);
+      }
+    });
+  }
+
+  // Shown only once every tick can be read, so a done step never flashes as
+  // undone. Recent cards are read from local storage when their service is
+  // made, so they need no wait. The rest have no loaded state of their own:
+  // login reads the dashboard state, the realm list and its info before it
+  // starts the sync, and the AI sessions are listed once the sync's first
+  // pass is processed.
+  private loadTask = task(async () => {
+    await this.aiAssistantPanelService.waitForSessionRooms();
+  });
+
+  private get isLoaded() {
+    return Boolean(this.loadTask.lastSuccessful);
+  }
 
   private get steps(): Step[] {
     let { agentSetup } = this.matrixService.dashboardState;
@@ -72,10 +99,7 @@ export default class GetStarted extends Component<Signature> {
         id: 'ask-ai',
         title: 'Ask Boxel AI to build something',
         hint: 'It can make your first cards from a sentence.',
-        // A session opens empty, so only one with a message has been asked.
-        done: this.aiAssistantPanelService.aiSessionRooms.some((session) =>
-          Boolean(session.lastMessage),
-        ),
+        done: this.aiAssistantPanelService.aiSessionRooms.length > 0,
       },
       {
         id: 'publish',
@@ -89,7 +113,9 @@ export default class GetStarted extends Component<Signature> {
         id: 'agent',
         title: 'Connect your own agent',
         hint: 'Claude Code and others build in your workspaces through the Boxel plugin.',
-        done: Object.values(agentSetup ?? {}).some((copied) => copied > 0),
+        // Only listed agents: progress kept for one no longer offered
+        // doesn't count.
+        done: AGENT_KINDS.some(({ id }) => (agentSetup?.[id] ?? 0) > 0),
       },
     ];
   }
@@ -102,11 +128,18 @@ export default class GetStarted extends Component<Signature> {
     return this.steps.find((step) => !step.done);
   }
 
+  private get isDismissed() {
+    return Boolean(this.matrixService.dashboardState.onboardingDismissed);
+  }
+
   private get isShown() {
-    return (
-      !this.matrixService.dashboardState.onboardingDismissed &&
-      this.nextStep !== undefined
-    );
+    return this.isLoaded && !this.isDismissed && this.nextStep !== undefined;
+  }
+
+  // Finishing every step dismisses it, so a step that later reads as undone
+  // (recent cards are kept per browser) doesn't bring it back.
+  private get isFinished() {
+    return this.isLoaded && !this.isDismissed && this.nextStep === undefined;
   }
 
   // A new account sees the steps; once one is done the panel folds to a
@@ -118,6 +151,12 @@ export default class GetStarted extends Component<Signature> {
   @action private toggleExpanded() {
     this.isExpanded = !this.isExpanded;
   }
+
+  // Runs when the finished state renders, not on every render: its element
+  // is inserted once, and goes when the dismissal lands.
+  private dismissWhenFinished = modifier(() => {
+    this.dismissTask.perform();
+  });
 
   private dismissTask = dropTask(async () => {
     try {
@@ -251,6 +290,8 @@ export default class GetStarted extends Component<Signature> {
           </ol>
         {{/if}}
       </section>
+    {{else if this.isFinished}}
+      <span hidden {{this.dismissWhenFinished}}></span>
     {{/if}}
 
     <style scoped>

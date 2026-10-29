@@ -56,10 +56,10 @@ interface Signature {
 }
 
 // The Agents section's body: pick an agent, then set it up. A coding agent's
-// steps are typed into its own chat; Boxel AI Assistant, built in, gets a
-// how-it-works card and a way to start. The pick and the setup progress are
-// kept in the dashboard's account data, so the rail's flyout and Get started
-// read the same state.
+// steps are copied into a terminal or its own chat; Boxel AI Assistant, built
+// in, gets a how-it-works card and a way to start. The pick and the setup
+// progress are kept in the dashboard's account data, so the rail's flyout and
+// Get started read the same state.
 export default class Agents extends Component<Signature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
@@ -99,7 +99,7 @@ export default class Agents extends Component<Signature> {
   }
 
   private get isBuiltIn() {
-    return !this.kind.installCommand;
+    return !this.kind.setup;
   }
 
   // Favorites first, since they're what the user works on, then the rest of
@@ -204,10 +204,11 @@ export default class Agents extends Component<Signature> {
     };
   }
 
-  // The dashboard can't see the agent's chat, so copying a step is what counts
-  // as doing it. The count is computed from the stored one, so a later step
-  // copied in another tab isn't wound back. A copy the browser refuses (no
-  // clipboard permission, an unfocused page) leaves the step as it was.
+  // The dashboard can't see the terminal or the agent's chat, so copying a
+  // step is what counts as doing it. The count is computed from the stored
+  // one, so a later step copied in another tab isn't wound back. A copy the
+  // browser refuses (no clipboard permission, an unfocused page) leaves the
+  // step as it was.
   private copyTask = restartableTask(async (index: number, text: string) => {
     let agent = this.kind.id;
     // The copied step stays open until the feedback ends, though the count
