@@ -663,12 +663,9 @@ export class Loader {
   ): void {
     // This walk repeats on every import() of the same module (e.g. when
     // deserializing many cards of one type) yet records the identical node set
-    // each time; the probe collapses repeats to one Set lookup. Scoped apart
-    // from the relationship walk because this one excludes shimmed modules, so
-    // the two record slightly different node sets.
+    // each time; the probe collapses repeats to one Set lookup.
     if (
       !shouldTrackRuntimeModuleGraph(
-        'import',
         rootModuleIdentifier,
         dependencyTrackingContext,
       )

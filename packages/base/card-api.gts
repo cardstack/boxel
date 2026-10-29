@@ -38,7 +38,6 @@ import {
   hasNothingToShow,
   getSerializer,
   humanReadable,
-  identify,
   identifyCard,
   computeContentHash,
   inferContentType,
@@ -83,11 +82,9 @@ import {
   FileMetaResourceType,
   CardResourceType,
   loadFileMetaDocument,
-  shouldTrackRuntimeModuleGraph,
   shouldTrackRuntimeRelationship,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
-  trackRuntimeModuleDependency,
   runtimeNonQueryDependencyContext,
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
@@ -5163,21 +5160,19 @@ function trackRuntimeRelationshipDependency(
   if (!shouldTrackRuntimeRelationship(id, dependencyTrackingContext)) {
     // Already tracked this relationship target this session. A linksTo /
     // linksToMany getter runs this on every read, and a dense graph re-reads
-    // the same targets combinatorially; a repeat would re-derive the identical
-    // instance/file + module-graph node set, so skipping it — and the
-    // prototype/identity lookups below — is a pure no-op.
+    // the same targets combinatorially; a repeat would record the identical
+    // instance or file dependency, so skipping it is a pure no-op.
     return;
   }
+  // Only the target itself is recorded, not its definition's module graph:
+  // the target's own index row records that graph, and invalidation is
+  // transitive through the target, so an edit to its definition reaches this
+  // consumer the same way an edit to the target does.
   if (isFileDef(declaredCard)) {
     trackRuntimeFileDependency(id, dependencyTrackingContext);
-    trackRuntimeRelationshipModuleDependencies(
-      value,
-      dependencyTrackingContext,
-    );
     return;
   }
   trackRuntimeInstanceDependency(id, dependencyTrackingContext);
-  trackRuntimeRelationshipModuleDependencies(value, dependencyTrackingContext);
 }
 
 function trackRuntimeRelationshipDependencies(
@@ -5191,56 +5186,6 @@ function trackRuntimeRelationshipDependencies(
       declaredCard,
       dependencyTrackingContext,
     );
-  }
-}
-
-function trackRuntimeRelationshipModuleDependencies(
-  value: unknown,
-  dependencyTrackingContext?: RuntimeDependencyTrackingContext,
-): void {
-  if (!value || typeof value !== 'object') {
-    return;
-  }
-
-  let ctor = Reflect.getPrototypeOf(value)?.constructor;
-  if (typeof ctor !== 'function') {
-    return;
-  }
-
-  let identity = identify(ctor);
-  if (!identity) {
-    return;
-  }
-
-  // This walk repeats once per element of a linksToMany (and again on every
-  // getter re-read), but records the identical node set every time, so it only
-  // needs to run once per (context, type module) per tracking session. The
-  // probe collapses each repeat to a single Set lookup — without it, a
-  // linksToMany of N same-typed cards re-tracks the type's entire module graph
-  // N times per read, and that per-call tracking overhead dominates aggregate
-  // renders.
-  if (
-    !shouldTrackRuntimeModuleGraph(
-      'relationship',
-      identity.module,
-      dependencyTrackingContext,
-    )
-  ) {
-    return;
-  }
-
-  // Loader identities and dependency lists are already in canonical RRI form,
-  // which is what the tracker records — so they are passed through as they are.
-  trackRuntimeModuleDependency(identity.module, dependencyTrackingContext);
-
-  // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
-  let loader = import.meta.loader;
-  if (!loader) {
-    return;
-  }
-
-  for (let dep of loader.getKnownConsumedModules(identity.module)) {
-    trackRuntimeModuleDependency(dep, dependencyTrackingContext);
   }
 }
 
