@@ -1164,7 +1164,8 @@ export async function fillSlots(
     }
     // A key that mints its access tokens sends the one it mints now; its
     // grant's marker has only proved the grant real.
-    let secret = MINTING_KINDS.has(opened.kind)
+    let mints = MINTING_KINDS.has(opened.kind);
+    let secret = mints
       ? await mintedToken(dbAdapter, ring, opened, slot, lookup.operation)
       : opened.value;
     let value =
@@ -1176,15 +1177,22 @@ export async function fillSlots(
       value,
       ...(value !== secret ? { raw: secret } : {}),
       destination: opened.destination,
-      grant: {
-        id: row.grant_id as string,
-        destination: opened.destination,
-        slot: { name: slot.name, key: slot.key },
-        realmURL: lookup.realmURL,
-        ...(row.share_id ? { shareId: row.share_id as string } : {}),
-        copy: opened.copy,
-        probe,
-      },
+      // A vendor's 401 to a stored key rejects the grant it was sent under. A
+      // minted token's refusal is its connection's to judge when it next
+      // refreshes, so a 401 to one is only the vendor's answer.
+      ...(mints
+        ? {}
+        : {
+            grant: {
+              id: row.grant_id as string,
+              destination: opened.destination,
+              slot: { name: slot.name, key: slot.key },
+              realmURL: lookup.realmURL,
+              ...(row.share_id ? { shareId: row.share_id as string } : {}),
+              copy: opened.copy,
+              probe,
+            },
+          }),
     });
   }
   return filled;

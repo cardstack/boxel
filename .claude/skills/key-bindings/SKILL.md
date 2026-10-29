@@ -193,7 +193,9 @@ order, and maps each way a slot falls short to an answer: no binding →
 `needs-connect`, or `needs-approval` where one of the caller's grants already
 covers the destination; a changed fingerprint → `needs-reapproval`; not
 `interactive` → `needs-approval`; a share slot short in any way → `needs-admin`
-to anyone but the share key's owner; nobody signed in → `needs-sign-in`. It
+to anyone but the share key's owner; a grant the vendor rejected, with no
+probe due → `credential-rejected` (to everyone, since the call says the
+same); nobody signed in → `needs-sign-in`. It
 opens no key and writes nothing: a changed fingerprint is reported, not moved
 to `needs-reapproval`, and no notice is recorded. **A check added to
 `checkedBindings` or `fillSlots` belongs in `key-readiness.ts` too**, or
