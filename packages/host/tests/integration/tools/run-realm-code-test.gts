@@ -390,7 +390,10 @@ return 'answered';`,
       roomId: '!room:example.com',
       code: `return await realm.ask({ question: 'Which one?', options: [{ label: 'Alpha', value: 'a' }, { label: 'Beta', value: 'b' }] });`,
     });
-    await waitUntil(() => toolService.scriptAsks.has('ask-call'));
+    // the sandbox starts before the script asks, slowly on a busy machine
+    await waitUntil(() => toolService.scriptAsks.has('ask-call'), {
+      timeout: 10000,
+    });
     let ask = toolService.scriptAsks.get('ask-call')!;
     assert.strictEqual(ask.request.question, 'Which one?');
     ask.answer('b');
@@ -425,7 +428,10 @@ return 'answered';`,
       code: `await realm.ask({ question: 'Which one?', options: [{ label: 'A' }, { label: 'B' }] });
 return 'answered';`,
     });
-    await waitUntil(() => toolService.scriptAsks.has('stopped-ask-call'));
+    // the sandbox starts before the script asks, slowly on a busy machine
+    await waitUntil(() => toolService.scriptAsks.has('stopped-ask-call'), {
+      timeout: 10000,
+    });
     toolService.stopTool('stopped-ask-call');
 
     assert.false(
