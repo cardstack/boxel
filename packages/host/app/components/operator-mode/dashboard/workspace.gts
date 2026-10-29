@@ -75,11 +75,13 @@ import {
 
 import HostedPill from './hosted-pill';
 import ItemContainer from './item-container';
+import PinnedCards from './pinned-cards';
+import { WorkspacePins } from './workspace-pins';
 
 import type { MenuEntry } from '@cardstack/pretui/internal/menu';
 
-// A favorite is a desk: its wallpaper as a surface, with room for the
-// workspace's pinned cards. A recent workspace is a tile with its wallpaper
+// A favorite is a desk: its wallpaper as a surface, with the workspace's
+// pinned cards on it. A recent workspace is a tile with its wallpaper
 // and, when hosted, its site's address as a chin. The rest are rows, where
 // names are what you scan.
 export type WorkspaceVariant = 'desk' | 'tile' | 'row';
@@ -234,8 +236,14 @@ export default class Workspace extends Component<Signature> {
                 <HostedPill class='desk-live' data-test-workspace-hosted />
               {{/if}}
             </div>
-            {{! Room for the workspace's pinned cards. }}
-            <div class='desk-pins'></div>
+            {{#if this.hasPins}}
+              <PinnedCards
+                class='desk-pins'
+                @cardIds={{this.pins.cardIds}}
+                @realmIdentifier={{@realmIdentifier}}
+                @workspaceName={{this.name}}
+              />
+            {{/if}}
           </div>
           <div class='desk-caption'>
             {{! Always rendered, so the counts, which load after the desk,
@@ -848,10 +856,24 @@ export default class Workspace extends Component<Signature> {
         margin-left: auto;
         backdrop-filter: var(--_workspace-glass-blur);
       }
+      /* Behind pins the wallpaper is dimmed, not blurred: it keeps the
+         workspace's colors while the cards carry the content. It follows
+         the drawn collage, not the link count, so a desk whose pins have
+         no rendering yet keeps its wallpaper. A hover brings a little of
+         it back. */
+      .desk-surface:has([data-pinned-collage])::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-color: var(--boxel-dark-50);
+        transition: background-color var(--boxel-transition);
+      }
+      .workspace.is-desk:hover
+        .desk-surface:has([data-pinned-collage])::before {
+        background-color: var(--boxel-dark-40);
+      }
       .desk-pins {
-        position: relative;
         flex: 1;
-        pointer-events: none;
       }
       .desk-caption {
         display: flex;
@@ -1266,6 +1288,17 @@ export default class Workspace extends Component<Signature> {
   @tracked private isHostDropdownOpen = false;
   @tracked private reindexError: string | undefined;
 
+  // Only a desk shows pins, so only a desk reads them.
+  private pins = new WorkspacePins(this, () =>
+    this.args.variant === 'desk'
+      ? {
+          realm: this.args.realmIdentifier,
+          realmURL: this.network.virtualNetwork.toURL(this.args.realmIdentifier)
+            .href,
+        }
+      : undefined,
+  );
+
   constructor(...args: [any, any]) {
     super(...args);
     this.loadRealmTask
@@ -1616,9 +1649,11 @@ export default class Workspace extends Component<Signature> {
     return this.updatedAtLabel?.replace(UPDATED_PREFIX, '');
   }
 
-  // A desk's Cards / Files / Definitions counts. A stat with no count is
-  // dropped rather than shown as 0. The counts are requested for favorites
-  // alone, after the desk renders, so the caption reserves their line.
+  // A desk's Cards / Files / Definitions / Pinned counts. A stat with no
+  // count is dropped rather than shown as 0. The counts are requested for
+  // favorites alone, after the desk renders, so the caption reserves their
+  // line. The pin count waits for the index counts, so the line fills at once
+  // instead of shifting as they arrive.
   private get tileStats(): { label: string; count: number }[] {
     let counts = this.realm.indexCounts(this.args.realmIdentifier);
     if (!counts) {
@@ -1628,7 +1663,12 @@ export default class Workspace extends Component<Signature> {
       { label: 'Cards', count: counts.cardCount },
       { label: 'Files', count: counts.fileCount },
       { label: 'Definitions', count: counts.definitionCount },
+      { label: 'Pinned', count: this.pins.cardIds.length },
     ].filter((stat): stat is { label: string; count: number } => !!stat.count);
+  }
+
+  private get hasPins() {
+    return this.pins.cardIds.length > 0;
   }
 
   private get isRealmOwner() {
