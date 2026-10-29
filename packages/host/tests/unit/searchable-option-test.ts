@@ -20,7 +20,7 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 
 import { testRealmURL } from '../helpers';
 
-import { shimTestModule } from '../helpers/identity-tags';
+import { tagTestModuleExports } from '../helpers/identity-tags';
 
 import type { CardDef, Field } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -157,14 +157,14 @@ module('Unit | searchable option', function (hooks) {
       });
     }
 
-    shimTestModule(loader, `${testRealmURL}country`, { Country });
-    shimTestModule(loader, `${testRealmURL}employer`, { Employer });
-    shimTestModule(loader, `${testRealmURL}address`, { Address });
-    shimTestModule(loader, `${testRealmURL}author`, { Author });
-    shimTestModule(loader, `${testRealmURL}article`, { Article });
-    shimTestModule(loader, `${testRealmURL}citation`, { Citation });
-    shimTestModule(loader, `${testRealmURL}journal`, { Journal });
-    shimTestModule(loader, `${testRealmURL}sample`, { Sample });
+    tagTestModuleExports(`${testRealmURL}country`, { Country });
+    tagTestModuleExports(`${testRealmURL}employer`, { Employer });
+    tagTestModuleExports(`${testRealmURL}address`, { Address });
+    tagTestModuleExports(`${testRealmURL}author`, { Author });
+    tagTestModuleExports(`${testRealmURL}article`, { Article });
+    tagTestModuleExports(`${testRealmURL}citation`, { Citation });
+    tagTestModuleExports(`${testRealmURL}journal`, { Journal });
+    tagTestModuleExports(`${testRealmURL}sample`, { Sample });
 
     cards = {
       Article: Article as unknown as typeof CardDef,

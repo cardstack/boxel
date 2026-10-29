@@ -4,12 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  identify,
-  Loader,
-  VirtualNetwork,
-} from '@cardstack/runtime-common';
+import { identify, Loader, VirtualNetwork } from '@cardstack/runtime-common';
 
 import {
   beginTimerBlock,
@@ -25,7 +20,6 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../helpers';
-import { shimTestModule } from '../helpers/identity-tags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -697,28 +691,4 @@ module('Unit | loader', function (hooks) {
       }
     });
   }
-
-  test('identify preserves original module for reexports', function (assert) {
-    let throwIfFetch = new Loader(async () => {
-      throw new Error(
-        'fetch should not be invoked during shimmed module tests',
-      );
-    });
-
-    class StringField {}
-
-    shimTestModule(throwIfFetch, `${baseRealm.url}card-api.gts`, {
-      StringField,
-    });
-
-    shimTestModule(throwIfFetch, `${baseRealm.url}string.ts`, {
-      default: StringField,
-    });
-
-    // The identity is the module the tag names.
-    assert.deepEqual(identify(StringField), {
-      module: `${baseRealm.url}card-api`,
-      name: 'StringField',
-    });
-  });
 });

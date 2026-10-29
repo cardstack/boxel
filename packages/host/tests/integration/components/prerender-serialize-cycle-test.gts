@@ -25,7 +25,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import { shimTestModule } from '../../helpers/identity-tags';
+import { tagTestModuleExports } from '../../helpers/identity-tags';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -88,7 +88,7 @@ module('Integration | prerender serialize cycle guard', function (hooks) {
         </template>
       };
     }
-    shimTestModule(loader, `${testRealmURL}test-cards`, { Node });
+    tagTestModuleExports(`${testRealmURL}test-cards`, { Node });
     let api = (await loader.import(
       '@cardstack/base/card-api',
     )) as typeof import('@cardstack/base/card-api');
@@ -148,7 +148,7 @@ module('Integration | prerender serialize cycle guard', function (hooks) {
         query: { filter: { eq: { firstName: 'anything' } } },
       });
     }
-    shimTestModule(loader, `${testRealmURL}team-cards`, { Member, Team });
+    tagTestModuleExports(`${testRealmURL}team-cards`, { Member, Team });
 
     let member = new Member({ firstName: 'Mango' });
     let team = new Team({ teamName: 'Engineering' });

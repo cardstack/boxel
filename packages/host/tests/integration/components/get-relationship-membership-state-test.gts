@@ -30,7 +30,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import { shimTestModule } from '../../helpers/identity-tags';
+import { tagTestModuleExports } from '../../helpers/identity-tags';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -126,7 +126,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let pet = new Pet({ firstName: 'Mango' });
       await saveCard(pet, `${testRealmURL}Pet/mango`, loader);
@@ -153,7 +153,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let unsavedPet = new Pet({ firstName: 'Mango' });
       let person = new Person({ firstName: 'Hassan', pet: unsavedPet });
@@ -184,7 +184,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       let state = singleMember(
@@ -204,7 +204,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       let sentinel: NotLoadedSentinel = {
@@ -230,7 +230,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       let doc = errorDoc('upstream pet exploded');
@@ -259,7 +259,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       let doc = errorDoc('not found', 404);
@@ -290,7 +290,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({ firstName: 'Mango' });
       await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
@@ -343,7 +343,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       let states = members(getRelationshipMembershipState(person, 'pets'));
@@ -358,7 +358,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       let sentinel: NotLoadedSentinel = {
@@ -396,7 +396,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
           },
         });
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let pet = new Pet({ firstName: 'Mango' });
       await saveCard(pet, `${testRealmURL}Pet/mango`, loader);
@@ -423,7 +423,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
           },
         });
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({ firstName: 'Mango' });
       let vangogh = new Pet({ firstName: 'Van Gogh' });
@@ -461,7 +461,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
           },
         });
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       let rel = getRelationshipMembershipState(person, 'maybePet');
@@ -481,7 +481,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field pet = linksTo(Pet);
         @field pets = linksToMany(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({ firstName: 'Mango' });
       await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
@@ -506,7 +506,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       let doc = errorDoc('upstream exploded');
@@ -532,7 +532,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       let doc = errorDoc('missing', 404);
@@ -558,7 +558,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       getDataBucket(person).set('pet', {
@@ -581,7 +581,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({ firstName: 'Mango' });
       await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
@@ -637,7 +637,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field pet = linksTo(Pet);
         @field pets = linksToMany(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       getDataBucket(person).set('pet', {
@@ -676,7 +676,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
           },
         });
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       getDataBucket(person).set('pet', {
@@ -705,7 +705,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field detail = contains(Detail);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         Person,
         Pet,
         Detail,
@@ -748,7 +748,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field name = contains(StringField);
         @field child = linksTo(Child);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         Parent,
         Child,
         Pet,
@@ -784,7 +784,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field self = linksTo(() => Node);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Node, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Node, Pet });
 
       let node = new Node({ name: 'Node' });
       await saveCard(node, `${testRealmURL}Node/n`, loader);
@@ -821,7 +821,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field pets = linksToMany(Pet);
         @field detail = contains(Detail);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         Person,
         Pet,
         Detail,
@@ -872,7 +872,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       let sentinel: NotLoadedSentinel = {
@@ -907,7 +907,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
       // Seed the WatchedArray that linksToMany.emptyValue() returns by reading
@@ -946,7 +946,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let renderCount = 0;
       let bump = () => {
@@ -1003,7 +1003,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
         @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({ firstName: 'Mango' });
       let vangogh = new Pet({ firstName: 'Van Gogh' });
@@ -1053,7 +1053,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
       let person = new Person({ firstName: 'Hassan' });
       assert.throws(
         () => getRelationshipMembershipState(person, 'pet'),
@@ -1065,7 +1065,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
       }
-      shimTestModule(loader, `${testRealmURL}test-cards`, { Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
       let person = new Person({ firstName: 'Hassan' });
       assert.throws(
         () => getRelationshipMembershipState(person, 'firstName'),

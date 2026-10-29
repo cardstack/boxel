@@ -114,8 +114,8 @@ module('Unit | operation lowering', function (hooks) {
     };
   });
 
-  // Register a class under `${testRealmURL}<name>` so `identifyCard` names it
-  // and `lookupDefinition` can load it back.
+  // Register a class under `${testRealmURL}<name>` so `lookupDefinition` can
+  // load it back by the code ref its tag names.
   function shim(exports: Record<string, typeof BaseDef>) {
     for (let [name, def] of Object.entries(exports)) {
       shimTestModule(loader, `${testRealmURL}${name.toLowerCase()}`, {
