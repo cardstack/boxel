@@ -12,6 +12,8 @@
 
   --host-search-sheet-z-index: 300;
 
+  /* Over the chooser's page, under the search sheet and the top bar. */
+  --host-dashboard-rail-z-index: 250;
   --host-workspace-chooser-z-index: 200;
 }
 

@@ -49,6 +49,7 @@ import * as InvalidateRealmIdentifiersToolModule from './invalidate-realm-identi
 import * as InviteUserToRoomToolModule from './invite-user-to-room';
 import * as InvokeCardOperationToolModule from './invoke-card-operation';
 import * as LintAndFixToolModule from './lint-and-fix';
+import * as ListRealmKeySharesToolModule from './list-realm-key-shares';
 import * as ListingBuildToolModule from './listing-action-build';
 import * as MigrateSkillToolModule from './migrate-skill';
 import * as OneShotLlmRequestToolModule from './one-shot-llm-request';
@@ -88,11 +89,13 @@ import * as ShowCardToolModule from './show-card';
 import * as ShowFileToolModule from './show-file';
 import * as StoreAddToolModule from './store-add';
 import * as SummarizeSessionToolModule from './summarize-session';
+import * as SuspendKeyShareToolModule from './suspend-key-share';
 import * as SwitchSubmodeToolModule from './switch-submode';
 import * as SyncOpenRouterModelsToolModule from './sync-openrouter-models';
 import * as TransformCardsToolModule from './transform-cards';
 import * as UnpublishRealmToolModule from './unpublish-realm';
 import * as UnregisterBotToolModule from './unregister-bot';
+import * as UnshareKeyToolModule from './unshare-key';
 import * as UpdateCodePathWithSelectionToolModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionToolModule from './update-playground-selection';
 import * as UpdateRoomSkillsToolModule from './update-room-skills';
@@ -333,6 +336,17 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(virtualNetwork, 'open-workspace', OpenWorkspaceToolModule);
   shimHostToolModule(
     virtualNetwork,
+    'list-realm-key-shares',
+    ListRealmKeySharesToolModule,
+  );
+  shimHostToolModule(
+    virtualNetwork,
+    'suspend-key-share',
+    SuspendKeyShareToolModule,
+  );
+  shimHostToolModule(virtualNetwork, 'unshare-key', UnshareKeyToolModule);
+  shimHostToolModule(
+    virtualNetwork,
     'send-ai-assistant-message',
     SendAiAssistantMessageModule,
   );
@@ -521,6 +535,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   InvalidateRealmIdentifiersToolModule.default,
   InvokeCardOperationToolModule.default,
   LintAndFixToolModule.default,
+  ListRealmKeySharesToolModule.default,
   ListingBuildToolModule.default,
   CreateListingPRRequestToolModule.default,
   OneShotLlmRequestToolModule.default,
@@ -566,12 +581,14 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   ShowCardToolModule.default,
   ShowFileToolModule.default,
   SummarizeSessionToolModule.default,
+  SuspendKeyShareToolModule.default,
   AskUserToolModule.default,
   SwitchSubmodeToolModule.default,
   SyncOpenRouterModelsToolModule.default,
   TransformCardsToolModule.default,
   UnpublishRealmToolModule.default,
   UnregisterBotToolModule.default,
+  UnshareKeyToolModule.default,
   CancelIndexingJobToolModule.default,
   CheckCorrectnessToolModule.default,
   CheckDomainAvailabilityToolModule.default,
