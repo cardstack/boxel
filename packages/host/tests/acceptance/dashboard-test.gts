@@ -1233,36 +1233,36 @@ module('Acceptance | dashboard', function (hooks) {
           .exists({ count: 1 }, 'only the desk shows pins');
       });
 
-      test('a pinned card opens that card', async function (assert) {
+      // The ids in the stack a pin opens, from the bottom.
+      function openedStack() {
+        let { stacks } = (
+          getService('operator-mode-state-service') as OperatorModeStateService
+        ).state;
+        return stacks.map((stack) => stack.map((item) => item.id));
+      }
+
+      test("a pinned card opens over its workspace's Home", async function (assert) {
         await visitWithFavorites([pinnedRealmURL]);
         await waitUntil(() => findAll(DESK_PINS).length === 4);
 
         await click(`[data-test-pinned-card="${pinnedRealmURL}roadmap"]`);
 
         assert.dom('[data-test-dashboard]').doesNotExist();
-        assert.deepEqual(
-          (
-            getService(
-              'operator-mode-state-service',
-            ) as OperatorModeStateService
-          ).getOpenCardIds(),
-          [`${pinnedRealmURL}roadmap`],
-        );
+        assert.deepEqual(openedStack(), [
+          [`${pinnedRealmURL}index`, `${pinnedRealmURL}roadmap`],
+        ]);
       });
 
-      test('a pin linked by prefix opens by that prefix', async function (assert) {
+      test("a pin in another realm opens by its own id over its workspace's Home", async function (assert) {
         await visitWithFavorites([pinnedRealmURL]);
         await waitUntil(() => findAll(DESK_PINS).length === 4);
 
         await click('[data-test-pinned-card="@cardstack/catalog/glossary"]');
 
         assert.deepEqual(
-          (
-            getService(
-              'operator-mode-state-service',
-            ) as OperatorModeStateService
-          ).getOpenCardIds(),
-          ['@cardstack/catalog/glossary'],
+          openedStack(),
+          [[`${pinnedRealmURL}index`, '@cardstack/catalog/glossary']],
+          'a prefix pin keeps its prefix, and the stack is the workspace the desk is for',
         );
       });
 

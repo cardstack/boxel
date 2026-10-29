@@ -6,12 +6,14 @@ import Component from '@glimmer/component';
 
 import {
   trimJsonExtension,
+  type RealmIdentifier,
   type RealmResourceIdentifier,
   type RenderableSearchEntryLike,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
 import SearchResults from '@cardstack/host/components/search/search-results';
+import { StackItem } from '@cardstack/host/lib/stack-item';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -20,6 +22,10 @@ import fitPage from './fit-page';
 
 // A desk has room for this many pins; the rest stay on the workspace's Home.
 const MAX_DESK_PINS = 4;
+
+// Only the first pins are searched, with room for some to have nothing to
+// draw, so a workspace with many pins doesn't fetch them all for one desk.
+const SEARCHED_PINS = MAX_DESK_PINS * 2;
 
 // The collage is laid out on a page this many design pixels wide and zoomed
 // to the desk, so each card lays itself out the way it really looks and the
@@ -31,6 +37,8 @@ interface Signature {
   Args: {
     // The pinned cards' ids, in the workspace's order.
     cardIds: RealmResourceIdentifier[];
+    // The workspace whose desk this is. A pin opens over its Home.
+    realmIdentifier: RealmIdentifier;
     workspaceName: string;
   };
 }
@@ -48,8 +56,8 @@ export default class PinnedCards extends Component<Signature> {
   // re-runs each time any realm is found.
   private lookedUp = new Set<string>();
 
-  // One search for all the pins, not just the first few, so a pin with no
-  // rendering yet gives its place to the next one. `html` alone would leave
+  // One search for the first pins, not just the ones a desk draws, so a pin
+  // with no rendering yet gives its place to the next one. `html` alone would leave
   // a pin unnamed, so the title rides along as a field-limited item, which
   // never loads code. A pin waits for its realm to be known, which `info`
   // looks up; the query runs again once it is.
@@ -57,7 +65,7 @@ export default class PinnedCards extends Component<Signature> {
     let { virtualNetwork } = this.network;
     let realms = new Set<string>();
     let cardUrls: string[] = [];
-    for (let id of this.args.cardIds) {
+    for (let id of this.args.cardIds.slice(0, SEARCHED_PINS)) {
       let url: string;
       try {
         url = virtualNetwork.toURL(id).href;
@@ -117,9 +125,20 @@ export default class PinnedCards extends Component<Signature> {
       : `Open pinned card in ${this.args.workspaceName}`;
   };
 
-  @action private openPin(cardId: string) {
-    this.operatorModeStateService.openCardInInteractMode(cardId);
-    this.operatorModeStateService.closeWorkspaceChooser();
+  // Over the workspace's Home, as opening it from the Home does, whatever
+  // realm the pinned card is in.
+  @action private async openPin(cardId: RealmResourceIdentifier) {
+    await this.operatorModeStateService.openWorkspace(
+      this.args.realmIdentifier,
+    );
+    this.operatorModeStateService.addItemToStack(
+      new StackItem({
+        id: cardId,
+        stackIndex: 0,
+        format: 'isolated',
+        type: 'card',
+      }),
+    );
   }
 
   <template>
