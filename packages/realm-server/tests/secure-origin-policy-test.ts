@@ -703,7 +703,8 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('focus rings and the checkbox and radio indicators on the key panel meet 3:1', async function (assert) {
     // Every stylesheet the shell ships is on the signed-out key page, so this
-    // finds every focus ring a control draws, each resolved under the panel
+    // reads every outline a `:focus` or `:focus-visible` rule draws, each
+    // checkbox edge and each accent colour, and resolves each under the panel
     // the key pages draw their controls on.
     await page.goto(`${secureOrigin}/secure/keys`, {
       waitUntil: 'networkidle0',
@@ -723,16 +724,22 @@ module(basename(import.meta.filename), function (hooks) {
         return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
       };
       // The colour a declaration paints, set on a probe under the panel so
-      // the panel's theme resolves it.
+      // the panel's theme resolves it. The probe sits in a wrapper of a
+      // sentinel colour, which a value that doesn't resolve falls back to,
+      // so it fails rather than passing as the panel's own text colour.
+      const SENTINEL = 'rgb(1, 2, 3)';
       let paints = (property: string, value: string, read: string) => {
+        let wrapper = document.createElement('span');
+        wrapper.style.setProperty('color', SENTINEL);
         let probe = document.createElement('span');
         probe.style.setProperty(property, value);
-        panel.append(probe);
+        wrapper.append(probe);
+        panel.append(wrapper);
         let color = getComputedStyle(probe).getPropertyValue(read);
-        probe.remove();
-        return toRGB(color);
+        wrapper.remove();
+        return color === SENTINEL ? undefined : toRGB(color);
       };
-      let indicators: { label: string; rgb: number[] }[] = [];
+      let indicators: { label: string; rgb: number[] | undefined }[] = [];
       let visit = (rules: CSSRuleList) => {
         for (let rule of rules) {
           if (rule instanceof CSSGroupingRule) {
@@ -745,8 +752,10 @@ module(basename(import.meta.filename), function (hooks) {
           let selector = rule.selectorText;
           let style = rule.style;
           if (
-            selector.includes(':focus-visible') &&
-            !selector.includes(':not(:focus-visible)')
+            /:focus(-visible)?(?![-\w])/.test(selector) &&
+            !selector.includes(':not(:focus-visible)') &&
+            // A rule that takes the outline away draws no ring.
+            style.getPropertyValue('outline-style') !== 'none'
           ) {
             for (let property of ['outline', 'outline-color']) {
               let value = style.getPropertyValue(property);
@@ -760,13 +769,19 @@ module(basename(import.meta.filename), function (hooks) {
               }
             }
           }
-          // An unticked checkbox is drawn by its edge alone.
-          let edge = style.getPropertyValue('--checkbox-border-color');
-          if (edge) {
-            indicators.push({
-              label: `${selector} { --checkbox-border-color: ${edge} }`,
-              rgb: paints('color', edge, 'color'),
-            });
+          // An unticked checkbox is drawn by its edge alone, and a ticked one
+          // keeps an edge around its fill.
+          for (let property of [
+            '--checkbox-border-color',
+            '--checkbox-checked-border-color',
+          ]) {
+            let edge = style.getPropertyValue(property);
+            if (edge) {
+              indicators.push({
+                label: `${selector} { ${property}: ${edge} }`,
+                rgb: paints('color', edge, 'color'),
+              });
+            }
           }
           let accent = style.getPropertyValue('accent-color');
           if (accent) {
@@ -792,10 +807,24 @@ module(basename(import.meta.filename), function (hooks) {
       "the checkbox's edge is among them",
     );
     assert.ok(
+      indicators.some(({ label }) =>
+        label.includes('--checkbox-checked-border-color'),
+      ),
+      "a ticked checkbox's edge is among them",
+    );
+    assert.ok(
+      indicators.some(({ label }) => /^a:focus /.test(label)),
+      'the global link focus outline is among them',
+    );
+    assert.ok(
       indicators.some(({ label }) => label.includes('accent-color')),
       "the radio choices' accent is among them",
     );
     for (let { label, rgb } of indicators) {
+      if (!rgb) {
+        assert.ok(false, `${label}: the colour doesn't resolve on the panel`);
+        continue;
+      }
       let ratio = contrast(rgb, background);
       assert.ok(
         ratio >= 3,
