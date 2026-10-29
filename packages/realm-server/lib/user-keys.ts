@@ -13,6 +13,7 @@ import {
   sealedFromColumns,
 } from './secrets-at-rest/sealed-columns.ts';
 import { revokeBindingsIn } from './key-binding-revocation.ts';
+import { clearKeyRejections } from './key-grant-rejection.ts';
 
 // Keys that belong to people. Every key has one owner, the user who created
 // it, and only that owner lists, shows, replaces or deletes it. A key's value
@@ -531,11 +532,13 @@ export function opensUnder(
 
 // Replaces a key's value, keeping its name and kind. The master copy and every
 // grant's copy are sealed again in the same transaction, so the old value
-// opens nowhere afterwards and no grant asks for approval again. A grant is
-// sealed again only when its current copy opens under its own binding: the
-// binding is read from the row, so sealing one whose copy doesn't open would
-// make a row written or edited outside the realm server a real grant. Such a
-// row is left as it is, and still sends nothing.
+// opens nowhere afterwards and no grant asks for approval again. Every grant
+// the vendor rejected the old value at is active again: the new value hasn't
+// been refused anywhere. A grant is sealed again only when its current copy
+// opens under its own binding: the binding is read from the row, so sealing
+// one whose copy doesn't open would make a row written or edited outside the
+// realm server a real grant. Such a row is left as it is, and still sends
+// nothing.
 export async function replaceUserKeyValue(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -617,6 +620,7 @@ export async function replaceUserKeyValue(
         param(grant.id as string),
       ]);
     }
+    await clearKeyRejections(txQuery, id);
     return toMetadata(updated);
   });
 }

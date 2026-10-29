@@ -288,6 +288,7 @@ export {
   slotsIn,
   type CallApiCredential,
   type CallApiFilledSlot,
+  type CallApiGrantUse,
   type CallApiMode,
   type CallApiReadinessLookup,
   type CallApiRequest,

@@ -61,6 +61,7 @@ import {
   startOutboundGuard,
 } from './lib/outbound/client.ts';
 import { createCallApiSender } from './lib/outbound/call-api-sender.ts';
+import { probeIntervalFromEnv } from './lib/key-grant-rejection.ts';
 import {
   reportPlaintextCensus,
   reportSealedCensus,
@@ -213,6 +214,9 @@ const SKIP_MODULES_CACHE_CLEAR_ON_STARTUP =
 // skipping their boot index removes both the ~minutes-long startup wait and
 // the prerender-pool contention that index would create with the tests.
 const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
+
+// How long a grant whose key the vendor rejected waits between probes.
+const KEY_GRANT_PROBE_INTERVAL_MS = probeIntervalFromEnv();
 // CS-10953 cross-process prerender coalesce. Off by default — flip on
 // after a stage burn-in. Effectively inert at N=1 (no contention; the
 // in-process #inFlight coalescer already dedups same-process callers),
@@ -837,7 +841,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
             reconciler
               ? findRealm(url, { realms, reconciler, dbAdapter })
               : Promise.resolve(undefined),
-          callApi: createCallApiSender(dbAdapter),
+          callApi: createCallApiSender(dbAdapter, {
+            probeIntervalMs: KEY_GRANT_PROBE_INTERVAL_MS,
+          }),
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),

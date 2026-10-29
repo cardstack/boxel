@@ -82,12 +82,22 @@ function serializeWithUse(
       ...serialized.attributes,
       ...(oauth ? { oauth } : {}),
       grants: grants.map(
-        ({ id, destination, state, approvedAt, approvedVia }) => ({
+        ({
           id,
           destination,
           state,
           approvedAt,
           approvedVia,
+          rejectedAt,
+          vendorForbidden,
+        }) => ({
+          id,
+          destination,
+          state,
+          approvedAt,
+          approvedVia,
+          rejectedAt,
+          vendorForbidden,
         }),
       ),
       usedWith: [
