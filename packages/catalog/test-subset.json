@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "79e145361cdebed7c23ee002453a865041131098",
+  "revision": "9d13b192e5db8217c868dff322d226fe8f71b317",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
