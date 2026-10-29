@@ -424,33 +424,13 @@ module('Integration | connecting an account', function (hooks) {
       });
     });
 
-    test('the workspace’s one shared app, or else Boxel’s, starts out chosen; among several such apps, or only the user’s own, none is', async function (assert) {
+    module('the app that starts out chosen', function () {
       let [platform, share, own] = CLIENTS;
       let otherShare = {
         ...share!,
         ref: { kind: 'share', shareId: '44444444-4444-4444-8444-444444444444' },
         label: 'Other Team App',
       };
-      let otherOwn = {
-        ...own!,
-        ref: { kind: 'own', keyId: '55555555-5555-4555-8555-555555555555' },
-        label: 'My Other App',
-      };
-      let chosen = async (clients: unknown[]) => {
-        serve({
-          'GET _oauth/clients': () =>
-            json(200, clientResources(clients as typeof CLIENTS)),
-        });
-        visitShell('connect');
-        await render(ConnectPage);
-        await waitFor('[data-test-connect-form]');
-        return [...document.querySelectorAll('[data-test-client-choice]')]
-          .filter((choice) => choice.querySelector('input')?.checked)
-          .map((choice) => choice.getAttribute('data-test-client-choice'));
-      };
-      assert.deepEqual(await chosen([share!, own!]), ['Team GitHub App']);
-      assert.deepEqual(await chosen([platform!, own!]), ['GitHub']);
-      assert.deepEqual(await chosen([share!, otherShare, own!]), []);
       let otherService = {
         ...platform!,
         ref: {
@@ -460,15 +440,44 @@ module('Integration | connecting an account', function (hooks) {
         label: 'Linear',
         apiHosts: ['https://api.linear.app/'],
       };
-      assert.deepEqual(
-        await chosen([share!, otherService, own!]),
-        [],
-        'apps for different services: the user picks',
-      );
-      assert.deepEqual(await chosen([own!, otherOwn]), []);
-      assert
-        .dom('[data-test-connect-submit]')
-        .isDisabled('nothing to connect through until the user picks');
+      let otherOwn = {
+        ...own!,
+        ref: { kind: 'own', keyId: '55555555-5555-4555-8555-555555555555' },
+        label: 'My Other App',
+      };
+      let cases: [string, unknown[], string[]][] = [
+        ['the workspace’s one shared app', [share!, own!], ['Team GitHub App']],
+        ['Boxel’s one app', [platform!, own!], ['GitHub']],
+        ['none among two shared apps', [share!, otherShare, own!], []],
+        [
+          'none among apps for different services',
+          [share!, otherService, own!],
+          [],
+        ],
+        ['none among only the user’s own', [own!, otherOwn], []],
+      ];
+      for (let [name, clients, expected] of cases) {
+        test(name, async function (assert) {
+          serve({
+            'GET _oauth/clients': () =>
+              json(200, clientResources(clients as typeof CLIENTS)),
+          });
+          visitShell('connect');
+          await render(ConnectPage);
+          await waitFor('[data-test-connect-form]');
+          assert.deepEqual(
+            [...document.querySelectorAll('[data-test-client-choice]')]
+              .filter((choice) => choice.querySelector('input')?.checked)
+              .map((choice) => choice.getAttribute('data-test-client-choice')),
+            expected,
+          );
+          if (expected.length === 0) {
+            assert
+              .dom('[data-test-connect-submit]')
+              .isDisabled('nothing to connect through until the user picks');
+          }
+        });
+      }
     });
 
     test('opened bare from the key page, asks for every app the user may use, and goes back', async function (assert) {
