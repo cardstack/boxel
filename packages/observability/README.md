@@ -99,14 +99,15 @@ GITHUB_TOKEN=$(gh auth token) node collectors/actions-queue.ts --once
 GITHUB_TOKEN=$(gh auth token) node collectors/actions-queue.ts   # loops, default 60s
 ```
 
-It emits four event types, all on channel `boxel:actions-queue`:
+It emits five event types, all on channel `boxel:actions-queue`:
 
-| `event_type`                             | one line per                   | carries                                                                                     |
-| ---------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
-| `job`                                    | queued, pending or running job | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step` |
-| `group`                                  | dimension × key                | `dimension` (branch / actor / workflow), `key`, `queued`, `running`, `pending`              |
-| `snapshot`                               | sample                         | `queued_jobs`, `running_jobs`, `pending_jobs`, `active_runs`, `rate_limit_remaining`        |
-| `collector-error`, `collector-throttled` | failure or skipped sample      | why the series has a gap                                                                    |
+| `event_type`                             | one line per                   | carries                                                                                                                                                |
+| ---------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `job`                                    | queued, pending or running job | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step`                                                            |
+| `group`                                  | dimension × key                | `dimension` (branch / actor / workflow), `key`, `queued`, `running`, `pending`                                                                         |
+| `snapshot`                               | sample                         | `queued_jobs`, `running_jobs`, `pending_jobs`, `github_hosted_running_jobs`, `github_hosted_queued_jobs`, `active_runs`, `rate_limit_remaining`        |
+| `spill`                                  | spill decision                 | the pool count, `diverted_jobs`, `pool_complete`, `spill_before`, `spill`, `changed`, `reason`, `mode`, `written`; see [Host CI spill](#host-ci-spill) |
+| `collector-error`, `collector-throttled` | failure or skipped sample      | why the series has a gap                                                                                                                               |
 
 GitHub reports a job as `pending` while a concurrency group holds it, and as
 `queued` while it waits for a runner. The two are counted apart, so a
@@ -133,6 +134,66 @@ Two constraints are load-bearing:
 
 The dashboard reads `{service="actions-collector", env="$env"}`, so a hosted
 deployment needs to log under that service name.
+
+#### Host CI spill
+
+GitHub's hosted runners cost nothing for this public repository, and the
+RunsOn instances in our AWS account do not. So pull request host jobs in
+`ci-host.yaml` use GitHub's runners, and take RunsOn only while the repo
+variable `HOST_TEST_SPILL` is `true`. Pushes to `main` always take RunsOn. Each
+sample decides what the variable should hold (`collectors/spill.ts`):
+
+- It counts the jobs on GitHub's free pool: those whose label names a standard
+  hosted image, such as `ubuntu-latest` or `macos-15`. Paid larger runners and
+  labels that no runner serves are not counted. A job queued longer than
+  `SPILL_STALE_QUEUED_SECONDS` is taken to be stuck and is not counted either.
+  The repositories in `SPILL_POOL_REPOS` share the pool and are counted too,
+  but emit no lines, so the dashboard still describes `--repo` alone.
+- Demand is the jobs running on the pool plus the RunsOn jobs that the spill
+  moved off it: those not from a push to `main`. Without them, spilling would
+  make the pool look quiet, and turning the spill off would bring the same
+  load back.
+- It turns the spill on when demand reaches `SPILL_ON_RUNNING`, or a job has
+  waited `SPILL_ON_QUEUED_SECONDS` for a runner.
+- It turns the spill off after `SPILL_OFF_QUIET_SAMPLES` samples in a row with
+  demand below `SPILL_OFF_RUNNING` and no job waiting
+  `SPILL_OFF_QUEUED_SECONDS`.
+- If a pool repository cannot be counted, the sample still decides, with
+  `pool_complete: false`. A partial count can turn the spill on, but not off.
+
+GitHub reads the variable when each job is queued, so a change reaches every
+job queued after it, and no job already queued.
+
+The collector writes the variable as a GitHub App installed only on the
+repository, with the "Variables: read and write" permission. The App's
+settings come from the environment. Without them every sample runs as
+`--dry-run`: the decision is logged with `mode: "dry-run"` and nothing is
+written.
+
+| Variable                     | Default                   |                                                                              |
+| ---------------------------- | ------------------------- | ---------------------------------------------------------------------------- |
+| `SPILL_APP_ID`               |                           | the App's ID                                                                 |
+| `SPILL_APP_INSTALLATION_ID`  |                           | its installation on the repository                                           |
+| `SPILL_APP_PRIVATE_KEY`      |                           | its private key (PEM)                                                        |
+| `SPILL_VARIABLE`             | `HOST_TEST_SPILL`         | the repo variable to write, on `--repo`                                      |
+| `SPILL_POOL_REPOS`           | `cardstack/boxel-catalog` | comma-separated repositories that share the pool                             |
+| `SPILL_ON_RUNNING`           | `48`                      | queue wait rises at about 50 running jobs; below that the median wait is 2 s |
+| `SPILL_ON_QUEUED_SECONDS`    | `60`                      |                                                                              |
+| `SPILL_OFF_RUNNING`          | `35`                      | must not exceed `SPILL_ON_RUNNING`                                           |
+| `SPILL_OFF_QUEUED_SECONDS`   | `15`                      | must not exceed `SPILL_ON_QUEUED_SECONDS`                                    |
+| `SPILL_OFF_QUIET_SAMPLES`    | `5`                       | at least 1                                                                   |
+| `SPILL_STALE_QUEUED_SECONDS` | `1800`                    | must exceed `SPILL_ON_QUEUED_SECONDS`                                        |
+
+The collector owns the variable while it has the App settings: it reads the
+variable on every sample, and changes it back when a sample's decision
+differs. To pin the spill on or off by hand, deploy the collector without the
+App settings first.
+
+If the collector stops while the variable is `true`, pull requests stay on
+RunsOn, which costs money but breaks nothing. If it stops while the variable
+is `false`, pull requests queue for GitHub's runners.
+
+Run the tests with `pnpm test`; `pnpm lint` runs them too.
 
 #### Hosted
 
