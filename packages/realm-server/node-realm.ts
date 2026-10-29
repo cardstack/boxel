@@ -44,7 +44,7 @@ const {
   fstatSync,
   closeSync,
 } = fsExtra;
-import { join } from 'path';
+import { isAbsolute, join, relative, sep } from 'path';
 import { Duplex, Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type {
@@ -122,6 +122,24 @@ export class NodeAdapter implements RealmAdapter {
     return this.realmDir;
   }
 
+  // The file-system path of a realm-relative path. Every file operation goes
+  // through here, so a path that resolves outside the realm directory is
+  // refused whatever produced it.
+  private pathInRealm(path: string): string {
+    let absolutePath = join(this.realmDir, path);
+    let fromRealm = relative(this.realmDir, absolutePath);
+    if (
+      fromRealm === '..' ||
+      fromRealm.startsWith(`..${sep}`) ||
+      isAbsolute(fromRealm)
+    ) {
+      let error = new Error(`${path} is outside the realm`);
+      (error as any).status = 404;
+      throw error;
+    }
+    return absolutePath;
+  }
+
   get fileWatcherEnabled(): boolean {
     return this.enableFileWatcher ?? false;
   }
@@ -133,7 +151,7 @@ export class NodeAdapter implements RealmAdapter {
     if (opts?.create) {
       ensureDirSync(path);
     }
-    let absolutePath = join(this.realmDir, path);
+    let absolutePath = this.pathInRealm(path);
     // Asynchronous on purpose: on a network filesystem a listing is a round
     // trip, and this generator runs on the request path and in the
     // cross-instance directory refresh, neither of which may block the event
@@ -220,12 +238,12 @@ export class NodeAdapter implements RealmAdapter {
   }
 
   async exists(path: string): Promise<boolean> {
-    let absolutePath = join(this.realmDir, path);
+    let absolutePath = this.pathInRealm(path);
     return existsSync(absolutePath);
   }
 
   async lastModified(path: string): Promise<number | undefined> {
-    let absolutePath = join(this.realmDir, path);
+    let absolutePath = this.pathInRealm(path);
     let stat = statIfExists(absolutePath);
     // The directory check covers case-insensitive file systems
     if (!stat || stat.isDirectory()) {
@@ -236,7 +254,7 @@ export class NodeAdapter implements RealmAdapter {
   }
 
   async openFile(path: string): Promise<FileRef | undefined> {
-    let absolutePath = join(this.realmDir, path);
+    let absolutePath = this.pathInRealm(path);
     let stat = statIfExists(absolutePath);
     // The directory check covers case-insensitive file systems
     if (!stat || stat.isDirectory()) {
@@ -318,8 +336,8 @@ export class NodeAdapter implements RealmAdapter {
     // down so the client can ask again. The staging name is one the realm
     // treats as no part of itself, and the per-file write locks the realm
     // takes keep two writers of one path from sharing it.
-    let absolutePath = join(this.realmDir, path);
-    let stagedPath = join(this.realmDir, partialWritePath(path as LocalPath));
+    let absolutePath = this.pathInRealm(path);
+    let stagedPath = this.pathInRealm(partialWritePath(path as LocalPath));
     try {
       ensureFileSync(stagedPath);
       writeFileSync(stagedPath, contents);
@@ -345,7 +363,7 @@ export class NodeAdapter implements RealmAdapter {
     path: LocalPath,
     contents: string | Uint8Array,
   ): Promise<AdapterAppendResult> {
-    let absolutePath = join(this.realmDir, path);
+    let absolutePath = this.pathInRealm(path);
     ensureFileSync(absolutePath);
     appendFileSync(absolutePath, contents);
     let stat = statSync(absolutePath);
@@ -366,8 +384,8 @@ export class NodeAdapter implements RealmAdapter {
     path: LocalPath,
     content: SplicedSource,
   ): Promise<AdapterWriteResult> {
-    let absolutePath = join(this.realmDir, path);
-    let stagedPath = join(this.realmDir, partialWritePath(path));
+    let absolutePath = this.pathInRealm(path);
+    let stagedPath = this.pathInRealm(partialWritePath(path));
     try {
       ensureFileSync(stagedPath);
       await pipeline(
@@ -396,7 +414,7 @@ export class NodeAdapter implements RealmAdapter {
       return;
     }
     // `end` is exclusive here and inclusive for a read stream.
-    for await (let chunk of createReadStream(join(this.realmDir, path), {
+    for await (let chunk of createReadStream(this.pathInRealm(path), {
       start,
       end: end - 1,
     })) {
@@ -405,7 +423,7 @@ export class NodeAdapter implements RealmAdapter {
   }
 
   async remove(path: LocalPath): Promise<void> {
-    let absolutePath = join(this.realmDir, path);
+    let absolutePath = this.pathInRealm(path);
     removeSync(absolutePath);
   }
 

@@ -1520,6 +1520,162 @@ module('Integration | key pages', function (hooks) {
         meta: { ticket: 'ticket-1' },
       });
     });
+
+    test('the key page shows a service account’s email, subject and scopes, and a replace starts from them', async function (assert) {
+      const SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
+      const DRIVE = 'https://www.googleapis.com/auth/drive.readonly';
+      let serviceAccount = {
+        ...KEYS[1],
+        id: 'key-sa',
+        name: 'Sheets',
+        kind: 'google-service-account',
+        serviceAccount: {
+          email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+          subject: 'owner@example.com',
+          scopes: [SHEETS, DRIVE],
+        },
+      };
+      let actsAsItself = {
+        ...serviceAccount,
+        id: 'key-sa-2',
+        name: 'Reports',
+        serviceAccount: { ...serviceAccount.serviceAccount, subject: null },
+      };
+      serve({
+        'GET _user-keys': () =>
+          json(200, keyResources([KEYS[1], actsAsItself, serviceAccount])),
+        'GET _key-shares': () => json(200, { data: [] }),
+        'PATCH _user-keys/key-sa': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-sa',
+              attributes: attributesOf(serviceAccount),
+            },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Sheets"]');
+      let row = '[data-test-key-row="Sheets"]';
+      assert
+        .dom(`${row} [data-test-service-account-detail="email"]`)
+        .hasText('sheets-bot@boxel-test.iam.gserviceaccount.com');
+      assert
+        .dom(`${row} [data-test-service-account-detail="subject"]`)
+        .hasText('owner@example.com');
+      assert.deepEqual(
+        [
+          ...document.querySelectorAll(
+            `${row} [data-test-service-account-scope]`,
+          ),
+        ].map((scope) => scope.textContent?.trim()),
+        [SHEETS, DRIVE],
+      );
+      assert
+        .dom(
+          '[data-test-key-row="Reports"] [data-test-service-account-detail="subject"]',
+        )
+        .hasText('The service account itself');
+      assert
+        .dom('[data-test-key-row="Maps"] [data-test-service-account-details]')
+        .doesNotExist('a key pasted in as it is has none');
+
+      await click(`${row} [data-test-key-replace]`);
+      await settled();
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText('start as the key has them now');
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('owner@example.com', 'Act as starts as it is');
+      assert
+        .dom('[data-test-service-account-scopes]')
+        .hasValue(`${SHEETS} ${DRIVE}`, 'Scopes start as they are');
+      assert
+        .dom('[data-test-key-replace-save]')
+        .isDisabled('the key file is still chosen anew');
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .doesNotExist(
+          'a key file for the same service account changes nothing',
+        );
+      await click('[data-test-key-replace-save]');
+      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
+      await settled();
+      assert.deepEqual(
+        requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+        {
+          value: SERVICE_ACCOUNT_FILE,
+          subject: 'owner@example.com',
+          scopes: [SHEETS, DRIVE],
+        },
+        'leaving the fields as they are keeps them',
+      );
+    });
+
+    test('a key file for another service account says the prefilled fields were granted to the old one', async function (assert) {
+      let serviceAccount = {
+        ...KEYS[1],
+        id: 'key-sa',
+        name: 'Sheets',
+        kind: 'google-service-account',
+        serviceAccount: {
+          email: 'reports-bot@boxel-test.iam.gserviceaccount.com',
+          subject: 'owner@example.com',
+          scopes: ['openid'],
+        },
+      };
+      serve({
+        'GET _user-keys': () => json(200, keyResources([serviceAccount])),
+        'GET _key-shares': () => json(200, { data: [] }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Sheets"]');
+      await click('[data-test-key-row="Sheets"] [data-test-key-replace]');
+      await settled();
+      assert.dom('[data-test-service-account-changed]').doesNotExist();
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .includesText(
+          'This key file is for sheets-bot@boxel-test.iam.gserviceaccount.com, not reports-bot@boxel-test.iam.gserviceaccount.com',
+        );
+    });
+
+    test('a replace cancelled after editing the prefilled fields starts from the key again', async function (assert) {
+      let serviceAccount = {
+        ...KEYS[1],
+        id: 'key-sa',
+        name: 'Sheets',
+        kind: 'google-service-account',
+        serviceAccount: {
+          email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+          subject: 'owner@example.com',
+          scopes: ['openid'],
+        },
+      };
+      serve({
+        'GET _user-keys': () => json(200, keyResources([serviceAccount])),
+        'GET _key-shares': () => json(200, { data: [] }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Sheets"]');
+      await click('[data-test-key-row="Sheets"] [data-test-key-replace]');
+      await settled();
+      await fillIn('[data-test-service-account-subject]', '');
+      await fillIn('[data-test-service-account-scopes]', 'email');
+      await click('[data-test-key-replace-form] button[type="button"]');
+      await click('[data-test-key-row="Sheets"] [data-test-key-replace]');
+      await settled();
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('owner@example.com');
+      assert.dom('[data-test-service-account-scopes]').hasValue('openid');
+    });
   });
 
   module('sharing a key', function () {
