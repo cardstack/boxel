@@ -96,6 +96,19 @@ no route sets it.
 - Anyone else, readers included, sees nothing of a realm's shares: the
   listings answer 403 and a share by id answers 404.
 
+## Where users manage shares
+
+A realm's direct writers manage its shares from the **API Keys** entry of the
+realm's config card (`realm.json`, `packages/base/realm-api-keys.gts`), in its
+edit and isolated formats. It lists the realm's shares
+(`GET /_key-shares?realm=`) with label, owner and state, and why a suspended
+one is suspended. Suspend and the owner's Unshare call the routes directly, from the
+app page, since neither takes a ticket. Share one of my keys and Swap one of my
+keys in open the secure window (`share-key`, `swap-key`), where the ticket is
+minted. For anyone who isn't a direct writer the listing answers 403 and the
+entry isn't drawn. The host tools behind it are `list-realm-key-shares`,
+`suspend-key-share` and `unshare-key` (`packages/host/app/tools/`).
+
 ## The tables
 
 ```sql

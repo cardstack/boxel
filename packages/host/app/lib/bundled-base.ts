@@ -347,6 +347,7 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/number/components/number-input'),
   operations: () => import('@cardstack/base/operations'),
   percentage: () => import('@cardstack/base/percentage'),
+  'realm-api-keys': () => import('@cardstack/base/realm-api-keys'),
   'realm-config': () => import('@cardstack/base/realm-config'),
   'skill-reference': () => import('@cardstack/base/skill-reference'),
   'streaming-envelope': () => import('@cardstack/base/streaming-envelope'),
