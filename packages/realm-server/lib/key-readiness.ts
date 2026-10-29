@@ -28,6 +28,13 @@ import { bindingSnapshot, fingerprintOf, slotToken } from './key-bindings.ts';
 // the share's key, who is told what they could fix themselves. A share whose
 // key the vendor refused reads `credential-rejected` to every caller, as the
 // call itself is refused for each of them.
+//
+// `needs-connect` and `needs-approval` differ only in whether one of the
+// caller's grants covers the destination, so any card can learn that about
+// the viewer for a destination it names. That tells a card nothing it can't
+// already read: card code holds the app session, and `GET /_user-keys` lists
+// every key's grants to it. A change that moves that listing behind a secure
+// session has to fold these two answers into one as well.
 
 // The order slot answers are reported in: the first slot to need something
 // further up the list decides the operation's answer. A slot only an
