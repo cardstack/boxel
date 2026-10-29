@@ -17,12 +17,14 @@ import type RouterService from '@ember/routing/router-service';
 import type Transition from '@ember/routing/transition';
 import { schedule } from '@ember/runloop';
 
+import { ApprovePage, ReviewChangesPage } from './keys/approve-page.gts';
 import ConnectPage from './keys/connect-page.gts';
 import ConnectedPage from './keys/connected-page.gts';
 import EnterKeyPage from './keys/enter-key-page.gts';
 import KeyPage from './keys/key-page.gts';
 import ShareKeyPage from './keys/share-key-page.gts';
 import SwapKeyPage from './keys/swap-key-page.gts';
+import UseKeyPage from './keys/use-key-page.gts';
 import { useRouter } from './navigation.js';
 import {
   ForgotPasswordPage,
@@ -59,12 +61,15 @@ Router.map(function () {
   this.route('keys', function () {
     this.route('add');
     this.route('share', { path: '/:key_id/share' });
+    this.route('use', { path: '/:key_id/use' });
   });
   this.route('enter-key');
   this.route('share-key');
   this.route('swap-key');
   this.route('connect');
   this.route('connected');
+  this.route('approve');
+  this.route('review-changes');
 });
 
 // The application route starts once, on the document's first transition: it
@@ -85,7 +90,8 @@ class ApplicationRoute extends Route {
   }
 }
 
-// The share page for the key its path names. The route's model is its
+// The share page, or the page for using with a card, for the key its path
+// names. The route's model is its
 // parameters, as there is no store to find a key in.
 class KeyShareRoute extends Route {
   model(params: { key_id: string }) {
@@ -100,10 +106,15 @@ const KeyAddTemplate: TOC<object> = <template>
 const KeyShareTemplate: TOC<{ Args: { model: { key_id: string } } }> =
   <template><ShareKeyPage @keyId={{@model.key_id}} /></template>;
 
+const KeyUseTemplate: TOC<{ Args: { model: { key_id: string } } }> = <template>
+  <UseKeyPage @keyId={{@model.key_id}} />
+</template>;
+
 const registry: Record<string, unknown> = {
   'router:main': Router,
   'route:application': ApplicationRoute,
   'route:keys/share': KeyShareRoute,
+  'route:keys/use': KeyShareRoute,
   'template:index': KeyPage,
   'template:sign-in': SignInPage,
   'template:cli-sign-in': CliSignInPage,
@@ -122,6 +133,9 @@ const registry: Record<string, unknown> = {
   'template:swap-key': SwapKeyPage,
   'template:connect': ConnectPage,
   'template:connected': ConnectedPage,
+  'template:keys/use': KeyUseTemplate,
+  'template:approve': ApprovePage,
+  'template:review-changes': ReviewChangesPage,
 };
 
 class ShellApplication extends Application {

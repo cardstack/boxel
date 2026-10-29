@@ -98,13 +98,6 @@ function inboxModule({
         headers: { authorization: 'Bearer {{apiKey}}' },
       };
 
-      @operation static post = {
-        base: 'callApi',
-        perInstance: true,
-        url: '${VENDOR}/post',
-        headers: { authorization: 'Bearer {{userKey}}' },
-      };
-
       @operation static ping = {
         base: 'callApi',
         url: '${VENDOR}/ping',
@@ -328,15 +321,15 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(found.card.exportName, 'Inbox');
     assert.deepEqual(
       found.groups.map((g) => g.destination.href),
-      [`${OTHER_HOST}/v1/`, `${VENDOR}/`],
+      [`${VENDOR}/`, `${OTHER_HOST}/v1/`],
       'grouped by destination',
     );
-    let vendorGroup = found.groups[1]!;
+    let vendorGroup = found.groups[0]!;
     assert.strictEqual(vendorGroup.destination.host, '127.0.0.1:4525');
     assert.deepEqual(
       vendorGroup.operations.map((o) => o.name).sort(),
       [...GRAPHQL_OPERATIONS].sort(),
-      "every GraphQL operation is in the batch; the share slot isn't the caller's to approve, a per-instance one waits for a card, and a keyless one sends nothing",
+      "every GraphQL operation is in the batch; the share slot isn't the caller's to approve, and a keyless one sends nothing",
     );
     let listPRs = vendorGroup.operations.find((o) => o.name === 'listPRs')!;
     assert.strictEqual(listPRs.label, 'List PRs', 'the name split into words');
@@ -348,7 +341,7 @@ module(basename(import.meta.filename), function (hooks) {
       [['userKey', 'new', 'header']],
     );
     assert.strictEqual(
-      found.groups[0]!.operations[0]!.label,
+      found.groups[1]!.operations[0]!.label,
       'Read from the other host',
       'a declared label leads',
     );
@@ -533,13 +526,18 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a batch opened for a card takes in its per-instance operations, for that card', async function (assert) {
+  test('a batch opened for a card is the batch of the type the card adopts from', async function (assert) {
     let found = await batchOf(OWNER, {
       kind: 'instance',
       url: `${realmURL.href}general`,
     });
-    let post = operationsIn(found).find((o) => o.name === 'post');
-    assert.strictEqual(post?.instance, `${realmURL.href}general`);
+    assert.strictEqual(found.card.exportName, 'Inbox');
+    assert.deepEqual(
+      operationsIn(found)
+        .map((o) => o.name)
+        .sort(),
+      [...GRAPHQL_OPERATIONS, 'elsewhere'].sort(),
+    );
   });
 
   test("a share slot is in the batch of the share key's owner", async function (assert) {

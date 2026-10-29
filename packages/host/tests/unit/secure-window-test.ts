@@ -57,6 +57,40 @@ module('Unit | secure-window', function () {
     assert.strictEqual(url, secureOriginPage('enter-key'));
   });
 
+  test('approving names the one operation the card is blocked on, on its card', function (assert) {
+    let url = secureWindowURL({
+      mode: 'approve',
+      target: { kind: 'instance', card: CARD, operation: 'forecast' },
+      reason: 'To show your forecast',
+    });
+    assert.strictEqual(url.split('#')[0], secureOriginPage('approve'));
+    assert.deepEqual(fragmentOf(url), {
+      card: CARD,
+      operation: 'forecast',
+      reason: 'To show your forecast',
+    });
+  });
+
+  test('reviewing changes names the operation on a card type, its module, export and realm', function (assert) {
+    let url = secureWindowURL({
+      mode: 'review-changes',
+      target: {
+        kind: 'type',
+        module: `${REALM}weather`,
+        name: 'Weather',
+        realm: REALM,
+        operation: 'forecast',
+      },
+    });
+    assert.strictEqual(url.split('#')[0], secureOriginPage('review-changes'));
+    assert.deepEqual(fragmentOf(url), {
+      module: `${REALM}weather`,
+      name: 'Weather',
+      realm: REALM,
+      operation: 'forecast',
+    });
+  });
+
   test('sharing a key names the realm', function (assert) {
     let url = secureWindowURL({ mode: 'share-key', realm: REALM });
     assert.strictEqual(url.split('#')[0], secureOriginPage('share-key'));

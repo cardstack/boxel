@@ -274,6 +274,41 @@ module('Acceptance | open the secure window', function (hooks) {
     assert.strictEqual(calls.length, 0, 'no window opened');
   });
 
+  test('approving opens the window for the one operation a card is blocked on', async function (assert) {
+    let { calls } = stubWindowOpen();
+    await visitWeatherStation();
+    let { toolContext } = getService('tool-service');
+    let tool = new OpenSecureWindowTool(toolContext);
+    for (let mode of ['approve', 'review-changes']) {
+      await tool.execute({
+        mode,
+        cardId: `${testRealmURL}WeatherStation/home`,
+        operation: OPERATION,
+      });
+    }
+    assert.deepEqual(
+      calls.map(({ url }) => new URL(url).pathname.split('/').pop()),
+      ['approve', 'review-changes'],
+    );
+    for (let { url } of calls) {
+      let opened = new URL(url);
+      assert.strictEqual(opened.search, '');
+      assert.deepEqual(
+        Object.fromEntries(new URLSearchParams(opened.hash.slice(1))),
+        { card: `${testRealmURL}WeatherStation/home`, operation: OPERATION },
+        'the card and its one operation, never the others it has',
+      );
+    }
+    await assert.rejects(
+      tool.execute({
+        mode: 'approve',
+        cardId: `${testRealmURL}WeatherStation/home`,
+      }),
+      /an approval names the operation/,
+      'an approval names the operation it is blocked on',
+    );
+  });
+
   test('what the window is opened for must name things it can read', async function (assert) {
     let { calls } = stubWindowOpen();
     await visitWeatherStation();
@@ -281,7 +316,7 @@ module('Acceptance | open the secure window', function (hooks) {
     let tool = new OpenSecureWindowTool(toolContext);
     await assert.rejects(
       tool.execute({ mode: 'delete-key', realm: testRealmURL }),
-      /mode must be one of "enter-key", "share-key", "swap-key"/,
+      /mode must be one of "enter-key", "share-key", "swap-key", "connect", "approve", "review-changes"/,
       'an unsupported mode',
     );
     await assert.rejects(

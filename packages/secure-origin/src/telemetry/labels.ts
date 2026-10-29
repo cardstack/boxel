@@ -78,13 +78,15 @@ export function endpointLabel(url: string | URL): string {
 }
 
 // The shell's page for one of its router's routes: the page's path beneath
-// the shell (`pages.js`), with a key's share page as `keys/share`. The shell's
+// the shell (`pages.js`), with a key's share page as `keys/share` and its
+// page for using it with a card as `keys/use`. The shell's
 // own address shows the key page.
 const PAGES: Record<string, string> = {
   index: 'keys',
   'keys.index': 'keys',
   'keys.add': 'keys/add',
   'keys.share': 'keys/share',
+  'keys.use': 'keys/use',
   'sign-in': 'sign-in',
   'cli-sign-in': 'cli-sign-in',
   'cli-auth': 'cli-auth',
@@ -99,6 +101,8 @@ const PAGES: Record<string, string> = {
   'swap-key': 'swap-key',
   connect: 'connect',
   connected: 'connected',
+  approve: 'approve',
+  'review-changes': 'review-changes',
 };
 
 export function pageLabel(routeName: string | undefined): string {
