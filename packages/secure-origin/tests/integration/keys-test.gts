@@ -143,6 +143,23 @@ const SERVICE_ACCOUNT_FILE = JSON.stringify(
   2,
 );
 
+type QUnitAssert = Parameters<Parameters<typeof test>[1]>[0];
+
+// Asserts the Scopes field holds these scopes one per line and is tall enough
+// to show every one of them without scrolling.
+function assertShowsEveryScope(assert: QUnitAssert, scopes: string[]) {
+  assert
+    .dom('[data-test-service-account-scopes]')
+    .hasValue(scopes.join('\n'), 'each scope is on a line of its own');
+  let field = document.querySelector<HTMLTextAreaElement>(
+    '[data-test-service-account-scopes]',
+  )!;
+  assert.ok(
+    field.scrollHeight <= field.clientHeight + 1,
+    `the field shows all ${scopes.length} scopes without scrolling (${field.scrollHeight}px of content in ${field.clientHeight}px)`,
+  );
+}
+
 // Chooses a key file and waits until the page has read this one. The read is
 // a browser promise `settled()` doesn't track, so the wait is for what the
 // page says of this file by name: the service account it holds, or why it
@@ -1524,6 +1541,7 @@ module('Integration | key pages', function (hooks) {
     test('the key page shows a service account’s email, subject and scopes, and a replace starts from them', async function (assert) {
       const SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
       const DRIVE = 'https://www.googleapis.com/auth/drive.readonly';
+      const CALENDAR = 'https://www.googleapis.com/auth/calendar.events';
       let serviceAccount = {
         ...KEYS[1],
         id: 'key-sa',
@@ -1532,7 +1550,7 @@ module('Integration | key pages', function (hooks) {
         serviceAccount: {
           email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
           subject: 'owner@example.com',
-          scopes: [SHEETS, DRIVE],
+          scopes: [SHEETS, DRIVE, CALENDAR],
         },
       };
       let actsAsItself = {
@@ -1570,7 +1588,7 @@ module('Integration | key pages', function (hooks) {
             `${row} [data-test-service-account-scope]`,
           ),
         ].map((scope) => scope.textContent?.trim()),
-        [SHEETS, DRIVE],
+        [SHEETS, DRIVE, CALENDAR],
       );
       assert
         .dom(
@@ -1589,9 +1607,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-service-account-subject]')
         .hasValue('owner@example.com', 'Act as starts as it is');
-      assert
-        .dom('[data-test-service-account-scopes]')
-        .hasValue(`${SHEETS} ${DRIVE}`, 'Scopes start as they are');
+      assertShowsEveryScope(assert, [SHEETS, DRIVE, CALENDAR]);
       assert
         .dom('[data-test-key-replace-save]')
         .isDisabled('the key file is still chosen anew');
@@ -1609,7 +1625,7 @@ module('Integration | key pages', function (hooks) {
         {
           value: SERVICE_ACCOUNT_FILE,
           subject: 'owner@example.com',
-          scopes: [SHEETS, DRIVE],
+          scopes: [SHEETS, DRIVE, CALENDAR],
         },
         'leaving the fields as they are keeps them',
       );
@@ -2283,13 +2299,14 @@ module('Integration | key pages', function (hooks) {
     test('a service account whose details are known starts from the user it acts as and its scopes', async function (assert) {
       const SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
       const DRIVE = 'https://www.googleapis.com/auth/drive.readonly';
+      const CALENDAR = 'https://www.googleapis.com/auth/calendar.events';
       serve({
         'POST _secure-window/context': () => serviceAccountSlot(),
         'GET _user-keys/key-1': () =>
           serviceAccountKey({
             email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
             subject: 'owner@example.com',
-            scopes: [SHEETS, DRIVE],
+            scopes: [SHEETS, DRIVE, CALENDAR],
           }),
         'PATCH _user-keys/key-1': () =>
           json(200, {
@@ -2313,9 +2330,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-service-account-subject]')
         .hasValue('owner@example.com', 'Act as starts as it is');
-      assert
-        .dom('[data-test-service-account-scopes]')
-        .hasValue(`${SHEETS} ${DRIVE}`, 'Scopes start as they are');
+      assertShowsEveryScope(assert, [SHEETS, DRIVE, CALENDAR]);
       assert
         .dom('[data-test-replace-key-save]')
         .isDisabled('the key file is still chosen anew');
@@ -2332,7 +2347,7 @@ module('Integration | key pages', function (hooks) {
         {
           value: SERVICE_ACCOUNT_FILE,
           subject: 'owner@example.com',
-          scopes: [SHEETS, DRIVE],
+          scopes: [SHEETS, DRIVE, CALENDAR],
         },
         'leaving the fields as they are keeps them',
       );

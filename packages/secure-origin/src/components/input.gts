@@ -8,12 +8,17 @@ import FailureBordered from './icons/failure-bordered.gts';
 import SuccessBordered from './icons/success-bordered.gts';
 import type { IconComponent } from './icons/types.ts';
 
-// boxel-ui's BoxelInput, for the single-line inputs the secure origin's pages
-// draw. boxel-ui's can't ship on the secure origin (ADR 008 §1.3), so its
-// template and styles are brought here, kept as they are there, but for what
-// the pages don't draw: other kinds of input (textarea, search, checkbox,
-// color), the large size, the flat bottom, the loading state, helper text, the
-// optional marker, and disabled and read-only inputs.
+// boxel-ui's BoxelInput, for the inputs the secure origin's pages draw.
+// boxel-ui's can't ship on the secure origin (ADR 008 §1.3), so its template
+// and styles are brought here, kept as they are there, but for what the pages
+// don't draw: other kinds of input (search, checkbox, color), the large size,
+// the flat bottom, the loading state, helper text, the optional marker, and
+// disabled and read-only inputs.
+//
+// A textarea grows with what it holds (`field-sizing: content`), where
+// boxel-ui's starts 10rem tall, so a field holding a short list shows all of
+// it and no more. Where the browser doesn't size a field by its content, the
+// textarea is as many rows tall as the value has lines.
 //
 // Unlike boxel-ui's, an error message describes the input
 // (`aria-describedby`) as well as being its `aria-errormessage`, which screen
@@ -33,10 +38,10 @@ export interface Signature {
     onKeyPress?: (ev: KeyboardEvent) => void;
     placeholder?: string;
     state?: InputValidationState;
-    type?: 'text' | 'password' | 'email' | 'tel' | 'url';
+    type?: 'text' | 'password' | 'email' | 'tel' | 'url' | 'textarea';
     value?: string | null;
   };
-  Element: HTMLInputElement;
+  Element: HTMLInputElement | HTMLTextAreaElement;
 }
 
 export default class BoxelInput extends Component<Signature> {
@@ -44,6 +49,14 @@ export default class BoxelInput extends Component<Signature> {
 
   private get id() {
     return this.args.id || this.guid;
+  }
+
+  private get isMultiline() {
+    return this.args.type === 'textarea';
+  }
+
+  private get rows() {
+    return Math.max(1, (this.args.value ?? '').split('\n').length);
   }
 
   private get hasValidation() {
@@ -80,7 +93,9 @@ export default class BoxelInput extends Component<Signature> {
   }
 
   private onInput = (event: Event) => {
-    this.args.onInput?.((event.target as HTMLInputElement).value);
+    this.args.onInput?.(
+      (event.target as HTMLInputElement | HTMLTextAreaElement).value,
+    );
   };
 
   private onKeyPress = (event: Event) => {
@@ -89,31 +104,59 @@ export default class BoxelInput extends Component<Signature> {
 
   <template>
     <div class={{cn 'input-container' has-validation=this.hasValidation}}>
-      <input
-        class={{cn
-          'boxel-input'
-          has-validation=this.hasValidation
-          has-validation-icon=this.hasValidationIcon
-          invalid=this.isInvalid
-        }}
-        id={{this.id}}
-        type={{@type}}
-        value={{@value}}
-        placeholder={{@placeholder}}
-        autocomplete={{@autocomplete}}
-        aria-describedby={{this.errorMessageId}}
-        aria-invalid={{if this.isInvalid 'true'}}
-        aria-errormessage={{this.errorMessageId}}
-        data-test-boxel-input
-        data-test-boxel-input-id={{@id}}
-        data-test-boxel-input-validation-state={{@state}}
-        {{on 'input' this.onInput}}
-        {{on 'blur' (optional @onBlur)}}
-        {{on 'keypress' this.onKeyPress}}
-        {{on 'focus' (optional @onFocus)}}
-        {{on 'change' (optional @onChange)}}
-        ...attributes
-      />
+      {{#if this.isMultiline}}
+        <textarea
+          class={{cn
+            'boxel-input'
+            has-validation=this.hasValidation
+            has-validation-icon=this.hasValidationIcon
+            invalid=this.isInvalid
+          }}
+          id={{this.id}}
+          rows={{this.rows}}
+          value={{@value}}
+          placeholder={{@placeholder}}
+          autocomplete={{@autocomplete}}
+          aria-describedby={{this.errorMessageId}}
+          aria-invalid={{if this.isInvalid 'true'}}
+          aria-errormessage={{this.errorMessageId}}
+          data-test-boxel-input
+          data-test-boxel-input-id={{@id}}
+          data-test-boxel-input-validation-state={{@state}}
+          {{on 'input' this.onInput}}
+          {{on 'blur' (optional @onBlur)}}
+          {{on 'keypress' this.onKeyPress}}
+          {{on 'focus' (optional @onFocus)}}
+          {{on 'change' (optional @onChange)}}
+          ...attributes
+        ></textarea>
+      {{else}}
+        <input
+          class={{cn
+            'boxel-input'
+            has-validation=this.hasValidation
+            has-validation-icon=this.hasValidationIcon
+            invalid=this.isInvalid
+          }}
+          id={{this.id}}
+          type={{@type}}
+          value={{@value}}
+          placeholder={{@placeholder}}
+          autocomplete={{@autocomplete}}
+          aria-describedby={{this.errorMessageId}}
+          aria-invalid={{if this.isInvalid 'true'}}
+          aria-errormessage={{this.errorMessageId}}
+          data-test-boxel-input
+          data-test-boxel-input-id={{@id}}
+          data-test-boxel-input-validation-state={{@state}}
+          {{on 'input' this.onInput}}
+          {{on 'blur' (optional @onBlur)}}
+          {{on 'keypress' this.onKeyPress}}
+          {{on 'focus' (optional @onFocus)}}
+          {{on 'change' (optional @onChange)}}
+          ...attributes
+        />
+      {{/if}}
       {{#if this.validationIcon}}
         <div class='validation-icon-container'>
           <this.validationIcon
@@ -179,6 +222,12 @@ export default class BoxelInput extends Component<Signature> {
           transition:
             var(--boxel-transition-properties),
             outline-color var(--boxel-transition);
+        }
+
+        textarea.boxel-input {
+          field-sizing: content;
+          resize: vertical;
+          overflow: auto;
         }
 
         /* keep text out from under the validation icon */
