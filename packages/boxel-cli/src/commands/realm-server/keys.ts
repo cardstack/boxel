@@ -343,7 +343,13 @@ function printHistory(
   }
   console.log('  history:');
   for (let change of history) {
-    console.log(`    ${change.changedAt} ${change.action}: ${change.note}`);
+    // A platform client's history is kept by name, so an entry may be for an
+    // earlier client deleted under that name: the vendor's client id tells
+    // them apart.
+    let client = 'clientId' in change ? ` (client id ${change.clientId})` : '';
+    console.log(
+      `    ${change.changedAt} ${change.action}${client}: ${change.note}`,
+    );
     console.log(
       `      from ${change.clientAddress ?? 'an unknown address'}, token signed ${change.tokenIssuedAt ?? 'at an unknown time'}`,
     );

@@ -767,6 +767,34 @@ module(basename(import.meta.filename), function () {
         })),
         'a deleted client keeps its history',
       );
+
+      let readded = await addPlatformClient({
+        oauth: {
+          clientId: 'Iv1.another-app',
+          authorizeUrl: 'https://github.com/login/oauth/authorize',
+          tokenUrl: 'https://github.com/login/oauth/access_token',
+          apiHosts: ['https://api.github.com/'],
+        },
+        note: 'registering a new GitHub App under the same name',
+      });
+      assert.strictEqual(readded.status, 201);
+      assert.notStrictEqual(readded.body.client.id, id, 'it has a new id');
+      let reshown = await request
+        .get('/_platform-oauth-clients/github')
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.deepEqual(
+        reshown.body.history.map((change: any) => [
+          change.action,
+          change.clientId,
+        ]),
+        [
+          ['add', 'Iv1.another-app'],
+          ['delete', 'Iv1.platform-client'],
+          ['replace', 'Iv1.platform-client'],
+          ['add', 'Iv1.platform-client'],
+        ],
+        'a client added again under a name shows the earlier client’s history too',
+      );
       let everything = JSON.stringify([
         added.body,
         replaced.body,
