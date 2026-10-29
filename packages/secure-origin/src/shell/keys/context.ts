@@ -3,7 +3,9 @@
 export type {
   ConnectableClient,
   DestinationDisplay,
+  KeyKind,
   KeyShare,
+  KeyValue,
   ListedKey,
   OAuthClientRef,
   OAuthKeyDescription,

@@ -37,7 +37,7 @@ import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 
-import type { SlotBound, WindowContext } from './context.ts';
+import type { KeyValue, SlotBound, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
@@ -45,6 +45,8 @@ import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { contextRequest, openedFor } from './opened-for.ts';
+import { ServiceAccountEntry } from './service-account-entry.ts';
+import ServiceAccountFields from './service-account-fields.gts';
 import { addressOf } from './workspace-dropdown.gts';
 
 // What the page does for one slot.
@@ -54,6 +56,9 @@ type SlotView =
       slot: string;
       key: { id: string; name: string };
       rejected: boolean;
+      // A Google service account, which is replaced with a whole new key
+      // file, subject and scopes rather than one value.
+      serviceAccount: boolean;
       // The share's label, when the key is one the user shares into the
       // workspace.
       shareLabel?: string;
@@ -103,6 +108,7 @@ function slotView(
       slot: slot.name,
       key: bound.key,
       rejected: bound.rejected,
+      serviceAccount: bound.key.kind === 'google-service-account',
       shareLabel: bound.share?.label,
     };
   }
@@ -197,7 +203,16 @@ class SlotPanel extends Component<{
           data-replace-key-form
           data-test-replace-key-form
         >
-          <KeyFields @value={{this.form.value}} @onValue={{this.setValue}} />
+          {{#if this.replacing.serviceAccount}}
+            <p class='note' data-test-service-account-replace-note>A replacement
+              sets the key file, the scopes and who it acts as all anew. Enter
+              the scopes again, and leave
+              <strong>Act as</strong>
+              empty only if it should act as the service account itself.</p>
+            <ServiceAccountFields @entry={{this.serviceAccount}} />
+          {{else}}
+            <KeyFields @value={{this.form.value}} @onValue={{this.setValue}} />
+          {{/if}}
           {{#if this.form.error}}
             <div class='keys-error' role='alert' data-test-keys-error>
               {{this.form.error}}
@@ -426,8 +441,21 @@ class SlotPanel extends Component<{
     );
   }
 
+  private serviceAccount = new ServiceAccountEntry();
+
+  // What the key is replaced with: a service account's new key file, subject
+  // and scopes, or any other key's new value.
+  private get replacement(): KeyValue | undefined {
+    if (this.replacing?.serviceAccount) {
+      return this.serviceAccount.value;
+    }
+    return this.form.value
+      ? { kind: 'static', value: this.form.value }
+      : undefined;
+  }
+
   private get submitDisabled() {
-    return this.form.saving || !this.form.value;
+    return this.form.saving || !this.replacement;
   }
 
   private setValue = (value: string) => {
@@ -438,7 +466,8 @@ class SlotPanel extends Component<{
   private save = async (event: Event) => {
     event.preventDefault();
     let view = this.replacing;
-    if (this.submitDisabled || !view) {
+    let entered = this.replacement;
+    if (this.submitDisabled || !view || !entered) {
       return;
     }
     this.form.saving = true;
@@ -446,10 +475,11 @@ class SlotPanel extends Component<{
     try {
       await replaceKey(this.args.api.config, {
         keyId: view.key.id,
-        value: this.form.value,
+        entered,
       });
       // The value is gone from the page the moment the server has it.
       this.form.value = '';
+      this.serviceAccount.clear();
       this.args.onReplaced(view.key);
     } catch (e) {
       if (isSignedOut(e)) {

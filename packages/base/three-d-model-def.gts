@@ -8,22 +8,6 @@ import { MODEL3D_FAMILY_CAPTURES } from './file-formats/model3d-captures';
 // inside a character class) can confuse the content-tag template lexer.
 const EXTENSION_RE = new RegExp('\\.[^/.]+$');
 
-// Lowercased file extension (including the leading dot) from a URL, e.g.
-// `.stl`. Shared by the leaf `extractAttributes` methods to reject a file whose
-// bytes don't match its extension. Falls back to a plain string scan when the
-// value isn't a parseable URL.
-export function getExtension(url: string): string {
-  try {
-    let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? '';
-    let dot = name.lastIndexOf('.');
-    return dot === -1 ? '' : name.slice(dot).toLowerCase();
-  } catch {
-    let dot = url.lastIndexOf('.');
-    return dot === -1 ? '' : url.slice(dot).toLowerCase();
-  }
-}
-
 // The wire shape a leaf's `extractAttributes` projects onto the shared `model3d`
 // field. Every key is optional: a leaf sets only what its header carries, and
 // `model3dAttributes` drops the rest so an absent fact never overwrites the

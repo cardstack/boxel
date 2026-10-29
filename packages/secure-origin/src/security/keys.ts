@@ -38,13 +38,42 @@ export interface WindowContext {
 // writers, and its owner only to those writers while the share is active.
 export interface SlotBound {
   rejected: boolean;
-  // `kind` is the key's (`static`, `oauth-client` or `oauth-connection`).
+  // `kind` is the key's (`static`, `google-service-account`, `oauth-client`
+  // or `oauth-connection`).
   key: { id: string; name: string; kind: string } | null;
   share?: {
     label?: string;
     suspended: boolean;
     ownedByYou: boolean;
     owner?: string;
+  };
+}
+
+// `static`: a key sent as it is. `google-service-account`: a Google service
+// account's JSON key file, from which the realm server mints the access tokens
+// it sends.
+export type KeyKind = 'static' | 'google-service-account';
+
+// What a key is entered as. A service account's value is its JSON key file,
+// with the user to act as (optional) and the scopes its tokens ask for.
+export type KeyValue =
+  | { kind: 'static'; value: string }
+  | {
+      kind: 'google-service-account';
+      value: string;
+      subject: string;
+      scopes: string[];
+    };
+
+// The attributes a key's value is sent as.
+function valueAttributes(entered: KeyValue): Record<string, unknown> {
+  if (entered.kind === 'static') {
+    return { value: entered.value };
+  }
+  return {
+    value: entered.value,
+    ...(entered.subject ? { subject: entered.subject } : {}),
+    scopes: entered.scopes,
   };
 }
 
@@ -80,11 +109,12 @@ export interface OAuthKeyDescription {
 }
 
 // One of the user's keys: its metadata, never its value. `kind` is `static`
-// for a secret pasted in, `oauth-client` or `oauth-connection`.
+// for a secret pasted in, `google-service-account`, `oauth-client` or
+// `oauth-connection`.
 export interface UserKey {
   id: string;
   name: string;
-  kind: string;
+  kind: KeyKind | 'oauth-client' | 'oauth-connection';
   state: string;
   createdAt: string;
   updatedAt: string;
@@ -169,13 +199,16 @@ export async function getKey(
 
 export async function addKey(
   config: Config,
-  { name, value }: { name: string; value: string },
+  { name, entered }: { name: string; entered: KeyValue },
 ): Promise<UserKey> {
   let { ticket } = await mintKeyWriteTicket(config, { action: 'add' });
   return resource<UserKey>(
     await authorizedRequest(config, '_user-keys', {
       body: {
-        data: { type: 'user-key', attributes: { name, kind: 'static', value } },
+        data: {
+          type: 'user-key',
+          attributes: { name, kind: entered.kind, ...valueAttributes(entered) },
+        },
         meta: { ticket },
       },
     }),
@@ -230,9 +263,10 @@ export async function showKey(
   );
 }
 
+// A key is replaced with a value of its own kind.
 export async function replaceKey(
   config: Config,
-  { keyId, value }: { keyId: string; value: string },
+  { keyId, entered }: { keyId: string; entered: KeyValue },
 ): Promise<UserKey> {
   let { ticket } = await mintKeyWriteTicket(config, {
     action: 'replace',
@@ -242,7 +276,11 @@ export async function replaceKey(
     await authorizedRequest(config, `_user-keys/${encodeURIComponent(keyId)}`, {
       method: 'PATCH',
       body: {
-        data: { type: 'user-key', id: keyId, attributes: { value } },
+        data: {
+          type: 'user-key',
+          id: keyId,
+          attributes: valueAttributes(entered),
+        },
         meta: { ticket },
       },
     }),

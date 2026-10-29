@@ -280,15 +280,107 @@ export async function keysShow(
   return shown;
 }
 
+// The kinds of key `add` takes. A `google-service-account` key is a Google
+// service account's JSON key file, read with --key-file or --stdin, with the
+// scopes its tokens ask for (--scope) and optionally the user to act as
+// (--subject).
+export const KEY_KINDS = ['static', 'google-service-account'] as const;
+
+export interface ServiceAccountOptions {
+  kind?: string;
+  subject?: string;
+  scope?: string[];
+}
+
+// Refuses a `--kind` that `add` doesn't take, before anything that would make
+// the person wait.
+function checkAddKind(kind: string): void {
+  if (!(KEY_KINDS as readonly string[]).includes(kind)) {
+    throw new Error(`--kind is one of: ${KEY_KINDS.join(', ')}`);
+  }
+}
+
+// Refuses options that don't fit the key's kind. A service account's key file
+// is JSON, so it is read from a file or stdin, never typed at the masked
+// prompt. Any other kind, an OAuth app's included, takes neither --subject
+// nor --scope, and what its replacement may be is the realm server's to say.
+function checkKindOptions(
+  kind: string,
+  options: ServiceAccountOptions & KeyValueSource,
+): void {
+  if (kind === 'google-service-account') {
+    if (!options.keyFile && !options.stdin) {
+      throw new Error(
+        "A Google service account's JSON key file is read with --key-file or --stdin",
+      );
+    }
+    if (!options.scope?.length) {
+      throw new Error(
+        'A Google service account needs at least one --scope, such as https://www.googleapis.com/auth/spreadsheets',
+      );
+    }
+  } else if (options.subject !== undefined || options.scope !== undefined) {
+    throw new Error(
+      '--subject and --scope are only for a google-service-account key',
+    );
+  }
+}
+
+// Whether a value is a Google service account's JSON key file, which is only
+// ever added as a google-service-account key: sent as it is, it would hand
+// the private key to the API.
+function isServiceAccountKeyFile(value: string): boolean {
+  if (!value.trimStart().startsWith('{')) {
+    return false;
+  }
+  try {
+    return JSON.parse(value)?.type === 'service_account';
+  } catch {
+    return false;
+  }
+}
+
+function checkNotAKeyFile(kind: string, value: string): void {
+  if (kind !== 'google-service-account' && isServiceAccountKeyFile(value)) {
+    throw new Error(
+      "This is a Google service account's JSON key file. Add it with --kind google-service-account and the --scope its tokens may use",
+    );
+  }
+}
+
+function serviceAccountAttributes(
+  kind: string,
+  options: ServiceAccountOptions,
+): { subject?: string; scopes?: string[] } {
+  if (kind !== 'google-service-account') {
+    return {};
+  }
+  return {
+    ...(options.subject ? { subject: options.subject } : {}),
+    scopes: options.scope ?? [],
+  };
+}
+
 export async function keysAdd(
   name: string,
-  options: { json?: boolean } & KeyValueSource & KeysCommandDeps = {},
+  options: { json?: boolean } & KeyValueSource &
+    ServiceAccountOptions &
+    KeysCommandDeps = {},
 ): Promise<UserKeyMetadata> {
   let ctx = context(options.json, options);
+  let kind = options.kind ?? 'static';
+  checkAddKind(kind);
+  checkKindOptions(kind, options);
   checkKeyValueSource(options, ctx.deps.input ?? process.stdin);
   let token = await secureToken(ctx);
   let value = await readValue(ctx, options);
-  let key = await addUserKey(ctx.realmServerUrl, token, { name, value });
+  checkNotAKeyFile(kind, value);
+  let key = await addUserKey(ctx.realmServerUrl, token, {
+    name,
+    ...(options.kind ? { kind } : {}),
+    value,
+    ...serviceAccountAttributes(kind, options),
+  });
   emit(ctx, key, () => {
     console.log(`${FG_GREEN}Added the key ${key.name}.${RESET}`);
     console.log(
@@ -298,18 +390,25 @@ export async function keysAdd(
   return key;
 }
 
+// A key is replaced with a value of its own kind: a service account with a
+// new key file and its scopes.
 export async function keysReplace(
   name: string,
-  options: { json?: boolean } & KeyValueSource & KeysCommandDeps = {},
+  options: { json?: boolean } & KeyValueSource &
+    Omit<ServiceAccountOptions, 'kind'> &
+    KeysCommandDeps = {},
 ): Promise<UserKeyMetadata> {
   let ctx = context(options.json, options);
   checkKeyValueSource(options, ctx.deps.input ?? process.stdin);
   let token = await secureToken(ctx);
-  let { id } = await findUserKey(ctx.realmServerUrl, token, name);
+  let { id, kind } = await findUserKey(ctx.realmServerUrl, token, name);
+  checkKindOptions(kind, options);
   let value = await readValue(ctx, options);
+  checkNotAKeyFile(kind, value);
   let key = await replaceUserKey(ctx.realmServerUrl, token, {
     keyId: id,
     value,
+    ...serviceAccountAttributes(kind, options),
   });
   emit(ctx, key, () => {
     console.log(`${FG_GREEN}Replaced the value of ${key.name}.${RESET}`);
@@ -449,7 +548,12 @@ export async function keysShares(
       console.log(`${canonicalRealmUrl(options.realm)} has no shares.`);
     }
     for (let share of shares) {
-      let owner = share.owner === ctx.matrixUserId ? 'you' : share.owner;
+      let owner =
+        share.owner === null
+          ? 'a former member of the realm'
+          : share.owner === ctx.matrixUserId
+            ? 'you'
+            : share.owner;
       console.log(`${describeShare(share, keyNames)}, owner ${owner}`);
     }
   });

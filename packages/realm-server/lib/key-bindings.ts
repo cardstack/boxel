@@ -48,6 +48,10 @@ import {
   type OAuthTokenFailure,
 } from './oauth.ts';
 import {
+  serviceAccountAccessToken,
+  ServiceAccountTokenError,
+} from './google-service-account-keys.ts';
+import {
   claimProbe,
   credentialRejected,
   DEFAULT_PROBE_INTERVAL_MS,
@@ -1339,26 +1343,38 @@ const MINTING_REFUSALS: Record<OAuthTokenFailure, string> = {
     'its token endpoint kept failing, so asking again later may succeed',
 };
 
+const SERVICE_ACCOUNT_REJECTED =
+  'Google no longer accepts its service account key, so its owner replaces the key';
+
 // The access token a minting key sends now, or the refusal for why it has
 // none: `credential-rejected`, with the reason.
 async function mintedToken(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
-  opened: { keyId: string; destination: string },
+  opened: { keyId: string; kind: string; destination: string },
   slot: CallApiSlot,
   operation: string,
 ): Promise<string> {
   try {
-    return await oauthAccessToken(dbAdapter, keyring, opened.keyId);
+    return opened.kind === 'google-service-account'
+      ? await serviceAccountAccessToken(dbAdapter, keyring, opened.keyId)
+      : await oauthAccessToken(dbAdapter, keyring, opened.keyId);
   } catch (error) {
-    if (!(error instanceof OAuthTokenError)) {
+    if (
+      !(error instanceof OAuthTokenError) &&
+      !(error instanceof ServiceAccountTokenError)
+    ) {
       throw error;
     }
+    let why =
+      error instanceof ServiceAccountTokenError && error.reason === 'rejected'
+        ? SERVICE_ACCOUNT_REJECTED
+        : MINTING_REFUSALS[error.reason];
     throw new OperationFailure({
       status: 424,
       code: 'credential-rejected',
       title: 'Credential rejected',
-      detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${MINTING_REFUSALS[error.reason]}`,
+      detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${why}`,
       meta: {
         slot: { name: slot.name, key: slot.key },
         destination: opened.destination,
