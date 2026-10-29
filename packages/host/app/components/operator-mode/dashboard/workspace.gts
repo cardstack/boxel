@@ -1,8 +1,6 @@
 import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { guidFor } from '@ember/object/internals';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -27,7 +25,6 @@ import type { RealmIdentifier } from '@cardstack/runtime-common';
 import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import { WorkspaceActions } from '@cardstack/host/lib/workspace-actions';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
-import type RealmService from '@cardstack/host/services/realm';
 
 import {
   ArchiveWorkspaceModal,
@@ -127,7 +124,7 @@ export default class Workspace extends Component<Signature> {
             outside the button: text inside a button joins its accessible
             name. }}
         <span
-          id={{this.realmURLDescriptionId}}
+          id={{this.workspace.realmURLDescriptionId}}
           class='boxel-sr-only'
         >{{this.workspace.realmURLText}}</span>
 
@@ -152,7 +149,7 @@ export default class Workspace extends Component<Signature> {
                 <button
                   type='button'
                   class='desk-pill'
-                  aria-describedby={{this.realmURLDescriptionId}}
+                  aria-describedby={{this.workspace.realmURLDescriptionId}}
                   data-nav-index={{@navIndex}}
                   {{on 'click' this.workspace.openWorkspace}}
                   {{focusWhenSelected
@@ -203,7 +200,7 @@ export default class Workspace extends Component<Signature> {
                 class='desk-stats'
                 data-test-workspace-stats={{@realmIdentifier}}
               >
-                {{#each this.tileStats as |stat|}}
+                {{#each this.workspace.tileStats as |stat|}}
                   <span
                     class='desk-stat'
                     data-test-workspace-stat={{stat.label}}
@@ -265,7 +262,7 @@ export default class Workspace extends Component<Signature> {
         {{else}}
           <ItemContainer
             class='tile-face'
-            aria-describedby={{this.realmURLDescriptionId}}
+            aria-describedby={{this.workspace.realmURLDescriptionId}}
             data-nav-index={{@navIndex}}
             {{on 'click' this.workspace.openWorkspace}}
             {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
@@ -408,7 +405,7 @@ export default class Workspace extends Component<Signature> {
               <button
                 type='button'
                 class='name row-open'
-                aria-describedby={{this.realmURLDescriptionId}}
+                aria-describedby={{this.workspace.realmURLDescriptionId}}
                 data-nav-index={{@navIndex}}
                 {{on 'click' this.workspace.openWorkspace}}
                 {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
@@ -1166,18 +1163,12 @@ export default class Workspace extends Component<Signature> {
     </style>
   </template>
 
-  @service declare private realm: RealmService;
-
   @tracked private isHostDropdownOpen = false;
 
   private workspace = new WorkspaceActions(
     this,
     () => this.args.realmIdentifier,
   );
-
-  private get realmURLDescriptionId() {
-    return `${guidFor(this)}-realm-url`;
-  }
 
   private get showSelectionRing() {
     return Boolean(this.args.isSelected && this.args.selectionActive);
@@ -1225,21 +1216,6 @@ export default class Workspace extends Component<Signature> {
 
   private get updatedAgoLabel() {
     return this.workspace.updatedAtLabel?.replace(UPDATED_PREFIX, '');
-  }
-
-  // A desk's Cards / Files / Definitions counts. A stat with no count is
-  // dropped rather than shown as 0. The counts are requested for favorites
-  // alone, after the desk renders, so the caption reserves their line.
-  private get tileStats(): { label: string; count: number }[] {
-    let counts = this.realm.indexCounts(this.args.realmIdentifier);
-    if (!counts) {
-      return [];
-    }
-    return [
-      { label: 'Cards', count: counts.cardCount },
-      { label: 'Files', count: counts.fileCount },
-      { label: 'Definitions', count: counts.definitionCount },
-    ].filter((stat): stat is { label: string; count: number } => !!stat.count);
   }
 
   // A tile opens from its face alone; a row opens from anywhere on it.
