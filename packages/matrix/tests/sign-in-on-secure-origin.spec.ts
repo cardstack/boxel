@@ -122,6 +122,30 @@ test.describe('Sign in on the secure origin', () => {
     ).toHaveCount(1, { timeout: 60_000 });
   });
 
+  test('a password reset link in an email sent to the app lands on the secure origin’s reset page', async ({
+    page,
+  }, testInfo) => {
+    // Reset emails link to the app, with the client secret in the query and
+    // the email address and validation session in the fragment.
+    let email = `${username}@example.com`;
+    await page.goto(
+      `${appURL}/?clientSecret=example-client-secret#email=${encodeURIComponent(email)}&sid=example-sid`,
+    );
+
+    await page.waitForURL((url) => url.pathname.endsWith('/reset-password'));
+    expect(onSecureOrigin(page, 'reset-password')).toBe(true);
+    await expect(page.locator('[data-test-reset-password-form]')).toBeVisible();
+    expect(
+      new URL(page.url()).hash,
+      'the reset link’s secrets are taken out of the address',
+    ).toBe('');
+    await snapshot(
+      testInfo,
+      page,
+      'secure origin reset page, from a reset link sent to the app',
+    );
+  });
+
   test('signing out goes through the secure origin and ends its session too', async ({
     page,
   }, testInfo) => {

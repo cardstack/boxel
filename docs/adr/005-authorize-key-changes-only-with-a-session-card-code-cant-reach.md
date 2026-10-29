@@ -119,18 +119,22 @@ stops before they are due.
 A secure window whose session has ended MUST forget it. A sign-in page then
 offers to sign in again. A key page MUST NOT: it offers no sign-in of its own,
 as it offers no sign-out, and says to sign in to Boxel from the page that
-opened it. The one sign-in is Boxel's own, which leaves the window its session
-on the secure origin only on a deployment that signs users in there (§1.7),
-so a key page never gathers a credential for a session of its own. A
-deployment MUST NOT open a key page unless it signs users in on the secure
-origin.
+opened it. The one sign-in is Boxel's own on the secure origin (§1.7), which
+leaves the window its session there, so a key page never gathers a credential
+for a session of its own.
 
 ### 1.7. Signing in to the app on the secure origin
 
-A deployment that signs users in on the secure origin MUST NOT have the app
-draw a field that a credential is typed into for signing in. A signed-out app
-MUST send the user to the secure origin's sign-in page instead, and it MUST
-NOT navigate a frame it is shown in to do so.
+Users MUST sign in to Boxel, create an account and reset a password only on
+the secure origin's pages. The app MUST NOT draw a field that a credential is
+typed into for any of these. A signed-out app MUST send the user to the secure
+origin's sign-in page instead, and it MUST NOT navigate a frame it is shown in
+to do so. A link already sent that names an app page for one of these, a
+password reset email's or an older CLI's `/cli-auth`, MUST be forwarded to
+the secure origin's page for it. The Matrix server MUST NOT offer a sign-in
+of its own that returns to the app, such as single sign-on; its password
+login stays, for the CLI's terminal sign-ins and the realm server's password
+check.
 
 The secure origin MUST hand the app only a single-use Matrix login token, and
 MUST NOT hand it the secure session (§1.4). The token MUST travel only by a
@@ -284,8 +288,12 @@ Signing in to the app on the secure origin (§1.7) closes what the
 credential fields leave open. Those fields are invisible frames inside the
 app's own form, so card code can draw a form that looks the same and the user
 can't tell them apart; a full page on the secure origin gives the user an
-address bar to check. One sign-in there also serves both the app and the
-secure window, which otherwise sign in separately.
+address bar to check. That only holds while no Boxel page but the secure
+origin's ever asks for a credential, so the app keeps no sign-in,
+registration or reset form at all, and the Matrix server's single sign-on,
+which took a Google sign-in on the Matrix server's pages and returned to the
+app, is not configured. One sign-in on the secure origin also serves both the
+app and the secure window, which otherwise sign in separately.
 
 What reaches the app is a Matrix login token, not a session of the secure
 origin's: card code can already mint the same kind of token from the app's

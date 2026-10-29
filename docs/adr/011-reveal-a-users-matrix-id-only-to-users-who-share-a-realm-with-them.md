@@ -10,7 +10,6 @@ scope:
   - packages/host/app/services/realm-server.ts
   - packages/host/app/services/ai-assistant-panel-service.ts
   - packages/host/app/tools/**
-  - packages/host/app/components/matrix/register-user.gts
   - packages/ai-bot/**
   - packages/bot-runner/**
   - packages/matrix/support/synapse/**
@@ -219,5 +218,6 @@ events, as proposed in #6906, breaks §1.3 and §1.5.
   this repository, so no entry here can name them. They break §1.6 in the same
   ways as the files above until each one sets the profile and invite settings
   and loads the invite module. `.github/workflows/sync-synapse-assets.yml`
-  copies `packages/matrix/support/synapse/modules/` to those homeservers, but
-  each configuration still has to list the module under `modules:`.
+  ships only the email templates to those homeservers, so the invite module
+  needs a way there too, and each configuration has to list it under
+  `modules:`.
