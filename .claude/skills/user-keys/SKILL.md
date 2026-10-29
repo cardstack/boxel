@@ -431,7 +431,7 @@ Google's time window (the signing host's clock), refuses that call alone and
 leaves the key `active`; a 408 is retried like a 5xx.
 
 - **Calls through any grant of a rejected key** are refused
-  `credential-rejected` (424, `meta.reason: 'rejected'`) by `checkedBindings`
+  `credential-rejected` (424, `meta.reason: 'rejected'`) by `checkSlots`
   without contacting Google, except **one probe per key per interval**,
   claimed on `user_keys.last_probe_at` in one `UPDATE` (`claimKeyProbe`), with
   the same `KEY_GRANT_PROBE_INTERVAL_SECONDS`. A pipeline admission admits a
