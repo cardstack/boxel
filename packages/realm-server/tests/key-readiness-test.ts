@@ -413,4 +413,55 @@ module(basename(import.meta.filename), function (hooks) {
       'a suspended share needs an administrator, whoever asks',
     );
   });
+
+  // Marks the grant a binding sends under as rejected by the vendor, its last
+  // probe `probedAgo` ago.
+  async function rejectGrantOf(bindingId: string, probedAgo: string) {
+    await dbAdapter.execute(
+      `UPDATE user_key_grants SET state = 'rejected', rejected_at = NOW(), last_probe_at = NOW() - $2::interval
+        WHERE id = (SELECT grant_id FROM key_bindings WHERE id = $1)`,
+      { bind: [bindingId, probedAgo] },
+    );
+  }
+
+  test('a grant the vendor rejected reads as rejected until its probe is due, and reading readiness claims no probe', async function (assert) {
+    let key = await addKey();
+    let binding = await approve(OWNER, 'list', { keyId: key.id });
+    await allowInteractive(binding);
+    await rejectGrantOf(binding, '0 seconds');
+    assert.strictEqual(
+      await readiness(OWNER, 'list'),
+      'credential-rejected',
+      'the call would be refused until the next probe',
+    );
+
+    await rejectGrantOf(binding, '1 day');
+    assert.strictEqual(
+      await readiness(OWNER, 'list'),
+      'ready',
+      'a call now would be sent, as the probe',
+    );
+    let [grant] = await dbAdapter.execute(
+      `SELECT g.last_probe_at < NOW() - interval '1 hour' AS untouched
+         FROM user_key_grants g JOIN key_bindings b ON b.grant_id = g.id
+        WHERE b.id = $1`,
+      { bind: [binding] },
+    );
+    assert.true(grant.untouched, 'only a call claims the probe');
+
+    let { id: shareId } = await share(key.id);
+    let shared = await approve(OWNER, 'shared', { shareId });
+    await allowInteractive(shared);
+    await rejectGrantOf(shared, '0 seconds');
+    assert.strictEqual(
+      await readiness(OWNER, 'shared'),
+      'credential-rejected',
+      "the owner of the share's key is told the vendor rejected it",
+    );
+    assert.strictEqual(
+      await readiness(WRITER, 'shared'),
+      'needs-admin',
+      'anyone else is told an administrator needs to fix it',
+    );
+  });
 });
