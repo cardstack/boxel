@@ -5,7 +5,7 @@ import {
   query,
   type DBAdapter,
 } from '@cardstack/runtime-common';
-import type { Querier } from '@cardstack/runtime-common/expression';
+import type { Expression, Querier } from '@cardstack/runtime-common/expression';
 import { destinationCovers } from '@cardstack/runtime-common/card-operations';
 import {
   PLATFORM_SECRET_OWNER,
@@ -21,6 +21,7 @@ import {
   outboundFetch,
 } from './outbound/client.ts';
 import { CredentialScrubber } from './outbound/scrubber.ts';
+import { operatorNoteRefusal, type SystemKeyCaller } from './system-keys.ts';
 import { normalizeGrantDestination } from './user-key-grants.ts';
 import {
   consumeKeyWriteTicket,
@@ -92,6 +93,9 @@ import {
 // offers it; where a connection's tokens may go is its grants alone.
 
 const log = logger('realm:oauth');
+// Operators' changes to platform clients are logged where changes to system
+// keys are, never with a secret.
+const operatorLog = logger('system-keys');
 
 export type OAuthGrantType = 'authorization_code' | 'client_credentials';
 export type OAuthTokenAuth = 'client_secret_post' | 'client_secret_basic';
@@ -453,6 +457,104 @@ function toPlatformClient(row: Record<string, unknown>): PlatformOAuthClient {
 }
 
 const PLATFORM_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const PLATFORM_HISTORY_SHOWN = 20;
+
+export type PlatformClientAction = 'add' | 'replace' | 'delete';
+
+// One entry in a platform client's history. The caller's address and the
+// time its operator token was signed are what the server observed; null
+// where it couldn't tell.
+export interface PlatformClientChange {
+  action: PlatformClientAction;
+  name: string;
+  clientId: string;
+  note: string;
+  keyId: string | null;
+  changedAt: string;
+  clientAddress: string | null;
+  tokenIssuedAt: string | null;
+}
+
+const UNKNOWN_CALLER: SystemKeyCaller = {
+  clientAddress: null,
+  tokenIssuedAt: null,
+};
+
+// Every change to a platform client carries an operator note, by the rules
+// system keys' notes follow, and the note may not contain the secret being
+// sent or the one the client holds, so neither reaches the history or the
+// log.
+function validPlatformNote(
+  note: unknown,
+  secrets: (string | undefined)[],
+): string {
+  let refusal = operatorNoteRefusal(note);
+  if (refusal) {
+    throw new UserKeyError(400, refusal);
+  }
+  if (secrets.some((secret) => secret && (note as string).includes(secret))) {
+    throw new UserKeyError(400, 'the note must not contain the secret');
+  }
+  return note as string;
+}
+
+// The secret a platform client holds, or undefined when it doesn't open,
+// which leaves nothing a note could carry.
+function currentPlatformSecret(
+  keyring: SecretsKeyring,
+  row: Record<string, unknown>,
+): string | undefined {
+  let sealed = sealedFromColumns(row, 'secret');
+  if (!sealed) {
+    return undefined;
+  }
+  try {
+    return keyring.open(
+      sealed,
+      platformClientBinding(row.id as string, row.token_url as string),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+// The history row written in the same statement as the change: `changed` is
+// the statement's CTE, whose rows carry the client's id, name, vendor client
+// id and the data key its secret is sealed under.
+function recordPlatformChangeIn(
+  changed: string,
+  action: PlatformClientAction,
+  note: string,
+  caller: SystemKeyCaller,
+): Expression {
+  return [
+    `, recorded AS (INSERT INTO platform_oauth_client_history (platform_client_id, name, client_id, action, note, key_id, client_address, token_issued_at) SELECT id, name, client_id, `,
+    param(action),
+    `::varchar, `,
+    param(note),
+    `::text, secret_key_id, `,
+    param(caller.clientAddress),
+    `::varchar, `,
+    param(caller.tokenIssuedAt),
+    `::bigint FROM ${changed})`,
+  ];
+}
+
+function logPlatformChange(
+  action: PlatformClientAction,
+  client: { id: string; name: string; clientId: string },
+  keyId: string | null,
+  note: string,
+  caller: SystemKeyCaller,
+): void {
+  let signed =
+    caller.tokenIssuedAt == null
+      ? 'unknown'
+      : new Date(caller.tokenIssuedAt * 1000).toISOString();
+  operatorLog.info(
+    `platform OAuth client ${action}: ${client.name} (id ${client.id}, client id ${client.clientId}${keyId ? `, data key ${keyId}` : ''}) from ${caller.clientAddress ?? 'an unknown address'}, token signed ${signed}. Note: ${JSON.stringify(note)}`,
+  );
+}
 
 export async function listPlatformClients(
   dbAdapter: DBAdapter,
@@ -461,6 +563,43 @@ export async function listPlatformClients(
     `SELECT ${PLATFORM_COLUMNS} FROM platform_oauth_clients ORDER BY name`,
   ]);
   return rows.map(toPlatformClient);
+}
+
+// One platform client and the most recent changes recorded under its name,
+// newest first. A client deleted and added again under the same name shows
+// the changes to both.
+export async function getPlatformClient(
+  dbAdapter: DBAdapter,
+  name: string,
+): Promise<{ client: PlatformOAuthClient; history: PlatformClientChange[] }> {
+  let [row] = await query(dbAdapter, [
+    `SELECT ${PLATFORM_COLUMNS} FROM platform_oauth_clients WHERE name = `,
+    param(name),
+  ]);
+  if (!row) {
+    throw new UserKeyError(404, 'no such platform client');
+  }
+  let history = await query(dbAdapter, [
+    `SELECT action, name, client_id, note, key_id, changed_at, client_address, token_issued_at FROM platform_oauth_client_history WHERE name = `,
+    param(name),
+    ` ORDER BY changed_at DESC, id DESC LIMIT ${PLATFORM_HISTORY_SHOWN}`,
+  ]);
+  return {
+    client: toPlatformClient(row),
+    history: history.map((change) => ({
+      action: change.action as PlatformClientAction,
+      name: change.name as string,
+      clientId: change.client_id as string,
+      note: change.note as string,
+      keyId: (change.key_id as string | null) ?? null,
+      changedAt: new Date(change.changed_at as string).toISOString(),
+      clientAddress: (change.client_address as string | null) ?? null,
+      tokenIssuedAt:
+        change.token_issued_at == null
+          ? null
+          : new Date(Number(change.token_issued_at) * 1000).toISOString(),
+    })),
+  };
 }
 
 // Adds a client Boxel registered with a vendor. Only an authorization-code
@@ -473,7 +612,16 @@ export async function addPlatformClient(
     label,
     secret,
     oauth,
-  }: { name: unknown; label: unknown; secret: unknown; oauth: unknown },
+    note,
+    caller = UNKNOWN_CALLER,
+  }: {
+    name: unknown;
+    label: unknown;
+    secret: unknown;
+    oauth: unknown;
+    note: unknown;
+    caller?: SystemKeyCaller;
+  },
 ): Promise<PlatformOAuthClient> {
   if (typeof name !== 'string' || !PLATFORM_NAME.test(name)) {
     throw new UserKeyError(
@@ -483,6 +631,7 @@ export async function addPlatformClient(
   }
   let validLabel = validText(label, 'label', true);
   let validSecret = validateUserKeyValue(secret);
+  let validNote = validPlatformNote(note, [validSecret]);
   let settings = validateOAuthClientSettings(oauth);
   if (settings.grantType !== 'authorization_code') {
     throw new UserKeyError(
@@ -496,7 +645,7 @@ export async function addPlatformClient(
     platformClientBinding(id, settings.tokenURL),
   );
   let rows = await query(dbAdapter, [
-    `INSERT INTO platform_oauth_clients (id, name, label, client_id, grant_type, authorize_url, token_url, scopes, token_auth, api_hosts, secret_ciphertext, secret_nonce, secret_tag, secret_key_id) VALUES (`,
+    `WITH added AS (INSERT INTO platform_oauth_clients (id, name, label, client_id, grant_type, authorize_url, token_url, scopes, token_auth, api_hosts, secret_ciphertext, secret_nonce, secret_tag, secret_key_id) VALUES (`,
     param(id),
     `, `,
     param(name),
@@ -516,59 +665,108 @@ export async function addPlatformClient(
     param(JSON.stringify(settings.apiHosts)),
     `::jsonb)), `,
     ...SEALED_COLUMN_VALUES(sealed),
-    `) ON CONFLICT (name) DO NOTHING RETURNING ${PLATFORM_COLUMNS}`,
+    `) ON CONFLICT (name) DO NOTHING RETURNING ${PLATFORM_COLUMNS}, secret_key_id)`,
+    ...recordPlatformChangeIn('added', 'add', validNote, caller),
+    ` SELECT * FROM added`,
   ]);
   if (rows.length === 0) {
     throw new UserKeyError(409, `a platform client named ${name} exists`);
   }
-  return toPlatformClient(rows[0]);
+  let client = toPlatformClient(rows[0]);
+  logPlatformChange('add', client, sealed.keyId, validNote, caller);
+  return client;
 }
 
 // Replaces a platform client's secret, which also clears a broken state.
 export async function replacePlatformClientSecret(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
-  { name, secret }: { name: string; secret: unknown },
+  {
+    name,
+    secret,
+    note,
+    caller = UNKNOWN_CALLER,
+  }: { name: string; secret: unknown; note: unknown; caller?: SystemKeyCaller },
 ): Promise<PlatformOAuthClient> {
   let validSecret = validateUserKeyValue(secret);
-  return await dbAdapter.withTransaction(async (txQuery) => {
+  validPlatformNote(note, [validSecret]);
+  let client = await dbAdapter.withTransaction(async (txQuery) => {
     let [row] = await txQuery([
-      `SELECT id, token_url FROM platform_oauth_clients WHERE name = `,
+      `SELECT id, token_url, ${sealedColumnsSelect('secret')} FROM platform_oauth_clients WHERE name = `,
       param(name),
       ` FOR UPDATE`,
     ]);
     if (!row) {
       throw new UserKeyError(404, 'no such platform client');
     }
+    let validNote = validPlatformNote(note, [
+      validSecret,
+      currentPlatformSecret(keyring, row),
+    ]);
     let sealed = keyring.seal(
       validSecret,
       platformClientBinding(row.id as string, row.token_url as string),
     );
     let [updated] = await txQuery([
-      `UPDATE platform_oauth_clients SET (secret_ciphertext, secret_nonce, secret_tag, secret_key_id, state, broken_at, updated_at) = (`,
+      `WITH replaced AS (UPDATE platform_oauth_clients SET (secret_ciphertext, secret_nonce, secret_tag, secret_key_id, state, broken_at, updated_at) = (`,
       ...SEALED_COLUMN_VALUES(sealed),
       `, 'active', NULL, NOW()) WHERE id = `,
       param(row.id as string),
-      ` RETURNING ${PLATFORM_COLUMNS}`,
+      ` RETURNING ${PLATFORM_COLUMNS}, secret_key_id)`,
+      ...recordPlatformChangeIn('replaced', 'replace', validNote, caller),
+      ` SELECT * FROM replaced`,
     ]);
-    return toPlatformClient(updated);
+    return {
+      client: toPlatformClient(updated),
+      keyId: sealed.keyId,
+      note: validNote,
+    };
   });
+  logPlatformChange(
+    'replace',
+    client.client,
+    client.keyId,
+    client.note,
+    caller,
+  );
+  return client.client;
 }
 
 // Deletes a platform client. Its connections stay, needing an administrator,
 // and a client added again under the same name doesn't take them back.
 export async function deletePlatformClient(
   dbAdapter: DBAdapter,
-  name: string,
-): Promise<void> {
-  let rows = await query(dbAdapter, [
-    `DELETE FROM platform_oauth_clients WHERE name = `,
-    param(name),
-    ` RETURNING id`,
-  ]);
-  if (rows.length === 0) {
-    throw new UserKeyError(404, 'no such platform client');
-  }
+  keyring: SecretsKeyring,
+  {
+    name,
+    note,
+    caller = UNKNOWN_CALLER,
+  }: { name: string; note: unknown; caller?: SystemKeyCaller },
+): Promise<PlatformOAuthClient> {
+  validPlatformNote(note, []);
+  let deleted = await dbAdapter.withTransaction(async (txQuery) => {
+    let [row] = await txQuery([
+      `SELECT id, token_url, ${sealedColumnsSelect('secret')} FROM platform_oauth_clients WHERE name = `,
+      param(name),
+      ` FOR UPDATE`,
+    ]);
+    if (!row) {
+      throw new UserKeyError(404, 'no such platform client');
+    }
+    let validNote = validPlatformNote(note, [
+      currentPlatformSecret(keyring, row),
+    ]);
+    let [removed] = await txQuery([
+      `WITH deleted AS (DELETE FROM platform_oauth_clients WHERE id = `,
+      param(row.id as string),
+      ` RETURNING ${PLATFORM_COLUMNS}, secret_key_id)`,
+      ...recordPlatformChangeIn('deleted', 'delete', validNote, caller),
+      ` SELECT * FROM deleted`,
+    ]);
+    return { client: toPlatformClient(removed), note: validNote };
+  });
+  logPlatformChange('delete', deleted.client, null, deleted.note, caller);
+  return deleted.client;
 }
 
 // --- Which clients connect mode offers --------------------------------

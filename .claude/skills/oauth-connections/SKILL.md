@@ -1,6 +1,6 @@
 ---
 name: oauth-connections
-description: Operate and diagnose OAuth clients and connections — the `oauth-client` and `oauth-connection` key kinds, the `oauth_clients`, `platform_oauth_clients`, `oauth_connections` and `oauth_connect_requests` tables, connecting through a client from the secure window (`/_oauth/connections`, the vendor's redirect back to `/_oauth/callback`), how access tokens are minted and refreshed in memory, and what each refresh error means — `credential-rejected` with `meta.reason` `rejected` (`invalid_grant`), `needs-admin` (`invalid_client`, or a client deleted, unshared or suspended) and `unavailable` (5xx, timeouts, `temporarily_unavailable` after retries). Also the platform's own clients (`boxel realm-server keys --kind oauth-client`, `/_platform-oauth-clients`), the Boxel (read-only) GitHub App among them — its GitHub settings, who administers it, rotating its secret and installing it in an organization — and why a token endpoint is never a grant's destination. Use when a user reports a connection that stopped working, a Reconnect they're asked for, a client every teammate's connection broke on, a sign-in that comes back with an error, when adding or rotating a platform client, or when changing `lib/oauth.ts`, `handlers/handle-oauth.ts` or `lib/outbound/token-endpoints.ts`.
+description: Operate and diagnose OAuth clients and connections — the `oauth-client` and `oauth-connection` key kinds, the `oauth_clients`, `platform_oauth_clients` (and its `platform_oauth_client_history`), `oauth_connections` and `oauth_connect_requests` tables, connecting through a client from the secure window (`/_oauth/connections`, the vendor's redirect back to `/_oauth/callback`), how access tokens are minted and refreshed in memory, and what each refresh error means — `credential-rejected` with `meta.reason` `rejected` (`invalid_grant`), `needs-admin` (`invalid_client`, or a client deleted, unshared or suspended) and `unavailable` (5xx, timeouts, `temporarily_unavailable` after retries). Also the platform's own clients (`boxel realm-server keys --kind oauth-client`, `/_platform-oauth-clients`), the Boxel (read-only) GitHub App among them — its GitHub settings, who administers it, rotating its secret and installing it in an organization — and why a token endpoint is never a grant's destination. Use when a user reports a connection that stopped working, a Reconnect they're asked for, a client every teammate's connection broke on, a sign-in that comes back with an error, when adding or rotating a platform client, or when changing `lib/oauth.ts`, `handlers/handle-oauth.ts` or `lib/outbound/token-endpoints.ts`.
 ---
 
 # OAuth clients and connections (operators)
@@ -172,7 +172,8 @@ Managed with `boxel realm-server keys --kind oauth-client`, which signs an
 operator token for `system-keys` with the realm secret seed (see the
 `system-keys` skill for the seed, the token and the `--realm-server` URL rules).
 The secret is typed at a masked prompt, or read with `--stdin` or
-`--key-file`, never taken as an argument:
+`--key-file`, never taken as an argument. Every `add`, `replace` and `delete`
+carries an operator note, prompted for at a terminal or passed with `--note`:
 
 ```sh
 boxel realm-server keys list    --realm-server <url> --kind oauth-client
@@ -182,22 +183,58 @@ boxel realm-server keys add     --realm-server <url> --kind oauth-client --name 
                                 --authorize-url <url> --token-url <url> \
                                 --api-host <url> [--api-host <url> …] \
                                 [--scopes <scopes>] [--token-auth client_secret_post|client_secret_basic] \
-                                [--stdin | --key-file <path>]
-boxel realm-server keys replace --realm-server <url> --kind oauth-client --name <name> [--stdin | --key-file <path>]
-boxel realm-server keys delete  --realm-server <url> --kind oauth-client --name <name>
+                                [--stdin | --key-file <path>] [--note <text>]
+boxel realm-server keys replace --realm-server <url> --kind oauth-client --name <name> \
+                                [--stdin | --key-file <path>] [--note <text>]
+boxel realm-server keys delete  --realm-server <url> --kind oauth-client --name <name> [--note <text>]
 ```
 
 The command calls these routes:
 
-| Route                                   | Does                                                                                                                |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `GET /_platform-oauth-clients`          | List them, without secrets                                                                                          |
-| `POST /_platform-oauth-clients`         | Add: `{name, label, secret, oauth: {clientId, authorizeUrl, tokenUrl, scopes, tokenAuth?, apiHosts}}`               |
-| `PATCH /_platform-oauth-clients/:name`  | Replace the secret (`{secret}`), which also clears `broken`                                                         |
-| `DELETE /_platform-oauth-clients/:name` | Delete; its connections stay and need an administrator, and a client re-added under the name doesn't take them back |
+| Route                                   | Does                                                                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /_platform-oauth-clients`          | List them, without secrets                                                                                                     |
+| `GET /_platform-oauth-clients/:name`    | One client and the 20 most recent changes recorded under its name, newest first                                                |
+| `POST /_platform-oauth-clients`         | Add: `{name, label, secret, note, oauth: {clientId, authorizeUrl, tokenUrl, scopes, tokenAuth?, apiHosts}}`                    |
+| `PATCH /_platform-oauth-clients/:name`  | Replace the secret (`{secret, note}`), which also clears `broken`                                                              |
+| `DELETE /_platform-oauth-clients/:name` | Delete (`{note}`); its connections stay and need an administrator, and a client re-added under the name doesn't take them back |
 
-Unlike a system key, a platform client keeps no history and takes no operator
-note; the command refuses `--note` with `--kind oauth-client`.
+**The operator note and the history.** A platform client's notes follow the
+rules system keys' do (see the `system-keys` skill): a change with no note is
+refused, as is a note with control characters or line breaks, longer than
+1000 characters, or containing the secret being sent or the secret the client
+holds. A name in the note is recorded as typed; nothing verifies it.
+
+Each change writes its `platform_oauth_clients` row and a
+`platform_oauth_client_history` row in a single statement:
+
+| Column               | Holds                                                                      |
+| -------------------- | -------------------------------------------------------------------------- |
+| `platform_client_id` | the client's row id (kept after the client is deleted)                     |
+| `name`               | its name; a client re-added under a name has a new id and the same name    |
+| `client_id`          | the vendor's client id                                                     |
+| `action`             | `add`, `replace` or `delete`                                               |
+| `note`               | the operator's note                                                        |
+| `key_id`             | the data key the secret was sealed under                                   |
+| `changed_at`         | when                                                                       |
+| `client_address`     | the caller's address, as the load balancer reports it (null when unknown)  |
+| `token_issued_at`    | when the operator token was signed, in seconds since the epoch (its `iat`) |
+
+It never holds a secret. `keys show --kind oauth-client` prints the recent
+entries; a deleted client's trail, and the full one, are in the table:
+
+```sql
+SELECT changed_at, action, name, client_id, note, client_address,
+  to_timestamp(token_issued_at) AS token_signed
+FROM platform_oauth_client_history
+ORDER BY changed_at DESC;
+```
+
+Each change is also logged on the `system-keys` channel, with no secret:
+
+```
+platform OAuth client replace: github (id …, client id Iv23…, data key kms-…) from 203.0.113.7, token signed 2026-01-01T00:00:00.000Z. Note: "rotating the secret after the incident — <your name>"
+```
 
 A platform client is always `authorization_code`. Its `apiHosts` decide where
 connect mode offers it (`https://api.github.com/` for the GitHub App). A
@@ -269,13 +306,14 @@ boxel realm-server keys add --realm-server https://realms-staging.stack.cards \
   --client-id <the app's client id, Iv23…> \
   --authorize-url https://github.com/login/oauth/authorize \
   --token-url https://github.com/login/oauth/access_token \
-  --api-host https://api.github.com/
+  --api-host https://api.github.com/ \
+  --note 'registering Boxel (read-only) — <your name>'
 ```
 
 **Rotating its secret.** Generate a new client secret on the app's settings
 page (GitHub keeps both working until the old one is deleted), run
 `boxel realm-server keys replace --kind oauth-client --name github` in each
-environment, and then check the new secret by **signing in again**: connect a
+environment (with a note saying who is rotating it and why), and then check the new secret by **signing in again**: connect a
 GitHub account through the app (or Reconnect one) in each environment. Neither
 `keys show`'s `state: active` nor a `callApi` proves it: `replace` sets the
 state to `active` whatever was typed, and a call reuses a cached access token
@@ -319,3 +357,8 @@ answers as if they didn't exist. Both are installed at
   client fencing off nothing, a cached token stopping with its client, minting
   again after another process's refresh, access-only expiry, reconnecting
   through the same client, and fresh grant markers on reconnect.
+- `packages/realm-server/tests/system-keys-test.ts` — the platform client
+  operator routes: each add, secret replace and delete recorded with its note,
+  the caller's address and the token's signing time, never the secret; a
+  change with no note, or a note holding a secret, refused with nothing
+  changed.

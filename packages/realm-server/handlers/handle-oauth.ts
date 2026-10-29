@@ -9,6 +9,7 @@ import {
   addPlatformClient,
   completeConnect,
   deletePlatformClient,
+  getPlatformClient,
   listConnectableClients,
   listPlatformClients,
   replacePlatformClientSecret,
@@ -25,6 +26,7 @@ import {
   ticketOf,
 } from './handle-user-keys.ts';
 import { secureClientOf } from './handle-user-key-grants.ts';
+import { operatorCaller } from './handle-system-keys.ts';
 
 // The OAuth routes: which clients a person may connect through, starting a
 // sign-in through one from the secure window, and the realm server's callback
@@ -215,7 +217,9 @@ export function handleCompleteConnect(args: CreateRoutesArgs): Handler {
 }
 
 // The operator routes for the platform's own clients, reached with an
-// operator token for `system-keys`. None answers with a secret.
+// operator token for `system-keys`. None answers with a secret. Every change
+// carries an operator note, recorded in the client's history with what the
+// server observed of the caller.
 export function handleListPlatformClients({ dbAdapter }: CreateRoutesArgs) {
   return keysHandler(async (ctxt) => {
     await sendJSON(ctxt, 200, {
@@ -224,7 +228,19 @@ export function handleListPlatformClients({ dbAdapter }: CreateRoutesArgs) {
   });
 }
 
-// Body: `name`, `label`, `secret` and `oauth` (the client's settings).
+// The client and its recent history.
+export function handleShowPlatformClient({ dbAdapter }: CreateRoutesArgs) {
+  return keysHandler(async (ctxt) => {
+    await sendJSON(
+      ctxt,
+      200,
+      await getPlatformClient(dbAdapter, ctxt.params.name),
+    );
+  });
+}
+
+// Body: `name`, `label`, `secret`, `oauth` (the client's settings) and
+// `note`.
 export function handleAddPlatformClient({ dbAdapter }: CreateRoutesArgs) {
   return keysHandler(async (ctxt) => {
     let body = await readJSON(ctxt);
@@ -233,27 +249,40 @@ export function handleAddPlatformClient({ dbAdapter }: CreateRoutesArgs) {
       label: body.label,
       secret: body.secret,
       oauth: body.oauth,
+      note: body.note,
+      caller: operatorCaller(ctxt),
     });
     await sendJSON(ctxt, 201, { client });
   });
 }
 
-// Body: `secret`.
+// Body: `secret` and `note`.
 export function handleReplacePlatformClient({ dbAdapter }: CreateRoutesArgs) {
   return keysHandler(async (ctxt) => {
     let body = await readJSON(ctxt);
     let client = await replacePlatformClientSecret(
       dbAdapter,
       secretsKeyring(),
-      { name: ctxt.params.name, secret: body.secret },
+      {
+        name: ctxt.params.name,
+        secret: body.secret,
+        note: body.note,
+        caller: operatorCaller(ctxt),
+      },
     );
     await sendJSON(ctxt, 200, { client });
   });
 }
 
+// Body: `note`.
 export function handleDeletePlatformClient({ dbAdapter }: CreateRoutesArgs) {
   return keysHandler(async (ctxt) => {
-    await deletePlatformClient(dbAdapter, ctxt.params.name);
+    let body = await readJSON(ctxt);
+    await deletePlatformClient(dbAdapter, secretsKeyring(), {
+      name: ctxt.params.name,
+      note: body.note,
+      caller: operatorCaller(ctxt),
+    });
     await sendJSON(ctxt, 200, { deleted: ctxt.params.name });
   });
 }
