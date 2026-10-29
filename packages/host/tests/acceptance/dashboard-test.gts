@@ -3,6 +3,7 @@ import {
   find,
   findAll,
   focus,
+  rerender,
   settled,
   triggerEvent,
   triggerKeyEvent,
@@ -588,6 +589,44 @@ module('Acceptance | dashboard', function (hooks) {
       );
     });
 
+    test('the star is a toggle with a fixed label whose pressed state and tooltip follow the favorite', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let star =
+        '[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-workspace-favorite-btn]';
+      let deskStar =
+        '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-workspace-favorite-btn]';
+      let tip =
+        '[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-pretui-tooltip] [role="tooltip"]';
+      assert.dom(tip).hasText('Add to Favorites');
+      assert
+        .dom(star)
+        .hasAttribute('aria-label', 'Favorite')
+        .hasAttribute('aria-pressed', 'false')
+        .hasAttribute('aria-describedby', find(tip)?.id ?? '')
+        .doesNotHaveAttribute('title', 'no native tooltip over the tip');
+
+      await click(star);
+
+      assert
+        .dom(star)
+        .hasAttribute('aria-label', 'Favorite')
+        .hasAttribute('aria-pressed', 'true');
+      assert.dom(tip).hasText('Remove from Favorites');
+      assert
+        .dom(deskStar)
+        .hasAttribute('aria-pressed', 'true', "the new desk's star is pressed");
+
+      await click(star);
+
+      assert
+        .dom(star)
+        .hasAttribute('aria-label', 'Favorite')
+        .hasAttribute('aria-pressed', 'false');
+      assert.dom(tip).hasText('Add to Favorites');
+      assert.dom(deskStar).doesNotExist();
+    });
+
     test("a hosted tile's site menu lists each published site and opens the one chosen", async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       let now = Date.now();
@@ -1125,6 +1164,22 @@ module('Acceptance | dashboard', function (hooks) {
           assert.strictEqual(shown.size, 12, 'no workspace is shown twice');
         });
 
+        test('choosing Workspaces in the section rail brings the page back to its top', async function (assert) {
+          await visitDashboard(assert, 1);
+          let scroller = find('[data-test-dashboard-scroller]') as HTMLElement;
+          scroller.scrollTop = scroller.scrollHeight;
+          await triggerEvent(scroller, 'scroll');
+          assert.true(scroller.scrollTop > 0, 'the page is scrolled down');
+
+          await click('[data-test-section-rail-entry="workspaces"]');
+          await waitUntil(() => scroller.scrollTop === 0);
+
+          assert.strictEqual(scroller.scrollTop, 0, 'the page is at its top');
+          assert
+            .dom('[data-test-section-rail-entry="workspaces"]')
+            .hasAttribute('aria-current', 'location');
+        });
+
         test('Show N more shows the rest of the rows, and Show fewer hides them again', async function (assert) {
           await visitDashboard(assert, 1);
 
@@ -1192,9 +1247,10 @@ module('Acceptance | dashboard', function (hooks) {
         });
       });
 
-      // Two columns: New Workspace and 5 tiles, then 2 grid rows of rows.
+      // Two columns: New Workspace and 5 tiles, then 2 grid rows of rows. The
+      // width leaves room for two rows beside the section rail's column.
       module('a few rows', function (hooks) {
-        setupWorkspaces(hooks, 8, '37rem');
+        setupWorkspaces(hooks, 8, '40rem');
 
         test('the most recently updated workspaces are the tiles', async function (assert) {
           await visitDashboard(assert, 2);
@@ -1457,6 +1513,204 @@ module('Acceptance | dashboard', function (hooks) {
             assert.strictEqual(ringName(), third);
           });
         });
+      });
+    });
+
+    module('section rail', function () {
+      const RAIL = '[data-test-section-rail]';
+      const ENTRY = '[data-test-section-rail-entry="workspaces"]';
+      const FLYOUT = '[data-test-section-rail-flyout="workspaces"]';
+
+      function favoriteWorkspaceA() {
+        let matrixService = getService('matrix-service') as MatrixService;
+        matrixService.workspaceFavorites = [realmURL];
+      }
+
+      // As a browser does for Enter on a focused button: the key, then its
+      // click.
+      async function pressEntry() {
+        await focus(ENTRY);
+        await triggerKeyEvent(ENTRY, 'keydown', 'Enter');
+        await click(ENTRY);
+      }
+
+      function openCardIds() {
+        return (
+          getService('operator-mode-state-service') as OperatorModeStateService
+        ).getOpenCardIds();
+      }
+
+      test('lists the sections that register, and marks the one being read', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        assert.deepEqual(
+          findAll('[data-test-section-rail-entry]').map((el) =>
+            el.getAttribute('data-test-section-rail-entry'),
+          ),
+          ['workspaces'],
+        );
+        assert.dom(RAIL).isVisible();
+        assert.dom(ENTRY).containsText('Workspaces');
+        assert
+          .dom(`${ENTRY} [data-test-section-rail-count]`)
+          .doesNotExist(
+            'the Workspaces heading has no count, so neither does its entry',
+          );
+        assert.dom(ENTRY).hasAttribute('aria-current', 'location');
+      });
+
+      test('pressing Enter on the Workspaces entry opens its flyout of favorites, and a favorite opens its workspace', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        favoriteWorkspaceA();
+
+        await focus(ENTRY);
+        assert
+          .dom(FLYOUT)
+          .doesNotExist('focus alone leaves it closed, so Tab passes the rail');
+
+        await pressEntry();
+
+        assert.dom(ENTRY).hasAttribute('aria-expanded', 'true');
+        assert.dom(FLYOUT).exists();
+        assert.dom(`${FLYOUT} header`).hasText('Favorites');
+        assert
+          .dom(`${FLYOUT} [data-test-section-rail-favorite]`)
+          .exists({ count: 1 });
+
+        await click(
+          `${FLYOUT} [data-test-section-rail-favorite="Workspace A"]`,
+        );
+
+        assert.dom('[data-test-dashboard]').doesNotExist();
+        assert.strictEqual(
+          (
+            getService(
+              'operator-mode-state-service',
+            ) as OperatorModeStateService
+          ).realmURL,
+          realmURL,
+          'Workspace A is the open workspace',
+        );
+      });
+
+      test('with no favorites, the flyout says how to add one', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        await pressEntry();
+
+        assert
+          .dom(`${FLYOUT} [data-test-section-rail-favorites-empty]`)
+          .includesText('Favorite a workspace');
+      });
+
+      test('Escape closes the flyout with focus back on its entry, then folds the rail', async function (assert) {
+        await visitOperatorMode({
+          workspaceChooserOpened: true,
+          stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+        });
+        favoriteWorkspaceA();
+        await pressEntry();
+        await focus(
+          `${FLYOUT} [data-test-section-rail-favorite="Workspace A"]`,
+        );
+
+        await triggerKeyEvent(
+          `${FLYOUT} [data-test-section-rail-favorite="Workspace A"]`,
+          'keydown',
+          'Escape',
+        );
+
+        assert.dom(FLYOUT).doesNotExist();
+        assert.dom(ENTRY).isFocused('focus goes back to the entry');
+        assert.dom(RAIL).hasAttribute('data-test-section-rail-folded', 'false');
+
+        await triggerKeyEvent(ENTRY, 'keydown', 'Escape');
+
+        assert
+          .dom(RAIL)
+          .hasAttribute(
+            'data-test-section-rail-folded',
+            'true',
+            'the second Escape folds the rail to its icons',
+          );
+        assert.dom(ENTRY).isFocused('focus stays on the entry');
+        assert.deepEqual(
+          openCardIds(),
+          [`${realmURL}index`],
+          'Escape stays in the rail, so the card behind the dashboard stays open',
+        );
+      });
+
+      test('a tap on an entry toggles its flyout, and a tap outside the rail closes it', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        // As on a touch screen: the press focuses the entry before its click.
+        async function tap() {
+          await triggerEvent(ENTRY, 'pointerdown', { pointerType: 'touch' });
+          await focus(ENTRY);
+          await click(ENTRY);
+        }
+
+        await tap();
+        assert.dom(FLYOUT).exists('the first tap opens the flyout');
+
+        await tap();
+        assert.dom(FLYOUT).doesNotExist('the second tap closes it');
+
+        await tap();
+        await triggerEvent('[data-test-dashboard-greeting]', 'pointerdown', {
+          pointerType: 'touch',
+        });
+        assert.dom(FLYOUT).doesNotExist('a tap outside the rail closes it');
+      });
+
+      test('Escape closes a flyout opened by hover while focus is elsewhere on the page', async function (assert) {
+        await visitOperatorMode({
+          workspaceChooserOpened: true,
+          stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+        });
+        await triggerEvent(
+          '[data-test-section-rail-item="workspaces"]',
+          'pointerenter',
+          {
+            pointerType: 'mouse',
+          },
+        );
+        assert.dom(FLYOUT).exists();
+
+        await triggerKeyEvent(document.body, 'keydown', 'Escape');
+
+        assert.dom(FLYOUT).doesNotExist();
+        assert.deepEqual(
+          openCardIds(),
+          [`${realmURL}index`],
+          'the card behind the dashboard stays open',
+        );
+      });
+
+      test('a flyout stays open while the pointer comes back within the grace period, and closes once it has passed', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        let item = find('[data-test-section-rail-item="workspaces"]')!;
+
+        await triggerEvent(item, 'pointerenter', { pointerType: 'mouse' });
+        assert.dom(FLYOUT).exists('hovering an entry opens its flyout');
+
+        // Dispatched by hand and followed by a render only, so the pointer
+        // is back before the grace period ends.
+        item.dispatchEvent(
+          new PointerEvent('pointerleave', { pointerType: 'mouse' }),
+        );
+        await rerender();
+        assert.dom(FLYOUT).exists('it stays through the grace period');
+
+        await triggerEvent(item, 'pointerenter', { pointerType: 'mouse' });
+        assert.dom(FLYOUT).exists('coming back keeps it open');
+
+        await triggerEvent(item, 'pointerleave', {
+          pointerType: 'mouse',
+          bubbles: false,
+        });
+        assert.dom(FLYOUT).doesNotExist('it closes after the grace period');
       });
     });
   });

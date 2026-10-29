@@ -96,8 +96,9 @@ export function parseRealmsFromPayload(
   if (
     !('realms' in payloadRecord) ||
     (Array.isArray(payloadRecord.realms) &&
-      payloadRecord.realms.map((realm) => realm.trim()).filter(Boolean)
-        .length == 0)
+      payloadRecord.realms
+        .map((realm) => (typeof realm === 'string' ? realm.trim() : realm))
+        .filter(Boolean).length == 0)
   ) {
     throw new SearchRequestError(
       'missing-realms',
