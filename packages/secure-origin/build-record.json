@@ -127,7 +127,7 @@
       ]
     },
     "shared.js": {
-      "bytes": 286592,
+      "bytes": 286785,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -157,7 +157,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/input.gts",
-          "size": 4259
+          "size": 4205
         },
         {
           "package": "@cardstack/secure-origin",
@@ -183,6 +183,11 @@
           "package": "@cardstack/secure-origin",
           "module": "src/helpers/truth-helpers.ts",
           "size": 317
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/modifiers/fit-content.ts",
+          "size": 424
         },
         {
           "package": "@cardstack/secure-origin",
@@ -884,7 +889,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 248338,
+      "bytes": 248332,
       "modules": [
         {
           "package": "@cardstack/secure-origin",

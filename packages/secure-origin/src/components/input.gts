@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 
 import cn from '../helpers/cn.ts';
 import optional from '../helpers/optional.ts';
+import { fitContent } from '../modifiers/fit-content.ts';
 import FailureBordered from './icons/failure-bordered.gts';
 import SuccessBordered from './icons/success-bordered.gts';
 import type { IconComponent } from './icons/types.ts';
@@ -15,10 +16,14 @@ import type { IconComponent } from './icons/types.ts';
 // the flat bottom, the loading state, helper text, the optional marker, and
 // disabled and read-only inputs.
 //
-// A textarea grows with what it holds (`field-sizing: content`), where
-// boxel-ui's starts 10rem tall, so a field holding a short list shows all of
-// it and no more. Where the browser doesn't size a field by its content, the
-// textarea is as many rows tall as the value has lines.
+// A textarea grows with what it holds (`field-sizing: content`, or the
+// `fitContent` modifier where the browser doesn't size a field by its
+// content), where boxel-ui's starts 10rem tall, so a field holding a short
+// list shows all of it and no more.
+//
+// The textarea and the input are drawn by two branches of the template, since
+// boxel-ui's `(element)` helper can't ship here; they carry the same
+// attributes and modifiers, and a change to one is made to both.
 //
 // Unlike boxel-ui's, an error message describes the input
 // (`aria-describedby`) as well as being its `aria-errormessage`, which screen
@@ -53,10 +58,6 @@ export default class BoxelInput extends Component<Signature> {
 
   private get isMultiline() {
     return this.args.type === 'textarea';
-  }
-
-  private get rows() {
-    return Math.max(1, (this.args.value ?? '').split('\n').length);
   }
 
   private get hasValidation() {
@@ -113,7 +114,7 @@ export default class BoxelInput extends Component<Signature> {
             invalid=this.isInvalid
           }}
           id={{this.id}}
-          rows={{this.rows}}
+          rows='1'
           value={{@value}}
           placeholder={{@placeholder}}
           autocomplete={{@autocomplete}}
@@ -128,6 +129,7 @@ export default class BoxelInput extends Component<Signature> {
           {{on 'keypress' this.onKeyPress}}
           {{on 'focus' (optional @onFocus)}}
           {{on 'change' (optional @onChange)}}
+          {{fitContent @value}}
           ...attributes
         ></textarea>
       {{else}}
