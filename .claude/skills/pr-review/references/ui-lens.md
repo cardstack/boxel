@@ -10,7 +10,7 @@ A PR in `cardstack/boxel-catalog` or `cardstack/boxel-home` is realm code, and i
 
 Load `gts-component-conventions` when the scope has a `.gts` file.
 
-Load `interfaces:better-interface`, and through it every domain skill in its order: `better-accessibility`, `better-layout`, `better-writing`, `better-typography`, `better-colors`, `better-ui`. When the `interfaces` plugin isn't installed, say so where the review states what it covered, and run the guidelines procedure alone. Mark any single domain that fails to load as not reviewed.
+Load `interfaces:better-interface`, and through it every domain skill in its order: `better-accessibility`, `better-layout`, `better-writing`, `better-typography`, `better-colors`, `better-ui`. When the `interfaces` plugin isn't installed, say, where the review states what it covered, that `better-interface` wasn't reviewed, and run the guidelines procedure alone. Mark any single domain that fails to load as not reviewed.
 
 Skip better-interface's §2 ("Send a change to `interface-review`"). It refuses to resolve a change scope and asks the user to run `interface-review`, which only the user can start. This lens takes `interface-review`'s place instead: read the plugin's `installPath` for `interfaces@interfaces` from `installed_plugins.json` in the plugins root (`$CLAUDE_CODE_PLUGIN_CACHE_DIR`, or `$HOME/.claude/plugins` when it's unset), then read `skills/interface-review/SKILL.md`, `scope-resolution.md` and `removed-signals.md` under that path, and use them to resolve the change scope and the removed signals. Don't pick a version from the cache directory, which keeps old versions. Its report format, severity ladder and verdict don't apply; the review's own classes and blocking calls do.
 

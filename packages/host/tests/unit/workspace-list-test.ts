@@ -5,6 +5,7 @@ import {
   isHostedRealm,
   sortByCreatedAtDesc,
   unreachableRealmServersMessage,
+  wallpaperImage,
 } from '@cardstack/host/lib/workspace-list';
 
 module('Unit | workspace list', function () {
@@ -13,6 +14,15 @@ module('Unit | workspace list', function () {
     assert.false(isHostedRealm({ lastPublishedAt: {} }));
     assert.false(isHostedRealm({ lastPublishedAt: null }));
     assert.false(isHostedRealm({}));
+  });
+
+  test('a wallpaper is a quoted CSS image, and none without a background', function (assert) {
+    assert.strictEqual(
+      wallpaperImage('https://a.test/bg (1).png'),
+      'url("https://a.test/bg (1).png")',
+    );
+    assert.strictEqual(wallpaperImage(null), undefined);
+    assert.strictEqual(wallpaperImage(''), undefined);
   });
 
   test('sorts newest first, with undated realms last', function (assert) {
