@@ -14,6 +14,9 @@ const REALM_SERVER_ENDPOINTS = [
   '_key-shares',
   '_key-shares/:id/swap',
   '_key-write-tickets',
+  '_oauth/clients',
+  '_oauth/connections',
+  '_oauth/connections/complete',
   '_secure-window/context',
   '_secure-window/realms',
   '_secure-origin',
@@ -91,6 +94,8 @@ const PAGES: Record<string, string> = {
   'share-key': 'share-key',
   'swap-key': 'swap-key',
   'replace-key': 'replace-key',
+  connect: 'connect',
+  connected: 'connected',
 };
 
 export function pageLabel(routeName: string | undefined): string {

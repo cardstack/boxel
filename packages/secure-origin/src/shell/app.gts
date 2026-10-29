@@ -17,6 +17,8 @@ import type RouterService from '@ember/routing/router-service';
 import type Transition from '@ember/routing/transition';
 import { schedule } from '@ember/runloop';
 
+import ConnectPage from './keys/connect-page.gts';
+import ConnectedPage from './keys/connected-page.gts';
 import EnterKeyPage from './keys/enter-key-page.gts';
 import KeyPage from './keys/key-page.gts';
 import ReplaceKeyPage from './keys/replace-key-page.gts';
@@ -63,6 +65,8 @@ Router.map(function () {
   this.route('share-key');
   this.route('swap-key');
   this.route('replace-key');
+  this.route('connect');
+  this.route('connected');
 });
 
 // The application route starts once, on the document's first transition: it
@@ -119,6 +123,8 @@ const registry: Record<string, unknown> = {
   'template:share-key': ShareKeyPage,
   'template:swap-key': SwapKeyPage,
   'template:replace-key': ReplaceKeyPage,
+  'template:connect': ConnectPage,
+  'template:connected': ConnectedPage,
 };
 
 class ShellApplication extends Application {

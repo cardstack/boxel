@@ -1,7 +1,8 @@
 // The fields a key is entered in, as rows of a card's edit format: its name,
 // a label for the user's own use, and its value, masked as it is typed. A key
 // holds no destination; where it may be sent is granted when an operation
-// using it is approved.
+// using it is approved. An OAuth app's fields go between the two, its client
+// secret being the value.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import FieldContainer from '../../components/field-container.gts';
@@ -17,7 +18,11 @@ interface Signature {
     value: string;
     onName?: (value: string) => void;
     onValue: (value: string) => void;
+    // What the value is called, when it isn't a key: an OAuth app's client
+    // secret.
+    valueLabel?: string;
   };
+  Blocks: { beforeValue: [] };
 }
 
 const KeyFields: TemplateOnlyComponent<Signature> = <template>
@@ -40,16 +45,17 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
       />
     </FieldContainer>
   {{/if}}
+  {{yield to='beforeValue'}}
   <FieldContainer
     @tag='label'
-    @label='Key'
+    @label={{if @valueLabel @valueLabel 'Key'}}
     @icon={{KeyRound}}
     data-test-key-field='value'
   >
     <BoxelInput
       @type='password'
       @autocomplete='off'
-      @placeholder='Paste the key'
+      @placeholder={{if @valueLabel 'Paste the secret' 'Paste the key'}}
       @value={{@value}}
       @onInput={{@onValue}}
       name='key-value'

@@ -113,6 +113,16 @@ const SHELL_PAGES: { page: string; address: string; marker: string }[] = [
       'replace-key#card=https%3A%2F%2Frealm.example%2Fcard&operation=example',
     marker: '[data-test-keys-page="replace-key"]',
   },
+  {
+    page: 'connect',
+    address: 'connect#realm=https%3A%2F%2Frealm.example%2F',
+    marker: '[data-test-keys-page="connect"]',
+  },
+  {
+    page: 'connected',
+    address: 'connected#error=denied',
+    marker: '[data-test-keys-page="connected"]',
+  },
 ];
 
 // Addresses that name a page by the `mode` query parameter, as earlier CLI

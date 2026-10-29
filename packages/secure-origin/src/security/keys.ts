@@ -47,7 +47,39 @@ export interface SlotBound {
   };
 }
 
-// One of the user's keys: its metadata, never its value.
+// Whom an OAuth client belongs to, as a connection or connect mode names it:
+// the platform's own (`platform`), one shared into a realm (`share`), or one
+// of the user's own keys (`own`).
+export type OAuthClientKind = 'own' | 'share' | 'platform';
+
+// What the key listing says about an OAuth key. A client's settings and
+// whether its token endpoint still takes its secret; a connection's client,
+// the scopes it was granted, and whether it needs its owner to sign in again
+// (`rejected`) or its client needs an administrator (`needs-admin`).
+export interface OAuthKeyDescription {
+  client?: {
+    clientId: string;
+    grantType: 'authorization_code' | 'client_credentials';
+    authorizeURL: string | null;
+    tokenURL: string;
+    scopes: string;
+    tokenAuth: 'client_secret_post' | 'client_secret_basic';
+    apiHosts: string[];
+    state: 'active' | 'broken';
+  };
+  connection?: {
+    client: {
+      kind: OAuthClientKind;
+      label: string | null;
+      ref: OAuthClientRef | null;
+    };
+    scopes: string;
+    status: 'active' | 'rejected' | 'needs-admin';
+  };
+}
+
+// One of the user's keys: its metadata, never its value. `kind` is `static`
+// for a secret pasted in, `oauth-client` or `oauth-connection`.
 export interface UserKey {
   id: string;
   name: string;
@@ -55,6 +87,7 @@ export interface UserKey {
   state: string;
   createdAt: string;
   updatedAt: string;
+  oauth?: OAuthKeyDescription;
 }
 
 // A realm that one of the user's keys is shared with, along with the key's
@@ -144,6 +177,54 @@ export async function addKey(
         data: { type: 'user-key', attributes: { name, kind: 'static', value } },
         meta: { ticket },
       },
+    }),
+  );
+}
+
+// What an OAuth client is added with beside its secret, as the realm server
+// takes it. A `client_credentials` client has no authorization URL.
+export interface OAuthClientSettings {
+  clientId: string;
+  grantType: 'authorization_code' | 'client_credentials';
+  authorizeUrl?: string;
+  tokenUrl: string;
+  scopes?: string;
+  tokenAuth: 'client_secret_post' | 'client_secret_basic';
+  apiHosts?: string[];
+}
+
+// Adds an OAuth client the user registered with a service: its secret is the
+// key's value, and its settings go beside it.
+export async function addOAuthClient(
+  config: Config,
+  {
+    name,
+    secret,
+    oauth,
+  }: { name: string; secret: string; oauth: OAuthClientSettings },
+): Promise<UserKey> {
+  let { ticket } = await mintKeyWriteTicket(config, { action: 'add' });
+  return resource<UserKey>(
+    await authorizedRequest(config, '_user-keys', {
+      body: {
+        data: {
+          type: 'user-key',
+          attributes: { name, kind: 'oauth-client', value: secret, oauth },
+        },
+        meta: { ticket },
+      },
+    }),
+  );
+}
+
+// One of the user's keys, as the key listing gives it.
+export async function showKey(
+  config: Config,
+  keyId: string,
+): Promise<ListedKey> {
+  return resource<ListedKey>(
+    await authorizedRequest(config, `_user-keys/${encodeURIComponent(keyId)}`, {
+      method: 'GET',
     }),
   );
 }
@@ -293,4 +374,94 @@ export async function writableRealms(
       name: attributes.name,
     }),
   );
+}
+
+// How connect mode names a client back to the realm server.
+export type OAuthClientRef =
+  | { kind: 'own'; keyId: string }
+  | { kind: 'share'; shareId: string }
+  | { kind: 'platform'; clientId: string };
+
+// A client the user may connect an account through: whose it is, its label,
+// the host its sign-in page is on, and the permissions (scopes, space
+// separated) it asks for. Never its secret or its owner.
+export interface ConnectableClient {
+  ref: OAuthClientRef;
+  kind: OAuthClientKind;
+  label: string;
+  clientId: string;
+  scopes: string;
+  apiHosts: string[];
+  authorizeHost: string;
+}
+
+// The clients the user may connect through: the platform's, those shared into
+// `realm` and their own, only those serving `destination` when it is given.
+// With `reconnect`, only the client that connection signs in through.
+export async function connectableClients(
+  config: Config,
+  {
+    realm,
+    destination,
+    reconnect,
+  }: { realm?: string; destination?: string; reconnect?: string },
+): Promise<ConnectableClient[]> {
+  let query = new URLSearchParams();
+  if (reconnect) {
+    query.set('reconnect', reconnect);
+  }
+  if (realm) {
+    query.set('realm', realm);
+  }
+  if (destination) {
+    query.set('destination', destination);
+  }
+  let search = query.size > 0 ? `?${query}` : '';
+  let json = await authorizedRequest(config, `_oauth/clients${search}`, {
+    method: 'GET',
+  });
+  return (json.data ?? []).map(
+    ({ attributes }: { attributes: ConnectableClient }) => attributes,
+  );
+}
+
+// Starts signing in to a service through `client`: a new connection under
+// `name`, with a ticket to add a key, or `reconnect`, an existing connection
+// signed in again, with a ticket to replace that key. Answers with the
+// service's authorization page to send the window to.
+export async function startConnect(
+  config: Config,
+  request:
+    | { client: OAuthClientRef; name: string }
+    | { client: OAuthClientRef; reconnect: string },
+): Promise<{ authorizeUrl: string; expiresAt: string }> {
+  let { ticket } = await mintKeyWriteTicket(
+    config,
+    'reconnect' in request
+      ? { action: 'replace', keyId: request.reconnect }
+      : { action: 'add' },
+  );
+  let json = await authorizedRequest(config, '_oauth/connections', {
+    body: {
+      data: { type: 'oauth-connect', attributes: request },
+      meta: { ticket },
+    },
+  });
+  return json.data.attributes;
+}
+
+// Finishes a sign-in the service sent back, with the `state` and `code` the
+// realm server's callback handed this window in its fragment. The realm
+// server finishes it only for the user who started it. Answers the
+// connection's id, or why it failed.
+export async function completeConnect(
+  config: Config,
+  { state, code }: { state: string; code: string },
+): Promise<{ connected?: string; error?: string }> {
+  let json = await authorizedRequest(config, '_oauth/connections/complete', {
+    body: {
+      data: { type: 'oauth-callback', attributes: { state, code } },
+    },
+  });
+  return json.data.attributes;
 }

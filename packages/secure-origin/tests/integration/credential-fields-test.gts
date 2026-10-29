@@ -16,6 +16,7 @@ import {
   applyStyle,
   customProperties,
   LAYOUT_PROPERTY,
+  whenStyled,
 } from '../../src/credentials/style.ts';
 import { CredentialFrame, FORMS } from '../../src/security/credentials.js';
 
@@ -453,6 +454,51 @@ module('Integration | credential fields', function (hooks) {
       assert.strictEqual(root.style.backgroundColor, '', 'no backdrop');
       assert.strictEqual(doc.body.style.width, '', 'no width');
       assert.strictEqual(doc.body.style.left, '', 'no offset');
+    });
+
+    // Whether `promise` settles within `ms`.
+    async function settlesWithin(promise: Promise<void>, ms: number) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let result = await Promise.race([
+        promise.then(() => true),
+        new Promise<boolean>((resolve) => {
+          timer = setTimeout(() => resolve(false), ms);
+        }),
+      ]);
+      clearTimeout(timer);
+      return result;
+    }
+
+    // A document with one stylesheet that is still loading.
+    function loadingDocument() {
+      let link = document.createElement('link');
+      link.rel = 'stylesheet';
+      let doc = {
+        querySelectorAll: () => [link],
+      } as unknown as Document;
+      return { doc, link };
+    }
+
+    test('is styled once its stylesheets load', async function (assert) {
+      let { doc, link } = loadingDocument();
+      let styled = whenStyled(doc, 60000);
+      assert.false(await settlesWithin(styled, 50), 'waits on the stylesheet');
+      link.dispatchEvent(new Event('load'));
+      assert.true(await settlesWithin(styled, 1000));
+    });
+
+    test('is styled once a stylesheet fails to load', async function (assert) {
+      let { doc, link } = loadingDocument();
+      let styled = whenStyled(doc, 60000);
+      link.dispatchEvent(new Event('error'));
+      assert.true(await settlesWithin(styled, 1000));
+    });
+
+    test('stops waiting on a stylesheet that never settles', async function (assert) {
+      let { doc } = loadingDocument();
+      let styled = whenStyled(doc, 100);
+      assert.false(await settlesWithin(styled, 20), 'waits at first');
+      assert.true(await settlesWithin(styled, 1000));
     });
 
     test("asks the app for the custom properties the fields' styles read", async function (assert) {

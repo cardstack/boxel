@@ -6,6 +6,22 @@ Entries below are written by CI on each stable promotion — most recent first.
 
 <!-- New entries are inserted directly below this line by the stable job in .github/workflows/boxel-cli-publish.yml. -->
 
+## 2026-10-29 — npm v0.11.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.11.0
+
+## @cardstack/boxel-cli v0.11.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.11.0
+
+## Changes
+
+- refactor: address the secure origin's pages by Ember routes instead of the mode query parameter by @habdelra in https://github.com/cardstack/boxel/pull/6984
+- feat: boxel keys manages your own keys and shares from the terminal by @habdelra in https://github.com/cardstack/boxel/pull/6966
+- fix: Serve Pret UI from boxel test's local mode by @lukemelia in https://github.com/cardstack/boxel/pull/6928
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.10.0...boxel-cli-v0.11.0
+
 ## 2026-10-24 — npm v0.10.0
 
 Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.10.0

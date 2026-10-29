@@ -36,7 +36,12 @@ import {
   type UserKeyGrant,
   type UserKeyGrantState,
 } from './user-key-grants.ts';
-import { UserKeyError } from './user-keys.ts';
+import { MINTING_KINDS, UserKeyError } from './user-keys.ts';
+import {
+  oauthAccessToken,
+  OAuthTokenError,
+  type OAuthTokenFailure,
+} from './oauth.ts';
 import {
   claimProbe,
   credentialRejected,
@@ -1274,27 +1279,77 @@ export async function fillSlots(
         notApproved(lookup.operation, lookup.request, lookup.realmURL),
       );
     }
+    // A key that mints its access tokens sends the one it mints now; its
+    // grant's marker has only proved the grant real.
+    let mints = MINTING_KINDS.has(opened.kind);
+    let secret = mints
+      ? await mintedToken(dbAdapter, ring, opened, slot, lookup.operation)
+      : opened.value;
     let value =
       slot.transform === 'basic'
-        ? Buffer.from(opened.value, 'utf8').toString('base64')
-        : opened.value;
+        ? Buffer.from(secret, 'utf8').toString('base64')
+        : secret;
     filled.push({
       name: slot.name,
       value,
-      ...(value !== opened.value ? { raw: opened.value } : {}),
+      ...(value !== secret ? { raw: secret } : {}),
       destination: opened.destination,
-      grant: {
-        id: row.grant_id as string,
-        destination: opened.destination,
-        slot: { name: slot.name, key: slot.key },
-        realmURL: lookup.realmURL,
-        ...(row.share_id ? { shareId: row.share_id as string } : {}),
-        copy: opened.copy,
-        probe,
-      },
+      // A vendor's 401 to a stored key rejects the grant it was sent under. A
+      // minted token's refusal is its connection's to judge when it next
+      // refreshes, so a 401 to one is only the vendor's answer.
+      ...(mints
+        ? {}
+        : {
+            grant: {
+              id: row.grant_id as string,
+              destination: opened.destination,
+              slot: { name: slot.name, key: slot.key },
+              realmURL: lookup.realmURL,
+              ...(row.share_id ? { shareId: row.share_id as string } : {}),
+              copy: opened.copy,
+              probe,
+            },
+          }),
     });
   }
   return filled;
+}
+
+const MINTING_REFUSALS: Record<OAuthTokenFailure, string> = {
+  rejected: 'its vendor no longer accepts it, so its owner signs in again',
+  'needs-admin':
+    'the OAuth client it mints through is unavailable, so an administrator of that client needs to set it up again',
+  unavailable:
+    'its token endpoint kept failing, so asking again later may succeed',
+};
+
+// The access token a minting key sends now, or the refusal for why it has
+// none: `credential-rejected`, with the reason.
+async function mintedToken(
+  dbAdapter: DBAdapter,
+  keyring: SecretsKeyring,
+  opened: { keyId: string; destination: string },
+  slot: CallApiSlot,
+  operation: string,
+): Promise<string> {
+  try {
+    return await oauthAccessToken(dbAdapter, keyring, opened.keyId);
+  } catch (error) {
+    if (!(error instanceof OAuthTokenError)) {
+      throw error;
+    }
+    throw new OperationFailure({
+      status: 424,
+      code: 'credential-rejected',
+      title: 'Credential rejected',
+      detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${MINTING_REFUSALS[error.reason]}`,
+      meta: {
+        slot: { name: slot.name, key: slot.key },
+        destination: opened.destination,
+        reason: error.reason,
+      },
+    });
+  }
 }
 
 // Whether a pipeline may invoke an operation, asked before the run starts: the

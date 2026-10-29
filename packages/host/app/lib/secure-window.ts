@@ -2,7 +2,9 @@ import { pageURL, withFragment } from './secure-sign-in';
 
 // The secure window: the secure origin's key pages, opened as a popup. A key's
 // value is only ever typed there, in a window whose address bar names the
-// secure origin, never in the app page, where card code could read it.
+// secure origin, never in the app page, where card code could read it. Its
+// connect mode signs the user in to a service through an OAuth app, from that
+// same window, so no token the service issues passes through the app page.
 //
 // The app tells the window which page to show and what it is for, and nothing
 // else. Everything it says names something (a realm, a card or a card type,
@@ -16,6 +18,7 @@ export const SECURE_WINDOW_MODES = [
   'enter-key',
   'replace-key',
   'share-key',
+  'connect',
 ] as const;
 export type SecureWindowMode = (typeof SECURE_WINDOW_MODES)[number];
 
@@ -23,8 +26,9 @@ export function isSecureWindowMode(mode: unknown): mode is SecureWindowMode {
   return SECURE_WINDOW_MODES.includes(mode as SecureWindowMode);
 }
 
-// What a key is entered for: an operation on a card instance, or on a card
-// type, which is named by its module, its export and the realm it is used in.
+// What a key is entered, or an account connected, for: an operation on a
+// card instance, or on a card type, which is named by its module, its export
+// and the realm it is used in.
 export type SecureWindowTarget =
   | { kind: 'instance'; card: string; operation?: string }
   | {
@@ -36,7 +40,9 @@ export type SecureWindowTarget =
     };
 
 // `replace-key` is for an operation, whose key the window finds from the
-// user's binding for it, so its target always names one.
+// user's binding for it, so its target always names one. An account is
+// connected for a target, or for a realm whose shared apps the window offers,
+// or for nothing in particular.
 export type SecureWindowRequest =
   | { mode: 'enter-key'; target?: SecureWindowTarget; reason?: string }
   | {
@@ -44,7 +50,13 @@ export type SecureWindowRequest =
       target: SecureWindowTarget & { operation: string };
       reason?: string;
     }
-  | { mode: 'share-key'; realm: string; reason?: string };
+  | { mode: 'share-key'; realm: string; reason?: string }
+  | {
+      mode: 'connect';
+      target?: SecureWindowTarget;
+      realm?: string;
+      reason?: string;
+    };
 
 // The popup's size. The share page lays a key's name and its fields out on one
 // line at this width.
@@ -77,6 +89,8 @@ export function secureWindowURL(request: SecureWindowRequest): string {
     fragment.module = request.target.module;
     fragment.name = request.target.name;
     fragment.realm = request.target.realm;
+  } else if (request.mode === 'connect' && request.realm) {
+    fragment.realm = request.realm;
   }
   if (request.mode !== 'share-key' && request.target?.operation) {
     fragment.operation = request.target.operation;

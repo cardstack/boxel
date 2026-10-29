@@ -38,10 +38,30 @@ import { clearKeyRejections } from './key-grant-rejection.ts';
 export const USER_KEY_VALUE_FIELD = 'user_keys.value';
 export const USER_KEY_GRANT_VALUE_FIELD = 'user_key_grants.value';
 
-export const USER_KEY_KINDS = ['static'] as const;
+// `static` is a secret sent as it is. `oauth-client` is an app registered with
+// a vendor, whose value is the client secret; `oauth-connection` is a person's
+// sign-in through one, whose value is the token that mints its access tokens
+// (see `lib/oauth.ts`). Only a static key or a client is added with a value; a
+// connection is made by signing in through a client.
+export const USER_KEY_KINDS = [
+  'static',
+  'oauth-client',
+  'oauth-connection',
+] as const;
 export type UserKeyKind = (typeof USER_KEY_KINDS)[number];
 
-export type UserKeyState = 'active';
+// The kinds whose value is never what reaches a vendor: it only mints the
+// access token that does, at a token endpoint the platform alone calls. A
+// grant of such a key holds no copy of the value, only a marker that proves
+// the grant was made by the realm server (see `createOrReuseGrantIn`).
+export const MINTING_KINDS: ReadonlySet<UserKeyKind> = new Set([
+  'oauth-client',
+  'oauth-connection',
+]);
+
+// `rejected` is an OAuth connection its vendor refused to refresh
+// (`invalid_grant`); signing in through its client again makes it `active`.
+export type UserKeyState = 'active' | 'rejected';
 
 export const KEY_WRITE_ACTIONS = [
   'add',
@@ -285,10 +305,16 @@ export function validateUserKeyKind(kind: unknown): UserKeyKind {
       `a key's kind is one of: ${USER_KEY_KINDS.join(', ')}`,
     );
   }
+  if (kind === 'oauth-connection') {
+    throw new UserKeyError(
+      400,
+      'an OAuth connection is made by signing in through a client, not added with a value',
+    );
+  }
   return kind as UserKeyKind;
 }
 
-function validateUserKeyValue(value: unknown): string {
+export function validateUserKeyValue(value: unknown): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new UserKeyError(400, 'a key needs a value');
   }
@@ -419,8 +445,13 @@ export async function addUserKey(
 ): Promise<UserKeyMetadata> {
   let validName = validateUserKeyName(name);
   let validKind = validateUserKeyKind(kind);
+  if (validKind !== 'static') {
+    throw new UserKeyError(
+      400,
+      'an OAuth client is added with its client id and endpoints (`oauth`)',
+    );
+  }
   let validValue = validateUserKeyValue(value);
-  let id = randomUUID();
   return await dbAdapter.withTransaction(async (txQuery) => {
     await consumeKeyWriteTicket(txQuery, owner, ticket, {
       action: 'add',
@@ -428,25 +459,54 @@ export async function addUserKey(
       realmURL: null,
       shareId: null,
     });
-    let sealed = keyring.seal(validValue, userKeyBinding(owner, id));
-    let rows = await txQuery([
-      `INSERT INTO user_keys (id, owner, name, kind, state, value_ciphertext, value_nonce, value_tag, value_key_id) VALUES (`,
-      param(id),
-      `, `,
-      param(owner),
-      `, `,
-      param(validName),
-      `, `,
-      param(validKind),
-      `, 'active', `,
-      ...SEALED_COLUMN_VALUES(sealed),
-      `) ON CONFLICT (owner, name) DO NOTHING RETURNING ${METADATA_COLUMNS}`,
-    ]);
-    if (rows.length === 0) {
-      throw new UserKeyError(409, `you already have a key named ${validName}`);
-    }
-    return toMetadata(rows[0]);
+    return await insertUserKeyIn(txQuery, keyring, {
+      id: randomUUID(),
+      owner,
+      name: validName,
+      kind: validKind,
+      value: validValue,
+    });
   });
+}
+
+// Inserts a key, its value sealed as its master copy, in the caller's
+// transaction. The caller has validated the name and value and spent the
+// ticket for the change; a name the owner already uses is refused 409.
+export async function insertUserKeyIn(
+  txQuery: Querier,
+  keyring: SecretsKeyring,
+  {
+    id,
+    owner,
+    name,
+    kind,
+    value,
+  }: {
+    id: string;
+    owner: string;
+    name: string;
+    kind: UserKeyKind;
+    value: string;
+  },
+): Promise<UserKeyMetadata> {
+  let sealed = keyring.seal(value, userKeyBinding(owner, id));
+  let rows = await txQuery([
+    `INSERT INTO user_keys (id, owner, name, kind, state, value_ciphertext, value_nonce, value_tag, value_key_id) VALUES (`,
+    param(id),
+    `, `,
+    param(owner),
+    `, `,
+    param(name),
+    `, `,
+    param(kind),
+    `, 'active', `,
+    ...SEALED_COLUMN_VALUES(sealed),
+    `) ON CONFLICT (owner, name) DO NOTHING RETURNING ${METADATA_COLUMNS}`,
+  ]);
+  if (rows.length === 0) {
+    throw new UserKeyError(409, `you already have a key named ${name}`);
+  }
+  return toMetadata(rows[0]);
 }
 
 // Whether `sealed` opens under `binding`. Only a copy that doesn't open
@@ -498,6 +558,22 @@ export async function replaceUserKeyValue(
       realmURL: null,
       shareId: null,
     });
+    let [current] = await txQuery([
+      `SELECT kind FROM user_keys WHERE id = `,
+      param(id),
+      ` AND owner = `,
+      param(owner),
+      ` FOR UPDATE`,
+    ]);
+    if (!current) {
+      throw notFound();
+    }
+    if (current.kind === 'oauth-connection') {
+      throw new UserKeyError(
+        400,
+        'an OAuth connection is replaced by signing in through its client again',
+      );
+    }
     let sealed = keyring.seal(validValue, userKeyBinding(owner, id));
     let [updated] = await txQuery([
       `UPDATE user_keys SET (value_ciphertext, value_nonce, value_tag, value_key_id, updated_at) = (`,
@@ -508,8 +584,16 @@ export async function replaceUserKeyValue(
       param(owner),
       ` RETURNING ${METADATA_COLUMNS}`,
     ]);
-    if (!updated) {
-      throw notFound();
+    if (MINTING_KINDS.has(updated.kind as UserKeyKind)) {
+      // A client's new secret is the fix for a token endpoint that refused the
+      // old one, so the client, and every connection through it, mints again.
+      // Its grants hold markers, not the secret, so they stay as they are.
+      await txQuery([
+        `UPDATE oauth_clients SET state = 'active', broken_at = NULL WHERE key_id = `,
+        param(id),
+      ]);
+      await resealGrantMarkersIn(txQuery, keyring, owner, id);
+      return toMetadata(updated);
     }
     let grants = await txQuery([
       `SELECT id, destination, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,
@@ -539,6 +623,46 @@ export async function replaceUserKeyValue(
     await clearKeyRejections(txQuery, id);
     return toMetadata(updated);
   });
+}
+
+// Seals a fresh marker into each grant of a key that mints its tokens, for a
+// change to what the key mints with (a client's new secret, a connection's
+// new sign-in). The markers prove nothing new, but each gets a new nonce, so
+// anything that compares a grant's copy from before the change (a refusal
+// that was in flight for the old secret) sees it was made for another one.
+// As for a static key's replace, a row whose marker doesn't open under its
+// own binding is left as it is.
+export async function resealGrantMarkersIn(
+  txQuery: Querier,
+  keyring: SecretsKeyring,
+  owner: string,
+  keyId: string,
+): Promise<void> {
+  let grants = await txQuery([
+    `SELECT id, destination, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,
+    param(keyId),
+    ` AND owner = `,
+    param(owner),
+    ` FOR UPDATE`,
+  ]);
+  for (let grant of grants) {
+    let binding = grantCopyBinding({
+      owner,
+      keyId,
+      grantId: grant.id as string,
+      destination: grant.destination as string,
+    });
+    if (!opensUnder(keyring, sealedFromColumns(grant, 'value'), binding)) {
+      continue;
+    }
+    let marker = keyring.seal(randomBytes(32).toString('base64url'), binding);
+    await txQuery([
+      `UPDATE user_key_grants SET (value_ciphertext, value_nonce, value_tag, value_key_id) = (`,
+      ...SEALED_COLUMN_VALUES(marker),
+      `) WHERE id = `,
+      param(grant.id as string),
+    ]);
+  }
 }
 
 // Deletes a key, and its grants with it (`user_key_grants` cascades). Every
