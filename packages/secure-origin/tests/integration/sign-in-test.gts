@@ -7,7 +7,6 @@ import {
   settled,
   triggerEvent,
   waitFor,
-  waitUntil,
 } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
@@ -23,6 +22,11 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
+import {
+  errorShown,
+  requestsMade,
+  waitForUntracked,
+} from '../helpers/wait-for-untracked.ts';
 
 // The realm server the pages talk to, named by the page's meta tag as the
 // shell's document names it.
@@ -116,6 +120,29 @@ module('Integration | sign-in', function (hooks) {
     server = realmServer(Object.assign({}, ...routes));
     sent = server.requests;
     return server;
+  }
+
+  // How far a page got, for a wait that times out.
+  function progress() {
+    return `${requestsMade(sent)}; ${errorShown('[data-test-secure-error]')}`;
+  }
+
+  // A page sends the window on, or hands off to the CLI, once it has read the
+  // realm server's answer, and `settled()` doesn't wait for that: the stubbed
+  // `fetch` is a plain promise. So a test waits for the window to go somewhere,
+  // or for the hand-off.
+  async function navigated() {
+    await waitForUntracked(() => navigations.length > 0, {
+      waitingFor: 'the window to go somewhere',
+      progress,
+    });
+  }
+
+  async function handedOff() {
+    await waitForUntracked(() => handoffs.length > 0, {
+      waitingFor: 'the hand-off to the CLI',
+      progress,
+    });
   }
 
   // The page's address, as the shell would be loaded at it.
@@ -214,7 +241,7 @@ module('Integration | sign-in', function (hooks) {
       await render(CliSignInPage);
       await waitFor('[data-test-secure-google]');
       await click('[data-test-secure-google]');
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.strictEqual(navigations.length, 1);
       let { how, url } = navigations[0];
       assert.strictEqual(how, 'assign');
@@ -518,7 +545,7 @@ module('Integration | sign-in', function (hooks) {
       await fillIn('[data-test-secure-username]', 'someone');
       await fillIn('[data-test-secure-password]', 'a-password');
       await click('[data-test-secure-password-submit]');
-      await waitUntil(() => handoffs.length > 0);
+      await handedOff();
       assert.strictEqual(handoffs.length, 1, 'posted once');
       let [form] = handoffs;
       assert.strictEqual(form.method, 'post');
@@ -660,7 +687,7 @@ module('Integration | sign-in', function (hooks) {
       visitShell(`cli-auth?port=51234&state=${STATE}&session=secure`);
       await render(CliAuthPage);
       await signInAs('someone');
-      await waitUntil(() => handoffs.length > 0);
+      await handedOff();
       let [form] = handoffs;
       assert.strictEqual(form.method, 'post');
       assert.strictEqual(form.action, 'http://127.0.0.1:51234/callback');
@@ -724,7 +751,7 @@ module('Integration | sign-in', function (hooks) {
       visitShell(`cli-auth?port=51234&state=${STATE}`);
       await render(CliAuthPage);
       await signInAs('someone');
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.deepEqual(navigations, [
         {
           how: 'replace',
@@ -783,7 +810,7 @@ module('Integration | sign-in', function (hooks) {
       });
       visitShell('?state=google-state&code=a-code', '/secure/google-callback');
       await render(GoogleCallback);
-      await waitUntil(() => handoffs.length > 0);
+      await handedOff();
       assert.deepEqual(
         [...new FormData(handoffs[0])].map(([name]) => name),
         ['state', 'login_token', 'secure_session', 'user_id', 'expires_at'],
@@ -813,7 +840,7 @@ module('Integration | sign-in', function (hooks) {
         '/secure/google-callback',
       );
       await render(GoogleCallback);
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.deepEqual(navigations, [
         {
           how: 'replace',
@@ -868,7 +895,7 @@ module('Integration | sign-in', function (hooks) {
       serve(exchanges(SIGNED_IN));
       visitShell('?state=google-state&code=a-code', '/secure/google-callback');
       await render(GoogleCallback);
-      await waitUntil(() => handoffs.length > 0);
+      await handedOff();
       assert.strictEqual(handoffs[0].action, 'http://127.0.0.1:51234/callback');
       assert.strictEqual(localStorage.getItem('boxel-secure-session'), null);
     });
@@ -964,7 +991,7 @@ module('Integration | sign-in', function (hooks) {
         '/secure/google-callback',
       );
       await render(GoogleCallback);
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.deepEqual(navigations, [
         {
           how: 'replace',
@@ -986,7 +1013,10 @@ module('Integration | sign-in', function (hooks) {
       assert
         .dom('[data-test-secure-signing-in]')
         .includesText('Signing you in…');
-      await waitUntil(() => answer);
+      await waitForUntracked(() => answer, {
+        waitingFor: 'the sign-in request',
+        progress,
+      });
       answer(SIGNED_IN);
       await rendered;
       await waitFor('[data-test-secure-signed-in]');
@@ -1041,7 +1071,7 @@ module('Integration | sign-in', function (hooks) {
         'the page to go back to is taken out of the address',
       );
       await signInWithPassword();
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.deepEqual(navigations, [
         {
           how: 'replace',
@@ -1081,7 +1111,7 @@ module('Integration | sign-in', function (hooks) {
       visitShell(`sign-in${returnFragment(`${APP}/`)}`);
       await render(SignInPage);
       await signInWithPassword();
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.deepEqual(navigations, [
         {
           how: 'replace',
@@ -1097,7 +1127,7 @@ module('Integration | sign-in', function (hooks) {
       });
       visitShell(`sign-in${returnFragment(`${APP}/`)}`);
       await render(SignInPage);
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.deepEqual(navigations, [
         { how: 'replace', url: `${APP}/#loginToken=a-login-token` },
       ]);
@@ -1111,7 +1141,7 @@ module('Integration | sign-in', function (hooks) {
       });
       visitShell(`sign-in${returnFragment('https://branch.preview.test/')}`);
       await render(SignInPage);
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.strictEqual(
         navigations[0].url,
         'https://branch.preview.test/#loginToken=a-login-token',
@@ -1153,7 +1183,7 @@ module('Integration | sign-in', function (hooks) {
         'nothing is minted until the user confirms',
       );
       await click('[data-test-secure-loopback-continue]');
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.deepEqual(navigations, [
         {
           how: 'replace',
@@ -1187,7 +1217,7 @@ module('Integration | sign-in', function (hooks) {
       });
       visitShell(`sign-in${returnFragment(`${APP}/`)}`);
       await render(SignInPage);
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.deepEqual(navigations, [
         { how: 'replace', url: '/secure/sign-in' },
       ]);
@@ -1234,7 +1264,7 @@ module('Integration | sign-in', function (hooks) {
       serve(MINTS, { 'POST _secure-session/google': () => SIGNED_IN });
       visitShell('?state=google-state&code=a-code', '/secure/google-callback');
       await render(GoogleCallback);
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.deepEqual(navigations, [
         {
           how: 'replace',
@@ -1257,7 +1287,7 @@ module('Integration | sign-in', function (hooks) {
       });
       visitShell(`sign-in${returnFragment(`${APP}/`)}`);
       await render(SignInPage);
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.strictEqual(attempts, 2);
       assert.strictEqual(
         navigations[0].url,
@@ -1282,7 +1312,7 @@ module('Integration | sign-in', function (hooks) {
         .dom('[data-test-secure-error]')
         .hasText('Signing in is unavailable.');
       await click('[data-test-secure-handoff-retry]');
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.strictEqual(
         navigations[0].url,
         `${APP}/#loginToken=a-login-token`,
@@ -1297,7 +1327,7 @@ module('Integration | sign-in', function (hooks) {
       });
       visitShell(`sign-out${returnFragment(`${APP}/`)}`);
       await render(SignOutPage);
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.deepEqual(navigations, [{ how: 'replace', url: `${APP}/` }]);
       assert.true(
         server.requests.some(
@@ -1316,7 +1346,7 @@ module('Integration | sign-in', function (hooks) {
       });
       visitShell(`sign-out${returnFragment(`${APP}/`)}`);
       await render(SignOutPage);
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.true(
         server.requests.some(
           (r) => r.method === 'DELETE' && r.path === '_secure-session',
@@ -1330,7 +1360,7 @@ module('Integration | sign-in', function (hooks) {
       serve({});
       visitShell(`sign-out${returnFragment('https://elsewhere.test/')}`);
       await render(SignOutPage);
-      await waitUntil(() => navigations.length > 0);
+      await navigated();
       assert.deepEqual(navigations, [
         { how: 'replace', url: '/secure/sign-in' },
       ]);

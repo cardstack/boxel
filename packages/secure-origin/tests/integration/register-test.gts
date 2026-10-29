@@ -4,7 +4,6 @@ import {
   render,
   triggerEvent,
   waitFor,
-  waitUntil,
 } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
@@ -26,6 +25,7 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
+import { waitForUntracked } from '../helpers/wait-for-untracked.ts';
 
 const STORAGE_KEY = 'boxel-secure-session';
 const PASSWORD = 'mypassword1!';
@@ -290,8 +290,9 @@ module('Integration | register', function (hooks) {
     ] as const) {
       await fillIn('[data-test-username-field] input', value);
       await triggerEvent('[data-test-username-field] input', 'blur');
-      await waitUntil(() =>
-        document.querySelector(error('username'))?.textContent?.trim(),
+      await waitForUntracked(
+        () => document.querySelector(error('username'))?.textContent?.trim(),
+        { waitingFor: `an error for the username "${value}"` },
       );
       assert.dom(error('username')).hasText(message, value || 'empty');
       // An error the availability check shows on its own is announced, and
@@ -493,7 +494,10 @@ module('Integration | register', function (hooks) {
     await waitFor('[data-test-token-field]');
     await fillIn('[data-test-token-field]', INVITE_CODE);
     await click('[data-test-next-btn]');
-    await waitUntil(() => submitted.length > 0, { timeout: 5000 });
+    await waitForUntracked(() => submitted.length > 0, {
+      waitingFor: 'the hand-off to the CLI',
+      timeout: 5000,
+    });
 
     let [form] = submitted;
     assert.strictEqual(form!.method, 'post');

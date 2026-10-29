@@ -5,7 +5,6 @@ import {
   settled,
   triggerEvent,
   triggerKeyEvent,
-  waitUntil,
 } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
@@ -19,6 +18,7 @@ import {
   whenStyled,
 } from '../../src/credentials/style.ts';
 import { CredentialFrame, FORMS } from '../../src/security/credentials.js';
+import { waitForUntracked } from '../helpers/wait-for-untracked.ts';
 
 const APP_ORIGIN = 'https://app.example.test';
 
@@ -365,12 +365,20 @@ module('Integration | credential fields', function (hooks) {
       receive({ type: 'style', properties: {} });
       // The frame measures itself once the styles are drawn, so the report
       // arrives after this message is handled.
-      await waitUntil(() => sizes().length > 0);
+      await waitForUntracked(() => sizes().length > 0, {
+        waitingFor: 'the frame to report its height',
+      });
       let first = sizes().at(-1);
       assert.strictEqual(first.height, formHeight(), 'the height of the form');
       await fillIn('[data-test-password-field]', 'short');
       await blur('[data-test-password-field]');
-      await waitUntil(() => sizes().at(-1).height > first.height);
+      await waitForUntracked(() => sizes().at(-1).height > first.height, {
+        waitingFor: 'the frame to report a taller height',
+        progress: () =>
+          `heights reported: ${sizes()
+            .map((size) => size.height)
+            .join(', ')}`,
+      });
       assert.strictEqual(
         sizes().at(-1).height,
         formHeight(),
