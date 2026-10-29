@@ -308,7 +308,7 @@ Neither sees card JSON. Elsewhere, reviewers enforce §1.2 and §1.4.
 - `packages/host/app/components/matrix/room.gts`,
   `packages/host/app/components/operator-mode/create-file-modal.gts`,
   `packages/host/app/components/operator-mode/workspace-chooser/{index,manage-catalogs}.gts`,
-  `packages/host/app/lib/{utils,workspace-actions}.ts`,
+  `packages/host/app/lib/utils.ts`,
   `packages/host/app/services/{matrix-service,realm-server,realm}.ts`,
   `packages/host/app/tools/{create-submission-workflow,generate-readme-spec,get-user-system-card,listing-action-build}.ts`
   and `packages/host/app/utils/file-extract-runner.ts` break §1.4. Writes or
