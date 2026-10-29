@@ -16,6 +16,7 @@ import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import IconTrash from '@cardstack/boxel-icons/trash-2';
 import Group from '@cardstack/boxel-icons/users';
 import IconX from '@cardstack/boxel-icons/x';
+import { Button } from '@cardstack/pretui/components/button';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Menu as PretMenu } from '@cardstack/pretui/components/menu';
 import { Spinner } from '@cardstack/pretui/components/spinner';
@@ -41,7 +42,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
-import { realmURLDisplayText } from '@cardstack/host/lib/realm-utils';
+import {
+  realmURLDisplayText,
+  urlDisplayText,
+} from '@cardstack/host/lib/realm-utils';
 import {
   publishedRealmURLsFromInfo,
   skillsRealmURL,
@@ -96,6 +100,25 @@ interface Signature {
 
 const log = logger('component:dashboard/workspace');
 
+// A Tab stop only while the element overflows, so a long text can be
+// scrolled from the keyboard and a short one adds no stop. Passed the text,
+// it measures again when the text changes in a box that doesn't resize.
+const focusableWhenScrollable = modifier(
+  (element: HTMLElement, [_text]: [string | undefined]) => {
+    let update = () => {
+      if (element.scrollHeight > element.clientHeight) {
+        element.tabIndex = 0;
+      } else {
+        element.removeAttribute('tabindex');
+      }
+    };
+    let observer = new ResizeObserver(update);
+    observer.observe(element);
+    update();
+    return () => observer.disconnect();
+  },
+);
+
 // A row's trailing time drops the "Updated" its position already says.
 const UPDATED_PREFIX = /^Updated /;
 
@@ -140,7 +163,8 @@ export default class Workspace extends Component<Signature> {
           <div class='reindex-error' role='alert' data-test-reindex-error>
             <span
               class='reindex-error-message'
-              title={{this.reindexError}}
+              {{focusableWhenScrollable this.reindexError}}
+              data-test-reindex-error-message
             >{{this.reindexError}}</span>
             <IconButton
               class='reindex-error-dismiss'
@@ -156,10 +180,12 @@ export default class Workspace extends Component<Signature> {
         {{/if}}
         {{! The URL describes the workspace rather than naming it, so it sits
             outside the button: text inside a button joins its accessible
-            name. }}
+            name. Hidden, so it's read only as that description, which
+            aria-describedby still reaches. }}
         <span
           id={{this.realmURLDescriptionId}}
           class='boxel-sr-only'
+          aria-hidden='true'
         >{{this.realmURLText}}</span>
 
         {{#if (eq @variant 'desk')}}
@@ -183,7 +209,7 @@ export default class Workspace extends Component<Signature> {
                 <button
                   type='button'
                   class='desk-pill'
-                  aria-describedby={{this.realmURLDescriptionId}}
+                  aria-describedby={{this.descriptionIds}}
                   data-nav-index={{@navIndex}}
                   {{on 'click' this.openWorkspace}}
                   {{focusWhenSelected
@@ -215,17 +241,20 @@ export default class Workspace extends Component<Signature> {
             {{! Always rendered, so the counts, which load after the desk,
                 fill reserved space instead of growing the caption. }}
             <div class='desk-caption-line'>
+              {{! Hidden, as the button reads it in its description. }}
               <span
                 class={{cn 'visibility-chip' (concat 'is-' this.visibility)}}
-                title={{this.visibilityLabel}}
+                aria-hidden='true'
                 data-test-workspace-visibility
               >
-                <this.visibilityIcon
-                  width='12'
-                  height='12'
-                  aria-hidden='true'
-                />
-                {{this.visibility}}
+                <this.visibilityIcon width='12' height='12' />
+                <span
+                  data-test-workspace-visibility-word
+                >{{this.visibility}}</span>
+                <span
+                  id={{this.visibilityDescriptionId}}
+                  class='boxel-sr-only'
+                >{{this.visibilityLabel}}</span>
               </span>
               <span
                 class='desk-stats'
@@ -258,13 +287,25 @@ export default class Workspace extends Component<Signature> {
                 ><span class='desk-host-url'>{{this.displayPublishedURL}}</span>
                   <span aria-hidden='true'>↗</span><span class='boxel-sr-only'>
                     (opens in a new tab)</span></a>
+                {{! The other sites in a menu, which stays on screen where a
+                    tooltip can't. }}
                 {{#if (gt this.publishedRealmURLs.length 1)}}
-                  <span
-                    class='desk-host-more'
-                    title={{this.extraPublishedTitle}}
-                  >+{{this.extraPublishedCount}}<span class='boxel-sr-only'>
-                      more:
-                      {{this.extraPublishedTitle}}</span></span>
+                  <PretMenu
+                    @items={{this.extraHostMenuItems}}
+                    @label='More hosted sites'
+                    @open={{this.isHostDropdownOpen}}
+                    @onOpenChange={{this.setHostDropdownOpen}}
+                  >
+                    <:trigger as |_open toggle|>
+                      <Button
+                        class='desk-host-more'
+                        @appearance='link'
+                        aria-label={{this.extraPublishedLabel}}
+                        {{on 'click' toggle}}
+                        data-test-desk-host-more={{@realmIdentifier}}
+                      >+{{this.extraPublishedCount}}</Button>
+                    </:trigger>
+                  </PretMenu>
                 {{/if}}
               </div>
             {{/if}}
@@ -291,7 +332,7 @@ export default class Workspace extends Component<Signature> {
         {{else}}
           <ItemContainer
             class='tile-face'
-            aria-describedby={{this.realmURLDescriptionId}}
+            aria-describedby={{this.descriptionIds}}
             data-nav-index={{@navIndex}}
             {{on 'click' this.openWorkspace}}
             {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
@@ -427,7 +468,7 @@ export default class Workspace extends Component<Signature> {
               <button
                 type='button'
                 class='name row-open'
-                aria-describedby={{this.realmURLDescriptionId}}
+                aria-describedby={{this.descriptionIds}}
                 data-nav-index={{@navIndex}}
                 {{on 'click' this.openWorkspace}}
                 {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
@@ -437,25 +478,34 @@ export default class Workspace extends Component<Signature> {
             {{else}}
               <span class='name' data-test-workspace-name>{{this.name}}</span>
             {{/if}}
-            {{! On a row the chip sits above its hit area so its title shows; a
-                click on it still opens the workspace. }}
+            {{! Hidden, as the button reads the chip and the time in its
+                description. }}
             <span
-              {{! template-lint-disable no-invalid-interactive }}
               class={{cn 'visibility-chip' (concat 'is-' this.visibility)}}
-              title={{this.visibilityLabel}}
-              {{on 'click' this.openFromRow}}
+              aria-hidden='true'
               data-test-workspace-visibility
             >
-              <this.visibilityIcon width='12' height='12' aria-hidden='true' />
-              {{this.visibility}}
+              <this.visibilityIcon width='12' height='12' />
+              <span
+                data-test-workspace-visibility-word
+              >{{this.visibility}}</span>
+              <span
+                id={{this.visibilityDescriptionId}}
+                class='boxel-sr-only'
+              >{{this.visibilityLabel}}</span>
             </span>
-            {{#if (eq @variant 'row')}}
-              {{#if this.updatedAtLabel}}
+            {{#if this.showsUpdatedTime}}
+              <span
+                class='updated'
+                aria-hidden='true'
+                data-test-workspace-updated
+              >
+                <span>{{this.updatedAgoLabel}}</span>
                 <span
-                  class='updated'
-                  data-test-workspace-updated
-                >{{this.updatedAgoLabel}}</span>
-              {{/if}}
+                  id={{this.updatedDescriptionId}}
+                  class='boxel-sr-only'
+                >{{this.spokenUpdatedAtLabel}}</span>
+              </span>
             {{/if}}
           </div>
         {{/unless}}
@@ -867,9 +917,12 @@ export default class Workspace extends Component<Signature> {
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      /* As tall as a line of the caption, where a Button would be taller. */
       .desk-host-more {
-        position: relative;
+        --pretui-button-h: 1lh;
         flex: none;
+        box-sizing: border-box;
+        height: 1lh;
       }
 
       /* Tile: the wallpaper face, its hosted chin, then the name and who can
@@ -908,6 +961,11 @@ export default class Workspace extends Component<Signature> {
         display: flex;
         width: 100%;
         height: var(--_workspace-chin-height);
+      }
+      /* The open menu's panel is stacked with the chin, so the chin rises
+         above the tile's frame, which would otherwise draw across it. */
+      .workspace.is-open .host-menu {
+        z-index: 5;
       }
       /* Pret UI's Menu has no knob to stretch its trigger's box. */
       .host-menu-wrap,
@@ -1051,12 +1109,6 @@ export default class Workspace extends Component<Signature> {
         font-weight: 600;
         text-align: left;
       }
-      /* Above the row's hit area, so its title shows. */
-      .is-row .visibility-chip {
-        position: relative;
-        z-index: 2;
-        cursor: pointer;
-      }
       /* A button ignores line-clamp, so the name truncates on one line. Its
          hit area covers the row; the controls sit above it. */
       .row-open {
@@ -1125,16 +1177,19 @@ export default class Workspace extends Component<Signature> {
         display: none;
       }
 
+      /* Above an open site menu's chin, which sits over the face too. The
+         menu's panel opens below the face, out of the alert's way. */
       .reindex-error {
         position: absolute;
         top: 0;
         left: 0;
-        z-index: 5;
+        z-index: 6;
         box-sizing: border-box;
         display: flex;
         align-items: flex-start;
         gap: var(--boxel-sp-5xs);
         width: 100%;
+        max-height: 100%;
         padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
         border-radius: var(--dashboard-tile-radius) var(--dashboard-tile-radius)
           0 0;
@@ -1142,17 +1197,25 @@ export default class Workspace extends Component<Signature> {
         color: var(--boxel-light);
         font: 600 var(--boxel-font-xs);
       }
+      /* Within the face, not over the name or caption beneath it. */
+      .is-tile .reindex-error {
+        max-height: var(--dashboard-tile-height);
+      }
+      .is-desk .reindex-error {
+        max-height: var(--_workspace-desk-height);
+      }
+      /* The whole error shows; a long one scrolls inside the tile, under a
+         dismiss button that stays put. Stretched, it takes the alert's
+         clamped height. */
       .reindex-error-message {
         flex: 1;
+        align-self: stretch;
         min-width: 0;
-        overflow: hidden;
+        overflow-y: auto;
         overflow-wrap: break-word;
-        /* A long server error is capped at a few lines; the title has it
-           whole. */
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
-        line-clamp: 3;
+      }
+      .reindex-error-message:focus-visible {
+        outline: 2px solid var(--ring);
       }
       .reindex-error-dismiss {
         flex-shrink: 0;
@@ -1328,6 +1391,29 @@ export default class Workspace extends Component<Signature> {
     return `${guidFor(this)}-realm-url`;
   }
 
+  private get visibilityDescriptionId() {
+    return `${guidFor(this)}-visibility`;
+  }
+
+  private get updatedDescriptionId() {
+    return `${guidFor(this)}-updated`;
+  }
+
+  private get showsUpdatedTime() {
+    return this.args.variant === 'row' && !!this.updatedAtLabel;
+  }
+
+  // What the workspace's button says after its name. The chip and the row's
+  // time show short forms, so each carries its full label for this.
+  private get descriptionIds() {
+    let ids = [this.visibilityDescriptionId];
+    if (this.showsUpdatedTime) {
+      ids.push(this.updatedDescriptionId);
+    }
+    ids.push(this.realmURLDescriptionId);
+    return ids.join(' ');
+  }
+
   private get realmURLText() {
     return realmURLDisplayText(
       this.network.virtualNetwork,
@@ -1432,20 +1518,16 @@ export default class Workspace extends Component<Signature> {
   }
 
   private get displayPublishedURL() {
-    try {
-      let url = new URL(this.primaryPublishedURL);
-      return url.host + url.pathname.replace(/\/$/, '');
-    } catch {
-      return this.primaryPublishedURL;
-    }
+    return urlDisplayText(this.primaryPublishedURL);
   }
 
   private get extraPublishedCount() {
     return Math.max(this.publishedRealmURLs.length - 1, 0);
   }
 
-  private get extraPublishedTitle() {
-    return this.publishedRealmURLs.slice(1).join('\n');
+  // Starts with the visible "+N", so the name contains what's on screen.
+  private get extraPublishedLabel() {
+    return `+${this.extraPublishedCount} more hosted ${pluralize('site', this.extraPublishedCount)}`;
   }
 
   private get hostTriggerLabel() {
@@ -1453,12 +1535,22 @@ export default class Workspace extends Component<Signature> {
   }
 
   private get hostMenuItems(): MenuEntry[] {
+    return this.siteMenuItems(this.publishedRealmURLs);
+  }
+
+  // A desk links its primary site beside the "+N", so its menu holds the
+  // other sites alone, as many as the "+N" says.
+  private get extraHostMenuItems(): MenuEntry[] {
+    return this.siteMenuItems(this.publishedRealmURLs.slice(1));
+  }
+
+  private siteMenuItems(urls: string[]): MenuEntry[] {
     return [
       {
         kind: 'section',
         label: 'Launch in new window',
-        items: this.publishedRealmURLs.map((url) => ({
-          label: url,
+        items: urls.map((url) => ({
+          label: urlDisplayText(url),
           onSelect: () => this.openPublishedRealm(url),
         })),
       },
@@ -1513,6 +1605,13 @@ export default class Workspace extends Component<Signature> {
     return updatedAt ? formatUpdatedTime(new Date(updatedAt)) : undefined;
   }
 
+  private get spokenUpdatedAtLabel() {
+    let { updatedAt } = this.realmInfo;
+    return updatedAt
+      ? formatUpdatedTime(new Date(updatedAt), { spoken: true })
+      : undefined;
+  }
+
   private get updatedAgoLabel() {
     return this.updatedAtLabel?.replace(UPDATED_PREFIX, '');
   }
@@ -1564,13 +1663,6 @@ export default class Workspace extends Component<Signature> {
     await this.operatorModeStateService.openWorkspace(
       this.args.realmIdentifier,
     );
-  }
-
-  // A tile opens from its face alone; a row opens from anywhere on it.
-  @action private async openFromRow() {
-    if (this.args.variant === 'row') {
-      await this.openWorkspace();
-    }
   }
 
   @action private openDeleteModal() {
