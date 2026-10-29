@@ -10,6 +10,7 @@ import {
   type CallApiSender,
 } from '@cardstack/runtime-common/card-operations';
 import { fillSlots } from '../key-bindings.ts';
+import { keyReadiness } from '../key-readiness.ts';
 import { secretsKeyring } from '../secrets-at-rest/index.ts';
 import {
   OutboundRefusedError,
@@ -59,7 +60,8 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 }
 
 // Fills a `callApi` request's slots from the bindings approved for it, and
-// sends it through the guarded outbound client.
+// sends it through the guarded outbound client. Answers, too, whether those
+// bindings would fill it for a card's caller (`key-readiness.ts`).
 //
 // Each slot is filled from its binding's grant (`lib/key-bindings.ts`), and
 // nothing is filled for a slot no binding serves. The request arrives as declared, every credential slot still a token, and
@@ -77,6 +79,7 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 export function createCallApiSender(dbAdapter: DBAdapter): CallApiSender {
   return {
     fill: (lookup) => fillSlots(dbAdapter, secretsKeyring, lookup),
+    readiness: (lookup) => keyReadiness(dbAdapter, lookup),
     send: async (request, credentials) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {
         log.warn(

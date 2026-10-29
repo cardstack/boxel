@@ -204,6 +204,12 @@ application/json` unless the declaration set one.
    not refuse another's requests. The check is made on the address the
    operation declares.
 
+The same sender answers `readiness`: what a card learns from
+`@context.keyReadiness` before it calls, through a `_capabilities` pair that
+asks for it. `lib/key-readiness.ts` reads the rows `fill` checks, in the same
+order, opens no key and writes nothing (see the `key-bindings` skill,
+_Readiness_). A check added to `fill` belongs there too.
+
 Which realm: an instance target's is the realm serving it; a type target's
 is the one the entry names in `data.meta.realmURL`, and `assertInRealm`
 holds it to the realm that received the batch. The server decides, never
