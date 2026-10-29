@@ -27,6 +27,7 @@ import {
 } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
 import { pipelineAdmission } from '../lib/key-bindings.ts';
+import { keyReadiness } from '../lib/key-readiness.ts';
 import { listKeyGrants } from '../lib/user-key-grants.ts';
 import {
   claimProbe,
@@ -454,6 +455,38 @@ module(basename(import.meta.filename), function (hooks) {
         .map((e) => (e as { status: number | null }).status),
       [401],
       'the probe and its result are recorded',
+    );
+  });
+
+  test('readiness answers credential-rejected while a call would be held back, and ready once a probe is due', async function (assert) {
+    let key = await addKey();
+    let approved = await approve(OWNER, 'check', {
+      userKey: { keyId: key.id },
+    });
+    let grantId = approved.meta.grant.id;
+    await dbAdapter.execute(
+      `UPDATE key_bindings SET interactive = true WHERE grant_id = $1`,
+      { bind: [grantId] },
+    );
+    let definition =
+      (await realm.operationCore.definitionLookup.lookupDefinition(INBOX))!
+        .operations!.check;
+    let readiness = () =>
+      keyReadiness(dbAdapter, {
+        realmURL: realmURL.href,
+        type: { module: String(INBOX.module), name: INBOX.name },
+        operation: 'check',
+        caller: OWNER,
+        request: definition.callApi!,
+      });
+    assert.strictEqual(await readiness(), 'ready');
+    await call('check', 401);
+    assert.strictEqual(await readiness(), 'credential-rejected');
+    await probeIsDue(grantId);
+    assert.strictEqual(
+      await readiness(),
+      'ready',
+      'a call would be sent as the probe',
     );
   });
 
