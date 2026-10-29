@@ -1,6 +1,6 @@
 import { trackedObject } from '@ember/reactive/collections';
 
-import type { KeyValue } from './context.ts';
+import type { KeyValue, ServiceAccountDetails } from './context.ts';
 
 // What is being entered for a Google service account: its JSON key file, read
 // from disk in this window, the user to act as and the scopes. The page reads
@@ -102,6 +102,15 @@ export class ServiceAccountEntry {
       subject: this.state.subject.trim(),
       scopes: this.scopeList,
     };
+  }
+
+  // A replace starts from the user the key acts as and the scopes it asks
+  // for now, so leaving them as they are keeps them. The key file is always
+  // chosen anew.
+  prefill({ subject, scopes }: ServiceAccountDetails): void {
+    this.clear();
+    this.state.subject = subject ?? '';
+    this.state.scopes = scopes.join(' ');
   }
 
   clear(): void {
