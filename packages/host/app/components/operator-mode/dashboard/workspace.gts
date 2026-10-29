@@ -16,10 +16,10 @@ import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import IconTrash from '@cardstack/boxel-icons/trash-2';
 import Group from '@cardstack/boxel-icons/users';
 import IconX from '@cardstack/boxel-icons/x';
+import { Button } from '@cardstack/pretui/components/button';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Menu as PretMenu } from '@cardstack/pretui/components/menu';
 import { Spinner } from '@cardstack/pretui/components/spinner';
-import { Tooltip } from '@cardstack/pretui/components/tooltip';
 
 import { didCancel, dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -260,35 +260,34 @@ export default class Workspace extends Component<Signature> {
                 <span>Hosted at</span>
                 {{! A link in running text, so a native one rather than a Pret
                     UI Button, which is for standalone actions. }}
-                <Tooltip
-                  class='desk-host-link-tooltip'
-                  @content={{this.primaryPublishedURL}}
-                >
-                  <a
-                    class='desk-host-link'
-                    href={{this.primaryPublishedURL}}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    data-test-desk-host-link={{@realmIdentifier}}
-                  ><span
-                      class='desk-host-url'
-                    >{{this.displayPublishedURL}}</span>
-                    <span aria-hidden='true'>↗</span><span
-                      class='boxel-sr-only'
-                    >
-                      (opens in a new tab)</span></a>
-                </Tooltip>
+                <a
+                  class='desk-host-link'
+                  href={{this.primaryPublishedURL}}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  data-test-desk-host-link={{@realmIdentifier}}
+                ><span class='desk-host-url'>{{this.displayPublishedURL}}</span>
+                  <span aria-hidden='true'>↗</span><span class='boxel-sr-only'>
+                    (opens in a new tab)</span></a>
+                {{! The other sites in the menu a tile's chin opens, which
+                    stays on screen and wraps where a tooltip can't. }}
                 {{#if (gt this.publishedRealmURLs.length 1)}}
-                  <Tooltip
-                    class='desk-host-more'
-                    @content={{this.extraPublishedList}}
+                  <PretMenu
+                    @items={{this.hostMenuItems}}
+                    @label='Hosted sites'
+                    @open={{this.isHostDropdownOpen}}
+                    @onOpenChange={{this.setHostDropdownOpen}}
                   >
-                    <span>+{{this.extraPublishedCount}}<span
-                        class='boxel-sr-only'
-                      >
-                        more:
-                        {{this.extraPublishedList}}</span></span>
-                  </Tooltip>
+                    <:trigger as |_open toggle|>
+                      <Button
+                        class='desk-host-more'
+                        @appearance='link'
+                        aria-label={{this.extraPublishedLabel}}
+                        {{on 'click' toggle}}
+                        data-test-desk-host-more={{@realmIdentifier}}
+                      >+{{this.extraPublishedCount}}</Button>
+                    </:trigger>
+                  </PretMenu>
                 {{/if}}
               </div>
             {{/if}}
@@ -891,11 +890,6 @@ export default class Workspace extends Component<Signature> {
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      /* The tooltip's wrapper is the flex item, so it carries the
-         truncation the link inside it needs. */
-      .desk-host-link-tooltip {
-        min-width: 0;
-      }
       .desk-host-more {
         flex: none;
       }
@@ -1491,9 +1485,9 @@ export default class Workspace extends Component<Signature> {
     return Math.max(this.publishedRealmURLs.length - 1, 0);
   }
 
-  // One line: the tooltip doesn't wrap.
-  private get extraPublishedList() {
-    return this.publishedRealmURLs.slice(1).join(', ');
+  // Starts with the visible "+N", so the name contains what's on screen.
+  private get extraPublishedLabel() {
+    return `+${this.extraPublishedCount} more hosted ${pluralize('site', this.extraPublishedCount)}`;
   }
 
   private get hostTriggerLabel() {

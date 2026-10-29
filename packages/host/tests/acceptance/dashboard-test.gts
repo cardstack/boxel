@@ -701,6 +701,44 @@ module('Acceptance | dashboard', function (hooks) {
         .hasAttribute('rel', 'noopener noreferrer');
     });
 
+    test("a desk's +N opens the same site menu as a tile's chin", async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      matrixService.workspaceFavorites = [realmURL];
+      let now = Date.now();
+      markHosted(realmURL, {
+        'https://older.example.com/': String(now - 60_000),
+        'https://newer.example.com/': String(now),
+      });
+      await settled();
+
+      let desk =
+        '[data-test-favorites-list] [data-test-workspace="Workspace A"]';
+      let menuItems = `${desk} [data-test-pretui-menu-panel] [role="menuitem"]`;
+      assert
+        .dom(`${desk} [data-test-desk-host-more]`)
+        .hasText('+1')
+        .hasAttribute('aria-label', '+1 more hosted site');
+
+      let windowOpen = stubWindowOpen();
+      try {
+        await click(`${desk} [data-test-desk-host-more]`);
+
+        assert.deepEqual(
+          findAll(menuItems).map((item) => item.textContent?.trim()),
+          ['https://newer.example.com/', 'https://older.example.com/'],
+        );
+
+        await click(findAll(menuItems)[1]);
+
+        assert.deepEqual(windowOpen.calls, [
+          ['https://older.example.com/', '_blank', 'noopener,noreferrer'],
+        ]);
+      } finally {
+        windowOpen.restore();
+      }
+    });
+
     test("Realm Settings opens the workspace's realm card in edit mode and closes the dashboard", async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
@@ -1327,9 +1365,29 @@ module('Acceptance | dashboard', function (hooks) {
             (name) => name !== 'Workspace A',
           )!;
 
-          await click(
+          // The chip takes no click of its own: the pointer reaches the row's
+          // hit area over it, so the test clicks whatever is hit there.
+          let chip = find(
             `[data-test-workspace="${rowName}"] [data-test-workspace-visibility]`,
+          )!;
+          chip.scrollIntoView({ block: 'center' });
+          let box = chip.getBoundingClientRect();
+          let target = document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2,
           );
+          if (!(target instanceof HTMLElement)) {
+            throw new Error('no element is hit over the visibility chip');
+          }
+          assert
+            .dom(target)
+            .hasAttribute(
+              'data-test-workspace-button',
+              rowName,
+              "the row's button receives the pointer over its chip",
+            );
+
+          await click(target);
 
           assert.dom('[data-test-dashboard]').doesNotExist();
           assert.strictEqual(
