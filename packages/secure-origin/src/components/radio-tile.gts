@@ -59,6 +59,10 @@ const RadioTile: TemplateOnlyComponent<Signature> = <template>
     .radio-tile:has(input:checked) {
       background-color: var(--selected);
       box-shadow: 0 0 0 2px var(--primary-ink);
+      /* Forced colors drop the box shadow and the fill; this outline, unseen
+         otherwise, is repainted there so the chosen tile still stands out. */
+      outline: 2px solid transparent;
+      outline-offset: -2px;
     }
     .radio-tile:has(input:focus-visible) {
       outline: 2px solid var(--ring, var(--boxel-highlight));
