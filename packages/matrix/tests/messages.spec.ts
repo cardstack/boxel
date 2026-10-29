@@ -176,9 +176,12 @@ test.describe('Room messages', () => {
     let innerHTML = await page
       .locator('[data-test-message-idx="1"] .content')
       .evaluate((el) => el.innerHTML);
-    expect(innerHTML, await describeMessages(page)).toContain(
-      '&lt;h1&gt;Hello&lt;/h1&gt; &lt;template&gt;Hello&lt;/template&gt;',
-    );
+    let escaped =
+      '&lt;h1&gt;Hello&lt;/h1&gt; &lt;template&gt;Hello&lt;/template&gt;';
+    expect(
+      innerHTML,
+      innerHTML.includes(escaped) ? undefined : await describeMessages(page),
+    ).toContain(escaped);
   });
 
   test(`it can create a room specific pending message`, async ({ page }) => {

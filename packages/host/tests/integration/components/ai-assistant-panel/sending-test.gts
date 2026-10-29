@@ -656,6 +656,43 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       .exists({ count: 1 }, 'a single bubble renders for the cgi');
   });
 
+  // Sends `body` from the composer and holds that message's send after its
+  // local echo, so the transcript can be checked while it is still sending.
+  // Returns the function that releases the send.
+  async function sendAndHold(roomId: string, body: string) {
+    let gate = new Deferred<void>();
+    mockMatrixUtils.setSendEventInterceptor(async ({ content }) => {
+      if (content.body === body) {
+        await gate.promise;
+      }
+    });
+    await fillIn('[data-test-message-field]', body);
+    click('[data-test-send-message-btn]');
+    let release = () => {
+      mockMatrixUtils.setSendEventInterceptor(undefined);
+      gate.fulfill();
+    };
+    try {
+      // the SDK's local echo of this message has replaced the optimistic event
+      let matrixService = getService('matrix-service');
+      await waitUntil(() =>
+        matrixService
+          .getRoomData(roomId)
+          ?.events.some(
+            (e) =>
+              e.event_id?.startsWith('~') &&
+              (e.content as { body?: string } | undefined)?.body === body,
+          ),
+      );
+      // not settled(): it would wait on the held send
+      await rerender();
+    } catch (e) {
+      release();
+      throw e;
+    }
+    return release;
+  }
+
   test('a message still sending sorts after a confirmed message whose server time is ahead of the client clock', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -680,33 +717,57 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     );
     await waitFor('[data-test-message-idx="0"]');
 
-    await fillIn('[data-test-message-field]', 'Sent while the reply exists');
-    let sendGate = new Deferred<void>();
-    mockMatrixUtils.setSendEventInterceptor(() => sendGate.promise);
-    click('[data-test-send-message-btn]');
-    await waitFor('[data-test-ai-assistant-message-pending]');
-    // the SDK's local echo, which carries the client's clock, has replaced
-    // the optimistic event
-    let matrixService = getService('matrix-service');
-    await waitUntil(() =>
-      matrixService
-        .getRoomData(roomId)
-        ?.events.some((e) => e.event_id?.startsWith('~')),
+    let release = await sendAndHold(roomId, 'Sent while the reply exists');
+    try {
+      assert
+        .dom(
+          '[data-test-message-idx="1"][data-test-ai-assistant-message-pending]',
+        )
+        .exists('the message still sending is last');
+      assert
+        .dom('[data-test-message-idx="0"]')
+        .containsText('Earlier reply', 'the confirmed message stays first');
+    } finally {
+      release();
+    }
+    await waitFor('[data-test-user-message]:not(.is-pending)');
+    await settled();
+  });
+
+  test('a message still sending sorts after a confirmed message that arrives during the send', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
     );
-    // not settled(): it would wait on the gated send
-    await rerender();
+    let roomId = await openAiAssistant();
 
-    assert
-      .dom(
-        '[data-test-message-idx="1"][data-test-ai-assistant-message-pending]',
-      )
-      .exists('the message still sending is last');
-    assert
-      .dom('[data-test-message-idx="0"]')
-      .containsText('Earlier reply', 'the confirmed message stays first');
+    let release = await sendAndHold(roomId, 'Sent before the reply arrives');
+    try {
+      // its server time is later than the sending message's provisional time
+      mockMatrixUtils.simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'Reply that arrives during the send',
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      });
+      await waitFor('[data-test-message-idx="1"]');
 
-    mockMatrixUtils.setSendEventInterceptor(undefined);
-    sendGate.fulfill();
+      assert
+        .dom(
+          '[data-test-message-idx="1"][data-test-ai-assistant-message-pending]',
+        )
+        .exists('the message still sending is last');
+      assert
+        .dom('[data-test-message-idx="0"]')
+        .containsText(
+          'Reply that arrives during the send',
+          'the confirmed message is first',
+        );
+    } finally {
+      release();
+    }
     await waitFor('[data-test-user-message]:not(.is-pending)');
     await settled();
   });
