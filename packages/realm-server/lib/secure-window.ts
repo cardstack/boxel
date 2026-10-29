@@ -11,6 +11,7 @@ import {
   query,
   type CodeRef,
   type DBAdapter,
+  type Definition,
   type DefinitionLookup,
   type Realm,
   type RealmResourceIdentifier,
@@ -168,7 +169,7 @@ export function validateContextRequest(
   return request;
 }
 
-interface Deps {
+export interface Deps {
   dbAdapter: DBAdapter;
   // The realm a URL is in, found among every realm this server serves,
   // mounted or not, and without mounting it (`findRealm`).
@@ -248,11 +249,25 @@ async function instanceType(
   return isResolvedCodeRef(absolute) ? absolute : undefined;
 }
 
-export async function secureWindowContext(
+// What a window's request names, resolved: the realm, mounted, and for a
+// target, its type's definition and, for a card, the card's URL.
+export interface ResolvedWindowRequest {
+  realm: Realm;
+  realmName: string;
+  target?: {
+    codeRef: ResolvedCodeRef;
+    instanceURL?: URL;
+    definition: Definition;
+  };
+}
+
+// Resolves what a window's request names, answering 404 alike for anything
+// the user can't read and anything that doesn't exist.
+export async function resolveWindowRequest(
   deps: Deps,
   user: string,
   request: SecureWindowContextRequest,
-): Promise<SecureWindowContext> {
+): Promise<ResolvedWindowRequest> {
   let { dbAdapter, findRealm, definitionLookup, virtualNetwork } = deps;
   let notFound = () => new UserKeyError(404, NOT_FOUND);
   let { target } = request;
@@ -285,15 +300,8 @@ export async function secureWindowContext(
     throw notFound();
   }
   let info = await realm.getRealmInfo();
-  let context: SecureWindowContext = {
-    realm: {
-      url: realm.url,
-      name: info.name,
-      directWriter: await isDirectWriter(dbAdapter, new URL(realm.url), user),
-    },
-  };
   if (!target) {
-    return context;
+    return { realm, realmName: info.name };
   }
 
   let codeRef: ResolvedCodeRef | undefined =
@@ -325,6 +333,38 @@ export async function secureWindowContext(
   } catch {
     throw notFound();
   }
+  return {
+    realm,
+    realmName: info.name,
+    target: { codeRef, instanceURL, definition },
+  };
+}
+
+export async function secureWindowContext(
+  deps: Deps,
+  user: string,
+  request: SecureWindowContextRequest,
+): Promise<SecureWindowContext> {
+  let { realm, realmName, target } = await resolveWindowRequest(
+    deps,
+    user,
+    request,
+  );
+  let context: SecureWindowContext = {
+    realm: {
+      url: realm.url,
+      name: realmName,
+      directWriter: await isDirectWriter(
+        deps.dbAdapter,
+        new URL(realm.url),
+        user,
+      ),
+    },
+  };
+  if (!target) {
+    return context;
+  }
+  let { codeRef, definition } = target;
   context.card = {
     name: definition.displayName ?? codeRef.name,
     module: codeRef.module,
@@ -337,7 +377,7 @@ export async function secureWindowContext(
     ? definition.operations![request.operation]
     : undefined;
   if (!operation) {
-    throw notFound();
+    throw new UserKeyError(404, NOT_FOUND);
   }
   context.operation = {
     name: request.operation,
@@ -385,5 +425,143 @@ export async function writableRealms(
   }
   return found.sort(
     (a, b) => a.name.localeCompare(b.name) || a.url.localeCompare(b.url),
+  );
+}
+
+// The realms this server serves that `user` can read by a permission row of
+// their own, by name: the realms they may approve a card's requests in. A
+// realm readable by everyone isn't one of theirs, so it isn't listed. None of
+// them is mounted to list it.
+export async function readableRealms(
+  { dbAdapter, findRealm }: Pick<Deps, 'dbAdapter' | 'findRealm'>,
+  user: string,
+): Promise<WritableRealm[]> {
+  if (isBotAccount(user)) {
+    return [];
+  }
+  let rows = (await query(dbAdapter, [
+    `SELECT rup.realm_url,
+            config.pristine_doc->'attributes'->'cardInfo'->>'name' AS name
+     FROM realm_user_permissions rup
+     LEFT JOIN realm_registry rr
+       ON rr.url = rup.realm_url AND rr.kind = 'published'
+     LEFT JOIN boxel_index config
+       ON config.url = rup.realm_url || 'realm.json'
+      AND config.realm_url = rup.realm_url
+      AND config.type = 'instance'
+      AND (config.is_deleted = FALSE OR config.is_deleted IS NULL)
+     WHERE rr.url IS NULL AND rup.read = true AND rup.username =`,
+    param(user),
+    `AND rup.realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)
+     ORDER BY rup.realm_url`,
+  ])) as { realm_url: string; name: string | null }[];
+  let found: WritableRealm[] = [];
+  for (let { realm_url: url, name } of rows) {
+    // A permission row can outlive the realm it names.
+    if ((await findRealm(new URL(url)))?.url === url) {
+      found.push({ url, name: name ?? UNNAMED_REALM });
+    }
+  }
+  return found.sort(
+    (a, b) => a.name.localeCompare(b.name) || a.url.localeCompare(b.url),
+  );
+}
+
+export interface CardWithRequests {
+  module: string;
+  name: string;
+  displayName: string;
+}
+
+// The most card types a realm's listing reads definitions for.
+const MAX_LISTED_TYPES = 200;
+
+// The card definitions the realm's cards adopt from that declare a `callApi`
+// operation sending the caller's own key (`{{userKey}}`), by display name:
+// the cards whose requests one of the user's keys can be approved for there.
+// Each definition is read from the definition cache, and only from a realm
+// the user may read.
+export async function realmCardsWithRequests(
+  deps: Deps,
+  user: string,
+  realmId: RealmResourceIdentifier,
+): Promise<CardWithRequests[]> {
+  let { dbAdapter, findRealm, definitionLookup, virtualNetwork } = deps;
+  let { realm } = await resolveWindowRequest(deps, user, { realm: realmId });
+  let rows = (await query(dbAdapter, [
+    `SELECT DISTINCT url, pristine_doc->'meta'->'adoptsFrom' AS adopts_from
+       FROM boxel_index
+      WHERE realm_url =`,
+    param(realm.url),
+    `AND type = 'instance' AND (is_deleted = FALSE OR is_deleted IS NULL)
+        AND pristine_doc->'meta'->'adoptsFrom' IS NOT NULL`,
+  ])) as { url: string; adopts_from: CodeRef | string | null }[];
+  let types = new Map<string, ResolvedCodeRef>();
+  for (let { url, adopts_from } of rows) {
+    let adoptsFrom =
+      typeof adopts_from === 'string' ? JSON.parse(adopts_from) : adopts_from;
+    if (!adoptsFrom) {
+      continue;
+    }
+    let absolute = codeRefWithAbsoluteIdentifier(
+      adoptsFrom,
+      url as RealmResourceIdentifier,
+      undefined,
+    );
+    if (isResolvedCodeRef(absolute)) {
+      types.set(`${absolute.module}#${absolute.name}`, absolute);
+    }
+    if (types.size >= MAX_LISTED_TYPES) {
+      break;
+    }
+  }
+  let readable = new Map<string, boolean>();
+  let found: CardWithRequests[] = [];
+  for (let codeRef of types.values()) {
+    let moduleURL = servedURL(
+      virtualNetwork,
+      codeRef.module as RealmResourceIdentifier,
+    );
+    let moduleRealm = moduleURL ? await findRealm(moduleURL) : undefined;
+    if (!moduleRealm) {
+      continue;
+    }
+    if (!readable.has(moduleRealm.url)) {
+      readable.set(
+        moduleRealm.url,
+        (await mayRead(dbAdapter, moduleRealm.url, user)) &&
+          Boolean(await moduleRealm.mount()),
+      );
+    }
+    if (!readable.get(moduleRealm.url)) {
+      continue;
+    }
+    let definition;
+    try {
+      definition = await definitionLookup
+        .forRealm(realm)
+        .lookupDefinition(codeRef);
+    } catch {
+      continue;
+    }
+    let sendsUserKey = Object.values(definition.operations ?? {}).some(
+      (operation) =>
+        operation.base === 'callApi' &&
+        !operation.invalid &&
+        operation.callApi?.slots.some((slot) => slot.key === 'userKey'),
+    );
+    if (sendsUserKey) {
+      found.push({
+        module: virtualNetwork.unresolveURL(String(codeRef.module)),
+        name: codeRef.name,
+        displayName: definition.displayName ?? codeRef.name,
+      });
+    }
+  }
+  return found.sort(
+    (a, b) =>
+      a.displayName.localeCompare(b.displayName) ||
+      a.module.localeCompare(b.module) ||
+      a.name.localeCompare(b.name),
   );
 }
