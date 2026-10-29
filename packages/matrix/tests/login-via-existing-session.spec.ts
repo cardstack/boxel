@@ -151,7 +151,7 @@ test.describe('login_via_existing_session', () => {
     );
 
     // The deep link survives the account switch: the card opens for the new
-    // session instead of the workspace chooser.
+    // session instead of the dashboard.
     await expect(
       page.locator(`[data-test-stack-card="${appURL}/fadhlan"]`),
     ).toHaveCount(1);

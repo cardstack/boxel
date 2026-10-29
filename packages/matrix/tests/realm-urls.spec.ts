@@ -64,11 +64,10 @@ test.describe('Realm URLs in Matrix account data', () => {
         '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"] [data-test-workspace-name]',
       ),
     ).toHaveText('Unknown Workspace');
-    // The chip may also hold a visually hidden full label.
     await expect(
       page.locator(
-        '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"] [data-test-workspace-visibility]',
+        '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"] [data-test-workspace-visibility-word]',
       ),
-    ).toContainText('private');
+    ).toHaveText('private');
   });
 });

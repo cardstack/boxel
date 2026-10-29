@@ -98,10 +98,7 @@ jobs:
           boxel_env="${{ inputs.boxel_environment }}"
           # Only the DASHBOARD_V2 build adds a segment, so the default
           # build's names stay as they were.
-          dashboard_suffix=""
-          if [ "${{ inputs.dashboard_v2 }}" = "true" ]; then
-            dashboard_suffix="-dashboard-v2"
-          fi
+          dashboard_suffix="${{ inputs.dashboard_v2 && '-dashboard-v2' || '' }}"
           # An empty boxel_environment encodes the standard-mode build;
           # any non-empty slug produces a distinct artifact + cache entry
           # so env-mode and standard-mode builds for the same SHA coexist.

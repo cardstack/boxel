@@ -85,6 +85,9 @@ jobs:
               - '.github/actions/**'
               - 'mise-tasks/**'
               - 'packages/observability/scripts/**'
+            # builds the host that the suites listing *test-web-assets download
+            test-web-assets: &test-web-assets
+              - '.github/workflows/test-web-assets.yaml'
             claude-hooks:
               - '.claude/hooks/**'
             boxel:
@@ -140,8 +143,7 @@ jobs:
               - 'packages/pretui/**'
             choreo:
               - *shared
-              # builds the host that the suites tagged *test-web-assets download
-              - &test-web-assets '.github/workflows/test-web-assets.yaml'
+              - *test-web-assets
               - 'packages/choreo/**'
               - 'packages/choreo-film-app/**'
               - 'packages/choreo-gallery/**'

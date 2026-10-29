@@ -143,7 +143,7 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
   - Ensure that host and realm server are running, the host with the dashboard on (the specs drive it, as CI's matrix host build does):
     `cd ../host && DASHBOARD_V2=true pnpm start`
     `MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix`
-  - The flag is baked in at build time. `test-services:matrix` reuses whatever host already answers on port 4200, so restart a dev server started without the flag. With no dev server it serves `packages/host/dist`: build that with `DASHBOARD_V2=true pnpm build` first, and rebuild it without the flag before running host tests from it.
+  - The flag is baked in at build time. `test-services:matrix` reuses whatever host already answers on port 4200, so restart a dev server started without the flag. With no dev server it serves `packages/host/dist`: build that with `DASHBOARD_V2=true pnpm build` first, and rebuild it without the flag before running host tests or the AI assistant evals (`packages/ai-assistant-evals`) from it. The evals drive the workspace chooser, so they hang against a host with the flag.
   - Run tests:
     `pnpm test`
   - `pnpm test` starts Synapse from the `test` template, which asks for an invite code at registration. A spec that needs a Synapse configured otherwise goes under `tests/with-synapse/<template>/`, named for a template in `support/synapse/`, and runs in a pass of its own against a Synapse from that template:
