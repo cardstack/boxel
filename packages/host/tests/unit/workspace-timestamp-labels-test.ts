@@ -81,6 +81,38 @@ module('Unit | workspace timestamp labels', function (hooks) {
       );
     });
 
+    test('spells out abbreviated units when spoken', function (assert) {
+      let spoken = { spoken: true };
+      assert.strictEqual(
+        formatUpdatedTime(ago(1, 'sec'), spoken),
+        'Updated 1 second ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(59, 'sec'), spoken),
+        'Updated 59 seconds ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(1, 'min'), spoken),
+        'Updated 1 minute ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(2, 'min'), spoken),
+        'Updated 2 minutes ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(1, 'hr'), spoken),
+        'Updated 1 hour ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(5, 'hr'), spoken),
+        'Updated 5 hours ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(3, 'day'), spoken),
+        'Updated 3 days ago',
+      );
+    });
+
     test('clamps a future timestamp to "just now"', function (assert) {
       // A client clock slightly ahead of the server, or a write racing this
       // render, would otherwise produce a negative age.
