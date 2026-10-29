@@ -1,12 +1,8 @@
 import { hash } from '@ember/helper';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { tracked } from '@glimmer/tracking';
-
-import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
@@ -21,19 +17,14 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
+import { CreateWorkspaceFlow } from '@cardstack/host/lib/create-workspace-flow';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
-import type MatrixService from '@cardstack/host/services/matrix-service';
-
-import { generateRandomWorkspaceName } from '../../../lib/random-name';
-import {
-  getRandomBackgroundURL,
-  iconURLFor,
-  toWorkspaceEndpoint,
-} from '../../../lib/utils';
 
 import ModalContainer from '../../modal-container';
 
 import ItemContainer from './item-container';
+
+import type { task } from 'ember-concurrency';
 
 interface AddWorkspaceModalSignature {
   Element: HTMLDivElement;
@@ -189,57 +180,13 @@ interface Signature {
 }
 
 export default class AddWorkspace extends Component<Signature> {
-  @service declare private matrixService: MatrixService;
-  @tracked private isModalOpen: boolean = false;
-  @tracked private endpoint = '';
-  @tracked private displayName = '';
-  @tracked private hasUserEditedEndpoint = false;
-  @tracked private error: string | null = null;
-  private setEndpoint = (value: string) => {
-    this.hasUserEditedEndpoint = true;
-    this.endpoint = value;
-  };
-  private setDisplayName = (value: string) => {
-    this.displayName = value;
-    // if the user starts typing in the endpoint field, then stop helping them
-    if (!this.hasUserEditedEndpoint) {
-      this.endpoint = toWorkspaceEndpoint(value);
-    }
-  };
-  private closeModal = () => {
-    this.isModalOpen = false;
-  };
-  private initializeSuggestedName() {
-    this.hasUserEditedEndpoint = false;
-    this.setDisplayName(generateRandomWorkspaceName());
-  }
-  private createWorkspaceTask = task(async () => {
-    this.error = null;
-    try {
-      await this.matrixService.createPersonalRealmForUser({
-        endpoint: this.endpoint,
-        name: this.displayName,
-        iconURL: iconURLFor(this.displayName),
-        backgroundURL: getRandomBackgroundURL(),
-      });
-      this.closeModal();
-    } catch (e: any) {
-      this.error = e.message;
-    }
-  });
+  private flow = new CreateWorkspaceFlow(this);
   private get showSelectionRing() {
     return Boolean(this.args.isSelected && this.args.selectionActive);
   }
-  private setIsModalOpen = (value: boolean) => {
-    this.isModalOpen = value;
-    if (value) {
-      this.error = null;
-      this.initializeSuggestedName();
-    }
-  };
   <template>
     <ItemContainer
-      {{on 'click' (fn this.setIsModalOpen true)}}
+      {{on 'click' (fn this.flow.setIsModalOpen true)}}
       {{focusWhenSelected @isSelected}}
       class='container {{if this.showSelectionRing "is-selected"}}'
       title='Create a New Workspace'
@@ -253,18 +200,18 @@ export default class AddWorkspace extends Component<Signature> {
         New Workspace
       </div>
     </ItemContainer>
-    {{#if this.isModalOpen}}
+    {{#if this.flow.isModalOpen}}
       <ToElsewhere
         @named='modal-elsewhere'
         @send={{component
           AddWorkspaceModal
-          displayName=this.displayName
-          endpoint=this.endpoint
-          setDisplayName=this.setDisplayName
-          setEndpoint=this.setEndpoint
-          createWorkspaceTask=this.createWorkspaceTask
-          error=this.error
-          onClose=(fn this.setIsModalOpen false)
+          displayName=this.flow.displayName
+          endpoint=this.flow.endpoint
+          setDisplayName=this.flow.setDisplayName
+          setEndpoint=this.flow.setEndpoint
+          createWorkspaceTask=this.flow.createWorkspaceTask
+          error=this.flow.error
+          onClose=(fn this.flow.setIsModalOpen false)
         }}
         }}
       />
