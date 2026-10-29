@@ -14,6 +14,9 @@ import {
   listSystemKeys,
   replacePlatformClientSecret,
   readKeyValue,
+  refuseClientOptions,
+  refuseNoteForClient,
+  refuseSystemOptions,
   replaceSystemKey,
   resolveSystemKeyId,
   type SystemKey,
@@ -314,7 +317,29 @@ describe('boxel realm-server keys', () => {
       }
     });
 
-    it('takes a platform client by --name, its settings as flags, and refuses what belongs to a system key', async () => {
+    it("refuses a system key's settings for a platform client, a platform client's for a system key, and a note it would record nowhere", () => {
+      let base = { realmServer: 'https://realms.example.test' };
+      expect(() =>
+        refuseSystemOptions({
+          ...base,
+          destination: 'https://api.github.com/',
+          creditStrategy: 'none',
+        }),
+      ).toThrow(
+        /--destination, --credit-strategy are for a system key, not a platform client/,
+      );
+      expect(() =>
+        refuseClientOptions({ ...base, clientId: 'Iv23.x', apiHost: ['a'] }),
+      ).toThrow(/--client-id, --api-host are for a platform client/);
+      expect(() => refuseNoteForClient({ ...base, note: 'rotating' })).toThrow(
+        /the server keeps none for a platform client/,
+      );
+      expect(() => refuseSystemOptions(base)).not.toThrow();
+      expect(() => refuseClientOptions(base)).not.toThrow();
+      expect(() => refuseNoteForClient(base)).not.toThrow();
+    });
+
+    it('exposes --kind, --name and the client settings as flags', async () => {
       let keys = buildBoxelProgram('0.0.0')
         .commands.find((command) => command.name() === 'realm-server')!
         .commands.find((command) => command.name() === 'keys')!;

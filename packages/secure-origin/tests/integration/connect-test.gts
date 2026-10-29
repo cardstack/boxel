@@ -333,7 +333,9 @@ module('Integration | connecting an account', function (hooks) {
             { realm: REALM, destination: DESTINATION.href },
             'asks for the apps serving the operation’s destination, in its realm',
           );
-          return json(200, clientResources());
+          // A workspace that shares no app for the service: Boxel's, then
+          // the user's own.
+          return json(200, clientResources([CLIENTS[0]!, CLIENTS[2]!]));
         },
       });
       visitShell(
@@ -359,31 +361,18 @@ module('Integration | connecting an account', function (hooks) {
         ['repo', 'read:user'],
         'each permission it asks for, one per line',
       );
-      let shared = '[data-test-client-choice="Team GitHub App"]';
-      assert
-        .dom(`${shared} [data-test-client-owner]`)
-        .hasText('Shared in Team Workspace');
-      assert
-        .dom(`${shared} [data-test-client-no-permissions]`)
-        .hasText('No extra permissions requested');
-      assert.dom(`${shared} [data-test-client-permissions]`).doesNotExist();
-      assert
-        .dom(
-          '[data-test-client-choice="My Forge App"] [data-test-client-owner]',
-        )
-        .hasText('Your app');
+      let own = '[data-test-client-choice="My Forge App"]';
+      assert.dom(`${own} [data-test-client-owner]`).hasText('Your app');
 
       assert
         .dom(`${platform} input`)
-        .isChecked('the first app, listed ahead of the user’s own, is chosen');
+        .isChecked('Boxel’s app, listed ahead of the user’s own, is chosen');
+      assert.dom('[data-test-connect-name]').hasValue('GitHub');
       assert.dom('[data-test-connect-back]').doesNotExist();
-      await click(`${shared} input`);
+      await click(`${own} input`);
       assert
         .dom('[data-test-connect-name]')
-        .hasValue(
-          'Team GitHub App',
-          'named after the app until a name is typed',
-        );
+        .hasValue('My Forge App', 'named after the app until a name is typed');
       await fillIn('[data-test-connect-name]', ' Work GitHub ');
       await click(`${platform} input`);
       assert
@@ -407,7 +396,35 @@ module('Integration | connecting an account', function (hooks) {
       );
     });
 
-    test('the workspace’s one shared app, or else Boxel’s, starts out chosen; among several shared apps or only the user’s own, none is', async function (assert) {
+    test('opened for an operation in a workspace that shares an app for the service, offers that app in Boxel’s place, chosen', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context(),
+        'GET _oauth/clients': () =>
+          json(200, clientResources([CLIENTS[1]!, CLIENTS[2]!])),
+      });
+      visitShell(
+        `connect#card=${encodeURIComponent(CARD)}&operation=listRepos`,
+      );
+      await render(ConnectPage);
+      await waitFor('[data-test-connect-form]');
+      let shared = '[data-test-client-choice="Team GitHub App"]';
+      assert
+        .dom(`${shared} [data-test-client-owner]`)
+        .hasText('Shared in Team Workspace');
+      assert
+        .dom(`${shared} [data-test-client-no-permissions]`)
+        .hasText('No extra permissions requested');
+      assert.dom(`${shared} [data-test-client-permissions]`).doesNotExist();
+      assert.dom(`${shared} input`).isChecked();
+      await click('[data-test-connect-submit]');
+      await navigated();
+      assert.deepEqual(connectRequest().data.attributes, {
+        client: SHARE_REF,
+        name: 'Team GitHub App',
+      });
+    });
+
+    test('the workspace’s one shared app, or else Boxel’s, starts out chosen; among several such apps, or only the user’s own, none is', async function (assert) {
       let [platform, share, own] = CLIENTS;
       let otherShare = {
         ...share!,
@@ -434,6 +451,20 @@ module('Integration | connecting an account', function (hooks) {
       assert.deepEqual(await chosen([share!, own!]), ['Team GitHub App']);
       assert.deepEqual(await chosen([platform!, own!]), ['GitHub']);
       assert.deepEqual(await chosen([share!, otherShare, own!]), []);
+      let otherService = {
+        ...platform!,
+        ref: {
+          kind: 'platform',
+          clientId: '66666666-6666-4666-8666-666666666666',
+        },
+        label: 'Linear',
+        apiHosts: ['https://api.linear.app/'],
+      };
+      assert.deepEqual(
+        await chosen([share!, otherService, own!]),
+        [],
+        'apps for different services: the user picks',
+      );
       assert.deepEqual(await chosen([own!, otherOwn]), []);
       assert
         .dom('[data-test-connect-submit]')

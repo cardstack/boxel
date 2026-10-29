@@ -804,6 +804,31 @@ module(basename(import.meta.filename), function (hooks) {
       "the realm's shared client takes the platform's place",
     );
 
+    // Opened for the realm alone, with no destination: a platform client
+    // for another service is still offered beside the shared one.
+    await addPlatformClient(dbAdapter, keyring, {
+      name: 'other-service',
+      label: 'Other service',
+      secret: CLIENT_SECRET,
+      oauth: clientSettings({ apiHosts: [`${OTHER_HOST}/api/`] }),
+    });
+    let realmOnly = await request
+      .get('/_oauth/clients')
+      .query({ realm: realmURL.href })
+      .set('Authorization', `Bearer ${createJWT(realm, TEAMMATE, [])}`);
+    assert.deepEqual(
+      realmOnly.body.data.map((c: any) => [
+        c.attributes.kind,
+        c.attributes.label,
+      ]),
+      [
+        ['share', 'Team GitHub app'],
+        ['platform', 'Other service'],
+        ['own', 'my app'],
+      ],
+      "a shared client hides only the platform's client for the same service",
+    );
+
     let elsewhere = await request
       .get('/_oauth/clients')
       .query({ destination: `${PROVIDER}/api/` })

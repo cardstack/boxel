@@ -322,7 +322,7 @@ function printHistory(history: SystemKeyChange[]): void {
   }
 }
 
-interface KeysCliOptions {
+export interface KeysCliOptions {
   realmServer: string;
   kind?: string;
   name?: string;
@@ -397,7 +397,7 @@ function clientName(options: KeysCliOptions): string {
 
 // The server keeps no history of platform clients, so a note would be
 // recorded nowhere.
-function refuseNoteForClient(options: KeysCliOptions): void {
+export function refuseNoteForClient(options: KeysCliOptions): void {
   if (options.note !== undefined) {
     throw new Error(
       "--note is recorded in a system key's history; the server keeps none for a platform client",
@@ -405,7 +405,7 @@ function refuseNoteForClient(options: KeysCliOptions): void {
   }
 }
 
-function refuseClientOptions(options: KeysCliOptions): void {
+export function refuseClientOptions(options: KeysCliOptions): void {
   let clientOnly = (
     [
       ['name', '--name'],
@@ -699,8 +699,8 @@ export function registerKeysCommand(realmServer: Command): void {
     );
 }
 
-async function addClientCommand(options: KeysCliOptions): Promise<void> {
-  refuseNoteForClient(options);
+// A platform client takes none of a system key's settings.
+export function refuseSystemOptions(options: KeysCliOptions): void {
   let systemOnly = (
     [
       ['destination', '--destination'],
@@ -715,6 +715,11 @@ async function addClientCommand(options: KeysCliOptions): Promise<void> {
       `${systemOnly.map(([, flag]) => flag).join(', ')} ${systemOnly.length === 1 ? 'is' : 'are'} for a system key, not a platform client`,
     );
   }
+}
+
+async function addClientCommand(options: KeysCliOptions): Promise<void> {
+  refuseNoteForClient(options);
+  refuseSystemOptions(options);
   let missing = (
     [
       ['name', '--name'],

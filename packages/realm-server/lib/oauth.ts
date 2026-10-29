@@ -575,9 +575,9 @@ export async function deletePlatformClient(
 
 // The clients a person may connect through, in the order connect mode
 // offers them: the authorization-code clients shared into `realmURL` (whose
-// shares are active), else the platform's, then their own. A realm that
-// shares a client for a destination has chosen the app its people use there,
-// so the platform's client for the same destination isn't offered beside it.
+// shares are active), the platform's, then their own. A realm that shares a
+// client for a service has chosen the app its people use there, so the
+// platform's client for the same service isn't offered beside it.
 // With a destination, only clients that name an API host covering it, so
 // connect mode offers what serves the operation. A client's secret and its
 // owner are never part of the answer.
@@ -709,7 +709,18 @@ export async function listConnectableClients(
       );
     }
   }
-  return [...(shared.length > 0 ? shared : platform), ...own];
+  // A platform client gives way only to a shared client for the same
+  // service: one whose API hosts overlap its own. Without a destination, a
+  // realm that shares an app for one service still gets the platform's for
+  // the others.
+  let overlaps = (a: string[], b: string[]) =>
+    a.some((x) =>
+      b.some((y) => destinationCovers(x, y) || destinationCovers(y, x)),
+    );
+  let unshadowed = platform.filter(
+    (client) => !shared.some((s) => overlaps(s.apiHosts, client.apiHosts)),
+  );
+  return [...shared, ...unshadowed, ...own];
 }
 
 export function validateClientRef(raw: unknown): ClientRef {

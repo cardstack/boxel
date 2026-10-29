@@ -204,12 +204,14 @@ connect mode offers it (`https://api.github.com/` for the GitHub App). A
 client's endpoints never change once stored; register a new client to move
 them.
 
-**A realm's shared client takes the platform client's place.** For a realm
-that has an active share of an authorization-code client serving the
-destination, connect mode offers the shared clients and not the platform's;
-everywhere else it offers the platform's. Either way it lists the person's
-own clients after them. The page starts with the first one chosen when it is
-the only shared client, or the only platform client.
+**A realm's shared client takes the platform client's place for its
+service.** Connect mode lists the realm's active shares of authorization-code
+clients first, then each platform client no shared client overlaps (their API
+hosts, one covering the other), then the person's own. So a realm that shares a
+GitHub App hides Boxel's for GitHub, and a realm that shares only a Linear app
+still gets Boxel's for GitHub. With a destination, every list is first narrowed
+to the clients serving it. The page starts with a client chosen when it is the
+only one, or the only shared or platform client listed.
 
 ### Boxel (read-only), the GitHub App
 
@@ -217,8 +219,8 @@ The platform's client for GitHub is a **GitHub App** named **Boxel
 (read-only)**, owned by the Cardstack GitHub organization
 (`https://github.com/organizations/cardstack/settings/apps/boxel-read-only`).
 The organization's owners administer it. Each environment stores it as the
-platform client named **`github`**, which is the name `boxel keys connect
---client platform:github` uses.
+platform client named **`github`**; keep that name in every environment, so
+anything that names the platform's GitHub client finds it.
 
 Its settings on GitHub:
 
@@ -273,23 +275,30 @@ boxel realm-server keys add --realm-server https://realms-staging.stack.cards \
 **Rotating its secret.** Generate a new client secret on the app's settings
 page (GitHub keeps both working until the old one is deleted), run
 `boxel realm-server keys replace --kind oauth-client --name github` in each
-environment, check a connection still works (a `callApi` through one, or `keys
-show`'s `state: active`), and then delete the old secret on GitHub. Replacing
+environment, and then check the new secret by **signing in again**: connect a
+GitHub account through the app (or Reconnect one) in each environment. Neither
+`keys show`'s `state: active` nor a `callApi` proves it: `replace` sets the
+state to `active` whatever was typed, and a call reuses a cached access token
+without reaching GitHub's token endpoint. Only once a fresh sign-in succeeds,
+delete the old secret on GitHub. Replacing
 it also clears a client marked `broken`, which is what an `invalid_client`
 from GitHub leaves behind (see [Refresh errors](#refresh-errors)): every
 connection through it resumes at once, with no one signing in again.
 
-### Installing the app in an organization
+### Installing the app
 
-A GitHub App's user token reaches an organization's repositories only where
-the app is installed. So a person whose organization hasn't installed Boxel
-(read-only) can connect, and their own public data comes back, but that
-organization's private repositories don't: GitHub answers as if they didn't
-exist.
+A GitHub App's user token reaches private repositories only on accounts where
+the app is installed: a person's own account as much as an organization. So a
+person can connect without any install and their public data comes back, but
+the private repositories of an account without the install don't: GitHub
+answers as if they didn't exist. Both are installed at
+`https://github.com/apps/boxel-read-only/installations/new`.
 
-- A member asks for it at `https://github.com/apps/boxel-read-only/installations/new`,
-  picking the organization. A member who isn't an owner sees **Request**
-  instead of **Install**, and GitHub sends the request to the owners.
+- For their own private repositories, a person installs it on their personal
+  account.
+- For an organization's, a member picks the organization. Someone who can't
+  install it there sees **Request** instead of **Install**, and GitHub sends
+  the request to the owners (unless the organization has turned requests off).
 - An owner approves it once, choosing all repositories or some. That install
   covers every Boxel use of the app in the organization: every member who
   connects reads what both they and the install can read, with no further

@@ -54,10 +54,9 @@ async function readsRealm(
 
 // `GET /_oauth/clients?realm=<url>&destination=<url>`: the clients connect
 // mode offers the signed-in user — the realm's shared ones (when they read
-// the realm), else the platform's, then their own — each with the
-// permissions it asks for. With a destination, only those whose API hosts
-// cover it, so a realm's shared client for a destination is offered in place
-// of the platform's. With
+// the realm), the platform's for services the realm shares none for, then
+// their own — each with the permissions it asks for. With a destination,
+// only those whose API hosts cover it. With
 // `reconnect=<key id>`, only the client that connection signs in through.
 export function handleListConnectableClients(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {

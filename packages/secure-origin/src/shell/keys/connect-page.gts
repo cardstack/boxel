@@ -1,8 +1,9 @@
 // The `connect` page: connects one of the user's accounts at a service, by
 // signing in there through an OAuth app. It lists the apps the realm server
 // offers the user — those shared into the workspace the window was opened
-// for, else Boxel's own, then the user's own — each with the permissions it
-// asks for. The workspace's shared app, or else Boxel's, starts out chosen.
+// for, Boxel's own for services the workspace shares none for, then the
+// user's own — each with the permissions it asks for. When one app is the
+// workspace's or Boxel's, it starts out chosen.
 // The user picks one and names the connection, and the window goes to the
 // service's sign-in page. The service sends the user back to the realm
 // server, which finishes the sign-in and sends the window on to `connected`.
@@ -50,25 +51,18 @@ import OpenedForSummary from './opened-for-summary.gts';
 import { contextRequest, openedFor } from './opened-for.ts';
 import { addressOf } from './workspace-dropdown.gts';
 
-// The app that starts out chosen: the only one offered, or the first when it
-// is the workspace's one shared app or Boxel's one app for the site, which
-// the realm server lists ahead of the user's own. Among several shared apps
-// the user picks.
+// The app that starts out chosen: the only one offered, or the one app that
+// is the workspace's or Boxel's, which the realm server lists ahead of the
+// user's own. With several such apps (two shared, or apps for different
+// services) the user picks.
 export function defaultClient(
   clients: ConnectableClient[],
 ): number | undefined {
   if (clients.length === 1) {
     return 0;
   }
-  let first = clients[0];
-  if (
-    first &&
-    first.kind !== 'own' &&
-    clients.filter((client) => client.kind === first.kind).length === 1
-  ) {
-    return 0;
-  }
-  return undefined;
+  let offered = clients.filter((client) => client.kind !== 'own');
+  return offered.length === 1 && clients[0] === offered[0] ? 0 : undefined;
 }
 
 type State =
