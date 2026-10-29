@@ -637,6 +637,16 @@ module(basename(import.meta.filename), function () {
         'the owner sees who suspended their share while rows name them both',
       );
 
+      await insertPermissions(dbAdapter, new URL(REALM), { [OWNER]: [] });
+      assert.deepEqual(
+        await ownSuspendedBy(),
+        [null],
+        `the owner doesn't see who suspended their share once the owner's own row is deleted`,
+      );
+      await insertPermissions(dbAdapter, new URL(REALM), {
+        [OWNER]: ['read'],
+      });
+
       await insertPermissions(dbAdapter, new URL(REALM), { [SUSPENDER]: [] });
       assert.deepEqual(
         await named(),
