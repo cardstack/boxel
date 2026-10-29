@@ -40,7 +40,12 @@ import {
   setPassScheduler,
 } from './far.ts';
 import { GESTURE, type GestureRef, trackGestures } from './gesture.ts';
-import { boundsOf as bounds, measure, type Snapshot } from './measure.ts';
+import {
+  boundsOf as bounds,
+  isRendered,
+  measure,
+  type Snapshot,
+} from './measure.ts';
 import {
   type ChoreoHost,
   type ChoreoProvider,
@@ -452,6 +457,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   /** participants whose Presence is letting them go: removed once, not on every pass while they leave */
   private leaving = new Set<ChoreoNode>();
   private snapshots = new Map<ChoreoNode, Snapshot>();
+  /** participants with no layout box before this pass (display: none) */
+  private unrendered = new Set<ChoreoNode>();
   private rootSnapshot?: DOMRect;
   private passPending = false;
   private rendered = false;
@@ -713,6 +720,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
 
   private snapshot() {
     this.snapshots.clear();
+    this.unrendered.clear();
     this.rootSnapshot = this.element?.getBoundingClientRect();
     const wired = this.args.inView ? this.nearView : undefined;
     for (const node of this.participants) {
@@ -722,7 +730,11 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         !this.orphans.has(node) &&
         (!wired || wired.has(node) || this.flying.has(node))
       ) {
-        this.snapshots.set(node, measure(el));
+        if (isRendered(el)) {
+          this.snapshots.set(node, measure(el));
+        } else {
+          this.unrendered.add(node);
+        }
       }
     }
   }
@@ -830,6 +842,17 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
           this.leaving.add(node);
           removed.push(sprite(node, 'removed', bounds(snap, before)));
         }
+      } else if (this.unrendered.has(node)) {
+        // shown again (a fold opening): it arrives where it now lives,
+        // rather than moving from the empty box display: none measured
+        if (isRendered(el)) {
+          inserted.push(
+            sprite(node, 'inserted', undefined, bounds(measure(el), after)),
+          );
+        }
+      } else if (snap && !isRendered(el)) {
+        // hidden this pass: it has no box to move to, and nothing to fade
+        this.leaving.delete(node);
       } else if (snap) {
         this.leaving.delete(node);
         kept.push(

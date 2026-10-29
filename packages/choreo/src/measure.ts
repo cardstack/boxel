@@ -89,6 +89,14 @@ export const offsetBox = (el: Element): DOMRect =>
     el
   ).getBoundingClientRect();
 
+/**
+ * Does the element have a layout box? One under `display: none` (its own or
+ * an ancestor's, as with the `hidden` attribute) measures as an empty rect at
+ * the page origin, which is no place to move from or to.
+ */
+export const isRendered = (el: Element): boolean =>
+  el.getClientRects().length > 0;
+
 export const measure = (el: Element): Snapshot => ({
   el: el.getBoundingClientRect(),
   // read with the geometry, while the element is still attached: a removed
