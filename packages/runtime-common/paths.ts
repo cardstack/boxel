@@ -80,12 +80,20 @@ export class RealmPaths {
       }
 
       if (opts.preserveQuerystring !== true) {
-        // Strip the query and fragment on a copy. Re-resolving the pathname
-        // against the URL instead would read a pathname that starts with `//`
-        // as a protocol-relative reference to another host.
-        input = new URL(input.href);
-        input.search = '';
-        input.hash = '';
+        // Strip the query and fragment by re-reading the decoded pathname,
+        // which also normalizes what decoding exposed (`\` becomes `/`, tabs
+        // and newlines are dropped) the way `fileURL` does. It is read under
+        // the realm's origin: resolved against the URL itself, a pathname that
+        // starts with `//` would name another host. Decoding can expose dot
+        // segments, so the result is checked against the realm again.
+        input = new URL(input.origin + decodeURI(input.pathname));
+        if (!this.inRealm(input)) {
+          let error = new Error(
+            `realm ${this.url} does not contain ${input.href}`,
+          );
+          (error as any).status = 404;
+          throw error;
+        }
       }
 
       // this will always remove a leading slash because our constructor ensures

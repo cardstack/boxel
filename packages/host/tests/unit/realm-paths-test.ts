@@ -51,6 +51,19 @@ module('Unit | RealmPaths', function (hooks) {
       '/example.org%2f..',
       'a pathname that starts with // and names no valid host does not throw',
     );
+    assert.strictEqual(
+      realmPaths.local(new URL('https://cardstack.com/hümans/a%5Cb')),
+      'a/b',
+      'a decoded backslash is normalized to a slash, as fileURL does',
+    );
+    assert.throws(
+      () =>
+        realmPaths.local(
+          new URL('https://cardstack.com/hümans/%252e%252e/other/a'),
+        ),
+      /does not contain/,
+      'a pathname whose decoding leaves the realm is refused',
+    );
   });
 
   test('#fileURL', function (assert) {
