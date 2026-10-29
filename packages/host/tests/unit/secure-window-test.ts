@@ -52,6 +52,37 @@ module('Unit | secure-window', function () {
     });
   });
 
+  test('replacing the key an operation sends names the operation and what it is on', function (assert) {
+    let onCard = secureWindowURL({
+      mode: 'replace-key',
+      target: { kind: 'instance', card: CARD, operation: 'forecast' },
+      reason: 'The forecast service rejected your key',
+    });
+    assert.strictEqual(onCard.split('#')[0], secureOriginPage('replace-key'));
+    assert.strictEqual(new URL(onCard).search, '');
+    assert.deepEqual(fragmentOf(onCard), {
+      card: CARD,
+      operation: 'forecast',
+      reason: 'The forecast service rejected your key',
+    });
+    let onType = secureWindowURL({
+      mode: 'replace-key',
+      target: {
+        kind: 'type',
+        module: `${REALM}weather-station`,
+        name: 'WeatherStation',
+        realm: REALM,
+        operation: 'forecast',
+      },
+    });
+    assert.deepEqual(fragmentOf(onType), {
+      module: `${REALM}weather-station`,
+      name: 'WeatherStation',
+      realm: REALM,
+      operation: 'forecast',
+    });
+  });
+
   test('a key entered for nothing in particular carries no fragment', function (assert) {
     let url = secureWindowURL({ mode: 'enter-key' });
     assert.strictEqual(url, secureOriginPage('enter-key'));
