@@ -4164,9 +4164,34 @@ module(
           search('boom', `['@cardstack/catalog/']`),
           /the catalog is down/,
         );
+        let run = (code: string) =>
+          command.execute({ realm: testRealmURL, roomId, code });
+        await assert.rejects(
+          run(
+            `await realm.entries.search({}, { realms: ['@cardstack/catalog/'], scope: 'card' });`,
+          ),
+          /Invalid scope "card"/,
+        );
+        await assert.rejects(
+          run(
+            `await realm.entries.search({}, { realms: ['@cardstack/catalog/', '@nope/realm/'] });`,
+          ),
+          /Unknown realm identifier "@nope\/realm\/"/,
+        );
+        await run(`await realm.entries.search(
+  {
+    filter: {
+      every: [
+        { matches: ${JSON.stringify('x'.repeat(400))} },
+        { not: { type: { module: '@cardstack/base/spec', name: 'Spec' } } },
+      ],
+    },
+  },
+  { realms: ['@cardstack/catalog/'] },
+);`);
 
         let spec = '@cardstack/base/spec#Spec';
-        let [named, byDefault, failed, ...rest] = recorded;
+        let [named, byDefault, failed, excluding, ...rest] = recorded;
         assert.deepEqual(
           named,
           {
@@ -4217,9 +4242,23 @@ module(
           `the error is recorded: ${error}`,
         );
         assert.deepEqual(
+          excluding,
+          {
+            event_type: 'catalog-search',
+            query_text: `${'x'.repeat(299)}…`,
+            query_type: '',
+            total: 0,
+            returned: 0,
+            incomplete: false,
+            error: '',
+            realm: testRealmURL,
+          },
+          'a type the query excludes is not the type it searched for, and long text is cut',
+        );
+        assert.deepEqual(
           rest,
           [],
-          'a search of another realm only is not recorded',
+          'a search of another realm only, or one refused before it was sent, is not recorded',
         );
       } finally {
         telemetry.recordEvent = recordEvent;
