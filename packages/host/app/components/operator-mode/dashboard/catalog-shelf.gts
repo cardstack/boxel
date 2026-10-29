@@ -284,7 +284,7 @@ export default class CatalogShelf extends Component<Signature> {
                         @tone='neutral'
                         @appearance='outlined'
                         @shape='pill'
-                        aria-label='Try it: {{story.name}}'
+                        aria-label='Try it {{story.name}}'
                         {{on 'click' (fn this.open story.exampleId)}}
                         data-test-catalog-story-try
                       >Try it</Button>
@@ -294,10 +294,10 @@ export default class CatalogShelf extends Component<Signature> {
                       @tone='neutral'
                       @appearance='accent'
                       @shape='pill'
-                      aria-label='{{story.action}} {{story.name}}'
+                      aria-label='Details {{story.name}}'
                       {{on 'click' (fn this.open story.id)}}
                       data-test-catalog-story-action
-                    >{{story.action}}</Button>
+                    >Details</Button>
                   </div>
                 </li>
               {{/let}}
@@ -562,11 +562,6 @@ export default class CatalogShelf extends Component<Signature> {
       }
       .see-all.is-pending {
         visibility: hidden;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .story {
-          transition: none;
-        }
       }
     </style>
   </template>

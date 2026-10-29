@@ -29,12 +29,11 @@ export interface ListingEntry {
 }
 
 export interface Story {
-  // The listing's URL, which Remix / Use and the story itself open.
+  // The listing's URL, which Details and the story itself open.
   id: string;
   eyebrow: string;
   name: string;
   copy: string;
-  action: 'Remix' | 'Use';
   // The listing's thumbnail, which stands in for the example's art.
   thumbnailURL: string | undefined;
   // The listing's first example, which Try it opens and the art shows.
@@ -143,12 +142,6 @@ export function shelfCopy(kind: string, summary: string | undefined): string {
   return KIND_COPY[kind] ?? DEFAULT_COPY;
 }
 
-// Themes and skills are used as they are; cards, fields and apps are
-// remixed into a workspace of your own. Either way the listing runs it.
-export function actionOf(kind: string): Story['action'] {
-  return kind === 'Theme' || kind === 'Skill' ? 'Use' : 'Remix';
-}
-
 function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
@@ -181,10 +174,9 @@ export function storiesFrom({
       let attributes = entry.item?.attributes ?? {};
       return {
         id: entry.id,
-        eyebrow: eyebrowOf(kind, index === 0),
+        eyebrow: eyebrowOf(kind, index === 0 && order.has(entry.id)),
         name: shelfName(text(attributes.name)),
         copy: shelfCopy(kind, text(attributes.summary)),
-        action: actionOf(kind),
         thumbnailURL: text(attributes.cardThumbnailURL),
         exampleId: linkedIds(entry, 'examples', resolve)[0],
         tint,

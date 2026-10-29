@@ -2,7 +2,6 @@ import { module, test } from 'qunit';
 
 import {
   STORY_COUNT,
-  actionOf,
   eyebrowOf,
   kindOf,
   linkedIds,
@@ -58,14 +57,6 @@ module('Unit | dashboard catalog stories', function () {
     assert.strictEqual(eyebrowOf('Field', false), 'Build with it');
     assert.strictEqual(eyebrowOf('Card', false), 'New card');
     assert.strictEqual(eyebrowOf('Listing', false), 'New in the catalog');
-  });
-
-  test('themes and skills are used; everything else is remixed', function (assert) {
-    assert.strictEqual(actionOf('Theme'), 'Use');
-    assert.strictEqual(actionOf('Skill'), 'Use');
-    assert.strictEqual(actionOf('Card'), 'Remix');
-    assert.strictEqual(actionOf('App'), 'Remix');
-    assert.strictEqual(actionOf('Field'), 'Remix');
   });
 
   test('a name drops the “definition” suffix the catalog index needs', function (assert) {
@@ -167,5 +158,18 @@ module('Unit | dashboard catalog stories', function () {
       'the first example is the one the story shows',
     );
     assert.strictEqual(stories[1]!.exampleId, undefined);
+  });
+
+  test('with nothing featured, no story is the pick of the week', function (assert) {
+    let stories = storiesFrom({
+      featuredIds: [],
+      featured: [],
+      others: [listing('c/AppListing/1'), listing('a/ThemeListing/1')],
+      resolve,
+    });
+    assert.deepEqual(
+      stories.map((story) => story.eyebrow),
+      ['New app', 'New theme'],
+    );
   });
 });

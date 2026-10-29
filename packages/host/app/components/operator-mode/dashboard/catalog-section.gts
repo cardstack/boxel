@@ -12,6 +12,7 @@ import { catalogRealmURL } from '@cardstack/host/lib/utils';
 import ManageCatalogs from '../workspace-chooser/manage-catalogs';
 
 import CatalogShelf from './catalog-shelf';
+import SectionHead from './section-head';
 import Workspace from './workspace';
 
 import type KeyboardCursor from './keyboard-cursor';
@@ -21,6 +22,8 @@ interface Signature {
   Args: {
     realmIdentifiers: RealmIdentifier[];
     emptyMessage: string | null;
+    // The catalogs shown, as the section rail counts them.
+    count: number;
     showShelf: boolean;
     // Placed ahead of Workspaces, for someone with few workspaces of their own.
     leads?: boolean;
@@ -47,10 +50,6 @@ export default class CatalogSection extends Component<Signature> {
     return Boolean(this.args.leads && this.shelfRealmURL);
   }
 
-  private get count() {
-    return this.args.emptyMessage ? 0 : this.args.realmIdentifiers.length;
-  }
-
   <template>
     <section
       class='dashboard-section'
@@ -58,30 +57,21 @@ export default class CatalogSection extends Component<Signature> {
       data-test-dashboard-section='catalogs'
       ...attributes
     >
-      <div class='section-head'>
-        <h2 class='section-title'>
-          <Store
-            class='section-icon'
-            width='20'
-            height='20'
-            aria-hidden='true'
-          />
-          <span id={{this.headingId}}>
-            {{if this.welcomes 'Start from the catalog' 'Catalogs'}}
-          </span>
-          {{#if this.count}}
-            <span class='group-count'>{{this.count}}</span>
-          {{/if}}
-        </h2>
-        <ManageCatalogs />
-        <p class='section-hint'>
+      <SectionHead
+        @icon={{Store}}
+        @title={{if this.welcomes 'Start from the catalog' 'Catalogs'}}
+        @titleId={{this.headingId}}
+        @count={{@count}}
+      >
+        <:actions><ManageCatalogs /></:actions>
+        <:default>
           {{#if this.welcomes}}
             New here? Pick something ready-made and make it yours.
           {{else}}
             Apps, fields and themes to use in your workspaces.
           {{/if}}
-        </p>
-      </div>
+        </:default>
+      </SectionHead>
       {{#if this.shelfRealmURL}}
         <CatalogShelf @realmURL={{this.shelfRealmURL}} />
       {{/if}}
@@ -109,46 +99,6 @@ export default class CatalogSection extends Component<Signature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xl);
-      }
-      .section-head {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        column-gap: var(--boxel-sp-xs);
-        row-gap: var(--boxel-sp-2xs);
-        padding-bottom: var(--boxel-sp-sm);
-        border-bottom: 1px solid var(--boxel-light-10);
-      }
-      .section-title {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        margin: 0;
-        font-size: var(--dashboard-section-title-font-size);
-        font-weight: 700;
-        letter-spacing: -0.015em;
-      }
-      .section-icon {
-        --icon-color: var(--muted-foreground);
-        color: var(--muted-foreground);
-        flex-shrink: 0;
-      }
-      .section-hint {
-        flex-basis: 100%;
-        margin: 0;
-        font-size: var(--dashboard-section-hint-font-size);
-        color: var(--muted-foreground);
-      }
-      .group-count {
-        font-family: var(--boxel-monospace-font-family);
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: var(--subtle-foreground);
-      }
-      .group-count::before {
-        content: '· ' / '';
       }
       .group-empty {
         margin: 0;

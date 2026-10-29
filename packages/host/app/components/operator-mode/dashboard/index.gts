@@ -46,6 +46,7 @@ import CatalogsFlyout from './catalogs-flyout';
 import FavoritesFlyout from './favorites-flyout';
 import { greetingFor } from './greeting';
 import KeyboardCursor from './keyboard-cursor';
+import SectionHead from './section-head';
 import Workspace from './workspace';
 import {
   COLLAPSED_WORKSPACE_ROWS,
@@ -600,6 +601,7 @@ export default class Dashboard extends Component<Signature> {
             <CatalogSection
               @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
               @emptyMessage={{this.catalogEmptyMessage}}
+              @count={{this.renderedCatalogCount}}
               @showShelf={{this.isCatalogShelfShown}}
               @leads={{true}}
               @navBase={{this.catalogNavBase}}
@@ -614,18 +616,11 @@ export default class Dashboard extends Component<Signature> {
             {{@sections.register this.workspacesSection}}
             data-test-dashboard-section='workspaces'
           >
-            <div class='section-head'>
-              <h2 class='section-title'>
-                <LayoutGrid
-                  class='section-icon'
-                  width='20'
-                  height='20'
-                  aria-hidden='true'
-                />
-                <span id={{this.headingId 'workspaces'}}>Workspaces</span>
-              </h2>
-              <p class='section-hint'>Where your cards live.</p>
-            </div>
+            <SectionHead
+              @icon={{LayoutGrid}}
+              @title='Workspaces'
+              @titleId={{this.headingId 'workspaces'}}
+            >Where your cards live.</SectionHead>
 
             <div class='group' data-test-favorites-section>
               <h3 class='group-head'>
@@ -847,6 +842,7 @@ export default class Dashboard extends Component<Signature> {
             <CatalogSection
               @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
               @emptyMessage={{this.catalogEmptyMessage}}
+              @count={{this.renderedCatalogCount}}
               @showShelf={{this.isCatalogShelfShown}}
               @navBase={{this.catalogNavBase}}
               @cursor={{this.cursor}}
@@ -859,19 +855,11 @@ export default class Dashboard extends Component<Signature> {
             aria-labelledby={{this.headingId 'agents'}}
             data-test-dashboard-section='agents'
           >
-            <div class='section-head'>
-              <h2 class='section-title'>
-                <Bot
-                  class='section-icon'
-                  width='20'
-                  height='20'
-                  aria-hidden='true'
-                />
-                <span id={{this.headingId 'agents'}}>Agents</span>
-              </h2>
-              <p class='section-hint'>Boxel AI works here; your own agent works
-                through the Boxel plugin.</p>
-            </div>
+            <SectionHead
+              @icon={{Bot}}
+              @title='Agents'
+              @titleId={{this.headingId 'agents'}}
+            >Boxel AI works here; your own agent works through the Boxel plugin.</SectionHead>
           </section>
         </div>
       </div>
@@ -1043,35 +1031,10 @@ export default class Dashboard extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-xl);
       }
-      .section-head {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        column-gap: var(--boxel-sp-xs);
-        row-gap: var(--boxel-sp-2xs);
-        padding-bottom: var(--boxel-sp-sm);
-        border-bottom: 1px solid var(--boxel-light-10);
-      }
-      .section-title {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        margin: 0;
-        font-size: var(--dashboard-section-title-font-size);
-        font-weight: 700;
-        letter-spacing: -0.015em;
-      }
-      .section-icon,
       .group-icon {
         --icon-color: var(--muted-foreground);
         color: var(--muted-foreground);
         flex-shrink: 0;
-      }
-      .section-hint {
-        flex-basis: 100%;
-        margin: 0;
-        font-size: var(--dashboard-section-hint-font-size);
-        color: var(--muted-foreground);
       }
 
       /* Groups inside a section are quiet labels; the tiles are the
