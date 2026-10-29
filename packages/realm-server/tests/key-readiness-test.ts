@@ -24,6 +24,7 @@ import {
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
+import { keyReadiness } from '../lib/key-readiness.ts';
 
 // ============================================================================
 // Readiness through `_capabilities`: what a card learns about a `callApi`
@@ -333,6 +334,32 @@ module(basename(import.meta.filename), function (hooks) {
       answer.readiness,
       'needs-sign-in',
       JSON.stringify(response.body),
+    );
+
+    // A share the realm provides is no different: the call refuses anyone
+    // not signed in before it looks for a binding.
+    let key = await addKey();
+    let { id: shareId } = await share(key.id);
+    await allowInteractive(await approve(OWNER, 'shared', { shareId }));
+    assert.strictEqual(await readiness(undefined, 'shared'), 'needs-sign-in');
+  });
+
+  test('a per-instance operation asked about on its type has no answer, since no approval names it', async function (assert) {
+    let definition =
+      (await realm.operationCore.definitionLookup.lookupDefinition(INBOX))!
+        .operations!.list;
+    let lookup = {
+      realmURL: realmURL.href,
+      type: { module: String(INBOX.module), name: INBOX.name },
+      operation: 'list',
+      caller: OWNER,
+      request: { ...definition.callApi!, perInstance: true as const },
+    };
+    assert.strictEqual(await keyReadiness(dbAdapter, lookup), undefined);
+    assert.strictEqual(
+      await keyReadiness(dbAdapter, { ...lookup, instance: GENERAL }),
+      'needs-connect',
+      'asked about on a card, it has an answer',
     );
   });
 

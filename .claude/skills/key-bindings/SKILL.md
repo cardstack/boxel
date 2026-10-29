@@ -184,6 +184,22 @@ operation, instance?, payer})` answers the refusal the call would get (or
 nothing), without opening any key, so a missing or changed approval stops the
 run up front.
 
+## Readiness
+
+`@context.keyReadiness(operation, target)` asks, through a `_capabilities`
+pair carrying `readiness: true`, what filling the slots would answer for this
+caller invoking from a card. `lib/key-readiness.ts` (`keyReadiness`, the
+sender's `readiness`) reads the same rows as `checkedBindings`, in the same
+order, and maps each way a slot falls short to an answer: no binding →
+`needs-connect`, or `needs-approval` where one of the caller's grants already
+covers the destination; a changed fingerprint → `needs-reapproval`; not
+`interactive` → `needs-approval`; a share slot short in any way → `needs-admin`
+to anyone but the share key's owner; nobody signed in → `needs-sign-in`. It
+opens no key and writes nothing: a changed fingerprint is reported, not moved
+to `needs-reapproval`, and no notice is recorded. **A check added to
+`checkedBindings` or `fillSlots` belongs in `key-readiness.ts` too**, or
+readiness will say `ready` for a call that is refused.
+
 ## What else changes bindings
 
 - **Removing a grant** (`DELETE /_user-key-grants/:id`) revokes every binding
