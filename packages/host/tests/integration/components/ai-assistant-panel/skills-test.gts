@@ -1016,7 +1016,9 @@ Instructions live in the markdown body.
     await settled();
     // Click on the apply button, skill card will be updated since it has changed
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
-    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+    );
     // The room's skills are re-uploaded before the tool's result event is
     // sent, so the room state is safe to read once the event lands. A
     // re-upload that throws still sends "applied" (the tool's effects

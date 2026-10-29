@@ -18,10 +18,10 @@ import {
   type getCard as GetCardType,
 } from '@cardstack/runtime-common';
 
-import AiAssistantActionBarUsage from '@cardstack/host/components/ai-assistant/action-bar-usage';
 import AiAssistantApplyButtonUsage from '@cardstack/host/components/ai-assistant/apply-button/usage';
 import AiAssistantAttachmentPickerUsage from '@cardstack/host/components/ai-assistant/attachment-picker/usage';
 import AiAssistantChatInputUsage from '@cardstack/host/components/ai-assistant/chat-input/usage';
+import AiAssistantComposerCapUsage from '@cardstack/host/components/ai-assistant/composer-cap-usage';
 import AiAssistantFocusPillUsage from '@cardstack/host/components/ai-assistant/focus-pill/usage';
 import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/message/usage';
 import AiAssistantSkillMenuUsage from '@cardstack/host/components/ai-assistant/skill-menu/usage';
@@ -94,7 +94,7 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
 
   get usageComponents() {
     return [
-      ['AiAssistant::ActionBar', AiAssistantActionBarUsage],
+      ['AiAssistant::ComposerCap', AiAssistantComposerCapUsage],
       ['AiAssistant::ApplyButton', AiAssistantApplyButtonUsage],
       ['AiAssistant::CardPicker', AiAssistantAttachmentPickerUsage],
       ['AiAssistant::ChatInput', AiAssistantChatInputUsage],

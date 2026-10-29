@@ -1,4 +1,5 @@
 import { getOwner, setOwner } from '@ember/owner';
+
 import type Owner from '@ember/owner';
 
 import { debounce } from '@ember/runloop';
@@ -10,7 +11,7 @@ import Ajv from 'ajv';
 
 import { task, timeout, all } from 'ember-concurrency';
 
-import { TrackedSet } from 'tracked-built-ins';
+import { TrackedMap, TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { Command, ToolContext } from '@cardstack/runtime-common';
@@ -27,6 +28,10 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
+import {
+  APPROVE_REACTION_KEY,
+  DECLINE_REACTION_KEY,
+} from '@cardstack/runtime-common/ai/approval-reaction';
 import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import {
@@ -36,12 +41,15 @@ import {
 import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 
 import ENV from '@cardstack/host/config/environment';
+import type { ChangedFile } from '@cardstack/host/lib/turn-summary';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
+import SendAiAssistantMessageTool from '@cardstack/host/tools/send-ai-assistant-message';
 
 import HostBaseTool from '../lib/host-base-tool';
 import LimitedSet from '../lib/limited-set';
+import { runDeliveryId } from '../lib/run-delivery';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
   isAutoExecutableTool,
@@ -54,7 +62,10 @@ import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type StoreService from './store';
 import type MessageTool from '../lib/matrix-classes/message-tool';
+import type { RealmFileEdit } from '../lib/realm-runner/edits';
 import type { RoomResource } from '../resources/room';
+import type { ScriptAsk } from '../tools/run-realm-code';
+import type { EntrySummary } from '../tools/search-entries';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
@@ -234,6 +245,39 @@ function coerceToSchema(
   return { value, changed: false };
 }
 
+// The last lines a running call recorded: enough for the transcript, never
+// the whole log.
+const MAX_PROGRESS_LINES = 12;
+
+export interface ToolProgressSnapshot {
+  progress?: {
+    step: number;
+    of: number;
+    label: string;
+    // the steps a script named with realm.plan
+    plan?: string[];
+    // progress inside the current step
+    count?: number;
+    countOf?: number;
+  };
+  lines: string[];
+}
+type ToolProgressListener = (entry: {
+  line: string;
+  progress?: ToolProgressSnapshot['progress'];
+}) => void;
+
+// How long a script's question waits for the reader.
+const SCRIPT_ASK_MAX_MS = 10 * 60 * 1000;
+
+interface ScriptAnswer {
+  answer: string;
+  label: string;
+}
+
+// A call the reader denied at its gate, as its result says it.
+export const DENIED_BY_USER = 'Denied by you';
+
 export default class ToolService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
@@ -244,6 +288,117 @@ export default class ToolService extends Service {
   @service declare private session: SessionService;
   @service declare private store: StoreService;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
+  // The room each running call runs for, by tool call id.
+  private executingToolRooms = new TrackedMap<string, string>();
+  // What a running call has said about itself so far, by tool call id: the
+  // step it is on and the lines it recorded. Filled by tools that report
+  // progress (the Realm Runner), read by the transcript while the call runs.
+  // It lives only in the tab that runs the call; the result carries the
+  // finished record.
+  toolProgress = new TrackedMap<string, ToolProgressSnapshot>();
+  // What a finished Realm Runner call changed, by tool call id: each file's
+  // full text before and after. Only the tab that ran the call has it; the
+  // result carries a compact diff for every other tab and after a reload.
+  toolEdits = new TrackedMap<string, RealmFileEdit[]>();
+  // What each run's searches found, best match first (realm.entries.search),
+  // for the row to show.
+  toolFound = new TrackedMap<string, EntrySummary[]>();
+  // Calls the reader stopped, by tool call id. A stop is asked once.
+  stoppedToolRequestIds = new TrackedSet<string>();
+  // The running tools that can be stopped, by tool call id, with the room
+  // each one runs for.
+  private stoppableTools = new TrackedMap<
+    string,
+    { roomId: string; stop: () => void }
+  >();
+  // Calls that stand for a background run still under way, reported by
+  // their rows. A turn holding one is live work, so it never folds away.
+  liveRunToolIds = new TrackedSet<string>();
+  // Questions a running script put to its reader (realm.ask), by tool call
+  // id: the row shows the picker, and the pick settles the script's wait.
+  scriptAsks = new TrackedMap<
+    string,
+    {
+      request: ScriptAsk;
+      answer: (value: string) => void;
+      cancel: () => void;
+    }
+  >();
+
+  private askFromScript(
+    toolRequestId: string,
+    request: ScriptAsk,
+  ): Promise<ScriptAnswer> {
+    return new Promise((resolve, reject) => {
+      let timer = setTimeout(() => {
+        this.scriptAsks.delete(toolRequestId);
+        reject(new Error('No answer came within 10 minutes'));
+      }, SCRIPT_ASK_MAX_MS);
+      this.scriptAsks.set(toolRequestId, {
+        request,
+        answer: (value: string) => {
+          clearTimeout(timer);
+          this.scriptAsks.delete(toolRequestId);
+          let option = request.options.find((o) => o.value === value);
+          resolve({ answer: value, label: option?.label ?? value });
+        },
+        cancel: () => {
+          clearTimeout(timer);
+          this.scriptAsks.delete(toolRequestId);
+          reject(new Error('The run ended before an answer came'));
+        },
+      });
+    });
+  }
+
+  // Click-required calls the reader allowed for the rest of a session, by
+  // room: "Always for this session" on a script's gate. Kept for the tab.
+  private alwaysAllowed = new TrackedMap<string, Set<string>>();
+
+  isAlwaysAllowed(roomId: string, call: string) {
+    return this.alwaysAllowed.get(roomId)?.has(call) ?? false;
+  }
+
+  allowAlways(roomId: string, calls: string[]) {
+    this.alwaysAllowed.set(
+      roomId,
+      new Set([...(this.alwaysAllowed.get(roomId) ?? []), ...calls]),
+    );
+  }
+
+  // The reader said no to a call that waited on their click: its result
+  // says so, so the call has an outcome and the model reads why. A decline
+  // does not resume the assistant, so it never lifts a Stop.
+  async denyTool(messageTool: MessageTool) {
+    let roomId = messageTool.message.roomId;
+    if (!messageTool.id) {
+      return;
+    }
+    await this.matrixService.sendToolResultEvent({
+      roomId,
+      invokedToolFromEventId:
+        this.getCurrentEventIdForCommandRequest(roomId, messageTool.id) ??
+        messageTool.eventId,
+      toolCallId: messageTool.id,
+      status: 'canceled',
+      failureReason: DENIED_BY_USER,
+      context: await this.operatorModeStateService.getSummaryForAIBot(),
+    });
+  }
+  // What each settled call changed in source files, reported by its row:
+  // the turn's footer sums them into one diff chip.
+  toolDiffStats = new TrackedMap<
+    string,
+    {
+      files: number;
+      added: number;
+      removed: number;
+      perFile?: ChangedFile[];
+    }
+  >();
+  // Background runs whose result this tab has posted to their room, by run
+  // card id: a run is delivered once.
+  private deliveredRuns = new Set<string>();
   executedToolRequestIds = new TrackedSet<string>();
   // Requests the auto-execution flow has claimed for resolution. Drain
   // passes can overlap, and the records above are written only after
@@ -285,6 +440,7 @@ export default class ToolService extends Service {
 
   resetState() {
     this.currentlyExecutingToolRequestIds.clear();
+    this.executingToolRooms.clear();
     this.executedToolRequestIds.clear();
     this.claimedToolRequestIds.clear();
     this.acceptingAllRoomIds.clear();
@@ -871,6 +1027,89 @@ export default class ToolService extends Service {
   // wins (handles the streaming → m.replace shape: the original streaming
   // event and later replace events both carry the toolRequests array; the
   // latest replace is the one ai-bot's /messages view agrees on).
+  private recordToolProgress(
+    toolRequestId: string,
+    entry: { line: string; progress?: ToolProgressSnapshot['progress'] },
+  ) {
+    let previous = this.toolProgress.get(toolRequestId);
+    let progress = entry.progress ?? previous?.progress;
+    // a plan named mid-run keeps the step the run is already on
+    if (entry.progress?.step === 0 && previous?.progress?.step) {
+      progress = {
+        ...previous.progress,
+        plan: entry.progress.plan,
+        of: entry.progress.of,
+      };
+    }
+    this.toolProgress.set(toolRequestId, {
+      progress,
+      lines: [...(previous?.lines ?? []), entry.line].slice(
+        -MAX_PROGRESS_LINES,
+      ),
+    });
+  }
+
+  // Asks a running call to stop. Only a tool that knows how to stop (the
+  // Realm Runner) can; what it already did stays and its result says so.
+  stopTool(toolRequestId: string) {
+    let tool = this.stoppableTools.get(toolRequestId);
+    if (!tool || this.stoppedToolRequestIds.has(toolRequestId)) {
+      return;
+    }
+    this.stoppedToolRequestIds.add(toolRequestId);
+    // A question the run put to its reader is withdrawn with it.
+    this.scriptAsks.get(toolRequestId)?.cancel();
+    tool.stop();
+  }
+
+  // The calls running in this tab for one room.
+  executingToolIdsInRoom(roomId: string): string[] {
+    return [...this.executingToolRooms]
+      .filter(([, room]) => room === roomId)
+      .map(([id]) => id);
+  }
+
+  // Stops every running call of one room: Stop in a room ends its own work
+  // only.
+  stopToolsInRoom(roomId: string) {
+    for (let [id, tool] of [...this.stoppableTools]) {
+      if (tool.roomId === roomId) {
+        this.stopTool(id);
+      }
+    }
+  }
+
+  canStopTool(toolRequestId: string) {
+    return (
+      this.stoppableTools.has(toolRequestId) &&
+      !this.stoppedToolRequestIds.has(toolRequestId)
+    );
+  }
+
+  // Posts a finished background run into its room, so the assistant gets a
+  // turn with the result: "I'll tell you when it's done" then happens. The
+  // message carries the run card and a client id derived from it, which
+  // both marks it as a delivery in the transcript and lets every tab see it
+  // has been sent.
+  async deliverRunResult(roomId: string, run: CardDef, title: string) {
+    if (!run.id || this.deliveredRuns.has(run.id)) {
+      return;
+    }
+    this.deliveredRuns.add(run.id);
+    try {
+      await new SendAiAssistantMessageTool(this.toolContext).execute({
+        roomId,
+        prompt: `The background run "${title}" finished. Summarize the attached result for me. Do not repeat the work.`,
+        clientGeneratedId: runDeliveryId(run.id),
+        attachedCards: [run],
+      });
+    } catch (e) {
+      // a delivery that did not land may be tried again
+      this.deliveredRuns.delete(run.id);
+      console.error(`could not deliver background run ${run.id}`, e);
+    }
+  }
+
   private getCurrentEventIdForCommandRequest(
     roomId: string | undefined,
     commandRequestId: string | undefined,
@@ -931,18 +1170,27 @@ export default class ToolService extends Service {
     },
   );
 
+  // An answer goes out twice. The result event is the answer ai-bot acts
+  // on, whatever its version; the 👍 or 👎 on the bot message is the answer
+  // people see (see runtime-common/ai/approval-reaction.ts), so every
+  // member's client shows who answered. ai-bot runs a call once however many
+  // answers it sees. A reaction answers every held call on its message, so a
+  // call that shares its message with another one still waiting gets no
+  // reaction of its own.
   private async sendApprovalAnswer(
     command: MessageTool,
     callId: string,
     answer: 'approve' | 'decline',
   ) {
+    let roomId = command.message.roomId;
     let invokedToolFromEventId =
-      this.getCurrentEventIdForCommandRequest(
-        command.message.roomId,
-        command.toolRequest.id,
-      ) ?? command.eventId;
+      this.getCurrentEventIdForCommandRequest(roomId, command.toolRequest.id) ??
+      command.eventId;
+    let othersWaiting = command.message.tools.some(
+      (tool) => tool !== command && tool.awaitsApproval,
+    );
     await this.matrixService.sendToolResultEvent({
-      roomId: command.message.roomId,
+      roomId,
       invokedToolFromEventId,
       toolCallId: callId,
       // Approving asks for the call to go ahead, which lifts a stop; declining
@@ -957,6 +1205,32 @@ export default class ToolService extends Service {
           }),
       context: await this.operatorModeStateService.getSummaryForAIBot(),
     });
+    if (othersWaiting) {
+      return;
+    }
+    try {
+      await this.matrixService.sendReactionEvent(
+        roomId,
+        this.originalEventId(roomId, invokedToolFromEventId),
+        answer === 'approve' ? APPROVE_REACTION_KEY : DECLINE_REACTION_KEY,
+      );
+    } catch (e) {
+      // the answer is in; only the reaction people see is missing
+      console.warn(`could not react to held tool call ${callId}`, e);
+    }
+  }
+
+  // A reaction annotates the message itself, never one of its edits: ai-bot
+  // reads the room without edits, and a client draws reactions on the
+  // message.
+  private originalEventId(roomId: string, eventId: string): string {
+    let events = this.matrixService.roomResources.get(roomId)?.events ?? [];
+    let event = events.find((e: any) => e?.event_id === eventId) as any;
+    let relation = event?.content?.['m.relates_to'];
+    return relation?.rel_type === 'm.replace' &&
+      typeof relation.event_id === 'string'
+      ? relation.event_id
+      : eventId;
   }
 
   // Runs a host tool and posts its result. `auto` says the tool drain started
@@ -965,7 +1239,10 @@ export default class ToolService extends Service {
   // says so, which lifts a stop they pressed.
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(
-    async (command: MessageTool, { auto = false }: { auto?: boolean } = {}) => {
+    async (
+      command: MessageTool,
+      { auto = false, answer }: { auto?: boolean; answer?: string } = {},
+    ) => {
       // ai-bot ran this one itself (e.g. readRealmFile): nothing for the host to
       // run. Guards the manual "Try Anyway" path as well as any auto-execution.
       if (command.executedBy === AI_BOT_EXECUTOR) {
@@ -1006,6 +1283,7 @@ export default class ToolService extends Service {
       try {
         this.matrixService.failedToolState.delete(commandRequestId!);
         this.currentlyExecutingToolRequestIds.add(commandRequestId!);
+        this.executingToolRooms.set(commandRequestId!, command.message.roomId);
 
         // The timeout brackets everything between claiming the request and
         // having a result in hand: module resolution and input construction
@@ -1037,6 +1315,11 @@ export default class ToolService extends Service {
 
           if (toolToRun) {
             let attributes = payload?.attributes;
+            // The user's pick for a tool that asks them (ask-user): it comes
+            // from the click, never from the model's arguments.
+            if (answer !== undefined) {
+              attributes = { ...attributes, answer };
+            }
             if (
               (toolToRun.constructor as { bindsToInvokingRoom?: boolean })
                 .bindsToInvokingRoom
@@ -1052,6 +1335,38 @@ export default class ToolService extends Service {
             ).extraExecuteTimeMsFor;
             if (typeof extraTimeFor === 'function') {
               extendTimeout(extraTimeFor(attributes));
+            }
+            if (
+              commandRequestId &&
+              (toolToRun.constructor as { reportsProgress?: boolean })
+                .reportsProgress
+            ) {
+              let requestId = commandRequestId;
+              (toolToRun as { onProgress?: ToolProgressListener }).onProgress =
+                (entry) => this.recordToolProgress(requestId, entry);
+              (
+                toolToRun as { onEdits?: (edits: RealmFileEdit[]) => void }
+              ).onEdits = (edits) => this.toolEdits.set(requestId, edits);
+              (
+                toolToRun as {
+                  onFound?: (found: EntrySummary[]) => void;
+                }
+              ).onFound = (found) => this.toolFound.set(requestId, found);
+              (
+                toolToRun as {
+                  onAsk?: (request: ScriptAsk) => Promise<ScriptAnswer>;
+                }
+              ).onAsk = (request) => {
+                extendTimeout(SCRIPT_ASK_MAX_MS);
+                return this.askFromScript(requestId, request);
+              };
+              let stoppable = toolToRun as { stop?: () => void };
+              if (typeof stoppable.stop === 'function') {
+                this.stoppableTools.set(requestId, {
+                  roomId: command.message.roomId,
+                  stop: stoppable.stop,
+                });
+              }
             }
             let typedInput = await this.instantiateToolInput(
               toolToRun,
@@ -1254,6 +1569,10 @@ export default class ToolService extends Service {
           this.store.dropReference(pinnedInputId);
         }
         this.currentlyExecutingToolRequestIds.delete(commandRequestId!);
+        this.executingToolRooms.delete(commandRequestId!);
+        this.stoppableTools.delete(commandRequestId!);
+        // A question the run left open has no one waiting for its answer.
+        this.scriptAsks.get(commandRequestId!)?.cancel();
         toolRunWaiter.endAsync(waiterToken);
       }
     },

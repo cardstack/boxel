@@ -8,14 +8,14 @@ import type { GalleryDemo, Near } from '../demo';
 import { FilmLink } from '../lib/film-link';
 import { passFocus, takesFocus } from '../lib/focus';
 import { labSlug, LabState } from '../lib/lab';
-import { MotionHold, wakeOnTouch } from '../lib/motion-hold';
-import { restWhenOff } from '../lib/onstage';
+import { MotionHold } from '../lib/motion-hold';
 import { type Theater, theaterView } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
 import { CodeBox } from './code-box';
 import { DemoLink } from './demo-link';
 import { DemoStage } from './demo-stage';
 import { GuideLink } from './guide-link';
+import { HeldStage } from './held-stage';
 import { LabPanel } from './lab-panel';
 import { LabToggle } from './lab-toggle';
 import { MotionToggle } from './motion-toggle';
@@ -178,15 +178,13 @@ export class DemoPage extends Component<Signature> {
           data-test-stage-row
           {{theaterView}}
         >
-          <div
+          <HeldStage
             class='stage-wrap'
+            @hold={{this.hold}}
             data-demo-stage
             data-test-stage
             data-well={{this.well}}
-            data-motion-hold={{this.hold.state}}
             {{@theater.stage}}
-            {{restWhenOff}}
-            {{wakeOnTouch this.hold}}
           >
             {{#each (array this.take) key='@identity'}}
               <MotionConfig @reducedMotion={{this.hold.reducedMotion}}>
@@ -215,7 +213,7 @@ export class DemoPage extends Component<Signature> {
                 <span class='theater-built'>How this is built</span>
               </button>
             {{/if}}
-          </div>
+          </HeldStage>
           {{#if this.labOpen}}
             {{#if this.labSlug}}
               <LabPanel
@@ -513,13 +511,6 @@ export class DemoPage extends Component<Signature> {
         order: -1;
         container-type: inline-size;
         margin-inline: calc((100% - var(--site-w, 100%)) / 2);
-      }
-
-      /* a stage scrolled away, or one waiting to be asked to move, holds its
-         animations where they stand */
-      .stage-wrap.is-resting,
-      .stage-wrap.is-resting :deep(*) {
-        animation-play-state: paused !important;
       }
 
       /* THE WELL'S ASPECT IS FOR A WELL. In theater the frame is as tall as

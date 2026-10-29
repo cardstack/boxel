@@ -48,11 +48,17 @@ import {
   type BotToolTurn,
   type ClassifiedToolCalls,
 } from './lib/bot-tools/index.ts';
-import { INTERRUPTED_TOOL_CALL_REASON } from './lib/bot-tools/results.ts';
+import {
+  INTERRUPTED_TOOL_CALL_REASON,
+  publishDeclinedResult,
+} from './lib/bot-tools/results.ts';
 import {
   ApprovalClaims,
+  declinedToolCalls,
+  handlesRoomEvent,
   releasedToolCalls,
   unreleasedApproval,
+  type DeclinedToolCall,
   type ReleasedToolCall,
 } from './lib/bot-tools/approval.ts';
 import { RoomTurns, type RoomTurn } from './lib/room-turns.ts';
@@ -60,7 +66,11 @@ import {
   readStopState,
   STOPPED_TOOL_CALL_REASON,
 } from '@cardstack/runtime-common/ai/stop';
-import { isApprovalResult } from '@cardstack/runtime-common/ai';
+import {
+  approvalReaction,
+  declinedByReactionReason,
+  isApprovalResult,
+} from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
 import { MAX_SCRIPT_SYNTAX_RETRIES } from './lib/script-syntax-check.ts';
@@ -421,7 +431,22 @@ Common issues are:
         // newest-event-wins queue. Otherwise a later reaction or other
         // timeline event could make a user message stand down, then exit
         // without responding.
-        if (!Responder.eventMayTriggerResponse(event)) {
+        // A 👍 or 👎 on a bot message holding a call for approval answers
+        // it (see runtime-common/ai/approval-reaction.ts).
+        let reaction = approvalReaction({
+          type: event.getType(),
+          sender: event.getSender() ?? undefined,
+          event_id: event.getId(),
+          content: event.getContent(),
+        });
+        let reactedTo = reaction
+          ? room.findEventById(reaction.targetEventId)
+          : undefined;
+        if (
+          !handlesRoomEvent(reaction, reactedTo, () =>
+            Responder.eventMayTriggerResponse(event),
+          )
+        ) {
           return;
         }
 
@@ -431,7 +456,15 @@ Common issues are:
         // handlers do not race for it and lose events. Only the newest event
         // waits: an older event is covered by the newer event's history, so
         // it stands down (see RoomEventSerializer).
-        releaseRoomTurn = await roomEventSerializer.claim(room.roomId, eventId);
+        // A reaction writes no reply, so it must not make a user message
+        // that is still waiting stand down.
+        releaseRoomTurn = await roomEventSerializer.claim(
+          room.roomId,
+          eventId,
+          {
+            supersedes: !reaction,
+          },
+        );
         if (!releaseRoomTurn) {
           return;
         }
@@ -468,6 +501,9 @@ Common issues are:
         let pendingFulfillAgentId: string | undefined;
         let pendingReleasedCalls: ReleasedToolCall[] = [];
         let pendingReleasedAgentId: string | undefined;
+        // The held calls a person declined with a 👎, answered as 'invalid'
+        // after the lock is released, like the calls above.
+        let pendingDeclinedCalls: DeclinedToolCall[] = [];
         // The bot-tool calls of an answer that was canceled mid-stream. They
         // never run, but each is answered as canceled (after the lock is
         // released, like the calls above), so no call is left without a
@@ -558,7 +594,8 @@ Common issues are:
             typeof event.getContent().data === 'string'
               ? JSON.parse(event.getContent().data)
               : event.getContent().data;
-          const agentId = contentData.context?.agentId;
+          // a reaction carries no data
+          const agentId = contentData?.context?.agentId;
 
           // The offered tools' turns are started only when a run needs them
           // (starting one can mean downloading what earlier calls read), and
@@ -594,6 +631,29 @@ Common issues are:
           pendingReleasedAgentId = agentId;
           if (pendingReleasedCalls.length > 0) {
             botToolTurns = await startTurns();
+          }
+          // The calls declined with a 👎 and not yet answered, claimed like
+          // approved ones so a call is answered once.
+          let declinedCalls = declinedToolCalls(
+            eventList,
+            aiBotUserId,
+            new Set(botTools.map((tool) => tool.name)),
+          );
+          let freshDeclines = new Set(
+            approvalClaims
+              .claim(eventList, declinedCalls)
+              .map((entry) => entry.call.id),
+          );
+          pendingDeclinedCalls = declinedCalls.filter((entry) =>
+            freshDeclines.has(entry.call.id),
+          );
+          // A reaction answers the held calls on its message; it is not a
+          // turn of its own, so its handler stops here.
+          if (reaction) {
+            log.debug(
+              `[${eventId}] ${reaction.sender} answered the held calls on ${reaction.targetEventId} with ${reaction.verdict}: ${pendingReleasedCalls.length} released, ${pendingDeclinedCalls.length} declined`,
+            );
+            return;
           }
           // An approval is not a turn of its own (getShouldRespond ignores
           // it), so its handler stops here.
@@ -1206,7 +1266,7 @@ Common issues are:
                   client,
                   roomId: room.roomId,
                   requestEventId: released.requestEventId,
-                  agentId: pendingReleasedAgentId,
+                  agentId: released.agentId ?? pendingReleasedAgentId,
                 },
               });
             }
@@ -1244,6 +1304,25 @@ Common issues are:
               },
               pendingCanceledReason,
             );
+          }
+          for (let declined of pendingDeclinedCalls) {
+            let outcome = await publishDeclinedResult(
+              declined.call,
+              {
+                client,
+                roomId: room.roomId,
+                requestEventId: declined.requestEventId,
+                agentId: declined.agentId ?? pendingReleasedAgentId,
+              },
+              declinedByReactionReason(
+                declined.call.function.name,
+                room.getMember(declined.reaction.sender)?.name ??
+                  declined.reaction.sender,
+              ),
+            );
+            if (!outcome.published) {
+              approvalClaims.release(declined.call.id);
+            }
           }
           let outcomes = await fulfillBotToolCalls(entries, stopped);
           // An approved call whose result never reached the room (or whose

@@ -163,7 +163,9 @@ test.describe('Commands', () => {
       `[data-test-tool-call-id="${commandRequestId}"]`,
     );
     await command.waitFor();
-    await command.locator('[data-test-tool-call-apply]').click();
+    await command
+      .locator('[data-test-pretui-tool-gate-action="apply"]')
+      .click();
 
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
@@ -237,7 +239,9 @@ test.describe('Commands', () => {
       `[data-test-tool-call-id="${commandRequestId}"]`,
     );
     await command.waitFor();
-    await command.locator('[data-test-tool-call-apply]').click();
+    await command
+      .locator('[data-test-pretui-tool-gate-action="apply"]')
+      .click();
 
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
@@ -387,7 +391,8 @@ test.describe('Commands', () => {
     // Note: you don't have to click on apply button, because command on Skill
     // has requireApproval set to false
     await page.waitForSelector(
-      '[data-test-message-idx="1"] [data-test-apply-state="applied"]',
+      '[data-test-message-idx="1"] [data-test-tool-call-apply="applied"]',
+      { state: 'attached' },
     );
 
     await expect(
@@ -459,13 +464,20 @@ test.describe('Commands', () => {
 
     await page.waitForSelector('[data-test-message-idx="3"]');
 
-    await page.waitForSelector(
-      '[data-test-message-idx="3"] [data-test-apply-state="applied"]',
-    );
-
-    await expect(
-      page.locator('[data-test-message-idx="3"] [data-test-tool-call-id]'),
-    ).not.toHaveClass(/is-failed/);
+    // The second call runs once: its result is in the room, applied. Both
+    // tool messages here are posted from the user's account, so the room
+    // shows them as the user's own, and their rows are not the signal.
+    await expect(async () => {
+      let results = (await getRoomEvents(username, password, roomId)).filter(
+        (event: any) =>
+          event.content?.commandRequestId ===
+          'a8fe43a4-7bd3-40a7-8455-50e31038e3a4',
+      );
+      expect(results).toHaveLength(1);
+      expect((results[0].content['m.relates_to'] as any)?.key).toStrictEqual(
+        'applied',
+      );
+    }).toPass();
 
     // check we're in interact mode
     await page.waitForSelector('[data-test-submode-switcher=interact]');
