@@ -125,98 +125,97 @@ module('Integration | ai-assistant-panel | token usage', function (hooks) {
       .containsText('340 out');
   });
 
-  test('session total appears once two turns carry usage', async function (assert) {
+  test("the session's total is in the latest answer's footer, not a line of its own", async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'First answer.',
-      msgtype: 'm.text',
-      isStreamingFinished: true,
-      data: {
-        usage: { promptTokens: 1000, completionTokens: 100 },
-      },
-    });
-    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
-    assert.dom('[data-test-conversation-token-usage]').doesNotExist();
-
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Second answer.',
-      msgtype: 'm.text',
-      isStreamingFinished: true,
-      data: {
-        usage: { promptTokens: 2000, completionTokens: 200 },
-      },
-    });
-
-    await waitFor('[data-test-conversation-token-usage]');
-    assert.dom('[data-test-conversation-token-usage]').containsText('3,000 in');
-    assert.dom('[data-test-conversation-token-usage]').containsText('300 out');
-  });
-
-  test('optional figures are dropped from the session total unless every turn reported them', async function (assert) {
-    let roomId = await renderAiAssistantPanel();
-
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'First answer.',
-      msgtype: 'm.text',
-      isStreamingFinished: true,
-      data: {
-        usage: {
-          promptTokens: 1000,
-          completionTokens: 100,
-          cachedTokens: 800,
-          costUsd: 0.01,
+    for (let [question, answer, costUsd] of [
+      ['First question', 'First answer.', 0.012],
+      ['Second question', 'Second answer.', 0.0304],
+    ] as const) {
+      simulateRemoteMessage(roomId, '@testuser:localhost', {
+        body: question,
+        msgtype: 'm.text',
+      });
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: answer,
+        msgtype: 'm.text',
+        isStreamingFinished: true,
+        data: {
+          usage: { promptTokens: 1000, completionTokens: 100, costUsd },
         },
-      },
-    });
-    // The second turn reports token counts only — its cost and cache detail
-    // are missing, so summing the other turn's figures would understate.
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Second answer.',
-      msgtype: 'm.text',
-      isStreamingFinished: true,
-      data: {
-        usage: { promptTokens: 2000, completionTokens: 200 },
-      },
-    });
+      });
+    }
 
-    await waitFor('[data-test-conversation-token-usage]');
-    assert.dom('[data-test-conversation-token-usage]').containsText('3,000 in');
-    assert
-      .dom('[data-test-conversation-token-usage]')
-      .doesNotContainText('cached');
-    assert.dom('[data-test-conversation-token-usage]').doesNotContainText('$');
-  });
-
-  test('a usage object without token counts does not add a session-total turn', async function (assert) {
-    let roomId = await renderAiAssistantPanel();
-
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'First answer.',
-      msgtype: 'm.text',
-      isStreamingFinished: true,
-      data: {
-        usage: { promptTokens: 1000, completionTokens: 100 },
-      },
-    });
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Second answer.',
-      msgtype: 'm.text',
-      isStreamingFinished: true,
-      data: {
-        usage: { costUsd: 0.01 },
-      },
-    });
-
-    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="1"]`);
     await waitUntil(
       () =>
         document
-          .querySelector('[data-test-message-idx="1"]')
-          ?.textContent?.includes('Second answer.') ?? false,
+          .querySelector(
+            '[data-test-message-idx="3"] [data-test-answer-footer]',
+          )
+          ?.textContent?.includes('this session') ?? false,
     );
-    // Only one turn has token counts, so no total is shown and the
-    // cost-only usage object does not count as a second turn.
-    assert.dom('[data-test-conversation-token-usage]').doesNotExist();
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-answer-footer]')
+      .containsText('42 credits this session');
+    let transcript =
+      document.querySelector('[data-test-ai-assistant-conversation]')
+        ?.textContent ?? '';
+    assert.strictEqual(
+      transcript.split('this session').length - 1,
+      1,
+      'the total is said once, in the latest footer',
+    );
+  });
+
+  async function sendTurns(
+    roomId: string,
+    usages: Record<string, number | undefined>[],
+  ) {
+    usages.forEach((usage, index) => {
+      simulateRemoteMessage(roomId, '@testuser:localhost', {
+        body: `Question ${index}`,
+        msgtype: 'm.text',
+      });
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: `Answer ${index}.`,
+        msgtype: 'm.text',
+        isStreamingFinished: true,
+        data: { usage },
+      });
+    });
+    let last = usages.length * 2 - 1;
+    await waitFor(
+      `[data-test-message-idx="${last}"] [data-test-answer-footer]`,
+    );
+    return `[data-test-message-idx="${last}"] [data-test-answer-footer]`;
+  }
+
+  test("the session total falls back to tokens when a turn's cost is missing", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let footer = await sendTurns(roomId, [
+      { promptTokens: 1000, completionTokens: 100, costUsd: 0.012 },
+      { promptTokens: 1000, completionTokens: 100 },
+    ]);
+    assert.dom(footer).containsText('this session');
+    assert
+      .dom(footer)
+      .doesNotIncludeText(
+        'credits this session',
+        'a partial sum is not given as the bill',
+      );
+  });
+
+  test('a usage without token counts does not count as a turn for the session total', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let footer = await sendTurns(roomId, [
+      { costUsd: 0.012 },
+      { promptTokens: 1000, completionTokens: 100, costUsd: 0.0304 },
+    ]);
+    assert
+      .dom(footer)
+      .doesNotIncludeText(
+        'this session',
+        'one counted turn has no total to add up',
+      );
   });
 });

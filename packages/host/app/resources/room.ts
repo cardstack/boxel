@@ -19,6 +19,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
+import { approvalReaction } from '@cardstack/runtime-common/ai/approval-reaction';
 import {
   readStopState,
   type StopState,
@@ -262,6 +263,10 @@ export class RoomResource extends Resource<Args> {
         // switch narrows on it.
         if ((event.type as string) === APP_BOXEL_COMPACTION_EVENT_TYPE) {
           this.updateMessageCompaction(event as unknown as CompactionEvent);
+          continue;
+        }
+        if ((event.type as string) === 'm.reaction') {
+          this.updateMessageApproval(roomId, event);
           continue;
         }
         switch (event.type) {
@@ -1022,6 +1027,39 @@ export class RoomResource extends Resource<Args> {
       },
     );
     messageBuilder.updateMessageCommandResult(message);
+  }
+
+  // A person's 👍 or 👎 on a bot message holding calls for approval answers
+  // them (see runtime-common/ai/approval-reaction.ts). The first answer on a
+  // message decides, and the bot never answers its own. A call that already
+  // has a result keeps it: the host answers each call with its own result,
+  // and its 👍 or 👎 follows the last one, so it speaks only for calls still
+  // waiting.
+  private updateMessageApproval(roomId: string, event: { sender?: string }) {
+    let reaction = approvalReaction(
+      event as Parameters<typeof approvalReaction>[0],
+    );
+    if (!reaction || reaction.sender === this.matrixService.aiBotUserId) {
+      return;
+    }
+    let message = this._messageCache.get(reaction.targetEventId);
+    let tools = (message?.tools ?? []).filter(
+      (tool) => tool.toolRequest.approvalRequired === true,
+    );
+    if (tools.some((tool) => tool.approvalAnswer)) {
+      return;
+    }
+    let held = tools.filter((tool) => tool.toolCallStatus === 'applying');
+    if (!held.length) {
+      return;
+    }
+    let member = this.upsertRoomMember({ roomId, userId: reaction.sender });
+    for (let tool of held) {
+      tool.approvalAnswer = {
+        verdict: reaction.verdict,
+        name: member.name ?? reaction.sender,
+      };
+    }
   }
 
   // ai-bot posts a compaction's progress as events that name the answer the
