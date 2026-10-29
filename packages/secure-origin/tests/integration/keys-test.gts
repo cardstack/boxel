@@ -2264,14 +2264,9 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-replace-key-slot="second"] h2')
         .hasText('second', 'the remaining row keeps its heading');
-      await waitUntil(
-        () =>
-          document.activeElement ===
-          document.querySelector(
-            '[data-test-replace-key-slot="second"] [data-test-key-value]',
-          ),
-      );
-      assert.ok(true, 'focus moves to the next key’s value');
+      assert
+        .dom('[data-test-replace-key-slot="second"] [data-test-key-value]')
+        .isFocused('focus moves to the next key’s value');
       assert.deepEqual(navigations, [], 'one key is still to replace');
       await fillIn(
         '[data-test-replace-key-slot="second"] [data-test-key-value]',
@@ -2363,12 +2358,9 @@ module('Integration | key pages', function (hooks) {
       });
       visitShell(OPENED);
       await render(ReplaceKeyPage);
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-replace-key-where]')
-          ?.textContent?.replace(/\s+/g, ' ')
-          .includes('3 workspaces use this key'),
-      );
+      assert
+        .dom('[data-test-replace-key-where]')
+        .includesText('3 workspaces use this key');
       assert
         .dom('[data-test-replace-key-where]')
         .includesText(
