@@ -114,14 +114,24 @@ export function extensionOfName(name: string): string {
   return dot <= 0 ? '' : name.slice(dot).toLowerCase();
 }
 
+// A file name without the extension `extensionOfName` reads from it.
+export function nameWithoutExtension(name: string): string {
+  let dot = name.lastIndexOf('.');
+  return dot <= 0 ? name : name.slice(0, dot);
+}
+
 // The extension of an identifier's last path segment, in either form, as
-// `extensionOfName` spells it.
+// `extensionOfName` spells it. An identifier that ends in a slash names a
+// directory, so it has no extension.
 export function extensionOfIdentifier(identifier: string): string {
-  return extensionOfName(lastSegmentOfIdentifier(identifier));
+  let path = identifier.split(/[?#]/, 1)[0];
+  return path.endsWith('/')
+    ? ''
+    : extensionOfName(lastSegmentOfIdentifier(path));
 }
 
 function extensionOf(url: URL): string {
-  return extensionOfName(url.pathname.split('/').pop() ?? '');
+  return extensionOfIdentifier(url.href);
 }
 
 // Whether a URL names a file rather than a card, judged by a known FileDef
@@ -149,8 +159,7 @@ export function segmentNamesFile(name: string): boolean {
 // what turns `<realm>/ModelConfiguration/claude-sonnet-4.6` into a reference to
 // a file that does not exist.
 export function referenceNamesFile(reference: string): boolean {
-  let path = reference.split(/[?#]/)[0];
-  return segmentNamesFile(path.slice(path.lastIndexOf('/') + 1));
+  return extensionOfIdentifier(reference) in FILEDEF_CODE_REF_BY_EXTENSION;
 }
 
 // An absolute module (URL or prefix form) is returned as written; a relative

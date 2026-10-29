@@ -1,6 +1,7 @@
 import {
   byteStreamToUint8Array,
   extensionOfIdentifier,
+  nameWithoutExtension,
   extractCardReferenceUrls,
   extractFileReferenceUrls,
   FRONTMATTER_DIAGNOSTICS_SYMBOL,
@@ -59,10 +60,6 @@ function toFrontmatterParseError(err: unknown): FrontmatterParseError {
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 const EXCERPT_MAX_LENGTH = 500;
-
-function fileNameWithoutExtension(name: string): string {
-  return name.replace(/\.[^/.]+$/, '');
-}
 
 function normalizeMarkdown(markdown: string): string {
   return markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -296,7 +293,7 @@ export class MarkdownDef extends FileDef {
     let base = await super.extractAttributes(url, memoizedStream, options);
     let bytes = await memoizedStream();
     let markdown = new TextDecoder().decode(bytes);
-    let fallbackTitle = fileNameWithoutExtension(base.name ?? '');
+    let fallbackTitle = nameWithoutExtension(base.name ?? '');
 
     let frontmatterData: Record<string, unknown> = {};
     let body = markdown;

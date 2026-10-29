@@ -1,6 +1,7 @@
 import {
   byteStreamToUint8Array,
   extensionOfIdentifier,
+  nameWithoutExtension,
 } from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import CsvIcon from '@cardstack/boxel-icons/csv';
@@ -27,10 +28,6 @@ const EXCERPT_MAX_LENGTH = 500;
 // An embedded cell shows the head of the table with a "… N more rows" note;
 // the isolated view shows the whole thing.
 const EMBEDDED_MAX_ROWS = 20;
-
-function fileNameWithoutExtension(name: string): string {
-  return name.replace(/\.[^/.]+$/, '');
-}
 
 function truncateExcerpt(text: string): string {
   if (text.length <= EXCERPT_MAX_LENGTH) {
@@ -437,7 +434,7 @@ export class CsvFileDef extends FileDef {
     let base = await super.extractAttributes(url, memoizedStream, options);
     let bytes = await memoizedStream();
     let csvText = new TextDecoder().decode(bytes);
-    let fallbackTitle = fileNameWithoutExtension(base.name ?? '');
+    let fallbackTitle = nameWithoutExtension(base.name ?? '');
     let rows = parseCsv(csvText);
     let columns = rows.length > 0 ? rows[0] : [];
     let columnCount = columns.length;

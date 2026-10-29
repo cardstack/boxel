@@ -1,6 +1,7 @@
 import {
   byteStreamToUint8Array,
   extensionOfIdentifier,
+  nameWithoutExtension,
 } from '@cardstack/runtime-common';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import { StringField, contains, field } from './card-api';
@@ -20,10 +21,6 @@ import {
 
 const HTML_EXTENSIONS = new Set(['.html', '.htm']);
 const EXCERPT_MAX_LENGTH = 500;
-
-function fileNameWithoutExtension(name: string): string {
-  return name.replace(/\.[^/.]+$/, '');
-}
 
 // A browser document, not a code file or a prose file: it has a rendered form
 // (safe inside a sandboxed frame) and an inspectable source form, and its
@@ -70,7 +67,7 @@ export class HtmlDef extends FileDef {
     let bytes = await memoizedStream();
     let text = new TextDecoder().decode(bytes);
     let htmlMetadata = extractHtmlMetadata(text);
-    let fallbackTitle = fileNameWithoutExtension(base.name ?? '');
+    let fallbackTitle = nameWithoutExtension(base.name ?? '');
 
     return {
       ...base,

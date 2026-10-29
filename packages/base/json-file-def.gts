@@ -1,6 +1,7 @@
 import {
   byteStreamToUint8Array,
   extensionOfIdentifier,
+  nameWithoutExtension,
 } from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import JsonIcon from '@cardstack/boxel-icons/json';
@@ -59,18 +60,6 @@ function tag(name: string, content: string, attrs?: string): string {
 
 function spanWrap(cls: string, content: string): string {
   return tag('span', content, `class="${cls}"`);
-}
-
-function fileNameWithoutExtension(name: string): string {
-  let dot = name.lastIndexOf('.');
-  if (dot === -1) {
-    return name;
-  }
-  let slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
-  if (dot < slash) {
-    return name;
-  }
-  return name.slice(0, dot);
 }
 
 function truncateExcerpt(text: string): string {
@@ -555,7 +544,7 @@ export class JsonFileDef extends FileDef {
     let base = await super.extractAttributes(url, memoizedStream, options);
     let bytes = await memoizedStream();
     let text = new TextDecoder().decode(bytes);
-    let fallbackTitle = fileNameWithoutExtension(base.name ?? '');
+    let fallbackTitle = nameWithoutExtension(base.name ?? '');
 
     // Parse once for the structural facts; invalid JSON keeps its content and
     // reports an empty root rather than failing the whole file.
