@@ -185,4 +185,30 @@ module('Integration | keyReadiness', function (hooks) {
       .dom('[data-test-readiness]')
       .hasText('ready', 'and the template re-reads the new answer');
   });
+
+  test('a focus long after the secure window opened is not a return from it', async function (assert) {
+    realmUnderTest.readiness.set('listPRs', 'needs-approval');
+    let secureWindow = this.owner.lookup(
+      'service:secure-window',
+    ) as unknown as SecureWindowService;
+    window.open = (() => ({})) as unknown as typeof window.open;
+    service.keyReadiness('listPRs', cardAt(`${REALM}inbox`));
+    await settled();
+    let realNow = Date.now;
+    let now = realNow();
+    Date.now = () => now;
+    try {
+      secureWindow.open('https://secure.example.test/secure');
+      now += 11 * 60_000;
+      window.dispatchEvent(new Event('focus'));
+      await settled();
+      assert.strictEqual(
+        realmUnderTest.sent.length,
+        1,
+        'switching back to the app later asks nothing',
+      );
+    } finally {
+      Date.now = realNow;
+    }
+  });
 });
