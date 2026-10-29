@@ -18,7 +18,7 @@ import {
   whenStyled,
 } from '../../src/credentials/style.ts';
 import { CredentialFrame, FORMS } from '../../src/security/credentials.js';
-import { waitForUntracked } from '../helpers/wait-for-untracked.ts';
+import { nextResize } from '../helpers/waiters.ts';
 
 const APP_ORIGIN = 'https://app.example.test';
 
@@ -365,20 +365,13 @@ module('Integration | credential fields', function (hooks) {
       receive({ type: 'style', properties: {} });
       // The frame measures itself once the styles are drawn, so the report
       // arrives after this message is handled.
-      await waitForUntracked(() => sizes().length > 0, {
-        waitingFor: 'the frame to report its height',
-      });
+      await settled();
       let first = sizes().at(-1);
       assert.strictEqual(first.height, formHeight(), 'the height of the form');
       await fillIn('[data-test-password-field]', 'short');
       await blur('[data-test-password-field]');
-      await waitForUntracked(() => sizes().at(-1).height > first.height, {
-        waitingFor: 'the frame to report a taller height',
-        progress: () =>
-          `heights reported: ${sizes()
-            .map((size) => size.height)
-            .join(', ')}`,
-      });
+      await nextResize(document.getElementById('credential-fields')!);
+      assert.true(sizes().at(-1).height > first.height, 'reports a new height');
       assert.strictEqual(
         sizes().at(-1).height,
         formHeight(),

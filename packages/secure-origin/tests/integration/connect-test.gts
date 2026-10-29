@@ -12,11 +12,7 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
-import {
-  errorShown,
-  requestsMade,
-  waitForUntracked,
-} from '../helpers/wait-for-untracked.ts';
+import { waitedFetch } from '../helpers/waiters.ts';
 
 // OAuth on the key pages, against a realm server that answers the requests
 // they make: connecting an account through an app the realm server offers,
@@ -201,22 +197,6 @@ module('Integration | connecting an account', function (hooks) {
       .map((r) => r.body.data.attributes);
   }
 
-  // How far a page got, for a wait that times out.
-  function progress() {
-    return `${requestsMade(requests)}; ${errorShown('[data-test-keys-error]')}`;
-  }
-
-  // The page sends the window on only once the realm server's answer to the
-  // connect request is read, and `settled()` doesn't wait for that: the stubbed
-  // `fetch` is a plain promise. A cold browser can still be reading it when the
-  // click returns, so a test waits for the window to go somewhere.
-  async function navigated() {
-    await waitForUntracked(() => navigations.length > 0, {
-      waitingFor: 'the window to go somewhere',
-      progress,
-    });
-  }
-
   function connectRequest() {
     return requests.find(
       (r) => r.method === 'POST' && r.path === '_oauth/connections',
@@ -261,27 +241,29 @@ module('Integration | connecting an account', function (hooks) {
           },
         }),
     };
-    window.fetch = async (
-      input: Parameters<typeof fetch>[0],
-      init: Parameters<typeof fetch>[1] = {},
-    ) => {
-      let url = new URL(String(input));
-      let method = init.method ?? 'GET';
-      let body = init.body ? JSON.parse(String(init.body)) : undefined;
-      let path = url.pathname.replace(/^\//, '');
-      requests.push({ method, path, url, body });
-      let route = routes[`${method} ${path}`];
-      let answer = route
-        ? await route({ url, method, body })
-        : refusal(404, 'Not found');
-      return new Response(
-        answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
-        {
-          status: answer.status,
-          headers: { 'Content-Type': 'application/vnd.api+json' },
-        },
-      );
-    };
+    window.fetch = waitedFetch(
+      async (
+        input: Parameters<typeof fetch>[0],
+        init: Parameters<typeof fetch>[1] = {},
+      ) => {
+        let url = new URL(String(input));
+        let method = init.method ?? 'GET';
+        let body = init.body ? JSON.parse(String(init.body)) : undefined;
+        let path = url.pathname.replace(/^\//, '');
+        requests.push({ method, path, url, body });
+        let route = routes[`${method} ${path}`];
+        let answer = route
+          ? await route({ url, method, body })
+          : refusal(404, 'Not found');
+        return new Response(
+          answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
+          {
+            status: answer.status,
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+          },
+        );
+      },
+    );
     navigation.assign = (url: string) =>
       navigations.push({ how: 'assign', url });
     navigation.replace = (url: string) =>
@@ -390,7 +372,6 @@ module('Integration | connecting an account', function (hooks) {
         .dom('[data-test-connect-name]')
         .hasValue(' Work GitHub ', 'a typed name stays');
       await click('[data-test-connect-submit]');
-      await navigated();
 
       assert.deepEqual(ticketRequests(), [{ action: 'add' }]);
       assert.deepEqual(connectRequest(), {
@@ -474,7 +455,6 @@ module('Integration | connecting an account', function (hooks) {
         'only the client the connection signs in through is asked for',
       );
       await click('[data-test-connect-submit]');
-      await navigated();
       assert.deepEqual(ticketRequests(), [
         { action: 'replace', keyId: 'conn-1' },
       ]);

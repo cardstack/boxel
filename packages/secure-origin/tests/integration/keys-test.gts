@@ -21,11 +21,7 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
-import {
-  errorShown,
-  requestsMade,
-  waitForUntracked,
-} from '../helpers/wait-for-untracked.ts';
+import { setupWaitedFileReads, waitedFetch } from '../helpers/waiters.ts';
 
 // The key pages, against a realm server that answers the requests they make.
 // Every change to a key is made with a key write ticket the page mints with
@@ -146,37 +142,17 @@ const SERVICE_ACCOUNT_FILE = JSON.stringify(
   2,
 );
 
-// Chooses a key file and waits until the page has read this one. The read is
-// a browser promise `settled()` doesn't track, so the wait is for what the
-// page says of this file by name: the service account it holds, or why it
-// can't be used.
+// Chooses a key file. The module waits on file reads, so this returns once
+// the page has read it.
 async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
   await triggerEvent('[data-test-service-account-file]', 'change', {
     files: [new File([contents], name, { type: 'application/json' })],
   });
-  await waitForUntracked(
-    () =>
-      document
-        .querySelector('[data-test-service-account-email]')
-        ?.textContent?.includes(name) ||
-      document
-        .querySelector('[data-test-service-account-problem]')
-        ?.getAttribute('data-test-service-account-problem-file') === name,
-    {
-      waitingFor: `the page to read ${name}`,
-      progress: () => {
-        let email = document
-          .querySelector('[data-test-service-account-email]')
-          ?.textContent?.trim();
-        return `service account shown: ${email || 'none'}; ${errorShown('[data-test-service-account-problem]')}`;
-      },
-    },
-  );
-  await settled();
 }
 
 module('Integration | key pages', function (hooks) {
   setupRenderingTest(hooks);
+  setupWaitedFileReads(hooks);
 
   let requests: { method: string; path: string; url: URL; body: any }[];
   let routes: Record<string, Route>;
@@ -193,11 +169,6 @@ module('Integration | key pages', function (hooks) {
 
   function visitShell(query: string) {
     history.replaceState(null, '', `/secure/${query}`);
-  }
-
-  // How far a page got, for a wait that times out.
-  function progress() {
-    return `${requestsMade(requests)}; ${errorShown('[data-test-keys-error]')}`;
   }
 
   function ticketRequests() {
@@ -235,27 +206,29 @@ module('Integration | key pages', function (hooks) {
         }),
       'GET _user-keys': () => json(200, keyResources()),
     };
-    window.fetch = async (
-      input: Parameters<typeof fetch>[0],
-      init: Parameters<typeof fetch>[1] = {},
-    ) => {
-      let url = new URL(String(input));
-      let method = init.method ?? 'GET';
-      let body = init.body ? JSON.parse(String(init.body)) : undefined;
-      let path = url.pathname.replace(/^\//, '');
-      requests.push({ method, path, url, body });
-      let route = routes[`${method} ${path}`];
-      let answer = route
-        ? await route({ url, method, body })
-        : refusal(404, 'Not found');
-      return new Response(
-        answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
-        {
-          status: answer.status,
-          headers: { 'Content-Type': 'application/vnd.api+json' },
-        },
-      );
-    };
+    window.fetch = waitedFetch(
+      async (
+        input: Parameters<typeof fetch>[0],
+        init: Parameters<typeof fetch>[1] = {},
+      ) => {
+        let url = new URL(String(input));
+        let method = init.method ?? 'GET';
+        let body = init.body ? JSON.parse(String(init.body)) : undefined;
+        let path = url.pathname.replace(/^\//, '');
+        requests.push({ method, path, url, body });
+        let route = routes[`${method} ${path}`];
+        let answer = route
+          ? await route({ url, method, body })
+          : refusal(404, 'Not found');
+        return new Response(
+          answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
+          {
+            status: answer.status,
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+          },
+        );
+      },
+    );
     navigation.assign = (url: string) =>
       navigations.push({ how: 'assign', url });
     navigation.replace = (url: string) =>
@@ -488,10 +461,6 @@ module('Integration | key pages', function (hooks) {
       await click('[data-test-key-row="Maps"] [data-test-key-replace]');
       await fillIn('[data-test-key-value]', 'new-value');
       await click('[data-test-key-replace-save]');
-      await waitForUntracked(() => requests.some((r) => r.method === 'PATCH'), {
-        waitingFor: 'the key to be replaced',
-        progress,
-      });
       assert.dom('[data-test-keys-signed-out]').doesNotExist();
       assert.strictEqual(
         requests.filter((r) => r.path === '_key-write-tickets').length,
@@ -617,11 +586,6 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
       await fillIn('[data-test-key-value]', 'sk-new-value');
       await click('[data-test-key-replace-save]');
-      await waitForUntracked(() => requests.some((r) => r.method === 'PATCH'), {
-        waitingFor: 'the key to be replaced',
-        progress,
-      });
-      await settled();
       assert.deepEqual(ticketRequests(), [
         { action: 'replace', keyId: 'key-2' },
       ]);
@@ -736,11 +700,6 @@ module('Integration | key pages', function (hooks) {
 
       await click(`${team} [data-test-key-unshare]`);
       await click(`${team} [data-test-key-unshare-confirm-button]`);
-      await waitForUntracked(() => listings === 2, {
-        waitingFor: 'the shares to be listed again',
-        progress,
-      });
-      await settled();
       assert.deepEqual(
         requests
           .filter((r) => r.method === 'DELETE')
@@ -934,11 +893,6 @@ module('Integration | key pages', function (hooks) {
           'Someone with direct write access to one of them can put their own key in its place.',
         );
       await click('[data-test-key-delete-confirm-button]');
-      await waitForUntracked(
-        () => requests.some((r) => r.method === 'DELETE'),
-        { waitingFor: 'the key to be deleted', progress },
-      );
-      await settled();
       assert.deepEqual(ticketRequests(), [
         { action: 'delete', keyId: 'key-1' },
       ]);
@@ -963,10 +917,7 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-key-delete-loading]');
       assert.dom('[data-test-key-delete-confirm-button]').isDisabled();
       release();
-      await waitForUntracked(
-        () => !document.querySelector('[data-test-key-delete-loading]'),
-        { waitingFor: 'the share lookup to finish', progress },
-      );
+      await settled();
       assert.dom('[data-test-key-delete-confirm-button]').isNotDisabled();
       assert
         .dom('[data-test-key-delete-confirm]')
@@ -1219,10 +1170,6 @@ module('Integration | key pages', function (hooks) {
       await fillIn('[data-test-key-name]', 'Forecasts');
       await fillIn('[data-test-key-value]', 'sk-forecast');
       await click('[data-test-enter-key-save]');
-      await waitForUntracked(() => navigations.length > 0, {
-        waitingFor: 'the window to go somewhere',
-        progress,
-      });
       assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
     });
 
@@ -1536,11 +1483,6 @@ module('Integration | key pages', function (hooks) {
         'https://www.googleapis.com/auth/spreadsheets',
       );
       await click('[data-test-key-replace-save]');
-      await waitForUntracked(() => requests.some((r) => r.method === 'PATCH'), {
-        waitingFor: 'the key to be replaced',
-        progress,
-      });
-      await settled();
       assert.deepEqual(ticketRequests(), [
         { action: 'replace', keyId: 'key-sa' },
       ]);
