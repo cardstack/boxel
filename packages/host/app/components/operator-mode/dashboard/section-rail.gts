@@ -240,6 +240,19 @@ export default class SectionRail extends Component<Signature> {
     this.args.sections.scrollTo(section.id);
   }
 
+  // A pick inside the flyout removes the focused row, so focus goes back to
+  // the flyout's entry, as it does on Escape.
+  @action private showSection(section: DashboardSection) {
+    if (this.flyoutElement?.contains(document.activeElement)) {
+      this.railElement
+        ?.querySelector<HTMLElement>(
+          `[data-section-rail-entry="${section.id}"]`,
+        )
+        ?.focus();
+    }
+    this.args.sections.scrollTo(section.id);
+  }
+
   @action private closeFlyout() {
     this.flyoutIntentTask.cancelAll();
     this.openId = null;
@@ -321,6 +334,7 @@ export default class SectionRail extends Component<Signature> {
                     <section.flyout
                       @close={{this.closeFlyout}}
                       @titleId={{this.flyoutTitleId section.id}}
+                      @showSection={{fn this.showSection section}}
                     />
                   </div>
                 </div>

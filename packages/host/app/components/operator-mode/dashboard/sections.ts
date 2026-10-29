@@ -13,6 +13,8 @@ export interface SectionFlyoutSignature {
     close: () => void;
     // The id the flyout's visible title takes, which names the flyout.
     titleId: string;
+    // Scrolls the page to the flyout's section.
+    showSection: () => void;
   };
 }
 
