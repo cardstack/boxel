@@ -8,9 +8,14 @@
 // Each rule names a skill and says which tool calls need it. A call that
 // matches a rule is allowed once the transcript of the session or subagent
 // making it shows the skill was loaded (through the Skill tool or its slash
-// command), and refused with the skill's name otherwise. A call no rule
-// matches never reads a transcript. Rules err toward matching: a needless
-// refusal costs one skill load, and a miss is the mistake the rule exists for.
+// command), and refused with the skill's name otherwise. The UI-lens rules
+// also accept a Read of a file of the skill, for a copy the Skill tool can't
+// load, and for a skill the session can't load at all, a review body that
+// says it wasn't reviewed; they read the transcript (the skill listing, the
+// loads) to decide whether they match, so a review of a UI change reads it
+// even when the rule ends up not matching. A call no other rule matches
+// never reads a transcript. Rules err toward matching: a needless refusal
+// costs one skill load, and a miss is the mistake the rule exists for.
 //
 // The hook fails open: input it can't parse, or a transcript it can't find or
 // read, allows the call rather than wedging the session.
@@ -50,20 +55,23 @@ const BODY_FILE = /(?:--body-file[=\s]+|-F\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/;
 // GH_REPO, or a cd into a checkout of it.
 const NAMES_CATALOG = /\bboxel-catalog\b/;
 
-function bodyFileText(command, cwd) {
-  let match = BODY_FILE.exec(command);
-  let file = match?.[1] ?? match?.[2] ?? match?.[3];
+// A file a command reads, relative to its directory. Only a regular file: a
+// FIFO would block the read until the hook times out.
+function fileText(file, cwd) {
   if (!file || file === '-') {
     return '';
   }
   let path = isAbsolute(file) || !cwd ? file : join(cwd, file);
   try {
-    // Only a regular file: a FIFO would block the read until the hook times
-    // out.
     return statSync(path).isFile() ? readFileSync(path, 'utf8') : '';
   } catch {
     return '';
   }
+}
+
+function bodyFileText(command, cwd) {
+  let match = BODY_FILE.exec(command);
+  return fileText(match?.[1] ?? match?.[2] ?? match?.[3], cwd);
 }
 
 function inCatalogCheckout(cwd) {
@@ -83,6 +91,674 @@ function inCatalogCheckout(cwd) {
   } catch {
     return false;
   }
+}
+
+// A pull request review posted from the shell or the GitHub MCP tools: a
+// review, or an inline comment in one. A reply in a thread isn't one: it
+// continues a review that already ran the lens, or answers one. Neither is a
+// top-level comment, which pr-review never posts a review as; requiring the
+// lens for one would cost every "rebased" note on a UI pull request.
+const GH_PR_REVIEW = new RegExp(
+  String.raw`\bgh${GH_REPO_FLAG}\s+pr${GH_REPO_FLAG}\s+review\b`,
+);
+// gh pr review flags that take a value.
+const GH_VALUE_FLAGS = new Set([
+  '-b',
+  '--body',
+  '-F',
+  '--body-file',
+  '-R',
+  '--repo',
+]);
+const GH_API_REVIEW =
+  /\bgh\s+api\b.*?\brepos\/([^/\s'"]+\/[^/\s'"]+)\/pulls\/(\d+)\/(reviews|comments)\b(?:\/(\d+)(\/replies|\/events)?)?/;
+// A field flag makes gh api POST unless the method says otherwise. PUT and
+// PATCH rewrite a review or comment that is already posted.
+const GH_API_METHOD = /(?:^|\s)(?:-X|--method)(?:=|\s*)['"]?(\w+)/i;
+const GH_API_FIELDS = /(?:^|\s)(?:-f|-F|--field|--raw-field|--input)(?:=|\s)/;
+function isWrite(apiCommand) {
+  let method = GH_API_METHOD.exec(apiCommand)?.[1];
+  return method
+    ? /^(?:POST|PUT|PATCH)$/i.test(method)
+    : GH_API_FIELDS.test(apiCommand);
+}
+// Where the command starting at `index` ends, in the unquoted text: the next
+// separator, pipe or newline.
+function commandEnd(code, index) {
+  let end = code.slice(index).search(/[;&|\n]/);
+  return end < 0 ? code.length : index + end;
+}
+const GH_GRAPHQL = /\bgh\s+api\s+graphql\b/;
+const GRAPHQL_REVIEW =
+  /\b(?:addPullRequestReview|addPullRequestReviewComment|addPullRequestReviewThread|submitPullRequestReview)\b/;
+// The mutations that write a review's body rather than an inline comment.
+const GRAPHQL_REVIEW_BODY =
+  /\b(?:addPullRequestReview|submitPullRequestReview)\b/;
+// The pull request, review, thread or comment a review mutation names.
+// A real node ID, not a shell variable like $PR_ID.
+const REVIEW_NODE_ID = /(?<![$\w])(?:PR|PRR|PRRT|PRRC)_[A-Za-z0-9_-]{6,}/;
+const MCP_REVIEW_TOOLS = new Set([
+  'mcp__github__pull_request_review_write',
+  'mcp__github__add_comment_to_pending_review',
+]);
+// What ui-lens.md calls a UI change, by file type. Tests aren't one.
+const UI_FILE = /\.(gts|hbs|css)$/;
+const TEST_FILE = /(^|\/)tests?\/|[.-]test\.gts$/;
+
+// The words of a shell command up to the end of its first command, unquoted.
+// Enough to read flags and arguments; not a shell parser.
+function shellWords(text) {
+  let words = [];
+  let word = null;
+  for (let i = 0; i < text.length; i++) {
+    let c = text[i];
+    if (c === "'") {
+      let end = text.indexOf("'", i + 1);
+      end = end < 0 ? text.length : end;
+      word = (word ?? '') + text.slice(i + 1, end);
+      i = end;
+    } else if (c === '"') {
+      let j = i + 1;
+      let quoted = '';
+      while (j < text.length && text[j] !== '"') {
+        if (text[j] === '\\' && j + 1 < text.length) {
+          j++;
+        }
+        quoted += text[j++];
+      }
+      word = (word ?? '') + quoted;
+      i = j;
+    } else if (c === '\\' && i + 1 < text.length) {
+      word = (word ?? '') + text[++i];
+    } else if (/[;&|\n<>]/.test(c)) {
+      // A redirect ends the arguments too; the `2` of `2>&1` isn't one.
+      if (/[<>]/.test(c) && word !== null && /^\d+$/.test(word)) {
+        word = null;
+      }
+      break;
+    } else if (/\s/.test(c)) {
+      if (word !== null) {
+        words.push(word);
+        word = null;
+      }
+    } else {
+      word = (word ?? '') + c;
+    }
+  }
+  if (word !== null) {
+    words.push(word);
+  }
+  return words;
+}
+
+// The command with every quoted string and heredoc body blanked out, at the
+// same offsets, so a pattern that matches it matches code the shell runs.
+function unquoted(command) {
+  let out = '';
+  let i = 0;
+  // A blank is a word character, so a quoted value stays one word: the
+  // `-R "cardstack/boxel"` before `pr` still matches a repository flag.
+  let blank = (text) => text.replace(/[^\n]/g, '_');
+  // Heredocs opened on the current line, whose bodies start after it.
+  let pending = [];
+  while (i < command.length) {
+    let c = command[i];
+    if (c === '\n' && pending.length) {
+      let at = i + 1;
+      for (let { strip, word } of pending) {
+        let delimiter = new RegExp(`^${strip ? '\\t*' : ''}${word}$`);
+        while (at < command.length) {
+          let next = command.indexOf('\n', at);
+          let lineEnd = next < 0 ? command.length : next;
+          let done = delimiter.test(command.slice(at, lineEnd));
+          at = lineEnd + 1;
+          if (done) {
+            break;
+          }
+        }
+      }
+      let end = Math.min(at, command.length);
+      out += '\n' + blank(command.slice(i + 1, end));
+      pending = [];
+      i = end;
+      continue;
+    }
+    if (c === '\\') {
+      out += command.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (c === '#' && (i === 0 || /[\s;&|(]/.test(command[i - 1]))) {
+      let end = command.indexOf('\n', i);
+      end = end < 0 ? command.length : end;
+      out += blank(command.slice(i, end));
+      i = end;
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      let j = i + 1;
+      while (j < command.length && command[j] !== c) {
+        j += c === '"' && command[j] === '\\' ? 2 : 1;
+      }
+      j = Math.min(j, command.length - 1);
+      // A quoted newline doesn't end the command.
+      out +=
+        c +
+        command.slice(i + 1, j).replace(/[^]/g, '_') +
+        command.slice(j, j + 1);
+      i = j + 1;
+      continue;
+    }
+    let heredoc = /^<<(-?)\s*(['"]?)(\w+)\2/.exec(command.slice(i));
+    if (heredoc) {
+      pending.push({ strip: Boolean(heredoc[1]), word: heredoc[3] });
+      out += heredoc[0];
+      i += heredoc[0].length;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+// The directory and GH_REPO a gh call at `index` runs with: the last `cd`
+// before it and an inline GH_REPO=, which the hook's own cwd doesn't see.
+function shellContext(command, index, cwd) {
+  let prefix = command.slice(0, index);
+  let dir = cwd;
+  for (let [, double, single, bare] of prefix.matchAll(
+    /(?:^|[;&|\s(])cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|)]+))/g,
+  )) {
+    let path = (double ?? single ?? bare).replace(
+      /^~(?=\/|$)/,
+      process.env.HOME ?? '~',
+    );
+    dir = isAbsolute(path) || !dir ? path : join(dir, path);
+  }
+  let repo = /\bGH_REPO=(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/.exec(prefix);
+  return { cwd: dir, repo: repo?.[1] ?? repo?.[2] ?? repo?.[3] };
+}
+
+// gh's `{owner}/{repo}` placeholders mean the current repository, which the
+// call's directory already gives.
+function literalRepo(repo) {
+  return repo && !repo.includes('{') ? repo : undefined;
+}
+
+// The Bash command with each backslash-newline continuation joined, at the
+// same offsets.
+function commandText(input) {
+  return (input.tool_input?.command ?? '').replace(/\\\n/g, '  ');
+}
+
+function reviewTarget(input) {
+  let { tool_name, tool_input, cwd } = input;
+  if (MCP_REVIEW_TOOLS.has(tool_name)) {
+    let { owner, repo, pullNumber, method } = tool_input ?? {};
+    // Throwing a pending review away posts nothing.
+    if (!pullNumber || method === 'delete_pending') {
+      return undefined;
+    }
+    let review = tool_name === 'mcp__github__pull_request_review_write';
+    return {
+      kind: review ? 'review' : 'comment',
+      // A pending review, and a comment added to one, are seen by no one
+      // until the review is submitted.
+      publishes:
+        review &&
+        (method === 'submit_pending'
+          ? 'pending'
+          : method !== 'create' || Boolean(tool_input.event)),
+      cwd,
+      selector: String(pullNumber),
+      repo: owner && repo ? `${owner}/${repo}` : undefined,
+    };
+  }
+  if (tool_name !== 'Bash') {
+    return undefined;
+  }
+  let command = commandText(input);
+  // Only a gh that runs counts; one quoted in a body or a fixture doesn't.
+  // Its path, query and flags are still read from the command as written.
+  let code = unquoted(command);
+  for (let ghApi of code.matchAll(/\bgh\s+api\b/g)) {
+    let end = commandEnd(code, ghApi.index);
+    let apiCommand = command.slice(ghApi.index, end);
+    let api = GH_API_REVIEW.exec(apiCommand);
+    if (api && isWrite(apiCommand)) {
+      if (api[5] === '/replies' || /\bin_reply_to\b/.test(apiCommand)) {
+        continue;
+      }
+      let context = shellContext(command, ghApi.index, cwd);
+      return {
+        kind: api[3] === 'reviews' ? 'review' : 'comment',
+        // A new review without an event stays pending; submitting one, editing
+        // a review and posting a comment outside a review all publish.
+        publishes:
+          api[3] === 'reviews' && !api[4] ? 'event' : api[5] ? 'pending' : true,
+        reviewId: api[4],
+        cwd: context.cwd,
+        selector: api[2],
+        repo: literalRepo(api[1]) ?? context.repo,
+      };
+    }
+    let query = command.slice(ghApi.index, end);
+    if (
+      GH_GRAPHQL.test(code.slice(ghApi.index, end)) &&
+      GRAPHQL_REVIEW.test(query)
+    ) {
+      let nodeId = REVIEW_NODE_ID.exec(query)?.[0];
+      if (nodeId) {
+        return {
+          kind: GRAPHQL_REVIEW_BODY.test(query) ? 'review' : 'comment',
+          // Comments and threads go into a pending review.
+          publishes: /\bsubmitPullRequestReview\b/.test(query)
+            ? 'pending'
+            : /\baddPullRequestReview\b/.test(query) &&
+              /\bevent\s*:/.test(query),
+          cwd: shellContext(command, ghApi.index, cwd).cwd,
+          nodeId,
+        };
+      }
+    }
+  }
+  let review = GH_PR_REVIEW.exec(code);
+  if (review) {
+    let context = shellContext(command, review.index, cwd);
+    // A repository flag can come before `pr` as well as after `review`.
+    let head = shellWords(
+      command.slice(review.index, review.index + review[0].length),
+    );
+    let at = head.findIndex((word) => /^(?:-R|--repo)$/.test(word));
+    let repo =
+      at >= 0
+        ? head[at + 1]
+        : head.find((word) => word.startsWith('--repo='))?.slice(7);
+    let words = shellWords(command.slice(review.index + review[0].length));
+    let selector;
+    for (let i = 0; i < words.length; i++) {
+      let word = words[i];
+      if (word === '-R' || word === '--repo') {
+        repo = words[i + 1];
+      } else if (word.startsWith('--repo=')) {
+        repo = word.slice('--repo='.length);
+      }
+      if (!word.startsWith('-')) {
+        selector ??= word;
+      } else if (GH_VALUE_FLAGS.has(word)) {
+        i++;
+      }
+    }
+    return {
+      kind: 'review',
+      publishes: true,
+      cwd: context.cwd,
+      selector,
+      repo: repo ?? context.repo,
+    };
+  }
+  return undefined;
+}
+
+const NODE_PULL_REQUEST = `query($id: ID!) { node(id: $id) {
+  ... on PullRequest { number repository { nameWithOwner } }
+  ... on PullRequestReview { pullRequest { number repository { nameWithOwner } } }
+  ... on PullRequestReviewThread { pullRequest { number repository { nameWithOwner } } }
+  ... on PullRequestReviewComment { pullRequest { number repository { nameWithOwner } } }
+} }`;
+
+function gh(args, cwd) {
+  return execFileSync('gh', args, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: 15000,
+  });
+}
+
+// The UI files the reviewed pull request changes. Every UI-lens rule asks,
+// so the diff is read once. A pull request or diff that can't be read allows
+// the review rather than refusing every one.
+let uiFiles;
+function changedUIFiles(input) {
+  if (uiFiles) {
+    return uiFiles;
+  }
+  uiFiles = [];
+  let target = reviewTarget(input);
+  if (!target) {
+    return uiFiles;
+  }
+  try {
+    if (target.nodeId) {
+      let [repo, number] = gh(
+        [
+          'api',
+          'graphql',
+          '-f',
+          `query=${NODE_PULL_REQUEST}`,
+          '-f',
+          `id=${target.nodeId}`,
+          '--jq',
+          '.data.node | (.pullRequest // .) | "\\(.repository.nameWithOwner) \\(.number)"',
+        ],
+        target.cwd,
+      )
+        .trim()
+        .split(' ');
+      target = { ...target, repo, selector: number };
+    }
+    let args = ['pr', 'diff', '--name-only'];
+    if (target.selector) {
+      args.push(target.selector);
+    }
+    if (target.repo) {
+      args.push('--repo', target.repo);
+    }
+    let names;
+    try {
+      names = gh(args, target.cwd);
+    } catch {
+      // gh pr diff refuses a diff too large to render; the files endpoint
+      // still lists up to 3000.
+      let url = gh(
+        ['pr', 'view', ...args.slice(3), '--json', 'url', '--jq', '.url'],
+        target.cwd,
+      );
+      let [, repo, number] =
+        /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url) ?? [];
+      names = gh(
+        [
+          'api',
+          '--paginate',
+          `repos/${repo}/pulls/${number}/files`,
+          '--jq',
+          '.[].filename',
+        ],
+        target.cwd,
+      );
+    }
+    uiFiles = names
+      .split('\n')
+      .map((file) => file.trim())
+      .filter((file) => UI_FILE.test(file) && !TEST_FILE.test(file));
+  } catch {
+    uiFiles = [];
+  }
+  return uiFiles;
+}
+
+// The skills in this session's skill listing, which the transcript records.
+// undefined when it can't say: no listing was found.
+let listed;
+function canLoad(input, skill) {
+  if (!listed) {
+    listed = new Set();
+    // A subagent's listing may be only in the main session's transcript,
+    // which a fork's already includes.
+    let texts = [sessionTranscript(input) ?? ''];
+    if (input.agent_id && input.agent_type !== 'fork') {
+      try {
+        texts.push(readFileSync(input.transcript_path, 'utf8'));
+      } catch {
+        // The subagent's own transcript still counts.
+      }
+    }
+    for (let line of texts.join('\n').split('\n')) {
+      if (!line.includes('"skill_listing"')) {
+        continue;
+      }
+      let entry;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      let content = entry?.attachment?.content;
+      if (
+        entry?.attachment?.type !== 'skill_listing' ||
+        typeof content !== 'string'
+      ) {
+        continue;
+      }
+      for (let [, name] of content.matchAll(/^- (\S+?):?(?:\s|$)/gm)) {
+        listed.add(name);
+      }
+    }
+  }
+  return listed.size ? listed.has(skill) : undefined;
+}
+
+// The value of a `name=value` field flag in a gh api command.
+function fieldValue(words, name) {
+  for (let i = 0; i < words.length; i++) {
+    let word = words[i];
+    let value = /^(?:-f|-F|--field|--raw-field)$/.test(word)
+      ? words[i + 1]
+      : /^(?:--field|--raw-field)=/.exec(word) && word.replace(/^[^=]*=/, '');
+    if (value?.startsWith(`${name}=`)) {
+      return value.slice(name.length + 1);
+    }
+  }
+  return undefined;
+}
+
+// The first heredoc body in a command, for input read from stdin.
+function heredocBody(command) {
+  return /<<-?\s*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n\s*\2\s*(?:\n|$)/.exec(
+    command,
+  )?.[3];
+}
+
+// What a call that publishes a review or comment shows: the body it writes,
+// and when it submits a pending review, that review's body as well. undefined
+// for a call nobody sees yet: a pending review, or a comment added to one.
+// The review body is where pr-review says which lenses didn't run.
+let body;
+let event = false;
+function publishedBody(input) {
+  if (body !== undefined) {
+    return body;
+  }
+  body = '';
+  let target = reviewTarget(input);
+  if (!target?.publishes) {
+    body = undefined;
+    return body;
+  }
+  readBody(input, target);
+  if (target.publishes === 'event' && !event) {
+    body = undefined;
+    return body;
+  }
+  if (target.publishes === 'pending') {
+    body += '\n' + pendingBody(input, target);
+  }
+  return body;
+}
+
+// The body of the pending review a call submits, from GitHub. One that can't
+// be read adds nothing, so the submitting call has to carry the statement.
+function pendingBody(input, target) {
+  let repo = target.repo ?? '{owner}/{repo}';
+  try {
+    if (target.nodeId) {
+      return gh(
+        [
+          'api',
+          'graphql',
+          '-f',
+          'query=query($id: ID!) { node(id: $id) { ... on PullRequestReview { body } } }',
+          '-f',
+          `id=${target.nodeId}`,
+          '--jq',
+          '.data.node.body // ""',
+        ],
+        target.cwd,
+      );
+    }
+    if (target.reviewId) {
+      return gh(
+        [
+          'api',
+          `repos/${repo}/pulls/${target.selector}/reviews/${target.reviewId}`,
+          '--jq',
+          '.body // ""',
+        ],
+        target.cwd,
+      );
+    }
+    return gh(
+      [
+        'api',
+        '--paginate',
+        `repos/${repo}/pulls/${target.selector}/reviews`,
+        '--jq',
+        '.[] | select(.state == "PENDING") | .body',
+      ],
+      target.cwd,
+    );
+  } catch {
+    return '';
+  }
+}
+
+// The body, and whether an event is set, as the call writes them.
+function readBody(input, target) {
+  let { tool_name, tool_input } = input;
+  if (tool_name !== 'Bash') {
+    body = typeof tool_input?.body === 'string' ? tool_input.body : '';
+    return;
+  }
+  let command = commandText(input);
+  let code = unquoted(command);
+  let review = GH_PR_REVIEW.exec(code);
+  if (review) {
+    let words = shellWords(command.slice(review.index + review[0].length));
+    for (let i = 0; i < words.length; i++) {
+      let [flag, inline] = words[i].split(/=(.*)/s);
+      let value = inline ?? words[i + 1];
+      if (flag === '-b' || flag === '--body') {
+        body += value ?? '';
+      } else if (flag === '-F' || flag === '--body-file') {
+        body +=
+          value === '-'
+            ? (heredocBody(command) ?? '')
+            : fileText(value, target.cwd);
+      }
+    }
+    return;
+  }
+  // gh api: a `body` field, or a JSON payload with a top-level body. An
+  // inline comment's `comments[][body]` isn't the review's body.
+  let start = /\bgh\s+api\b/.exec(code)?.index ?? 0;
+  let words = shellWords(command.slice(start, commandEnd(code, start)));
+  // `-F body=@file` reads the body from a file.
+  let field = fieldValue(words, 'body') ?? '';
+  body = field.startsWith('@')
+    ? field === '@-'
+      ? (heredocBody(command) ?? '')
+      : fileText(field.slice(1), target.cwd)
+    : field;
+  event = Boolean(fieldValue(words, 'event'));
+  let inputAt = words.findIndex((word) => /^--input(=|$)/.test(word));
+  if (inputAt >= 0) {
+    let file = words[inputAt].includes('=')
+      ? words[inputAt].slice('--input='.length)
+      : words[inputAt + 1];
+    let json = file === '-' ? heredocBody(command) : fileText(file, target.cwd);
+    try {
+      let payload = JSON.parse(json ?? '');
+      body += typeof payload?.body === 'string' ? payload.body : '';
+      event ||= Boolean(payload?.event);
+    } catch {
+      // Not JSON: no body to read.
+    }
+  }
+  if (target.nodeId) {
+    // A GraphQL review mutation: the body argument of its input.
+    body += /\bbody\s*:\s*\\?"((?:[^"\\]|\\.)*?)\\?"/.exec(command)?.[1] ?? '';
+  }
+}
+
+// A sentence of the body that names the skill and says it didn't run.
+const NOT_REVIEWED = /\bnot\b|n't\b|\bskipped\b/i;
+function namesAsNotReviewed(text, skill) {
+  return text
+    .split(/(?<=[.!?])\s+|\n/)
+    .some(
+      (sentence) => sentence.includes(skill) && NOT_REVIEWED.test(sentence),
+    );
+}
+
+// The plugin a lens skill comes from, for the install hint.
+const LENS_PLUGINS = {
+  'boxel-skills': 'boxel-skills@cardstack-boxel',
+  interfaces: 'interfaces@interfaces',
+};
+
+// `load` is the name the Skill tool loads the skill by. A `.gts`-only rule
+// applies when the change has a `.gts` file.
+function uiLensRule(load, { gtsOnly = false } = {}) {
+  let skill = load.split(':').pop();
+  return {
+    skill,
+    load,
+    why: 'A review of a UI change runs the UI lens in .claude/skills/pr-review/references/ui-lens.md, which loads these skills and runs them in full.',
+    matches(input) {
+      let files = changedUIFiles(input);
+      if (!files.length) {
+        return false;
+      }
+      if (gtsOnly && !files.some((file) => file.endsWith('.gts'))) {
+        return false;
+      }
+      let available = canLoad(input, load);
+      if (available) {
+        return 'posting a review of a UI change';
+      }
+      // A skill this session can't load can't be required. Reading another
+      // copy of it (boxel-ui-guidelines from the fetch:skills cache) stands
+      // in for it; otherwise the review's body says it wasn't reviewed,
+      // naming better-interface for the whole interfaces plugin when that is
+      // what's missing.
+      let transcript = sessionTranscript(input);
+      if (
+        transcript === undefined ||
+        loaded(transcript, skill) ||
+        readSkillFile(transcript, skill)
+      ) {
+        return false;
+      }
+      let [prefix] = load.split(':');
+      let named =
+        prefix === 'interfaces' &&
+        !canLoad(input, 'interfaces:better-interface')
+          ? 'better-interface'
+          : skill;
+      // Only the call that publishes has to carry the statement.
+      let text = publishedBody(input);
+      if (text === undefined || namesAsNotReviewed(text, named)) {
+        return false;
+      }
+      let plugin = LENS_PLUGINS[prefix];
+      if (available === undefined) {
+        // No skill listing was found, so whether the session can load the
+        // skill is unknown: either answer satisfies the rule.
+        return {
+          refusal: `Posting a review of a UI change needs the \`${skill}\` skill. Load it with the Skill tool (skill: "${load}") and run it, or, if this session can't load it, say in the review's opening sentence that \`${named}\` wasn't reviewed, then retry.`,
+        };
+      }
+      return {
+        refusal:
+          `This session can't load \`${named}\`` +
+          (plugin
+            ? `: the \`${plugin}\` plugin isn't installed here, or wasn't when this session started. Ask the user to run \`claude plugin install ${plugin} --scope local\` and /reload-plugins, then load the skill and run the lens. Only when it can't be installed here, say in the review's opening sentence that \`${named}\` wasn't reviewed, then retry.`
+            : `, so the review's opening sentence has to say \`${named}\` wasn't reviewed, and this one doesn't. Say so, then retry.`),
+      };
+    },
+  };
 }
 
 const rules = [
@@ -137,6 +813,18 @@ const rules = [
       return false;
     },
   },
+  uiLensRule('gts-component-conventions', { gtsOnly: true }),
+  uiLensRule('boxel-skills:boxel-ui-guidelines'),
+  // better-interface, then each of its domains in its order.
+  ...[
+    'better-interface',
+    'better-accessibility',
+    'better-layout',
+    'better-writing',
+    'better-typography',
+    'better-colors',
+    'better-ui',
+  ].map((skill) => uiLensRule(`interfaces:${skill}`)),
 ];
 
 // A loaded skill is a user message whose text block opens with "Base
@@ -181,6 +869,37 @@ function loaded(transcript, skill) {
   return false;
 }
 
+// Whether the session read a file of the skill with the Read tool, as it
+// does for a copy the Skill tool can't load: its SKILL.md, or one of its
+// references, which is where boxel-ui-guidelines keeps the procedure itself.
+function readSkillFile(transcript, skill) {
+  for (let line of transcript.split('\n')) {
+    if (!line.includes(`/${skill}/`)) {
+      continue;
+    }
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    let content = entry?.message?.content;
+    if (
+      entry?.type === 'assistant' &&
+      Array.isArray(content) &&
+      content.some(
+        (block) =>
+          block?.type === 'tool_use' &&
+          block.name === 'Read' &&
+          String(block.input?.file_path ?? '').includes(`/${skill}/`),
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Every hook call gets the main session's transcript_path, including calls a
 // subagent makes; those also carry agent_id, and the subagent's own messages,
 // its skill loads among them, are written to
@@ -209,6 +928,20 @@ function readTranscript(input) {
   return transcript;
 }
 
+// The transcript of the session or subagent making the call, read once;
+// undefined when it can't be read.
+let transcriptText = null;
+function sessionTranscript(input) {
+  if (transcriptText === null) {
+    try {
+      transcriptText = readTranscript(input);
+    } catch {
+      transcriptText = undefined;
+    }
+  }
+  return transcriptText;
+}
+
 let input;
 try {
   input = JSON.parse(readFileSync(0, 'utf8'));
@@ -217,27 +950,29 @@ try {
 }
 
 let refusals = [];
-let transcript;
+let whys = new Set();
 for (let rule of rules) {
   let action = rule.matches(input);
   if (!action) {
     continue;
   }
+  if (action.refusal) {
+    if (!refusals.includes(action.refusal)) {
+      refusals.push(action.refusal);
+      whys.add(rule.why);
+    }
+    continue;
+  }
+  let transcript = sessionTranscript(input);
   if (transcript === undefined) {
-    try {
-      transcript = readTranscript(input);
-    } catch {
-      transcript = undefined;
-    }
-    if (transcript === undefined) {
-      process.exit(0);
-    }
+    process.exit(0);
   }
   if (!loaded(transcript, rule.skill)) {
     refusals.push(
       `${action} needs the \`${rule.skill}\` skill, which this session hasn't loaded. ` +
-        `Load it with the Skill tool (skill: "${rule.skill}"), follow it, then retry. ${rule.why}`,
+        `Load it with the Skill tool (skill: "${rule.load ?? rule.skill}"), follow it, then retry.`,
     );
+    whys.add(rule.why);
   }
 }
 
@@ -247,7 +982,7 @@ if (refusals.length) {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
-        permissionDecisionReason: refusals.join(' '),
+        permissionDecisionReason: [...refusals, ...whys].join(' '),
       },
     }),
   );
