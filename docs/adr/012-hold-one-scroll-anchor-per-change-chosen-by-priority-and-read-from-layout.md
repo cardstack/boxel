@@ -156,4 +156,4 @@ not decided here. When it lands, it extends §1.4 by an edit to this ADR.
 
 ## 6. Remediation
 
-No known gaps.
+Known gaps are listed in [remediation/012.md](remediation/012.md).

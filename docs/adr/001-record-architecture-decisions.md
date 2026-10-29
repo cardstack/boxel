@@ -63,7 +63,7 @@ MUST follow the title directly. Sections MUST be numbered, in this order:
 | Consequences       | OPTIONAL. Omit unless it adds value beyond the Decision. |
 | Open questions     | Retroactive ADRs only, while any question remains.       |
 | Sources            | REQUIRED for retroactive ADRs. OPTIONAL otherwise.       |
-| Remediation        | REQUIRED while `proposed` (§1.6).                        |
+| Remediation        | REQUIRED while `proposed`. Links the remediation file.   |
 
 Section numbers follow the order of the sections present. Remediation comes
 last, so deleting it on acceptance does not renumber other sections.
@@ -103,15 +103,19 @@ An ADR MAY merge with status `proposed` before the code conforms to it.
 Merging a proposed ADR records that the team agrees with its Decision.
 Accepting it records that the code conforms.
 
-A proposed ADR MUST have a Remediation section that lists each known gap: a
-place where the code does not meet a MUST or MUST NOT of its Decision. Each
-entry MUST name a file and the requirement it breaks. It SHOULD also name the
-symbol when the gap is narrower than the file. The file MUST match the ADR's
-`scope`, so `scripts/adr-for.mts` shows the ADR to anyone changing it. When no gaps are known, the
-section MUST say so. A change that closes a gap MUST remove its entry.
+A proposed ADR MUST have a remediation file, `docs/adr/remediation/<number>.md`,
+that lists each known gap: a place where the code does not meet a MUST or MUST
+NOT of its Decision. The ADR's Remediation section MUST hold only a link to
+that file. Each entry MUST name the requirement it breaks, and MUST name a file
+by its path from the repository root, in backticks. The path MAY instead be on
+a line that introduces a group of entries. An entry SHOULD also name the symbol
+when the gap is narrower than the file. The named file MUST match the ADR's
+`scope`, so `scripts/adr-for.mts` shows the ADR, and the entry, to anyone
+changing it. When no gaps are known, the remediation file MUST say so. A change
+that closes a gap MUST remove its entry.
 
 A person SHOULD set `accepted` when no gaps remain. The change that sets
-`accepted` MUST also delete the Remediation section.
+`accepted` MUST also delete the Remediation section and the remediation file.
 
 The Decision of a proposed ADR MAY change in a reviewed PR, for example when
 remediation shows that a requirement is wrong. Such an edit MUST NOT renumber
@@ -150,7 +154,7 @@ SHOULD or SHOULD NOT needs a stated reason, and a missing reason is a
 non-blocking review finding.
 
 These rules also apply to a proposed ADR, including in the PR that adds it,
-with one exception. A gap listed under its Remediation section is not a review
+with one exception. A gap listed in its remediation file is not a review
 finding, and a change MAY touch that code without closing the gap. A listed
 gap is not a precedent: new code MUST NOT copy it. A change that adds a gap,
 or closes one and leaves its entry, is a blocking review finding. An existing
@@ -176,8 +180,11 @@ The codebase is older than its ADRs, so a new ADR often describes a rule the
 code does not yet follow everywhere. If the ADR waits in its PR until the code
 conforms, the agreed rule stays invisible to the agents and reviewers who do
 the remediation, and new code keeps adding gaps. A merged proposed ADR stops
-new gaps at once. Its Remediation section turns the old ones into a finite
-list of work, and acceptance marks the end of that list.
+new gaps at once. Its remediation file turns the old ones into a finite list
+of work, and acceptance marks the end of that list. The list is a file of its
+own because an agent reads an ADR to follow its Decision, on every change in
+its scope, and a long list of gaps would cost tokens each time.
+`scripts/adr-for.mts` prints only the entries for the paths it is given.
 
 ## 3. Considered options
 
@@ -188,6 +195,9 @@ list of work, and acceptance marks the end of that list.
   rules for sourcing retroactive reasons, which are what agents most need.
 - **Merge an ADR only when the code conforms.** The ADR waits in its PR
   through the remediation, while the code it governs keeps changing under it.
+- **Remediation inline in the ADR.** One file is simpler to keep in step, but
+  every reader of the ADR pays for the whole list, which can outgrow the
+  Decision.
 - **Accept an ADR with known gaps.** Each gap is then a broken MUST of an
   accepted ADR, which §1.9 makes blocking, so every change that touches the
   gap is blocked or needs an exception.
@@ -201,4 +211,4 @@ list of work, and acceptance marks the end of that list.
 
 ## 4. Remediation
 
-No known gaps.
+Known gaps are listed in [remediation/001.md](remediation/001.md).

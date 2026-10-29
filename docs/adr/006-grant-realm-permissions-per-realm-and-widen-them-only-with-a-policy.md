@@ -152,4 +152,4 @@ may read a realm, nothing elsewhere takes that away.
 
 ## 5. Remediation
 
-No known gaps.
+Known gaps are listed in [remediation/006.md](remediation/006.md).

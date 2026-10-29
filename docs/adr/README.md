@@ -8,7 +8,8 @@ a deliberate choice from an accident before they change it.
 [ADR 001](001-record-architecture-decisions.md) defines the format, the
 lifecycle, and enforcement. Start a new ADR from [`template.md`](template.md),
 and load the `adr` skill (`.claude/skills/adr/SKILL.md`) to write, supersede,
-or backfill one.
+or backfill one. A proposed ADR's known gaps are listed in
+[`remediation/`](remediation/), one file per ADR.
 
 ## Index
 

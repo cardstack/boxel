@@ -206,15 +206,7 @@ it cannot, it uses live-DOM motion.
 
 ## 5. Remediation
 
-- `packages/host/app/components/operator-mode/stack.gts` breaks §1.1: it
-  awaits the closing animations before it closes the cards.
-- `packages/host/app/components/operator-mode/stack-item.gts` breaks §1.2: it
-  runs its own animations, tracks which one is playing, and changes its
-  behavior on that.
-- `packages/host/app/components/pill-menu/index.gts` breaks §1.1: the menu
-  collapses only on `animationend`.
-- `packages/pretui/components/toaster.gts` breaks §1.1: a toast is removed on
-  `animationend`, so with motion off it is never removed by its timer.
+Known gaps are listed in [remediation/007.md](remediation/007.md).
 
 ## 6. Sources
 

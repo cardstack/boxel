@@ -120,4 +120,4 @@ does.
 
 ## 5. Remediation
 
-No known gaps.
+Known gaps are listed in [remediation/014.md](remediation/014.md).

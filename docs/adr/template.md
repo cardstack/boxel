@@ -43,8 +43,8 @@ Required for retroactive ADRs.
 
 ## 7. Remediation
 
-Required while proposed. Each known gap: the file (and symbol, when the gap is
-narrower) where the code does not yet meet the Decision, and the requirement it
-breaks. Write "No known gaps." when there are none. Delete on acceptance.
+Required while proposed. Start the remediation file from
+[`remediation/template.md`](remediation/template.md). Delete this section and
+the file on acceptance.
 
-- `packages/example/old-path.ts` (`legacyLoad`) breaks §1.1.
+Known gaps are listed in [remediation/NNN.md](remediation/NNN.md).

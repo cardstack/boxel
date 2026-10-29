@@ -150,5 +150,4 @@ The motion layer had been animating these shrinks. That made them smoother, not 
 
 ## 5. Remediation
 
-- `packages/choreo/src/run.ts`, a run compiled in a long task: §1.11. The first painted frame after a send still advances the follow by about 14% of its travel (19 px of 133 when the task before it took 87 ms): the run's clock counts part of that task despite the fresh-clock start.
-- `packages/pretui/components/stick-to-bottom.gts`, `settle()` on a viewport resize: §1.7. The composer cap's slot now opens and closes over a beat, so the transcript follows it in small steps instead of dropping, but each step is settled from the scroll owner's ResizeObserver, outside a render pass.
+Known gaps are listed in [remediation/013.md](remediation/013.md).

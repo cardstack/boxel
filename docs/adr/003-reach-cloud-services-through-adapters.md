@@ -169,4 +169,4 @@ it.
 
 ## 4. Remediation
 
-No known gaps.
+Known gaps are listed in [remediation/003.md](remediation/003.md).
