@@ -199,12 +199,12 @@ module('Integration | credential fields', function (hooks) {
     let fields = new CredentialFields();
     await render(
       <template>
-        <CredentialFieldsFrame @form='confirm-password' @fields={{fields}} />
+        <CredentialFieldsFrame @form='change-password' @fields={{fields}} />
       </template>,
     );
-    assertFrameShown(assert, 'confirm-password');
+    assertFrameShown(assert, 'change-password');
     let element = document.querySelector<HTMLElement>(
-      '[data-test-credential-fields="confirm-password"]',
+      '[data-test-credential-fields="change-password"]',
     )!;
     let before = parseFloat(element.style.height);
 
