@@ -30,13 +30,18 @@ export interface BlockedSecureWindow {
 // shows it.
 //
 // Since the app holds no handle to the popup, it can't see it close either.
-// What it can see is the user coming back: once a secure window has opened,
-// each time this page takes focus again it tells whoever asked
-// (`onReturn`), so what the window may have changed — a key added, an
-// operation approved — is asked of the realm server again.
+// What it can see is the user coming back: each time this page takes focus
+// again within `RETURN_WINDOW_MS` of a secure window opening, it tells
+// whoever asked (`onReturn`), so what the window may have changed — a key
+// added, an operation approved — is asked of the realm server again. Past
+// that, a focus is the user switching windows, not coming back from this one.
+// How long after a secure window opens a return to this page counts as coming
+// back from it: long enough to add a key or approve a batch of operations.
+const RETURN_WINDOW_MS = 10 * 60_000;
+
 export default class SecureWindowService extends Service {
   @tracked blocked: BlockedSecureWindow | undefined;
-  #opened = false;
+  #openedAt: number | undefined;
   #onReturn: Set<() => void> = new Set();
 
   constructor(owner: Owner) {
@@ -82,12 +87,15 @@ export default class SecureWindowService extends Service {
       return false;
     }
     popup.opener = null;
-    this.#opened = true;
+    this.#openedAt = Date.now();
     return true;
   }
 
   #returned(): void {
-    if (!this.#opened) {
+    if (
+      this.#openedAt === undefined ||
+      Date.now() - this.#openedAt > RETURN_WINDOW_MS
+    ) {
       return;
     }
     for (let callback of [...this.#onReturn]) {
