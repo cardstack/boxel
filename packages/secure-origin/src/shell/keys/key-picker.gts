@@ -41,14 +41,13 @@ const KeyPicker: TemplateOnlyComponent<Signature> = <template>
       >Select a key</legend>
       {{#each @keys as |key|}}
         <RadioTile
-          class='choice'
           @name='key'
           @value={{key.id}}
           @checked={{eq @selected key.id}}
           @onChange={{fn @onSelect key.id}}
           data-test-key-choice={{key.name}}
         >
-          <KeyTile class='tile' @key={{key}} />
+          <KeyTile @key={{key}} @framed={{false}} />
         </RadioTile>
       {{else}}
         <p class='empty' data-test-key-picker-empty>You haven’t added any keys
@@ -87,10 +86,6 @@ const KeyPicker: TemplateOnlyComponent<Signature> = <template>
       overflow: hidden;
       clip-path: inset(50%);
       white-space: nowrap;
-    }
-    /* The radio tile draws the key tile's border. */
-    .choice .tile {
-      box-shadow: none;
     }
     .empty {
       margin: 0;

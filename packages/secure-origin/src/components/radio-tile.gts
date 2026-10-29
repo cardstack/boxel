@@ -1,7 +1,7 @@
 // One choice of a list drawn as tiles to click: a bordered tile wrapping a
 // radio button that is hidden but stays in the tab order and the
 // accessibility tree, so the arrow keys and screen readers work as for any
-// radio group. The chosen tile is outlined in the theme's primary colour, a
+// radio group. The chosen tile is outlined in the theme's primary color, a
 // hovered one in its foreground, and keyboard focus rings the tile. The
 // block is the tile's content and sets its own padding, and the tile's text
 // is the radio's accessible name. Attributes go on the tile's label.
