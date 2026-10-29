@@ -9,6 +9,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/ci-software-factory.yaml"
+      # builds the host this suite downloads
+      - ".github/workflows/test-web-assets.yaml"
       - "packages/runtime-common/**"
       - "packages/base/**"
       - "packages/boxel-icons/**"

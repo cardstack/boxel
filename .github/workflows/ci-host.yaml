@@ -24,6 +24,8 @@ on:
       - "packages/secure-origin/**"
       - "packages/runtime-common/**"
       - ".github/workflows/ci-host.yaml"
+      # builds the host this suite downloads
+      - ".github/workflows/test-web-assets.yaml"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
