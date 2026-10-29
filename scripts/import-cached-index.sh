@@ -13,7 +13,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # test realms keep their index in a separate one, so a caller importing that
 # snapshot passes INDEX_CACHE_DB=$PGDATABASE_TEST.
 DB_NAME="${INDEX_CACHE_DB:-${PGDATABASE:-boxel}}"
-REPO="cardstack/boxel"
+# The repository whose main runs uploaded the snapshot. boxel-catalog's live
+# tests restore a catalog index its own main runs upload.
+REPO="${INDEX_CACHE_REPO:-cardstack/boxel}"
+# A caller that has to match the snapshot to the code it checked out names the
+# run that uploaded it; otherwise the newest main run's snapshot is used.
+PINNED_RUN_ID="${INDEX_CACHE_RUN_ID:-}"
 # Artifacts to try, in order. `boxel-index-cache` carries every realm the
 # export job indexes; `boxel-index-cache-host` carries only the realms a host
 # test stack serves and is a fraction of the size, so a caller that serves
@@ -104,7 +109,11 @@ DOWNLOAD_START=$(date +%s)
 CACHE_FILE=""
 for ARTIFACT_NAME in $ARTIFACT_NAMES; do
   CANDIDATE="$DOWNLOAD_DIR/${ARTIFACT_NAME}.sql.gz"
-  RUN_IDS=$(cache_run_ids "$ARTIFACT_NAME") || RUN_IDS=""
+  if [ -n "$PINNED_RUN_ID" ]; then
+    RUN_IDS="$PINNED_RUN_ID"
+  else
+    RUN_IDS=$(cache_run_ids "$ARTIFACT_NAME") || RUN_IDS=""
+  fi
   if [ -z "$RUN_IDS" ]; then
     echo "No unexpired ${ARTIFACT_NAME} artifact from main found."
   fi
