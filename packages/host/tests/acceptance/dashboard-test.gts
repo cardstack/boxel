@@ -701,7 +701,7 @@ module('Acceptance | dashboard', function (hooks) {
         .hasAttribute('rel', 'noopener noreferrer');
     });
 
-    test("a desk's +N opens the same site menu as a tile's chin", async function (assert) {
+    test("a desk's +N opens a menu of the sites beyond its link", async function (assert) {
       let matrixService = getService('matrix-service') as MatrixService;
       await visitOperatorMode({ workspaceChooserOpened: true });
       matrixService.workspaceFavorites = [realmURL];
@@ -716,9 +716,25 @@ module('Acceptance | dashboard', function (hooks) {
         '[data-test-favorites-list] [data-test-workspace="Workspace A"]';
       let menuItems = `${desk} [data-test-pretui-menu-panel] [role="menuitem"]`;
       assert
+        .dom(`${desk} [data-test-desk-host-link]`)
+        .hasText(/newer\.example\.com/)
+        .hasAttribute('title', 'https://newer.example.com/');
+      assert
         .dom(`${desk} [data-test-desk-host-more]`)
         .hasText('+1')
         .hasAttribute('aria-label', '+1 more hosted site');
+
+      // The +N keeps the caption's line height rather than a Button's.
+      let linkHeight = find(
+        `${desk} [data-test-desk-host-link]`,
+      )!.getBoundingClientRect().height;
+      let moreHeight = find(
+        `${desk} [data-test-desk-host-more]`,
+      )!.getBoundingClientRect().height;
+      assert.ok(
+        moreHeight <= linkHeight + 0.5,
+        `the +N (${moreHeight}px) is no taller than the link (${linkHeight}px)`,
+      );
 
       let windowOpen = stubWindowOpen();
       try {
@@ -726,10 +742,11 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert.deepEqual(
           findAll(menuItems).map((item) => item.textContent?.trim()),
-          ['newer.example.com', 'older.example.com'],
+          ['older.example.com'],
+          'the menu holds as many sites as the +N says',
         );
 
-        await click(findAll(menuItems)[1]);
+        await click(findAll(menuItems)[0]);
 
         assert.deepEqual(windowOpen.calls, [
           ['https://older.example.com/', '_blank', 'noopener,noreferrer'],
@@ -737,6 +754,60 @@ module('Acceptance | dashboard', function (hooks) {
       } finally {
         windowOpen.restore();
       }
+    });
+
+    module('a failed Re-index', function (hooks) {
+      const TILE =
+        '[data-test-workspace-list] [data-test-workspace="Workspace A"]';
+
+      let reindexError = '';
+      // Answers the reindex request alone, leaving auth to the module's
+      // endpoints, which make the test user the realm's owner.
+      hooks.beforeEach(function () {
+        getService('network').mount(
+          async (req: Request) =>
+            new URL(req.url).pathname === '/testuser/workspace-a/_full-reindex'
+              ? new Response(reindexError, { status: 500 })
+              : null,
+          { prepend: true },
+        );
+      });
+
+      async function reindexFails(message: string) {
+        reindexError = message;
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await click(`${TILE} [data-test-workspace-menu-trigger]`);
+        await click('[data-test-boxel-menu-item-text="Re-index"]');
+        await waitFor(`${TILE} [data-test-reindex-error]`);
+      }
+
+      test('a short error adds no Tab stop', async function (assert) {
+        await reindexFails('boom');
+
+        assert
+          .dom(`${TILE} [data-test-reindex-error-message]`)
+          .hasText('Full reindex realm failed: 500 - boom')
+          .doesNotHaveAttribute('tabindex');
+      });
+
+      test('a long error scrolls within the face, from the keyboard too', async function (assert) {
+        await reindexFails('stack trace: '.repeat(200).trim());
+
+        assert
+          .dom(`${TILE}[data-test-workspace-variant="tile"]`)
+          .exists('Workspace A shows as a tile');
+        assert
+          .dom(`${TILE} [data-test-reindex-error-message]`)
+          .hasAttribute('tabindex', '0');
+
+        let alert = find(`${TILE} [data-test-reindex-error]`)!;
+        let face = find(`${TILE} [data-test-workspace-button]`)!;
+        assert.ok(
+          alert.getBoundingClientRect().bottom <=
+            face.getBoundingClientRect().bottom + 0.5,
+          'the error stays within the face, off the name and chip below it',
+        );
+      });
     });
 
     test("Realm Settings opens the workspace's realm card in edit mode and closes the dashboard", async function (assert) {
